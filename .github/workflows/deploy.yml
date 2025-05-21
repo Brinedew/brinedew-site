@@ -5,6 +5,9 @@ on:
     branches:
       - main # Or whatever your main working branch is named
 
+permissions:  # Add this section
+  contents: write # This allows the action to push to the gh-pages branch
+
 jobs:
   deploy:
     name: Deploy to GitHub Pages
