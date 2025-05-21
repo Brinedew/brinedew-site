@@ -1,0 +1,30 @@
+site_name: My Knowledge Base # Your site's title
+site_author: Your Name
+site_url: https://brinedew.com # Later, this will be your actual domain
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate # Integrates table of contents into the sidebar
+    - navigation.top
+    - search.suggest
+    - search.highlight
+  palette: # Optional: pick a color scheme
+    primary: indigo
+    accent: indigo
+
+nav: # This is how you'll structure your sidebar navigation initially
+  - Home: index.md
+  - Introduction: introduction.md
+  # Add more pages here as you create them
+
+# Copyright
+copyright: Copyright &copy; 2025 Your Name
+
+# For Decap CMS later - ensures static assets are handled.
+# This might need adjustment depending on where Decap CMS admin files are placed.
+# For now, let's assume admin files will go into the 'docs' folder.
+# If you have other static assets like images, you can specify them too.
+# Example: extra_css, extra_javascript
