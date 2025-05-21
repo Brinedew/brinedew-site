@@ -1,0 +1,28 @@
+name: Deploy MkDocs site to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main # Or whatever your main working branch is named
+
+jobs:
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Fetches your code
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x' # Or a specific version like '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install mkdocs mkdocs-material
+          # Add any other mkdocs plugins you use here, e.g.:
+          # pip install mkdocs-awesome-pages-plugin mkdocs-redirects
+
+      - name: Deploy with MkDocs
+        run: mkdocs gh-deploy --force --clean --verbose

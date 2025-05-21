@@ -1,5 +1,5 @@
-site_name: My Knowledge Base # Your site's title
-site_author: Your Name
+site_name: Brinedew # Your site's title
+site_author: Brinedew
 site_url: https://brinedew.com # Later, this will be your actual domain
 
 theme:
@@ -21,7 +21,7 @@ nav: # This is how you'll structure your sidebar navigation initially
   # Add more pages here as you create them
 
 # Copyright
-copyright: Copyright &copy; 2025 Your Name
+copyright: Copyright &copy; 2025 Brinedew
 
 # For Decap CMS later - ensures static assets are handled.
 # This might need adjustment depending on where Decap CMS admin files are placed.
