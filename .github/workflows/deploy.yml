@@ -25,7 +25,8 @@ jobs:
         run: |
           pip install mkdocs mkdocs-material
           # Add any other mkdocs plugins you use here, e.g.:
-          # pip install mkdocs-awesome-pages-plugin mkdocs-redirects
+          pip install mkdocs-awesome-pages-plugin mkdocs-redirects
+          
 
       - name: Deploy with MkDocs
         run: mkdocs gh-deploy --force --clean --verbose

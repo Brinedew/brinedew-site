@@ -1,30 +1,31 @@
-site_name: Brinedew # Your site's title
+site_name: Brinedew
 site_author: Brinedew
-site_url: https://brinedew.com # Later, this will be your actual domain
+site_url: https://brinedew.com
 
 theme:
   name: material
   features:
     - navigation.tabs
     - navigation.sections
-    - toc.integrate # Integrates table of contents into the sidebar
+    - toc.integrate
     - navigation.top
     - search.suggest
     - search.highlight
-  palette: # Optional: pick a color scheme
+  palette:
     primary: indigo
     accent: indigo
 
-nav: # This is how you'll structure your sidebar navigation initially
-  - Home: index.md
-  - Introduction: introduction.md
-  # Add more pages here as you create them
+plugins:
+  - search # Included with Material or good to have
+  - awesome-pages # Add the awesome-pages plugin
 
-# Copyright
+# The 'nav' section below is now optional if you use a root .pages file (see step 3).
+# If you want to define the top-level order explicitly, you can use a .pages file.
+# For a simpler start, you can remove the 'nav' section entirely and awesome-pages
+# will list docs/index.md, docs/introduction.md, and the docs/concepts folder alphabetically.
+# Let's try removing it for now, and we can add a .pages file if needed for ordering.
+# nav:
+#   - Home: index.md
+#   - Introduction: introduction.md
+
 copyright: Copyright &copy; 2025 Brinedew
-
-# For Decap CMS later - ensures static assets are handled.
-# This might need adjustment depending on where Decap CMS admin files are placed.
-# For now, let's assume admin files will go into the 'docs' folder.
-# If you have other static assets like images, you can specify them too.
-# Example: extra_css, extra_javascript
