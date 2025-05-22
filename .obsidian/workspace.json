@@ -20,8 +20,23 @@
               "icon": "lucide-file",
               "title": "Obsidian test note"
             }
+          },
+          {
+            "id": "7cfa99de5b35b02b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/posts/Obsidian test note 2.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Obsidian test note 2"
+            }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -94,7 +109,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "docs/posts/Obsidian test note.md",
+                "file": "docs/posts/Obsidian test note 2.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +119,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Obsidian test note"
+              "title": "Backlinks for Obsidian test note 2"
             }
           },
           {
@@ -113,12 +128,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "docs/posts/Obsidian test note.md",
+                "file": "docs/posts/Obsidian test note 2.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Obsidian test note"
+              "title": "Outgoing links from Obsidian test note 2"
             }
           },
           {
@@ -142,13 +157,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "docs/posts/Obsidian test note.md",
+                "file": "docs/posts/Obsidian test note 2.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Obsidian test note"
+              "title": "Outline of Obsidian test note 2"
             }
           },
           {
@@ -180,10 +195,15 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "00126ce3ee2b5156",
+  "active": "7cfa99de5b35b02b",
   "lastOpenFiles": [
+    "docs/posts/Obsidian test note.md",
+    "docs/posts/Obsidian test note 2.md",
+    "docs/test-page.md",
+    "docs/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
+    "docs/assets/images",
+    "docs/assets",
     "ChatGPT Image Apr 8, 2025, 04_09_19 PM 1.png",
-    "ChatGPT Image Apr 8, 2025, 04_09_19 PM.png",
-    "docs/posts/Obsidian test note.md"
+    "ChatGPT Image Apr 8, 2025, 04_09_19 PM.png"
   ]
 }
