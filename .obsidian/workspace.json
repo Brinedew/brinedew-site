@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/posts/Obsidian test note 2.md",
+                "file": "docs/posts/Obsidian test note.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Obsidian test note 2"
+              "title": "Obsidian test note"
             }
           }
         ],
@@ -109,7 +109,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "docs/posts/Obsidian test note 2.md",
+                "file": "docs/posts/Obsidian test note.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -119,7 +119,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Obsidian test note 2"
+              "title": "Backlinks for Obsidian test note"
             }
           },
           {
@@ -128,12 +128,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "docs/posts/Obsidian test note 2.md",
+                "file": "docs/posts/Obsidian test note.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Obsidian test note 2"
+              "title": "Outgoing links from Obsidian test note"
             }
           },
           {
@@ -157,13 +157,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "docs/posts/Obsidian test note 2.md",
+                "file": "docs/posts/Obsidian test note.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Obsidian test note 2"
+              "title": "Outline of Obsidian test note"
             }
           },
           {
@@ -197,10 +197,10 @@
   },
   "active": "7cfa99de5b35b02b",
   "lastOpenFiles": [
-    "docs/introduction.md",
     "docs/posts/Obsidian test note 2.md",
-    "docs/posts/Obsidian test note.md",
     "docs/test-page.md",
+    "docs/introduction.md",
+    "docs/posts/Obsidian test note.md",
     "docs/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
     "docs/assets/images",
     "docs/assets",

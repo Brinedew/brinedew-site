@@ -12,8 +12,13 @@ theme:
     - search.suggest
     - search.highlight
   palette:
-    primary: indigo
-    accent: indigo
+    # You can define palettes per scheme
+    - scheme: default # This is the light mode
+      primary: white # Or another light color
+      accent: indigo
+    - scheme: slate # This is dark mode (if you enable a switcher)
+      primary: blue grey # Example for dark mode
+      accent: indigo
 
 plugins:
   - search # Included with Material or good to have
