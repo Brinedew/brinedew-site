@@ -1,0 +1,18 @@
+/* Distraction-free writing */
+.workspace-leaf-content {
+  padding: 2rem;
+}
+
+.markdown-source-view.mod-cm6 .cm-editor {
+  max-width: 65ch;
+  margin: 0 auto;
+}
+
+/* Hide UI when writing */
+.workspace-ribbon.mod-left {
+  display: none;
+}
+
+.status-bar {
+  display: none;
+}
