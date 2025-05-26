@@ -1,36 +1,69 @@
 site_name: Brinedew
 site_author: Brinedew
 site_url: https://brinedew.com
+site_description: Notes on longevity, systems, and other obsessions
 
 theme:
   name: material
   features:
     - navigation.tabs
     - navigation.sections
-    - toc.integrate
     - navigation.top
+    - navigation.tracking
     - search.suggest
     - search.highlight
+    - search.share
+    - header.autohide
+    - content.code.copy
+    - content.code.annotate
   palette:
-    # You can define palettes per scheme
-    - scheme: default # This is the light mode
-      primary: white # Or another light color
-      accent: indigo
-    - scheme: slate # This is dark mode (if you enable a switcher)
-      primary: blue grey # Example for dark mode
-      accent: indigo
+    # Dark mode (primary)
+    - scheme: slate
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Light mode
+    - scheme: default
+      primary: white
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    logo: material/brain
 
 plugins:
-  - search # Included with Material or good to have
-  - awesome-pages # Add the awesome-pages plugin
+  - search
+  - awesome-pages
 
-# The 'nav' section below is now optional if you use a root .pages file (see step 3).
-# If you want to define the top-level order explicitly, you can use a .pages file.
-# For a simpler start, you can remove the 'nav' section entirely and awesome-pages
-# will list docs/index.md, docs/introduction.md, and the docs/concepts folder alphabetically.
-# Let's try removing it for now, and we can add a .pages file if needed for ordering.
-# nav:
-#   - Home: index.md
-#   - Introduction: introduction.md
+extra_css:
+  - stylesheets/extra.css
 
-copyright: Copyright &copy; 2025 Brinedew
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - footnotes
+  - meta
+  - toc:
+      permalink: true
+
+copyright: |
+  &copy; 2025 Brinedew
