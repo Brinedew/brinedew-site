@@ -32,7 +32,7 @@
 }
 
 .md-typeset h1, .md-typeset h2, .md-typeset h3, .md-typeset h4, .md-typeset h5, .md-typeset h6 {
-  font-family: var(--sans-font) !important;
+  font-family: var(--serif-font) !important;
   font-weight: 600 !important;
   letter-spacing: -0.025em;
   margin-top: 0;
@@ -170,14 +170,49 @@
   display: none !important;
 }
 
+/* Compact single-line header */
+.md-header__inner {
+  height: 3rem;
+  padding: 0 1rem;
+}
+
+/* Hide logo but keep theme toggle visible */
+.md-header__button:not([data-md-color-media]) {
+  display: none !important;
+}
+
+/* Position theme toggle on the right */
+.md-header__inner {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
 /* Center navigation tabs */
 .md-tabs {
   justify-content: center;
+  position: relative;
 }
 
 .md-tabs__list {
   margin: 0 auto;
   justify-content: center;
+}
+
+/* Style theme toggle with text */
+.md-header__button[data-md-color-media]::after {
+  margin-left: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--md-default-fg-color--light);
+  font-family: var(--sans-font);
+}
+
+[data-md-color-scheme="default"] .md-header__button[data-md-color-media]::after {
+  content: "dark mode";
+}
+
+[data-md-color-scheme="slate"] .md-header__button[data-md-color-media]::after {
+  content: "light mode";
 }
 
 /* Search styling */
@@ -257,14 +292,11 @@
   --subtle-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
-/* Match main page background to header in dark mode */
+/* Keep dark mode properly dark */
 [data-md-color-scheme="slate"] .md-main,
-[data-md-color-scheme="slate"] .md-main__inner {
-  background-color: var(--md-primary-bg-color);
-}
-
+[data-md-color-scheme="slate"] .md-main__inner,
 [data-md-color-scheme="slate"] .md-content {
-  background-color: var(--md-primary-bg-color);
+  background-color: var(--md-default-bg-color);
 }
 
 /* Subtle animations */
