@@ -1,5 +1,7 @@
 ---
 title: About
+hide:
+  - navigation
 ---
 Test test
 
