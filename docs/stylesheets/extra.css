@@ -194,12 +194,12 @@
   justify-content: center;
 }
 
-/* Fix tab text visibility */
-.md-tabs__link {
+/* Light mode tab styling */
+[data-md-color-scheme="default"] .md-tabs__link {
   color: var(--md-default-fg-color) !important;
 }
 
-.md-tabs__link--active {
+[data-md-color-scheme="default"] .md-tabs__link--active {
   color: var(--md-accent-fg-color) !important;
 }
 
@@ -309,12 +309,17 @@
   --subtle-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
-/* Fix all dark mode backgrounds to match header color */
+/* Dark mode styling - comprehensive fix */
 [data-md-color-scheme="slate"] {
   --md-default-bg-color: #14151a !important;
   --md-primary-bg-color: #14151a !important;
+  --md-default-fg-color: #e8e6e3 !important;
+  --md-default-fg-color--light: #b8b5b2 !important;
+  --md-default-fg-color--lighter: #8a8783 !important;
+  --md-default-fg-color--lightest: #5a5854 !important;
 }
 
+/* Dark mode backgrounds */
 [data-md-color-scheme="slate"] .md-main,
 [data-md-color-scheme="slate"] .md-main__inner,
 [data-md-color-scheme="slate"] .md-content,
@@ -328,6 +333,38 @@
 [data-md-color-scheme="slate"] .md-overlay,
 [data-md-color-scheme="slate"] body {
   background-color: #14151a !important;
+}
+
+/* Dark mode text colors */
+[data-md-color-scheme="slate"] .md-typeset,
+[data-md-color-scheme="slate"] .md-typeset p,
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h3,
+[data-md-color-scheme="slate"] .md-typeset h4,
+[data-md-color-scheme="slate"] .md-typeset h5,
+[data-md-color-scheme="slate"] .md-typeset h6 {
+  color: #e8e6e3 !important;
+}
+
+/* Dark mode sidebar styling */
+[data-md-color-scheme="slate"] .md-nav__title,
+[data-md-color-scheme="slate"] .md-nav__link {
+  color: #e8e6e3 !important;
+  background-color: transparent !important;
+}
+
+[data-md-color-scheme="slate"] .md-nav__item--active > .md-nav__link {
+  color: var(--md-accent-fg-color) !important;
+}
+
+/* Dark mode tab styling */
+[data-md-color-scheme="slate"] .md-tabs__link {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__link--active {
+  color: var(--md-accent-fg-color) !important;
 }
 
 /* Subtle animations */

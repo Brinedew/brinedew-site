@@ -38,6 +38,8 @@ plugins:
   - search
   - awesome-pages
 
+use_directory_urls: true
+
 extra_css:
   - stylesheets/extra.css
 
@@ -64,6 +66,9 @@ markdown_extensions:
   - meta
   - toc:
       permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
 
 copyright: |
   &copy; 2025 Brinedew
