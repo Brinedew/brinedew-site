@@ -114,9 +114,9 @@
   border: 1px solid var(--md-default-fg-color--lightest);
 }
 
-/* Refined link styling */
+/* Visible link styling */
 .md-typeset a {
-  color: var(--md-primary-fg-color);
+  color: var(--md-accent-fg-color) !important;
   text-decoration: underline;
   text-decoration-color: var(--md-accent-fg-color);
   text-decoration-thickness: 1px;
@@ -125,6 +125,7 @@
 }
 
 .md-typeset a:hover {
+  color: var(--md-primary-fg-color) !important;
   text-decoration-color: var(--md-primary-fg-color);
   text-decoration-thickness: 2px;
 }
@@ -163,35 +164,38 @@
   box-shadow: none;
 }
 
-/* Hide header elements */
+/* Minimal header with only theme toggle */
+.md-header {
+  height: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.md-header__inner {
+  height: 2.5rem;
+  padding: 0 1rem;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* Hide everything except theme toggle */
 .md-header__title,
 .md-search,
 .md-header__button[for="__search"] {
   display: none !important;
 }
 
-/* Compact single-line header */
-.md-header__inner {
-  height: 3rem;
-  padding: 0 1rem;
-}
-
-/* Hide logo but keep theme toggle visible */
-.md-header__button:not([data-md-color-media]) {
-  display: none !important;
-}
-
-/* Position theme toggle on the right */
-.md-header__inner {
-  display: flex;
-  justify-content: flex-end;
+/* Keep only theme toggle visible */
+.md-header__button[data-md-color-media] {
+  display: flex !important;
   align-items: center;
 }
 
 /* Center navigation tabs */
 .md-tabs {
   justify-content: center;
-  position: relative;
+  padding: 0.5rem 1rem;
+  min-height: 2.5rem;
 }
 
 .md-tabs__list {
@@ -199,7 +203,7 @@
   justify-content: center;
 }
 
-/* Style theme toggle with text */
+/* Add text label to theme toggle */
 .md-header__button[data-md-color-media]::after {
   margin-left: 0.5rem;
   font-size: 0.8rem;
