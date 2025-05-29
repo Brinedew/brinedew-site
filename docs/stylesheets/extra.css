@@ -259,6 +259,15 @@
   background: rgba(232, 230, 227, 0.1) !important;
 }
 
+/* Dark mode theme toggle styling */
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
+  background: rgba(232, 230, 227, 0.1) !important;
+}
+
 /* Hide theme toggle on mobile where hamburger menu exists */
 @media screen and (max-width: 76.1875em) {
   .md-tabs__theme-toggle {
