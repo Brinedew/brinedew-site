@@ -13,7 +13,6 @@ theme:
     - search.suggest
     - search.highlight
     - search.share
-    - header.autohide
     - content.code.copy
     - content.code.annotate
   palette:
@@ -41,6 +40,9 @@ plugins:
 
 extra_css:
   - stylesheets/extra.css
+
+extra_javascript:
+  - assets/javascripts/theme-toggle.js
 
 markdown_extensions:
   - pymdownx.highlight:

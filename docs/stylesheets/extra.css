@@ -153,8 +153,10 @@
   transition: var(--hover-transition);
 }
 
-/* Clean minimal header */
+/* Single-line header - tabs only */
 .md-header {
+  position: relative !important;
+  height: auto;
   box-shadow: none;
   border-bottom: none;
   background: var(--md-default-bg-color);
@@ -164,38 +166,20 @@
   box-shadow: none;
 }
 
-/* Minimal header with only theme toggle */
-.md-header {
-  height: 2.5rem;
-  min-height: 2.5rem;
-}
-
+/* Hide entire top header bar */
 .md-header__inner {
-  height: 2.5rem;
-  padding: 0 1rem;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-
-/* Hide everything except theme toggle */
-.md-header__title,
-.md-search,
-.md-header__button[for="__search"] {
   display: none !important;
 }
 
-/* Keep only theme toggle visible */
-.md-header__button[data-md-color-media] {
-  display: flex !important;
-  align-items: center;
-}
-
-/* Center navigation tabs */
+/* Make tabs the complete header */
 .md-tabs {
+  position: relative;
+  display: flex;
   justify-content: center;
-  padding: 0.5rem 1rem;
-  min-height: 2.5rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  min-height: 3rem;
+  background: var(--md-default-bg-color);
 }
 
 .md-tabs__list {
@@ -203,21 +187,29 @@
   justify-content: center;
 }
 
-/* Add text label to theme toggle */
-.md-header__button[data-md-color-media]::after {
-  margin-left: 0.5rem;
-  font-size: 0.8rem;
+/* Custom theme toggle in tabs area */
+.md-tabs::after {
+  content: "🌙 dark";
+  position: absolute;
+  right: 1rem;
+  font-size: 0.85rem;
   color: var(--md-default-fg-color--light);
   font-family: var(--sans-font);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  transition: var(--hover-transition);
 }
 
-[data-md-color-scheme="default"] .md-header__button[data-md-color-media]::after {
-  content: "dark mode";
+.md-tabs:hover::after {
+  background: var(--md-default-fg-color--lightest);
 }
 
-[data-md-color-scheme="slate"] .md-header__button[data-md-color-media]::after {
-  content: "light mode";
+[data-md-color-scheme="slate"] .md-tabs::after {
+  content: "☀️ light";
 }
+
+/* Add JavaScript functionality for theme toggle */
 
 /* Search styling */
 .md-search__input {
@@ -296,7 +288,11 @@
   --subtle-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
-/* Keep dark mode properly dark */
+/* Match page color to header color in dark mode */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #212121;
+}
+
 [data-md-color-scheme="slate"] .md-main,
 [data-md-color-scheme="slate"] .md-main__inner,
 [data-md-color-scheme="slate"] .md-content {
