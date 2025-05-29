@@ -27,6 +27,8 @@ mkdocs serve
 mkdocs build
 ```
 
+**Important**: The site uses automated deployment via GitHub Actions. Changes to `docs/` content and CSS are automatically built and deployed when pushed to the main branch. Manual building is only needed for local development.
+
 ### Decap Proxy (Cloudflare Worker)
 ```bash
 # Navigate to decap-proxy directory first
@@ -59,6 +61,7 @@ yarn test:debug
 - `docs/admin/config.yml`: Decap CMS configuration with GitHub backend and collection definitions
 - `decap-proxy/wrangler.toml`: Cloudflare Worker deployment configuration
 - `decap-proxy/package.json`: Worker dependencies and scripts
+- `.github/workflows/deploy.yml`: GitHub Actions workflow for automated site deployment
 
 ## Content Structure
 
@@ -75,3 +78,18 @@ The Decap CMS uses the Cloudflare Worker as a GitHub OAuth proxy. The worker han
 3. CORS handling for the admin interface
 
 Users access the CMS at `/admin/` which authenticates through the deployed worker at the configured `base_url`.
+
+## Deployment Workflow
+
+The site uses GitHub Actions for automated deployment:
+
+1. **Trigger**: Any push to the `main` branch triggers the deployment workflow
+2. **Build Process**: GitHub Actions installs MkDocs, Material theme, and required plugins
+3. **Deployment**: Uses `mkdocs gh-deploy` to build and push to GitHub Pages
+4. **Dependencies Installed**: mkdocs, mkdocs-material, mkdocs-awesome-pages-plugin, mkdocs-redirects, pymdown-extensions
+
+**Key Points**:
+- Changes to `docs/` content, CSS, or `mkdocs.yml` automatically trigger rebuilds
+- The `site/` directory in the repo is not used for production (GitHub Pages serves from gh-pages branch)
+- Build takes ~2-3 minutes after pushing changes
+- No manual intervention needed for deployment
