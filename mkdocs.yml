@@ -38,7 +38,15 @@ plugins:
   - search
   - awesome-pages
 
+hooks:
+  - hooks.py
+
 use_directory_urls: true
+
+# Configure URL generation to use slugified paths
+# This converts spaces to hyphens in URLs while keeping original file/folder names
+extra:
+  url_slug_transform: true
 
 extra_css:
   - stylesheets/extra.css

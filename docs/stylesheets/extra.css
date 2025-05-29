@@ -225,6 +225,15 @@
   background: var(--md-default-fg-color--lightest);
 }
 
+/* Dark mode theme toggle styling */
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
+  background: rgba(232, 230, 227, 0.1) !important;
+}
+
 /* Hide theme toggle on mobile where hamburger menu exists */
 @media screen and (max-width: 76.1875em) {
   .md-tabs__theme-toggle {
@@ -352,10 +361,20 @@
 [data-md-color-scheme="slate"] .md-nav__link {
   color: #e8e6e3 !important;
   background-color: transparent !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
 }
 
 [data-md-color-scheme="slate"] .md-nav__item--active > .md-nav__link {
   color: var(--md-accent-fg-color) !important;
+}
+
+/* Fix dark mode sidebar title styling */
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__title {
+  color: #e8e6e3 !important;
+  background-color: transparent !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
 }
 
 /* Dark mode tab styling */
