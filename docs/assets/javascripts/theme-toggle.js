@@ -31,21 +31,31 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleTheme() {
         const html = document.documentElement;
         const currentScheme = getCurrentScheme();
-        const palette = document.querySelector('input[data-md-color-media]');
+        
+        // Find all palette inputs (light and dark)
+        const darkPalette = document.querySelector('input[data-md-color-scheme="slate"]');
+        const lightPalette = document.querySelector('input[data-md-color-scheme="default"]');
         
         if (currentScheme === 'slate') {
+            // Switch to light mode
             html.setAttribute('data-md-color-scheme', 'default');
             localStorage.setItem('data-md-color-scheme', 'default');
-            if (palette) palette.removeAttribute('checked');
+            
+            if (darkPalette) darkPalette.checked = false;
+            if (lightPalette) lightPalette.checked = true;
         } else {
+            // Switch to dark mode
             html.setAttribute('data-md-color-scheme', 'slate');
             localStorage.setItem('data-md-color-scheme', 'slate');
-            if (palette) palette.setAttribute('checked', '');
+            
+            if (lightPalette) lightPalette.checked = false;
+            if (darkPalette) darkPalette.checked = true;
         }
         
-        // Trigger Material's theme update
-        const event = new Event('change', { bubbles: true });
-        if (palette) palette.dispatchEvent(event);
+        // Trigger change events on both inputs
+        const changeEvent = new Event('change', { bubbles: true });
+        if (darkPalette) darkPalette.dispatchEvent(changeEvent);
+        if (lightPalette) lightPalette.dispatchEvent(changeEvent);
         
         updateToggleText();
     }

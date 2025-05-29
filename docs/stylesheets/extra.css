@@ -194,6 +194,15 @@
   justify-content: center;
 }
 
+/* Fix tab text visibility */
+.md-tabs__link {
+  color: var(--md-default-fg-color) !important;
+}
+
+.md-tabs__link--active {
+  color: var(--md-accent-fg-color) !important;
+}
+
 /* Custom theme toggle as real element */
 .md-tabs__theme-toggle {
   position: absolute;
