@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/index.md",
+                "file": "docs/aging biology myths/Immortal Jellyfish.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "index"
+              "title": "Immortal Jellyfish"
             }
           }
         ]
@@ -186,8 +186,9 @@
   },
   "active": "7cfa99de5b35b02b",
   "lastOpenFiles": [
-    "docs/aging biology myths/Myth - Lobsters Don't Age.md",
-    "docs/aging biology myths/Myth - Immortal Jellyfish.md",
+    "docs/aging biology myths/Lobsters Don't Age.md",
+    "docs/aging biology myths/Immortal Jellyfish.md",
+    "docs/index.md",
     "docs/posts/Obsidian test note.md",
     "docs/aging biology myths",
     "templates/blog-post.md",

@@ -1,72 +1,123 @@
-/* Import Inter font */
+/* Import fonts for intellectual blog aesthetic */
+@import url('https://fonts.googleapis.com/css2?family=Charter:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* Root variables for consistent theming */
+/* Root variables for intellectual blog aesthetic */
 :root {
-  --content-max-width: 65ch;
-  --border-radius: 4px;
-  --subtle-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  --hover-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --content-max-width: 75ch;
+  --reading-width: 45em;
+  --border-radius: 2px;
+  --subtle-shadow: none;
+  --hover-transition: all 0.15s ease;
+  --serif-font: 'Charter', 'Georgia', 'Times New Roman', serif;
+  --sans-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono-font: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace;
 }
 
-/* Enhanced typography */
+/* LessWrong/Gwern-inspired typography */
 .md-typeset {
-  font-size: 0.9rem;
-  line-height: 1.7;
+  font-family: var(--serif-font);
+  font-size: 1.05rem;
+  line-height: 1.65;
   color: var(--md-default-fg-color);
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
+}
+
+.md-typeset h1, .md-typeset h2, .md-typeset h3, .md-typeset h4, .md-typeset h5, .md-typeset h6 {
+  font-family: var(--sans-font);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin-top: 0;
+  margin-bottom: 0.5em;
 }
 
 .md-typeset h1 {
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin-top: 0;
+  font-size: 2.2em;
+  margin-bottom: 0.8em;
+  border-bottom: none;
 }
 
 .md-typeset h2 {
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  margin-top: 2rem;
+  font-size: 1.6em;
+  margin-top: 2.5em;
+  margin-bottom: 0.6em;
 }
 
 .md-typeset h3 {
-  font-weight: 500;
-  color: var(--md-default-fg-color--light);
+  font-size: 1.3em;
+  margin-top: 2em;
+  color: var(--md-default-fg-color);
 }
 
-/* Content width constraints for better readability */
+.md-typeset h4 {
+  font-size: 1.1em;
+  margin-top: 1.8em;
+  font-weight: 500;
+}
+
+/* Better paragraph spacing */
+.md-typeset p {
+  margin: 1.2em 0;
+}
+
+.md-typeset p:first-child {
+  margin-top: 0;
+}
+
+/* Optimal reading experience */
 .md-content__inner {
-  max-width: var(--content-max-width);
+  max-width: var(--reading-width);
   margin: 0 auto;
+  padding: 2rem 1.5rem;
 }
 
 .md-typeset > * {
-  max-width: var(--content-max-width);
+  max-width: none;
 }
 
-/* Enhanced code blocks */
+.md-main {
+  margin-top: 2rem;
+}
+
+.md-main__inner {
+  margin-top: 0;
+}
+
+/* Clean code styling */
 .md-typeset pre {
+  font-family: var(--mono-font);
+  font-size: 0.9rem;
+  line-height: 1.5;
   border-radius: var(--border-radius);
-  box-shadow: var(--subtle-shadow);
-  font-size: 0.85rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  background: var(--md-code-bg-color);
 }
 
 .md-typeset code {
-  font-size: 0.875em;
-  font-weight: 500;
-  border-radius: 3px;
-  padding: 0.1em 0.3em;
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  font-weight: 400;
+  border-radius: 2px;
+  padding: 0.15em 0.35em;
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
 }
 
-/* Subtle link styling */
+/* Refined link styling */
 .md-typeset a {
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
+  color: var(--md-primary-fg-color);
+  text-decoration: underline;
+  text-decoration-color: var(--md-accent-fg-color);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
   transition: var(--hover-transition);
 }
 
 .md-typeset a:hover {
-  border-bottom-color: var(--md-accent-fg-color);
+  text-decoration-color: var(--md-primary-fg-color);
+  text-decoration-thickness: 2px;
 }
 
 /* Clean table styling */
@@ -92,10 +143,24 @@
   transition: var(--hover-transition);
 }
 
-/* Header refinements */
+/* Minimal header */
 .md-header {
   box-shadow: none;
-  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  border-bottom: none;
+  background: transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.md-header--lifted {
+  box-shadow: none;
+}
+
+.md-header__title {
+  font-family: var(--sans-font);
+  font-weight: 400;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
 }
 
 /* Search styling */
@@ -117,17 +182,18 @@
   color: var(--md-default-fg-color--light);
 }
 
-/* Content spacing improvements */
-.md-typeset > p:first-child {
-  margin-top: 0;
-}
-
+/* Improved blockquotes */
 .md-typeset blockquote {
-  border-left: 4px solid var(--md-accent-fg-color);
-  margin: 1.5em 0;
-  padding: 0 1em;
+  border-left: 3px solid var(--md-accent-fg-color);
+  margin: 2em 0;
+  padding: 0 1.5em;
   color: var(--md-default-fg-color--light);
   font-style: italic;
+  font-size: 1.02em;
+}
+
+.md-typeset blockquote p {
+  margin: 0.8em 0;
 }
 
 /* Admonition styling */
@@ -143,14 +209,29 @@
   border-top: 1px solid var(--md-default-fg-color--lightest);
 }
 
-/* Responsive adjustments */
+/* Responsive reading experience */
 @media screen and (max-width: 76.1875em) {
   .md-content__inner {
     max-width: none;
+    padding: 1.5rem 1rem;
   }
   
-  .md-typeset > * {
-    max-width: none;
+  .md-typeset {
+    font-size: 1rem;
+  }
+}
+
+@media screen and (max-width: 48em) {
+  .md-content__inner {
+    padding: 1rem 0.75rem;
+  }
+  
+  .md-typeset h1 {
+    font-size: 1.8em;
+  }
+  
+  .md-typeset h2 {
+    font-size: 1.4em;
   }
 }
 
