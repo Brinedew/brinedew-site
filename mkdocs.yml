@@ -38,8 +38,6 @@ plugins:
   - search
   - awesome-pages
 
-hooks:
-  - hooks.py
 
 use_directory_urls: true
 
