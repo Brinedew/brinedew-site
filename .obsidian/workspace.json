@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/index.md",
+                "file": "docs/About.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "index"
+              "title": "About"
             }
           }
         ]
@@ -184,20 +184,20 @@
       "table-editor-obsidian:Advanced Tables Toolbar": false
     }
   },
-  "active": "e83863c767d97dda",
+  "active": "7cfa99de5b35b02b",
   "lastOpenFiles": [
+    "docs/index.md",
+    "docs/About.md",
+    "docs/posts/Obsidian test note.md",
+    "docs/posts/Obsidian test note 2.md",
     "docs/assets/javascripts/theme-toggle.js",
     "docs/assets/javascripts",
     "site/assets/stylesheets/extra.css",
     "docs/aging biology myths/Immortal Jellyfish.md",
     "docs/aging biology myths/Lobsters Don't Age.md",
-    "docs/index.md",
-    "docs/posts/Obsidian test note.md",
     "docs/aging biology myths",
     "templates/blog-post.md",
     "templates",
-    "docs/posts/Obsidian test note 2.md",
-    "docs/test-page.md",
     "docs/introduction.md",
     "docs/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
     "docs/assets/images",
