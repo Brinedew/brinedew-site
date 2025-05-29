@@ -31,14 +31,21 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleTheme() {
         const html = document.documentElement;
         const currentScheme = getCurrentScheme();
+        const palette = document.querySelector('input[data-md-color-media]');
         
         if (currentScheme === 'slate') {
             html.setAttribute('data-md-color-scheme', 'default');
             localStorage.setItem('data-md-color-scheme', 'default');
+            if (palette) palette.removeAttribute('checked');
         } else {
             html.setAttribute('data-md-color-scheme', 'slate');
             localStorage.setItem('data-md-color-scheme', 'slate');
+            if (palette) palette.setAttribute('checked', '');
         }
+        
+        // Trigger Material's theme update
+        const event = new Event('change', { bubbles: true });
+        if (palette) palette.dispatchEvent(event);
         
         updateToggleText();
     }
