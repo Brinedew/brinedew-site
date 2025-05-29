@@ -1,12 +1,13 @@
+# Optional: This tells Decap CMS where your live site will be.
+# Useful for features like preview links if your theme/setup supports them.
+site_url: https://brinedew.com
+
 backend:
   name: github
-  repo: Brinedew/brinedew-site
-  branch: main
-  site_domain: chimerical-kringle-bca023.netlify.app # Often needed for local testing with Netlify Identity
-                                                      # or if your production site domain is different.
-                                                      # For GitHub Pages, you might use your custom domain here once live.
-                                                      # Let's try without it first, or use your actual custom domain.
-  # For Netlify Identity, you usually don't need base_url or auth_endpoint here.
+  repo: Brinedew/brinedew-site # <<< YOUR NEW REPO NAME
+  branch: main # Or your primary working branch
+  base_url: https://decap-proxy.decap.workers.dev # <<< YOUR CLOUDFLARE WORKER URL
+  auth_endpoint: auth # Default for decap-proxy
 
 media_folder: "docs/assets/images" # Where uploaded images will be stored
 public_folder: "/assets/images"   # How they are accessed in Markdown/site

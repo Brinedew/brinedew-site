@@ -2,10 +2,26 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://brinedew.com/</loc>
-         <lastmod>2025-05-21</lastmod>
+         <lastmod>2025-05-29</lastmod>
     </url>
     <url>
-         <loc>https://brinedew.com/introduction/</loc>
-         <lastmod>2025-05-21</lastmod>
+         <loc>https://brinedew.com/About/</loc>
+         <lastmod>2025-05-29</lastmod>
+    </url>
+    <url>
+         <loc>https://brinedew.com/aging%20biology%20myths/Immortal%20Jellyfish/</loc>
+         <lastmod>2025-05-29</lastmod>
+    </url>
+    <url>
+         <loc>https://brinedew.com/aging%20biology%20myths/Lobsters%20Don%27t%20Age/</loc>
+         <lastmod>2025-05-29</lastmod>
+    </url>
+    <url>
+         <loc>https://brinedew.com/posts/Obsidian%20test%20note%202/</loc>
+         <lastmod>2025-05-29</lastmod>
+    </url>
+    <url>
+         <loc>https://brinedew.com/posts/Obsidian%20test%20note/</loc>
+         <lastmod>2025-05-29</lastmod>
     </url>
 </urlset>

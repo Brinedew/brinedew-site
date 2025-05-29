@@ -1,0 +1,472 @@
+/* Import fonts for intellectual blog aesthetic - load first for priority */
+@import url('https://fonts.googleapis.com/css2?family=Charter:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* Global font override to ensure our fonts take precedence */
+* {
+  --md-text-font: 'Charter', 'Georgia', 'Times New Roman', serif !important;
+  --md-code-font: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace !important;
+}
+
+/* Root variables for intellectual blog aesthetic */
+:root {
+  --content-max-width: 75ch;
+  --reading-width: 45em;
+  --border-radius: 2px;
+  --subtle-shadow: none;
+  --hover-transition: all 0.15s ease;
+  --serif-font: 'Charter', 'Georgia', 'Times New Roman', serif;
+  --sans-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono-font: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace;
+}
+
+/* LessWrong/Gwern-inspired typography */
+.md-typeset {
+  font-family: var(--serif-font) !important;
+  font-size: 1.05rem !important;
+  line-height: 1.65 !important;
+  color: var(--md-default-fg-color);
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
+}
+
+.md-typeset h1, .md-typeset h2, .md-typeset h3, .md-typeset h4, .md-typeset h5, .md-typeset h6 {
+  font-family: var(--serif-font) !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.025em;
+  margin-top: 0;
+  margin-bottom: 0.5em;
+}
+
+.md-typeset h1 {
+  font-size: 1.8em !important;
+  margin-bottom: 0.8em;
+  border-bottom: none;
+  color: var(--md-default-fg-color) !important;
+}
+
+.md-typeset h2 {
+  font-size: 1.4em !important;
+  margin-top: 2.5em;
+  margin-bottom: 0.6em;
+  color: var(--md-default-fg-color) !important;
+}
+
+.md-typeset h3 {
+  font-size: 1.2em !important;
+  margin-top: 2em;
+  color: var(--md-default-fg-color) !important;
+}
+
+.md-typeset h4 {
+  font-size: 1.1em !important;
+  margin-top: 1.8em;
+  font-weight: 500;
+  color: var(--md-default-fg-color) !important;
+}
+
+/* Better paragraph spacing */
+.md-typeset p {
+  margin: 1.2em 0;
+}
+
+.md-typeset p:first-child {
+  margin-top: 0;
+}
+
+/* Optimal reading experience */
+.md-content__inner {
+  max-width: var(--reading-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.md-typeset > * {
+  max-width: none;
+}
+
+/* Remove the header spacer element that creates gap between tabs and content */
+.md-header__spacer {
+  display: none !important;
+}
+
+.md-main {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.md-main__inner {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Clean code styling */
+.md-typeset pre {
+  font-family: var(--mono-font);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  background: var(--md-code-bg-color);
+}
+
+.md-typeset code {
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  font-weight: 400;
+  border-radius: 2px;
+  padding: 0.15em 0.35em;
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* Visible link styling */
+.md-typeset a {
+  color: var(--md-accent-fg-color) !important;
+  text-decoration: underline;
+  text-decoration-color: var(--md-accent-fg-color);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+  transition: var(--hover-transition);
+}
+
+.md-typeset a:hover {
+  color: var(--md-primary-fg-color) !important;
+  text-decoration-color: var(--md-primary-fg-color);
+  text-decoration-thickness: 2px;
+}
+
+/* Clean table styling */
+.md-typeset table:not([class]) {
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  box-shadow: var(--subtle-shadow);
+  font-size: 0.85rem;
+}
+
+.md-typeset table:not([class]) th {
+  font-weight: 500;
+  color: var(--md-default-fg-color);
+}
+
+/* Navigation enhancements */
+.md-tabs__link {
+  font-weight: 500;
+  transition: var(--hover-transition);
+}
+
+.md-nav__link {
+  transition: var(--hover-transition);
+}
+
+/* Single-line header - tabs only */
+.md-header {
+  position: relative !important;
+  height: auto;
+  box-shadow: none;
+  border-bottom: none;
+  background: var(--md-default-bg-color);
+}
+
+.md-header--lifted {
+  box-shadow: none;
+}
+
+/* Hide entire top header bar except on mobile */
+.md-header__inner {
+  display: none !important;
+}
+
+/* Show header on mobile for hamburger menu */
+@media screen and (max-width: 76.1875em) {
+  .md-header__inner {
+    display: flex !important;
+  }
+  
+  /* Hide everything in header except hamburger and logo */
+  .md-header__title,
+  .md-search,
+  .md-header__source {
+    display: none !important;
+  }
+  
+  /* Style mobile header */
+  .md-header {
+    background: var(--md-default-bg-color);
+    height: 2.4rem;
+  }
+  
+  .md-header__inner {
+    height: 2.4rem;
+    padding: 0 0.5rem;
+  }
+}
+
+/* Make tabs the complete header */
+.md-tabs {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  min-height: 3rem;
+  background: var(--md-default-bg-color);
+}
+
+.md-tabs__list {
+  margin: 0 auto;
+  justify-content: center;
+}
+
+/* Light mode tab styling */
+[data-md-color-scheme="default"] .md-tabs__link {
+  color: var(--md-default-fg-color) !important;
+}
+
+[data-md-color-scheme="default"] .md-tabs__link--active {
+  color: var(--md-accent-fg-color) !important;
+}
+
+/* Custom theme toggle as real element */
+.md-tabs__theme-toggle {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-text-font);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.1rem;
+  transition: var(--hover-transition);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.md-tabs__theme-toggle:hover {
+  background: var(--md-default-fg-color--lightest);
+}
+
+/* Dark mode theme toggle styling */
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
+  background: rgba(232, 230, 227, 0.1) !important;
+}
+
+/* Dark mode theme toggle styling */
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
+  background: rgba(232, 230, 227, 0.1) !important;
+}
+
+/* Hide theme toggle on mobile where hamburger menu exists */
+@media screen and (max-width: 76.1875em) {
+  .md-tabs__theme-toggle {
+    display: none;
+  }
+  
+    /* Fix mobile sidebar covering content */
+  .md-sidebar--primary {
+    position: fixed !important;
+    left: -12.1rem !important;
+    width: 12.1rem !important;
+    transform: translateX(0) !important;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Show sidebar when drawer is checked */
+  [data-md-toggle="drawer"]:checked ~ .md-container .md-sidebar--primary {
+    transform: translateX(12.1rem) !important;
+  }
+
+  /* Fix z-index to ensure sidebar appears above content */
+  .md-sidebar--primary {
+    z-index: 5 !important;
+  }
+  
+  /* Fix hamburger menu visibility */
+  .md-header__button.md-icon[for="__drawer"] {
+    display: block !important;
+  }
+}
+
+/* Search styling */
+.md-search__input {
+  border-radius: var(--border-radius);
+  font-size: 0.9rem;
+}
+
+/* Sidebar refinements */
+.md-sidebar {
+  width: 14rem;
+}
+
+.md-nav--secondary .md-nav__title {
+  font-weight: 500;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Improved blockquotes */
+.md-typeset blockquote {
+  border-left: 3px solid var(--md-accent-fg-color);
+  margin: 2em 0;
+  padding: 0 1.5em;
+  color: var(--md-default-fg-color--light);
+  font-style: italic;
+  font-size: 1.02em;
+}
+
+.md-typeset blockquote p {
+  margin: 0.8em 0;
+}
+
+/* Admonition styling */
+.md-typeset .admonition {
+  border-radius: var(--border-radius);
+  box-shadow: var(--subtle-shadow);
+  border: none;
+  margin: 1.5em 0;
+}
+
+/* Remove footer entirely */
+.md-footer {
+  display: none !important;
+}
+
+/* Responsive reading experience */
+@media screen and (max-width: 76.1875em) {
+  .md-content__inner {
+    max-width: none;
+    padding: 1.5rem 1rem;
+  }
+  
+  .md-typeset {
+    font-size: 1rem;
+  }
+}
+
+@media screen and (max-width: 48em) {
+  .md-content__inner {
+    padding: 1rem 0.75rem;
+  }
+  
+  .md-typeset h1 {
+    font-size: 1.8em;
+  }
+  
+  .md-typeset h2 {
+    font-size: 1.4em;
+  }
+}
+
+/* Dark mode specific adjustments */
+[data-md-color-scheme="slate"] {
+  --subtle-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* Dark mode styling - comprehensive fix */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #14151a !important;
+  --md-primary-bg-color: #14151a !important;
+  --md-default-fg-color: #e8e6e3 !important;
+  --md-default-fg-color--light: #b8b5b2 !important;
+  --md-default-fg-color--lighter: #8a8783 !important;
+  --md-default-fg-color--lightest: #5a5854 !important;
+}
+
+/* Dark mode backgrounds */
+[data-md-color-scheme="slate"] .md-main,
+[data-md-color-scheme="slate"] .md-main__inner,
+[data-md-color-scheme="slate"] .md-content,
+[data-md-color-scheme="slate"] .md-tabs,
+[data-md-color-scheme="slate"] .md-sidebar,
+[data-md-color-scheme="slate"] .md-sidebar--primary,
+[data-md-color-scheme="slate"] .md-sidebar--secondary,
+[data-md-color-scheme="slate"] .md-nav,
+[data-md-color-scheme="slate"] .md-nav--primary,
+[data-md-color-scheme="slate"] .md-nav--secondary,
+[data-md-color-scheme="slate"] .md-overlay,
+[data-md-color-scheme="slate"] body {
+  background-color: #14151a !important;
+}
+
+/* Dark mode text colors */
+[data-md-color-scheme="slate"] .md-typeset,
+[data-md-color-scheme="slate"] .md-typeset p,
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h3,
+[data-md-color-scheme="slate"] .md-typeset h4,
+[data-md-color-scheme="slate"] .md-typeset h5,
+[data-md-color-scheme="slate"] .md-typeset h6 {
+  color: #e8e6e3 !important;
+}
+
+/* Dark mode sidebar styling */
+[data-md-color-scheme="slate"] .md-nav__title,
+[data-md-color-scheme="slate"] .md-nav__link {
+  color: #e8e6e3 !important;
+  background-color: transparent !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+[data-md-color-scheme="slate"] .md-nav__item--active > .md-nav__link {
+  color: var(--md-accent-fg-color) !important;
+}
+
+/* Fix dark mode sidebar title styling */
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__title {
+  color: #e8e6e3 !important;
+  background-color: transparent !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* Dark mode tab styling */
+[data-md-color-scheme="slate"] .md-tabs__link {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__link--active {
+  color: var(--md-accent-fg-color) !important;
+}
+
+/* Subtle animations */
+.md-nav__item {
+  transition: var(--hover-transition);
+}
+
+.md-nav__item:hover {
+  transform: translateX(2px);
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--md-default-fg-color--lighter);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--md-default-fg-color--light);
+}
