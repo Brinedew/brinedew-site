@@ -184,8 +184,10 @@
       "table-editor-obsidian:Advanced Tables Toolbar": false
     }
   },
-  "active": "7cfa99de5b35b02b",
+  "active": "e83863c767d97dda",
   "lastOpenFiles": [
+    "docs/assets/javascripts/theme-toggle.js",
+    "docs/assets/javascripts",
     "site/assets/stylesheets/extra.css",
     "docs/aging biology myths/Immortal Jellyfish.md",
     "docs/aging biology myths/Lobsters Don't Age.md",
