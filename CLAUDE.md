@@ -105,3 +105,19 @@ The site uses GitHub Actions for automated deployment:
 **Troubleshooting CSS issues**:
 - If changes don't appear: check browser cache (hard refresh) and verify CSS precedence
 - Material theme CSS loads after custom CSS, so use `!important` for font families and critical styles
+
+## Development Best Practices
+
+**Before implementing UI changes**:
+1. **Inspect existing elements first**: Use browser dev tools to check actual CSS values, colors, fonts, and sizes
+2. **Match existing patterns**: Copy exact styling from similar elements (font-family, font-size, colors)
+3. **Use theme CSS variables**: Don't hardcode colors - use Material theme's existing CSS variables
+4. **Test responsive behavior**: Check mobile/tablet layouts and existing responsive patterns
+5. **Create proper interactive elements**: Use real DOM elements with event listeners, not pseudo-elements for clickable items
+
+**Common mistakes to avoid**:
+- Don't guess CSS values - inspect and copy exact values
+- Don't create pseudo-elements for interactive functionality
+- Don't ignore mobile responsive behavior
+- Don't use different fonts/sizes from existing UI elements
+- Don't hardcode colors that should match theme variables

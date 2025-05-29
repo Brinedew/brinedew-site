@@ -1,24 +1,36 @@
 // Custom theme toggle functionality
 document.addEventListener('DOMContentLoaded', function() {
-    // Add click event to the theme toggle
+    // Create and insert theme toggle element
     const tabs = document.querySelector('.md-tabs');
     if (tabs) {
-        tabs.addEventListener('click', function(e) {
-            // Check if click is on the theme toggle area (right side)
-            const rect = tabs.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
-            
-            // If click is in the right 100px, treat as theme toggle
-            if (clickX > rect.width - 100) {
-                e.preventDefault();
-                toggleTheme();
-            }
+        const themeToggle = document.createElement('span');
+        themeToggle.className = 'md-tabs__theme-toggle';
+        themeToggle.textContent = getCurrentScheme() === 'slate' ? 'light' : 'dark';
+        
+        tabs.appendChild(themeToggle);
+        
+        // Add click event to the theme toggle
+        themeToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleTheme();
         });
+    }
+    
+    function getCurrentScheme() {
+        return document.documentElement.getAttribute('data-md-color-scheme') || 'default';
+    }
+    
+    function updateToggleText() {
+        const toggle = document.querySelector('.md-tabs__theme-toggle');
+        if (toggle) {
+            toggle.textContent = getCurrentScheme() === 'slate' ? 'light' : 'dark';
+        }
     }
     
     function toggleTheme() {
         const html = document.documentElement;
-        const currentScheme = html.getAttribute('data-md-color-scheme');
+        const currentScheme = getCurrentScheme();
         
         if (currentScheme === 'slate') {
             html.setAttribute('data-md-color-scheme', 'default');
@@ -27,6 +39,8 @@ document.addEventListener('DOMContentLoaded', function() {
             html.setAttribute('data-md-color-scheme', 'slate');
             localStorage.setItem('data-md-color-scheme', 'slate');
         }
+        
+        updateToggleText();
     }
     
     // Load saved theme preference
@@ -34,4 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (savedScheme) {
         document.documentElement.setAttribute('data-md-color-scheme', savedScheme);
     }
+    
+    // Update toggle text after theme loads
+    setTimeout(updateToggleText, 100);
 });

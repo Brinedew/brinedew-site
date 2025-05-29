@@ -187,29 +187,34 @@
   justify-content: center;
 }
 
-/* Custom theme toggle in tabs area */
-.md-tabs::after {
-  content: "🌙 dark";
+/* Custom theme toggle as real element */
+.md-tabs__theme-toggle {
   position: absolute;
   right: 1rem;
-  font-size: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7rem;
+  font-weight: 400;
   color: var(--md-default-fg-color--light);
-  font-family: var(--sans-font);
+  font-family: var(--md-text-font);
   cursor: pointer;
   padding: 0.25rem 0.5rem;
-  border-radius: 3px;
+  border-radius: 0.1rem;
   transition: var(--hover-transition);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
-.md-tabs:hover::after {
+.md-tabs__theme-toggle:hover {
   background: var(--md-default-fg-color--lightest);
 }
 
-[data-md-color-scheme="slate"] .md-tabs::after {
-  content: "☀️ light";
+/* Hide theme toggle on mobile where hamburger menu exists */
+@media screen and (max-width: 76.1875em) {
+  .md-tabs__theme-toggle {
+    display: none;
+  }
 }
-
-/* Add JavaScript functionality for theme toggle */
 
 /* Search styling */
 .md-search__input {
@@ -289,14 +294,14 @@
 }
 
 /* Match page color to header color in dark mode */
-[data-md-color-scheme="slate"] {
-  --md-default-bg-color: #212121;
-}
-
 [data-md-color-scheme="slate"] .md-main,
 [data-md-color-scheme="slate"] .md-main__inner,
 [data-md-color-scheme="slate"] .md-content {
-  background-color: var(--md-default-bg-color);
+  background-color: #14151a !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #14151a !important;
 }
 
 /* Subtle animations */
