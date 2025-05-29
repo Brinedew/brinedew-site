@@ -1,7 +1,13 @@
-/* Import fonts for intellectual blog aesthetic */
+/* Import fonts for intellectual blog aesthetic - load first for priority */
 @import url('https://fonts.googleapis.com/css2?family=Charter:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* Global font override to ensure our fonts take precedence */
+* {
+  --md-text-font: 'Charter', 'Georgia', 'Times New Roman', serif !important;
+  --md-code-font: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace !important;
+}
 
 /* Root variables for intellectual blog aesthetic */
 :root {
@@ -17,17 +23,17 @@
 
 /* LessWrong/Gwern-inspired typography */
 .md-typeset {
-  font-family: var(--serif-font);
-  font-size: 1.05rem;
-  line-height: 1.65;
+  font-family: var(--serif-font) !important;
+  font-size: 1.05rem !important;
+  line-height: 1.65 !important;
   color: var(--md-default-fg-color);
   font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
   text-rendering: optimizeLegibility;
 }
 
 .md-typeset h1, .md-typeset h2, .md-typeset h3, .md-typeset h4, .md-typeset h5, .md-typeset h6 {
-  font-family: var(--sans-font);
-  font-weight: 600;
+  font-family: var(--sans-font) !important;
+  font-weight: 600 !important;
   letter-spacing: -0.025em;
   margin-top: 0;
   margin-bottom: 0.5em;

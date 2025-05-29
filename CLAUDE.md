@@ -93,3 +93,15 @@ The site uses GitHub Actions for automated deployment:
 - The `site/` directory in the repo is not used for production (GitHub Pages serves from gh-pages branch)
 - Build takes ~2-3 minutes after pushing changes
 - No manual intervention needed for deployment
+
+## CSS and Styling Notes
+
+**Important for CSS changes**:
+- Material theme has strong CSS precedence - use `!important` declarations for critical styles
+- Set `font: false` in `mkdocs.yml` to disable theme font overrides
+- Custom CSS is loaded via `extra_css: - stylesheets/extra.css` in mkdocs.yml
+- Global CSS variable overrides may be needed for Material theme variables like `--md-text-font`
+
+**Troubleshooting CSS issues**:
+- If changes don't appear: check browser cache (hard refresh) and verify CSS precedence
+- Material theme CSS loads after custom CSS, so use `!important` for font families and critical styles
