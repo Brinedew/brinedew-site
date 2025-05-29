@@ -173,9 +173,34 @@
   box-shadow: none;
 }
 
-/* Hide entire top header bar */
+/* Hide entire top header bar except on mobile */
 .md-header__inner {
   display: none !important;
+}
+
+/* Show header on mobile for hamburger menu */
+@media screen and (max-width: 76.1875em) {
+  .md-header__inner {
+    display: flex !important;
+  }
+  
+  /* Hide everything in header except hamburger and logo */
+  .md-header__title,
+  .md-search,
+  .md-header__source {
+    display: none !important;
+  }
+  
+  /* Style mobile header */
+  .md-header {
+    background: var(--md-default-bg-color);
+    height: 2.4rem;
+  }
+  
+  .md-header__inner {
+    height: 2.4rem;
+    padding: 0 0.5rem;
+  }
 }
 
 /* Make tabs the complete header */
@@ -238,6 +263,27 @@
 @media screen and (max-width: 76.1875em) {
   .md-tabs__theme-toggle {
     display: none;
+  }
+  
+  /* Fix mobile sidebar covering content */
+  .md-sidebar--primary {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  
+  /* Show sidebar when drawer is checked */
+  [data-md-toggle="drawer"]:checked ~ .md-container .md-sidebar--primary {
+    transform: translateX(0);
+  }
+  
+  /* Ensure main content takes full width on mobile */
+  .md-main__inner {
+    margin-left: 0 !important;
+  }
+  
+  /* Fix hamburger menu visibility */
+  .md-header__button.md-icon[for="__drawer"] {
+    display: block !important;
   }
 }
 
