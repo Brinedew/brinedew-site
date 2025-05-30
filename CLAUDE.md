@@ -1,123 +1,128 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+*Guidance for Claude Code (claude.ai/code) and other automated editors working with this repository.*
+
+---
 
 ## Project Architecture
 
-This is a personal website built with MkDocs Material that combines:
+This personal website combines:
 
-1. **Documentation Site** (`docs/` → `site/`): Main website content using MkDocs Material theme
-2. **Decap CMS Integration**: Content management system for editing markdown files via web interface
-3. **Cloudflare Worker Proxy** (`decap-proxy/`): GitHub OAuth proxy for Decap CMS authentication
+1. **Documentation Site** (`docs/` → build output): Main content rendered with **MkDocs Material**
+2. **Decap CMS** (`docs/admin/`): In‑browser markdown editing using the GitHub backend
+3. **Cloudflare Worker Proxy** (`decap-proxy/`): GitHub OAuth proxy for Decap CMS authentication
 
-### Key Components
+### Key Components *(unchanged)*
 
-- **MkDocs Site**: Primary content in `docs/` with Material theme, custom CSS, and multiple markdown extensions
-- **Decap CMS**: Admin interface at `/admin/` for content editing with GitHub backend
-- **Cloudflare Worker**: Separate authentication proxy deployed to handle GitHub OAuth for Decap CMS
+* **MkDocs site** — primary content in `docs/`, Material theme, custom CSS, multiple markdown extensions
+* **Decap CMS** — admin interface at `/admin/` for content editing
+* **Cloudflare Worker** — handles OAuth and CORS for the CMS (regular folder; *no longer a Git submodule*)
+
+---
 
 ## Common Commands
 
 ### Documentation Site (MkDocs)
+
 ```bash
-# Build and serve the site locally (if mkdocs installed)
+# Serve locally
 mkdocs serve
 
-# Build static site to site/ directory
+# Build static site to ./site (for local inspection)
 mkdocs build
 ```
 
-**Important**: The site uses automated deployment via GitHub Actions. Changes to `docs/` content and CSS are automatically built and deployed when pushed to the main branch. Manual building is only needed for local development.
+*(Local `mkdocs build` is optional; CI builds automatically on push.)*
 
-### Decap Proxy (Cloudflare Worker)
+### Decap Proxy (Cloudflare Worker)
+
 ```bash
-# Navigate to decap-proxy directory first
 cd decap-proxy
 
-# Local development
-npm run dev
-# or
-yarn dev
+# Local dev
+yarn dev   # or npm run dev
 
 # Deploy to Cloudflare
-npm run deploy
-# or 
-yarn deploy
+yarn deploy   # or npm run deploy
 
-# Run tests
-npm test
-# or
-yarn test
-
-# Debug tests
-npm run test:debug
-# or
+yarn test     # run unit tests
 yarn test:debug
 ```
 
+---
+
 ## Configuration Files
 
-- `mkdocs.yml`: Site configuration, theme settings, plugins, and markdown extensions
-- `docs/admin/config.yml`: Decap CMS configuration with GitHub backend and collection definitions
-- `decap-proxy/wrangler.toml`: Cloudflare Worker deployment configuration
-- `decap-proxy/package.json`: Worker dependencies and scripts
-- `.github/workflows/deploy.yml`: GitHub Actions workflow for automated site deployment
+* `mkdocs.yml` — site configuration, theme, plugins, markdown extensions
+* `docs/admin/config.yml` — Decap CMS configuration
+* `decap-proxy/wrangler.toml` — Cloudflare Worker deployment settings
+* `decap-proxy/package.json` — dependencies & scripts for the worker
+* `.github/workflows/deploy.yml` — GitHub Actions workflow (artifact‑based Pages deployment)
+
+---
 
 ## Content Structure
 
-- `docs/`: Markdown content files for the website
-- `docs/assets/images/`: Media files uploaded through Decap CMS
-- `docs/admin/`: Decap CMS admin interface files
-- `site/`: Generated static site output (built by MkDocs)
+* `docs/` — Markdown content
+* `docs/assets/images/` — Media managed by Decap CMS
+* `docs/admin/` — CMS UI
+* `site/` — Local build output *(not committed; CI artifacts only)*
 
-## Authentication Flow
+---
 
-The Decap CMS uses the Cloudflare Worker as a GitHub OAuth proxy. The worker handles:
-1. GitHub OAuth authentication
-2. Token exchange for API access
-3. CORS handling for the admin interface
+## Authentication Flow (CMS)
 
-Users access the CMS at `/admin/` which authenticates through the deployed worker at the configured `base_url`.
+1. User visits `/admin/`.
+2. CMS initiates GitHub OAuth.
+3. Cloudflare Worker (`decap‑proxy`) exchanges the code for a token and returns it to the CMS.
 
-## Deployment Workflow
+---
 
-The site uses GitHub Actions for automated deployment:
+## Deployment Workflow **(updated 2025‑05‑30)**
 
-1. **Trigger**: Any push to the `main` branch triggers the deployment workflow
-2. **Build Process**: GitHub Actions installs MkDocs, Material theme, and required plugins
-3. **Deployment**: Uses `mkdocs gh-deploy` to build and push to GitHub Pages
-4. **Dependencies Installed**: mkdocs, mkdocs-material, mkdocs-awesome-pages-plugin, mkdocs-redirects, pymdown-extensions
+| Step                   | Action                                                                    |
+| ---------------------- | ------------------------------------------------------------------------- |
+| **1. Trigger**         | Push to `main` branch.                                                    |
+| **2. Build**           | CI installs MkDocs & plugins, then `mkdocs build --strict` into `./site`. |
+| **3. Artifact Upload** | `actions/upload-pages-artifact@v3` stores `./site` as the Pages artifact. |
+| **4. Deploy**          | `actions/deploy-pages@v4` publishes the artifact to GitHub Pages.         |
 
-**Key Points**:
-- Changes to `docs/` content, CSS, or `mkdocs.yml` automatically trigger rebuilds
-- The `site/` directory in the repo is not used for production (GitHub Pages serves from gh-pages branch)
-- Build takes ~2-3 minutes after pushing changes
-- No manual intervention needed for deployment
+### Key Points
 
-## CSS and Styling Notes
+* **No `gh-pages` branch** is used; Pages serves the artifact produced by CI.
+* Broken internal links cause CI failure because `mkdocs.yml` sets `strict: true`.
+* Typical build + deploy time: **≈ 60 seconds**.
+* Manual `mkdocs gh-deploy` is obsolete — do not run it.
 
-**Important for CSS changes**:
-- Material theme has strong CSS precedence - use `!important` declarations for critical styles
-- Set `font: false` in `mkdocs.yml` to disable theme font overrides
-- Custom CSS is loaded via `extra_css: - stylesheets/extra.css` in mkdocs.yml
-- Global CSS variable overrides may be needed for Material theme variables like `--md-text-font`
+---
 
-**Troubleshooting CSS issues**:
-- If changes don't appear: check browser cache (hard refresh) and verify CSS precedence
-- Material theme CSS loads after custom CSS, so use `!important` for font families and critical styles
+## CSS and Styling Notes *(verbatim — still relevant)*
 
-## Development Best Practices
+> *Material theme overrides many styles; use `!important` sparingly and prefer theme variables.*
 
-**Before implementing UI changes**:
-1. **Inspect existing elements first**: Use browser dev tools to check actual CSS values, colors, fonts, and sizes
-2. **Match existing patterns**: Copy exact styling from similar elements (font-family, font-size, colors)
-3. **Use theme CSS variables**: Don't hardcode colors - use Material theme's existing CSS variables
-4. **Test responsive behavior**: Check mobile/tablet layouts and existing responsive patterns
-5. **Create proper interactive elements**: Use real DOM elements with event listeners, not pseudo-elements for clickable items
+* Custom CSS: `extra_css:` in `mkdocs.yml` points to `stylesheets/extra.css`.
+* Use Material CSS variables (`--md-*`) instead of hard‑coded colors.
+* Hard‑refresh the browser when styles don’t reflect.
 
-**Common mistakes to avoid**:
-- Don't guess CSS values - inspect and copy exact values
-- Don't create pseudo-elements for interactive functionality
-- Don't ignore mobile responsive behavior
-- Don't use different fonts/sizes from existing UI elements
-- Don't hardcode colors that should match theme variables
+---
+
+## Development Best Practices *(verbatim — still relevant)*
+
+1. Inspect existing elements before changing CSS.
+2. Follow existing patterns; match fonts, sizes, colors.
+3. Use theme variables; don’t hard‑code.
+4. Test responsive layouts.
+5. Use proper DOM elements for interactivity.
+
+**Avoid:** guessing values, pseudo‑element hacks, ignoring mobile, mixing fonts, hard‑coding theme colors.
+
+---
+
+## Obsolete Elements Removed in This Revision
+
+* References to `mkdocs gh-deploy` and the `gh-pages` branch.
+* Statement that `decap-proxy` is a Git submodule.
+
+---
+
+**Last updated:** 2025‑05‑30
