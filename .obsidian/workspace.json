@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "merge-hell-guide.md",
+                "file": "docs/About.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "merge-hell-guide"
+              "title": "About"
             }
           }
         ]
@@ -186,7 +186,10 @@
   },
   "active": "7cfa99de5b35b02b",
   "lastOpenFiles": [
+    "portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
+    "docs/index.md",
     "docs/About.md",
+    "merge-hell-guide.md",
     "site/posts/Obsidian test note 2/index.html",
     "site/posts/Obsidian test note/index.html",
     "site/posts/Obsidian test note 2",
@@ -198,7 +201,6 @@
     "site/aging biology myths/Immortal Jellyfish",
     "site/aging biology myths",
     "site/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
-    "docs/index.md",
     "docs/posts/Obsidian test note.md",
     "docs/posts/Obsidian test note 2.md",
     "docs/aging biology myths/Immortal Jellyfish.md",

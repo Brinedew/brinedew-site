@@ -5,10 +5,6 @@ hide:
   - toc
 ---
 
-# Brinedew
-
-I write about longevity research, computational biology, and systems thinking. My work focuses on the intersection of technology and life extension, exploring how computational approaches can accelerate our understanding of aging and disease.
-
 ## Recent Writing
 
 - [The Computational Approach to Aging Biology](posts/computational-aging.md) — How machine learning is transforming longevity research
