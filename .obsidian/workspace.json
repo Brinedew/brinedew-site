@@ -11,17 +11,14 @@
             "id": "7cfa99de5b35b02b",
             "type": "leaf",
             "state": {
-              "type": "canvas",
+              "type": "markdown",
               "state": {
-                "file": "docs/posts/Test canvas.canvas",
-                "viewState": {
-                  "x": 0,
-                  "y": 0,
-                  "zoom": 0
-                }
+                "file": "docs/About.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-layout-dashboard",
-              "title": "Test canvas"
+              "icon": "lucide-file",
+              "title": "About"
             }
           }
         ]
@@ -189,8 +186,8 @@
   },
   "active": "7cfa99de5b35b02b",
   "lastOpenFiles": [
-    "docs/aging biology myths/Aging is a disease.md",
     "docs/posts/Test canvas.canvas",
+    "docs/aging biology myths/Aging is a disease.md",
     "docs/Recommendations/Papers.md",
     "docs/posts/systems-thinking-biology.md",
     "docs/posts/computational-aging.md",
