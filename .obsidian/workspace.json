@@ -11,14 +11,17 @@
             "id": "7cfa99de5b35b02b",
             "type": "leaf",
             "state": {
-              "type": "markdown",
+              "type": "canvas",
               "state": {
-                "file": "docs/aging biology myths/Aging is a disease.md",
-                "mode": "source",
-                "source": false
+                "file": "docs/posts/Test canvas.canvas",
+                "viewState": {
+                  "x": 0,
+                  "y": 0,
+                  "zoom": 0
+                }
               },
-              "icon": "lucide-file",
-              "title": "Aging is a disease"
+              "icon": "lucide-layout-dashboard",
+              "title": "Test canvas"
             }
           }
         ]
@@ -166,7 +169,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 299.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -186,8 +189,9 @@
   },
   "active": "7cfa99de5b35b02b",
   "lastOpenFiles": [
-    "docs/Recommendations/Papers.md",
     "docs/aging biology myths/Aging is a disease.md",
+    "docs/posts/Test canvas.canvas",
+    "docs/Recommendations/Papers.md",
     "docs/posts/systems-thinking-biology.md",
     "docs/posts/computational-aging.md",
     "docs/Recommendations",
