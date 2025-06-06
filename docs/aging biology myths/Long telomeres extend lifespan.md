@@ -50,7 +50,7 @@ Stem cells maintain telomerase activity indefinitely but exist in specialized ni
 
 Studies attempting to correlate naturally occurring telomere length with mortality show mixed results (Ehrlenbach et al., 2009; Fitzpatrick et al., 2011), but genetic studies consistently show cancer risk from long telomeres.
 
-**The key insight:** We've been thinking about telomeres backwards. The anti-aging industry asks "How can we make telomeres longer?" Evolution already solved this problem by programming controlled telomere shortening that balances cellular function against cancer suppression. Longer is not better.
+**The key insight:** Evolution already solved the telomere shortening problem by programming controlled telomere extension that balances cellular function against cancer suppression. Extending telomeres artificially shifts this trade-off towards increased cancer risk.
 
 ## References
 
