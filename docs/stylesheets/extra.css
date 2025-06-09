@@ -228,7 +228,7 @@
   color: var(--md-accent-fg-color) !important;
 }
 
-/* Custom theme toggle as real element */
+/* Custom theme toggle - INACTIVE (using Material's built-in toggle instead)
 .md-tabs__theme-toggle {
   position: absolute;
   right: 1rem;
@@ -250,7 +250,6 @@
   background: var(--md-default-fg-color--lightest);
 }
 
-/* Dark mode theme toggle styling */
 [data-md-color-scheme="slate"] .md-tabs__theme-toggle {
   color: #e8e6e3 !important;
 }
@@ -258,21 +257,14 @@
 [data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
   background: rgba(232, 230, 227, 0.1) !important;
 }
+*/
 
-/* Dark mode theme toggle styling */
-[data-md-color-scheme="slate"] .md-tabs__theme-toggle {
-  color: #e8e6e3 !important;
-}
-
-[data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
-  background: rgba(232, 230, 227, 0.1) !important;
-}
-
-/* Hide theme toggle on mobile where hamburger menu exists */
+/* Hide custom theme toggle on mobile - INACTIVE
 @media screen and (max-width: 76.1875em) {
   .md-tabs__theme-toggle {
     display: none;
   }
+*/
   
     /* Fix mobile sidebar covering content */
   .md-sidebar--primary {

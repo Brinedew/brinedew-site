@@ -49,8 +49,8 @@ extra:
 extra_css:
   - stylesheets/extra.css
 
-extra_javascript:
-  - assets/javascripts/theme-toggle.js
+# extra_javascript:
+  # - assets/javascripts/theme-toggle.js  # Moved to assets/inactive/ - using Material's built-in toggle instead
 
 markdown_extensions:
   - pymdownx.highlight:
