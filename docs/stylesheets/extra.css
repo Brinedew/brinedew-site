@@ -376,50 +376,54 @@
   --subtle-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
-/* Dark mode styling - comprehensive color system fix */
+/* Dark mode styling - component-specific variable fixes only */
 [data-md-color-scheme="slate"] {
-  /* Base colors */
-  --md-default-bg-color: #14151a;
-  --md-default-bg-color--light: #1a1b20;
-  --md-default-bg-color--lighter: #202127;
-  --md-default-bg-color--lightest: #26272e;
-  
-  --md-primary-bg-color: #14151a;
-  --md-primary-bg-color--light: #1a1b20;
-  
-  --md-default-fg-color: #e8e6e3;
-  --md-default-fg-color--light: #b8b5b2;
-  --md-default-fg-color--lighter: #8a8783;
-  --md-default-fg-color--lightest: #5a5854;
-  
-  /* Typography colors */
-  --md-typeset-color: #e8e6e3;
-  --md-typeset-a-color: var(--md-accent-fg-color);
-  --md-typeset-mark-color: #ff9500;
-  --md-typeset-kbd-color: #e8e6e3;
-  --md-typeset-kbd-accent-color: #ffffff;
-  --md-typeset-kbd-border-color: #5a5854;
-  
-  /* Table colors - THIS FIXES THE WHITE TABLE ISSUE */
+  /* Table colors - fixes white text on white background */
   --md-typeset-table-color: #e8e6e3;
   --md-typeset-table-color--light: #b8b5b2;
   
-  /* Code colors */
-  --md-code-fg-color: #e8e6e3;
+  /* Code block colors - ensure proper contrast */
   --md-code-bg-color: #1a1b20;
   --md-code-hl-color: rgba(232, 230, 227, 0.15);
   --md-code-hl-color--light: rgba(232, 230, 227, 0.1);
   
-  /* Admonition colors */
-  --md-admonition-fg-color: #e8e6e3;
+  /* Keyboard key colors */
+  --md-typeset-kbd-color: #e8e6e3;
+  --md-typeset-kbd-accent-color: #ffffff;
+  --md-typeset-kbd-border-color: #5a5854;
+  
+  /* Mark/highlight colors */
+  --md-typeset-mark-color: #ff9500;
+  
+  /* Search overlay colors */
+  --md-search-result-color: #e8e6e3;
+  --md-search-result-color--light: #b8b5b2;
+  
+  /* Form input colors */
+  --md-input-fg-color: #e8e6e3;
+  --md-input-bg-color: #1a1b20;
+  --md-input-border-color: #5a5854;
+  
+  /* Admonition/callout colors */
   --md-admonition-bg-color: #1a1b20;
   
-  /* Footer colors */
-  --md-footer-bg-color: #14151a;
-  --md-footer-bg-color--dark: #0f1015;
-  --md-footer-fg-color: #b8b5b2;
-  --md-footer-fg-color--light: #8a8783;
-  --md-footer-fg-color--lighter: #5a5854;
+  /* Syntax highlighting improvements */
+  --md-code-hl-number-color: #ff9500;
+  --md-code-hl-string-color: #a8cc8c;
+  --md-code-hl-comment-color: #8a8783;
+  --md-code-hl-keyword-color: #c792ea;
+  --md-code-hl-function-color: #82aaff;
+  
+  /* Task list/checkbox colors */
+  --md-typeset-checkbox-color: #5a5854;
+  --md-typeset-checkbox-checked-color: var(--md-accent-fg-color);
+  
+  /* Blockquote enhancements */
+  --md-typeset-blockquote-color: #b8b5b2;
+  
+  /* Tab colors */
+  --md-tab-color: #e8e6e3;
+  --md-tab-active-color: var(--md-accent-fg-color);
 }
 
 /* Subtle animations */
