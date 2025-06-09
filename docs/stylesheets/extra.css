@@ -178,6 +178,37 @@
   display: none !important;
 }
 
+/* Extract Material's theme toggle and position it in tabs area */
+.md-header__button[for="__palette"] {
+  display: block !important;
+  position: absolute !important;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  /* Style to match tabs aesthetic */
+  color: var(--md-default-fg-color--light);
+  font-size: 1.2rem;
+  padding: 0.25rem;
+  border-radius: 0.2rem;
+  transition: var(--hover-transition);
+  background: transparent;
+  border: none;
+}
+
+.md-header__button[for="__palette"]:hover {
+  background: var(--md-default-fg-color--lightest);
+}
+
+/* Dark mode styling for extracted toggle */
+[data-md-color-scheme="slate"] .md-header__button[for="__palette"] {
+  color: #e8e6e3;
+}
+
+[data-md-color-scheme="slate"] .md-header__button[for="__palette"]:hover {
+  background: rgba(232, 230, 227, 0.1);
+}
+
 /* Show header on mobile for hamburger menu */
 @media screen and (max-width: 76.1875em) {
   .md-header__inner {
