@@ -122,17 +122,8 @@ Here's another footnote[^2].
 
 Inline math: $E = mc^2$
 
-Block math version 1:
-$$
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-$$
 
-Block math version 2:
-\[
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-\]
-
-Block math version 3 (no spaces):
+Block math (no spaces):
 $$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
 
 ## Links
