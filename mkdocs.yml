@@ -38,6 +38,8 @@ plugins:
   - search
   - awesome-pages
 
+nav:
+  - Home: index.md
 
 use_directory_urls: true
 

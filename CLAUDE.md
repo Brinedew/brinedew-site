@@ -113,6 +113,46 @@ mkdocs build
 
 **Avoid:** guessing values, pseudo‑element hacks, ignoring mobile, mixing fonts, hard‑coding theme colors, overriding Material's base color system variables.
 
+### **MathJax Configuration**
+
+**✅ WORKING Configuration:**
+```javascript
+// In docs/assets/javascripts/mathjax.js
+window.MathJax = {
+  tex: {
+    inlineMath: [["\\(", "\\)"], ["$", "$"]],
+    displayMath: [["\\[", "\\]"], ["$$", "$$"]],
+    processEscapes: true,
+    processEnvironments: true
+  },
+  options: {
+    ignoreHtmlClass: "",      // Process ALL elements
+    processHtmlClass: ""      // Don't restrict to specific classes
+  }
+};
+```
+
+**❌ BROKEN Configuration:**
+```javascript
+options: {
+  ignoreHtmlClass: ".*|",
+  processHtmlClass: "arithmatex"  // Too restrictive - only processes .arithmatex elements
+}
+```
+
+**Why:** Material's default MathJax setup is too restrictive. The `processHtmlClass: "arithmatex"` setting only processes elements with that specific class, but `pymdownx.arithmatex` doesn't always wrap `$$` blocks correctly. Setting both class options to empty strings makes MathJax process all math regardless of HTML structure.
+
+**Required in mkdocs.yml:**
+```yaml
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - assets/javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+```
+
 ---
 
 ## Git Troubleshooting & Merge Conflict Recovery
