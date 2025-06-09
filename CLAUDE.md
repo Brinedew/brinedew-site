@@ -64,7 +64,7 @@ mkdocs build
 
 ---
 
-## CSS and Styling Notes *(verbatim — still relevant)*
+## CSS and Styling Notes
 
 > *Material theme overrides many styles; use `!important` sparingly and prefer theme variables.*
 
@@ -72,17 +72,46 @@ mkdocs build
 * Use Material CSS variables (`--md-*`) instead of hard‑coded colors.
 * Hard‑refresh the browser when styles don't reflect.
 
+### **CRITICAL: Material Theme Color Customization**
+
+**✅ CORRECT Pattern - Component-Specific Variables:**
+```css
+[data-md-color-scheme="slate"] {
+  /* Override ONLY component-specific variables */
+  --md-typeset-table-color: #e8e6e3;
+  --md-code-bg-color: #1a1b20;
+  --md-admonition-bg-color: #1a1b20;
+}
+```
+
+**❌ WRONG Pattern - Base System Variables:**
+```css
+[data-md-color-scheme="slate"] {
+  /* DON'T override base system variables - breaks theme toggle */
+  --md-default-bg-color: #14151a;  /* BREAKS LIGHT MODE */
+  --md-default-fg-color: #e8e6e3;  /* BREAKS LIGHT MODE */
+}
+```
+
+**Why:** Material's theme toggle depends on base variables being defined differently for "default" vs "slate" schemes. Overriding base variables breaks the switching logic.
+
+**Safe Variables to Override:** Component-specific variables like `--md-typeset-*`, `--md-code-*`, `--md-admonition-*`, etc.
+
+**Unsafe Variables:** Base system variables like `--md-default-*`, `--md-primary-*` that control fundamental color inheritance.
+
 ---
 
-## Development Best Practices *(verbatim — still relevant)*
+## Development Best Practices
 
 1. Inspect existing elements before changing CSS.
 2. Follow existing patterns; match fonts, sizes, colors.
 3. Use theme variables; don't hard‑code.
 4. Test responsive layouts.
 5. Use proper DOM elements for interactivity.
+6. **Test dark/light mode toggle after any color changes.**
+7. **Use `/docs/posts/Dark Mode Test Page.md` to verify color customizations.**
 
-**Avoid:** guessing values, pseudo‑element hacks, ignoring mobile, mixing fonts, hard‑coding theme colors.
+**Avoid:** guessing values, pseudo‑element hacks, ignoring mobile, mixing fonts, hard‑coding theme colors, overriding Material's base color system variables.
 
 ---
 

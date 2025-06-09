@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/posts/Has lifespan extension research plateaued.md",
+                "file": "docs/posts/Dark Mode Test Page.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Has lifespan extension research plateaued"
+              "title": "Dark Mode Test Page"
             }
           }
         ]
@@ -184,11 +184,11 @@
       "table-editor-obsidian:Advanced Tables Toolbar": false
     }
   },
-  "active": "e83863c767d97dda",
+  "active": "26aa88873134aa56",
   "lastOpenFiles": [
+    "docs/posts/Has lifespan extension research plateaued.md",
     "docs/posts/Dark Mode Test Page.md",
     "docs/posts/Obsidian test note.md",
-    "docs/posts/Has lifespan extension research plateaued.md",
     "docs/aging biology myths/Long telomeres extend lifespan.md",
     "CLAUDE.md",
     "merge-hell-guide.md",
