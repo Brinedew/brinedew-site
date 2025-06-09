@@ -24,7 +24,7 @@
 /* LessWrong/Gwern-inspired typography */
 .md-typeset {
   font-family: var(--serif-font) !important;
-  font-size: 1.05rem !important;
+  font-size: 0.8rem !important;
   line-height: 1.65 !important;
   color: var(--md-default-fg-color);
   font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
@@ -179,7 +179,8 @@
 }
 
 /* Extract Material's theme toggle and position it in tabs area */
-.md-header__button[for="__palette"] {
+.md-header__button[for="__palette"],
+.md-header__button[data-md-component="palette"] {
   display: block !important;
   position: absolute !important;
   right: 1rem;
@@ -196,16 +197,19 @@
   border: none;
 }
 
-.md-header__button[for="__palette"]:hover {
+.md-header__button[for="__palette"]:hover,
+.md-header__button[data-md-component="palette"]:hover {
   background: var(--md-default-fg-color--lightest);
 }
 
 /* Dark mode styling for extracted toggle */
-[data-md-color-scheme="slate"] .md-header__button[for="__palette"] {
+[data-md-color-scheme="slate"] .md-header__button[for="__palette"],
+[data-md-color-scheme="slate"] .md-header__button[data-md-component="palette"] {
   color: #e8e6e3;
 }
 
-[data-md-color-scheme="slate"] .md-header__button[for="__palette"]:hover {
+[data-md-color-scheme="slate"] .md-header__button[for="__palette"]:hover,
+[data-md-color-scheme="slate"] .md-header__button[data-md-component="palette"]:hover {
   background: rgba(232, 230, 227, 0.1);
 }
 
@@ -376,7 +380,7 @@
   }
   
   .md-typeset {
-    font-size: 1rem;
+    font-size: 0.75rem;
   }
 }
 
