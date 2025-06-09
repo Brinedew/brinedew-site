@@ -120,11 +120,12 @@ Here's another footnote[^2].
 
 ## Math Expressions (if MathJax is enabled)
 
-Inline math: $E = mc^2$
+Inline math: \(E = mc^2\)
 
-
-Block math (no spaces):
-$$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
+Block math:
+\[
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+\]
 
 ## Links
 
