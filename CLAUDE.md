@@ -153,6 +153,56 @@ extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 ```
 
+### **Navigation System Warnings**
+
+**❌ NEVER add explicit `nav:` configuration when using `navigation.tabs` + `awesome-pages`**
+```yaml
+# This BREAKS the header tabs - turns them into single "Home" tab
+nav:
+  - Home: index.md
+```
+
+**Why:** Material's `navigation.tabs` feature expects either:
+- No `nav:` at all (auto-discovery via awesome-pages)
+- Complete manual navigation structure
+
+**Half-configured navigation breaks the tab system.**
+
+### **Mobile Development Limitations**
+
+**Obsidian Git Mobile is Fundamentally Broken:**
+- Cannot handle merge conflicts (MergeNotSupportedError)
+- Very unstable according to official docs
+- No SSH authentication support
+- Performance issues on large repos
+
+**Better Mobile Alternatives:**
+- Notion + Super.so (WYSIWYG editing)
+- GitHub mobile web interface (direct file editing)
+- Working Copy (iOS) / MGit (Android) + external markdown editor
+- Edit locally, sync/push from desktop later
+
+**Don't waste time trying to fix Obsidian Git mobile sync issues.**
+
+### **CSS Scoping Warnings**
+
+**❌ Mobile-specific CSS rules applying globally:**
+```css
+/* This rule is OUTSIDE media query but affects all devices */
+.md-sidebar--primary {
+  left: -12.1rem !important;  /* Hides sidebar on ALL devices */
+}
+```
+
+**✅ Proper mobile scoping:**
+```css
+@media screen and (max-width: 76.1875em) {
+  .md-sidebar--primary {
+    left: -12.1rem !important;  /* Only affects mobile */
+  }
+}
+```
+
 ---
 
 ## Git Troubleshooting & Merge Conflict Recovery
