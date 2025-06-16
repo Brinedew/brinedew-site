@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/posts/Dark Mode Test Page.md",
+                "file": "docs/posts/Untitled.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Dark Mode Test Page"
+              "title": "Untitled"
             }
           }
         ]
@@ -186,11 +186,12 @@
   },
   "active": "26aa88873134aa56",
   "lastOpenFiles": [
+    "docs/posts/Dark Mode Test Page.md",
+    "docs/posts/Untitled.md",
     "docs/assets/javascripts/mathjax.js",
     "docs/assets/inactive/theme-toggle.js",
     "docs/assets/inactive",
     "docs/posts/Has lifespan extension research plateaued.md",
-    "docs/posts/Dark Mode Test Page.md",
     "docs/posts/Obsidian test note.md",
     "docs/aging biology myths/Long telomeres extend lifespan.md",
     "CLAUDE.md",
@@ -211,7 +212,6 @@
     "site/posts/Obsidian test note",
     "site/posts",
     "site/aging biology myths/Immortal Jellyfish/index.html",
-    "site/aging biology myths/Lobsters Don't Age/index.html",
     "site/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
     "docs/posts/Obsidian test note 2.md",
     "docs/aging biology myths/Lobsters Don't Age.md",
