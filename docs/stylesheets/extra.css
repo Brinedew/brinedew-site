@@ -310,6 +310,13 @@
   width: 14rem;
 }
 
+/* Make sidebars scroll with content instead of staying fixed */
+.md-sidebar--primary,
+.md-sidebar--secondary {
+  position: static !important;
+  height: auto !important;
+}
+
 .md-nav--secondary .md-nav__title {
   font-weight: 500;
   font-size: 0.8rem;
