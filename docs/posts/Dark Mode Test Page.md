@@ -178,4 +178,4 @@ $$
 
 ---
 
-This test page should reveal any dark mode color issues across all major content types and interactive elements
+This test page should reveal any dark mode color issues across all major content types and interactive elements.
