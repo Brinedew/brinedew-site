@@ -1,19 +1,13 @@
 window.MathJax = {
   tex: {
-    inlineMath: [["\\(", "\\)"], ["$", "$"]],
-    displayMath: [["\\[", "\\]"], ["$$", "$$"]],
+    inlineMath: [["\\(", "\\)"]],
+    displayMath: [["\\[", "\\]"]],
     processEscapes: true,
     processEnvironments: true
   },
   options: {
-    ignoreHtmlClass: "",
-    processHtmlClass: ""
-  },
-  startup: {
-    ready() {
-      MathJax.startup.defaultReady();
-      console.log('MathJax loaded');
-    }
+    ignoreHtmlClass: ".*|",
+    processHtmlClass: "arithmatex"
   }
 };
 
