@@ -4,17 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "c6936e032da688e1",
+        "id": "7a995014a5ddd2cf",
         "type": "tabs",
         "children": [
           {
-            "id": "0d9b1d8b0f55bbdd",
+            "id": "b07a175343194075",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "docs/posts/Obsidian test note.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "Obsidian test note"
             }
           }
         ]
@@ -151,9 +155,8 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "0d9b1d8b0f55bbdd",
+  "active": "b07a175343194075",
   "lastOpenFiles": [
-    "docs/posts/Obsidian test note.md",
     "docs/posts/Has lifespan extension research plateaued.md",
     "docs/posts/Dark Mode Test Page.md",
     "templates/blog-post.md",
@@ -172,6 +175,7 @@
     "portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
     "docs/resources/longevity-research.md",
     "docs/posts/Test canvas.canvas",
+    "docs/posts/Obsidian test note.md",
     "docs/posts/Obsidian test note 2.md",
     "docs/index.md",
     "docs/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
