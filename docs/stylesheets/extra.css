@@ -352,29 +352,17 @@
   display: none !important;
 }
 
-/* Responsive reading experience */
+/* Responsive padding only - no font scaling */
 @media screen and (max-width: 76.1875em) {
   .md-content__inner {
     max-width: none;
     padding: 1.5rem 1rem;
-  }
-  
-  .md-typeset {
-    font-size: 1rem;
   }
 }
 
 @media screen and (max-width: 48em) {
   .md-content__inner {
     padding: 1rem 0.75rem;
-  }
-  
-  .md-typeset h1 {
-    font-size: 1.8em;
-  }
-  
-  .md-typeset h2 {
-    font-size: 1.4em;
   }
 }
 
