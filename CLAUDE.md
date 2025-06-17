@@ -46,6 +46,22 @@ mkdocs build
 
 ---
 
+## Site Elements
+
+### Sidebars
+
+**Left sidebar** (site navigation):
+* **Technical name**: Primary sidebar
+* **MkDocs Material class**: `md-sidebar--primary`
+* **Purpose**: Site-wide navigation, section menus (e.g., "posts")
+
+**Right sidebar** (page navigation):
+* **Technical name**: Secondary sidebar
+* **MkDocs Material class**: `md-sidebar--secondary`
+* **Purpose**: Page-specific table of contents, in-page navigation
+
+---
+
 ## Deployment Workflow **(updated 2025‑05‑30)**
 
 | Step                   | Action                                                                    |
