@@ -24,7 +24,7 @@
 /* LessWrong/Gwern-inspired typography */
 .md-typeset {
   font-family: var(--serif-font) !important;
-  font-size: 0.8rem !important;
+  font-size: 1.05rem !important;
   line-height: 1.65 !important;
   color: var(--md-default-fg-color);
   font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
@@ -178,41 +178,6 @@
   display: none !important;
 }
 
-/* Extract Material's theme toggle and position it in tabs area */
-.md-header__button[for="__palette"],
-.md-header__button[data-md-component="palette"] {
-  display: block !important;
-  position: absolute !important;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  /* Style to match tabs aesthetic */
-  color: var(--md-default-fg-color--light);
-  font-size: 1.2rem;
-  padding: 0.25rem;
-  border-radius: 0.2rem;
-  transition: var(--hover-transition);
-  background: transparent;
-  border: none;
-}
-
-.md-header__button[for="__palette"]:hover,
-.md-header__button[data-md-component="palette"]:hover {
-  background: var(--md-default-fg-color--lightest);
-}
-
-/* Dark mode styling for extracted toggle */
-[data-md-color-scheme="slate"] .md-header__button[for="__palette"],
-[data-md-color-scheme="slate"] .md-header__button[data-md-component="palette"] {
-  color: #e8e6e3;
-}
-
-[data-md-color-scheme="slate"] .md-header__button[for="__palette"]:hover,
-[data-md-color-scheme="slate"] .md-header__button[data-md-component="palette"]:hover {
-  background: rgba(232, 230, 227, 0.1);
-}
-
 /* Show header on mobile for hamburger menu */
 @media screen and (max-width: 76.1875em) {
   .md-header__inner {
@@ -263,7 +228,7 @@
   color: var(--md-accent-fg-color) !important;
 }
 
-/* Custom theme toggle - INACTIVE (using Material's built-in toggle instead)
+/* Custom theme toggle as real element */
 .md-tabs__theme-toggle {
   position: absolute;
   right: 1rem;
@@ -285,6 +250,7 @@
   background: var(--md-default-fg-color--lightest);
 }
 
+/* Dark mode theme toggle styling */
 [data-md-color-scheme="slate"] .md-tabs__theme-toggle {
   color: #e8e6e3 !important;
 }
@@ -292,14 +258,21 @@
 [data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
   background: rgba(232, 230, 227, 0.1) !important;
 }
-*/
 
-/* Hide custom theme toggle on mobile - INACTIVE
+/* Dark mode theme toggle styling */
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__theme-toggle:hover {
+  background: rgba(232, 230, 227, 0.1) !important;
+}
+
+/* Hide theme toggle on mobile where hamburger menu exists */
 @media screen and (max-width: 76.1875em) {
   .md-tabs__theme-toggle {
     display: none;
   }
-*/
   
     /* Fix mobile sidebar covering content */
   .md-sidebar--primary {
@@ -380,7 +353,7 @@
   }
   
   .md-typeset {
-    font-size: 0.75rem;
+    font-size: 1rem;
   }
 }
 
@@ -403,54 +376,72 @@
   --subtle-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
-/* Dark mode styling - component-specific variable fixes only */
+/* Dark mode styling - comprehensive fix */
 [data-md-color-scheme="slate"] {
-  /* Table colors - fixes white text on white background */
-  --md-typeset-table-color: #e8e6e3;
-  --md-typeset-table-color--light: #b8b5b2;
-  
-  /* Code block colors - ensure proper contrast */
-  --md-code-bg-color: #1a1b20;
-  --md-code-hl-color: rgba(232, 230, 227, 0.15);
-  --md-code-hl-color--light: rgba(232, 230, 227, 0.1);
-  
-  /* Keyboard key colors */
-  --md-typeset-kbd-color: #e8e6e3;
-  --md-typeset-kbd-accent-color: #ffffff;
-  --md-typeset-kbd-border-color: #5a5854;
-  
-  /* Mark/highlight colors */
-  --md-typeset-mark-color: #ff9500;
-  
-  /* Search overlay colors */
-  --md-search-result-color: #e8e6e3;
-  --md-search-result-color--light: #b8b5b2;
-  
-  /* Form input colors */
-  --md-input-fg-color: #e8e6e3;
-  --md-input-bg-color: #1a1b20;
-  --md-input-border-color: #5a5854;
-  
-  /* Admonition/callout colors */
-  --md-admonition-bg-color: #1a1b20;
-  
-  /* Syntax highlighting improvements */
-  --md-code-hl-number-color: #ff9500;
-  --md-code-hl-string-color: #a8cc8c;
-  --md-code-hl-comment-color: #8a8783;
-  --md-code-hl-keyword-color: #c792ea;
-  --md-code-hl-function-color: #82aaff;
-  
-  /* Task list/checkbox colors */
-  --md-typeset-checkbox-color: #5a5854;
-  --md-typeset-checkbox-checked-color: var(--md-accent-fg-color);
-  
-  /* Blockquote enhancements */
-  --md-typeset-blockquote-color: #b8b5b2;
-  
-  /* Tab colors */
-  --md-tab-color: #e8e6e3;
-  --md-tab-active-color: var(--md-accent-fg-color);
+  --md-default-bg-color: #14151a !important;
+  --md-primary-bg-color: #14151a !important;
+  --md-default-fg-color: #e8e6e3 !important;
+  --md-default-fg-color--light: #b8b5b2 !important;
+  --md-default-fg-color--lighter: #8a8783 !important;
+  --md-default-fg-color--lightest: #5a5854 !important;
+}
+
+/* Dark mode backgrounds */
+[data-md-color-scheme="slate"] .md-main,
+[data-md-color-scheme="slate"] .md-main__inner,
+[data-md-color-scheme="slate"] .md-content,
+[data-md-color-scheme="slate"] .md-tabs,
+[data-md-color-scheme="slate"] .md-sidebar,
+[data-md-color-scheme="slate"] .md-sidebar--primary,
+[data-md-color-scheme="slate"] .md-sidebar--secondary,
+[data-md-color-scheme="slate"] .md-nav,
+[data-md-color-scheme="slate"] .md-nav--primary,
+[data-md-color-scheme="slate"] .md-nav--secondary,
+[data-md-color-scheme="slate"] .md-overlay,
+[data-md-color-scheme="slate"] body {
+  background-color: #14151a !important;
+}
+
+/* Dark mode text colors */
+[data-md-color-scheme="slate"] .md-typeset,
+[data-md-color-scheme="slate"] .md-typeset p,
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h3,
+[data-md-color-scheme="slate"] .md-typeset h4,
+[data-md-color-scheme="slate"] .md-typeset h5,
+[data-md-color-scheme="slate"] .md-typeset h6 {
+  color: #e8e6e3 !important;
+}
+
+/* Dark mode sidebar styling */
+[data-md-color-scheme="slate"] .md-nav__title,
+[data-md-color-scheme="slate"] .md-nav__link {
+  color: #e8e6e3 !important;
+  background-color: transparent !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+[data-md-color-scheme="slate"] .md-nav__item--active > .md-nav__link {
+  color: var(--md-accent-fg-color) !important;
+}
+
+/* Fix dark mode sidebar title styling */
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__title {
+  color: #e8e6e3 !important;
+  background-color: transparent !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* Dark mode tab styling */
+[data-md-color-scheme="slate"] .md-tabs__link {
+  color: #e8e6e3 !important;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__link--active {
+  color: var(--md-accent-fg-color) !important;
 }
 
 /* Subtle animations */
