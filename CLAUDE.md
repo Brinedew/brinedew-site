@@ -153,41 +153,6 @@ extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 ```
 
-### **Navigation System Warnings**
-
-**❌ NEVER add explicit `nav:` configuration when using `navigation.tabs` + `awesome-pages`**
-```yaml
-# This BREAKS the header tabs - turns them into single "Home" tab
-nav:
-  - Home: index.md
-```
-
-**Why:** Material's `navigation.tabs` feature expects either:
-- No `nav:` at all (auto-discovery via awesome-pages)
-- Complete manual navigation structure
-
-**Half-configured navigation breaks the tab system.**
-
-
-### **CSS Scoping Warnings**
-
-**❌ Mobile-specific CSS rules applying globally:**
-```css
-/* This rule is OUTSIDE media query but affects all devices */
-.md-sidebar--primary {
-  left: -12.1rem !important;  /* Hides sidebar on ALL devices */
-}
-```
-
-**✅ Proper mobile scoping:**
-```css
-@media screen and (max-width: 76.1875em) {
-  .md-sidebar--primary {
-    left: -12.1rem !important;  /* Only affects mobile */
-  }
-}
-```
-
 ---
 
 ## Git Troubleshooting & Merge Conflict Recovery
