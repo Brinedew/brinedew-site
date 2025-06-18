@@ -155,9 +155,22 @@ Title options: Principal-100-quadrillion-agents problem / The Price of Not Being
    - **Creates the principal** → But agents still need control
 
 
-## **6. Layer 2: The Credit Allocation Dilemma**
+## **6. Layer 2: Replication licensing**
 
-1. **The Pareto front reveals itself**
+1. **Problems with static soma body plans**
+	- what if some cells are torn off? This just kills the body
+	- Would be so easy to patch up the gap if only the neighboring soma cell could divide
+	- But they cant - too much anti-defector red tape
+	- the germ cell can divide, but its clones can't easily reach everywhere
+	- need some way for the soma cells to divide to patch the gaps
+	- this is regeneration - relaxation of anti-defector rules
+2. **Too much regeneration is bad, too little regeneration is bad**
+	- 0 regeneration - die from every scratch, low lifespan
+	- 100 regeneration - die from every pro-defector mutation, low lifespan 
+	- the maximum lifespan is somewhere between the too
+	- draw the inverted parabola graph to illustrate
+	- solution: local "aristocracy" of stem cells that keep some replication abilities after the body plan has fully formed
+3. **The Pareto front reveals itself**
 
    - Size vs longevity vs regeneration
 
