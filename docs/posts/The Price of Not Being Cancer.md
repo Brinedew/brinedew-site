@@ -207,13 +207,15 @@ Title options: Principal-100-quadrillion-agents problem / The Price of Not Being
 
 ## **7. Layer 3: When Prevention Fails (Active Warfare)**
 
-1. **The policing state emerges**
+1. Its also possible to fight a tumor that has already appeared.
+2. **The policing state emerges**
 
-   - p53 network (self-destruct on suspicion)
+   - p53 network (self-destruct on losing purity, akin to seppuku)
 
    - Immune surveillance (roaming enforcers)
 
    - Physical barriers (walls and checkpoints)
+   - inflammation
 
    - _Getting desperate now_
 
@@ -223,13 +225,16 @@ Title options: Principal-100-quadrillion-agents problem / The Price of Not Being
 
    - Defenses slowly losing the arms race
 
-   - **→ The Final Question:** What happens when you're losing?
+   - **→ The Final Question:** What happens when you're already implementing layers 0-3, but evolutionary pressure still rewards longer lifespans than what you currently have?
 
 
 ## **8. Layer 4: The Nuclear Option (Aging as Anti-Cancer)**
 
 1. **The police state analogy crystallizes**
-
+	-  young adult - few mutated cells, defectors are a small and rare concern
+   - older adult - lots of mutated cells, defecfors are a huge and constant concern
+   - more defectors = more red tape needed to contain them
+   - over time, an individual organism's cells transition from high trust society to low trust society
    - Society under threat → paranoid responses
 
    - Trade freedom for security
