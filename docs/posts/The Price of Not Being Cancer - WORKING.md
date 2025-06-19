@@ -97,15 +97,13 @@ The causal chain for this threat is straightforward:
 
 This internal Darwinian pressure necessitates powerful, multi-layered defenses.
 
-**[VOICE ISSUE: The following sections are too academic - need Brinedew treatment]**
+Think of genome stability as a budget. Every time a cell divides, DNA replication introduces errors - most harmless, but occasionally you get a mutation that turns a cooperative cell into a selfish one. If the error rate is too high, you're basically printing counterfeit currency for cellular rebellion.
 
-### Layer 0: The "Replicative Credit" Budget
+Evolution's response was to build incredibly sophisticated quality control. DNA polymerases with proofreading capabilities, multiple repair pathways that catch and fix different types of damage. This reduces the baseline mutation rate dramatically, effectively giving you more "safe" cell divisions to spend.
 
-Think of genome stability as a budget. High-fidelity replication gives you more "safe" divisions to spend on size, regeneration, or longevity. But here's the thing: you can't have all three.
+But here's the constraint: you can't have everything. More size means more cells. Longer lifespan means more time for mutations to accumulate. Better regeneration means more stem cell divisions. Pick two.
 
-Evolution's first move was investing heavily in DNA repair machinery - proofreading polymerases, multiple repair pathways. This reduces the mutation rate from μ_raw to μ_repaired, effectively increasing your pool of "replicative credits."
-
-Organisms like Hydra with extreme regeneration must have exceptionally high fidelity in their stem cells to support continuous renewal. The price? Energy costs, and it's still not perfect.
+Organisms like Hydra, which can regenerate from tiny fragments and seem effectively immortal, must have exceptional quality control in their stem cells. They're spending their cellular budget on continuous renewal rather than size or complexity. The price is constant energy costs for all that repair machinery, and even then it's not perfect - mutations still slip through.
 
 ### Layer 1: Creating the Principal
 
