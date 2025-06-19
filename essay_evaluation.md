@@ -1,6 +1,6 @@
 # Essay Quality Evaluation: "The Price of Not Being Cancer"
 
-**File**: `/docs/posts/The Price of Not Being Cancer.md`
+**File**: `/docs/posts/The Price of Not Being Cancer - WORKING.md`
 **Word Count**: 6,411 words
 **Line Count**: 496 lines
 **Status**: UNDER SYSTEMATIC REVIEW
