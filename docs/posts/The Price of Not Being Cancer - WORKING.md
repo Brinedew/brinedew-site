@@ -118,23 +118,15 @@ True multicellularity required creating a "principal" class (germline) and subor
 
 Plants, of course, just laugh at the Weismann barrier and grow new bits from wherever they please. Anarchists, the lot of them.
 
-### Layer 2: The Pareto Front
+Even with cellular caste systems and quality control, you still have the fundamental resource allocation problem. Your "replicative credit" budget has to cover three things: body size, lifespan, and regenerative capacity. You can't maximize all three.
 
-**[NEEDS: Regeneration parabola visualization]**
+This creates what economists call a Pareto front - a boundary where improving one thing necessarily makes another thing worse. Want to be huge and long-lived like a whale? Fine, but your regenerative capacity will be terrible. Ever seen a whale regrow a fin? 
 
-Even with subordinated soma and high-quality replicative credits, divisions create cheater opportunities. Layer 2 manages the budget across body size, lifespan, and regenerative capacity. These form a Pareto front - you can't maximize all three simultaneously.
+Mice made the opposite trade-off. They're small and short-lived, which frees up cellular budget for impressive regeneration. Cut off a mouse's tail tip and it grows back. Humans are stuck in the middle - moderate size, moderate lifespan, moderate regeneration.
 
-Examples prove the point:
-- **Whales**: Huge + long-lived = terrible regeneration  
-- **Mice**: Small + short-lived = great regeneration
-- **Humans**: Stuck in the middle
+The body enforces these trade-offs through multiple control systems. Normal cells need "permission slips" (growth factors) before they can divide, and they respect "no vacancy" signs (contact inhibition) when space gets crowded. Most cells also have built-in divisional counters - telomeres that get shorter with each division until the cell hits its limit and stops.
 
-The defense mechanisms:
-- **Growth controls**: Cells need permission slips (growth factors)
-- **Telomere limits**: Built-in divisional counters
-- **Contact inhibition**: Respect the "no vacancy" signs
-
-Each control mechanism sacrifices capability for security.
+Cancer cells systematically disable these controls. They forge their own permission slips, ignore density signals, and reactivate their divisional counters. It's like cellular identity theft - they're spending replicative credits they're not authorized to use.
 
 ### Layer 3: Active Policing
 
