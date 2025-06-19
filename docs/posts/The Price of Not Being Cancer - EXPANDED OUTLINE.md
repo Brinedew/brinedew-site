@@ -61,19 +61,17 @@ What's optimal for parts often kills the whole. What keeps the whole alive often
 
 ### Just count the agents
 
-[10^13-14 cells in humans, 10^17 in blue whales (!)]
+{Think about the numbers involved.} A human body contains roughly 10^13 to 10^14 cells. A blue whale? About 10^17 cells - {a thousand times more cellular agents that need coordination}. Each time any of these cells divides, DNA replication introduces small errors. Most are harmless, but occasionally you get a mutation that makes a cell slightly more selfish - better at hoarding resources, ignoring growth signals, or avoiding death.
 
-[Each division = mutation opportunity. Do the math: this should be impossible]
+{Now here's the problem: in a system with trillions of agents, even very rare events become inevitable.} If there's a one-in-a-million chance that any given cell division produces a "cheater" mutation, then over a lifetime of cellular turnover, you're essentially guaranteed to generate thousands of potential defectors.
 
-### The principal-agent nightmare
+### {The principal-agent nightmare}
 
-[Germline = principal (wants long-term reproduction)]
+{This is fundamentally a principal-agent problem, but at a scale that makes corporate governance look trivial.} The germline - your reproductive cells - acts as the "principal," with a long-term interest in getting genes into the next generation. The soma - all your other cells - are the "agents," supposedly working on behalf of the germline's reproductive goals.
 
-[Soma = trillions of agents (each potentially self-interested)]
+{But here's where it gets tricky: mutations create value drift.} Each cellular generation, some agents start caring a little less about the principal's goals and a little more about their own immediate replication. {In economics, you might have a CEO who cares more about quarterly bonuses than long-term shareholder value. In biology, you get cells that care more about their own division than the organism's survival.}
 
-[Mutations = value drift]
-
-[This is the largest principal-agent problem imaginable - how do you keep trillions of agents from defecting?]
+{How do you maintain alignment across trillions of agents, each potentially one mutation away from defection?}
 
 ## **4. Layer 0: An ounce of prevention**
 
