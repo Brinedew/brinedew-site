@@ -330,7 +330,8 @@ Title options: Principal-100-quadrillion-agents problem / The Price of Not Being
    - **...IS aging itself**
 
 
-## **11. Implications cascade outward**
+## **11.  Why did I write this post?
+**
 
 1. **For understanding biology**
 
@@ -346,7 +347,7 @@ Title options: Principal-100-quadrillion-agents problem / The Price of Not Being
 
    - Most startups attacking symptoms not causes
 
-   - "Cellular immortality" claims = red flags
+   - "Cellular immortality", "anti aging genes" claims = red flags for you to pick up on
 
    - Need to respect Chesterton's fence
 

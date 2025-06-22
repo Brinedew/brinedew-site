@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/posts/The Price of Not Being Cancer.md",
+                "file": "docs/posts/The Price of Not Being Cancer - Outline.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "The Price of Not Being Cancer"
+              "title": "The Price of Not Being Cancer - Outline"
             }
           }
         ]
@@ -155,8 +155,9 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "ff7b490bb06629b6",
+  "active": "0d9b1d8b0f55bbdd",
   "lastOpenFiles": [
+    "docs/posts/The Price of Not Being Cancer.md",
     "outline_correspondence_analysis.md",
     "essay_evaluation.md",
     "docs/posts/The Price of Not Being Cancer - WORKING.md",
@@ -187,7 +188,6 @@
     "/CLAUDE.md",
     "docs/posts/assets/images",
     "/docs/posts/assets/images",
-    "docs/posts/The Price of Not Being Cancer.md",
     "docs/posts/Obsidian test note.md",
     "docs/posts/Has lifespan extension research plateaued.md",
     "docs/posts/Dark Mode Test Page.md",
