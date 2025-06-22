@@ -124,6 +124,7 @@ Title options: Principal-100-quadrillion-agents problem / The Price of Not Being
 
    - **Still imperfect though** → Need more layers
 
+Example: Trichoplax
 
 ## **5. Layer 1: Establishing a death pact
 
