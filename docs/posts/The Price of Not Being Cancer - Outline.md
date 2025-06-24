@@ -124,7 +124,7 @@ Title options: Principal-100-quadrillion-agents problem / The Price of Not Being
 
    - **Still imperfect though** → Need more layers
 
-Example: Trichoplax
+ 
 
 ## **5. Layer 1: Establishing a death pact
 
@@ -155,7 +155,7 @@ Example: Trichoplax
 
    - **Creates the principal** → But agents still need control
 
-
+example: placozoans (trichoplax) https://pubmed.ncbi.nlm.nih.gov/34788294/
 ## **6. Layer 2: Replication licensing**
 
 1. **Problems with static soma body plans**
