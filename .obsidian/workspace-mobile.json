@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/posts/The parable of the thermometer.md",
+                "file": "docs/posts/Vibes are principal components.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "The parable of the thermometer"
+              "title": "Vibes are principal components"
             }
           }
         ]
@@ -98,6 +98,7 @@
         "state": {
           "type": "backlink",
           "state": {
+            "file": "docs/posts/Vibes are principal components.md",
             "collapseAll": false,
             "extraContext": false,
             "sortOrder": "alphabetical",
@@ -157,8 +158,9 @@
   },
   "active": "0d9b1d8b0f55bbdd",
   "lastOpenFiles": [
-    "docs/posts/The Price of Not Being Cancer - Outline.md",
     "docs/posts/The parable of the thermometer.md",
+    "docs/posts/Vibes are principal components.md",
+    "docs/posts/The Price of Not Being Cancer - Outline.md",
     "docs/posts/Loyalists, drifters, defectors.md",
     "Untitled.md",
     "docs/posts/The Price of Not Being Cancer.md",
@@ -198,7 +200,6 @@
     "site/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
     "site/assets/images/favicon.png",
     "portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
-    "docs/resources/longevity-research.md",
     "docs/posts/Test canvas.canvas",
     "docs/assets/images/portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
     "ChatGPT Image Apr 8, 2025, 04_09_19 PM.png",
