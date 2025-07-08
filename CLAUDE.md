@@ -36,18 +36,13 @@ Don't overthink it. The CI does everything.
 ## navigation works automatically
 
 We're using the awesome-pages plugin, which means:
-- New markdown files show up in nav automatically
-- Want custom ordering? Add a `.pages` file in that directory
-- No need to manually edit mkdocs.yml for every new page
+- **New markdown files show up in nav automatically**
+- **No need to create .pages files** - navigation is generated from file structure
+- **No need to manually edit mkdocs.yml** for every new page
+- Files appear in alphabetical order by default
+- Put `index.md` in folders to create section landing pages
 
-Example `.pages` file:
-```yaml
-title: Section Name
-arrange:
-  - index.md
-  - important-page.md
-  - other-page.md
-```
+**Important: Don't create .pages files.** The wiki navigation auto-generates from your actual file structure, so just create the markdown files you want.
 
 ## styling notes
 
@@ -99,11 +94,16 @@ All installed automatically by CI.
 
 ## wiki structure
 
-New as of today: `/docs/wiki/` with hierarchical organization for longevity research concepts. Uses `.pages` files for navigation control. Each category gets its own subfolder with an index page.
+`/docs/wiki/` has hierarchical organization for longevity research concepts. Navigation auto-generates from file structure. Each category gets its own subfolder with an index page.
 
-Categories: concepts, theories, mechanisms, organisms, animal-models, proteins, pathways, research, papers, researchers.
+**To add new wiki content:**
+1. Create markdown files in the appropriate folder
+2. That's it - navigation updates automatically
+3. Cross-reference everything with relative links
 
-Cross-reference everything. That's the whole point of a wiki.
+**Current categories:** concepts, theories, mechanisms, organisms
+
+**Don't create .pages files** - they're not needed and will break the auto-navigation.
 
 ---
 
