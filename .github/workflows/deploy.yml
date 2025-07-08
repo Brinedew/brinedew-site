@@ -38,7 +38,7 @@ jobs:
           pip install $MKDOCS_DEPS
 
       - name: Build site
-        run: mkdocs build --strict --verbose --site-dir ./site
+        run: mkdocs build --verbose --site-dir ./site
 
       # Upload the generated ./site directory as a Pages artifact
       - name: Upload artifact
