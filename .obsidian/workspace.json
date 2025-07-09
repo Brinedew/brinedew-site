@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/wiki/concepts/de-darwinization.md",
+                "file": "docs/resources/longevity-research.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "de-darwinization"
+              "title": "longevity-research"
             }
           }
         ]
@@ -113,12 +113,11 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "docs/wiki/concepts/de-darwinization.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from de-darwinization"
+              "title": "Outgoing links"
             }
           },
           {
@@ -185,6 +184,15 @@
   },
   "active": "e83863c767d97dda",
   "lastOpenFiles": [
+    "docs/wiki/concepts/de-darwinization-v3.md",
+    "docs/wiki/concepts/sedRoeymk",
+    "docs/wiki/concepts/sedCskgfR",
+    "docs/wiki/concepts/sedvdFqlI",
+    "docs/wiki/concepts/sedmOe7FX",
+    "docs/wiki/concepts/de-darwinization-v2.md",
+    "docs/wiki/concepts/sedswsd6k",
+    "docs/wiki/concepts/sedfBMXpZ",
+    "docs/wiki/concepts/sedzZjdqo",
     "docs/wiki/concepts/de-darwinization.md.backup",
     "docs/resources/longevity-research.md",
     "docs/wiki/concepts/de-darwinization.md",
@@ -211,16 +219,7 @@
     "docs/02-Development",
     "docs/posts/Vibes are principal components.md",
     "docs/wiki/theories/Atavistic-theory-of-cancer.md",
-    "docs/wiki/theories/Atavistic-theory-of-cancer.txt",
-    "docs/wiki/theories/New Text Document.txt",
     "docs/wiki/theories/tumor-suppressor-theory-of-aging.md",
-    "docs/wiki/concepts/de-darwinization - Basic.md",
-    "docs/wiki/concepts/de-darwinization - Advanced.txt",
-    "docs/wiki/concepts/New Text Document.txt",
-    "docs/wiki/animal-models/cell-lines",
-    "docs/wiki/animal-models/invertebrates",
-    "docs/wiki/animal-models/vertebrates",
-    "docs/wiki/proteins/enzymes",
     "docs/posts/assets/images/ChatGPT Image Apr 8, 2025, 04_09_19 PM.png",
     "docs/posts/Test canvas.canvas",
     "portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
