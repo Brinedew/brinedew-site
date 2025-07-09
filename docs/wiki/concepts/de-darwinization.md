@@ -5,8 +5,6 @@
 
 ### 1. Introduction: The Paradox of Multicellularity
 
-De-darwinization is how multicellular organisms prevent their cells from evolving. Essentially, organisms use evolution to suppress evolution - building systems that stop cells from competing with each other and reverting to their ancestral unicellular behavior.
-
 Every multicellular organism faces the same basic problem: keeping trillions of cells working together when evolution originally trained them to compete. Your cells descend from billions of years of single-celled ancestors that got really good at outcompeting their neighbors. But now those same cellular descendants have to cooperate to build and maintain complex organisms.
 
 De-darwinization is the collection of mechanisms that solve this cooperation problem. Natural selection built systems that suppress natural selection - using evolution to prevent evolution from happening inside organisms. The result is a hierarchy where what's good for the organism trumps what's good for individual cells.
