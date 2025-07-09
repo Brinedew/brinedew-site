@@ -105,6 +105,34 @@ All installed automatically by CI.
 
 **Don't create .pages files** - they're not needed and will break the auto-navigation.
 
+## gemini analysis templates
+
+Use these prompts with the `gemini -p "prompt" @file.md` command to get structural analysis of documents:
+
+### structural analysis template
+```
+I am trying to improve the structure and flow of this article. The goal is to create a document that builds logically from first principles, introduces problems before solutions, and maintains consistent voice throughout. The intended audience is intelligent readers familiar with rationalist concepts who do not need dumbed-down explanations but appreciate clear progression of ideas.
+
+What structural problems do you notice in this article? Are there issues with redundancy, flow, logical progression, or sections that feel disconnected? Does the article successfully motivate each concept before explaining it, or does it jump to solutions without properly setting up the problems? Please be specific about which sections have issues and suggest concrete improvements.
+```
+
+### voice consistency template
+```
+Analyze this document for voice and tone consistency. The target audience is LessWrong veterans and researchers who prefer precise, substantive content. Look for: patronizing language, inconsistent formality levels, sections that sound like different authors, unclear transitions between concepts. Point out specific examples of voice problems and suggest how to fix them.
+```
+
+## writing for intelligent readers
+
+This site's audience includes LessWrong veterans, researchers, and people who read technical content for fun. Avoid patronizing tone:
+
+- **Don't use condescending phrases** ("Think of it as...", "This is essentially...", "How do you...")
+- **Avoid oversimplified explanations** of sophisticated concepts 
+- **Use precise technical language** instead of dumbed-down analogies
+- **Build from first principles is fine** - just don't talk down while doing it
+
+Wrong: "Think of it as evolution turning against itself to stop cells from competing"
+Right: "Multicellular organisms suppress intra-organismal evolution through..."
+
 ---
 
 *Last updated: whenever I remembered to update this*
