@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "docs/posts/Obsidian test note.md",
+                "file": "docs/resources/longevity-research.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Obsidian test note"
+              "title": "Outgoing links from longevity-research"
             }
           },
           {
@@ -142,13 +142,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "docs/posts/Obsidian test note.md",
+                "file": "docs/resources/longevity-research.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Obsidian test note"
+              "title": "Outline of longevity-research"
             }
           },
           {
@@ -183,8 +183,10 @@
       "table-editor-obsidian:Advanced Tables Toolbar": false
     }
   },
-  "active": "7d6a1c9c21a682d6",
+  "active": "e83863c767d97dda",
   "lastOpenFiles": [
+    "docs/wiki/concepts/de-darwinization.md",
+    "docs/wiki/concepts/de-darwinization-v3-complete-20250709-144716.md",
     "docs/wiki/mechanisms/immune-surveillance.md",
     "docs/wiki/mechanisms/weismann-barrier.md",
     "docs/wiki/mechanisms/telomeres.md",
@@ -201,7 +203,6 @@
     "docs/wiki/concepts/scandal-hypothesis.md",
     "docs/wiki/concepts/replicative-credit.md",
     "docs/wiki/concepts/death-pact.md",
-    "docs/wiki/concepts/de-darwinization.md",
     "docs/wiki/concepts/index.md",
     "test_push.txt",
     "docs/02-Development/HANDOFF_NOTE.md",
@@ -216,7 +217,6 @@
     "docs/wiki/concepts/de-darwinization - Advanced.txt",
     "docs/wiki/concepts/New Text Document.txt",
     "docs/wiki/theories/index.md",
-    "docs/wiki/theories/defensive-degeneration-theory.md",
     "docs/wiki/animal-models/cell-lines",
     "docs/wiki/animal-models/invertebrates",
     "docs/wiki/animal-models/vertebrates",
