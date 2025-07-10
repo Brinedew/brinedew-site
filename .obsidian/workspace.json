@@ -113,11 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "docs/resources/longevity-research.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links"
+              "title": "Outgoing links from longevity-research"
             }
           },
           {
@@ -141,13 +142,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "docs/wiki/concepts/de-darwinization.md",
+                "file": "docs/resources/longevity-research.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of de-darwinization"
+              "title": "Outline of longevity-research"
             }
           },
           {
@@ -182,20 +183,25 @@
       "table-editor-obsidian:Advanced Tables Toolbar": false
     }
   },
-  "active": "e83863c767d97dda",
+  "active": "26aa88873134aa56",
   "lastOpenFiles": [
-    "docs/wiki/concepts/de-darwinization-v3.md",
-    "docs/wiki/concepts/sedRoeymk",
-    "docs/wiki/concepts/sedCskgfR",
-    "docs/wiki/concepts/sedvdFqlI",
-    "docs/wiki/concepts/sedmOe7FX",
-    "docs/wiki/concepts/de-darwinization-v2.md",
-    "docs/wiki/concepts/sedswsd6k",
-    "docs/wiki/concepts/sedfBMXpZ",
-    "docs/wiki/concepts/sedzZjdqo",
-    "docs/wiki/concepts/de-darwinization.md.backup",
-    "docs/resources/longevity-research.md",
     "docs/wiki/concepts/de-darwinization.md",
+    "docs/wiki/concepts/sedqY8KEo",
+    "docs/wiki/concepts/sedql7HUs",
+    "docs/wiki/concepts/sedw6slYS",
+    "docs/wiki/concepts/sedZsi8bL",
+    "docs/wiki/concepts/sedtsOvcg",
+    "docs/wiki/concepts/de-darwinization.md.backup",
+    "docs/wiki/concepts/sedrUI0Zp",
+    "docs/wiki/concepts/sedj8uoiB",
+    "docs/wiki/concepts/sedSj5Dxu",
+    "docs/wiki/concepts/sedNrjOJ7",
+    "docs/wiki/concepts/de-darwinization-v4.md",
+    "docs/wiki/concepts/~$-darwinization-v3.md",
+    "docs/wiki/concepts/~$-darwinization-v2.md",
+    "docs/wiki/concepts/de-darwinization-v3.md",
+    "docs/wiki/concepts/de-darwinization-v2.md",
+    "docs/resources/longevity-research.md",
     "docs/wiki/concepts/de-darwinization-v3-complete-20250709-144716.md",
     "docs/wiki/mechanisms/immune-surveillance.md",
     "docs/wiki/mechanisms/weismann-barrier.md",
@@ -214,12 +220,6 @@
     "docs/wiki/concepts/replicative-credit.md",
     "docs/wiki/concepts/death-pact.md",
     "docs/wiki/concepts/index.md",
-    "test_push.txt",
-    "docs/02-Development/HANDOFF_NOTE.md",
-    "docs/02-Development",
-    "docs/posts/Vibes are principal components.md",
-    "docs/wiki/theories/Atavistic-theory-of-cancer.md",
-    "docs/wiki/theories/tumor-suppressor-theory-of-aging.md",
     "docs/posts/assets/images/ChatGPT Image Apr 8, 2025, 04_09_19 PM.png",
     "docs/posts/Test canvas.canvas",
     "portrait_de_l-artiste_sous_les_traits_d-un_moqueur_-_musée_du_louvre_peintures_rf_2261.jpg",
