@@ -1,82 +1,82 @@
 # what i was working on - January 22, 2025
 
-User wanted me to fix a wiki page about oncogenes that Alex (a fictional but very real LessWrong-style reviewer) kept tearing apart. The page was supposed to classify oncogenic mechanisms for intelligent readers who understand game theory and systems thinking, but it kept sounding like pop-sci garbage mixed with corporate training materials.
+User wanted me to systematically fix Alex's complaints about the oncogene classification wiki page. Alex is a fictional but very effective LessWrong-style reviewer who tears apart technical writing that's full of jargon, hand-waving, and corporate speak. His review identified about 15 specific issues that needed fixing.
 
-The real problem: how do you explain cancer's strategic landscape to someone who's smart but not a biologist, without either dumbing it down or drowning them in jargon?
+The real problem: how do you take a technical document that's readable by experts but make it accessible to smart non-specialists without dumbing it down? Alex's complaints weren't about the content being too complex - they were about poor explanations, undefined jargon, and missing conceptual frameworks.
 
 ## what actually works now
 
-The oncogene classification page is much better. It went from academic paper + TED talk mashup to actual systems analysis that treats cancer like a multi-agent coordination problem.
+I systematically fixed Alex's first 5 major complaints by working through them in linear order:
 
 **Files I changed:**
-- `/mnt/d/Coding/Website/docs/wiki/proteins/oncogenes/oncogene-classification.md` - complete rewrite (lines 1-340+)
-  - Fixed all title case headings ("Overview" → "overview") 
-  - Removed corporate speak ("safety-system-centric" → plain language)
-  - Added multi-level selection framing (gene ↔ cell ↔ tissue ↔ organism)
-  - Fixed factual errors (ALT mechanism explanation, PD-L1 expression pathways)
-  - Added missing mechanisms (ecDNA, drug-tolerant persisters, NK-cell editing loops)
-  - Removed lazy analogies ("like a factory," "code review," "malware")
-  - Added gear-level explanations (how Hippo pathway actually works as logical AND gate)
-  - Moved theoretical framework to end instead of dumping data in intro
+- `/mnt/d/Coding/Website/docs/wiki/proteins/oncogenes/oncogene-classification.md` - multiple sections improved (lines throughout)
 
-**Alex review outputs saved:**
-- `/mnt/d/Coding/alex-oncogene-review-round2.md` - second review after major fixes
-- `/mnt/d/Coding/alex-oncogene-review-round3.md` - final review after systematic cleanup
+**What got fixed:**
+1. **Removed patronizing tone** (line 5): Cut the condescending "Note on evolutionary language" section down to one sentence
+2. **Simplified overview** (lines 11-12): Replaced dense cell type definitions with simple "stromal cells (infrastructure/logistics), immune cells (police/military)"
+3. **Explained tissue architecture differences** (lines 15-19): Added mechanistic explanation for why epithelial cancers need more security layers than hematopoietic cancers
+4. **Moved evolutionary dynamics to end** (lines 487-509): Restructured so concrete mechanisms come before abstract theory
+5. **Fixed TGF-β stromal co-option** (lines 70-91): Replaced jargon soup with clear explanation of how cancer breaks wound healing resolution mechanisms
+
+**Major conceptual improvements:**
+- **Emergency override framework**: Explained TGF-β hijacking as cancer exploiting the emergency override system that lets immune signals suspend tissue quality control
+- **Synthetic lethality explanation**: Added clear explanation of why losing redundant pathways kills cells (mitotic catastrophe vs programmed suicide)
+- **Apoptosis architecture correction**: Fixed incorrect "centralized control" claim - showed apoptosis actually has multiple independent pathways
+- **Cell competition mechanisms**: Detailed the 5-step process from Myc fitness detection through corpse engulfment
 
 **Research integration:**
-Used WebSearch to get real data on driver mutations per cancer type, single-driver cancers (CML, Ewing sarcoma), and complex epithelial patterns. Replaced hand-wavy "3-7 mutations" with actual empirical patterns and theoretical justification.
-
-**What works for testing:**
-The document now reads like systems analysis instead of marketing copy. Each gate explains WHY the control system evolved that way and HOW cancer breaks it, with actual molecular mechanisms and evolutionary trade-offs.
+- Used WebSearch extensively to get actual mechanisms instead of hand-waving
+- Found papers on specialized pro-resolving mediators, TRAF6 signaling, mitotic catastrophe, cell competition
+- Fixed several factual errors about how these systems actually work
 
 ## what's broken
 
-Nothing major is broken. The document is functionally complete and addresses all the systematic issues Alex identified.
+**Current blocker:** I was in the middle of fixing Alex's complaint about "Entosis and cannibalism" being just one sentence when the user interrupted. The section at line 286 still needs expansion - Alex called it "a fascinating and horrifying mechanism" that "deserves more than a passing mention."
 
-**Minor stuff:**
-- Haven't tested how it renders on the actual website (just markdown)
-- Could probably use one more Alex review iteration to catch any remaining issues
-- Some sections could use more cross-references to related wiki pages
+**Incomplete fixes:** Still about 10 more Alex complaints to work through linearly:
+- Need to explain entosis mechanism properly
+- Metabolic section still has unexplained "alphabet soup" (PI3K-AKT-mTOR)
+- Several other jargon-heavy sections throughout
+
+**Pattern I discovered:** Alex immediately spots when you drop technical terms without building conceptual foundation first. The fix isn't removing complexity - it's explaining WHY the complexity matters before introducing the jargon.
 
 ## where things stand
 
-**Current file state:**
-- Document is ~340 lines, well-structured, internally consistent
-- All 12 gates follow consistent format: what host enforces → why this design → how cancer breaks it → concrete examples
-- Added comprehensive theoretical section at end explaining driver mutation patterns
-- Removed all the corporate speak and patronizing tone Alex hated
+**Current approach that's working:**
+1. Read Alex's review linearly, one complaint at a time
+2. Don't jump around to different sections
+3. Research the actual mechanisms using WebSearch
+4. Explain the conceptual framework BEFORE introducing molecular players
+5. Always ask "what would Alex ask next?" and preempt those questions
 
-**Alex reviewer system:**
-- The Alex roleplay prompt works incredibly well for spotting jargon, hand-waving, and missing mechanisms
-- Saved in `/mnt/d/Coding/CLAUDE.md` lines 272-290 for future use
-- Target is 90% criticism, 10% praise - forces real improvement
+**Tools being used:**
+- WebSearch for getting real mechanisms from papers
+- Grep for finding specific text in the document
+- Edit/MultiEdit for systematic fixes
+- TodoWrite for tracking progress (though I should use it more)
 
-**Working tools:**
-- Gemini CLI works from `/mnt/d/Coding` with @file syntax and 10-minute timeout
-- Edit/MultiEdit tools work well for systematic changes
-- WebSearch and WebFetch worked for getting current research data
+**Working directory:** `/mnt/d/Coding/Website/docs/wiki/proteins/oncogenes/oncogene-classification.md`
 
 ## what to do next
 
-**Most urgent:** If you want to polish this further, run another Alex review iteration. The document is much better but could probably handle one more round of criticism.
+**Most urgent:** Fix the entosis explanation (line 286). Alex wants to know: "How does it work? Is it a specific pathway?" Need to research entosis mechanisms and explain the cell-in-cell phenomenon properly.
 
-**For expanding the wiki:** Use the Alex roleplay approach on other technical pages. It's incredibly effective for killing pop-sci clichés and demanding real explanations.
+**After that:** Continue working through Alex's review linearly. The next complaints are in the metabolic reprogramming section about PI3K-AKT-mTOR jargon.
 
-**If working on other biology content:** The multi-level selection framing and evolutionary trade-off analysis approach works well for this audience. Frame everything as "how does this coordination system work and how does it break down."
+**The pattern to follow:** Always research the actual mechanisms first, then build explanations that start with conceptual frameworks and work toward molecular details. Don't assume anything is "centralized" or make up evolutionary just-so stories.
 
 ## stuff to remember
 
-**What worked really well:**
-- Systematic chunk-by-chunk fixes instead of trying to fix everything at once
-- Getting actual empirical data instead of hand-waving numbers
-- The Alex reviewer persona is gold for technical content review
-- Moving theoretical framework to end instead of front-loading complexity
+**Alex's core insight:** Smart readers want to understand underlying system design and trade-offs, not memorize biological facts. Frame everything as "how does this coordination system work and how does it break down."
 
-**Key insight:** LessWrong-style readers want to understand the underlying game theory and system design, not memorize biological facts. Explain WHY systems evolved certain ways and what the trade-offs are.
+**Voice lessons learned:** 
+- Avoid corporate speak like "leverage," "optimize," "systematic"
+- Use "you" instead of "one" or "users"  
+- Replace academic jargon with everyday words unless precision requires technical terms
+- Tell the reader what something DOES before telling them what it's CALLED
 
-**Don't do this:** 
-- Don't add analogies when someone complains about jargon - Alex hates analogies more than jargon
-- Don't front-load complex theoretical frameworks in the intro
-- Don't hand-wave with vague numbers - get the actual data or don't mention it
+**Critical debugging pattern:** When you catch yourself writing "integrated," "implemented," "enhanced," "optimized," "systematic," or "comprehensive" - stop and rewrite in normal words.
 
-**The user specifically wanted:** Systems-level analysis focused on coordination failures and evolutionary game theory, not clinical therapeutic implications. Keep focus on fundamental understanding rather than drug targets.
+**Research approach that works:** Use WebSearch to find actual molecular mechanisms, then ask "what would Alex's next question be?" and research that too. Don't hand-wave about evolutionary purposes without solid evidence.
+
+**The user specifically wanted:** Systems-level analysis focused on coordination failures and game theory, not clinical applications. Keep the focus on fundamental understanding rather than therapeutic implications.
