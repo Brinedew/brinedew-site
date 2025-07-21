@@ -1,82 +1,83 @@
 # what i was working on - January 22, 2025
 
-User wanted me to systematically fix Alex's complaints about the oncogene classification wiki page. Alex is a fictional but very effective LessWrong-style reviewer who tears apart technical writing that's full of jargon, hand-waving, and corporate speak. His review identified about 15 specific issues that needed fixing.
-
-The real problem: how do you take a technical document that's readable by experts but make it accessible to smart non-specialists without dumbing it down? Alex's complaints weren't about the content being too complex - they were about poor explanations, undefined jargon, and missing conceptual frameworks.
+User wanted me to reorganize the oncogene classification wiki page into a progression from 1-hit to 5-hit cancers, showing how different tissues need different numbers of mutations because they have different defense architectures. The old format was just a grab-bag of mechanisms that Alex (the fictional harsh reviewer) ripped apart for being poorly organized.
 
 ## what actually works now
 
-I systematically fixed Alex's first 5 major complaints by working through them in linear order:
+Completely rewrote `/mnt/d/Coding/Website/docs/posts/One-Hit-Cancer.md` with a clear progression:
 
-**Files I changed:**
-- `/mnt/d/Coding/Website/docs/wiki/proteins/oncogenes/oncogene-classification.md` - multiple sections improved (lines throughout)
+**5-Hit Cancer: Pancreatic Ductal Adenocarcinoma (PDAC)**
+- Hit 1: KRAS (growth signal independence) 
+- Hit 2: CDKN2A loss (cell cycle checkpoints)
+- Hit 3: TP53 disruption (DNA damage detection)
+- Hit 4: SMAD4 inactivation (TGF-β resistance) 
+- Hit 5: TERT activation (telomere maintenance)
 
-**What got fixed:**
-1. **Removed patronizing tone** (line 5): Cut the condescending "Note on evolutionary language" section down to one sentence
-2. **Simplified overview** (lines 11-12): Replaced dense cell type definitions with simple "stromal cells (infrastructure/logistics), immune cells (police/military)"
-3. **Explained tissue architecture differences** (lines 15-19): Added mechanistic explanation for why epithelial cancers need more security layers than hematopoietic cancers
-4. **Moved evolutionary dynamics to end** (lines 487-509): Restructured so concrete mechanisms come before abstract theory
-5. **Fixed TGF-β stromal co-option** (lines 70-91): Replaced jargon soup with clear explanation of how cancer breaks wound healing resolution mechanisms
+**4-Hit Cancer: Clear Cell Renal Carcinoma (ccRCC)**
+- Hit 1: VHL loss (oxygen sensing disruption)
+- Hit 2: HIF2α stabilization (angiogenesis induction)  
+- Hit 3: Metabolic enzyme dysregulation (lipid accumulation)
+- Hit 4: 14q chromosomal deletion (tumor suppressor loss)
 
-**Major conceptual improvements:**
-- **Emergency override framework**: Explained TGF-β hijacking as cancer exploiting the emergency override system that lets immune signals suspend tissue quality control
-- **Synthetic lethality explanation**: Added clear explanation of why losing redundant pathways kills cells (mitotic catastrophe vs programmed suicide)
-- **Apoptosis architecture correction**: Fixed incorrect "centralized control" claim - showed apoptosis actually has multiple independent pathways
-- **Cell competition mechanisms**: Detailed the 5-step process from Myc fitness detection through corpse engulfment
+**3-Hit Cancer: Acute Myeloid Leukemia (AML)**
+- Hit 1: DNMT3A mutation (epigenetic reprogramming)
+- Hit 2: NPM1 insertion (nucleolar disruption)
+- Hit 3: FLT3-ITD (growth signal independence)
 
-**Research integration:**
-- Used WebSearch extensively to get actual mechanisms instead of hand-waving
-- Found papers on specialized pro-resolving mediators, TRAF6 signaling, mitotic catastrophe, cell competition
-- Fixed several factual errors about how these systems actually work
+**2-Hit Cancer: Retinoblastoma**
+- Hit 1: First RB1 allele loss (partial brake failure)
+- Hit 2: Second RB1 allele loss (complete brake failure)
+
+**1-Hit Cancer: Chromothripsis Events**
+- Hit 1: Chromosome shattering (simultaneous TP53 + oncogene changes)
+
+Fixed the major problems Alex complained about:
+- Line 5-9: Replaced overwrought TED-talk intro with direct explanation
+- Moved framework explanation to the top instead of burying it
+- Fixed the species mixing problem in lines 249-307 (was mixing mammalian and Drosophila mechanisms)
+- Replaced concept → example structure throughout instead of just listing acronyms
+- Each cancer uses completely different biological mechanisms (no overlap)
 
 ## what's broken
 
-**Current blocker:** I was in the middle of fixing Alex's complaint about "Entosis and cannibalism" being just one sentence when the user interrupted. The section at line 286 still needs expansion - Alex called it "a fascinating and horrifying mechanism" that "deserves more than a passing mention."
+Still need to find a proper 3-hit cancer that doesn't reuse mechanisms from other vignettes. Current AML still uses growth signal independence (FLT3-ITD) which duplicates mechanism from PDAC (KRAS) and the metabolic mechanism from DNMT3A overlaps conceptually with ccRCC metabolic changes.
 
-**Incomplete fixes:** Still about 10 more Alex complaints to work through linearly:
-- Need to explain entosis mechanism properly
-- Metabolic section still has unexplained "alphabet soup" (PI3K-AKT-mTOR)
-- Several other jargon-heavy sections throughout
+The 3-hit cancer needs to use three completely different mechanisms:
+- Not growth factor receptors (already used KRAS, BRAF, FLT3-ITD)  
+- Not cell cycle checkpoints (already used TP53, RB1, CDKN2A)
+- Not TGF-β pathway (already used SMAD4, TGFBR2)
+- Not immune evasion, DNA repair, telomeres, or chromatin
 
-**Pattern I discovered:** Alex immediately spots when you drop technical terms without building conceptual foundation first. The fix isn't removing complexity - it's explaining WHY the complexity matters before introducing the jargon.
+Research showed follicular lymphoma, splicing-factor MDS, and other options all eventually use TP53 or similar mechanisms we've already covered.
 
 ## where things stand
 
-**Current approach that's working:**
-1. Read Alex's review linearly, one complaint at a time
-2. Don't jump around to different sections
-3. Research the actual mechanisms using WebSearch
-4. Explain the conceptual framework BEFORE introducing molecular players
-5. Always ask "what would Alex ask next?" and preempt those questions
+File `/mnt/d/Coding/Website/docs/posts/One-Hit-Cancer.md` is ready except for the 3-hit section. The document flows logically from complex (5-hit epithelial) to simple (1-hit catastrophic), with each section explaining WHY that tissue needs that many hits based on its coordination architecture.
 
-**Tools being used:**
-- WebSearch for getting real mechanisms from papers
-- Grep for finding specific text in the document
-- Edit/MultiEdit for systematic fixes
-- TodoWrite for tracking progress (though I should use it more)
-
-**Working directory:** `/mnt/d/Coding/Website/docs/wiki/proteins/oncogenes/oncogene-classification.md`
+The original wiki file `/mnt/d/Coding/Website/docs/wiki/proteins/oncogenes/oncogene-classification.md` has been improved:
+- Fixed mammalian/Drosophila species confusion in cell competition section  
+- Removed corporate speak throughout
+- Enhanced intro with historical discovery context
 
 ## what to do next
 
-**Most urgent:** Fix the entosis explanation (line 286). Alex wants to know: "How does it work? Is it a specific pathway?" Need to research entosis mechanisms and explain the cell-in-cell phenomenon properly.
+Find a 3-hit cancer that uses three genuinely different mechanisms. Need to search more specifically for cancers that avoid all the pathways we've already used. Possible directions:
+- Protein folding/ER stress pathways
+- Calcium signaling disruption
+- Cytoskeletal/mechanical force sensing
+- circadian rhythm disruption
+- Alternative splicing machinery (beyond what we covered in MDS)
 
-**After that:** Continue working through Alex's review linearly. The next complaints are in the metabolic reprogramming section about PI3K-AKT-mTOR jargon.
+Check papers on rare sarcomas, specific leukemia subtypes, or brain tumors - they might have unique pathway combinations.
 
-**The pattern to follow:** Always research the actual mechanisms first, then build explanations that start with conceptual frameworks and work toward molecular details. Don't assume anything is "centralized" or make up evolutionary just-so stories.
+Alternative: restructure to skip 3-hit entirely and go directly from 4-hit to 2-hit. The key insight about tissue architecture determining required hits still works.
 
 ## stuff to remember
 
-**Alex's core insight:** Smart readers want to understand underlying system design and trade-offs, not memorize biological facts. Frame everything as "how does this coordination system work and how does it break down."
+Alex's review approach worked really well - he wanted mechanistic explanations that build understanding before introducing jargon, not just lists of protein names. The concept → example structure (explain what growth factor receptors DO, then mention EGFR/HER2) was much more effective than acronym soup.
 
-**Voice lessons learned:** 
-- Avoid corporate speak like "leverage," "optimize," "systematic"
-- Use "you" instead of "one" or "users"  
-- Replace academic jargon with everyday words unless precision requires technical terms
-- Tell the reader what something DOES before telling them what it's CALLED
+The historical context about 6-7 hits from 1950s epidemiology was crucial for the intro - shows this isn't just made-up categorization but reflects real patterns discovered mathematically before we could sequence cancer genomes.
 
-**Critical debugging pattern:** When you catch yourself writing "integrated," "implemented," "enhanced," "optimized," "systematic," or "comprehensive" - stop and rewrite in normal words.
+The clear cell renal carcinoma (ccRCC) example works perfectly as 4-hit because it uses the VHL/HIF oxygen-sensing pathway which is completely orthogonal to all the other mechanisms. This demonstrates how different tissues can have fundamentally different vulnerabilities.
 
-**Research approach that works:** Use WebSearch to find actual molecular mechanisms, then ask "what would Alex's next question be?" and research that too. Don't hand-wave about evolutionary purposes without solid evidence.
-
-**The user specifically wanted:** Systems-level analysis focused on coordination failures and game theory, not clinical applications. Keep the focus on fundamental understanding rather than therapeutic implications.
+The "Why don't previous mechanisms stop this?" questions between sections are key - they force explanation of why blood cells bypass epithelial controls, why retinal cells bypass blood cell controls, etc.
