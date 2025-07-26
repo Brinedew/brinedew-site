@@ -10,4 +10,4 @@ Reasons this blog is different from research blogs in other fields:
 4. Aging research has stagnated despite enormous positive impact potential
 5. Each individual researcher has very few shots at getting the answer correct
 6. The public interest is already divided 
-7. Funding landscape includes not just governments (demographic aging crisis) but also individual mega-donors.
+7. Funding landscape includes not just governments (demographic aging crisis) and markets (biotech) but also individual mega-donors
