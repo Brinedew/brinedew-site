@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/resources/longevity-research.md",
+                "file": "docs/posts/Aging research is different from most research.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "longevity-research"
+              "title": "Aging research is different from most research"
             }
           }
         ]
@@ -185,6 +185,8 @@
   },
   "active": "26aa88873134aa56",
   "lastOpenFiles": [
+    "docs/resources/longevity-research.md",
+    "docs/posts/Aging research is different from most research.md",
     "docs/wiki/concepts/de-darwinization.md",
     "docs/wiki/concepts/sedqY8KEo",
     "docs/wiki/concepts/sedql7HUs",
@@ -201,7 +203,6 @@
     "docs/wiki/concepts/~$-darwinization-v2.md",
     "docs/wiki/concepts/de-darwinization-v3.md",
     "docs/wiki/concepts/de-darwinization-v2.md",
-    "docs/resources/longevity-research.md",
     "docs/wiki/concepts/de-darwinization-v3-complete-20250709-144716.md",
     "docs/wiki/mechanisms/immune-surveillance.md",
     "docs/wiki/mechanisms/weismann-barrier.md",
