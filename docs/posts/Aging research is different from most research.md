@@ -11,3 +11,4 @@ Reasons this blog is different from research blogs in other fields:
 5. Each individual researcher has very few shots at getting the answer correct
 6. The public interest is already divided 
 7. Funding landscape includes not just governments (demographic aging crisis) and markets (biotech) but also individual mega-donors
+8. Long-term interest (extending your own lifespan) comes in conflict with short-term incentives (profit, publications)
