@@ -1,83 +1,62 @@
-# what i was working on - January 22, 2025
+# what i was working on - January 24, 2025
 
-User wanted me to reorganize the oncogene classification wiki page into a progression from 1-hit to 5-hit cancers, showing how different tissues need different numbers of mutations because they have different defense architectures. The old format was just a grab-bag of mechanisms that Alex (the fictional harsh reviewer) ripped apart for being poorly organized.
+User wanted to finish the One-Hit Cancer article by copying the remaining wiki sections verbatim into the PDAC example and fix the broken 4-hit ccRCC section that had wrong hit counting.
 
 ## what actually works now
 
-Completely rewrote `/mnt/d/Coding/Website/docs/posts/One-Hit-Cancer.md` with a clear progression:
+**Fixed the One-Hit Cancer article structure:**
+- Added a proper 4-hit example using Malignant Pleural Mesothelioma instead of the broken ccRCC
+- Copied all 4 requested wiki sections verbatim into the PDAC 5-hit example
+- Used sections that weren't already covered in other cancer examples
 
-**5-Hit Cancer: Pancreatic Ductal Adenocarcinoma (PDAC)**
-- Hit 1: KRAS (growth signal independence) 
-- Hit 2: CDKN2A loss (cell cycle checkpoints)
-- Hit 3: TP53 disruption (DNA damage detection)
-- Hit 4: SMAD4 inactivation (TGF-β resistance) 
-- Hit 5: TERT activation (telomere maintenance)
+**Wiki sections now integrated into PDAC:**
+- Section 2 (cell cycle checkpoint evasion) - copied into Hit 2-3: CDKN2A loss
+- Section 4 (replicative senescence evasion) - copied before Hit 1: KRAS activation  
+- Section 5 (apoptosis evasion) - copied into Hit 4: TP53 dominant-negative
+- Section 9 (invasion and metastasis) - copied into Hit 5: SMAD4 loss
 
-**4-Hit Cancer: Clear Cell Renal Carcinoma (ccRCC)**
-- Hit 1: VHL loss (oxygen sensing disruption)
-- Hit 2: HIF2α stabilization (angiogenesis induction)  
-- Hit 3: Metabolic enzyme dysregulation (lipid accumulation)
-- Hit 4: 14q chromosomal deletion (tumor suppressor loss)
+**New 4-hit Mesothelioma example covers unused wiki sections:**
+- Section 3 (contact inhibition evasion) - NF2/Hippo pathway
+- Section 8 (angiogenesis induction) - YAP/TAZ → VEGF
+- Section 11 (epigenetic reprogramming) - BAP1 chromatin control
+- Section 10 (genomic instability) - BAP1 DNA repair
 
-**3-Hit Cancer: Acute Myeloid Leukemia (AML)**
-- Hit 1: DNMT3A mutation (epigenetic reprogramming)
-- Hit 2: NPM1 insertion (nucleolar disruption)
-- Hit 3: FLT3-ITD (growth signal independence)
-
-**2-Hit Cancer: Retinoblastoma**
-- Hit 1: First RB1 allele loss (partial brake failure)
-- Hit 2: Second RB1 allele loss (complete brake failure)
-
-**1-Hit Cancer: Chromothripsis Events**
-- Hit 1: Chromosome shattering (simultaneous TP53 + oncogene changes)
-
-Fixed the major problems Alex complained about:
-- Line 5-9: Replaced overwrought TED-talk intro with direct explanation
-- Moved framework explanation to the top instead of burying it
-- Fixed the species mixing problem in lines 249-307 (was mixing mammalian and Drosophila mechanisms)
-- Replaced concept → example structure throughout instead of just listing acronyms
-- Each cancer uses completely different biological mechanisms (no overlap)
+Files changed:
+- `/mnt/d/Coding/Website/docs/posts/One-Hit-Cancer.md` - massive expansion of PDAC section (lines 65-292), replaced ccRCC with mesothelioma section (lines 380-433)
 
 ## what's broken
 
-Still need to find a proper 3-hit cancer that doesn't reuse mechanisms from other vignettes. Current AML still uses growth signal independence (FLT3-ITD) which duplicates mechanism from PDAC (KRAS) and the metabolic mechanism from DNMT3A overlaps conceptually with ccRCC metabolic changes.
+**ccRCC section removed but still mentioned:** I removed the ccRCC 4-hit section because research showed it's actually 2-3 hits (VHL biallelic + 14q deletion), not 4. The article flow works fine without it, but there might be references to "4-hit ccRCC" elsewhere that need cleaning up.
 
-The 3-hit cancer needs to use three completely different mechanisms:
-- Not growth factor receptors (already used KRAS, BRAF, FLT3-ITD)  
-- Not cell cycle checkpoints (already used TP53, RB1, CDKN2A)
-- Not TGF-β pathway (already used SMAD4, TGFBR2)
-- Not immune evasion, DNA repair, telomeres, or chromatin
-
-Research showed follicular lymphoma, splicing-factor MDS, and other options all eventually use TP53 or similar mechanisms we've already covered.
+**Hit counting verification incomplete:** I started checking whether VHL loss in ccRCC should count as 1 or 2 hits based on papers, found it's definitely 2 hits (3p deletion + point mutation), but didn't finish reviewing all the other examples for similar errors.
 
 ## where things stand
 
-File `/mnt/d/Coding/Website/docs/posts/One-Hit-Cancer.md` is ready except for the 3-hit section. The document flows logically from complex (5-hit epithelial) to simple (1-hit catastrophic), with each section explaining WHY that tissue needs that many hits based on its coordination architecture.
+**Article now has coherent progression:**
+- 1-hit: ASPS (transcriptional master switch)
+- 2-hit: Burkitt lymphoma (MYC + cell cycle brakes)
+- 3-hit: Retinoblastoma 
+- 4-hit: Mesothelioma (NF2 + BAP1 biallelic losses)
+- 5-hit: PDAC (comprehensive wiki integration)
 
-The original wiki file `/mnt/d/Coding/Website/docs/wiki/proteins/oncogenes/oncogene-classification.md` has been improved:
-- Fixed mammalian/Drosophila species confusion in cell competition section  
-- Removed corporate speak throughout
-- Enhanced intro with historical discovery context
+**The PDAC section is now pedagogically complete** - it has all the detailed wiki explanations LessWrong readers need, covering growth control, cell cycle checkpoints, immortality, apoptosis resistance, and metastasis with full molecular mechanisms.
+
+**Mesothelioma section is scientifically accurate** - research shows BAP1+NF2 double knockouts produce mesothelioma in ~20% of mice, supporting the 4-hit model (2 hits each for biallelic tumor suppressor losses).
 
 ## what to do next
 
-Find a 3-hit cancer that uses three genuinely different mechanisms. Need to search more specifically for cancers that avoid all the pathways we've already used. Possible directions:
-- Protein folding/ER stress pathways
-- Calcium signaling disruption
-- Cytoskeletal/mechanical force sensing
-- circadian rhythm disruption
-- Alternative splicing machinery (beyond what we covered in MDS)
+**Priority 1: Finish hit counting verification** - Go through the remaining cancer examples (Burkitt, Retinoblastoma, AML) and verify that the hit counting follows epidemiological principles. Make sure biallelic tumor suppressor losses are counted as 2 hits when they require 2 independent events, and 1 hit when they can happen through single events like dominant-negative mutations.
 
-Check papers on rare sarcomas, specific leukemia subtypes, or brain tumors - they might have unique pathway combinations.
+**Priority 2: Test the article flow** - The massive wiki integration might have made some sections too dense. Consider using the gemini analysis template from CLAUDE.md to check if the progression still builds logically or if some sections need streamlining.
 
-Alternative: restructure to skip 3-hit entirely and go directly from 4-hit to 2-hit. The key insight about tissue architecture determining required hits still works.
+**Priority 3: Check for orphaned references** - Search for any mentions of ccRCC or "clear cell" that might need updating since that section was removed.
 
 ## stuff to remember
 
-Alex's review approach worked really well - he wanted mechanistic explanations that build understanding before introducing jargon, not just lists of protein names. The concept → example structure (explain what growth factor receptors DO, then mention EGFR/HER2) was much more effective than acronym soup.
+**User preferred verbatim copying**: They explicitly wanted exact copy-paste from wiki sections, not editing or summarizing. The approach worked well - the detailed explanations provide the foundation LessWrong readers need.
 
-The historical context about 6-7 hits from 1950s epidemiology was crucial for the intro - shows this isn't just made-up categorization but reflects real patterns discovered mathematically before we could sequence cancer genomes.
+**Hit counting is strict epidemiological definition**: A "hit" must be an independent stochastic event with constant probability over time. Biallelic tumor suppressor loss ≠ automatically 2 hits - depends on whether it requires 2 independent events or can happen as single event (like large deletions).
 
-The clear cell renal carcinoma (ccRCC) example works perfectly as 4-hit because it uses the VHL/HIF oxygen-sensing pathway which is completely orthogonal to all the other mechanisms. This demonstrates how different tissues can have fundamentally different vulnerabilities.
+**Mesothelioma tissue vulnerability**: The key insight is that mesothelial cells' primary defense is contact inhibition (they form thin barrier sheets), making NF2/Hippo pathway loss immediately devastating. This demonstrates how tissue-specific vulnerabilities reduce required hit count.
 
-The "Why don't previous mechanisms stop this?" questions between sections are key - they force explanation of why blood cells bypass epithelial controls, why retinal cells bypass blood cell controls, etc.
+**Wiki section coverage strategy worked**: By mapping which sections were already used vs unused, we created a logical progression that covers all the major defense mechanisms across different cancer examples without redundancy.
