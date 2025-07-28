@@ -20,6 +20,7 @@ env:
     mkdocs-awesome-pages-plugin
     mkdocs-redirects
     pymdown-extensions
+    mkdocs-obsidian-excalidraw-plugin
 
 jobs:
   build:

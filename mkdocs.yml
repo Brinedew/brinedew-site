@@ -37,6 +37,7 @@ theme:
 plugins:
   - search
   - awesome-pages
+  - obsidian-excalidraw
 
 
 use_directory_urls: true
