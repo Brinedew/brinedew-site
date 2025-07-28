@@ -7,3 +7,9 @@ Outline (audio transcription with errors):
 4. Principal component analysis is a mathematical technique used to align multidimensional spaces among a long certain access axis that are drawn from the data so you look at the data and you see what is the axis along with your data set that is the most the diagonal for all the axis so how would you for example if you have a very very stretched out data set but the stranger it doesn't fall on any of the diagonals how would you say how would you point out the direction on this long as I said for example go link twice or go controlling fly you can't use any single access because it's not a line over any single access so in this case you need to extract the principle component and this has an effect of rotating your entire data set so that it's long it's longer axis of the data set itself becomes the principal component we can call it dimension
 5. Something like a moody photo has more than just two Dimensions it has thousands of dimensions summer categorical and summer quantity anything from simple metrics like brightness saturation contrast to complicated Concepts like weather composition maturity all of them can be put in the multidimensional space because basically all the photos exist in a multidimensional space where each dimension is the pixel of this photo and it varies from zero which is black to 100 which is why if you want to encode a colored folders then just pretend each pixel is from zero brightness to maximum brightness of this particular color
 6. Analysis is breaking down. It's pretty mundane and, well, analytical. It's pretty clear how to do it well. Synthesis is magical, intuitive and vibe-ey. Very different skillset, and hard to grasp via structured explanations. But I hope that this illustration made one dimension of synthesis from vibe-y to legible.
+
+[[Excalidraw/Drawing 2025-07-28 12.25.37.excalidraw.md#^T9NvKQgO|Embeddingtest]]
+
+
+
+
