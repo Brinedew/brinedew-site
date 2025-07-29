@@ -1,7 +1,0 @@
-{
-  "promptDelete": false,
-  "newLinkFormat": "relative",
-  "alwaysUpdateLinks": true,
-  "useMarkdownLinks": true,
-  "attachmentFolderPath": "./assets/images"
-}
