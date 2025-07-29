@@ -465,3 +465,22 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--md-default-fg-color--light);
 }
+
+/* Image alignment support for Obsidian-style markdown */
+.md-typeset img[align="center"] {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.md-typeset img[align="left"] {
+  float: left;
+  margin-right: 1em;
+  margin-bottom: 0.5em;
+}
+
+.md-typeset img[align="right"] {
+  float: right;
+  margin-left: 1em;
+  margin-bottom: 0.5em;
+}
