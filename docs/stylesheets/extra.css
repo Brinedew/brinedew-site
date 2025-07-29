@@ -466,21 +466,10 @@
   background: var(--md-default-fg-color--light);
 }
 
-/* Image alignment support for Obsidian-style markdown */
-.md-typeset img[align="center"] {
+/* Match Obsidian's default image display behavior */
+.md-typeset img {
   display: block;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.md-typeset img[align="left"] {
-  float: left;
-  margin-right: 1em;
-  margin-bottom: 0.5em;
-}
-
-.md-typeset img[align="right"] {
-  float: right;
-  margin-left: 1em;
-  margin-bottom: 0.5em;
+  margin: 1em auto;
+  max-width: 100%;
+  height: auto;
 }
