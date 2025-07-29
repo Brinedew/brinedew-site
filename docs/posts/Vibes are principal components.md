@@ -8,8 +8,5 @@ Outline (audio transcription with errors):
 5. Something like a moody photo has more than just two Dimensions it has thousands of dimensions summer categorical and summer quantity anything from simple metrics like brightness saturation contrast to complicated Concepts like weather composition maturity all of them can be put in the multidimensional space because basically all the photos exist in a multidimensional space where each dimension is the pixel of this photo and it varies from zero which is black to 100 which is why if you want to encode a colored folders then just pretend each pixel is from zero brightness to maximum brightness of this particular color
 6. Analysis is breaking down. It's pretty mundane and, well, analytical. It's pretty clear how to do it well. Synthesis is magical, intuitive and vibe-ey. Very different skillset, and hard to grasp via structured explanations. But I hope that this illustration made one dimension of synthesis from vibe-y to legible.
 
-[[Excalidraw/Drawing 2025-07-28 12.25.37.excalidraw.md#^T9NvKQgO|Embeddingtest]]
-
-
-
-
+Rhh!sdsdsds
+![[assets/images/Vibes are principal components 2025-07-28 12.52.03.excalidraw]]
