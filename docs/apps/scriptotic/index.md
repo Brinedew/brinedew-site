@@ -218,13 +218,21 @@ title: Scriptotic - YouTube Transcript Generator
     <form id="transcription-form">
         <div class="form-group">
             <label for="url">YouTube URL</label>
-            <input type="url" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
+            <input type="url" id="url" name="url" value="https://www.youtube.com/watch?v=MFDiuBomSuY" required>
         </div>
         
         <div class="form-group">
             <label for="speakers">Speaker Names (Optional)</label>
-            <input type="text" id="speakers" name="speakers" placeholder="Alice, Bob, Charlie">
+            <input type="text" id="speakers" name="speakers" value="Linus, Luke" placeholder="Alice, Bob, Charlie">
             <div class="hint">Comma-separated names for speaker identification</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="engine">AI Model</label>
+            <div class="config-section" style="margin: 0; border-left: none; padding: 15px; background: var(--md-default-fg-color--lightest);">
+                <strong style="color: var(--md-accent-fg-color);">Voxtral Mini 3B</strong>
+                <br><small>Advanced speech recognition with automatic language detection</small>
+            </div>
         </div>
         
         <div class="form-group">
@@ -277,7 +285,7 @@ title: Scriptotic - YouTube Transcript Generator
 <script>
 (function() {
     // Configuration - update this when you're home with your PC  
-    const API_BASE_URL = 'http://192.168.0.100:5000'; // Your current local Flask server
+    const API_BASE_URL = 'https://api.brinedew.com';
     
     let currentJobId = null;
     let statusCheckInterval = null;
@@ -402,9 +410,18 @@ title: Scriptotic - YouTube Transcript Generator
     }
     
     function downloadResult(jobId) {
+        // Generate timestamp filename like Tkinter GUI does
+        const now = new Date();
+        const timestamp = now.getFullYear() + 
+            String(now.getMonth() + 1).padStart(2, '0') + 
+            String(now.getDate()).padStart(2, '0') + '_' +
+            String(now.getHours()).padStart(2, '0') + 
+            String(now.getMinutes()).padStart(2, '0') + 
+            String(now.getSeconds()).padStart(2, '0');
+        
         const link = document.createElement('a');
         link.href = `${API_BASE_URL}/api/download/${jobId}`;
-        link.download = `transcript_${jobId}.txt`;
+        link.download = `transcript_${timestamp}.txt`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
