@@ -276,8 +276,8 @@ title: Scriptotic - YouTube Transcript Generator
 
 <script>
 (function() {
-    // Configuration - update this when you're home with your PC
-    const API_BASE_URL = 'https://api.brinedew.com'; // Change to your actual API endpoint
+    // Configuration - update this when you're home with your PC  
+    const API_BASE_URL = 'http://192.168.0.100:5000'; // Your current local Flask server
     
     let currentJobId = null;
     let statusCheckInterval = null;
