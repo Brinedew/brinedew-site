@@ -312,8 +312,14 @@ title: Scriptotic - YouTube Transcript Generator
             statusDot.classList.add('dot-red');
             generateBtn.disabled = true;
             offlineNotice.style.display = 'none';
+        } else if (isOnline && status === 'offline') {
+            // Server offline but will auto-start - allow transcription
+            serverStatus.classList.add('status-offline');
+            statusDot.classList.add('dot-orange');
+            generateBtn.disabled = false;  // Enable button for on-demand startup
+            offlineNotice.style.display = 'none';
         } else {
-            // Offline
+            // API not reachable
             serverStatus.classList.add('status-offline');
             statusDot.classList.add('dot-orange');
             generateBtn.disabled = true;
