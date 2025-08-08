@@ -315,16 +315,16 @@ title: Scriptotic - YouTube Transcript Generator
             statusDot.classList.add('dot-blue');
             generateBtn.disabled = true;
             offlineNotice.style.display = 'none';
-        } else if (isOnline) {
-            serverStatus.classList.add('status-error');
-            statusDot.classList.add('dot-red');
-            generateBtn.disabled = true;
-            offlineNotice.style.display = 'none';
         } else if (isOnline && status === 'offline') {
             // Server offline but will auto-start - allow transcription
             serverStatus.classList.add('status-offline');
             statusDot.classList.add('dot-orange');
             generateBtn.disabled = false;  // Enable button for on-demand startup
+            offlineNotice.style.display = 'none';
+        } else if (isOnline) {
+            serverStatus.classList.add('status-error');
+            statusDot.classList.add('dot-red');
+            generateBtn.disabled = true;
             offlineNotice.style.display = 'none';
         } else {
             // API not reachable
