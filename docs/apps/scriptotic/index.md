@@ -285,7 +285,7 @@ title: Scriptotic - YouTube Transcript Generator
 <script>
 (function() {
     // Configuration - update this when you're home with your PC  
-    const API_BASE_URL = 'https://api.brinedew.com';
+    const API_BASE_URL = 'https://api2.brinedew.com';
     
     let currentJobId = null;
     let statusCheckInterval = null;
