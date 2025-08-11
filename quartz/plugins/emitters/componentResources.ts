@@ -5,7 +5,7 @@ import { QuartzEmitterPlugin } from "../types"
 import spaRouterScript from "../../components/scripts/spa.inline"
 // @ts-ignore
 import popoverScript from "../../components/scripts/popover.inline"
-import styles from "../../styles/custom.scss"
+import baseStyles from "../../styles/base.scss"
 import popoverStyle from "../../components/styles/popover.scss"
 import { BuildCtx } from "../../util/ctx"
 import { QuartzComponent } from "../../components/types"
@@ -276,8 +276,8 @@ export const ComponentResources: QuartzEmitterPlugin = () => {
       const stylesheet = joinStyles(
         ctx.cfg.configuration.theme,
         googleFontsStyleSheet,
+        baseStyles,
         ...componentResources.css,
-        styles,
       )
 
       const [prescript, postscript] = await Promise.all([
