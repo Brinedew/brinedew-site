@@ -1,12 +1,9 @@
-/* Font imports */
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300..900;1,300..900&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
-/* Typography as Architecture */
+/* Typography as Architecture - fonts loaded via Head component */
 :root {
-  /* System stack for UI, Crimson for content */
-  --bodyFont: 'Crimson Pro', 'Iowan Old Style', Palatino, serif;
-  --headerFont: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  --codeFont: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  /* System stack for UI, Crimson for content - using !important to win cascade */
+  --bodyFont: 'Crimson Pro', 'Iowan Old Style', Palatino, serif !important;
+  --headerFont: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif !important;
+  --codeFont: 'IBM Plex Mono', 'SF Mono', Consolas, monospace !important;
   
   /* Tighter, more editorial spacing */
   --fontSize: 19px; /* Bigger body = more confident */
@@ -113,7 +110,8 @@ h3 {
 body {
   font-family: var(--bodyFont);
   font-size: var(--fontSize);
-  font-weight: 425; /* Variable font finesse */
+  font-weight: 400; /* Clear weight for better fallback */
+  font-synthesis: none; /* Stop UA from faking bold/italic */
   background-color: var(--light);
   color: var(--dark);
 }
@@ -121,7 +119,7 @@ body {
 article {
   font-family: var(--bodyFont);
   font-size: var(--fontSize);
-  font-weight: 425;
+  font-weight: 400; /* Clear weight for better fallback */
 }
 
 article p {

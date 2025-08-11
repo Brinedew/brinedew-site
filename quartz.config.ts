@@ -12,12 +12,11 @@ const config: QuartzConfig = {
     ignorePatterns: ["private", "templates", ".obsidian", "*.tmp"],
     defaultDateType: "created",
     theme: {
-      fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        header: "Crimson Pro",
-        body: "Crimson Pro", 
-        code: "IBM Plex Mono",
+        header: { name: "Crimson Pro", weights: [300,400,500,600,700,800,900], includeItalic: true },
+        body: { name: "Crimson Pro", weights: [300,400,500,600], includeItalic: true },
+        code: { name: "IBM Plex Mono", weights: [400,500], includeItalic: false },
       },
       colors: {
         lightMode: {
