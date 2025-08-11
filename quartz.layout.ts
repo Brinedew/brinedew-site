@@ -5,11 +5,11 @@ import * as Component from "./quartz/components"
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [],
+  afterBody: [Component.ViewTransitions()],
   footer: Component.Footer({
     links: {
-      GitHub: "https://github.com/jackyzha0/quartz",
-      "Discord Community": "https://discord.gg/cRFFHYye7t",
+      "About": "About",
+      "Graph": "graph",
     },
   }),
 }
@@ -38,11 +38,19 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    Component.Explorer(),
+    // Hide explorer on homepage only
+    Component.ConditionalRender({
+      component: Component.Explorer(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
   ],
   right: [
     Component.DesktopOnly(Component.TableOfContents()),
-    Component.Backlinks(),
+    // Hide backlinks on homepage only
+    Component.ConditionalRender({
+      component: Component.Backlinks(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
   ],
 }
 

@@ -86,6 +86,10 @@ export default (() => {
         <meta name="description" content={description} />
         <meta name="generator" content="Quartz" />
         <link href="/static/custom.css" rel="stylesheet" type="text/css" />
+        
+        {/* Performance optimizations */}
+        <link rel="modulepreload" href="/static/search.js" />
+        <link rel="prefetch" href="/posts" as="document" />
 
         {css.map((resource) => CSSResourceToStyleElement(resource, true))}
         {js

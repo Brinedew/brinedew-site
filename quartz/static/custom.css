@@ -1,87 +1,166 @@
-/* Pattern A: Guard + Order theme implementation */
-/* 1) Base defaults (light theme) */
+/* Font imports */
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300..900;1,300..900&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+/* Typography as Architecture */
 :root {
-  --light: #faf8f8;
-  --lightgray: #e5e5e5;
-  --gray: #b8b8b8;
-  --darkgray: #5e5e5e;
-  --dark: #2e2e2e;
-  --secondary: #7aa2f7;
-  --tertiary: #84a59d;
-  --highlight: rgba(143, 159, 169, 0.15);
+  /* System stack for UI, Crimson for content */
+  --bodyFont: 'Crimson Pro', 'Iowan Old Style', Palatino, serif;
+  --headerFont: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --codeFont: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  
+  /* Tighter, more editorial spacing */
+  --fontSize: 19px; /* Bigger body = more confident */
+  --lineHeight: 1.45; /* Tighter than academic 1.6+ */
+  --paragraphSpacing: 0.75em; /* Less spacing = more flow */
 }
 
-/* 2) System preference ONLY if no user choice */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --light: #1a1a1a;
-    --lightgray: #393639;
-    --gray: #646464;
-    --darkgray: #d4d4d4;
-    --dark: #ebebec;
-    --secondary: #7aa2f7;
-    --tertiary: #84a59d;
+/* OKLCH Color System with Restraint */
+@layer base {
+  :root {
+    /* Light: warm paper, not stark white */
+    --light: oklch(97.5% 0.01 85); /* Slight yellow cast */
+    --lightgray: oklch(88% 0.01 85);
+    --gray: oklch(75% 0.01 85);
+    --darkgray: oklch(55% 0.01 85);
+    --dark: oklch(25% 0.02 85);   /* Warm black */
+    --accent: oklch(50% 0.08 185); /* Muted teal */
+    
+    /* UI elements darker than text (inverted expectation) */
+    --ui-border: oklch(88% 0.01 85);
+    --ui-bg: oklch(94% 0.005 85);
+    
+    /* Keep existing semantic colors */
+    --secondary: var(--accent);
+    --tertiary: oklch(60% 0.06 150);
     --highlight: rgba(143, 159, 169, 0.15);
+  }
+  
+  /* Dark theme: actually dark, not gray */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      --light: oklch(12% 0.01 85);    /* Near black */
+      --lightgray: oklch(22% 0.01 85);
+      --gray: oklch(45% 0.01 85);
+      --darkgray: oklch(65% 0.01 85);
+      --dark: oklch(88% 0.01 85);    /* Warm white */
+      --accent: oklch(68% 0.08 185);
+      
+      --ui-border: oklch(22% 0.01 85);
+      --ui-bg: oklch(16% 0.005 85);
+    }
   }
 }
 
-/* 3) User choice ALWAYS wins - placed AFTER media block */
+/* User choice ALWAYS wins */
 :root[data-theme="light"] {
-  --light: #faf8f8;
-  --lightgray: #e5e5e5;
-  --gray: #b8b8b8;
-  --darkgray: #5e5e5e;
-  --dark: #2e2e2e;
-  --secondary: #7aa2f7;
-  --tertiary: #84a59d;
-  --highlight: rgba(143, 159, 169, 0.15);
+  --light: oklch(97.5% 0.01 85);
+  --lightgray: oklch(88% 0.01 85);
+  --gray: oklch(75% 0.01 85);
+  --darkgray: oklch(55% 0.01 85);
+  --dark: oklch(25% 0.02 85);
+  --accent: oklch(50% 0.08 185);
+  --ui-border: oklch(88% 0.01 85);
+  --ui-bg: oklch(94% 0.005 85);
 }
 
 :root[data-theme="dark"] {
-  --light: #1a1a1a;
-  --lightgray: #393639;
-  --gray: #646464;
-  --darkgray: #d4d4d4;
-  --dark: #ebebec;
-  --secondary: #7aa2f7;
-  --tertiary: #84a59d;
-  --highlight: rgba(143, 159, 169, 0.15);
+  --light: oklch(12% 0.01 85);
+  --lightgray: oklch(22% 0.01 85);
+  --gray: oklch(45% 0.01 85);
+  --darkgray: oklch(65% 0.01 85);
+  --dark: oklch(88% 0.01 85);
+  --accent: oklch(68% 0.08 185);
+  --ui-border: oklch(22% 0.01 85);
+  --ui-bg: oklch(16% 0.005 85);
 }
 
+/* Headlines that actually create hierarchy */
+h1 { 
+  font-size: 2.4em;
+  font-weight: 300; /* Light weight at large size */
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-family: var(--bodyFont);
+}
+
+h2 {
+  font-size: 1.4em;
+  font-weight: 600;
+  margin-top: 2em;
+  font-family: var(--headerFont);
+}
+
+h3 {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin-top: 1.5em;
+  font-family: var(--headerFont);
+}
+
+/* Body text with personality */
 body {
+  font-family: var(--bodyFont);
+  font-size: var(--fontSize);
+  font-weight: 425; /* Variable font finesse */
   background-color: var(--light);
-  color: var(--darkgray);
+  color: var(--dark);
 }
 
-/* Typography overrides */
 article {
-  font-size: 1.1rem !important;
-  line-height: 1.7 !important;
+  font-family: var(--bodyFont);
+  font-size: var(--fontSize);
+  font-weight: 425;
 }
 
-article h1 { font-size: 2.5rem !important; }
-article h2 { font-size: 1.8rem !important; }
-article h3 { font-size: 1.4rem !important; }
-
-/* Content width override */
-:root {
-  --content-width: 750px !important;
-  --right-sidebar-width: 250px !important;
+article p {
+  margin-bottom: var(--paragraphSpacing);
+  text-wrap: pretty; /* 2025: better line breaks */
 }
 
-/* Search button - positioned with other header buttons */
+/* One accent color, used sparingly */
+a {
+  color: inherit;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+/* Code styling */
+code, pre {
+  font-family: var(--codeFont);
+}
+
+/* Explorer shouldn't hijack mobile taps */
+.explorer {
+  @media (max-width: 768px) {
+    &:not(.expanded) {
+      pointer-events: none;
+    }
+  }
+}
+
+/* Search should be omnipresent */
 .search {
-  background: none;
-  border: none;
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 999;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
   cursor: pointer;
-  padding: 0 0.5rem;
-  position: relative;
-  height: 20px;
+  padding: 0.5rem;
+  height: auto;
   margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .search svg {
@@ -96,10 +175,45 @@ article h3 { font-size: 1.4rem !important; }
   display: none;
 }
 
+.search kbd {
+  font-size: 0.8em;
+  padding: 0.1em 0.3em;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  margin-left: 0.5rem;
+  color: var(--darkgray);
+}
+
+/* Make backlinks subtle, not dominant */
+.backlinks {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--ui-border);
+}
+
+.backlinks h3 {
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--darkgray);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.backlinks ul {
+  list-style: none;
+  padding: 0;
+}
+
+.backlinks li {
+  padding: 0.25em 0;
+  font-size: 0.95em;
+}
+
 /* NetLogo embed styling */
 .netlogo-embed {
   margin: 2rem 0;
-  border: 1px solid var(--lightgray);
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -110,32 +224,26 @@ article h3 { font-size: 1.4rem !important; }
   border: none;
 }
 
-/* Backlinks styling */
-.backlinks {
-  margin-top: 4rem;
-  padding-top: 2rem;
-  border-top: 1px solid var(--lightgray);
+/* View Transitions - Crossfade everything except persistent UI */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 250ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.backlinks h3 {
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
+/* Keep header/nav stable */
+header {
+  view-transition-name: header;
 }
 
-.backlinks ul {
-  list-style: none;
-  padding: 0;
+/* Lazy loading for all images */
+img {
+  loading: lazy;
+  decoding: async;
 }
 
-.backlinks li {
-  margin-bottom: 0.5rem;
-}
-
-.backlinks a {
-  color: var(--secondary);
-  text-decoration: none;
-}
-
-.backlinks a:hover {
-  text-decoration: underline;
+/* Content width override */
+:root {
+  --content-width: 750px;
+  --right-sidebar-width: 250px;
 }
