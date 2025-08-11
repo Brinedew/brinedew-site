@@ -64,7 +64,10 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 
 ## when things break
 
-**Site not updating?** Check GitHub Actions tab. Build probably failed.
+**Site not updating?** Check GitHub Actions first: https://github.com/Brinedew/brinedew-site/actions
+- Green checkmark = deployment succeeded, changes should be live in ~60 seconds
+- Red X = build failed, check the logs for errors
+- Yellow circle = build in progress, wait for completion
 
 **Build failing?** Check that:
 - All markdown files have proper frontmatter (title and date)
@@ -153,6 +156,30 @@ Excalidraw drawings work seamlessly across all devices and auto-convert to image
 
 **Result:** Mobile editing, cross-device sync, automatic web publishing. Draw on phone, appears on website.
 
+## debugging css problems properly
+
+**Don't guess at CSS selectors based on React/TSX components** - the actual DOM might have extra wrapper divs. Always check DevTools Elements panel first.
+
+**For click blocking issues on mobile:**
+```js
+// In browser console at mobile viewport, find what's actually catching clicks:
+document.elementFromPoint(10, 10)  // returns the topmost element at that coordinate
+```
+
+**For CSS custom property cascade issues:**
+```js  
+// Check if attribute is set correctly:
+document.documentElement.getAttribute('saved-theme')
+
+// Check what value actually wins the cascade:
+getComputedStyle(document.documentElement).getPropertyValue('--light').trim()
+```
+
+**In DevTools:**
+- Elements panel → select :root → Computed tab → filter for custom property name to see which rule wins
+- Layers panel (More tools → Layers) to visualize z-index stacking
+- Check for `@media (prefers-color-scheme)` blocks that might override theme variables later in cascade
+
 ## gemini analysis templates
 
 Use these prompts with the `gemini -p "prompt" @file.md` command to get structural analysis of documents:
@@ -164,7 +191,7 @@ I am trying to improve the structure and flow of this article. The goal is to cr
 What structural problems do you notice in this article? Are there issues with redundancy, flow, logical progression, or sections that feel disconnected? Does the article successfully motivate each concept before explaining it, or does it jump to solutions without properly setting up the problems? Please be specific about which sections have issues and suggest concrete improvements.
 ```
 
-### voice consistency template
+### voice consistency template  
 ```
 Analyze this document for voice and tone consistency. The target audience is LessWrong veterans and researchers who prefer precise, substantive content. Look for: patronizing language, inconsistent formality levels, sections that sound like different authors, unclear transitions between concepts. Point out specific examples of voice problems and suggest how to fix them.
 ```

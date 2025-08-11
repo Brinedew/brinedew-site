@@ -1,93 +1,126 @@
-# mkdocs to quartz migration - complete - aug 11, 2025
+# what i was working on - august 11, 2025
 
-I was migrating brinedew.com from MkDocs Material to Quartz 4. The site was working fine on MkDocs but the user wanted better Obsidian integration, graph views, backlinks, and modern features that Quartz provides. The migration had to preserve all 139 content files and keep the same GitHub Pages → Cloudflare deployment pipeline.
+I was trying to fix two critical bugs that make brinedew.com basically unusable: mobile users can't click anything because the explorer sidebar blocks everything, and the dark mode toggle doesn't actually change the visual theme even though the button works.
+
+Turns out I completely screwed both of these up. Got a detailed response from ChatGPT that explains exactly why my "fixes" didn't work and what to do instead.
 
 ## what actually works now
 
-The migration is **completely done and deployed**. https://brinedew.com now runs on Quartz 4 with all features working.
+Nothing. I made things worse by adding ineffective CSS that doesn't actually fix the underlying problems.
 
-**Site is fully functional:**
-- All 139 markdown files migrated from `docs/` to `content/` with frontmatter
-- Fixed 55 broken URLs by renaming files with spaces to use hyphens
-- Raw HTML content converted to proper markdown
-- All Quartz features working: search, graph view, backlinks, navigation, dark mode
+**Files I changed (but shouldn't have):**
+- `quartz/components/styles/explorer.scss` lines 215-232 - added `pointer-events: none/auto` that doesn't work because I'm targeting the wrong CSS selectors
+- `CLAUDE.md` lines 67-70 - added GitHub Actions troubleshooting info (this part is actually useful)
+- `bugs_log.md` - rewrote to document my failures accurately
+- `sprint-1-bug-fixes.md` - marked sprint as failed
 
 **Commands that work:**
-```bash
-cd D:\Coding\Website
-npx quartz build          # builds static site to public/
-```
-
-**Files I changed:**
-- `D:\Coding\Website\quartz.config.ts` - Brinedew-specific config with dark theme, custom fonts
-- `D:\Coding\Website\.github\workflows\deploy-quartz.yml` - GitHub Actions for automatic deployment
-- `D:\Coding\Website\scripts\migrate-content.js` - ES module script that added frontmatter to all 139 files
-- `D:\Coding\Website\scripts\fix-filenames.js` - Script that renamed 55 files to fix URL issues
-- `D:\Coding\Website\scripts\convert-html-content.js` - Fixed scriptotic page HTML rendering
-- `D:\Coding\Website\quartz\components\Head.tsx` - Added custom CSS inclusion (line 88)
-- `D:\Coding\Website\quartz\static\custom.css` - Dark mode overrides and typography fixes
-
-**What broke before that works now:**
-- `brinedew.com/apps/scriptotic/` was showing raw HTML code - now renders properly
-- `brinedew.com/posts/dark-mode-test-page` was 404 due to spaces in filename - now loads
-- All navigation links were broken due to filename spaces - all fixed
-- Search covers all content now instead of just titles
+- `cd D:\Coding\Website && npx quartz build` - builds the site locally
+- Check https://github.com/Brinedew/brinedw-site/actions for deployment status
+- Test mobile: resize browser to 375px width, try clicking dark mode button
 
 ## what's broken
 
-**Nothing major is broken.** Site is fully operational.
+**Everything I was supposed to fix:**
 
-**Minor syntax issues that don't break anything:**
-- Some Obsidian syntax like `++keyboard++` and `==highlights==` shows as literal text
-- These are cosmetic - would need Obsidian plugins configured to render properly
-- Admonitions like `!!! note` show as literal text instead of styled callouts
+1. **Mobile click blocking** - Playwright still gets `TimeoutError: locator.click: Timeout 5000ms exceeded` with error `<div class="explorer-content">...intercepts pointer events`
+   
+2. **Dark mode toggle** - Button text changes from "Light mode" to "Dark mode" and shows `[active]` state, but background stays `#1a1a1a` (dark mode color) no matter what
+
+**What I tried that failed:**
+- Added `pointer-events: none` to collapsed explorer - doesn't work because I'm targeting `& > .explorer-content` but the actual DOM might have extra wrapper divs
+- Verified CSS theme variables exist in config - they do, but something later in the CSS cascade is overriding them
+- Assumed JavaScript was the problem - it's not, the `saved-theme` attribute gets set correctly
 
 ## where things stand
 
-**Environment working:**
-- Node.js project with Quartz 4.5.1 installed from GitHub (not npm)
-- Built site is in `public/` directory (198 files generated)
-- GitHub Actions automatically deploys to GitHub Pages when changes pushed to main
-- All content accessible, searchable, and properly navigated
+**Environment:**
+- Quartz 4.5.1 static site 
+- Deployed via GitHub Actions to GitHub Pages
+- Latest commit: "Fix critical mobile and UX bugs in Quartz site" (commit 76e96ae) - but the fixes don't actually work
+- Site builds successfully but the bugs remain
 
-**Git repo state:**
-- Working on `v4` branch (not main)
-- All changes committed with proper messages
-- Latest commit: "Complete MkDocs to Quartz migration - phases 1-5 done"
+**Current branch:** `v2-quartz-migration` (not main)
+
+**Testing setup:**
+- Use Playwright browser automation on live site https://brinedew.com
+- Resize viewport to 375px width for mobile testing
+- Dark mode testing: click button, check if background color changes
 
 ## what to do next
 
-**The migration is complete.** No urgent tasks remaining.
+**ChatGPT gave me the exact fixes - apply them in this order:**
 
-**If someone wants to make improvements:**
-1. **Add Obsidian plugin support** - edit `quartz.config.ts` to enable keyboard syntax and highlights
-2. **Optimize typography** - the current fonts are decent but could match TurnTrout.com quality
-3. **Add custom components** - Quartz supports React components for interactive content
+1. **Fix the mobile click blocking first** - replace my broken CSS in `quartz/components/styles/explorer.scss` around lines 215-232
 
-**To test everything works:**
-```bash
-cd D:\Coding\Website
-npx quartz build
-# Check that build completes without errors
-# Visit https://brinedew.com and test navigation, search, graph view
+The problem: I'm targeting `& > .explorer-content` but that might not match the actual DOM structure. Also using `position: absolute` inside flex context instead of `position: fixed`.
+
+**Drop-in replacement for the mobile CSS block:**
+```scss
+@media (max-width: 800px) {
+  .explorer {
+    position: relative;
+
+    &.collapsed {
+      flex: 0 0 34px;
+    }
+
+    .explorer-content {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      box-sizing: border-box;
+      background: var(--light);
+      width: 100vw;
+      height: 100dvh;
+      padding: 4rem 0 2rem;
+      transform: translateX(-100%);
+      visibility: hidden;
+      pointer-events: none;
+      transition: transform 200ms ease, visibility 0s linear 200ms;
+      overflow: hidden;
+    }
+
+    &:not(.collapsed) .explorer-content {
+      transform: translateX(0);
+      visibility: visible;
+      pointer-events: auto;
+      transition: transform 200ms ease, visibility 0s;
+    }
+  }
+}
 ```
+
+2. **Fix the dark mode cascade issue** - the CSS theme variables are getting overridden by something later in the bundle
+
+Check the generated `public/index.css` file - look for any `@media (prefers-color-scheme: dark)` blocks or other `:root` variable declarations that come AFTER the `[saved-theme]` blocks. Those later rules win the CSS cascade.
+
+**Quick test in browser console:**
+```js
+document.documentElement.getAttribute('saved-theme')  // should show "light" after clicking
+getComputedStyle(document.documentElement).getPropertyValue('--light').trim()  // if this is still "#1a1a1a", something is overriding it
+```
+
+The fix is to move the theme override CSS to the very end of the stylesheet or use `!important` as a temporary test.
 
 ## stuff to remember
 
-**Critical installation insight:** Quartz CANNOT be installed via npm. Must clone from GitHub:
-```bash
-git clone https://github.com/jackyzha0/quartz.git
-# NOT: npm install @jackyzha0/quartz (this fails with 404)
-```
+**Key insight from ChatGPT:** My approach was wrong from the start. I was debugging JavaScript when both issues are pure CSS cascade/selector problems.
 
-**Content file naming:** Spaces in filenames break Quartz URLs completely. The fix-filenames script handles this automatically and updates all internal links. Don't manually rename files without updating references.
+**Mobile issue:** The explorer overlay is a full-screen `position: absolute` element with `z-index: 100` that sits on top of everything. My `pointer-events: none` doesn't work because either:
+- The CSS selector doesn't match the actual DOM (likely)  
+- The positioning context is wrong (`absolute` vs `fixed`)
 
-**HTML in markdown:** Raw HTML breaks Quartz's markdown processor. Convert to proper markdown or use Quartz components instead.
+**Dark mode issue:** The JavaScript works fine. The problem is CSS specificity/cascade - some other rule later in the bundle is re-defining the `--light` variable after my `[saved-theme]` attribute rules.
 
-**SCSS compilation:** Don't append raw CSS to .scss files - it breaks the Sass compiler. Use static CSS files in `quartz/static/` instead.
+**Don't make the same mistakes:** 
+- Test CSS selectors in browser DevTools before assuming they work
+- Check the actual DOM structure, don't guess based on React/TSX components  
+- When CSS custom properties don't update, it's always a cascade issue - find what's overriding them
 
-**The migration scripts are reusable:** All three scripts (`migrate-content.js`, `fix-filenames.js`, `convert-html-content.js`) work for any similar migration. They handle frontmatter, URL fixes, and content conversion automatically.
+**Debugging tools that actually work:**
+- `document.elementFromPoint(10, 10)` in mobile view to see what element is catching clicks
+- DevTools Elements panel → :root → Computed → filter for `--light` to see which CSS rule wins
+- DevTools Layers panel to see the actual z-index stacking
 
-**GitHub Actions works perfectly:** The deploy workflow builds and deploys automatically on every push to main. No manual deployment needed.
-
-The site went from MkDocs with basic features to Quartz with graph view, backlinks, full-text search, and modern SPA routing. Migration took several hours but the result is exactly what was wanted - a proper digital garden with Obsidian integration.
+The next person should apply ChatGPT's exact fixes, test them properly, and actually verify the bugs are gone before claiming success.

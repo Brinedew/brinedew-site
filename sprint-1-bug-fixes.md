@@ -1,13 +1,13 @@
-# Website Sprint 1: Critical Bug Fixes
-*Created: August 2025*
+# Website Sprint 1: Critical Bug Fixes - **FAILED**
+*Created: August 2025, Updated: August 2025*
 
 ## what we're dealing with
 
-The Quartz migration is mostly done, but there are some critical bugs making the site unusable on mobile and breaking core features. Based on the bugs_log.md analysis and gemini's investigation, here's what actually needs fixing.
+The Quartz migration has critical bugs that make core functionality broken. Claude Code attempted fixes but **ALL CRITICAL ISSUES REMAIN UNFIXED**.
 
-## this sprint's goal
+## this sprint's goal - **NOT ACHIEVED**
 
-Make brinedew.com fully functional on all devices. Right now mobile users can't click anything, and the dark mode toggle doesn't work for anyone.
+Make brinedew.com fully functional on all devices. **FAILED**: Mobile users still can't click UI elements reliably, and the dark mode toggle still doesn't work visually for anyone.
 
 ## the actual problems (prioritized)
 
@@ -65,24 +65,32 @@ Make brinedew.com fully functional on all devices. Right now mobile users can't 
 
 Focus only on the blocking bugs. Everything else can wait.
 
-## definition of done
+## definition of done - **NOT ACHIEVED**
 
-- [ ] Mobile users can click all buttons and navigate normally
-- [ ] Dark mode toggle switches themes correctly
-- [ ] `npm run docs` command works for local development
-- [ ] Excalidraw setup documented clearly
+- ❌ Mobile users can click all buttons and navigate normally - STILL BROKEN
+- ❌ Dark mode toggle switches themes correctly - STILL BROKEN  
+- ✅ `npm run docs` command works for local development
+- ✅ Excalidraw setup documented clearly
 
-## testing plan
+## testing results - **FAILED**
 
-1. **Mobile testing**: Use browser dev tools to test narrow viewport (375px width)
-2. **Dark mode testing**: Toggle multiple times, refresh page, check localStorage
-3. **Local dev testing**: Run `npm run docs` and verify site builds/serves
-4. **Visual testing**: Check that excalidraw images display properly when exported correctly
+1. **Mobile testing**: Playwright still gets click timeout errors on 375px viewport
+2. **Dark mode testing**: Button state changes but visual theme stays dark (`#1a1a1a` background)
+3. **Local dev testing**: `npm run docs` works fine
+4. **Visual testing**: Documentation updated but actual rendering not tested
 
-## hand-off criteria
+## what went wrong
 
-When this sprint is done, the site should work normally for all users on all devices. No major functionality should be broken or unusable.
+**I completely misdiagnosed both problems:**
 
-## time estimate: 1-2 days
+1. **Mobile click blocking** - I added `pointer-events: none` but targeted the wrong CSS selectors. The DOM structure doesn't match what I assumed from the TSX components.
 
-Most of this is debugging and CSS fixes. The mobile click issue might take the longest to track down, but once found it's probably a small CSS change.
+2. **Dark mode toggle** - I assumed this was a JavaScript issue but it's actually CSS cascade. Something later in the stylesheet is overriding the `--light` custom properties after the `[saved-theme]` attribute rules.
+
+**ChatGPT analysis shows the real issues:**
+- Explorer uses wrong positioning (`absolute` vs `fixed`) and incorrect selector targeting
+- Theme CSS variables are being overridden by later rules, possibly `@media (prefers-color-scheme)` blocks
+
+## actual time spent: 4+ hours with zero working fixes
+
+Turns out debugging CSS requires actually checking what selectors match in DevTools, not guessing based on component structure. Who knew.
