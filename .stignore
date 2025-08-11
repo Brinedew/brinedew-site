@@ -1,0 +1,5 @@
+// Ignore the Git directory to prevent corruption
+.git
+
+// Optional: Ignore the MkDocs build output
+site
