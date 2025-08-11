@@ -4,7 +4,7 @@ tags:
   - plugin/emitter
 ---
 
-This plugin emits both RSS and an XML sitemap for your site. The [[RSS Feed]] allows users to subscribe to content on your site and the sitemap allows search engines to better index your site. The plugin also emits a `contentIndex.json` file which is used by dynamic frontend components like search and graph.
+This plugin emits both RSS and an XML sitemap for your site. The [[rss-feed]] allows users to subscribe to content on your site and the sitemap allows search engines to better index your site. The plugin also emits a `contentIndex.json` file which is used by dynamic frontend components like search and graph.
 
 This plugin emits a comprehensive index of the site's content, generating additional resources such as a sitemap, an RSS feed, and a
 

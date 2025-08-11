@@ -4,7 +4,7 @@ tags:
   - plugin/transformer
 ---
 
-This plugin provides support for [[Obsidian compatibility]].
+This plugin provides support for [[obsidian-compatibility]].
 
 > [!note]
 > For information on how to add, remove or configure plugins, see the [[configuration#Plugins|Configuration]] page.

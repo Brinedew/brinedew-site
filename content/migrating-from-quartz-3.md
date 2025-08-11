@@ -38,4 +38,4 @@ When running `npx quartz create`, you will be prompted as to how to initialize y
   - Folder descriptions should go under `content/<folder-name>/index.md` where `<folder-name>` is the name of the folder.
   - Tag descriptions should go under `content/tags/<tag-name>.md` where `<tag-name>` is the name of the tag.
 - Some HTML layout may not be the same between Quartz 3 and Quartz 4. If you depended on a particular HTML hierarchy or class names, you may need to update your custom CSS to reflect these changes.
-- If you customized the layout of Quartz 3, you may need to translate these changes from Go templates back to JSX as Quartz 4 no longer uses Hugo. For components, check out the guide on [[creating components]] for more details on this.
+- If you customized the layout of Quartz 3, you may need to translate these changes from Go templates back to JSX as Quartz 4 no longer uses Hugo. For components, check out the guide on [[creating-components]] for more details on this.

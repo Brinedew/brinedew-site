@@ -261,7 +261,7 @@ This is a thin wrapper around writing to the appropriate output folder and ensur
 
 If you are creating an emitter plugin that needs to render components, there are three more things to be aware of:
 
-- Your component should use `getQuartzComponents` to declare a list of `QuartzComponents` that it uses to construct the page. See the page on [[creating components]] for more information.
+- Your component should use `getQuartzComponents` to declare a list of `QuartzComponents` that it uses to construct the page. See the page on [[creating-components]] for more information.
 - You can use the `renderPage` function defined in `quartz/components/renderPage.tsx` to render Quartz components into HTML.
 - If you need to render an HTML AST to JSX, you can use the `htmlToJsx` function from `quartz/util/jsx.ts`. An example of this can be found in `quartz/components/pages/Content.tsx`.
 
