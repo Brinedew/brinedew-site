@@ -71,6 +71,13 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 - No spaces in filenames (use hyphens instead)
 - No raw HTML in markdown files
 
+**Excalidraw drawings showing as text links instead of images?** You need to enable PNG auto-export in Obsidian:
+1. Open Obsidian → Settings → Community plugins → Excalidraw
+2. ✅ Enable "Auto export PNG" 
+3. ✅ Enable "Keep same folder as drawing"
+4. Your drawings will now automatically export as PNG files alongside the .excalidraw files
+5. The website will display the PNG images instead of text links
+
 **Git corruption (fatal: loose object is corrupt)?** This happens when Syncthing and Git conflict:
 1. Back up your `content/` directory to a safe location
 2. Delete the corrupted Website folder
@@ -174,28 +181,29 @@ This site's audience includes LessWrong veterans, researchers, and people who re
 Wrong: "Think of it as evolution turning against itself to stop cells from competing"
 Right: "Multicellular organisms suppress intra-organismal evolution through..."
 
-## migration from mkdocs (completed aug 2025)
+## current workflow (quartz 4 setup)
 
-The site was successfully migrated from MkDocs Material to Quartz 4. All 139 content files were preserved and enhanced with new features.
+**Working publishing workflow:**
+1. Write/edit content in Obsidian on any device
+2. Syncthing syncs content automatically across devices (mobile ↔ PC)
+3. Git commit and push from PC only (when ready to publish)
+4. GitHub Actions builds and deploys via Quartz 4
 
-**What changed:**
-- Content moved from `docs/` to `content/` with frontmatter added
-- Fixed 55 broken URLs by renaming files with spaces to use hyphens  
-- Raw HTML content converted to proper markdown
-- GitHub Actions updated to use Quartz build process
+**Critical workflow requirements:**
+- **PC**: Both Syncthing + Git enabled
+- **Mobile**: Syncthing only - Git plugin must be DISABLED on mobile devices
+- **Syncthing**: `.stignore` file protects `.git` and `public/` from sync conflicts
 
-**Migration scripts (reusable):**
-- `scripts/migrate-content.js` - adds frontmatter to all markdown files
-- `scripts/fix-filenames.js` - renames files to fix URL issues and updates internal links
-- `scripts/convert-html-content.js` - converts raw HTML to markdown
+**Excalidraw integration:**
+- Create drawings using `![[drawing.excalidraw]]` syntax in Obsidian
+- Must enable PNG auto-export in Obsidian Excalidraw plugin settings
+- Drawings sync across devices via Syncthing, display as images on web
 
-**Critical Quartz installation note:** Cannot use npm. Must clone from GitHub:
+**Build commands:**
 ```bash
-git clone https://github.com/jackyzha0/quartz.git
-# NOT: npm install @jackyzha0/quartz (this fails)
+npx quartz build    # local build to public/
+npm run docs        # build + serve locally
 ```
-
-**New features gained:** Graph view, backlinks, better search, SPA routing, improved Obsidian integration.
 
 ---
 

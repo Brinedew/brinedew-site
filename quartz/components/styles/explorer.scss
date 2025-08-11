@@ -218,6 +218,7 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
       & > .explorer-content {
         transform: translateX(-100vw);
         visibility: hidden;
+        pointer-events: none;
       }
     }
 
@@ -227,6 +228,7 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
       & > .explorer-content {
         transform: translateX(0);
         visibility: visible;
+        pointer-events: auto;
       }
     }
 
