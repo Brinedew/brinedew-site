@@ -12,12 +12,8 @@ const config: QuartzConfig = {
     ignorePatterns: ["private", "templates", ".obsidian", "*.tmp"],
     defaultDateType: "created",
     theme: {
-      cdnCaching: true,
-      typography: {
-        header: { name: "Crimson Pro", weights: [300,400,500,600,700,800,900], includeItalic: true },
-        body: { name: "Crimson Pro", weights: [300,400,500,600], includeItalic: true },
-        code: { name: "IBM Plex Mono", weights: [400,500], includeItalic: false },
-      },
+      cdnCaching: false,
+      typography: { header: "system-ui", body: "system-ui", code: "ui-monospace" },
       colors: {
         lightMode: {
           light: "#faf8f8",

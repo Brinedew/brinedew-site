@@ -89,13 +89,8 @@ export default (() => {
         {/* Load Quartz CSS first */}
         {css.map((resource) => CSSResourceToStyleElement(resource, true))}
         
-        {/* Google Fonts - load robustly with preconnect */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300..900;1,300..900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-        
-        {/* Custom CSS last to override Quartz defaults */}
-        <link href="/static/custom.css?v=84f1847" rel="stylesheet" type="text/css" />
+        {/* Custom CSS last with self-hosted fonts */}
+        <link href="/static/custom.css?v=a7f434e" rel="stylesheet" type="text/css" />
         
         {/* Performance optimizations */}
         <link rel="modulepreload" href="/static/search.js" />
