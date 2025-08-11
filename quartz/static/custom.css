@@ -1,18 +1,56 @@
-/* Dark mode as default */
+/* Pattern A: Guard + Order theme implementation */
+/* 1) Base defaults (light theme) */
 :root {
-  --light: #1a1a1a !important;
-  --lightgray: #393639 !important;
-  --gray: #646464 !important;
-  --darkgray: #d4d4d4 !important;
-  --dark: #ebebec !important;
-  --secondary: #7aa2f7 !important;
-  --tertiary: #84a59d !important;
-  --highlight: rgba(143, 159, 169, 0.15) !important;
+  --light: #faf8f8;
+  --lightgray: #e5e5e5;
+  --gray: #b8b8b8;
+  --darkgray: #5e5e5e;
+  --dark: #2e2e2e;
+  --secondary: #7aa2f7;
+  --tertiary: #84a59d;
+  --highlight: rgba(143, 159, 169, 0.15);
+}
+
+/* 2) System preference ONLY if no user choice */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --light: #1a1a1a;
+    --lightgray: #393639;
+    --gray: #646464;
+    --darkgray: #d4d4d4;
+    --dark: #ebebec;
+    --secondary: #7aa2f7;
+    --tertiary: #84a59d;
+    --highlight: rgba(143, 159, 169, 0.15);
+  }
+}
+
+/* 3) User choice ALWAYS wins - placed AFTER media block */
+:root[data-theme="light"] {
+  --light: #faf8f8;
+  --lightgray: #e5e5e5;
+  --gray: #b8b8b8;
+  --darkgray: #5e5e5e;
+  --dark: #2e2e2e;
+  --secondary: #7aa2f7;
+  --tertiary: #84a59d;
+  --highlight: rgba(143, 159, 169, 0.15);
+}
+
+:root[data-theme="dark"] {
+  --light: #1a1a1a;
+  --lightgray: #393639;
+  --gray: #646464;
+  --darkgray: #d4d4d4;
+  --dark: #ebebec;
+  --secondary: #7aa2f7;
+  --tertiary: #84a59d;
+  --highlight: rgba(143, 159, 169, 0.15);
 }
 
 body {
-  background-color: #1a1a1a !important;
-  color: #ebebec !important;
+  background-color: var(--light);
+  color: var(--darkgray);
 }
 
 /* Typography overrides */
@@ -31,26 +69,31 @@ article h3 { font-size: 1.4rem !important; }
   --right-sidebar-width: 250px !important;
 }
 
-/* Command palette styling */
-.search-button {
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  background: var(--dark);
-  color: var(--light);
-  padding: 0.75rem 1.5rem;
-  border-radius: 2rem;
-  border: 1px solid var(--lightgray);
+/* Search button - positioned with other header buttons */
+.search {
+  background: none;
+  border: none;
   cursor: pointer;
+  padding: 0 0.5rem;
+  position: relative;
+  height: 20px;
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  z-index: 100;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.search-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+.search svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--darkgray);
+  transition: opacity 0.1s ease;
+}
+
+/* Hide the "Search" text, show only icon */
+.search p {
+  display: none;
 }
 
 /* NetLogo embed styling */
