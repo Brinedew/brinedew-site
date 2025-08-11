@@ -6,7 +6,7 @@ Wikilinks were pioneered by earlier internet wikis to make it easier to write li
 
 Quartz supports Wikilinks by default and these links are resolved by Quartz using the [[CrawlLinks]] plugin. See the [Obsidian Help page on Internal Links](https://help.obsidian.md/Linking+notes+and+files/Internal+links) for more information on Wikilink syntax.
 
-This is enabled as a part of [[Obsidian compatibility]] and can be configured and enabled/disabled from that plugin.
+This is enabled as a part of [[obsidian-compatibility]] and can be configured and enabled/disabled from that plugin.
 
 ## Syntax
 

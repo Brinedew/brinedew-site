@@ -4,7 +4,7 @@ tags:
   - plugin/emitter
 ---
 
-This plugin generates index pages for folders, creating a listing page for each folder that contains multiple content files. See [[folder and tag listings]] for more information.
+This plugin generates index pages for folders, creating a listing page for each folder that contains multiple content files. See [[folder-and-tag-listings]] for more information.
 
 Example: [[advanced/|Advanced]]
 

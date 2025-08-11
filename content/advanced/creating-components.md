@@ -149,7 +149,7 @@ As the names suggest, the `.beforeDOMLoaded` scripts are executed _before_ the p
 
 The `.afterDOMLoaded` script executes once the page has been completely loaded. This is a good place to setup anything that should last for the duration of a site visit (e.g. getting something saved from local storage).
 
-If you need to create an `afterDOMLoaded` script that depends on _page specific_ elements that may change when navigating to a new page, you can listen for the `"nav"` event that gets fired whenever a page loads (which may happen on navigation if [[SPA Routing]] is enabled).
+If you need to create an `afterDOMLoaded` script that depends on _page specific_ elements that may change when navigating to a new page, you can listen for the `"nav"` event that gets fired whenever a page loads (which may happen on navigation if [[spa-routing]] is enabled).
 
 ```ts
 document.addEventListener("nav", () => {
@@ -161,7 +161,7 @@ document.addEventListener("nav", () => {
 })
 ```
 
-You can also add the equivalent of a `beforeunload` event for [[SPA Routing]] via the `prenav` event.
+You can also add the equivalent of a `beforeunload` event for [[spa-routing]] via the `prenav` event.
 
 ```ts
 document.addEventListener("prenav", () => {

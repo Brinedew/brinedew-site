@@ -37,7 +37,7 @@ Quartz **components**, like plugins, can take in additional properties as config
 
 See [a list of all the components](component.md) for all available components along with their configuration options. Additionally, Quartz provides several built-in higher-order components for layout composition - see [[layout-components]] for more details.
 
-You can also checkout the guide on [[creating components]] if you're interested in further customizing the behaviour of Quartz.
+You can also checkout the guide on [[creating-components]] if you're interested in further customizing the behaviour of Quartz.
 
 ### Layout breakpoints
 
