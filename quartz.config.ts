@@ -15,9 +15,9 @@ const config: QuartzConfig = {
       fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        header: "Inter",
-        body: "Source Serif Pro",
-        code: "JetBrains Mono",
+        header: "Crimson Pro",
+        body: "Crimson Pro", 
+        code: "IBM Plex Mono",
       },
       colors: {
         lightMode: {

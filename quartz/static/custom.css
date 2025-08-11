@@ -14,6 +14,18 @@
   --paragraphSpacing: 0.75em; /* Less spacing = more flow */
 }
 
+/* Force Crimson Pro override for Quartz's built-in typography */
+* {
+  font-family: var(--bodyFont) !important;
+}
+
+/* System fonts for UI elements */
+h1, h2, h3, h4, h5, h6, 
+.page-title, .breadcrumbs, .content-meta, .tags, 
+nav, button, .search, .darkmode, .footer {
+  font-family: var(--headerFont) !important;
+}
+
 /* OKLCH Color System with Restraint */
 @layer base {
   :root {
