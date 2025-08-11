@@ -6,16 +6,15 @@
 
 ## what this thing is
 
-Personal longevity research blog built with MkDocs Material. Think of it as a fancy markdown-to-website converter that handles all the boring stuff automatically.
+Personal longevity research blog built with Quartz 4. This is a modern static site generator optimized for Obsidian integration, with features like graph view, backlinks, full-text search, and proper digital garden functionality.
 
-The basic flow: write markdown in `docs/`, push to GitHub, CI builds the site, GitHub Pages serves it at brinedew.com. Takes about 60 seconds from push to live.
+The basic flow: write markdown in `content/`, push to GitHub, CI builds the site with Quartz, GitHub Pages serves it at brinedew.com. Takes about 60 seconds from push to live.
 
 ## how to actually use it
 
 **Local development (PC only):**
 ```bash
-mkdocs serve    # preview at localhost:8000
-mkdocs build    # build to ./site (optional, CI does this)
+npx quartz build    # builds static site to public/
 ```
 
 **Content workflow (mobile-first):**
@@ -27,49 +26,57 @@ mkdocs build    # build to ./site (optional, CI does this)
 **Device setup:**
 - **Mobile devices**: Obsidian with Git plugins disabled, Syncthing enabled
 - **PC**: Obsidian with Git enabled, Syncthing enabled with `.stignore` protection
-- **Syncthing ignores**: `.git` folder (prevents corruption) and `site/` folder (build output)
+- **Syncthing ignores**: `.git` folder (prevents corruption) and `public/` folder (build output)
 
 Don't overthink it. Edit anywhere, publish from PC, CI does the rest.
 
 ## file structure that matters
 
-- `docs/` - all your markdown content lives here
-- `docs/assets/images/` - throw images here
-- `mkdocs.yml` - site config (theme, plugins, nav)
-- `.github/workflows/deploy.yml` - the magic that builds and deploys
-- `site/` - build output (git ignores this, CI handles it)
+- `content/` - all your markdown content lives here (migrated from `docs/`)
+- `content/posts/assets/images/` - throw images here
+- `quartz.config.ts` - site config (theme, plugins, nav)
+- `.github/workflows/deploy-quartz.yml` - GitHub Actions workflow for Quartz builds
+- `public/` - build output (git ignores this, CI handles it)
+- `quartz/static/` - static assets like CSS, images that get copied to public
+- `scripts/` - migration and utility scripts
 
 ## navigation works automatically
 
-We're using the awesome-pages plugin, which means:
-- **New markdown files show up in nav automatically**
-- **No need to create .pages files** - navigation is generated from file structure
-- **No need to manually edit mkdocs.yml** for every new page
+Quartz generates navigation from your file structure:
+- **New markdown files show up in navigation automatically**
+- **Explorer sidebar** shows entire site structure as a tree
+- **Breadcrumbs** show your current location in the hierarchy
+- **Backlinks** automatically generated for pages that reference each other
 - Files appear in alphabetical order by default
 - Put `index.md` in folders to create section landing pages
 
-**Important: Don't create .pages files.** The wiki navigation auto-generates from your actual file structure, so just create the markdown files you want.
+**No manual navigation configuration needed.** Just create the markdown files and folders you want.
 
 ## styling notes
 
-Using Material theme with custom CSS in `docs/stylesheets/extra.css`. 
+Using Quartz's default theme with custom CSS in `quartz/static/custom.css`. Dark mode is the default.
 
-**Don't mess with base theme variables** - it breaks the dark/light mode toggle. Only override component-specific stuff like `--md-typeset-table-color`.
+**Don't append CSS to .scss files** - it breaks the Sass compiler. Use static CSS files only.
 
-Use `/docs/posts/Dark Mode Test Page.md` to test color changes work in both modes.
+**Custom CSS is included via Head component** - check `quartz/components/Head.tsx` line 88.
+
+Use `content/posts/dark-mode-test-page.md` to test that all content types render properly.
 
 ## when things break
 
-**Links broken?** CI fails with strict mode enabled. Fix the markdown links.
-
 **Site not updating?** Check GitHub Actions tab. Build probably failed.
 
+**Build failing?** Check that:
+- All markdown files have proper frontmatter (title and date)
+- No spaces in filenames (use hyphens instead)
+- No raw HTML in markdown files
+
 **Git corruption (fatal: loose object is corrupt)?** This happens when Syncthing and Git conflict:
-1. Back up your `docs/` content to a safe location
+1. Back up your `content/` directory to a safe location
 2. Delete the corrupted Website folder
 3. `git clone https://github.com/Brinedew/brinedew-site.git Website`
 4. Restore your content from backup
-5. Verify `.stignore` file exists with `.git` and `site` entries
+5. Verify `.stignore` file exists with `.git` and `public` entries
 6. **Critical**: Never sync the `.git` folder via Syncthing again
 
 **Merge conflicts?** The nuclear option that works:
@@ -84,40 +91,43 @@ git reset --hard origin/main
 
 1. Push to main
 2. GitHub Actions spins up Ubuntu runner
-3. Installs Python + MkDocs + plugins 
-4. Runs `mkdocs build --strict --verbose`
-5. Uploads the `./site` directory as a Pages artifact
+3. Installs Node.js + Quartz dependencies
+4. Runs `npx quartz build` 
+5. Uploads the `./public` directory as a Pages artifact
 6. Deploys to GitHub Pages
 
 No gh-pages branch, no manual deployment commands. Just push and wait.
 
-## plugins we're using
+## quartz features we're using
 
-- `mkdocs-material` - the pretty theme
-- `mkdocs-awesome-pages-plugin` - automatic navigation
-- `mkdocs-redirects` - URL redirects
-- `pymdown-extensions` - better markdown (math, syntax highlighting, etc.)
+- **Graph View** - interactive visualization of content connections
+- **Full-text Search** - search across all content
+- **Backlinks** - automatic cross-references between pages  
+- **Explorer** - hierarchical navigation sidebar
+- **SPA Routing** - fast page transitions
+- **Obsidian Compatibility** - handles wikilinks and basic Obsidian syntax
+- **Dark Mode** - enabled by default with toggle available
 
-All installed automatically by CI.
+All features built into Quartz, no additional plugins needed.
 
 ## things to not touch
 
-- `.github/workflows/deploy.yml` permissions (required for Pages)
-- `strict: true` in mkdocs.yml (catches broken links)
-- Base theme color variables (breaks dark mode toggle)
+- `.github/workflows/deploy-quartz.yml` permissions (required for Pages)
+- `quartz.config.ts` core configuration (themes, plugins)
+- Don't append CSS to .scss files (breaks Sass compilation)
 
 ## wiki structure
 
-`/docs/wiki/` has hierarchical organization for longevity research concepts. Navigation auto-generates from file structure. Each category gets its own subfolder with an index page.
+`content/wiki/` has hierarchical organization for longevity research concepts. Navigation auto-generates from file structure. Each category gets its own subfolder with an index page.
 
 **To add new wiki content:**
-1. Create markdown files in the appropriate folder
+1. Create markdown files in the appropriate folder with proper frontmatter
 2. That's it - navigation updates automatically
-3. Cross-reference everything with relative links
+3. Cross-reference everything with wikilinks or relative links
 
 **Current categories:** concepts, theories, mechanisms, organisms
 
-**Don't create .pages files** - they're not needed and will break the auto-navigation.
+**Quartz handles all navigation automatically** - no manual configuration files needed.
 
 ## excalidraw integration
 
@@ -164,6 +174,29 @@ This site's audience includes LessWrong veterans, researchers, and people who re
 Wrong: "Think of it as evolution turning against itself to stop cells from competing"
 Right: "Multicellular organisms suppress intra-organismal evolution through..."
 
+## migration from mkdocs (completed aug 2025)
+
+The site was successfully migrated from MkDocs Material to Quartz 4. All 139 content files were preserved and enhanced with new features.
+
+**What changed:**
+- Content moved from `docs/` to `content/` with frontmatter added
+- Fixed 55 broken URLs by renaming files with spaces to use hyphens  
+- Raw HTML content converted to proper markdown
+- GitHub Actions updated to use Quartz build process
+
+**Migration scripts (reusable):**
+- `scripts/migrate-content.js` - adds frontmatter to all markdown files
+- `scripts/fix-filenames.js` - renames files to fix URL issues and updates internal links
+- `scripts/convert-html-content.js` - converts raw HTML to markdown
+
+**Critical Quartz installation note:** Cannot use npm. Must clone from GitHub:
+```bash
+git clone https://github.com/jackyzha0/quartz.git
+# NOT: npm install @jackyzha0/quartz (this fails)
+```
+
+**New features gained:** Graph view, backlinks, better search, SPA routing, improved Obsidian integration.
+
 ---
 
-*Last updated: whenever I remembered to update this*
+*Last updated: Aug 2025 (post-Quartz migration)*
