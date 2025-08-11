@@ -20,20 +20,46 @@ type FolderState = {
 }
 
 let currentExplorerState: Array<FolderState>
+// Mobile breakpoint detection - single source of truth
+const mobileBreakpoint = window.matchMedia("(max-width: 800px)")
+
 function toggleExplorer(this: HTMLElement) {
   const nearestExplorer = this.closest(".explorer") as HTMLElement
-  if (!nearestExplorer) return
-  const explorerCollapsed = nearestExplorer.classList.toggle("collapsed")
-  nearestExplorer.setAttribute(
-    "aria-expanded",
-    nearestExplorer.getAttribute("aria-expanded") === "true" ? "false" : "true",
-  )
+  const explorerContent = nearestExplorer?.querySelector(".explorer-content") as HTMLElement
+  if (!nearestExplorer || !explorerContent) return
 
-  if (!explorerCollapsed) {
-    // Stop <html> from being scrollable when mobile explorer is open
-    document.documentElement.classList.add("mobile-no-scroll")
+  // On mobile, toggle .is-open class; on desktop, toggle .collapsed for backwards compatibility
+  if (mobileBreakpoint.matches) {
+    const isOpen = nearestExplorer.classList.toggle("is-open")
+    nearestExplorer.setAttribute("aria-expanded", String(isOpen))
+    explorerContent.toggleAttribute("inert", !isOpen)
+    document.documentElement.classList.toggle("mobile-no-scroll", isOpen)
   } else {
+    // Desktop behavior (backwards compatibility)
+    const explorerCollapsed = nearestExplorer.classList.toggle("collapsed")
+    nearestExplorer.setAttribute(
+      "aria-expanded", 
+      explorerCollapsed ? "false" : "true"
+    )
+  }
+}
+
+function closeExplorerOnMobile() {
+  const explorer = document.querySelector(".explorer") as HTMLElement
+  const explorerContent = document.querySelector(".explorer-content") as HTMLElement
+  if (!explorer || !explorerContent) return
+
+  // If we are entering mobile, force close
+  if (mobileBreakpoint.matches) {
+    explorer.classList.remove("is-open")
+    explorer.setAttribute("aria-expanded", "false")
+    explorerContent.setAttribute("inert", "")
     document.documentElement.classList.remove("mobile-no-scroll")
+  } else {
+    // Leaving mobile: sidebar is part of layout; ensure it's not inert
+    explorerContent.removeAttribute("inert")
+    // Remove mobile-specific classes but keep desktop .collapsed state
+    explorer.classList.remove("is-open")
   }
 }
 
@@ -269,48 +295,24 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
   const currentSlug = e.detail.url
   await setupExplorer(currentSlug)
 
-  // if mobile hamburger is visible, collapse by default
+  // Apply mobile state management after navigation
+  closeExplorerOnMobile()
+
+  // Remove loading class from mobile hamburger
   for (const explorer of document.getElementsByClassName("explorer")) {
     const mobileExplorer = explorer.querySelector(".mobile-explorer")
-    if (!mobileExplorer) return
-
-    if (mobileExplorer.checkVisibility()) {
-      explorer.classList.add("collapsed")
-      explorer.setAttribute("aria-expanded", "false")
-
-      // Allow <html> to be scrollable when mobile explorer is collapsed
-      document.documentElement.classList.remove("mobile-no-scroll")
-    }
-
-    mobileExplorer.classList.remove("hide-until-loaded")
-  }
-})
-
-window.addEventListener("resize", function () {
-  // Desktop explorer opens by default, but should collapse when resized to mobile
-  const explorer = document.querySelector(".explorer")
-  if (!explorer) return
-  
-  const mobileExplorer = explorer.querySelector(".mobile-explorer")
-  if (!mobileExplorer) return
-
-  // If mobile hamburger is now visible, collapse the explorer
-  if (mobileExplorer.checkVisibility()) {
-    if (!explorer.classList.contains("collapsed")) {
-      explorer.classList.add("collapsed")
-      explorer.setAttribute("aria-expanded", "false")
-      // Allow <html> to be scrollable when mobile explorer is collapsed
-      document.documentElement.classList.remove("mobile-no-scroll")
-    }
-  } else {
-    // If switching back to desktop, ensure explorer is expanded
-    if (explorer.classList.contains("collapsed")) {
-      explorer.classList.remove("collapsed")
-      explorer.setAttribute("aria-expanded", "true")
-      document.documentElement.classList.remove("mobile-no-scroll")
+    if (mobileExplorer) {
+      mobileExplorer.classList.remove("hide-until-loaded")
     }
   }
 })
+
+// Set up matchMedia listener for breakpoint changes
+mobileBreakpoint.addEventListener("change", closeExplorerOnMobile)
+window.addEventListener("pageshow", closeExplorerOnMobile) // covers bfcache restores
+
+// Initialize state on page load
+document.addEventListener("DOMContentLoaded", closeExplorerOnMobile)
 
 function setFolderState(folderElement: HTMLElement, collapsed: boolean) {
   return collapsed ? folderElement.classList.remove("open") : folderElement.classList.add("open")

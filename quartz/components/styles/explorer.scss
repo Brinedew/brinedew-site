@@ -212,45 +212,35 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
 
 .explorer {
   @media all and ($mobile) {
-    &.collapsed {
-      flex: 0 0 34px;
-
-      & > .explorer-content {
-        transform: translateX(-100vw);
-        visibility: hidden;
-        pointer-events: none;
-      }
-    }
-
-    &:not(.collapsed) {
-      flex: 0 0 34px;
-
-      & > .explorer-content {
-        transform: translateX(0);
-        visibility: visible;
-        pointer-events: auto;
-      }
-    }
+    flex: 0 0 34px;
 
     .explorer-content {
       box-sizing: border-box;
       z-index: 100;
-      position: absolute;
+      position: fixed;  /* fixed instead of absolute */
       top: 0;
       left: 0;
       margin-top: 0;
       background-color: var(--light);
-      max-width: 100vw;
       width: 100vw;
-      transform: translateX(-100vw);
-      transition:
-        transform 200ms ease,
-        visibility 200ms ease;
-      overflow: hidden;
-      padding: 4rem 0 2rem 0;
       height: 100dvh;
-      max-height: 100dvh;
+      overflow: auto;
+      padding: 4rem 0 2rem 0;
+      
+      /* CLOSED by default */
+      transform: translateX(-100%);
       visibility: hidden;
+      pointer-events: none;
+      transition: transform 200ms ease, visibility 0s linear 200ms;
+    }
+
+    /* OPEN only when explicit flag is present */
+    &.is-open .explorer-content,
+    &[aria-expanded="true"] .explorer-content {
+      transform: translateX(0);
+      visibility: visible;
+      pointer-events: auto;
+      transition: transform 200ms ease, visibility 0s;
     }
 
     .mobile-explorer {
