@@ -1,0 +1,11 @@
+
+ Quartz v4.5.1  
+
+Cleaned output directory `public` in 8ms
+Found 139 input files from `content` in 13ms
+Parsing input files using 1 threads
+Parsed 139 Markdown files in 3s
+Filtered out 1 files in 104μs
+Emitting files
+Emitted 202 files to `public` in 493ms
+Done processing 139 files in 3s

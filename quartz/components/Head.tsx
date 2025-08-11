@@ -85,6 +85,7 @@ export default (() => {
         <link rel="icon" href={iconPath} />
         <meta name="description" content={description} />
         <meta name="generator" content="Quartz" />
+        <link href="/static/custom.css" rel="stylesheet" type="text/css" />
 
         {css.map((resource) => CSSResourceToStyleElement(resource, true))}
         {js
