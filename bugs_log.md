@@ -30,18 +30,23 @@
 
 ---
 
-## Critical Issues - STILL BROKEN
+## Recently Fixed Issues ✅
 
-### 3. Mobile Click Blocking - UNFIXED 🔴
-**Status**: 🔴 Critical - **NOT ADDRESSED YET**
-**File**: `quartz/components/styles/explorer.scss` lines 213-266
-**Symptoms**: Explorer sidebar blocks clicks to UI elements on mobile viewports
+### 3. Mobile Click Blocking - FIXED ✅
+**Status**: ✅ **RESOLVED** - commit `f6392d8`
+**Files Fixed**: 
+- `quartz/components/styles/explorer.scss` - Default mobile CSS to closed state with `.is-open` class
+- `quartz/components/scripts/explorer.inline.ts` - Use `matchMedia()` instead of `checkVisibility()` for breakpoint detection
 
-**Root Cause**: Explorer overlay uses wrong positioning (`position: absolute` vs `position: fixed`) and incorrect CSS selectors.
+**Root Cause**: CSS defaulted to open state on mobile (`&:not(.collapsed)`), requiring JavaScript to fight against it. Also used unreliable visibility detection instead of actual breakpoint matching.
 
-**Fix Available**: Replace mobile CSS block with corrected version (documented in handoff note).
+**Fix Applied**: ChatGPT's "breakpoint as source of truth" approach - CSS defaults closed, JavaScript only opts into open state using `matchMedia('(max-width: 800px)')` listener.
 
-**Priority**: High - affects mobile usability
+**Resolution Verified**: 
+- Mobile navigation starts closed when resizing desktop→mobile ✅
+- Hamburger menu opens/closes correctly on tap ✅
+- No click blocking on mobile viewports ✅
+- Desktop navigation remains unaffected ✅
 
 ---
 
@@ -76,3 +81,16 @@
 - ✅ Content rendering and markdown processing
 - ✅ Explorer sidebar structure display
 - ✅ Site architecture and content organization
+- ✅ Mobile hamburger navigation (fixed in commit `f6392d8`)
+- ✅ Desktop-to-mobile viewport transitions
+- ✅ Self-hosted fonts (Crimson Pro) via nuclear patch approach
+- ✅ Editorial design transformation complete
+- ✅ MkDocs to Quartz 4 migration complete
+
+## Outstanding Issues
+
+### Deployment Pipeline Unclear
+**Status**: 🟡 **NEEDS INVESTIGATION**
+**Issue**: `deploy-quartz.yml` workflow exists but doesn't appear in GitHub Actions workflow list
+**Impact**: Future deployments may not work automatically 
+**Next Steps**: Check workflow syntax, verify GitHub Pages configuration

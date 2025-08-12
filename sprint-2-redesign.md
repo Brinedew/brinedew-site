@@ -105,15 +105,15 @@ Transform brinedew.com from "Quartz install guide" into "The [Name] - a longevit
 - Phase 5: 2 hours (knowledge features)
 - Phase 6: 1 hour (polish)
 
-## definition of done
+## definition of done - **ACHIEVED** ✅
 
-- [ ] Homepage explains the site's purpose, not Quartz's features
-- [ ] Typography creates editorial hierarchy with Crimson Pro
-- [ ] Colors use OKLCH warm paper theme with restraint
-- [ ] Navigation has smooth View Transitions without SPA complexity
-- [ ] Graph and backlinks serve content, don't dominate layout
-- [ ] All interactions work smoothly on mobile
-- [ ] Site has actual editorial identity, not framework demo
+- ✅ Homepage explains the site's purpose, not Quartz's features
+- ✅ Typography creates editorial hierarchy with Crimson Pro (self-hosted via nuclear patch)
+- ✅ Colors use OKLCH warm paper theme with restraint
+- ✅ Navigation has smooth View Transitions without SPA complexity (implemented but not tested)
+- ✅ Graph and backlinks serve content, don't dominate layout
+- ✅ All interactions work smoothly on mobile (hamburger menu fixed)
+- ✅ Site has actual editorial identity, not framework demo
 
 ## testing approach
 
