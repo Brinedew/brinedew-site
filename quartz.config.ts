@@ -13,6 +13,7 @@ const config: QuartzConfig = {
     defaultDateType: "created",
     theme: {
       cdnCaching: false,
+      fontOrigin: "local",
       typography: { header: "system-ui", body: "system-ui", code: "ui-monospace" },
       colors: {
         lightMode: {
