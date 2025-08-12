@@ -1,0 +1,239 @@
+/* Self-hosted font faces - TOP of file */
+@font-face {
+  font-family: "Crimson Pro";
+  src: url("/static/fonts/CrimsonPro-VariableFont_wght.woff2") format("woff2");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Crimson Pro";
+  src: url("/static/fonts/CrimsonPro-Italic-VariableFont_wght.woff2") format("woff2");
+  font-weight: 300 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/static/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/static/fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Apply fonts directly - no variables, no fights */
+html, body, article { font-family: "Crimson Pro", serif; }
+h1,h2,h3,.page-title,.breadcrumbs,nav,button { font-family: "Crimson Pro", serif; }
+code, pre { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+body { 
+  font-synthesis: none; 
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+/* OKLCH Color System with Restraint */
+@layer base {
+  :root {
+    /* Light: warm paper, not stark white */
+    --light: oklch(97.5% 0.01 85); /* Slight yellow cast */
+    --lightgray: oklch(88% 0.01 85);
+    --gray: oklch(75% 0.01 85);
+    --darkgray: oklch(55% 0.01 85);
+    --dark: oklch(25% 0.02 85);   /* Warm black */
+    --accent: oklch(50% 0.08 185); /* Muted teal */
+    
+    /* UI elements darker than text (inverted expectation) */
+    --ui-border: oklch(88% 0.01 85);
+    --ui-bg: oklch(94% 0.005 85);
+    
+    /* Keep existing semantic colors */
+    --secondary: var(--accent);
+    --tertiary: oklch(60% 0.06 150);
+    --highlight: rgba(143, 159, 169, 0.15);
+  }
+  
+  /* Dark theme: actually dark, not gray */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      --light: oklch(12% 0.01 85);    /* Near black */
+      --lightgray: oklch(22% 0.01 85);
+      --gray: oklch(45% 0.01 85);
+      --darkgray: oklch(65% 0.01 85);
+      --dark: oklch(88% 0.01 85);    /* Warm white */
+      --accent: oklch(68% 0.08 185);
+      
+      --ui-border: oklch(22% 0.01 85);
+      --ui-bg: oklch(16% 0.005 85);
+    }
+  }
+}
+
+/* User choice ALWAYS wins */
+:root[data-theme="light"] {
+  --light: oklch(97.5% 0.01 85);
+  --lightgray: oklch(88% 0.01 85);
+  --gray: oklch(75% 0.01 85);
+  --darkgray: oklch(55% 0.01 85);
+  --dark: oklch(25% 0.02 85);
+  --accent: oklch(50% 0.08 185);
+  --ui-border: oklch(88% 0.01 85);
+  --ui-bg: oklch(94% 0.005 85);
+}
+
+:root[data-theme="dark"] {
+  --light: oklch(12% 0.01 85);
+  --lightgray: oklch(22% 0.01 85);
+  --gray: oklch(45% 0.01 85);
+  --darkgray: oklch(65% 0.01 85);
+  --dark: oklch(88% 0.01 85);
+  --accent: oklch(68% 0.08 185);
+  --ui-border: oklch(22% 0.01 85);
+  --ui-bg: oklch(16% 0.005 85);
+}
+
+/* Headlines that actually create hierarchy */
+h1 { 
+  font-size: 2.4em;
+  font-weight: 300; /* Light weight at large size */
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 1.4em;
+  font-weight: 600;
+  margin-top: 2em;
+}
+
+h3 {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin-top: 1.5em;
+}
+
+/* Body text with personality */
+body {
+  background-color: var(--light);
+  color: var(--dark);
+}
+
+article {
+  font-size: 19px;
+  font-weight: 400;
+}
+
+article p {
+  margin-bottom: 0.75em;
+  text-wrap: pretty; /* 2025: better line breaks */
+}
+
+/* One accent color, used sparingly */
+a {
+  color: inherit;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+/* Search button - positioned with other header buttons */
+.search {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.5rem;
+  position: relative;
+  height: 20px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.search svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--darkgray);
+  transition: opacity 0.1s ease;
+}
+
+/* Hide the "Search" text, show only icon */
+.search p {
+  display: none;
+}
+
+/* Make backlinks subtle, not dominant */
+.backlinks {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--ui-border);
+}
+
+.backlinks h3 {
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--darkgray);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.backlinks ul {
+  list-style: none;
+  padding: 0;
+}
+
+.backlinks li {
+  padding: 0.25em 0;
+  font-size: 0.95em;
+}
+
+/* NetLogo embed styling */
+.netlogo-embed {
+  margin: 2rem 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.netlogo-embed iframe {
+  width: 100%;
+  height: 600px;
+  border: none;
+}
+
+/* View Transitions - Crossfade everything except persistent UI */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 250ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Keep header/nav stable */
+header {
+  view-transition-name: header;
+}
+
+/* Lazy loading for all images */
+img {
+  loading: lazy;
+  decoding: async;
+}
+
+/* Content width override */
+:root {
+  --content-width: 750px;
+  --right-sidebar-width: 250px;
+}

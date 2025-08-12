@@ -1,30 +1,17 @@
-# Obsidian workspace files (personal)
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-
-# MkDocs build output (CI generates this)
-site/
+.DS_Store
+node_modules
+public
+prof
+tsconfig.tsbuildinfo
+.obsidian
+.quartz-cache
+private/
+.replit
+replit.nix
 
 # Syncthing ignore file (not needed in git)
 .stignore
 
-# Draft content (private until ready)
-docs/drafts/
-
-# Project documentation (keep locally only)
-CLAUDE.md
-
 # Auto-generated Excalidraw exports (generated from .md files)
 **/*.excalidraw.png
 **/*.excalidraw.svg
-
-# Obsidian plugin files (bloat)
-.obsidian/plugins/*/main.js
-.obsidian/plugins/*/manifest.json
-.obsidian/plugins/*/styles.css
-
-# Keep only essential Obsidian config in git:
-# ✅ .obsidian/app.json
-# ✅ .obsidian/appearance.json  
-# ✅ .obsidian/community-plugins.json
-# ✅ .obsidian/core-plugins.json
