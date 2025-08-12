@@ -40,64 +40,71 @@ body {
   line-height: 1.45;
 }
 
-/* OKLCH Color System with Restraint */
+/* Dark Academia OKLCH Color System - 2025 */
 @layer base {
   :root {
-    /* Light: warm paper, not stark white */
-    --light: oklch(97.5% 0.01 85); /* Slight yellow cast */
-    --lightgray: oklch(88% 0.01 85);
-    --gray: oklch(75% 0.01 85);
-    --darkgray: oklch(55% 0.01 85);
-    --dark: oklch(25% 0.02 85);   /* Warm black */
-    --accent: oklch(50% 0.08 185); /* Muted teal */
+    /* Light mode: Rich paper tones with sufficient contrast */
+    --light: oklch(96% 0.015 75);      /* Warm cream paper */
+    --lightgray: oklch(85% 0.02 65);   /* Soft taupe */
+    --gray: oklch(70% 0.025 60);       /* Medium warm gray */
+    --darkgray: oklch(45% 0.03 55);    /* Deep warm gray */
+    --dark: oklch(20% 0.035 50);       /* Rich dark brown - WCAG AA compliant */
+    --accent: oklch(50% 0.08 185);     /* Keep the beloved teal */
     
-    /* UI elements darker than text (inverted expectation) */
-    --ui-border: oklch(88% 0.01 85);
-    --ui-bg: oklch(94% 0.005 85);
+    /* UI elements with subtle warmth */
+    --ui-border: oklch(82% 0.02 70);
+    --ui-bg: oklch(92% 0.01 75);
     
-    /* Keep existing semantic colors */
-    --secondary: var(--accent);
-    --tertiary: oklch(60% 0.06 150);
-    --highlight: rgba(143, 159, 169, 0.15);
+    /* Semantic colors for better hierarchy */
+    --secondary: oklch(40% 0.04 55);   /* Darker brown for secondary text */
+    --tertiary: oklch(55% 0.06 150);   /* Muted green accent */
+    --highlight: oklch(85% 0.03 185 / 0.15);
   }
   
-  /* Dark theme: actually dark, not gray */
+  /* Dark mode: True dark academia with softer text */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
-      --light: oklch(12% 0.01 85);    /* Near black */
-      --lightgray: oklch(22% 0.01 85);
-      --gray: oklch(45% 0.01 85);
-      --darkgray: oklch(65% 0.01 85);
-      --dark: oklch(88% 0.01 85);    /* Warm white */
-      --accent: oklch(68% 0.08 185);
+      --light: oklch(8% 0.02 45);       /* Rich dark background */
+      --lightgray: oklch(18% 0.02 50);  /* Dark warm gray */
+      --gray: oklch(40% 0.025 55);      /* Medium warm gray */
+      --darkgray: oklch(62% 0.02 60);   /* Light warm gray */
+      --dark: oklch(85% 0.015 65);      /* Soft warm white - not harsh */
+      --accent: oklch(68% 0.08 185);    /* Brighter teal for dark mode */
       
-      --ui-border: oklch(22% 0.01 85);
-      --ui-bg: oklch(16% 0.005 85);
+      --ui-border: oklch(20% 0.025 50);
+      --ui-bg: oklch(12% 0.02 45);
+      
+      --secondary: oklch(70% 0.02 60);  /* Lighter secondary for dark mode */
+      --tertiary: oklch(65% 0.06 150);
     }
   }
 }
 
 /* User choice ALWAYS wins */
 :root[data-theme="light"] {
-  --light: oklch(97.5% 0.01 85);
-  --lightgray: oklch(88% 0.01 85);
-  --gray: oklch(75% 0.01 85);
-  --darkgray: oklch(55% 0.01 85);
-  --dark: oklch(25% 0.02 85);
+  --light: oklch(96% 0.015 75);
+  --lightgray: oklch(85% 0.02 65);
+  --gray: oklch(70% 0.025 60);
+  --darkgray: oklch(45% 0.03 55);
+  --dark: oklch(20% 0.035 50);
   --accent: oklch(50% 0.08 185);
-  --ui-border: oklch(88% 0.01 85);
-  --ui-bg: oklch(94% 0.005 85);
+  --ui-border: oklch(82% 0.02 70);
+  --ui-bg: oklch(92% 0.01 75);
+  --secondary: oklch(40% 0.04 55);
+  --tertiary: oklch(55% 0.06 150);
 }
 
 :root[data-theme="dark"] {
-  --light: oklch(12% 0.01 85);
-  --lightgray: oklch(22% 0.01 85);
-  --gray: oklch(45% 0.01 85);
-  --darkgray: oklch(65% 0.01 85);
-  --dark: oklch(88% 0.01 85);
+  --light: oklch(8% 0.02 45);
+  --lightgray: oklch(18% 0.02 50);
+  --gray: oklch(40% 0.025 55);
+  --darkgray: oklch(62% 0.02 60);
+  --dark: oklch(85% 0.015 65);
   --accent: oklch(68% 0.08 185);
-  --ui-border: oklch(22% 0.01 85);
-  --ui-bg: oklch(16% 0.005 85);
+  --ui-border: oklch(20% 0.025 50);
+  --ui-bg: oklch(12% 0.02 45);
+  --secondary: oklch(70% 0.02 60);
+  --tertiary: oklch(65% 0.06 150);
 }
 
 /* Headlines that actually create hierarchy */
@@ -120,20 +127,25 @@ h3 {
   margin-top: 1.5em;
 }
 
-/* Body text with personality */
+/* Body text with proper contrast and personality */
 body {
   background-color: var(--light);
   color: var(--dark);
+  /* Ensure smooth font rendering across all browsers */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 article {
   font-size: 19px;
   font-weight: 400;
+  color: var(--dark); /* Explicit color for better contrast */
 }
 
 article p {
   margin-bottom: 0.75em;
   text-wrap: pretty; /* 2025: better line breaks */
+  color: var(--dark);
 }
 
 /* One accent color, used sparingly */
@@ -236,4 +248,84 @@ img {
 :root {
   --content-width: 750px;
   --right-sidebar-width: 250px;
+}
+
+/* Fix Explorer Sidebar - Remove Blue Colors and Bold Text */
+.explorer-content {
+  /* Override Quartz's blue secondary color for sidebar links */
+  
+  & ul li > a {
+    color: var(--dark) !important;
+    opacity: 0.8;
+    font-weight: 400; /* Normal weight, not bold */
+    font-size: 0.9rem;
+    line-height: 1.4;
+    
+    &:hover {
+      opacity: 1;
+      color: var(--accent);
+    }
+    
+    &.active {
+      opacity: 1;
+      color: var(--accent);
+    }
+  }
+}
+
+/* Fix folder container styling */
+.folder-container {
+  /* Folder names (like "Core Concepts") */
+  & div > a {
+    color: var(--darkgray) !important; /* Slightly muted for hierarchy */
+    font-weight: 500 !important;      /* Medium weight, not semibold */
+    font-size: 0.9rem !important;
+    opacity: 0.9;
+    
+    &:hover {
+      color: var(--dark) !important;
+      opacity: 1;
+    }
+  }
+  
+  /* Folder buttons */
+  & div > button span {
+    color: var(--darkgray) !important;
+    font-weight: 500 !important;
+    font-size: 0.9rem !important;
+  }
+  
+  /* Folder icons */
+  .folder-icon {
+    color: var(--gray) !important;
+    
+    &:hover {
+      color: var(--accent) !important;
+    }
+  }
+}
+
+/* Ensure consistent visual hierarchy in sidebar */
+.explorer {
+  /* Top-level items slightly larger */
+  & > .explorer-content > ul > li > .folder-container a,
+  & > .explorer-content > ul > li > a {
+    font-size: 0.95rem !important;
+  }
+  
+  /* Nested items smaller for hierarchy */
+  .folder-outer ul li a {
+    font-size: 0.85rem !important;
+    opacity: 0.75;
+    
+    &:hover {
+      opacity: 1;
+    }
+  }
+  
+  /* Third level and deeper even smaller */
+  .folder-outer .folder-outer ul li a {
+    font-size: 0.8rem !important;
+    opacity: 0.7;
+  }
 }
