@@ -89,8 +89,24 @@
 
 ## Outstanding Issues
 
-### Deployment Pipeline Unclear
-**Status**: 🟡 **NEEDS INVESTIGATION**
-**Issue**: `deploy-quartz.yml` workflow exists but doesn't appear in GitHub Actions workflow list
-**Impact**: Future deployments may not work automatically 
-**Next Steps**: Check workflow syntax, verify GitHub Pages configuration
+### Font Loading Errors Despite Correct Deployment
+**Status**: 🔴 **CRITICAL** - commit `3a22a78`
+**Issue**: Browser console shows `OTS parsing error: invalid sfntVersion: 1008813135` for Crimson Pro fonts
+**Root Cause**: OTS error number `1008813135 = 0x3C21444F = "<!DO"` indicates browser receiving HTML instead of woff2 bytes
+**Files Affected**: 
+- `quartz/static/fonts/CrimsonPro-VariableFont_wght.woff2` (48,348 bytes, verified correct)
+- `quartz/static/fonts/CrimsonPro-Italic-VariableFont_wght.woff2` (51,236 bytes, verified correct)
+
+**What's Verified Working**:
+- Font files are actual variable fonts with proper wOF2 signatures
+- GitHub Actions deployment completes successfully  
+- Direct fetch() of font URLs returns correct bytes and content-type: font/woff2
+- CSS @font-face declarations correctly configured for variable fonts (weight: 300 900)
+
+**Diagnostic Steps Needed** (from ChatGPT consultation):
+1. Browser console fetch test with cache-busting to confirm HTML vs woff2 response
+2. Check for service worker intercepting requests
+3. Verify URL case sensitivity and path resolution
+4. Test with different cache-busting strategies
+
+**Impact**: Typography falls back to system fonts, site doesn't match design intent
