@@ -257,7 +257,8 @@ img {
   & ul li > a {
     color: var(--dark) !important;
     opacity: 0.8;
-    font-weight: 400; /* Normal weight, not bold */
+    font-weight: 400 !important; /* Normal weight, not bold */
+    font-family: "Crimson Pro", serif !important; /* Serif for consistency */
     font-size: 0.9rem;
     line-height: 1.4;
     
@@ -280,6 +281,7 @@ img {
     color: var(--darkgray) !important; /* Slightly muted for hierarchy */
     font-weight: 500 !important;      /* Medium weight, not semibold */
     font-size: 0.9rem !important;
+    font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
     opacity: 0.9;
     
     &:hover {
@@ -293,6 +295,7 @@ img {
     color: var(--darkgray) !important;
     font-weight: 500 !important;
     font-size: 0.9rem !important;
+    font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
   }
   
   /* Folder icons */
@@ -311,11 +314,15 @@ img {
   & > .explorer-content > ul > li > .folder-container a,
   & > .explorer-content > ul > li > a {
     font-size: 0.95rem !important;
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 400 !important; /* Normal weight for consistency */
   }
   
   /* Nested items smaller for hierarchy */
   .folder-outer ul li a {
     font-size: 0.85rem !important;
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 400 !important;
     opacity: 0.75;
     
     &:hover {
@@ -326,6 +333,52 @@ img {
   /* Third level and deeper even smaller */
   .folder-outer .folder-outer ul li a {
     font-size: 0.8rem !important;
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 400 !important;
     opacity: 0.7;
+  }
+}
+
+/* Fix Table of Contents - Remove Progressive Dimming and Bold Fonts */
+.toc {
+  /* TOC header */
+  button.toc-header h3 {
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 500 !important; /* Medium weight, not bold */
+  }
+}
+
+ul.toc-content.overflow {
+  /* Remove progressive dimming - all TOC items same opacity */
+  & > li > a {
+    color: var(--dark) !important;
+    opacity: 0.8 !important; /* Fixed opacity, no animation */
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 400 !important;
+    transition: none !important; /* Remove opacity transitions */
+    
+    &:hover {
+      opacity: 1 !important;
+      color: var(--accent) !important;
+    }
+    
+    &.in-view {
+      opacity: 0.8 !important; /* Same as default, no special highlighting */
+    }
+  }
+}
+
+/* Fix inconsistent fonts in left sidebar - make everything serif */
+.explorer-content ul li {
+  /* Regular page links like "About", "Graph" etc */
+  & > a {
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 400 !important;
+  }
+  
+  /* Make sure nested items also use serif */
+  ul li a {
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 400 !important;
   }
 }
