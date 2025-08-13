@@ -35,6 +35,14 @@
 
 .scr-results { border-top: 1px solid var(--lightgray); padding-top: .75rem; }
 .scr-meta { font-size: .85rem; opacity: .8; }
+.scr-meta.offline { color: var(--bd-err); }
+.scr-meta.starting { color: var(--bd-warn); animation: pulse 2s infinite; }
+.scr-meta.ready { color: var(--bd-ok); }
+
+@keyframes pulse {
+  0%, 100% { opacity: .8; }
+  50% { opacity: .4; }
+}
 
 @media (max-width: 800px) {
   #scriptotic-root { margin: 1rem .5rem; padding: .75rem; }

@@ -74,6 +74,11 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 - No spaces in filenames (use hyphens instead)
 - No raw HTML in markdown files
 
+**Interactive web apps disappeared?** Check if migration scripts removed embedded HTML:
+- Look in `scripts/` for content conversion scripts that strip HTML
+- Check git history: `git log --oneline --grep="app\|html\|frontend"`
+- Embedded HTML gets nuked during static site migrations - use external JS/CSS files instead
+
 **Excalidraw drawings showing as text links instead of images?** You need to enable PNG auto-export in Obsidian:
 1. Open Obsidian → Settings → Community plugins → Excalidraw
 2. ✅ Enable "Auto export PNG" 
@@ -119,6 +124,36 @@ No gh-pages branch, no manual deployment commands. Just push and wait.
 - **Dark Mode** - enabled by default with toggle available
 
 All features built into Quartz, no additional plugins needed.
+
+## interactive web apps
+
+**How to add working frontends to static sites:**
+
+Instead of embedding 600-line HTML/CSS/JavaScript blobs in markdown (migration scripts will strip them), use clean architecture:
+
+1. **Minimal markdown shell** with data attributes:
+```markdown
+<div id="app-root" data-api-origin="https://api.example.com"></div>
+```
+
+2. **External assets** in `quartz/static/apps/appname/`:
+   - `app.css` - themed styles using Quartz CSS variables
+   - `app.js` - SPA-safe JavaScript with MutationObserver initialization
+
+3. **Load globally** in `quartz/components/Head.tsx`:
+```tsx
+<link rel="stylesheet" href="/static/apps/appname/app.css?v=1" />
+<script defer src="/static/apps/appname/app.js?v=1"></script>
+```
+
+**SPA compatibility:** Use MutationObserver to reinitialize when DOM changes:
+```js
+function tryInit() { /* initialize app */ }
+tryInit(); // run now
+new MutationObserver(tryInit).observe(document.documentElement, {childList:true, subtree:true});
+```
+
+This survives Quartz's dynamic navigation and won't get nuked by migration scripts.
 
 ## things to not touch
 

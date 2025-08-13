@@ -56,16 +56,32 @@
       try {
         const r = await api(origin, '/api/server-status', { cache: 'no-store' });
         const j = await r.json();
-        STATE.serverOk = true;
-        ui.server.textContent = `Server: ${j.status}`;
-        ui.server.style.opacity = '1';
+        STATE.serverOk = (j.status === 'ready');
+        STATE.serverStatus = j.status; // Track full server state
+        
+        // Display server status with appropriate styling
+        if (j.status === 'starting') {
+          const eta = j.eta ? ` (≈${j.eta}s)` : '';
+          ui.server.textContent = `Server: starting${eta}`;
+          ui.server.style.opacity = '1';
+          ui.server.className = 'scr-meta starting';
+        } else if (j.status === 'ready') {
+          ui.server.textContent = 'Server: ready';
+          ui.server.style.opacity = '1';
+          ui.server.className = 'scr-meta ready';
+        } else {
+          ui.server.textContent = `Server: ${j.status}`;
+          ui.server.style.opacity = '1';
+          ui.server.className = 'scr-meta';
+        }
+        
         ui.server.title = j.message || '';
-        ui.server.className = 'scr-meta';
       } catch (e) {
         STATE.serverOk = false;
+        STATE.serverStatus = 'offline';
         ui.server.textContent = 'Server: offline';
         ui.server.style.opacity = '.7';
-        ui.server.className = 'scr-meta';
+        ui.server.className = 'scr-meta offline';
       }
     }
     pollServerOnce();
@@ -76,22 +92,50 @@
 
     // job polling
     let jobTimer = null;
+    let startupRetryTimer = null;
+    
     async function startJob() {
-      if (!STATE.serverOk) await pollServerOnce();
+      await pollServerOnce(); // Get current server state
       const url = ui.url.value.trim();
       if (!url) { setStatus('Enter a YouTube URL.', 'warn'); return; }
+      
       abortAll(); // cancel prior
       setStatus('Submitting…', 'warn'); setProgress(0);
       ui.start.disabled = true; ui.cancel.disabled = false; ui.results.textContent = '';
 
       try {
         const r = await api(origin, '/api/transcribe', { method: 'POST', body: JSON.stringify({ url }) });
+        
+        // Handle 202 response - backend is starting up
+        if (r.status === 202) {
+          const j = await r.json();
+          setStatus(j.message || 'Starting service...', 'warn');
+          
+          // Start polling for when the service becomes ready
+          const retryDelay = (j.retryAfter || 5) * 1000;
+          startupRetryTimer = setTimeout(async () => {
+            // Check if service is ready, then retry
+            await pollServerOnce();
+            if (STATE.serverStatus === 'ready') {
+              setStatus('Service ready, submitting job...', 'warn');
+              startJob(); // Retry the job submission
+            } else if (STATE.serverStatus === 'starting') {
+              startJob(); // Keep retrying while starting
+            } else {
+              setStatus('Service startup failed', 'err');
+              ui.start.disabled = false; ui.cancel.disabled = true;
+            }
+          }, retryDelay);
+          return;
+        }
+        
+        // Handle successful job submission (200 response)
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         STATE.jobId = j.job_id || j.id || j.jobId;
         setStatus(`Job submitted: ${STATE.jobId}`, 'ok');
 
-        // poll
+        // Start polling for job progress
         jobTimer = setInterval(async () => {
           try {
             const s = await api(origin, `/api/job-status/${STATE.jobId}`, { cache: 'no-store' });
@@ -119,6 +163,7 @@
     function cancelJob() {
       abortAll();
       if (jobTimer) clearInterval(jobTimer);
+      if (startupRetryTimer) clearTimeout(startupRetryTimer);
       ui.start.disabled = false; ui.cancel.disabled = true;
       setStatus('Canceled.', 'warn'); setProgress(0);
     }
@@ -127,7 +172,12 @@
     ui.cancel.addEventListener('click', cancelJob);
 
     // cleanup on bfcache unloads
-    window.addEventListener('pagehide', () => { clearInterval(serverTimer); if (jobTimer) clearInterval(jobTimer); abortAll(); });
+    window.addEventListener('pagehide', () => { 
+      clearInterval(serverTimer); 
+      if (jobTimer) clearInterval(jobTimer); 
+      if (startupRetryTimer) clearTimeout(startupRetryTimer);
+      abortAll(); 
+    });
   }
 
   // SPA-safe initializer: run now, and whenever the route swaps DOM
