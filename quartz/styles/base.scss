@@ -226,8 +226,8 @@ a {
       box-sizing: border-box;
       padding: $topSpacing 2rem 2rem 2rem;
       display: flex;
-      height: 100vh;
-      position: sticky;
+      height: auto;
+      position: static;
     }
 
     & .sidebar.left {

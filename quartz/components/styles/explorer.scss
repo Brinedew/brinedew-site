@@ -110,8 +110,7 @@ button.desktop-explorer {
 
 .explorer-content {
   list-style: none;
-  overflow: hidden;
-  overflow-y: auto;
+  overflow: visible;
   margin-top: 0.5rem;
 
   & ul {
