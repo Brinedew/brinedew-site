@@ -118,8 +118,14 @@ nssm start ScriptoticSentinel
 - ✅ Visitors can click "Transcribe" and automatically start the backend if PC is online
 - ✅ Frontend shows proper "starting" status and auto-retries when ready
 - ✅ Backend auto-shuts down after 15 minutes of inactivity
-- ✅ Sentinel service starts automatically with Windows
-- ✅ Complete flow works: offline → starting → transcribing → idle → shutdown
+- ❌ Sentinel service starts automatically with Windows (NSSM installation pending)
+- ❌ Complete flow works: offline → starting → transcribing → idle → shutdown (backend startup broken)
+
+## FINAL STATUS: 90% COMPLETE - BACKEND ENVIRONMENT BUG
+
+**What works:** Sentinel proxy, frontend integration, tunnel configuration, job submission
+**What's broken:** PowerShell script uses wrong Python environment (`voxtral-env` instead of `venv-vllm-stable`)
+**Next step:** Fix environment path in `start_scriptotic_web.ps1` and add missing Mistral flags
 
 ## architecture details
 

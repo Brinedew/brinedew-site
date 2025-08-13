@@ -121,3 +121,25 @@
 **Files Fixed**:
 - `D:\Coding\Scriptotic\start_scriptotic_web.ps1` - Explicit Python path and forward slashes
 - `D:\Coding\CLAUDE.md` - Added Windows PowerShell path separator documentation
+
+---
+
+### 8. Scriptotic Backend Environment Mismatch - CRITICAL ❌
+**Status**: 🔴 **UNRESOLVED** - Blocking transcription completion
+**Issue**: PowerShell startup script uses wrong Python virtual environment for vLLM
+
+**Root Cause**: PowerShell script calls `source voxtral-env/bin/activate` but vLLM is installed in `~/venv-vllm-stable/bin/activate`
+
+**Impact**: 
+- Transcription jobs submitted but never complete
+- Flask backend shows "error" status perpetually
+- Users get no transcript despite successful job creation (job_1755085305_967)
+
+**Fix Required**: Update `D:\Coding\Scriptotic\start_scriptotic_web.ps1` to use correct environment path
+
+**Working Command Verified**:
+```bash
+wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.entrypoints.openai.api_server --model mistralai/Voxtral-Mini-3B-2507 --task transcription --dtype bfloat16 --gpu-memory-utilization 0.89 --max-model-len 4096 --port 8000 --host 0.0.0.0 --tokenizer-mode mistral --config-format mistral --load-format mistral"
+```
+
+**Evidence**: Model was successfully loading (10/12GB VRAM usage) when using correct environment
