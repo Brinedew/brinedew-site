@@ -57,8 +57,8 @@ body {
     
     /* Semantic colors for better hierarchy */
     --secondary: oklch(40% 0.04 55);   /* Darker brown for secondary text */
-    --tertiary: oklch(55% 0.06 150);   /* Muted green accent */
-    --highlight: oklch(85% 0.03 185 / 0.15);
+    --tertiary: var(--accent);         /* Use accent for tertiary - unified teal */
+    --highlight: oklch(from var(--accent) l c h / 0.25); /* Accent-based highlight */
   }
   
   /* Dark mode: True dark academia with softer text */
@@ -75,7 +75,7 @@ body {
       --ui-bg: oklch(12% 0.02 45);
       
       --secondary: oklch(70% 0.02 60);  /* Lighter secondary for dark mode */
-      --tertiary: oklch(65% 0.06 150);
+      --tertiary: var(--accent);         /* Use accent for tertiary - unified teal */
     }
   }
 }
@@ -91,7 +91,7 @@ body {
   --ui-border: oklch(82% 0.02 70);
   --ui-bg: oklch(92% 0.01 75);
   --secondary: oklch(40% 0.04 55);
-  --tertiary: oklch(55% 0.06 150);
+  --tertiary: var(--accent);
 }
 
 :root[data-theme="dark"] {
@@ -104,7 +104,7 @@ body {
   --ui-border: oklch(20% 0.025 50);
   --ui-bg: oklch(12% 0.02 45);
   --secondary: oklch(70% 0.02 60);
-  --tertiary: oklch(65% 0.06 150);
+  --tertiary: var(--accent);
 }
 
 /* Headlines that actually create hierarchy */
@@ -148,7 +148,7 @@ article p {
   color: var(--dark);
 }
 
-/* One accent color, used sparingly */
+/* Unified accent color for all link states */
 a {
   color: inherit;
   text-decoration-color: var(--accent);
@@ -158,6 +158,17 @@ a {
 
 a:hover {
   color: var(--accent);
+}
+
+/* Text selection highlighting with proper contrast */
+::selection {
+  background-color: oklch(from var(--accent) l c h / 0.25); /* Accent color with 25% opacity */
+  color: var(--dark); /* Ensure text remains readable */
+}
+
+::-moz-selection {
+  background-color: oklch(from var(--accent) l c h / 0.25);
+  color: var(--dark);
 }
 
 /* Search button - positioned with other header buttons */
