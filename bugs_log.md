@@ -98,4 +98,26 @@
 
 ## Outstanding Issues
 
-*No critical technical issues remaining. Both Sprint 1 (bug fixes) and Sprint 2 (redesign) complete.*
+### 7. Scriptotic Sentinel Backend Startup Failure - FIXED ✅
+**Status**: ✅ **RESOLVED** - August 13, 2025
+**Issue**: Sentinel activation failed due to Python environment conflicts and PowerShell path separator issues
+
+**Root Causes Identified**:
+1. **Python Environment**: PowerShell PATH resolved to Anaconda (`C:\ProgramData\anaconda3\python.exe`) instead of system Python (`C:\Python313\python.exe`)
+2. **Path Separators**: PowerShell argument `"src\core\web_server.py"` became `"srccoreweb_server.py"` due to backslash escape processing
+
+**Fixes Applied**:
+- Updated PowerShell script to use explicit Python path: `C:\Python313\python.exe`
+- Fixed argument separator: `"src/core/web_server.py"` (forward slashes)
+- Added permanent documentation to root `CLAUDE.md` about Windows path separator syntax
+
+**Resolution Verified**:
+- ✅ Sentinel triggers PowerShell script correctly
+- ✅ Flask backend starts with proper Python environment
+- ✅ Sentinel detects healthy backend and transitions to "ready" state
+- ✅ API proxy works: POST /api/transcribe returns job_id successfully
+- ✅ End-to-end activation flow: offline → starting → ready → proxy requests
+
+**Files Fixed**:
+- `D:\Coding\Scriptotic\start_scriptotic_web.ps1` - Explicit Python path and forward slashes
+- `D:\Coding\CLAUDE.md` - Added Windows PowerShell path separator documentation

@@ -1,8 +1,8 @@
 # what i was working on - August 13, 2025
 
-I was working on restoring the Scriptotic web interface that got accidentally nuked during the mkdocs → Quartz migration. The user knew it was working before the refactor and was asking me to research what happened and fix it.
+I completed the Scriptotic on-demand activation system implementation. This builds on the previously restored web interface and adds the ability for visitors to remotely trigger backend startup when the PC is online.
 
-The real problem: A migration script (`scripts/convert-html-content.js`) deliberately stripped out a 600-line HTML/CSS/JavaScript frontend that was embedded in the markdown file. The frontend was completely removed and replaced with a placeholder message saying it was "temporarily converted to a separate component."
+**Sprint 3 Status: ✅ COMPLETED** - All sentinel architecture components implemented and deployed.
 
 ## what actually works now
 

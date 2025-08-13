@@ -27,7 +27,7 @@
     // UI
     const urlRow = el('div', { className: 'scr-row' },
       el('label', { className: 'scr-label', htmlFor: 'scr-url', innerText: 'YouTube URL' }),
-      el('input', { id: 'scr-url', className: 'scr-input', placeholder: 'https://www.youtube.com/watch?v=…' })
+      el('input', { id: 'scr-url', className: 'scr-input', placeholder: 'https://www.youtube.com/watch?v=…', value: 'https://www.youtube.com/watch?v=Bbwp4PbWYzw' })
     );
 
     const actions = el('div', { className: 'scr-actions' },
