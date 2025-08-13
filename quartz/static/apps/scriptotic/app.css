@@ -1,0 +1,41 @@
+:root {
+  --bd-gap: 12px;
+  --bd-card: color-mix(in oklch, var(--light) 90%, var(--dark) 10%);
+  --bd-ok: oklch(70% 0.12 150);
+  --bd-warn: oklch(75% 0.10 80);
+  --bd-err: oklch(60% 0.16 30);
+}
+
+#scriptotic-root {
+  display: grid;
+  gap: var(--bd-gap);
+  max-width: 720px;
+  margin: 1.5rem auto;
+  padding: 1rem;
+  background: var(--bd-card);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px color-mix(in oklch, var(--dark) 15%, transparent);
+}
+
+.scr-row { display: grid; gap: 8px; }
+
+.scr-label { font-weight: 600; }
+.scr-input { width: 100%; padding: .65rem .8rem; border-radius: 8px; border: 1px solid var(--lightgray); background: var(--light); color: var(--darkgray); }
+.scr-actions { display: flex; gap: 8px; align-items: center; }
+.scr-btn { padding: .6rem .9rem; border-radius: 8px; border: 1px solid var(--darkgray); background: var(--light); cursor: pointer; }
+.scr-btn[disabled] { opacity: .6; cursor: not-allowed; }
+
+.scr-status { font-size: .9rem; padding: .5rem .6rem; border-radius: 8px; background: color-mix(in oklch, var(--light) 80%, var(--dark) 20%); }
+.scr-status.ok { outline: 2px solid var(--bd-ok); }
+.scr-status.warn { outline: 2px solid var(--bd-warn); }
+.scr-status.err { outline: 2px solid var(--bd-err); }
+
+.scr-progress { height: 8px; border-radius: 999px; background: color-mix(in oklch, var(--light) 70%, var(--dark) 30%); overflow: clip; }
+.scr-progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+
+.scr-results { border-top: 1px solid var(--lightgray); padding-top: .75rem; }
+.scr-meta { font-size: .85rem; opacity: .8; }
+
+@media (max-width: 800px) {
+  #scriptotic-root { margin: 1rem .5rem; padding: .75rem; }
+}

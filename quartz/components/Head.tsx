@@ -92,6 +92,10 @@ export default (() => {
         {/* Custom CSS last with self-hosted fonts */}
         <link href="/static/custom.css?v=a7f434e" rel="stylesheet" type="text/css" />
         
+        {/* Scriptotic app assets */}
+        <link rel="stylesheet" href="/static/apps/scriptotic/app.css?v=1" />
+        <script defer src="/static/apps/scriptotic/app.js?v=1"></script>
+        
         {/* Performance optimizations */}
         <link rel="modulepreload" href="/static/search.js" />
         <link rel="prefetch" href="/posts" as="document" />
