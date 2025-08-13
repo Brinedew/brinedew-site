@@ -256,19 +256,19 @@ img {
   
   & ul li > a {
     color: var(--dark) !important;
-    opacity: 0.8;
+    opacity: 0.85 !important; /* Match consistent opacity */
     font-weight: 400 !important; /* Normal weight, not bold */
     font-family: "Crimson Pro", serif !important; /* Serif for consistency */
-    font-size: 0.9rem;
+    font-size: 0.9rem !important; /* Explicit size override */
     line-height: 1.4;
     
     &:hover {
-      opacity: 1;
+      opacity: 1 !important;
       color: var(--accent);
     }
     
     &.active {
-      opacity: 1;
+      opacity: 1 !important;
       color: var(--accent);
     }
   }
@@ -310,12 +310,17 @@ img {
 
 /* Ensure consistent visual hierarchy in sidebar */
 .explorer {
-  /* Top-level items slightly larger */
+  /* Top-level items - consistent size and opacity */
   & > .explorer-content > ul > li > .folder-container a,
   & > .explorer-content > ul > li > a {
-    font-size: 0.95rem !important;
+    font-size: 0.9rem !important; /* Match TOC size for consistency */
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important; /* Normal weight for consistency */
+    opacity: 0.85 !important; /* Match TOC opacity */
+    
+    &:hover {
+      opacity: 1 !important;
+    }
   }
   
   /* Nested items smaller for hierarchy */
@@ -323,10 +328,10 @@ img {
     font-size: 0.85rem !important;
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
-    opacity: 0.75;
+    opacity: 0.85 !important; /* Consistent with top-level */
     
     &:hover {
-      opacity: 1;
+      opacity: 1 !important;
     }
   }
   
@@ -335,7 +340,11 @@ img {
     font-size: 0.8rem !important;
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
-    opacity: 0.7;
+    opacity: 0.85 !important; /* Consistent opacity across all levels */
+    
+    &:hover {
+      opacity: 1 !important;
+    }
   }
 }
 
@@ -352,9 +361,10 @@ ul.toc-content.overflow {
   /* Remove progressive dimming - all TOC items same opacity */
   & > li > a {
     color: var(--dark) !important;
-    opacity: 0.8 !important; /* Fixed opacity, no animation */
+    opacity: 0.85 !important; /* Match left sidebar consistency */
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
+    font-size: 0.9rem !important; /* Much smaller - TOC shouldn't compete with body text */
     transition: none !important; /* Remove opacity transitions */
     
     &:hover {
@@ -363,7 +373,7 @@ ul.toc-content.overflow {
     }
     
     &.in-view {
-      opacity: 0.8 !important; /* Same as default, no special highlighting */
+      opacity: 0.85 !important; /* Same as default, no special highlighting */
     }
   }
 }
@@ -374,11 +384,22 @@ ul.toc-content.overflow {
   & > a {
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
+    font-size: 0.9rem !important; /* Consistent size */
+    opacity: 0.85 !important; /* Consistent opacity */
+    
+    &:hover {
+      opacity: 1 !important;
+    }
   }
   
   /* Make sure nested items also use serif */
   ul li a {
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
+    opacity: 0.85 !important; /* Consistent opacity for nested items too */
+    
+    &:hover {
+      opacity: 1 !important;
+    }
   }
 }
