@@ -12,5 +12,6 @@
   "obsidian-charts",
   "image-converter",
   "advanced-canvas",
-  "multi-column-markdown"
+  "multi-column-markdown",
+  "obsidian-local-rest-api"
 ]

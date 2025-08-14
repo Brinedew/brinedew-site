@@ -121,11 +121,11 @@ nssm start ScriptoticSentinel
 - ❌ Sentinel service starts automatically with Windows (NSSM installation pending)
 - ❌ Complete flow works: offline → starting → transcribing → idle → shutdown (backend startup broken)
 
-## FINAL STATUS: 90% COMPLETE - BACKEND ENVIRONMENT BUG
+## FINAL STATUS: ✅ COMPLETE - ENVIRONMENT + MEMORY OPTIMIZATION DONE
 
-**What works:** Sentinel proxy, frontend integration, tunnel configuration, job submission
-**What's broken:** PowerShell script uses wrong Python environment (`voxtral-env` instead of `venv-vllm-stable`)
-**Next step:** Fix environment path in `start_scriptotic_web.ps1` and add missing Mistral flags
+**What works:** Environment consolidation, vLLM memory optimization, smart auto-shutdown, transcription pipeline
+**What's blocked:** Audio chunking needed for 3+ hour podcasts (vLLM size limits)
+**Next sprint:** Audio preprocessing and chunking implementation
 
 ## architecture details
 

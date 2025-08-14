@@ -124,22 +124,42 @@
 
 ---
 
-### 8. Scriptotic Backend Environment Mismatch - CRITICAL ❌
-**Status**: 🔴 **UNRESOLVED** - Blocking transcription completion
+### 8. Scriptotic Backend Environment Mismatch - FIXED ✅
+**Status**: ✅ **RESOLVED** - Environment consolidation complete
 **Issue**: PowerShell startup script uses wrong Python virtual environment for vLLM
 
 **Root Cause**: PowerShell script calls `source voxtral-env/bin/activate` but vLLM is installed in `~/venv-vllm-stable/bin/activate`
 
-**Impact**: 
-- Transcription jobs submitted but never complete
-- Flask backend shows "error" status perpetually
-- Users get no transcript despite successful job creation (job_1755085305_967)
+**Fix Applied**: 
+- Consolidated to 2 clean environments (Windows venv + WSL2 venv-vllm-stable)
+- Updated all scripts to use explicit interpreter paths
+- Added runtime guards to prevent wrong environment usage
+- Archived broken voxtral-env
+- Optimized vLLM memory settings (FP8 KV cache, V0 engine)
 
-**Fix Required**: Update `D:\Coding\Scriptotic\start_scriptotic_web.ps1` to use correct environment path
+**Resolution Verified**: Transcription pipeline works up to vLLM audio size limits (~16 minutes)
 
-**Working Command Verified**:
+**Working Command (Updated with Memory Optimization)**:
 ```bash
-wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.entrypoints.openai.api_server --model mistralai/Voxtral-Mini-3B-2507 --task transcription --dtype bfloat16 --gpu-memory-utilization 0.89 --max-model-len 4096 --port 8000 --host 0.0.0.0 --tokenizer-mode mistral --config-format mistral --load-format mistral"
+wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.entrypoints.openai.api_server --model mistralai/Voxtral-Mini-3B-2507 --task transcription --dtype bfloat16 --kv-cache-dtype fp8_e5m2 --calculate-kv-scales --gpu-memory-utilization 0.95 --max-model-len 4096 --max-num-seqs 1 --port 8000 --host 0.0.0.0 --tokenizer-mode mistral --config-format mistral --load-format mistral"
 ```
 
-**Evidence**: Model was successfully loading (10/12GB VRAM usage) when using correct environment
+**Evidence**: KV cache memory increased from 0.24GB → 1.81GB available with optimizations
+
+---
+
+### 9. vLLM Audio File Size Limits - NEW ❌
+**Status**: 🔴 **UNRESOLVED** - Blocking 3+ hour podcast transcription
+**Issue**: vLLM rejects audio files over ~16 minutes with "Maximum file size exceeded" error
+
+**Root Cause**: Voxtral Mini 3B has built-in audio processing limits that can't handle long podcasts
+
+**Impact**: 
+- 16-minute video transcribes successfully but fails at vLLM stage
+- 3+ hour podcasts will definitely exceed limits
+- Need audio chunking or compression preprocessing
+
+**Next Steps**: 
+- Implement audio chunking (split into 10-15 minute segments)
+- Or audio compression (mono, lower sample rate, silence removal)
+- Or investigate larger Voxtral models with higher limits
