@@ -267,6 +267,67 @@ npx quartz build    # local build to public/
 npm run docs        # build + serve locally
 ```
 
+## Quartz Component Architecture Patterns
+
+**CRITICAL: Don't reinvent Quartz components with inline hacks**
+
+When creating or modifying Quartz components, ALWAYS follow the established patterns. The TagExplorer disaster showed what happens when you ignore these:
+
+### How Quartz components actually work
+
+**External files pattern (the right way):**
+- `ComponentName.tsx` - Clean JSX template with proper TypeScript types
+- `styles/componentName.scss` - External SCSS file for all styling
+- `scripts/componentName.inline.ts` - External TypeScript for interaction logic
+- Import external files: `import style from "./styles/componentName.scss"`
+
+**DON'T do inline hacks:**
+```typescript
+// WRONG - inline CSS strings
+ComponentName.css = `
+  .some-class { color: red; }
+`
+
+// WRONG - inline JavaScript strings  
+ComponentName.afterDOMLoaded = `
+  document.querySelector('.thing').addEventListener('click', ...);
+`
+```
+
+### Study existing components before coding
+
+Before implementing any new component functionality, study how existing components handle it:
+
+- **Collapsible behavior**: Check `Explorer.tsx` and `TableOfContents.tsx` 
+- **Grid animations**: Use `grid-template-rows: 0fr` to `1fr`, not max-height hacks
+- **Mobile responsive**: Check Explorer's mobile patterns with proper breakpoint handling
+- **State persistence**: Look at how Explorer saves/restores state in localStorage
+- **Accessibility**: Copy ARIA patterns from existing components
+
+### Component checklist before submitting
+
+- [ ] External SCSS file with proper imports and variables
+- [ ] External TypeScript file for interactions (no inline strings)
+- [ ] Clean JSX template without inline styles/scripts
+- [ ] Follows existing component patterns (Explorer, TOC, etc.)
+- [ ] Uses established animation patterns (CSS Grid, not hacks)
+- [ ] Proper TypeScript types and error handling
+- [ ] ARIA attributes copied from similar components
+
+### Red flags that indicate you're doing it wrong
+
+- Writing CSS in template literal strings
+- Writing JavaScript in template literal strings  
+- Trying to "fix" animation with `max-height` transitions
+- Reinventing interaction patterns that already exist
+- Not studying how similar components work first
+
+### When you see bad patterns in the codebase
+
+If you encounter components with inline CSS/JS (legacy code), don't copy those patterns. Always check the newest, cleanest components like Explorer and TableOfContents for the right way to structure things.
+
+**The rule**: If Explorer or TOC doesn't do it that way, you probably shouldn't either.
+
 ---
 
-*Last updated: Aug 2025 (post-Quartz migration)*
+*Last updated: August 2025 (post-TagExplorer architecture lesson)*
