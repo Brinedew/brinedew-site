@@ -28,7 +28,16 @@ export default ((user?: Options) => {
     for (const f of allFiles) {
       const tagsRaw = (f.frontmatter?.tags ?? []) as unknown[]
       const tags = (Array.isArray(tagsRaw) ? tagsRaw : [tagsRaw]).map(normalizeTag).filter(Boolean) as string[]
-      if (!tags.length) continue
+      
+      // Handle untagged files
+      if (!tags.length) {
+        const untaggedBucket = map.get("untagged") ?? { count: 0, pages: [] }
+        untaggedBucket.count++
+        untaggedBucket.pages.push({ title: f.frontmatter?.title ?? f.slug, slug: "/" + f.slug })
+        map.set("untagged", untaggedBucket)
+        continue
+      }
+      
       for (const tag of tags) {
         const bucket = map.get(tag) ?? { count: 0, pages: [] }
         bucket.count++
@@ -40,6 +49,10 @@ export default ((user?: Options) => {
     // Apply count filter and sort
     let entries = [...map.entries()].filter(([, v]) => v.count >= opts.minCount)
     entries.sort((a, b) => {
+      // Always put "untagged" at the bottom
+      if (a[0] === "untagged") return 1
+      if (b[0] === "untagged") return -1
+      
       if (opts.sort === "alpha") return a[0].localeCompare(b[0])
       return b[1].count - a[1].count || a[0].localeCompare(b[0])
     })
