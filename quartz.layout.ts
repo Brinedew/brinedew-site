@@ -23,7 +23,6 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.ArticleTitle(),
     Component.ContentMeta(),
-    Component.TagList(),
   ],
   left: [
     Component.PageTitle(),
@@ -43,6 +42,9 @@ export const defaultContentPageLayout: PageLayout = {
       component: Component.TagExplorer({ title: "Tags", minCount: 1, sort: "count" }),
       condition: (page) => page.fileData.slug !== "index",
     }),
+  ],
+  afterBody: [
+    Component.TagList(),
   ],
   right: [
     Component.DesktopOnly(Component.TableOfContents()),

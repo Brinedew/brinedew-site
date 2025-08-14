@@ -1,5 +1,8 @@
 // quartz/components/TagExplorer.tsx
 import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import { classNames } from "../util/lang"
+// @ts-ignore
+import script from "./scripts/toc.inline"
 
 type Options = {
   title?: string
@@ -8,7 +11,7 @@ type Options = {
 }
 
 const defaultOpts: Required<Options> = {
-  title: "Tags",
+  title: "Tags", 
   minCount: 1,
   sort: "count",
 }
@@ -19,10 +22,11 @@ function normalizeTag(t: unknown): string | null {
   return s.length ? s : null
 }
 
+let numTags = 0
 export default ((user?: Options) => {
   const opts = { ...defaultOpts, ...user }
 
-  function TagExplorer({ allFiles }: QuartzComponentProps) {
+  function TagExplorer({ allFiles, displayClass, cfg }: QuartzComponentProps) {
     // Build: tag -> array of pages
     const map = new Map<string, { count: number; pages: { title: string; slug: string }[] }>()
     for (const f of allFiles) {
@@ -57,67 +61,104 @@ export default ((user?: Options) => {
       return b[1].count - a[1].count || a[0].localeCompare(b[0])
     })
 
+    if (entries.length === 0) {
+      return null
+    }
+
+    const id = `tag-explorer-${numTags++}`
     return (
-      <nav class="tag-explorer">
-        <h3 class="tag-explorer-title">{opts.title}</h3>
-        <ul class="tag-root">
+      <div class={classNames(displayClass, "toc")}>
+        <button
+          type="button"
+          class="toc-header"
+          aria-controls={id}
+          aria-expanded="true"
+        >
+          <h3>{opts.title}</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="fold"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <ul id={id} class="toc-content overflow">
           {entries.map(([tag, info]) => (
-            <li class="tag-node" data-tag={tag}>
-              <button class="tag-toggle" aria-expanded="false">
-                <span class="tag-name">#{tag}</span>
+            <li class="tag-group" data-tag={tag}>
+              <div class="tag-header">
+                <span class="tag-name">{tag === "untagged" ? "untagged" : tag}</span>
                 <span class="tag-count">({info.count})</span>
-              </button>
-              <ul class="tag-pages" hidden>
+              </div>
+              <ul class="tag-pages">
                 {info.pages
                   .sort((a, b) => a.title.localeCompare(b.title))
                   .map((p) => (
-                    <li class="tag-page"><a href={p.slug}>{p.title}</a></li>
+                    <li class="depth-1"><a href={p.slug}>{p.title}</a></li>
                   ))}
               </ul>
             </li>
           ))}
         </ul>
-      </nav>
+      </div>
     )
   }
 
   TagExplorer.css = `
-  .tag-explorer { padding: 0.5rem 0; }
-  .tag-explorer-title { margin: 0 0 0.5rem 0; font-size: 0.95rem; opacity: .85; }
-  .tag-root, .tag-pages { list-style: none; padding-left: 0; margin: 0; }
-  .tag-node { margin: 0.15rem 0; }
-  .tag-toggle { all: unset; cursor: pointer; display: flex; justify-content: space-between; width: 100%; padding: .2rem .3rem; border-radius: .35rem; }
-  .tag-toggle:hover { background: var(--lightgray); }
-  .tag-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tag-count { opacity: .7; }
-  .tag-pages { margin-left: .6rem; padding-left: .6rem; border-left: 1px solid var(--lightgray);
-               margin-top: .25rem; }
-  .tag-page a { display: block; padding: .15rem .25rem; border-radius: .25rem; }
-  .tag-page a:hover { background: var(--lightgray); }
-  `
-
-  TagExplorer.afterDOMLoaded = `
-  // expand/collapse with localStorage
-  const root = document.querySelector('.tag-explorer')
-  if (root) {
-    const key = 'TagExplorer.open'
-    const open = new Set(JSON.parse(localStorage.getItem(key) || '[]'))
-    const sync = () => localStorage.setItem(key, JSON.stringify([...open]))
-    root.querySelectorAll('.tag-node').forEach((node) => {
-      const tag = node.getAttribute('data-tag')
-      const btn = node.querySelector('.tag-toggle')
-      const list = node.querySelector('.tag-pages')
-      const set = (expanded) => {
-        btn.setAttribute('aria-expanded', expanded ? 'true' : 'false')
-        if (expanded) { list.removeAttribute('hidden'); open.add(tag) }
-        else { list.setAttribute('hidden', ''); open.delete(tag) }
-        sync()
-      }
-      set(open.has(tag))
-      btn.addEventListener('click', () => set(btn.getAttribute('aria-expanded') !== 'true'))
-    })
+  .tag-group {
+    margin: 0.5rem 0;
+  }
+  
+  .tag-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    color: var(--dark);
+    margin-bottom: 0.25rem;
+    opacity: 0.8;
+    font-size: 0.9rem;
+  }
+  
+  .tag-name {
+    flex-grow: 1;
+  }
+  
+  .tag-count {
+    opacity: 0.6;
+    font-size: 0.8rem;
+    font-weight: normal;
+  }
+  
+  .tag-pages {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .tag-pages .depth-1 {
+    padding-left: 1rem;
+  }
+  
+  .tag-pages .depth-1 a {
+    color: var(--dark);
+    opacity: 0.75;
+    transition: opacity 0.3s ease;
+  }
+  
+  .tag-pages .depth-1 a:hover {
+    opacity: 1;
   }
   `
+
+  TagExplorer.afterDOMLoaded = script
 
   return TagExplorer
 }) satisfies QuartzComponentConstructor
