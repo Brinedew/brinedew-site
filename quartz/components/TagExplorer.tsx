@@ -1,12 +1,12 @@
-// quartz/components/TagExplorer.tsx
-import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
+import style from "./styles/tagExplorer.scss"
 // @ts-ignore
-import script from "./scripts/toc.inline"
+import script from "./scripts/tagExplorer.inline"
 
 type Options = {
   title?: string
-  minCount?: number     // hide very rare tags if you like
+  minCount?: number
   sort?: "alpha" | "count"
 }
 
@@ -22,7 +22,7 @@ function normalizeTag(t: unknown): string | null {
   return s.length ? s : null
 }
 
-let numTags = 0
+let numTagExplorers = 0
 export default ((user?: Options) => {
   const opts = { ...defaultOpts, ...user }
 
@@ -65,12 +65,12 @@ export default ((user?: Options) => {
       return null
     }
 
-    const id = `tag-explorer-${numTags++}`
+    const id = `tag-explorer-${numTagExplorers++}`
     return (
-      <div class={classNames(displayClass, "toc")}>
+      <div class={classNames(displayClass, "tag-explorer")}>
         <button
           type="button"
-          class="toc-header"
+          class="tag-explorer-header"
           aria-controls={id}
           aria-expanded="true"
         >
@@ -90,159 +90,47 @@ export default ((user?: Options) => {
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </button>
-        <ul id={id} class="toc-content overflow">
-          {entries.map(([tag, info]) => (
-            <li class="tag-group" data-tag={tag}>
-              <button 
-                type="button"
-                class="tag-toggle"
-                data-tag={tag}
-                aria-expanded="false"
-              >
-                <span class="tag-name">{tag === "untagged" ? "untagged" : tag}</span>
-                <span class="tag-count"> ({info.count})</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  class="fold"
-                >
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </button>
-              <ul class="tag-pages collapsed">
-                {info.pages
-                  .sort((a, b) => a.title.localeCompare(b.title))
-                  .map((p) => (
-                    <li class="depth-1"><a href={p.slug}>{p.title}</a></li>
-                  ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
+        <div id={id} class="tag-explorer-content" role="group">
+          <ul>
+            {entries.map(([tag, info]) => (
+              <li class="tag-group">
+                <div class="tag-container" data-tag={tag}>
+                  <span class="tag-name">{tag === "untagged" ? "untagged" : tag}</span>
+                  <span class="tag-count">({info.count})</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="tag-icon"
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </div>
+                <div class="tag-pages-outer">
+                  <ul>
+                    {info.pages
+                      .sort((a, b) => a.title.localeCompare(b.title))
+                      .map((p) => (
+                        <li><a href={p.slug}>{p.title}</a></li>
+                      ))}
+                  </ul>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     )
   }
 
-  TagExplorer.css = `
-  .tag-group {
-    margin: 0.25rem 0;
-  }
-  
-  .tag-toggle {
-    background: none;
-    border: none;
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.25rem 0;
-    cursor: pointer;
-    text-align: left;
-    color: var(--dark);
-    font-size: 1rem;
-  }
-  
-  .tag-toggle:hover {
-    opacity: 0.8;
-  }
-  
-  .tag-name {
-    flex-grow: 1;
-  }
-  
-  .tag-count {
-    opacity: 0.6;
-    font-size: 0.8rem;
-    font-weight: normal;
-  }
-  
-  .tag-toggle .fold {
-    margin-left: 0.5rem;
-    transition: transform 0.3s ease;
-    opacity: 0.8;
-    transform: rotateZ(-90deg);
-  }
-  
-  .tag-toggle[aria-expanded="true"] .fold {
-    transform: rotateZ(0deg);
-  }
-  
-  .tag-pages {
-    list-style: none;
-    margin: 0.25rem 0 0 0;
-    padding: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-  }
-  
-  .tag-pages.collapsed {
-    max-height: 0;
-  }
-  
-  .tag-pages:not(.collapsed) {
-    max-height: 20rem;
-  }
-  
-  .tag-pages .depth-1 {
-    padding-left: 1rem;
-  }
-  
-  .tag-pages .depth-1 a {
-    color: var(--dark);
-    opacity: 0.35;
-    transition: opacity 0.3s ease;
-  }
-  
-  .tag-pages .depth-1 a:hover {
-    opacity: 0.75;
-  }
-  `
-
-  TagExplorer.afterDOMLoaded = `
-  // Tag collapsing logic
-  const tagExplorer = document.querySelector('.toc');
-  if (tagExplorer && tagExplorer.querySelector('.tag-toggle')) {
-    const key = 'TagExplorer.expandedTags';
-    const expandedTags = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
-    
-    const saveState = () => {
-      localStorage.setItem(key, JSON.stringify([...expandedTags]));
-    };
-    
-    tagExplorer.querySelectorAll('.tag-toggle').forEach((button) => {
-      const tag = button.getAttribute('data-tag');
-      const pages = button.parentNode.querySelector('.tag-pages');
-      
-      const setExpanded = (expanded) => {
-        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        if (expanded) {
-          pages.classList.remove('collapsed');
-          expandedTags.add(tag);
-        } else {
-          pages.classList.add('collapsed');
-          expandedTags.delete(tag);
-        }
-        saveState();
-      };
-      
-      // Initialize state
-      setExpanded(expandedTags.has(tag));
-      
-      // Click handler
-      button.addEventListener('click', () => {
-        setExpanded(button.getAttribute('aria-expanded') !== 'true');
-      });
-    });
-  }
-  
-  ` + script
+  TagExplorer.css = style
+  TagExplorer.afterDOMLoaded = script
 
   return TagExplorer
 }) satisfies QuartzComponentConstructor

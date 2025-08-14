@@ -1,0 +1,126 @@
+@use "../../styles/variables.scss" as *;
+
+.tag-explorer {
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+  min-height: 1.2rem;
+  flex: 0 1 auto;
+  
+  &.collapsed {
+    flex: 0 1 1.2rem;
+    & .fold {
+      transform: rotateZ(-90deg);
+    }
+  }
+
+  & .fold {
+    margin-left: 0.5rem;
+    transition: transform 0.3s ease;
+    opacity: 0.8;
+  }
+}
+
+button.tag-explorer-header {
+  background-color: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  color: var(--dark);
+  display: flex;
+  align-items: center;
+
+  & h3 {
+    font-size: 1rem;
+    display: inline-block;
+    margin: 0;
+  }
+}
+
+.tag-explorer-content {
+  list-style: none;
+  overflow: visible;
+  margin-top: 0.5rem;
+
+  & ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overscroll-behavior: contain;
+  }
+}
+
+.tag-group {
+  margin: 0.25rem 0;
+}
+
+.tag-container {
+  flex-direction: row;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  cursor: pointer;
+  padding: 0.25rem 0;
+
+  &:hover {
+    opacity: 0.8;
+  }
+
+  .tag-name {
+    flex-grow: 1;
+    font-size: 0.95rem;
+    color: var(--dark);
+    font-weight: $semiBoldWeight;
+  }
+
+  .tag-count {
+    opacity: 0.6;
+    font-size: 0.8rem;
+    font-weight: normal;
+    margin-right: 0.5rem;
+  }
+}
+
+.tag-icon {
+  color: var(--secondary);
+  cursor: pointer;
+  transition: transform 0.3s ease;
+  backface-visibility: visible;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.tag-pages-outer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease-in-out;
+}
+
+.tag-pages-outer.open {
+  grid-template-rows: 1fr;
+}
+
+.tag-pages-outer > ul {
+  overflow: hidden;
+  margin-left: 6px;
+  padding-left: 0.8rem;
+  border-left: 1px solid var(--lightgray);
+
+  li a {
+    color: var(--dark);
+    opacity: 0.35;
+    pointer-events: all;
+    transition: opacity 0.3s ease;
+
+    &:hover {
+      opacity: 0.75;
+    }
+  }
+}
+
+li:has(> .tag-pages-outer:not(.open)) > .tag-container > .tag-icon {
+  transform: rotate(-90deg);
+}
