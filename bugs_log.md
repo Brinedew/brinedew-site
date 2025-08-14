@@ -50,7 +50,33 @@
 
 ---
 
-### 4. Excalidraw Images Not Rendering 
+### 4. TagExplorer Component Architecture - PARTIALLY FIXED ⚠️
+**Status**: 🟡 **PARTIALLY RESOLVED** - commit `af40fa7`  
+**Issue**: TagExplorer component was implemented with inline CSS/JS hacks instead of following Quartz patterns
+
+**Root Cause**: Original implementation ignored established Quartz component architecture (external SCSS, external TypeScript, proper templates)
+
+**Fix Applied**: Complete rewrite following Explorer component patterns:
+- Created external `quartz/components/styles/tagExplorer.scss` 
+- Created external `quartz/components/scripts/tagExplorer.inline.ts`
+- Implemented grid-based collapsible animations
+- Added proper TypeScript interaction logic with localStorage persistence
+
+**Partially Fixed**:
+- ✅ Individual tag collapsibility with state persistence
+- ✅ Proper Quartz component architecture 
+- ✅ Clean separation of concerns (CSS, JS, JSX)
+- ✅ Grid-based animations instead of max-height hacks
+
+**Remaining Issues**:
+- ❌ Main "Tags" header not collapsible (needs overall component collapse logic)
+- ❌ Font styling inconsistent with TOC (opacity, font-weight, hover states)  
+- ❌ PageTags component not rendering in sidebar (layout issue)
+- ❌ Horizontal scrollbar flicker during animations (needs overflow-x: hidden)
+
+---
+
+### 5. Excalidraw Images Not Rendering 
 **Status**: 🟡 Medium Priority - **DOCUMENTATION PROVIDED**
 **Expected**: Embedded image display  
 **Actual**: Text link `Vibes-are-principal-components-2025-07-28-12.52.03.excalidraw`
