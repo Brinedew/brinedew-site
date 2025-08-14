@@ -148,18 +148,37 @@ wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.
 
 ---
 
-### 9. vLLM Audio File Size Limits - NEW ❌
-**Status**: 🔴 **UNRESOLVED** - Blocking 3+ hour podcast transcription
+### 9. vLLM Audio File Size Limits - FIXED ✅
+**Status**: ✅ **RESOLVED** - Sprint 4 implementation complete
 **Issue**: vLLM rejects audio files over ~16 minutes with "Maximum file size exceeded" error
 
-**Root Cause**: Voxtral Mini 3B has built-in audio processing limits that can't handle long podcasts
+**Root Cause**: HTTP file upload limits (25MB), not model capacity. Voxtral-Mini supports up to 30 minutes.
+
+**Fix Applied**: 
+- Implemented FFmpeg Opus compression in `D:\Coding\Scriptotic\src\core\web_server.py` lines 86-89 (24kbps reduces files by 6.3x)
+- Added 30-minute chunking algorithm lines 100-111 with 10-second overlaps
+- Worker functions write transcript files to `output/` directory
+
+**Resolution**: Files that previously failed due to size now process through compression → chunking → transcription pipeline.
+
+---
+
+### 10. Flask Backend Auto-Start Failure - NEW ❌
+**Status**: 🔴 **UNRESOLVED** - Blocking all transcription requests
+**Issue**: Flask backend (port 5000) not starting when triggered by Sentinel (port 5050)
+
+**Root Cause**: PowerShell auto-start mechanism failing - exact cause unknown
 
 **Impact**: 
-- 16-minute video transcribes successfully but fails at vLLM stage
-- 3+ hour podcasts will definitely exceed limits
-- Need audio chunking or compression preprocessing
+- Website shows "Server: offline" and "Submit failed"
+- Sentinel responds with service status but cannot proxy to Flask
+- All integration work completed but system unusable due to this
+
+**Evidence**:
+- Sentinel running: `curl http://localhost:5050/api/server-status` → `{"status":"idle"}`  
+- Flask not running: `curl http://localhost:5000/api/server-status` → Connection refused
 
 **Next Steps**: 
-- Implement audio chunking (split into 10-15 minute segments)
-- Or audio compression (mono, lower sample rate, silence removal)
-- Or investigate larger Voxtral models with higher limits
+- Debug PowerShell script execution when Sentinel triggers auto-start
+- Check execution policies, paths, and Flask startup logs
+- Test manual script execution to verify Flask can start

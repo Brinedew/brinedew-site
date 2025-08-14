@@ -135,21 +135,29 @@
         STATE.jobId = j.job_id || j.id || j.jobId;
         setStatus(`Job submitted: ${STATE.jobId}`, 'ok');
 
-        // Start polling for job progress
+        // Start polling for job progress  
         jobTimer = setInterval(async () => {
           try {
-            const s = await api(origin, `/api/job-status/${STATE.jobId}`, { cache: 'no-store' });
+            const s = await api(origin, `/api/jobs/${STATE.jobId}`, { cache: 'no-store' });
             const sj = await s.json();
             setStatus(`Status: ${sj.status}`, sj.status === 'error' ? 'err' : sj.status === 'done' ? 'ok' : 'warn');
             if (typeof sj.progress === 'number') setProgress(Math.round(sj.progress));
-            if (sj.status === 'done' && sj.download_url) {
+            if (sj.status === 'done') {
               clearInterval(jobTimer); ui.cancel.disabled = true; ui.start.disabled = false; setProgress(100);
-              const a = el('a', { href: sj.download_url, innerText: 'Download transcript', className: 'scr-btn' });
-              ui.results.replaceChildren(a);
+              if (sj.download_url) {
+                const a = el('a', { href: sj.download_url, innerText: 'Download transcript', className: 'scr-btn' });
+                ui.results.replaceChildren(a);
+              } else if (sj.text) {
+                const pre = el('pre', { style: 'white-space:pre-wrap' }, sj.text);
+                ui.results.replaceChildren(pre);
+              } else {
+                ui.results.textContent = 'Completed, but no transcript returned.';
+              }
+              return;
             }
             if (sj.status === 'error') {
               clearInterval(jobTimer); ui.cancel.disabled = true; ui.start.disabled = false;
-              ui.results.textContent = sj.message || 'Job failed.';
+              ui.results.textContent = sj.error || sj.message || 'Job failed.';
             }
           } catch {
             // transient failure; keep polling
