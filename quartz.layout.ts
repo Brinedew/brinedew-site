@@ -43,11 +43,13 @@ export const defaultContentPageLayout: PageLayout = {
       condition: (page) => page.fileData.slug !== "index",
     }),
   ],
-  afterBody: [
-    Component.TagList(),
-  ],
   right: [
     Component.DesktopOnly(Component.TableOfContents()),
+    // Page tags section above backlinks
+    Component.ConditionalRender({
+      component: Component.PageTags(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
     // Hide backlinks on homepage only
     Component.ConditionalRender({
       component: Component.Backlinks(),

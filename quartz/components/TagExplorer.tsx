@@ -93,11 +93,30 @@ export default ((user?: Options) => {
         <ul id={id} class="toc-content overflow">
           {entries.map(([tag, info]) => (
             <li class="tag-group" data-tag={tag}>
-              <div class="tag-header">
+              <button 
+                type="button"
+                class="tag-toggle"
+                data-tag={tag}
+                aria-expanded="false"
+              >
                 <span class="tag-name">{tag === "untagged" ? "untagged" : tag}</span>
-                <span class="tag-count">({info.count})</span>
-              </div>
-              <ul class="tag-pages">
+                <span class="tag-count"> ({info.count})</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="fold"
+                >
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <ul class="tag-pages collapsed">
                 {info.pages
                   .sort((a, b) => a.title.localeCompare(b.title))
                   .map((p) => (
@@ -113,18 +132,25 @@ export default ((user?: Options) => {
 
   TagExplorer.css = `
   .tag-group {
-    margin: 0.5rem 0;
+    margin: 0.25rem 0;
   }
   
-  .tag-header {
+  .tag-toggle {
+    background: none;
+    border: none;
+    width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-weight: 600;
+    padding: 0.25rem 0;
+    cursor: pointer;
+    text-align: left;
     color: var(--dark);
-    margin-bottom: 0.25rem;
+    font-size: 1rem;
+  }
+  
+  .tag-toggle:hover {
     opacity: 0.8;
-    font-size: 0.9rem;
   }
   
   .tag-name {
@@ -137,10 +163,31 @@ export default ((user?: Options) => {
     font-weight: normal;
   }
   
+  .tag-toggle .fold {
+    margin-left: 0.5rem;
+    transition: transform 0.3s ease;
+    opacity: 0.8;
+    transform: rotateZ(-90deg);
+  }
+  
+  .tag-toggle[aria-expanded="true"] .fold {
+    transform: rotateZ(0deg);
+  }
+  
   .tag-pages {
     list-style: none;
-    margin: 0;
+    margin: 0.25rem 0 0 0;
     padding: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  
+  .tag-pages.collapsed {
+    max-height: 0;
+  }
+  
+  .tag-pages:not(.collapsed) {
+    max-height: 20rem;
   }
   
   .tag-pages .depth-1 {
@@ -149,16 +196,53 @@ export default ((user?: Options) => {
   
   .tag-pages .depth-1 a {
     color: var(--dark);
-    opacity: 0.75;
+    opacity: 0.35;
     transition: opacity 0.3s ease;
   }
   
   .tag-pages .depth-1 a:hover {
-    opacity: 1;
+    opacity: 0.75;
   }
   `
 
-  TagExplorer.afterDOMLoaded = script
+  TagExplorer.afterDOMLoaded = `
+  // Tag collapsing logic
+  const tagExplorer = document.querySelector('.toc');
+  if (tagExplorer && tagExplorer.querySelector('.tag-toggle')) {
+    const key = 'TagExplorer.expandedTags';
+    const expandedTags = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+    
+    const saveState = () => {
+      localStorage.setItem(key, JSON.stringify([...expandedTags]));
+    };
+    
+    tagExplorer.querySelectorAll('.tag-toggle').forEach((button) => {
+      const tag = button.getAttribute('data-tag');
+      const pages = button.parentNode.querySelector('.tag-pages');
+      
+      const setExpanded = (expanded) => {
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        if (expanded) {
+          pages.classList.remove('collapsed');
+          expandedTags.add(tag);
+        } else {
+          pages.classList.add('collapsed');
+          expandedTags.delete(tag);
+        }
+        saveState();
+      };
+      
+      // Initialize state
+      setExpanded(expandedTags.has(tag));
+      
+      // Click handler
+      button.addEventListener('click', () => {
+        setExpanded(button.getAttribute('aria-expanded') !== 'true');
+      });
+    });
+  }
+  
+  ` + script
 
   return TagExplorer
 }) satisfies QuartzComponentConstructor

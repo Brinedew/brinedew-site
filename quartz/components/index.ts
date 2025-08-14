@@ -25,6 +25,7 @@ import Flex from "./Flex"
 import ConditionalRender from "./ConditionalRender"
 import ViewTransitions from "./ViewTransitions"
 import TagExplorer from "./TagExplorer"
+import PageTags from "./PageTags"
 
 export {
   ArticleTitle,
@@ -54,4 +55,5 @@ export {
   ConditionalRender,
   ViewTransitions,
   TagExplorer,
+  PageTags,
 }
