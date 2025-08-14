@@ -91,4 +91,59 @@ The architecture is working - I proved the tunnel routes correctly and the senti
 
 **Windows path separators:** Added documentation to root CLAUDE.md about using forward slashes in PowerShell arguments. `src\core\web_server.py` becomes `srccoreweb_server.py` due to backslash escaping.
 
-The system design is solid - lightweight sentinel proxy, proper state machine, frontend auto-retry logic. Just need to fix that one environment path and it'll work end-to-end.
+**Chesterton's fence - Why voxtral-env exists:**
+
+I initially thought "just change the environment path from voxtral-env to venv-vllm-stable" but that would break things. Here's why both environments exist:
+
+```bash
+# voxtral-env (on NTFS /mnt/d/...) - Flask web server dependencies:
+source /mnt/d/Coding/Scriptotic/voxtral-env/bin/activate
+python -c "import flask"  # ❌ Flask not available
+pip list | grep requests  # ✅ requests==2.31.0
+
+# venv-vllm-stable (on ext4 ~/...) - vLLM model server:  
+source ~/venv-vllm-stable/bin/activate
+python -c "import vllm"   # ✅ vllm==0.10.0  
+python -c "import flask"  # ❌ Flask not available
+```
+
+**The original architecture was actually correct:**
+1. Flask web server runs from `voxtral-env` (handles HTTP requests, job management)
+2. vLLM model server runs from `venv-vllm-stable` (handles ML inference)
+3. They communicate via HTTP: Flask → `http://localhost:8000` → vLLM
+
+**But there's a critical performance bug:** `voxtral-env` is on NTFS filesystem which causes 12x slower Python imports (CLAUDE.md documents this: "30+ second import hangs vs 2.5s on ext4").
+
+**What would break if I just switched to venv-vllm-stable:**
+```python
+# web_server.py line 15-16:
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+# ❌ Both missing from venv-vllm-stable
+```
+
+**The real fix isn't changing the environment path - it's fixing the performance issue:**
+
+Option 1: Install Flask in the fast environment:
+```bash
+source ~/venv-vllm-stable/bin/activate  
+pip install flask flask-cors requests
+```
+
+Option 2: Create new fast environment with all dependencies:
+```bash
+cd ~ && python -m venv venv-scriptotic-combined
+source ~/venv-scriptotic-combined/bin/activate
+pip install flask flask-cors requests vllm
+```
+
+Option 3: Move voxtral-env to ext4 filesystem:
+```bash
+# Move from slow NTFS to fast ext4
+cp -r /mnt/d/Coding/Scriptotic/voxtral-env ~/voxtral-env-fast
+# Update PowerShell script to use ~/voxtral-env-fast/bin/activate
+```
+
+**Why the separation of concerns was smart:** Flask web server and vLLM model server have different lifecycles, resource requirements, and dependency sets. Someone correctly identified they should be separate services. The bug was just putting one on the slow filesystem.
+
+The system design is solid - lightweight sentinel proxy, proper state machine, frontend auto-retry logic. Just need to fix the filesystem performance issue without breaking the service separation.
