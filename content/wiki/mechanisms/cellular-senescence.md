@@ -1,6 +1,6 @@
 ---
-title: "Cellular Senescence"
-date: 2025-08-10
+title: Cellular Senescence
+date: "2025-08-10tags: [type/concept, topic/aging, topic/biology, status/stub]"
 ---
 
 # Cellular Senescence

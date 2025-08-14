@@ -1,6 +1,7 @@
 ---
-title: "Vibes are principal components"
-date: 2025-08-10
+title: Vibes are principal components
+date: "2025-08-10tags: [type/post, topic/psychology, topic/analysis,
+  status/published]"
 ---
 
 Title: Vibes are principal components

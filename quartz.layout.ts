@@ -38,9 +38,9 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    // Hide explorer on homepage only
+    // Hide tag explorer on homepage only
     Component.ConditionalRender({
-      component: Component.Explorer(),
+      component: Component.TagExplorer({ title: "Tags", minCount: 1, sort: "count" }),
       condition: (page) => page.fileData.slug !== "index",
     }),
   ],
@@ -69,7 +69,7 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.Explorer(),
+    Component.TagExplorer({ title: "Tags", minCount: 1, sort: "count" }),
   ],
   right: [],
 }
