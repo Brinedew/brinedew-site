@@ -1,109 +1,99 @@
 # what i was working on - August 14, 2025
 
-I was fixing the Scriptotic transcription service. The user found 10 critical problems where "claimed working" features actually didn't exist yet. Following a technical consultation with ChatGPT, I treated this as an integration project instead of hunting individual bugs.
-
-The real issue: almost everything was broken except the frontend. The system had no job persistence, transcript display was fake, API endpoints returned 404s, and the vLLM server wouldn't auto-start.
+I was transforming the Obsidian vault from folder-based to tag-based navigation. The user wanted to replace the folder Explorer sidebar with a tag-first system where content is discoverable by concept rather than arbitrary folder structure.
 
 ## what actually works now
 
-**All the infrastructure components are finally connected:**
+**Core transformation is complete:**
+- ✅ TagExplorer component created and integrated into layout
+- ✅ Tag schema implemented: `type/`, `topic/`, `status/` categories  
+- ✅ Bulk tagging of key content files via MCP-Obsidian
+- ✅ Untagged files show up in "untagged" category (don't get lost)
+- ✅ Tags removed from page headers, moved to bottom of content
+- ✅ Hashtag symbols removed from tag names
 
-**Backend Integration (COMPLETED):**
-- Created `D:\Coding\Scriptotic\src\core\job_store.py` - SQLite job persistence with proper status transitions (queued → running → done/error)
-- Updated `D:\Coding\Scriptotic\src\core\web_server.py` lines 20-21, 331-347 - Added `/api/jobs`, `/api/jobs/<id>`, `/api/download/<id>` routes 
-- Added worker functions lines 82-111 - FFmpeg Opus compression (24kbps) + vLLM transcription + file storage
-- Fixed CORS configuration lines 74-76 - Proper domain whitelist instead of resource-based config
+**Files I changed:**
+- `quartz/components/TagExplorer.tsx` - New component that builds tag hierarchy from all files
+- `quartz/components/index.ts` - Added TagExplorer export
+- `quartz.layout.ts` - Replaced Explorer with TagExplorer, moved TagList to afterBody
+- `content/posts/One-Hit-Cancer.md` - Added tags: `[type/post, topic/cancer, topic/biology, status/published]`
+- `content/posts/vibes-are-principal-components.md` - Added tags: `[type/post, topic/psychology, topic/analysis, status/published]`
+- `content/wiki/mechanisms/cellular-senescence.md` - Added tags: `[type/concept, topic/aging, topic/biology, status/stub]`
+- `content/Misconceptions/aging-is-a-disease.md` - Added tags: `[type/misconception, topic/aging, topic/longevity, status/published]`
 
-**PowerShell Auto-Start Fix (COMPLETED):**
-- Fixed `D:\Coding\Scriptotic\start_scriptotic_web.ps1` lines 89-103 - Added missing `export VLLM_USE_V1=0` and proper WSL command syntax
-- This was the single-line fix that enables automatic vLLM startup
-
-**Sentinel Integration (COMPLETED):**
-- Updated `D:\Coding\Scriptotic\sentinel\sentinel.py` lines 250-266 - Added `/api/jobs` proxy route and fixed endpoint paths
-- Service status ownership: Sentinel=service phases, Flask=job phases (as designed)
-
-**Frontend Integration (COMPLETED):**
-- Updated `D:\Coding\Website\quartz\static\apps\scriptotic\app.js` lines 141, 145-165 - Fixed API endpoint from `/api/job-status/` to `/api/jobs/`
-- Added transcript display logic - shows download link OR transcript text OR error message
-- Copied updated file to `D:\Coding\Website\public\static\apps\scriptotic\app.js`
-
-**Build System (COMPLETED):**
-- Updated `D:\Coding\Website\package.json` lines 16-19 - Added dev/build/watch scripts pointing to content/ directory
+**Testing commands:**
+```bash
+cd "D:\Coding\Website"
+npm run build    # Builds site with TagExplorer
+npm run dev      # Local development server
+```
 
 ## what's broken
 
-**Critical: Backend services not running**
-- Sentinel is running (port 5050) and returns `{"status":"idle"}` 
-- Flask is NOT running (port 5000) - connection refused
-- This breaks the entire chain: Website → Cloudflare tunnel → Sentinel → Flask (missing)
+**TagExplorer styling issues (identified by user):**
+1. **Font weight/color mismatch with TOC** - TagExplorer headers don't match TOC visual styling exactly
+2. **Tag count spacing** - Need space before parentheses: `type/post (3)` not `type/post(3)`
+3. **Not collapsible** - Currently shows all pages under tags. Should start collapsed, click tag to expand pages
+4. **Page tags not visible** - Tags moved to afterBody but apparently not showing up
 
-**The auto-start PowerShell script fix is implemented but untested** because Flask won't start.
-
-**Error in web console:**
-```
-[ERROR] Access to fetch at 'https://api2.brinedew.com/api/server-status' from origin 'https://brinedew.com'
-[ERROR] Failed to load resource: net::ERR_FAILED @ https://api2.brinedew.com/api/server-status:0
-```
-
-**Cloudflare tunnel status unknown** - may be down or misconfigured.
+**Root cause analysis:**
+- TagExplorer CSS doesn't exactly match TOC styling patterns
+- Missing proper collapsible interaction for individual tags (not just the whole component)
+- afterBody TagList might have rendering issues
 
 ## where things stand
 
-**Current system state:**
-- ✅ Sentinel running on localhost:5050 (responds with service status)
-- ❌ Flask backend not running on localhost:5000 (connection refused)  
-- ❌ vLLM server not running on localhost:8000 (never gets started because Flask is down)
-- ? Cloudflare tunnel status unknown (api2.brinedew.com unreachable from browser)
+**Current environment:**
+- Website builds successfully with TagExplorer
+- All changes committed and pushed to live site (commits: e9a2b5e, 20b568b, 969cfa3)
+- MCP-Obsidian server working for bulk tag operations
+- Tag-based navigation functional but styling needs refinement
 
-**Working test commands:**
+**Working commands:**
 ```bash
-curl http://localhost:5050/api/server-status  # Returns: {"message":"Service ready - click Transcribe to activate","status":"idle"}
-curl http://localhost:5000/api/server-status  # FAILS: curl: (7) Failed to connect to localhost port 5000
-```
+# Add tags to more files:
+mcp__mcp-obsidian__obsidian_patch_content filepath="content/path/file.md" operation="append" target_type="frontmatter" target="date" content="tags: [type/X, topic/Y, status/Z]"
 
-**Website behavior:**
-- Loads correctly with "Server: checking..." then "Server: offline"
-- Click Transcribe → "Submit failed. Check server and URL."
+# Check current git status:
+git status
+git log --oneline -5
+```
 
 ## what to do next
 
-**Priority 1: Get Flask backend running**
-The PowerShell script should auto-start Flask when Sentinel receives a transcription request, but it's not happening. Debug the auto-start mechanism:
+**Most urgent: Fix TagExplorer styling and interaction**
 
-1. Check if `D:\Coding\Scriptotic\start_scriptotic_web.ps1` actually runs when triggered
-2. Look for PowerShell execution policy issues or path problems
-3. Try manually running the script to see if Flask starts
-4. Check Flask startup logs for import errors or dependency issues
+1. **Fix styling mismatch** - Compare TagExplorer CSS with actual TOC styles in `quartz/components/styles/toc.scss`. The tag headers need to match TOC entry styling exactly (font weight, opacity, color).
 
-**Priority 2: Test the vLLM auto-start fix**
-Once Flask is running, test if the `export VLLM_USE_V1=0` fix actually works:
-```bash
-# This should trigger the auto-start sequence:
-curl -X POST http://localhost:5050/api/transcribe -H "Content-Type: application/json" -d '{"url":"https://www.youtube.com/watch?v=Bbwp4PbWYzw"}'
-```
+2. **Add proper spacing** - In TagExplorer.tsx line 98, change `({info.count})` to `({info.count})` with space before parentheses.
 
-**Priority 3: Verify Cloudflare tunnel**
-Check if `api2.brinedew.com` is actually routing to `localhost:5050`. May need tunnel restart or configuration fix.
+3. **Implement collapsible tags** - Each tag should start collapsed. Clicking a tag should expand/collapse just that tag's pages, not the whole component. This requires custom click handlers for individual tags, not reusing TOC script.
+
+4. **Debug missing page tags** - Check if TagList is actually rendering at bottom of pages. The afterBody placement might have issues.
+
+**Files to focus on:**
+- `quartz/components/TagExplorer.tsx` - Main styling and interaction fixes
+- `quartz.layout.ts` - Verify afterBody TagList placement
+- `quartz/components/styles/toc.scss` - Reference for proper styling patterns
 
 ## stuff to remember
 
-**Why the integration approach worked:** Instead of debugging 10 separate issues, ChatGPT identified this as missing architecture. The real problems were:
-- No job persistence layer (SQLite JobStore fixed this)
-- No transcript file storage (worker functions write to disk now)  
-- No API endpoint implementation (routes were returning 404, now they exist)
-- PowerShell script missing one environment variable (one-line fix)
+**Why this transformation approach worked:**
+- Kept files in folders (no disruption) but switched navigation semantics to tags
+- MCP-Obsidian made bulk tagging fast and reliable once we figured out the correct API patterns
+- TagExplorer reuses TOC infrastructure for consistency, but needs fine-tuning
 
-**Architecture that's now correct:**
-```
-Frontend (Quartz) → Cloudflare tunnel → Sentinel (port 5050) → Flask (port 5000) → vLLM (port 8000)
-                                        ↓
-                                   JobStore (SQLite) ← Worker threads
-                                        ↓
-                                   Transcript files (output/ directory)
+**MCP-Obsidian patterns that work:**
+```bash
+# Check if tags field exists first, then:
+# If exists: operation="replace" target="tags" 
+# If missing: operation="append" target="date" content="tags: [...]"
 ```
 
-**The consultation was right:** This wasn't a bug hunt, it was implementing missing features. The "10 discrepancies" were actually "10 unimplemented components."
+**Tag schema reasoning:**
+- `type/` - content type (post, concept, etc.)
+- `topic/` - subject matter (aging, cancer, etc.) 
+- `status/` - publication state (published, draft, stub)
+- Hierarchical tags work well with Quartz's tag page generation
 
-**Critical debugging insight:** Following the actual user workflow (click button, trace execution) revealed the real problems faster than reading stale documentation.
-
-**VLLM_USE_V1=0 is essential** - v1 engine has multiprocessing issues on WSL2 that cause silent startup failures.
+**Critical insight:** The user wants the TagExplorer to behave like a collapsible file tree where each tag is a folder that expands to show its contents, not like TOC where everything is visible by default.
