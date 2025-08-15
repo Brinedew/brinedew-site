@@ -1,0 +1,41 @@
+@use "../../styles/variables.scss" as *;
+
+.mobile-menu-toggle {
+  display: none;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  margin: 0;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--darkgray);
+  
+  .lucide-menu {
+    stroke: var(--darkgray);
+  }
+  
+  .menu-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  
+  &:hover {
+    color: var(--tertiary);
+    
+    .lucide-menu {
+      stroke: var(--tertiary);
+    }
+  }
+  
+  @media all and ($mobile) {
+    display: flex;
+  }
+}
+
+// Hide menu button on desktop
+@media all and not ($mobile) {
+  .mobile-menu-toggle {
+    display: none !important;
+  }
+}

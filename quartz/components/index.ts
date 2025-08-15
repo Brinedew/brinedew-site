@@ -26,6 +26,7 @@ import ConditionalRender from "./ConditionalRender"
 import ViewTransitions from "./ViewTransitions"
 import TagExplorer from "./TagExplorer"
 import PageTags from "./PageTags"
+import MobileMenu from "./MobileMenu"
 
 export {
   ArticleTitle,
@@ -56,4 +57,5 @@ export {
   ViewTransitions,
   TagExplorer,
   PageTags,
+  MobileMenu,
 }

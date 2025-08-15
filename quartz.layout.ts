@@ -29,6 +29,8 @@ export const defaultContentPageLayout: PageLayout = {
     Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
+        // Mobile hamburger menu button
+        { Component: Component.MobileOnly(Component.MobileMenu()) },
         {
           Component: Component.Search(),
           grow: true,
@@ -66,6 +68,8 @@ export const defaultListPageLayout: PageLayout = {
     Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
+        // Mobile hamburger menu button
+        { Component: Component.MobileOnly(Component.MobileMenu()) },
         {
           Component: Component.Search(),
           grow: true,
