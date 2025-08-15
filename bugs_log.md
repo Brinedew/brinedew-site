@@ -211,19 +211,20 @@ wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.
 
 ---
 
-### 11. TagExplorer Font Styling - DIAGNOSED ⚠️
-**Status**: 🔴 **ROOT CAUSE IDENTIFIED** - commit `b585c0e`
-**Issue**: TagExplorer page links invisible due to `opacity: 0.35`, but font fixes deployed successfully yet not applied
+### 11. TagExplorer Font Styling - FIXED ✅
+**Status**: ✅ **RESOLVED** - commits `a63f01a`, `23eab0d`, `85ee156`, `bae1d16`
+**Issue**: TagExplorer page links were nearly invisible due to CSS specificity conflict and wrong hover colors
 
-**Root Cause Identified**: SCSS changes landed in `quartz/components/styles/tagExplorer.scss` but that file isn't imported by any component. Quartz v4 only compiles SCSS explicitly imported via component `.css` property.
+**Root Cause Identified**: TOC styles (`ul.toc-content.overflow > li > a`) had higher CSS specificity than TagExplorer styles (`.tag-pages-outer > ul li a`), causing TOC's `opacity: 0.35` to override TagExplorer's intended `opacity: 0.85`.
 
-**Evidence**:
-- GitHub Actions deployment successful (commit b585c0e)
-- CSS selector `.tag-pages-outer > ul li a` matches 72 elements on live site
-- Applied CSS rules still show old opacity/font values: `opacity: 0.35; transition: opacity 0.3s`
-- Browser DevTools confirmed SCSS changes aren't in compiled CSS
+**Fixes Applied**:
+- **CSS Scoping**: Prefixed TOC styles with `.toc` wrapper to prevent leakage into TagExplorer
+- **Scroll Spy Removal**: Eliminated outdated IntersectionObserver JavaScript and faded CSS states  
+- **Correct Hover Color**: Changed from `var(--secondary)` (gray) to `var(--tertiary)` (actual blue)
+- **Line Spacing**: Added `margin-bottom: 0.2rem` and `line-height: 1.4` to prevent cramped appearance
 
-**Next Steps**:
-1. Find which component actually owns `.tag-pages-outer > ul li a` selector
-2. Move SCSS changes to the correct imported file OR fix import chain
-3. Test that `npx quartz build` includes the new styles in `public/` output
+**Resolution Verified**: 
+- ✅ TagExplorer links now show at proper opacity (0.85)
+- ✅ Hover state turns blue like other site links
+- ✅ Proper visual spacing between links
+- ✅ Both TOC and TagExplorer maintain independent, clean styling

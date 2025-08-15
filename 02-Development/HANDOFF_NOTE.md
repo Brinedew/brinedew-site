@@ -1,115 +1,87 @@
-# environment consolidation + vllm optimization complete - 2025-08-14
+# TagExplorer font styling and CSS conflicts completely fixed - 2025-08-15
 
-I was working on two big problems: fixing the messy virtual environment situation and getting vLLM transcriptions to actually work without eating 100% GPU forever.
+I was working on fixing a font/CSS bug where TagExplorer page links in the sidebar were nearly invisible and looked terrible.
 
 ## what actually works now
 
-**Environment consolidation is done:**
-- Windows: Single `D:\Coding\Scriptotic\venv` environment for Flask/GUI (5.4GB)
-- WSL2: Single `~/venv-vllm-stable` environment for vLLM (8GB, on fast ext4)
-- Eliminated: `voxtral-env._trash` (archived the broken duplicate)
+**TagExplorer component is fully functional with proper styling:**
+- ✅ **Opacity fixed**: Links now show at `opacity: 0.85` (readable) instead of `0.35` (nearly invisible)
+- ✅ **Hover color fixed**: Links turn blue (`var(--tertiary)`) on hover instead of gray
+- ✅ **Line spacing fixed**: Added `margin-bottom: 0.2rem` and `line-height: 1.4` so links don't look cramped
+- ✅ **Scroll spy remnants removed**: Eliminated outdated IntersectionObserver JavaScript and faded CSS states
 
-Files I changed:
-- `start_scriptotic_web.ps1` - fixed to use explicit venv interpreter paths, added vLLM startup with optimized memory settings
-- `src/core/web_server.py` - added runtime guard on line 20-22, new `/api/active-jobs` endpoint on line 381-386
-- `smart_shutdown_monitor.ps1` - new file, smart activity-based shutdown (not dumb timers)
+**Files I changed:**
+- `quartz/components/styles/toc.scss` - Scoped TOC styles to `.toc` wrapper to prevent CSS leakage (line 41)
+- `quartz/components/styles/toc.scss` - Removed scroll spy opacity rules and JavaScript (lines 50-60)
+- `quartz/components/scripts/toc.inline.ts` - Removed IntersectionObserver scroll tracking code (lines 1-14, 40-43)
+- `quartz/components/styles/tagExplorer.scss` - Changed hover from `var(--secondary)` to `var(--tertiary)` (line 124)
+- `quartz/components/styles/tagExplorer.scss` - Added proper line spacing (lines 112-128)
 
-**vLLM memory optimization works:**
-- Fixed KV cache from 0.24GB → 1.81GB available with FP8 + V0 engine fallback
-- Command that works: `--kv-cache-dtype fp8_e5m2 --calculate-kv-scales --gpu-memory-utilization 0.95`
-- RTX 4080 12GB can now run full 4096 context length
-
-**Smart auto-shutdown implemented:**
-- Monitors `/api/active-jobs` every 10 seconds
-- Only shuts down after 60 seconds of ZERO active jobs
-- Won't kill long transcriptions mid-process
-- 4-hour safety limit to prevent runaway processes
-
-Commands that work right now:
+**Commands that work to test it:**
 ```bash
-cd D:\Coding\Scriptotic
-powershell -File "start_scriptotic_web.ps1" -Verbose  # starts everything + monitor
-curl http://localhost:5000/api/active-jobs            # check job count
-curl http://localhost:5000/api/server-status         # check Flask
-curl http://localhost:8000/v1/models                 # check vLLM
+cd "D:\Coding\Website"
+npx quartz build    # builds successfully with no errors
 ```
+Visit https://brinedew.com/tags and check that TagExplorer page links in left sidebar are:
+- Clearly visible (not faded)
+- Turn blue when you hover
+- Have proper spacing between lines
 
 ## what's broken
 
-**The core issue: vLLM can't handle 3+ hour podcasts**
+Nothing major is broken. The font issues are completely resolved.
 
-Got a transcript for "The Goddess of Everything Else" (16 minutes) but it failed with:
-```
-HTTP 400: {"message":"Maximum file size exceeded.","type":"BadRequestError","code":400}
-```
-
-The transcription pipeline works but hits vLLM's audio processing limits around 16+ minutes. For 3-hour podcasts, we need:
-- Audio chunking (split into 10-15 minute segments)
-- Or audio compression/stripping (lower bitrate, mono, remove silence)
-- Or different model with higher limits
-
-**vLLM server gets stuck in processing loops:**
-- After failed jobs, server stays at 100% GPU with no output
-- Requires manual `pkill -f vllm` to reset
-- Smart shutdown detects this but we need better error recovery
+**Minor cosmetic things that could be improved:**
+- TOC and TagExplorer styling could be made more consistent (font sizes, etc.) but they're both functional
+- Some frontmatter date warnings during build but these don't affect functionality
 
 ## where things stand
 
-**System architecture is solid:**
-- Environment consolidation complete (2 clean envs instead of 3 broken ones)
-- Memory optimization working (FP8 KV cache, V0 engine)
-- Smart shutdown monitoring active
-- Flask + vLLM integration functional
+**Current system state:**
+- Website builds cleanly with Quartz 4.5.1
+- All commits pushed to main branch (latest: `bae1d16`)
+- GitHub Actions deploys automatically
+- Live site at brinedew.com reflects all changes
 
-**Currently running:**
-- Flask server at localhost:5000 (might still be up)
-- No vLLM server (killed the stuck one)
-- Smart shutdown monitor probably running in background
-
-**Test with working 16-minute video:**
-- URL: `https://www.youtube.com/watch?v=Bbwp4PbWYzw`
-- Downloads successfully (yt-dlp working)
-- Processes until vLLM size limit hit
-- Need chunking for longer content
+**Working commands:**
+```bash
+cd "D:\Coding\Website"
+npx quartz build --serve    # local preview
+git status                  # check git state
+```
 
 ## what to do next
 
-**Most urgent: implement audio chunking for long podcasts**
+**Most urgent thing:** Nothing urgent. The TagExplorer styling work is complete.
 
-The transcription pipeline is in `src/core/voxtral_engine.py` around lines 250-300. Need to:
-1. Add audio duration detection after download
-2. If >15 minutes, split into chunks using ffmpeg
-3. Transcribe each chunk separately 
-4. Concatenate results with timestamp alignment
+**If you want to continue improving the sidebar styling:**
+1. Look at `quartz/components/styles/tagExplorer.scss` and `quartz/components/styles/toc.scss`
+2. Consider making font sizes and spacing more consistent between the two components
+3. Test that both components look good on mobile viewport
 
-Look at the `AudioDownloader` class - it already uses yt-dlp to get webm→wav. Add chunking logic there.
-
-**Alternative approach: audio compression**
-Before chunking, try aggressive compression:
-- Mono audio (half the data)
-- Lower sample rate (22kHz instead of 44kHz) 
-- Remove silence gaps (ffmpeg silenceremove filter)
-
-Could get 3+ hours down to vLLM's size limits.
+**If you want to work on something else:**
+- Check `sprints/sprint-4-long-youtube-transcription-CORRECTED.md` for the Scriptotic backend work
+- Epic 0 (Backend Auto-Start) is still blocking that project
 
 ## stuff to remember
 
-**Environment paths that matter:**
-- Windows venv: `D:\Coding\Scriptotic\venv\Scripts\python.exe` 
-- WSL2 venv: `~/venv-vllm-stable/bin/activate`
-- Never use `voxtral-env` (it's broken and archived)
+**Root cause was CSS specificity conflict:** 
+- TOC styles (`ul.toc-content.overflow > li > a`) were overriding TagExplorer styles (`.tag-pages-outer > ul li a`)
+- Fixed by scoping TOC styles to `.toc` wrapper instead of letting them leak globally
 
-**vLLM memory settings that work:**
-```bash
---kv-cache-dtype fp8_e5m2 --calculate-kv-scales 
---gpu-memory-utilization 0.95 --max-num-seqs 1
-```
-Don't mess with these - they're tuned for RTX 4080 12GB.
+**Color variables in this theme:**
+- `var(--secondary)` = gray/muted color (not blue!)
+- `var(--tertiary)` = actual blue color for links
+- Always use `--tertiary` for blue hover states
 
-**Smart shutdown is conservative:**
-- 60 seconds true idle (no active jobs)
-- Checks every 10 seconds
-- 4-hour safety limit
-- Won't interrupt running transcriptions
+**Scroll spy was intentionally removed:**
+- User didn't want the fading in/out link behavior based on scroll position
+- Removed both CSS and JavaScript completely rather than trying to fix it
 
-**The next person should focus on audio preprocessing, not the vLLM infrastructure.** All the hard memory/environment work is done. The bottleneck is now audio file size limits, not GPU memory or environment conflicts.
+**Quartz component architecture patterns:**
+- External SCSS files (`styles/componentName.scss`)
+- External TypeScript files (`scripts/componentName.inline.ts`) 
+- Clean JSX templates with proper imports
+- Never use inline CSS/JS strings - that was the old broken pattern
+
+The TagExplorer font work is 100% complete and deployed. The sidebar looks professional now with readable links and proper blue hover states.
