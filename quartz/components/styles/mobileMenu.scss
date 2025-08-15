@@ -10,16 +10,22 @@
   align-items: center;
   gap: 0.5rem;
   color: var(--darkgray);
+  position: relative;
+  pointer-events: auto;
+  touch-action: manipulation;
+  
+  /* Children never intercept in any engine (Edge, Chrome, Safari) */
+  > * {
+    pointer-events: none;
+  }
   
   .lucide-menu {
     stroke: var(--darkgray);
-    pointer-events: none;
   }
   
   .menu-text {
     font-size: 0.9rem;
     font-weight: 500;
-    pointer-events: none;
   }
   
   &:hover {
