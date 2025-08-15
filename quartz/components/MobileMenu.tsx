@@ -10,7 +10,6 @@ export default (() => {
       <button
         type="button"
         class={classNames(displayClass, "mobile-menu-toggle")}
-        aria-controls="tag-explorer-content"
         aria-expanded="false"
         aria-label="Open menu"
       >
@@ -19,6 +18,8 @@ export default (() => {
           width="24"
           height="24"
           viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -33,7 +34,7 @@ export default (() => {
     )
   }
 
+  MobileMenu.beforeDOMLoaded = script
   MobileMenu.css = style
-  MobileMenu.afterDOMLoaded = script
   return MobileMenu
 }) satisfies QuartzComponentConstructor

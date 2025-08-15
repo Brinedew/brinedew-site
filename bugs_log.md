@@ -228,3 +228,77 @@ wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.
 - ✅ Hover state turns blue like other site links
 - ✅ Proper visual spacing between links
 - ✅ Both TOC and TagExplorer maintain independent, clean styling
+
+---
+
+## NEW CRITICAL ISSUES - MOBILE HAMBURGER MENU
+
+### 12. Mobile Hamburger Menu - BROKEN ❌
+**Status**: 🔴 **CRITICAL** - Mobile navigation completely non-functional  
+**Issue**: Hamburger menu implementation has multiple critical failures
+**Files Affected**: 
+- `quartz/components/MobileMenu.tsx`
+- `quartz/components/scripts/mobileMenu.inline.ts` 
+- `quartz/components/styles/mobileMenu.scss`
+- `quartz.layout.ts`
+
+#### Sub-Issue 12A: Random Navigation Bug (CRITICAL)
+**Problem**: Hamburger menu click navigates to random page instead of opening menu
+**Reproduction Steps**:
+1. Go to https://brinedew.com/posts/ on mobile viewport (375px)
+2. Click hamburger "Menu" button  
+**Expected**: Menu overlay opens
+**Actual**: Browser navigates to `/posts/vibes-are-principal-components` (random page)
+**Impact**: Core functionality completely broken - menu unusable
+
+#### Sub-Issue 12B: JavaScript Loading Failure (CRITICAL) 
+**Problem**: Mobile menu JavaScript not loading/executing
+**Evidence**:
+- `toggleMobileMenu` function doesn't exist in browser
+- No click handlers attached to hamburger button
+- Console shows 404 error: `Failed to load resource: search.js`
+**Impact**: No hamburger menu functionality at all
+
+#### Sub-Issue 12C: ARIA-Controls ID Mismatch (HIGH)
+**Problem**: Accessibility completely broken due to hardcoded ARIA attributes
+**Details**:
+- Hamburger button: `aria-controls="tag-explorer-content"`
+- Actual TagExplorer content ID: `tag-explorer-18` (dynamically generated)
+**Impact**: Screen readers broken, JavaScript selectors fail
+
+#### Sub-Issue 12D: CSS Media Query Incorrect (MEDIUM)
+**Problem**: Hamburger menu shows at wrong viewport sizes
+**Reproduction**: Resize to 768px tablet view
+**Expected**: Hamburger hidden (desktop layout should be active)
+**Actual**: Hamburger still visible creating UI clutter
+**Impact**: Shows hamburger when not needed
+
+#### Sub-Issue 12E: Edge Browser Icon Rendering (MEDIUM)
+**Problem**: Hamburger icon doesn't render in Microsoft Edge browser
+**Reported By**: User observation during testing
+**Details**: SVG hamburger icon fails to display in Edge
+**Impact**: Visual UI degradation in Edge browser
+
+#### Sub-Issue 12F: Intermittent Menu Functionality (LOW)
+**Problem**: Menu occasionally works but behavior is inconsistent
+**Reported By**: User observation - "I do sometimes see a menu when I click it"
+**Details**: Suggests race condition or timing issue with JavaScript loading
+**Impact**: Unpredictable user experience
+
+**Root Cause Analysis**:
+1. **Primary**: JavaScript compilation/loading pipeline broken in Quartz build process
+2. **Secondary**: ARIA attributes hardcoded instead of dynamic ID matching
+3. **Tertiary**: No integration testing during development
+
+**Fixes Applied - August 15, 2025**:
+- ✅ Rewrote JavaScript to follow working darkmode pattern (beforeDOMLoaded + nav events)
+- ✅ Fixed ARIA-controls ID mismatch with dynamic ID detection
+- ✅ Fixed Edge browser SVG rendering with proper fill/stroke attributes
+- ❌ Not tested on live site - interrupted during build process
+- ❌ CSS media query and overlay functionality still needs verification
+
+**Files Changed**:
+- `quartz/components/MobileMenu.tsx` - switched to beforeDOMLoaded, removed hardcoded ARIA
+- `quartz/components/scripts/mobileMenu.inline.ts` - complete rewrite following Quartz patterns
+
+**Status**: 🟡 **PARTIALLY FIXED** - Major JavaScript and accessibility issues resolved but not deployed/tested

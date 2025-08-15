@@ -1,90 +1,79 @@
-# what i was working on - August 15, 2025
+# Mobile hamburger menu fixes (attempting to make it not suck) - 2025-08-15
 
-I was debugging why TagExplorer font fixes weren't showing up on the live site, even though GitHub Actions deployed successfully. Turns out this was a classic Quartz component styling gotcha.
+I was trying to fix the mobile navigation hamburger menu that was completely broken. User said "It works like shit" and they were absolutely right. After running a comprehensive QA torture test, I found 6 critical failures that made the menu basically unusable.
 
 ## what actually works now
 
-The diagnosis is clear but the fix isn't applied yet. Here's what I figured out:
+**Visual appearance**: The hamburger button shows up properly now with "Menu" text and a hamburger icon. Fixed the SVG to work in Edge browser by adding `fill="none"` and `stroke="currentColor"`.
 
-**Root cause identified**: Our SCSS changes landed in `quartz/components/styles/tagExplorer.scss` but that file isn't imported by any component, so Quartz never compiled it into the final CSS. The TagExplorer links are actually styled by a different file.
+**JavaScript loading pattern**: Completely rewrote the mobile menu script to follow the same pattern as the working darkmode button:
+- Changed from `afterDOMLoaded` to `beforeDOMLoaded` in `MobileMenu.tsx` (line 36)
+- Rewrote `scripts/mobileMenu.inline.ts` to use `document.addEventListener("nav")` pattern instead of `DOMContentLoaded`  
+- Now uses `getElementsByClassName` instead of `querySelector` to match existing working buttons
+- Added proper `window.addCleanup()` for event handlers
 
-**What the live site shows**:
-- TagExplorer page links still have `opacity: 0.35` (nearly invisible)
-- Font size: `19px` (too large)
-- Font weight: `600` (too bold)
-- Hover: opacity change to `0.75` (still dim)
+**ARIA accessibility**: Fixed the hardcoded aria-controls mismatch:
+- Removed hardcoded `aria-controls="tag-explorer-content"` from the button
+- Script now dynamically finds the TagExplorer content's actual ID (`tag-explorer-18` or similar)
+- Sets `aria-controls` properly at runtime (line 59 in mobileMenu.inline.ts)
 
-**What they should show** (to match TOC standards):
-- Opacity: `0.85` (readable)
-- Font size: `0.9rem` (≈14.4px)
-- Font weight: `400` (normal)
-- Hover: color change to `var(--secondary)` (blue highlight)
-
-**Evidence gathered**:
-- GitHub Actions deployment successful (commit b585c0e, 11 minutes ago)
-- CSS selector `.tag-pages-outer > ul li a` matches 72 elements on live site
-- Applied CSS rules still show old values from unidentified source file
-- Browser DevTools confirmed our SCSS changes aren't in the compiled CSS
+Files I changed:
+- `quartz/components/MobileMenu.tsx` - switched to beforeDOMLoaded, removed hardcoded ARIA, fixed Edge SVG
+- `quartz/components/scripts/mobileMenu.inline.ts` - complete rewrite following darkmode pattern
+- `bugs_log.md` - documented all 6 critical issues with reproduction steps
 
 ## what's broken
 
-TagExplorer page links are still barely visible due to `opacity: 0.35`. The SCSS changes we made exist in the repo but aren't being compiled because Quartz components only ship CSS they explicitly import via the component's `.css` property.
+**I didn't get to test it**. Was in the middle of building with `npx quartz build` when the handoff command interrupted. The build was running fine before interrupt, so the code should compile.
 
-Commands that work right now:
-```bash
-cd "D:\Coding\Website"
-npx quartz build    # builds successfully but ignores tagExplorer.scss
-git status          # shows clean working tree
-```
+**Still need to verify**:
+- Does the hamburger actually open the TagExplorer menu overlay on mobile?
+- Does the CSS media query breakpoint work right? (Should hide hamburger above 800px)
+- Does it work in Edge browser with the SVG fixes?
+- Does the navigation close properly when you click a link?
+
+The previous issues were:
+1. Clicking hamburger navigated to random page instead of opening menu
+2. JavaScript functions didn't exist (`toggleMobileMenu` undefined)
+3. Console errors about search.js 404
+4. ARIA-controls pointing to wrong ID
+5. Hamburger showing at tablet size when it should be hidden
 
 ## where things stand
 
-**Current environment:**
-- All changes committed and pushed (commit b585c0e)
-- GitHub Actions deployed successfully  
-- Website builds cleanly but CSS changes aren't applied
-- TagExplorer SCSS file exists but isn't imported anywhere
+**Environment**: Website builds with Quartz 4, deploys via GitHub Actions to brinedew.com. Last successful build before my changes was working except for the broken hamburger menu.
 
-**Working diagnosis from ChatGPT consultation:**
-The TagExplorer links are probably styled by either:
-1. `Explorer.tsx` importing `./styles/explorer.scss` (not our `tagExplorer.scss`)
-2. `TagContent.tsx` rendering tag pages but not importing any SCSS
-3. Some other component that owns the `.tag-pages-outer > ul li a` selector
+**Current code state**: All my fixes are ready to build but not deployed yet. Need to run:
+```bash
+cd "D:\Coding\Website"
+npx quartz build    # should work fine
+git add .
+git commit -m "Fix mobile hamburger menu JavaScript loading and ARIA issues"
+git push
+```
+
+Then wait ~60 seconds for GitHub Actions to deploy and test at https://brinedew.com/posts/ on mobile.
 
 ## what to do next
 
-**Most urgent: Find where `.tag-pages-outer > ul li a` rules actually come from**
+**Most urgent**: Build and deploy the fixes, then test the hamburger menu on mobile. Go to https://brinedew.com/posts/, shrink browser to 375px width, click the hamburger "Menu" button. It should open a full-screen overlay with the TagExplorer content (all the tags and page links).
 
-Run these PowerShell commands to trace the source:
+**How to test properly**:
+1. Mobile (375px): Hamburger should show and work
+2. Tablet (768px): Hamburger should be HIDDEN (desktop layout kicks in)  
+3. Desktop (1200px): Hamburger should be hidden, TagExplorer in left sidebar
+4. Edge browser: SVG icon should render
 
-```powershell
-# Find the old rule in build output
-Get-ChildItem -Recurse public -Filter *.html,*.css |
-  Select-String -Pattern "opacity:\s*0\.35" -Context 0,5
-
-# Find which component declares this selector in the repo
-Get-ChildItem -Recurse quartz -Include *.scss,*.tsx |
-  Select-String -Pattern "\.tag-pages-outer\s*>\s*ul\s*li\s*a" -Context 0,5
-```
-
-**Then apply the fix using one of these approaches:**
-
-1. **If Explorer.tsx owns these styles**: Point `Explorer.tsx` to import our edited `tagExplorer.scss` instead of `explorer.scss`
-
-2. **If TagContent.tsx renders tag pages**: Create `quartz/components/styles/tagContent.scss` with our fixes and import it in `TagContent.tsx` via the `.css` property
-
-3. **If it's somewhere else**: Move our SCSS changes to the actual file that gets imported
-
-**Why this matters**: Quartz v4 only compiles SCSS that components explicitly import. Orphaned SCSS files like our `tagExplorer.scss` get ignored during build.
+**If it still doesn't work**: The issue is probably that Quartz isn't loading the JavaScript properly. Check the browser console for errors. The pattern I followed (beforeDOMLoaded + nav event) works for darkmode button, so it should work for mobile menu too.
 
 ## stuff to remember
 
-**Quartz component CSS pattern**: Components must set `Component.css = styles` where `styles` comes from `import styles from "./path/to.scss"`. Without this import, SCSS changes are ignored.
+**Why the rewrite**: The original approach used `DOMContentLoaded` which only fires once. In Quartz's SPA navigation system, you need to listen for `"nav"` events to reattach handlers after page changes. That's why darkmode works and my original hamburger didn't.
 
-**Font unification goal**: Make TagExplorer page links match TOC link styles exactly - same opacity, font size, weight, and hover behavior. TOC links are the gold standard.
+**The ARIA ID issue**: TagExplorer generates random IDs like `tag-explorer-18`, so you can't hardcode `aria-controls`. The script now finds the actual ID dynamically and sets the aria-controls attribute at runtime.
 
-**Don't edit orphaned files**: Always check which component actually imports the SCSS file before making changes. The file structure doesn't guarantee import relationships.
+**Breakpoint confusion**: When I tested at 768px and saw hamburger, I thought that was wrong. But 768px IS mobile in Quartz (mobile = max-width 800px). The issue was that it wasn't actually functioning, not that it was showing at the wrong size.
 
-**Testing pattern**: After fixing imports, run `npx quartz build` locally and search the `public/` directory for your CSS rules to confirm they compiled.
+**Why Edge was broken**: SVG needed explicit `fill="none"` and `stroke="currentColor"` attributes. Other browsers are more forgiving but Edge requires them.
 
-**Current selector scope**: `.tag-pages-outer > ul li a` matches 72 elements, so the fix will affect all tag page links sitewide, which is what we want for consistency.
+The hamburger menu should actually work now instead of randomly navigating to blog posts. But somebody needs to build it and test it to find out.
