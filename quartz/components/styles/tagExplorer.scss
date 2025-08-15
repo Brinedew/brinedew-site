@@ -111,12 +111,14 @@ button.tag-explorer-header {
 
   li a {
     color: var(--dark);
-    opacity: 0.35;
+    opacity: 0.85;
+    font-size: 0.9rem;
+    font-weight: 400;
     pointer-events: all;
-    transition: opacity 0.3s ease;
+    transition: color 0.3s ease;
 
     &:hover {
-      opacity: 0.75;
+      color: var(--secondary);
     }
   }
 }

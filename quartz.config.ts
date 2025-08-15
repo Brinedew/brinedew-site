@@ -9,7 +9,23 @@ const config: QuartzConfig = {
     analytics: null,
     locale: "en-US",
     baseUrl: "brinedew.com",
-    ignorePatterns: ["private", "templates", ".obsidian", "*.tmp"],
+    ignorePatterns: [
+      // existing
+      "private",
+      "templates",
+      ".obsidian",
+      "*.tmp",
+      // added
+      ".obsidian/",
+      "Templates/",
+      "Snippets/",
+      "**/*.canvas",
+      "**/*.excalidraw",
+      "**/~$*",
+      "**/.DS_Store",
+      "**/Thumbs.db",
+      "Attachments/private-*",
+    ],
     defaultDateType: "created",
     theme: {
       cdnCaching: false,
@@ -25,6 +41,7 @@ const config: QuartzConfig = {
           secondary: "#0050a0",
           tertiary: "#84a59d",
           highlight: "rgba(143, 159, 169, 0.15)",
+          textHighlight: "rgba(255, 234, 0, 0.35)", // new
         },
         darkMode: {
           light: "#1a1a1a",
@@ -35,6 +52,7 @@ const config: QuartzConfig = {
           secondary: "#7aa2f7",
           tertiary: "#84a59d",
           highlight: "rgba(143, 159, 169, 0.15)",
+          textHighlight: "rgba(125, 211, 252, 0.25)", // new
         },
       },
     },
