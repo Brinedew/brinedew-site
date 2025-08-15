@@ -1,5 +1,5 @@
 # Technical Bugs Report
-*Updated: 2025-08-11*
+*Updated: 2025-08-15*
 
 ## Fixed Issues ✅
 
@@ -208,3 +208,22 @@ wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.
 - Debug PowerShell script execution when Sentinel triggers auto-start
 - Check execution policies, paths, and Flask startup logs
 - Test manual script execution to verify Flask can start
+
+---
+
+### 11. TagExplorer Font Styling - DIAGNOSED ⚠️
+**Status**: 🔴 **ROOT CAUSE IDENTIFIED** - commit `b585c0e`
+**Issue**: TagExplorer page links invisible due to `opacity: 0.35`, but font fixes deployed successfully yet not applied
+
+**Root Cause Identified**: SCSS changes landed in `quartz/components/styles/tagExplorer.scss` but that file isn't imported by any component. Quartz v4 only compiles SCSS explicitly imported via component `.css` property.
+
+**Evidence**:
+- GitHub Actions deployment successful (commit b585c0e)
+- CSS selector `.tag-pages-outer > ul li a` matches 72 elements on live site
+- Applied CSS rules still show old opacity/font values: `opacity: 0.35; transition: opacity 0.3s`
+- Browser DevTools confirmed SCSS changes aren't in compiled CSS
+
+**Next Steps**:
+1. Find which component actually owns `.tag-pages-outer > ul li a` selector
+2. Move SCSS changes to the correct imported file OR fix import chain
+3. Test that `npx quartz build` includes the new styles in `public/` output

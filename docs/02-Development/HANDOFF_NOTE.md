@@ -1,82 +1,90 @@
 # what i was working on - August 15, 2025
 
-I was fixing the TagExplorer component that replaced the old folder-based Explorer. The user complained it was "awful" and had 4 specific issues that needed fixing. Turns out my first attempt was a hack job that ignored Quartz's component patterns.
+I was debugging why TagExplorer font fixes weren't showing up on the live site, even though GitHub Actions deployed successfully. Turns out this was a classic Quartz component styling gotcha.
 
 ## what actually works now
 
-**TagExplorer component rewritten properly:**
-- ✅ Individual tags are collapsible with localStorage persistence
-- ✅ Proper Quartz component architecture with external files
-- ✅ Grid-based animations instead of CSS hacks
-- ✅ Clean TypeScript interaction logic
-- ✅ Proper SCSS styling following Explorer patterns
+The diagnosis is clear but the fix isn't applied yet. Here's what I figured out:
 
-**Files I changed:**
-- `quartz/components/TagExplorer.tsx` - Complete rewrite following Quartz patterns, removed inline CSS/JS
-- `quartz/components/styles/tagExplorer.scss` - New external SCSS file with grid-based collapsible behavior
-- `quartz/components/scripts/tagExplorer.inline.ts` - External TypeScript for clean interaction handling
-- `quartz/components/PageTags.tsx` - Dedicated component for page tags with section header
-- `quartz/components/index.ts` - Added PageTags export
-- `quartz.layout.ts` - Moved page tags to right sidebar above Backlinks
+**Root cause identified**: Our SCSS changes landed in `quartz/components/styles/tagExplorer.scss` but that file isn't imported by any component, so Quartz never compiled it into the final CSS. The TagExplorer links are actually styled by a different file.
 
-**Testing commands:**
-```bash
-cd "D:\Coding\Website"
-npm run build    # Builds successfully with new structure
-```
+**What the live site shows**:
+- TagExplorer page links still have `opacity: 0.35` (nearly invisible)
+- Font size: `19px` (too large)
+- Font weight: `600` (too bold)
+- Hover: opacity change to `0.75` (still dim)
 
-**What works:**
-- Tags expand/collapse when clicking the arrow icon
-- State persists across page visits via localStorage
-- Proper grid animations like Explorer component
-- Clean separation of concerns (CSS, JS, JSX in separate files)
+**What they should show** (to match TOC standards):
+- Opacity: `0.85` (readable)
+- Font size: `0.9rem` (≈14.4px)
+- Font weight: `400` (normal)
+- Hover: color change to `var(--secondary)` (blue highlight)
+
+**Evidence gathered**:
+- GitHub Actions deployment successful (commit b585c0e, 11 minutes ago)
+- CSS selector `.tag-pages-outer > ul li a` matches 72 elements on live site
+- Applied CSS rules still show old values from unidentified source file
+- Browser DevTools confirmed our SCSS changes aren't in the compiled CSS
 
 ## what's broken
 
-The user identified 4 remaining issues:
+TagExplorer page links are still barely visible due to `opacity: 0.35`. The SCSS changes we made exist in the repo but aren't being compiled because Quartz components only ship CSS they explicitly import via the component's `.css` property.
 
-1. **"Tags" header button not collapsible** - Clicking the main "Tags" label doesn't collapse the whole component like TOC does
-2. **Font styling inconsistencies** - Page links in TagExplorer still don't match TOC styling (highlight color, bolding, font size)  
-3. **Missing page tags sidebar** - The PageTags component isn't showing up in the right sidebar above Backlinks
-4. **Horizontal scrollbar flicker** - During collapse animation, a horizontal scrollbar appears briefly
+Commands that work right now:
+```bash
+cd "D:\Coding\Website"
+npx quartz build    # builds successfully but ignores tagExplorer.scss
+git status          # shows clean working tree
+```
 
 ## where things stand
 
 **Current environment:**
-- Website builds successfully with new TagExplorer structure
-- All changes committed and pushed to live site (commit af40fa7)
-- GitHub Actions should have deployed the changes
-- TagExplorer uses proper Quartz patterns now instead of inline hacks
+- All changes committed and pushed (commit b585c0e)
+- GitHub Actions deployed successfully  
+- Website builds cleanly but CSS changes aren't applied
+- TagExplorer SCSS file exists but isn't imported anywhere
 
-**Working commands:**
-```bash
-cd "D:\Coding\Website" 
-npm run build        # Builds site with new TagExplorer
-git status          # Shows clean working tree
-```
+**Working diagnosis from ChatGPT consultation:**
+The TagExplorer links are probably styled by either:
+1. `Explorer.tsx` importing `./styles/explorer.scss` (not our `tagExplorer.scss`)
+2. `TagContent.tsx` rendering tag pages but not importing any SCSS
+3. Some other component that owns the `.tag-pages-outer > ul li a` selector
 
 ## what to do next
 
-**Most urgent: Fix the 4 remaining issues**
+**Most urgent: Find where `.tag-pages-outer > ul li a` rules actually come from**
 
-1. **Header collapsibility** - The main "Tags" button needs a click handler to collapse the entire component, similar to how TOC works. Check how `quartz/components/TableOfContents.tsx` handles overall component collapsing.
+Run these PowerShell commands to trace the source:
 
-2. **Font consistency** - Compare the actual computed styles between TagExplorer links and TOC links. The issue is likely in `quartz/components/styles/tagExplorer.scss` - the page links need to match TOC opacity, font-weight, and hover states exactly.
+```powershell
+# Find the old rule in build output
+Get-ChildItem -Recurse public -Filter *.html,*.css |
+  Select-String -Pattern "opacity:\s*0\.35" -Context 0,5
 
-3. **Missing PageTags** - The PageTags component in the right sidebar isn't rendering. Check if the conditional rendering logic is working and if the component is getting the right props.
+# Find which component declares this selector in the repo
+Get-ChildItem -Recurse quartz -Include *.scss,*.tsx |
+  Select-String -Pattern "\.tag-pages-outer\s*>\s*ul\s*li\s*a" -Context 0,5
+```
 
-4. **Scrollbar flicker** - The horizontal scrollbar during animation suggests the grid transition is causing content overflow. Likely needs `overflow-x: hidden` during transitions in the SCSS.
+**Then apply the fix using one of these approaches:**
 
-**How to debug:** Use browser dev tools to compare the computed styles between TagExplorer and TOC elements. The font inconsistencies should be visible in the Elements panel.
+1. **If Explorer.tsx owns these styles**: Point `Explorer.tsx` to import our edited `tagExplorer.scss` instead of `explorer.scss`
+
+2. **If TagContent.tsx renders tag pages**: Create `quartz/components/styles/tagContent.scss` with our fixes and import it in `TagContent.tsx` via the `.css` property
+
+3. **If it's somewhere else**: Move our SCSS changes to the actual file that gets imported
+
+**Why this matters**: Quartz v4 only compiles SCSS that components explicitly import. Orphaned SCSS files like our `tagExplorer.scss` get ignored during build.
 
 ## stuff to remember
 
-**Why I rewrote it:** The original TagExplorer was trying to reimplement everything inline instead of following Quartz's established component patterns. The Explorer component shows the right way - external SCSS, external TypeScript, clean separation of concerns.
+**Quartz component CSS pattern**: Components must set `Component.css = styles` where `styles` comes from `import styles from "./path/to.scss"`. Without this import, SCSS changes are ignored.
 
-**Component architecture:** Quartz components use external files for styling and scripts, not inline CSS/JS. Always check existing components like Explorer and TOC for the right patterns.
+**Font unification goal**: Make TagExplorer page links match TOC link styles exactly - same opacity, font size, weight, and hover behavior. TOC links are the gold standard.
 
-**Grid animations:** Quartz uses CSS Grid with `grid-template-rows: 0fr` to `1fr` for smooth expand/collapse, not hacky max-height transitions.
+**Don't edit orphaned files**: Always check which component actually imports the SCSS file before making changes. The file structure doesn't guarantee import relationships.
 
-**The PageTags issue:** I created a separate PageTags component to show tags in the sidebar, but it's not rendering. The layout configuration might be wrong, or it might need different conditional logic.
+**Testing pattern**: After fixing imports, run `npx quartz build` locally and search the `public/` directory for your CSS rules to confirm they compiled.
 
-**Font matching:** The user specifically wants TagExplorer links to match TOC links exactly. This means opacity, font-weight, hover states, and colors need to be identical - not just similar.
+**Current selector scope**: `.tag-pages-outer > ul li a` matches 72 elements, so the fix will affect all tag page links sitewide, which is what we want for consistency.
