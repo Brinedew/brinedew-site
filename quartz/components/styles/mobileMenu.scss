@@ -13,11 +13,13 @@
   
   .lucide-menu {
     stroke: var(--darkgray);
+    pointer-events: none;
   }
   
   .menu-text {
     font-size: 0.9rem;
     font-weight: 500;
+    pointer-events: none;
   }
   
   &:hover {
