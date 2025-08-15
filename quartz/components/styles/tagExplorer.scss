@@ -109,16 +109,21 @@ button.tag-explorer-header {
   padding-left: 0.8rem;
   border-left: 1px solid var(--lightgray);
 
-  li a {
-    color: var(--dark);
-    opacity: 0.85;
-    font-size: 0.9rem;
-    font-weight: 400;
-    pointer-events: all;
-    transition: color 0.3s ease;
+  li {
+    margin-bottom: 0.2rem;
+    
+    a {
+      color: var(--dark);
+      opacity: 0.85;
+      font-size: 0.9rem;
+      font-weight: 400;
+      pointer-events: all;
+      transition: color 0.3s ease;
+      line-height: 1.4;
 
-    &:hover {
-      color: var(--tertiary);
+      &:hover {
+        color: var(--tertiary);
+      }
     }
   }
 }
