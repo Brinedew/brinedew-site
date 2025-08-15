@@ -54,7 +54,7 @@ button.toc-header {
       color: var(--dark);
       opacity: 0.85;
       transition: color 0.3s ease;
-      line-height: 1.22; /* Creates 0.2rem space within multi-line links (0.4÷2) */
+      line-height: 0.8; /* Much tighter line spacing within links */
       
       &:hover {
         opacity: 1;
