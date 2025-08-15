@@ -47,14 +47,19 @@ button.toc-header {
   overscroll-behavior: contain;
   list-style: none;
 
-  & > li > a {
-    color: var(--dark);
-    opacity: 0.85;
-    transition: color 0.3s ease;
+  & > li {
+    margin-bottom: 0.4rem; /* 0.4rem space between separate TOC links */
     
-    &:hover {
-      opacity: 1;
-      color: var(--secondary);
+    > a {
+      color: var(--dark);
+      opacity: 0.85;
+      transition: color 0.3s ease;
+      line-height: 1.22; /* Creates 0.2rem space within multi-line links (0.4÷2) */
+      
+      &:hover {
+        opacity: 1;
+        color: var(--secondary);
+      }
     }
   }
 
