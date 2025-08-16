@@ -142,6 +142,7 @@ button.tag-explorer-header {
 
   li {
     margin-bottom: 0.4rem; /* 0.4rem space between separate links */
+    line-height: 0.1; /* Test extreme line spacing at parent level */
     
     a {
       color: var(--dark);
@@ -150,7 +151,6 @@ button.tag-explorer-header {
       font-weight: 400;
       pointer-events: all;
       transition: color 0.3s ease;
-      line-height: 0.1; /* Test extreme line spacing within links */
 
       &:hover {
         color: var(--tertiary);
