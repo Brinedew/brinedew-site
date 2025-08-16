@@ -142,7 +142,7 @@ button.tag-explorer-header {
 
   li {
     margin-bottom: 1.6rem; /* More space between separate links */
-    line-height: 0.5; /* Tight but readable line spacing for wrapped text */
+    line-height: 1; /* Tight but readable line spacing for wrapped text */
     
     a {
       color: var(--dark);
