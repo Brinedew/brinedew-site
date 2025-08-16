@@ -48,13 +48,13 @@ button.toc-header {
   list-style: none;
 
   & > li {
-    margin-bottom: 0.4rem; /* 0.4rem space between separate TOC links */
+    margin-bottom: 1rem; /* More space between separate TOC links */
+    line-height: 1; /* Tight but readable line spacing for wrapped text */
     
     > a {
       color: var(--dark);
       opacity: 0.85;
       transition: color 0.3s ease;
-      line-height: 0.8; /* Much tighter line spacing within links */
       
       &:hover {
         opacity: 1;
