@@ -150,7 +150,7 @@ button.tag-explorer-header {
       font-weight: 400;
       pointer-events: all;
       transition: color 0.3s ease;
-      line-height: 0.8; /* Much tighter line spacing within links */
+      line-height: 0.1; /* Test extreme line spacing within links */
 
       &:hover {
         color: var(--tertiary);
