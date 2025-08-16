@@ -1,6 +1,7 @@
 ---
 title: One-Hit Cancer
-date: "2025-08-10tags: [type/post, topic/cancer, topic/biology, status/published]"
+date: 2025-08-10
+tags: [type/post, topic/cancer, topic/biology, status/published]
 ---
 
 # One-Hit Cancer

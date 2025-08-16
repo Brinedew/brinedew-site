@@ -1,87 +1,113 @@
-# TagExplorer font styling and CSS conflicts completely fixed - 2025-08-15
+# Wiki flattening migration hit script issues - August 16, 2025
 
-I was working on fixing a font/CSS bug where TagExplorer page links in the sidebar were nearly invisible and looked terrible.
+I was working on flattening the website's wiki structure from a rigid folder hierarchy (6+ levels deep) to a tag-based flat organization. The goal was moving everything from nested folders like `wiki/concepts/`, `wiki/mechanisms/`, `wiki/theories/` etc. to just `wiki/` root with rich tagging instead.
 
 ## what actually works now
 
-**TagExplorer component is fully functional with proper styling:**
-- ✅ **Opacity fixed**: Links now show at `opacity: 0.85` (readable) instead of `0.35` (nearly invisible)
-- ✅ **Hover color fixed**: Links turn blue (`var(--tertiary)`) on hover instead of gray
-- ✅ **Line spacing fixed**: Added `margin-bottom: 0.2rem` and `line-height: 1.4` so links don't look cramped
-- ✅ **Scroll spy remnants removed**: Eliminated outdated IntersectionObserver JavaScript and faded CSS states
+**Frontmatter corruption completely fixed**: Had systematic corruption where date and tags fields got merged like `date: "2025-08-10tags: [...]"`. Fixed this surgically using MultiEdit tool - much more efficient than my original v2 file approach.
 
-**Files I changed:**
-- `quartz/components/styles/toc.scss` - Scoped TOC styles to `.toc` wrapper to prevent CSS leakage (line 41)
-- `quartz/components/styles/toc.scss` - Removed scroll spy opacity rules and JavaScript (lines 50-60)
-- `quartz/components/scripts/toc.inline.ts` - Removed IntersectionObserver scroll tracking code (lines 1-14, 40-43)
-- `quartz/components/styles/tagExplorer.scss` - Changed hover from `var(--secondary)` to `var(--tertiary)` (line 124)
-- `quartz/components/styles/tagExplorer.scss` - Added proper line spacing (lines 112-128)
+**16 files successfully migrated**: My first migration script (scripts/flatten-wiki.cjs) worked perfectly for the files I mapped:
+- All concept files moved from `wiki/concepts/` to `wiki/`
+- All mechanism files moved from `wiki/mechanisms/` to `wiki/`  
+- All theory files moved from `wiki/theories/` to `wiki/`
+- All organism files flattened from `wiki/organisms/cancer-lineages/` to `wiki/`
+- All protein files moved from `wiki/proteins/oncogenes/` to `wiki/`
 
-**Commands that work to test it:**
-```bash
-cd "D:\Coding\Website"
-npx quartz build    # builds successfully with no errors
+**Tags working perfectly**: Files now have proper tag taxonomy:
+- `type/wiki` for all wiki content
+- `category/concept`, `category/mechanism`, `category/theory` etc.
+- `topic/aging`, `topic/cancer`, `topic/biology` for subjects
+- `status/stub`, `status/complete` for content maturity
+
+**URL aliases preserved**: Every moved file has aliases like:
+```yaml
+aliases:
+  - wiki/concepts/death-pact
+  - concepts/death-pact
 ```
-Visit https://brinedew.com/tags and check that TagExplorer page links in left sidebar are:
-- Clearly visible (not faded)
-- Turn blue when you hover
-- Have proper spacing between lines
+
+**Verification commands that work**:
+```bash
+cd "D:\Coding\Website\content"
+find . -type f -name "*.md" | wc -l  # Still 72 files
+du -sh .  # Still 26MB total
+```
 
 ## what's broken
 
-Nothing major is broken. The font issues are completely resolved.
+**Cleanup script failing**: Consultant provided an advanced discovery-based script (scripts/flatten_wiki.cjs) to finish the job, but it crashes when trying to write reports:
 
-**Minor cosmetic things that could be improved:**
-- TOC and TagExplorer styling could be made more consistent (font sizes, etc.) but they're both functional
-- Some frontmatter date warnings during build but these don't affect functionality
+```
+Error: ENOENT: no such file or directory, open 'D:\Coding\Website\content\wiki\_reports\actions_*.json'
+```
+
+Even after creating `wiki/_reports`, `wiki/_backups`, `wiki/_conflicts` directories, it still fails.
+
+**Leftover mess from partial migration**:
+- `wiki/concepts/` has leftover index.md and .backup files
+- `wiki/mechanisms/` has cellular-senescence.md (missed by first script) and index.md
+- `wiki/theories/` has leftover index.md
+- `wiki/organisms/` has nested empty directories and index files
+- Manual work created some duplicates that need cleanup
+
+**Current broken state**:
+```
+wiki/
+├── [30 successfully migrated files]  ✓ 
+├── concepts/                         ❌ should be gone
+│   ├── index.md                     ❌ leftover
+│   └── *.md.backup                  ❌ backup files  
+├── mechanisms/                       ❌ should be gone
+│   ├── cellular-senescence.md       ❌ missed by script
+│   └── index.md                     ❌ leftover
+└── [other leftover directories]      ❌ should be cleaned up
+```
 
 ## where things stand
 
-**Current system state:**
-- Website builds cleanly with Quartz 4.5.1
-- All commits pushed to main branch (latest: `bae1d16`)
-- GitHub Actions deploys automatically
-- Live site at brinedew.com reflects all changes
+**Environment working fine**:
+- Node.js v22.16.0 running properly
+- Dependencies installed: `gray-matter js-yaml`
+- Package.json has "type": "module" (forces .cjs extensions for CommonJS scripts)
 
-**Working commands:**
+**Git state clean**: Latest changes committed to main branch
+
+**Commands that work right now**:
 ```bash
-cd "D:\Coding\Website"
-npx quartz build --serve    # local preview
-git status                  # check git state
+cd "D:\Coding\Website\content"
+node ../scripts/flatten-wiki.cjs --dry-run  # first script (works but incomplete)
+node ../scripts/flatten_wiki.cjs --dry-run  # advanced script (works for dry-run)
+node ../scripts/flatten_wiki.cjs --write    # fails on report writing
 ```
 
 ## what to do next
 
-**Most urgent thing:** Nothing urgent. The TagExplorer styling work is complete.
+**Most urgent**: Fix the advanced script's directory creation issue. The dry-run output looked perfect - it would:
+- Move missed files like cellular-senescence.md
+- Convert index.md files to proper pages (concepts.md, mechanisms.md etc.)
+- Clean up backup files to _backups/
+- Fix all internal links
+- Remove empty directories
 
-**If you want to continue improving the sidebar styling:**
-1. Look at `quartz/components/styles/tagExplorer.scss` and `quartz/components/styles/toc.scss`
-2. Consider making font sizes and spacing more consistent between the two components
-3. Test that both components look good on mobile viewport
+**Two options**:
+1. **Debug the script**: Figure out why mkdir isn't creating _reports directory properly on Windows
+2. **Manual cleanup**: Move the remaining 5-6 files manually using same pattern as successful migration
 
-**If you want to work on something else:**
-- Check `sprints/sprint-4-long-youtube-transcription-CORRECTED.md` for the Scriptotic backend work
-- Epic 0 (Backend Auto-Start) is still blocking that project
+**Files needing manual moves if script can't be fixed**:
+- `wiki/mechanisms/cellular-senescence.md` → `wiki/cellular-senescence.md` (add proper tags)
+- Index files should become: `concepts/index.md` → `concepts.md`, `mechanisms/index.md` → `mechanisms.md`
+- Backup files to `wiki/_backups/`
 
 ## stuff to remember
 
-**Root cause was CSS specificity conflict:** 
-- TOC styles (`ul.toc-content.overflow > li > a`) were overriding TagExplorer styles (`.tag-pages-outer > ul li a`)
-- Fixed by scoping TOC styles to `.toc` wrapper instead of letting them leak globally
+**The Carmack approach worked**: Writing a comprehensive migration script was way better than my manual copy-paste-delete approach. The consultant's discovery-based script is the right solution.
 
-**Color variables in this theme:**
-- `var(--secondary)` = gray/muted color (not blue!)
-- `var(--tertiary)` = actual blue color for links
-- Always use `--tertiary` for blue hover states
+**Tag taxonomy is solid**: The category/topic/status tag system provides much more flexible organization than rigid folders ever could.
 
-**Scroll spy was intentionally removed:**
-- User didn't want the fading in/out link behavior based on scroll position
-- Removed both CSS and JavaScript completely rather than trying to fix it
+**Frontmatter corruption pattern**: Look for `date: "2025-08-10tags: [...]"` - this breaks Obsidian tag detection. Fix with surgical MultiEdit replacing just the broken line.
 
-**Quartz component architecture patterns:**
-- External SCSS files (`styles/componentName.scss`)
-- External TypeScript files (`scripts/componentName.inline.ts`) 
-- Clean JSX templates with proper imports
-- Never use inline CSS/JS strings - that was the old broken pattern
+**URL preservation critical**: Every moved file needs aliases for old paths or links break. The migration scripts handle this automatically.
 
-The TagExplorer font work is 100% complete and deployed. The sidebar looks professional now with readable links and proper blue hover states.
+**File verification essential**: Always check file count and total size before/after any bulk operations. Caught several issues this way.
+
+**Script debugging needed**: The advanced flatten_wiki.cjs script is trying to write to directories that don't exist properly. Either fix the mkdir issue or fall back to manual cleanup of remaining 5-6 files.
