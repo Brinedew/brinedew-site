@@ -141,8 +141,8 @@ button.tag-explorer-header {
   border-left: 1px solid var(--lightgray);
 
   li {
-    margin-bottom: 0.4rem; /* 0.4rem space between separate links */
-    line-height: 0.1; /* Test extreme line spacing at parent level */
+    margin-bottom: 0.6rem; /* More space between separate links */
+    line-height: 0.5; /* Tight but readable line spacing for wrapped text */
     
     a {
       color: var(--dark);
