@@ -249,6 +249,16 @@ header {
   view-transition-name: header;
 }
 
+/* Keep sidebar elements stable during theme transitions */
+.explorer, .toc, .tag-explorer {
+  view-transition-name: none;
+}
+
+/* Prevent any transitions on sidebar text during theme changes */
+.explorer *, .toc *, .tag-explorer * {
+  transition: none !important;
+}
+
 /* Lazy loading for all images */
 img {
   loading: lazy;
