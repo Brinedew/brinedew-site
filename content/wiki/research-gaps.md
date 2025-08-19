@@ -32,9 +32,9 @@ If medusae routinely senesce (or die for ecological reasons) within weeks to a f
 At least one dataset (N ≥ 100) showing a **survival curve** with **median and 95% CI** for **medusa-only** longevity, under clearly stated conditions and with reversal-censoring.
 
 ### References
-1. Martell, L., Piraino, S., Boero, F., Gravili, C., & Kubota, S. (2016). *Life cycle, morphology and medusa ontogenesis of* **Turritopsis dohrnii**. **Italian Journal of Zoology**. https://doi.org/10.1080/11250003.2016.1203034  
-2. Piraino, S., Boero, F., Aeschbach, B., & Schmid, V. (1996). *Reversing the life cycle: Medusae transforming into polyps and cell transdifferentiation in* **Turritopsis nutricula**. **Biological Bulletin, 190**(3), 302–312. https://doi.org/10.2307/1543022  
-3. Pascual-Torner, M., et al. (2022). *Comparative genomics of mortal and immortal cnidarians unveils novel keys behind rejuvenation*. **PNAS, 119**(36), e2118763119. https://doi.org/10.1073/pnas.2118763119  
-4. Matsumoto, Y., Piraino, S., & Miglietta, M. P. (2019). *Transcriptome characterization of reverse development in* **Turritopsis dohrnii**. **G3: Genes|Genomes|Genetics, 9**(12), 4127–4143. https://doi.org/10.1534/g3.119.400617  
-5. Velasco-Muñoz, V., et al. (2024/2025). *Testing* **Turritopsis dohrnii**’s *life-cycle reversal in response to multiple stressors*. **Invertebrate Biology**. https://doi.org/10.1111/ivb.12347 (publisher page: BioOne)  
-6. Roosen-Runge, E. C. (1970). *Life cycle of the hydromedusa* **Phialidium**. **Transactions of the American Microscopical Society, 89**(3), 413–424. (PMID: 29332479)
+1. Martell, L., Piraino, S., Boero, F., Gravili, C., & Kubota, S. (2016). *Life cycle, morphology and medusa ontogenesis of* **Turritopsis dohrnii**. https://doi.org/10.1080/11250003.2016.1203034  
+2. Piraino, S., Boero, F., Aeschbach, B., & Schmid, V. (1996). *Reversing the life cycle: Medusae transforming into polyps and cell transdifferentiation in* **Turritopsis nutricula**.  https://doi.org/10.2307/1543022  
+3. Pascual-Torner, M., et al. (2022). *Comparative genomics of mortal and immortal cnidarians unveils novel keys behind rejuvenation*. https://doi.org/10.1073/pnas.2118763119  
+4. Matsumoto, Y., Piraino, S., & Miglietta, M. P. (2019). *Transcriptome characterization of reverse development in* **Turritopsis dohrnii**.  https://doi.org/10.1534/g3.119.400487
+5. Juliana Giraldo-Meneses and Maria Pia Miglietta (2025). *Testing* **Turritopsis dohrnii**’s *life-cycle reversal in response to multiple stressors*.  https://doi.org/10.71161/ivb.144.1.2024.00023
+6. Roosen-Runge, E. C. (1970). *Life cycle of the hydromedusa* **Phialidium**. https://doi.org/10.2307/1540137
