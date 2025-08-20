@@ -5,6 +5,8 @@ date: 2025-08-10
 
 # The Price of Not Being Cancer
 
+The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness Book of World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
+
 Individual cell lines can be immortal. The Canine Transmissible Venereal Tumor (CTVT) has been making identical copies of itself for 11,000 years across the globe, transmitted between dogs during mating. Tasmanian Devil Facial Tumor Disease (DFTD) has spread between devils for decades, far outliving the 7-year lifespan of its hosts. In labs, immortalizing normal human cells often requires tweaking just a few pathways: p53, Rb, telomerase.
 
 Multicellular organisms are not immortal. The cells that make up a dog's body age and die within decades while the CTVT lineage thrives for millennia. 
@@ -19,6 +21,8 @@ If evolution doesn't care enough to make bodies immortal, why did it bother to d
 
 Let's try to find satisfying answers beyond just "cancer cells are just broken and shouldn't be compared to healthy cells" and see if we can figure out what is it about cellular immortality that makes it hard to make these cells stick together.
 
+(And yes, fair warning: I'm about to anthropomorphize evolution more than a Pixar movie. If that bothers you, mentally replace every "evolution decided" with "selective pressures resulted in." We both know what's really happening.)
+
 ## Why large animals should be extinct from cancer
 
 Every time a cell divides, DNA replication introduces random errors. Most are harmless, but occasionally you get a mutation that gives a cell a growth advantage - faster division, resistance to suicide commands, ability to grow without external permission signals. That cell outcompetes its neighbors and expands into a clone. Within that larger clone, more mutations occur, some of which provide additional advantages. After accumulating several key mutations, you get cancer.
@@ -31,7 +35,23 @@ But they're not extinct. Mice get cancer at ~40% lifetime rates. Humans get canc
 
 This pattern - larger animals having lower cancer rates despite more cells - shows that larger species evolved enhanced anti-cancer mechanisms that scale with body size. Within each species, older/larger individuals still get more cancer as expected. But between species, the scaling relationship breaks down because evolution upgraded the surveillance systems.
 
+Concrete examples make this vivid: elephants carry ~20 copies of the tumor suppressor gene TP53 (we have ~1), and their cells trigger apoptosis at much higher rates after DNA damage — a zero‑tolerance policy for sketchy genomes. Bowhead whales (200+ year lifespans) show signatures of selection in DNA repair and cell‑cycle control genes; comparative genomics points to reinforced maintenance rather than magical cancer resistance.
+
 This observation shows that more stringent cellular control is possible, but implies it comes at increasing cost.
+
+## Evolved to stop evolving
+
+Let's talk about what cancer cells actually do:
+
+- Multiply blazingly fast
+- Don't die when told
+- Hog resources
+- Bully nearby cells
+- Evolve to get better at all the above
+
+Sorry, did I say "cancer cells"? My bad, "single cells". It's what living unicellular organisms do, and did ever since the Late Heavy Bombardment.
+
+For billions of years, this was life: unicellular organisms compete; mutations fuel adaptation; lineages rise and fall. That's the baseline. Multicellularity is a hard‑won, highly regulated truce imposed on that Malthusian free‑for‑all. When a cell "becomes cancerous," it systematically dismantles that truce and reverts to the ancient playbook of unicellular competition.
 
 ## The coordination framework
 
@@ -40,6 +60,8 @@ This pattern points to a deeper principle: multicellular life is fundamentally a
 For four billion years, cellular success meant rapid replication, resource consumption, resistance to death, invasion of new territories, and evolution to get better at all of the above. Cancer cells exhibit this exact repertoire - the only difference is they're doing it inside a multicellular body instead of a primordial soup.
 
 Every cell in your body retains the genetic machinery for unlimited replication and competitive behavior. These capabilities aren't aberrations - they're the evolutionary baseline that must be actively suppressed.
+
+Philosopher Peter Godfrey‑Smith calls this de‑Darwinization: lower‑level units (cells) lose their Darwinian autonomy when they become parts of a higher‑level individual. In organisms, cell fitness is subordinated to organismal fitness; evolution literally builds mechanisms that suppress selection within you.
 
 This creates what economists call a **Principal-Agent Problem**: the organism (principal) must control trillions of cells (agents) that are constantly mutating back toward their ancestral competitive behavior. Each somatic mutation is a potential step toward cellular defection. The organism must detect and eliminate these defectors while maintaining the cellular functions it needs to survive.
 
@@ -411,5 +433,3 @@ In the following years, p53 protein (and its gene TP53) was recognized as the mo
 Similarly, in the early 1990s, Carol Greider and colleagues discovered that _telomere shortening_ accompanies cell division in human cells, ultimately causing _replicative senescence_ - the very phenomenon Hayflick discovered 30 years before. This shortening could be reversed with the protein _telomerase_. This was hailed as a mechanism by which evolution has limited somatic cell lineage lifespan.
 
 All these findings – limited cell divisions, immune policing of tumors, dominance of normal growth regulators, cell competition – converged on a common theme: cancer is a coordination problem.
-
-
