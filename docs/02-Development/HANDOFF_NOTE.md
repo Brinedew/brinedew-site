@@ -1,67 +1,92 @@
-# fixed the tagexplorer spacing issue - august 16, 2025
+# protein wiki deployment and site navigation issues - aug 21, 2025
 
-Long filenames in the left sidebar were cramped together when they wrapped to multiple lines. Specifically, those excalidraw files like "vibes-are-principal-components-2025-07-28-12.39.55.excalidraw" had way too little space between the wrapped lines within each link.
+## what i was actually working on
+
+Had a concatenated protein glossary file with 46 protein entries that needed to be split into individual wiki pages. Also discovered and partially fixed the alex-content-critic agent which had broken WSL paths and wasn't saving output properly.
+
+The real problem: Created 46 high-quality protein wiki pages but they're practically invisible to users because the site has terrible information architecture for wiki discovery.
 
 ## what actually works now
 
-Fixed the TagExplorer component spacing by controlling line-height at the parent level instead of the child level.
+**Protein wiki pages are live and functional:**
+- Split `protein_glossary_multicellularity_enforcement_stack_2025_08_21.md` into 46 individual files
+- All pages deployed successfully to brinedew.com/wiki/[protein-name]
+- Pages show up in search (tested with "p53" search)
+- Tags system works - all 46 pages tagged as "glossary" and "protein"
+- Consistent formatting: "What it is", "Why it matters here", "Notes" sections
 
-**Key insight discovered**: When text wraps within an inline element (like `<a>`) that's inside a block container (like `<li>`), the block container's line-height controls the spacing between wrapped lines, not the inline element's line-height.
+Files created in `content/wiki/`:
+- `p53-tp53.md`, `mdm2.md`, `rb-rb1.md`, `atm.md`, `atr.md`, etc.
+- 46 total protein pages covering cell cycle, apoptosis, growth factors, immune checkpoints
 
-Files I changed:
-- `quartz/components/styles/tagExplorer.scss` lines 144-145:
-  - `margin-bottom: 1rem` (space between separate links)  
-  - `line-height: 1` (controls wrapped line spacing within individual links)
+**Alex-content-critic agent fixed:**
+- Changed WSL path `/mnt/d/Coding` to Windows path `"D:\Coding"` in `.claude/agents/alex-content-critic.md`
+- Added output redirection to save reviews as timestamped files in `gemini-output/`
+- Added directory creation: `mkdir -p "gemini-output"`
+- Fixed Unicode handling for proteins like β-catenin
+- Updated personality to appreciate Yudkowsky/SSC style writing (not just hate everything)
 
-What broke before that works now:
-- Long filenames like excalidraw files now have tight but readable line spacing when they wrap
-- Each separate link has proper spacing from the next link
-- No more cramped text where wrapped lines were squished together
-
-Commands to test it:
-1. Go to https://brinedew.com/posts/
-2. Look at left sidebar TagExplorer under "excalidraw" tag
-3. Those long filenames should have tight line spacing within each link but good separation between different links
+Working commands:
+```bash
+cd "D:\Coding\Website" && git status  # shows clean state
+```
 
 ## what's broken
 
-Nothing major broken from this change. The fix is working as intended.
+**Major discoverability problem:**
+- Protein wiki pages are orphaned from main site navigation
+- Homepage has no clear path to wiki content
+- Users can only find proteins through specific searches or by accident
+- 46 high-quality pages are essentially invisible to casual browsing
 
-**Remaining work**: Need to apply the same spacing fix to the right sidebar (TOC component). The user specifically requested "do the same for the right sidebar" before triggering handoff.
+**What I tested with Playwright on brinedew.com:**
+- Search for "p53" works perfectly - shows both old and new p53 pages
+- Direct navigation to protein pages works (e.g., `/wiki/mdm2`)
+- But normal user flow from homepage → no obvious way to discover wiki section
+- Tags sidebar only shows after you're already on a protein page (catch-22)
 
 ## where things stand
 
-Environment is working:
-- Website deploys automatically via GitHub Actions in ~60 seconds
-- Quartz 4 build system is functional: `npx quartz build` works locally
-- No need to build locally before committing - GitHub Actions handles the build
+**Environment:**
+- All changes committed and pushed to GitHub (commit 5877d39: "Add protein glossary wiki pages")
+- GitHub Actions deployment successful - pages are live
+- VS Code integration working properly (alex-content-critic needed restart to fix hanging)
+- Playwright browser automation working for testing
 
-Current git state: All changes committed and pushed. Latest commits:
-- `8dbc762` - "Fix tag link spacing - increase margin-bottom to 11.6rem"  
-- `f960b0f` - "Fix line spacing in tag pages"
-
-User adjusted values to final: `margin-bottom: 1rem` and `line-height: 1`
+**Current file structure:**
+- 46 new files in `content/wiki/` with protein-prefixed names
+- Original concatenated file removed
+- No changes to site navigation or homepage
 
 ## what to do next
 
-**Most urgent**: Apply the same spacing fix to the TOC (Table of Contents) component in the right sidebar.
+**Most urgent: Fix wiki discoverability**
 
-1. Open `quartz/components/styles/toc.scss`
-2. Find the list item styling (probably around `ul li` or similar)
-3. Add `line-height: 1` to control wrapped line spacing
-4. Add `margin-bottom: 1rem` to control spacing between separate links
-5. Test on a page that has a TOC (like the longer blog posts)
+1. **Create wiki browse page** - `content/wiki/proteins.md` or update `content/wiki/index.md` to include:
+   - Categorized protein list (cell cycle, apoptosis, growth factors, etc.)
+   - Clear navigation from main site
 
-Why it matters: The right sidebar likely has the same cramped spacing issue for long headings that wrap to multiple lines.
+2. **Add homepage navigation** - Edit `content/index.md` to include wiki link:
+   - Current homepage only links to "The Price of Not Being Cancer" post
+   - Needs "Browse protein wiki" or "Research wiki" prominent link
 
-Where to look for context: The TagExplorer fix in `quartz/components/styles/tagExplorer.scss` lines 143-159 shows the exact pattern to follow.
+3. **Cross-link from main content** - Link from posts like "The Price of Not Being Cancer" to relevant proteins (p53, MDM2, etc.)
 
 ## stuff to remember
 
-**Critical debugging insight**: Line-height on child inline elements (like `<a>`) gets ignored by the browser when text wraps. The parent block element (`<li>`) controls the actual spacing between wrapped lines.
+**Why I made these choices:**
+- Used Python script instead of manual file creation (Carmack approach - automate the boring stuff)
+- Kept original YAML frontmatter structure for consistency
+- Used safe filenames (converted spaces to hyphens, β to beta)
+- Fixed alex-content-critic agent because it's useful for content review, but gemini @directory syntax is fundamentally broken for large directories
 
-**Testing pattern that worked**: Set line-height to extreme values (like 0.1) to see if you're targeting the right CSS property. If the spacing doesn't change dramatically, you're targeting the wrong element.
+**Gotchas:**
+- Gemini CLI has serious issues with @directory syntax on large directories - creates fake file listings instead of analyzing real content
+- VS Code restart was required to fix gemini hanging issues
+- Unicode characters in protein names (β-catenin) need special handling in filename generation
+- The protein pages work great individually but need better site integration
 
-**GitHub deployment**: Don't need to run `npx quartz build` before committing. GitHub Actions handles the build automatically. Changes go live in about 60 seconds after push.
-
-**Quartz component architecture**: External SCSS files in `quartz/components/styles/` directory. Don't use inline CSS strings - follow the established patterns like Explorer and TOC components.
+**Testing approach that actually works:**
+- Use Playwright to test real user browsing patterns, not direct URL navigation
+- Search functionality works well for discovery
+- Tag system provides good navigation once you find one protein page
