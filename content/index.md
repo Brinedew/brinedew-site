@@ -3,8 +3,12 @@ title: ""
 enableToc: false
 ---
 
-# The Brinedew Essays
+# Brinedew
 
-Research notes on evolution, aging, and why cellular immortality comes with trade-offs.
+Personal research notes on aging, evolution, and trade-offs of cellular immortality.
 
-Start with [[posts/the-price-of-not-being-cancer-v3|The Price of Not Being Cancer]] or browse [[posts/|all posts]].
+[[posts|Posts]] are for opinions, discussion, and informed speculation - no AI writing.
+
+[[wiki|Wiki]] pages are single-topic information primers and collections of evidence compiled with LLM assistance.
+
+A good place to start is the post [[posts/the-price-of-not-being-cancer-v3|The Price of Not Being Cancer]]
