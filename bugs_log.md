@@ -281,3 +281,54 @@ wsl -d Ubuntu bash -c "source ~/venv-vllm-stable/bin/activate && python -m vllm.
 - ✅ Cross-browser SVG rendering and click detection functional
 
 **Key Technical Insight**: Quartz SPA navigation requires `"nav"` event listeners, not `DOMContentLoaded`. Most online examples use wrong pattern for Quartz components.
+
+---
+
+### 13. Posts Page Empty Content - FIXED ✅
+**Status**: ✅ **RESOLVED** - August 21, 2025
+**Issue**: Posts page (brinedew.com/posts) showed only heading with no content while wiki page worked fine
+
+**Root Cause**: `content/posts.md` was essentially empty. Quartz FolderPage plugin needs actual content to generate listing page structure.
+
+**Fix Applied**: Added proper frontmatter and minimal content to posts.md:
+```yaml
+---
+title: "Posts"
+date: 2025-08-21
+---
+
+# Posts
+*This page will automatically list all posts below.*
+```
+
+**Resolution Verified**: Posts page now displays proper structure with title, content, and automatic post listing functionality.
+
+---
+
+### 14. TagExplorer Hierarchical Tags Not Nesting - PARTIALLY FIXED ⚠️
+**Status**: 🟡 **95% RESOLVED** - August 21, 2025  
+**Issue**: TagExplorer displayed flat tags ("topic/aging", "type/post") instead of hierarchical nesting ("topic" → "aging", "post")
+
+**Root Cause**: Custom TagExplorer component treated "/" as literal text instead of parsing into parent-child relationships. Original flat Map structure incompatible with hierarchy.
+
+**Fix Applied**: Complete rewrite of TagExplorer component:
+- Added hierarchical data types (TagNode) and tree building logic
+- Replaced flat tag processing with recursive renderNode function  
+- Implemented aggregate counts showing parent + descendant page totals
+- Preserved all existing CSS classes for compatibility
+- Enhanced JavaScript to handle both CSS classes and inline styles
+
+**Files Fixed**:
+- `quartz/components/TagExplorer.tsx` - complete rewrite (lines 17-137)
+- `quartz/components/scripts/tagExplorer.inline.ts` - updated for hierarchy (lines 16-84)  
+- `quartz.layout.ts` - added hierarchical configuration (lines 44-51)
+
+**Resolution Status**:
+- ✅ Perfect hierarchical display: "topic (14)" → aging (4), biology (4), cancer (3)
+- ✅ Aggregate counts working: parents show sum of all descendants  
+- ✅ Visual hierarchy with proper indentation and nesting
+- ❌ Click handlers not responding: collapse/expand functionality broken
+
+**Remaining Issue**: JavaScript click handlers for collapse/expand not working. Tags display correctly but don't respond to clicks for toggling visibility.
+
+**Next Steps**: Debug event attachment in `setupTagExplorer()` function around lines 54-80 of tagExplorer.inline.ts.
