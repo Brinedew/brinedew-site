@@ -2,19 +2,7 @@
 
 ## Immediate Actions Needed
 
-### 1. TOC Spacing Fix - URGENT 🔴
-**From handoff note**: Apply TagExplorer spacing fix to Table of Contents component
-
-**What to do**:
-- Open `quartz/components/styles/toc.scss`
-- Add `line-height: 1` and `margin-bottom: 1rem` to list item styling
-- Test on pages with TOC (longer blog posts)
-
-**Why urgent**: User specifically requested this before handoff, simple CSS change
-
----
-
-### 2. Flask Backend Auto-Start - CRITICAL 🔴 
+### 1. Flask Backend Auto-Start - CRITICAL 🔴 
 **Status**: Blocking all Scriptotic transcription features
 
 **Problem**: PowerShell auto-start script failing when Sentinel (port 5050) tries to trigger Flask (port 5000)
@@ -62,5 +50,15 @@
 
 ---
 
-*Last updated: August 20, 2025*
+## Recently Completed ✅
+
+### TOC Spacing Fix - COMPLETED ✅
+**Status**: ✅ **RESOLVED** - August 21, 2025
+**Issue**: Apply TagExplorer spacing fix to Table of Contents component
+**Resolution**: User confirmed TOC spacing issue has been fixed
+**Files**: `quartz/components/styles/toc.scss`
+
+---
+
+*Last updated: August 21, 2025*
 *Next review: After resolving immediate blockers*
