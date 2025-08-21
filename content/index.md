@@ -2,9 +2,6 @@
 title: ""
 enableToc: false
 ---
-
-# Brinedew
-
 Personal research notes on aging, evolution, and trade-offs of cellular immortality.
 
 [[posts|Posts]] are for opinions, discussion, and informed speculation - no AI writing.
