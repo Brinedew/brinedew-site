@@ -41,7 +41,14 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     // Hide tag explorer on homepage only
     Component.ConditionalRender({
-      component: Component.TagExplorer({ title: "Tags", minCount: 1, sort: "count" }),
+      component: Component.TagExplorer({ 
+        title: "Tags", 
+        minCount: 1, 
+        sort: "count",
+        hierarchical: true,
+        aggregateCounts: true,
+        defaultOpenDepth: 1
+      }),
       condition: (page) => page.fileData.slug !== "index",
     }),
   ],
