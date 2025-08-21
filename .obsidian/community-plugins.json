@@ -12,9 +12,5 @@
   "obsidian-charts",
   "image-converter",
   "advanced-canvas",
-  "multi-column-markdown",
-  "obsidian-local-rest-api",
-  "obsidian-tagfolder",
-  "tag-wrangler",
-  "notes-explorer"
+  "multi-column-markdown"
 ]
