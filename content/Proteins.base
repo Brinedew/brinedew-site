@@ -1,0 +1,17 @@
+properties:
+  note.:
+    displayName: Mass (kDa)
+views:
+  - type: table
+    name: Table
+    filters:
+      and:
+        - file.hasTag("protein")
+    order:
+      - file.name
+      - length (aa)
+      - note.
+      - Image link
+      - Domains
+    columnSize:
+      file.name: 258
