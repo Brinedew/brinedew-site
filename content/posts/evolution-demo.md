@@ -1,6 +1,6 @@
 ---
-title: "Evolution Simulation Demo"
-tags: ["simulation", "evolution", "netlogo"]
+title: Evolution Simulation Demo
+tags:
 ---
 
 # Evolution Simulation Demo

@@ -1,6 +1,6 @@
 ---
 title: Research Gaps — Cnidarian Longevity & Rejuvenation
-tags: [research-gaps, cnidaria, turritopsis, aging, lifecycle]
+tags:
 date: 2025-08-19
 status: draft
 ---

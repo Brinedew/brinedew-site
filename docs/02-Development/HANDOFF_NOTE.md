@@ -11,10 +11,11 @@ The real issue was that the custom TagExplorer component was breaking Quartz's n
 
 ## what actually works now
 
-**Posts page is fixed:**
+**Posts page is partially fixed:**
 - Added proper frontmatter and content to `content/posts.md` 
-- Quartz FolderPage plugin now generates the posts listing page correctly
-- Page displays "Posts" title and explains it will list posts below
+- Page now displays "Posts" title and content instead of being completely empty
+- BUT still doesn't actually list the posts - just shows the placeholder text
+- The automatic post listing functionality isn't working yet
 - Committed in: 0b9fd48
 
 **Hierarchical tag system is 95% working:**
@@ -31,7 +32,10 @@ Files I changed:
 
 ## what's broken right now
 
-**Click handlers for collapse/expand aren't working** - this is the 5% that needs fixing:
+**Two main issues still need fixing:**
+
+1. **Posts page doesn't list actual posts** - shows title and placeholder text but no post listing
+2. **Click handlers for collapse/expand aren't working** - this is the 5% that needs fixing for tags:
 - The hierarchical structure displays perfectly
 - But clicking on tag containers like "topic (14)" doesn't collapse the children
 - Tags remain expanded and don't respond to clicks
@@ -66,7 +70,10 @@ npx quartz build    # builds locally to test
 
 ## what to do next
 
-**Most urgent: Fix the click handlers for hierarchical tag collapse/expand**
+**Two urgent fixes needed:**
+
+1. **Fix posts page to actually list posts** - the FolderPage plugin or component isn't generating the post listing
+2. **Fix the click handlers for hierarchical tag collapse/expand**
 
 The issue is likely in `quartz/components/scripts/tagExplorer.inline.ts` around lines 54-80. The `setupTagExplorer()` function needs to:
 
