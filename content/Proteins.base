@@ -13,5 +13,8 @@ views:
       - mass
       - Image link
       - Domains
+    sort:
+      - property: Image link
+        direction: ASC
     columnSize:
       file.name: 258

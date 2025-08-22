@@ -1,12 +1,12 @@
 ---
 title: ARF (p14^ARF)
 tags:
-- protein
+  - protein
 date: 2025-08-21
 status: draft
 aliases:
-- p14ARF
-- CDKN2A-ARF
+  - p14ARF
+  - CDKN2A-ARF
 ---
 # ARF (p14^ARF)
 
