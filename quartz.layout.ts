@@ -23,6 +23,7 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.ArticleTitle(),
     Component.ContentMeta(),
+    Component.ProteinInfobox(),
   ],
   left: [
     Component.PageTitle(),

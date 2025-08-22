@@ -1,5 +1,5 @@
 properties:
-  note.:
+  mass:
     displayName: Mass (kDa)
 views:
   - type: table
@@ -10,7 +10,7 @@ views:
     order:
       - file.name
       - length (aa)
-      - note.
+      - mass
       - Image link
       - Domains
     columnSize:
