@@ -190,8 +190,10 @@ export default ((user?: Options) => {
             data-tag={node.path}
             style={{ paddingLeft: `${depth * 12}px` }}
           >
-            <span class="tag-name">{node.name === "untagged" ? "untagged" : node.name}</span>
-            <span class="tag-count">({count})</span>
+            <span class="tag-name-area">
+              <span class="tag-name">{node.name === "untagged" ? "untagged" : node.name}</span>
+              <span class="tag-count">({count})</span>
+            </span>
             {hasChildren && (
               <svg
                 xmlns="http://www.w3.org/2000/svg"

@@ -5,40 +5,81 @@ interface TagState {
 
 let currentTagState: Array<TagState>
 
-function toggleTag(this: HTMLElement) {
-  const tagGroup = this.closest(".tag-group") as HTMLElement
-  const tagPagesOuter = tagGroup?.querySelector(".tag-pages-outer") as HTMLElement
-  if (!tagGroup || !tagPagesOuter) return
-
-  const tag = this.dataset.tag
-  if (!tag) return
+function toggleTagSection(tagGroup: HTMLElement, tag: string, forceState?: boolean) {
+  const tagPagesOuter = tagGroup.querySelector(".tag-pages-outer") as HTMLElement
+  if (!tagPagesOuter) return false
 
   // Check current state - support both CSS classes and inline styles
   let isOpen = tagPagesOuter.classList.contains("open") || 
                tagPagesOuter.style.display === "block" ||
                (!tagPagesOuter.style.display && !tagPagesOuter.classList.contains("closed"))
   
-  if (isOpen) {
-    tagPagesOuter.classList.remove("open")
-    tagPagesOuter.classList.add("closed")
-    tagPagesOuter.style.display = "none"
-  } else {
+  // If forceState is provided, use it; otherwise toggle
+  const shouldOpen = forceState !== undefined ? forceState : !isOpen
+  
+  if (shouldOpen) {
     tagPagesOuter.classList.add("open") 
     tagPagesOuter.classList.remove("closed")
     tagPagesOuter.style.display = "block"
+  } else {
+    tagPagesOuter.classList.remove("open")
+    tagPagesOuter.classList.add("closed")
+    tagPagesOuter.style.display = "none"
   }
 
   // Save state to localStorage using hierarchical paths
   const key = "TagExplorer.expandedTags"
   const expandedTags = new Set(JSON.parse(localStorage.getItem(key) || "[]"))
   
-  if (isOpen) {
-    expandedTags.delete(tag)
-  } else {
+  if (shouldOpen) {
     expandedTags.add(tag)
+  } else {
+    expandedTags.delete(tag)
   }
   
   localStorage.setItem(key, JSON.stringify([...expandedTags]))
+  return shouldOpen
+}
+
+function handleTagNameClick(event: Event) {
+  event.preventDefault()
+  event.stopPropagation()
+  
+  const tagContainer = event.currentTarget as HTMLElement
+  const tagGroup = tagContainer.closest(".tag-group") as HTMLElement
+  const tag = tagContainer.getAttribute("data-tag")
+  if (!tagGroup || !tag) return
+
+  const tagPagesOuter = tagGroup.querySelector(".tag-pages-outer") as HTMLElement
+  if (!tagPagesOuter) return
+  
+  // Check if currently expanded
+  const isOpen = tagPagesOuter.classList.contains("open") || 
+                 tagPagesOuter.style.display === "block" ||
+                 (!tagPagesOuter.style.display && !tagPagesOuter.classList.contains("closed"))
+  
+  if (isOpen) {
+    // If expanded, navigate to tag page
+    const tagUrl = `/tags/${tag}`
+    window.location.href = tagUrl
+  } else {
+    // If collapsed, expand the section
+    toggleTagSection(tagGroup, tag, true)
+  }
+}
+
+function handleTagIconClick(event: Event) {
+  event.preventDefault()
+  event.stopPropagation()
+  
+  const tagIcon = event.currentTarget as HTMLElement
+  const tagContainer = tagIcon.closest(".tag-container") as HTMLElement
+  const tagGroup = tagContainer?.closest(".tag-group") as HTMLElement
+  const tag = tagContainer?.getAttribute("data-tag")
+  if (!tagGroup || !tag) return
+
+  // Arrow always toggles, regardless of current state
+  toggleTagSection(tagGroup, tag)
 }
 
 function setupTagExplorer() {
@@ -56,7 +97,7 @@ function setupTagExplorer() {
     const tagGroup = container.closest(".tag-group") as HTMLElement
     const tagPagesOuter = tagGroup?.querySelector(".tag-pages-outer") as HTMLElement
     
-    if (tag && tagPagesOuter) {
+    if (tag && tagGroup && tagPagesOuter) {
       // Set initial state based on localStorage and default depth
       const shouldBeOpen = expandedTags.has(tag) || 
                           (tagPagesOuter.style.display === "block") ||
@@ -74,8 +115,21 @@ function setupTagExplorer() {
         tagPagesOuter.style.display = "none"
       }
       
-      // Add click handler
-      container.addEventListener("click", toggleTag)
+      // Add separate click handlers for tag name and icon
+      const tagNameArea = container.querySelector(".tag-name-area") as HTMLElement
+      const tagIcon = container.querySelector(".tag-icon") as HTMLElement
+      
+      if (tagNameArea) {
+        // Make the tag name area clickable by setting data-tag on it
+        tagNameArea.setAttribute("data-tag", tag)
+        tagNameArea.style.cursor = "pointer"
+        tagNameArea.addEventListener("click", handleTagNameClick)
+      }
+      
+      if (tagIcon) {
+        tagIcon.style.cursor = "pointer"
+        tagIcon.addEventListener("click", handleTagIconClick)
+      }
     }
   })
   
