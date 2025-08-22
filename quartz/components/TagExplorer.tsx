@@ -179,6 +179,8 @@ export default ((user?: Options) => {
       const count = opts.aggregateCounts ? aggregateCount(node) : node.count
       const hasChildren = children.length > 0
       const hasPages = node.pages.length > 0
+      // Show collapse arrow for all tags that have any content
+      const shouldShowArrow = hasChildren || hasPages
       
       // Determine if this node should be initially open based on depth
       const shouldDefaultOpen = depth < opts.defaultOpenDepth
@@ -194,7 +196,7 @@ export default ((user?: Options) => {
               <span class="tag-name">{node.name === "untagged" ? "untagged" : node.name}</span>
               <span class="tag-count">({count})</span>
             </span>
-            {hasChildren && (
+            {shouldShowArrow && (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
