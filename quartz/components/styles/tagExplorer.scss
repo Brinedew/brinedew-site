@@ -99,29 +99,49 @@ button.tag-explorer-header {
     opacity: 0.8;
   }
 
-  .tag-name {
+  .tag-name-area {
     flex-grow: 1;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 0.1rem 0.3rem;
+    transition: background-color 0.2s ease;
+    
+    &:hover {
+      background-color: var(--lightgray);
+    }
+  }
+
+  .tag-name {
     font-size: 0.95rem;
     color: var(--dark);
     font-weight: $semiBoldWeight;
+    margin-right: 0.3rem;
   }
 
   .tag-count {
     opacity: 0.6;
     font-size: 0.8rem;
     font-weight: normal;
-    margin-right: 0.5rem;
   }
 }
 
 .tag-icon {
   color: var(--secondary);
   cursor: pointer;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, color 0.2s ease;
   backface-visibility: visible;
   flex-shrink: 0;
   width: 16px;
   height: 16px;
+  padding: 0.2rem;
+  border-radius: 3px;
+  
+  &:hover {
+    color: var(--tertiary);
+    background-color: var(--lightgray);
+  }
 }
 
 .tag-pages-outer {
