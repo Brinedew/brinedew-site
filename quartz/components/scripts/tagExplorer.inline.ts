@@ -86,9 +86,48 @@ function handleTagIconClick(event: Event) {
   toggleTagSection(tagGroup, tag)
 }
 
+function toggleTagExplorer(event: Event) {
+  event.preventDefault()
+  event.stopPropagation()
+  
+  const button = event.currentTarget as HTMLElement
+  const nearestTagExplorer = button.closest(".tag-explorer") as HTMLElement
+  const tagExplorerContent = nearestTagExplorer?.querySelector(".tag-explorer-content") as HTMLElement
+  if (!nearestTagExplorer || !tagExplorerContent) return
+
+  // Toggle the collapsed state
+  const isCollapsed = nearestTagExplorer.classList.toggle("collapsed")
+  
+  // Update ARIA attributes
+  button.setAttribute("aria-expanded", String(!isCollapsed))
+  
+  // Save state to localStorage
+  const key = "TagExplorer.collapsed"
+  localStorage.setItem(key, String(isCollapsed))
+}
+
 function setupTagExplorer() {
   const tagExplorer = document.querySelector(".tag-explorer")
   if (!tagExplorer) return
+
+  // Set up main header toggle functionality
+  const headerButton = tagExplorer.querySelector(".tag-explorer-header") as HTMLElement
+  if (headerButton) {
+    // Load and restore collapsed state
+    const collapsedKey = "TagExplorer.collapsed"
+    const isCollapsed = localStorage.getItem(collapsedKey) === "true"
+    
+    if (isCollapsed) {
+      tagExplorer.classList.add("collapsed")
+      headerButton.setAttribute("aria-expanded", "false")
+    } else {
+      tagExplorer.classList.remove("collapsed")
+      headerButton.setAttribute("aria-expanded", "true")
+    }
+    
+    // Add click handler
+    headerButton.addEventListener("click", toggleTagExplorer)
+  }
 
   // Load saved state
   const key = "TagExplorer.expandedTags"

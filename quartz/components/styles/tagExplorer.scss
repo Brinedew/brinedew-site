@@ -9,6 +9,13 @@
   
   &.collapsed {
     flex: 0 1 1.2rem;
+    
+    // Hide the content when collapsed
+    .tag-explorer-content {
+      display: none;
+    }
+    
+    // Rotate the fold icon
     & .fold {
       transform: rotateZ(-90deg);
     }
