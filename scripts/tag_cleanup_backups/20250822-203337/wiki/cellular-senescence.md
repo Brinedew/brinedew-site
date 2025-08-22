@@ -1,10 +1,9 @@
 ---
 title: Cellular Senescence
 date: 2025-08-10
-tags:
-- status/complete
-- type/wiki
+tags: [type/wiki, category/mechanism, topic/aging, topic/biology, status/complete]
 ---
+
 # Cellular Senescence
 
 Irreversible cell cycle arrest accompanied by altered cellular metabolism and secretory activity. This is one of the ways multicellular organisms prevent damaged cells from becoming cancerous.

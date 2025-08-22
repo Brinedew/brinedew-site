@@ -1,10 +1,9 @@
 ---
-title: Atavistic Theory of Cancer
+title: "Atavistic Theory of Cancer"
 date: 2025-08-10
-tags:
-- status/complete
-- type/wiki
+tags: [type/wiki, category/theory, topic/cancer, topic/biology, status/complete]
 ---
+
 # Atavistic Theory of Cancer
 
 In 2011, physicist Paul Davies and astrobiologist Charlie Lineweaver argued that cancer isn't just cells accumulating random mutations. Instead, cancer cells switch back on ancient genetic programs that helped single-celled organisms survive billions of years ago.
@@ -26,7 +25,7 @@ These capabilities aren't newly acquired through mutations - they're ancient gen
 Davies and Lineweaver later refined this into the "serial atavism model." Cancer progression follows a specific sequence that mirrors evolutionary history:
 
 1. **Late multicellular reversion**: Loss of growth control and apoptosis resistance
-2. **Early multicellular reversion**: Tissue invasion and metastatic capability
+2. **Early multicellular reversion**: Tissue invasion and metastatic capability  
 3. **Unicellular reversion**: Metabolic reprogramming and immortalization
 
 This sequence explains why cancer progression looks similar across different tissue types and species.

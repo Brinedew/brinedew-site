@@ -3,6 +3,7 @@ title: Aging is a disease
 date: 2025-08-10
 tags:
 - status/published
+- type/misconception
 ---
 It's not so simple, even if you target lifespan extension.
 

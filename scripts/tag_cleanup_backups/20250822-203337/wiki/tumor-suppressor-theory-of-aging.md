@@ -1,10 +1,9 @@
 ---
-title: Tumor Suppressor Theory of Aging
+title: "Tumor Suppressor Theory of Aging"
 date: 2025-08-10
-tags:
-- status/complete
-- type/wiki
+tags: [type/wiki, category/theory, topic/aging, topic/cancer, status/complete]
 ---
+
 # Tumor Suppressor Theory of Aging
 
 The tumor suppressor theory of aging proposes that cellular mechanisms evolved to prevent cancer contribute directly to aging processes through tissue damage and stem cell depletion.

@@ -1,15 +1,14 @@
 ---
 title: One-Hit Cancer
 date: 2025-08-10
-tags:
-- status/published
-- type/post
+tags: [type/post, topic/cancer, topic/biology, status/published]
 ---
+
 # One-Hit Cancer
 
 ## The Historical Discovery
 
-In 1953-1954, epidemiologists discovered that cancer incidence increases roughly as the sixth power of age—doubling someone's age increases cancer risk 64-fold, not 2-fold. This suggested cancer requires approximately 6-7 sequential "hits," each with constant probability over time.
+In 1953-1954, epidemiologists discovered that cancer incidence increases roughly as the sixth power of age—doubling someone's age increases cancer risk 64-fold, not 2-fold. This suggested cancer requires approximately 6-7 sequential "hits," each with constant probability over time. 
 
 Modern cancer genomics validated this multi-hit model while revising numbers downward: epithelial cancers typically need 3-5 driver mutations, blood cancers often just 1-2. But can we go lower?
 
@@ -27,37 +26,37 @@ Different tissues evolved different coordination architectures, creating natural
 
 ### 1. growth signal independence
 
-*What the host enforces:* Resting cells require external permission to divide. This creates a coordination mechanism where individual cells defer to collective judgment about growth conditions. The system uses a multi-component lock: permission signals must accumulate to sufficient levels to activate kinases (CDK4/6 - enzymes that add phosphate groups to proteins to change their function), which then remove a molecular brake from the replication machinery.
+*What the host enforces:* Resting cells require external permission to divide. This creates a coordination mechanism where individual cells defer to collective judgment about growth conditions. The system uses a multi-component lock: permission signals must accumulate to sufficient levels to activate kinases (CDK4/6 - enzymes that add phosphate groups to proteins to change their function), which then remove a molecular brake from the replication machinery. 
 
 The brake works like this: RB protein normally sits bound to E2F transcription factors, physically preventing them from turning on DNA synthesis genes. When CDK4/6 kinases phosphorylate RB protein, this changes RB's shape and forces it to release its grip on E2F. The freed E2F transcription factors can then bind to DNA and activate the genes needed for DNA replication, including DNA polymerase and the molecular machinery for copying chromosomes.
 
 ??? "How is gene expression controlled?"
- Gene regulation is controlled by transcription factors - proteins that bind to specific DNA sequences and control whether genes get transcribed into RNA:
-
- **DNA binding:** Transcription factors have specialized domains that recognize and bind to specific DNA sequences (usually 6-12 base pairs long) near target genes.
-
- **Activation vs. repression:** Some transcription factors activate genes by recruiting RNA polymerase and helping it start transcription. Others repress genes by blocking RNA polymerase access or recruiting chromatin-compacting proteins.
-
- **Combinatorial control:** Multiple transcription factors work together on each gene's regulatory region. A gene might need 3-5 different transcription factors all bound simultaneously to turn on fully.
-
- **Signal integration:** This allows cells to integrate multiple signals - a gene might only turn on when growth factors AND nutrients AND appropriate cell cycle signals are all present, each detected by different transcription factors.
-
- This system lets cells respond to environmental changes by rapidly changing which proteins they make, without altering their DNA sequence.
+    Gene regulation is controlled by transcription factors - proteins that bind to specific DNA sequences and control whether genes get transcribed into RNA:
+    
+    **DNA binding:** Transcription factors have specialized domains that recognize and bind to specific DNA sequences (usually 6-12 base pairs long) near target genes.
+    
+    **Activation vs. repression:** Some transcription factors activate genes by recruiting RNA polymerase and helping it start transcription. Others repress genes by blocking RNA polymerase access or recruiting chromatin-compacting proteins.
+    
+    **Combinatorial control:** Multiple transcription factors work together on each gene's regulatory region. A gene might need 3-5 different transcription factors all bound simultaneously to turn on fully.
+    
+    **Signal integration:** This allows cells to integrate multiple signals - a gene might only turn on when growth factors AND nutrients AND appropriate cell cycle signals are all present, each detected by different transcription factors.
+    
+    This system lets cells respond to environmental changes by rapidly changing which proteins they make, without altering their DNA sequence.
 
 ??? "How does phosphorylation work as a molecular switch?"
- Phosphorylation is a fundamental mechanism cells use to rapidly change protein function without making new proteins:
+    Phosphorylation is a fundamental mechanism cells use to rapidly change protein function without making new proteins:
+    
+    **Chemical modification:** Kinase enzymes add charged phosphate groups (PO₄³⁻) to specific amino acids (usually serine, threonine, or tyrosine) on target proteins.
+    
+    **Conformational change:** The added negative charge and bulk of the phosphate group changes the protein's 3D shape by altering local electrostatic interactions and creating new binding surfaces.
+    
+    **Functional switching:** This shape change can activate enzymes, create or destroy protein binding sites, change protein stability, or alter subcellular localization.
+    
+    **Reversibility:** Phosphatase enzymes can remove phosphate groups, making this a reversible on/off switch that doesn't require protein synthesis or degradation.
+    
+    This allows cells to rapidly coordinate complex responses to signals - one kinase activation can simultaneously modify dozens of target proteins.
 
- **Chemical modification:** Kinase enzymes add charged phosphate groups (PO₄³⁻) to specific amino acids (usually serine, threonine, or tyrosine) on target proteins.
-
- **Conformational change:** The added negative charge and bulk of the phosphate group changes the protein's 3D shape by altering local electrostatic interactions and creating new binding surfaces.
-
- **Functional switching:** This shape change can activate enzymes, create or destroy protein binding sites, change protein stability, or alter subcellular localization.
-
- **Reversibility:** Phosphatase enzymes can remove phosphate groups, making this a reversible on/off switch that doesn't require protein synthesis or degradation.
-
- This allows cells to rapidly coordinate complex responses to signals - one kinase activation can simultaneously modify dozens of target proteins.
-
-*Why this design?* The multi-component architecture requires consensus from multiple inputs before committing to cell division. This prevents catastrophic coordination failures: a single cell deciding to divide when nutrients are scarce, space is limited, or tissue repair is complete could trigger runaway growth that damages the entire organism.
+*Why this design?* The multi-component architecture requires consensus from multiple inputs before committing to cell division. This prevents catastrophic coordination failures: a single cell deciding to divide when nutrients are scarce, space is limited, or tissue repair is complete could trigger runaway growth that damages the entire organism. 
 
 The consensus requirement creates multiple veto points—growth factors must indicate "tissue needs more cells," contact inhibition must confirm "space available," nutrient sensors must report "resources sufficient," and DNA damage checkpoints must verify "genome intact." Only when all systems vote "proceed" does division occur. This distributed decision-making makes the system robust against any single component failing, but creates multiple attack surfaces that cancer can exploit.
 
@@ -97,7 +96,7 @@ The result: cancer cells bypass the Hayflick limit. Cells with functional telome
 
 ### Hit 2-3: CDKN2A biallelic loss (cell cycle checkpoint evasion)
 
-*What the host enforces:* Even if a cell gets permission to grow (Gate 1), it must pass multiple internal safety checks before actually dividing. Two checkpoint systems monitor different variables:
+*What the host enforces:* Even if a cell gets permission to grow (Gate 1), it must pass multiple internal safety checks before actually dividing. Two checkpoint systems monitor different variables: 
 
 **G1/S checkpoint** monitors cell size, nutrient availability, growth factor signaling adequacy, and DNA damage status before committing to DNA synthesis. The nutrient sensing works through a sophisticated computational network: mTOR uses dual sensing with Sestrin2 proteins detecting leucine in the cytoplasm and SLC38A9 transporters detecting arginine inside lysosomes. When both sensors detect abundance, they activate Rag GTPases that recruit mTORC1 to promote growth. This creates a logical AND gate - growth only proceeds when BOTH cytosolic and lysosomal amino acid levels are sufficient.
 
@@ -109,26 +108,26 @@ These systems have different functions: G1/S asks "are conditions right to start
 
 **Overwhelming G1/S controls:** Cancer can overwhelm the checkpoint by multiple routes:
 - Overproducing the "go" signal (Cyclin D1)
-- Making the signal receiver hyperactive (CDK4/6 mutations)
+- Making the signal receiver hyperactive (CDK4/6 mutations)  
 - Destroying the "stop" signals (p16INK4a and p27 inhibitors)
 - Amplifying the machinery that destroys stop signals (SKP2)
 
 This forces premature release of the cell division machinery (E2F transcription factors) regardless of actual conditions.
 
 ??? "Why is the cell cycle organized into discrete phases with checkpoints?"
- The cell cycle's organization solves several computational and coordination problems that would be impossible with continuous division:
-
- **All-or-nothing control:** Cell division must be binary - there's no such thing as "half a cell division." The system uses hysteresis (like a light switch with different on/off thresholds) to ensure committed entry into each phase. Once cyclin levels reach the threshold to start M-phase, they must drop much lower to exit, preventing oscillation.
-
- **Error propagation prevention:** DNA replication errors and chromosome segregation mistakes are catastrophic if not caught. Discrete checkpoints create mandatory "inspection points" where the cell verifies completion and quality before proceeding. Each checkpoint can halt the entire cycle until problems are resolved.
-
- **Irreversible progression:** Positive feedback loops ensure that once a phase transition begins, it completes fully. This prevents partial replication or incomplete chromosome separation, which would be lethal.
-
- **Stable coordination states:** The discrete phases create stable cellular states (G1: growth, S: replication, G2: preparation, M: division) that can be maintained indefinitely if conditions aren't right. This allows cells to pause growth during stress or nutrient deprivation.
-
- **Resource management:** Separating DNA synthesis (S) from division (M) allows the cell to complete the energy-intensive replication process before committing to the mechanically complex division process.
-
- This design is evolutionarily conserved across all eukaryotes because it's the only known mechanism for reliable cellular reproduction.
+    The cell cycle's organization solves several computational and coordination problems that would be impossible with continuous division:
+    
+    **All-or-nothing control:** Cell division must be binary - there's no such thing as "half a cell division." The system uses hysteresis (like a light switch with different on/off thresholds) to ensure committed entry into each phase. Once cyclin levels reach the threshold to start M-phase, they must drop much lower to exit, preventing oscillation.
+    
+    **Error propagation prevention:** DNA replication errors and chromosome segregation mistakes are catastrophic if not caught. Discrete checkpoints create mandatory "inspection points" where the cell verifies completion and quality before proceeding. Each checkpoint can halt the entire cycle until problems are resolved.
+    
+    **Irreversible progression:** Positive feedback loops ensure that once a phase transition begins, it completes fully. This prevents partial replication or incomplete chromosome separation, which would be lethal.
+    
+    **Stable coordination states:** The discrete phases create stable cellular states (G1: growth, S: replication, G2: preparation, M: division) that can be maintained indefinitely if conditions aren't right. This allows cells to pause growth during stress or nutrient deprivation.
+    
+    **Resource management:** Separating DNA synthesis (S) from division (M) allows the cell to complete the energy-intensive replication process before committing to the mechanically complex division process.
+    
+    This design is evolutionarily conserved across all eukaryotes because it's the only known mechanism for reliable cellular reproduction.
 
 **Disabling replication stress response:** Many cancers have defective ATR-CHK1 signaling, allowing them to proceed through S-phase despite replication fork problems. This creates a dependency where cancer cells rely on residual checkpoint function to prevent lethal replication fork collapse - they can tolerate some replication stress but cannot survive complete loss of stress response mechanisms.
 
@@ -146,7 +145,7 @@ WGD happens when normal cell cycle control breaks down. Usually, DNA replication
 
 WGD is typically a catastrophic failure that kills most cells attempting it. However, the rare cells that survive gain unexpected benefits: four-copy gene buffering masks recessive deleterious mutations while providing larger mutational targets for beneficial changes. This accidentally accelerates karyotype exploration - surviving cells can tolerate more chromosomal losses because essential genes exist in multiple copies, creating enhanced tolerance for genetic damage and more opportunities for evolutionary experimentation.
 
-**Synthetic lethal vulnerability:** This is a crucial concept in system robustness. Synthetic lethality occurs when disabling component A is survivable, disabling component B is survivable, but disabling both A and B simultaneously is catastrophic.
+**Synthetic lethal vulnerability:** This is a crucial concept in system robustness. Synthetic lethality occurs when disabling component A is survivable, disabling component B is survivable, but disabling both A and B simultaneously is catastrophic. 
 
 Why does this vulnerability exist? Biological systems use redundant backup mechanisms for critical functions. If DNA repair pathway A fails, pathway B can compensate. This redundancy protects normal cells against single-point failures.
 
@@ -172,7 +171,7 @@ The result: internal validation systems are bypassed. Cell division proceeds wit
 
 ### Hit 4: TP53 dominant-negative mutation (apoptosis resistance)
 
-*What the host enforces:* Cells run continuous self-diagnostics. When they detect serious problems—DNA damage, oncogene activation, metabolic stress—they're supposed to either stop dividing permanently or trigger apoptosis (programmed cell death).
+*What the host enforces:* Cells run continuous self-diagnostics. When they detect serious problems—DNA damage, oncogene activation, metabolic stress—they're supposed to either stop dividing permanently or trigger apoptosis (programmed cell death). 
 
 *System architecture:* Apoptosis is actually NOT centralized through p53. Multiple independent pathways can trigger cell death:
 
@@ -214,7 +213,7 @@ Cancer breaks this assumption in a devastating way. Instead of becoming stiffer 
 
 **Why this creates such effective cannibalism:** When cancer cells cannibalize neighbors through entosis, they're not just getting nutrients - they're exploiting a rigged competition where they have multiple unfair advantages:
 1. **Mechanical superiority**: Cancer cells are softer and more deformable
-2. **Metabolic dominance**: Cancer cells hoard nutrients more effectively
+2. **Metabolic dominance**: Cancer cells hoard nutrients more effectively  
 3. **Stress resistance**: Cancer cells maintain fitness markers during harsh conditions
 4. **Growth factor production**: Digested cells provide amino acids and building blocks that fuel cancer proliferation
 
@@ -248,7 +247,7 @@ Cancer activates EMT - a cellular reprogramming process that evolved for embryon
 
 **The motility-linked proliferation constraint:** In epithelial tissues specifically, the body treats motility acquisition as suspicious and restricts cell division accordingly. This isn't an energy trade-off - it's active surveillance that evolved because motile epithelial cells break barrier function.
 
-The surveillance works through tumor suppressor checkpoints that detect motility-associated molecular changes. p53 actively represses EMT by upregulating microRNAs (miR-200, miR-34) that block EMT transcription factors like SNAIL and ZEB. When epithelial cells override p53 and enter EMT anyway, the process triggers cell cycle arrest - EMT execution is "fueled by upregulation of ribosome biogenesis during G1/S arrest."
+The surveillance works through tumor suppressor checkpoints that detect motility-associated molecular changes. p53 actively represses EMT by upregulating microRNAs (miR-200, miR-34) that block EMT transcription factors like SNAIL and ZEB. When epithelial cells override p53 and enter EMT anyway, the process triggers cell cycle arrest - EMT execution is "fueled by upregulation of ribosome biogenesis during G1/S arrest." 
 
 Additional motility sensors include PTEN (which detects chemotactic gradients and restricts motility-associated signaling) and protein 4.1B (a metastasis suppressor that maintains stress fiber "brakes" on cell movement). When these surveillance systems are intact, epithelial cells attempting motility face automatic proliferation restrictions.
 
@@ -416,7 +415,7 @@ The spatial sensing system works through the Hippo kinase cascade (MST1/2 → LA
 
 The host solves this through chemical locks on DNA. Think of your genome as a massive library where every cell type needs access to only certain books (genes) while keeping others permanently sealed. The locking mechanism works through two main systems:
 
-1. **DNA methylation**: Adding chemical tags directly to DNA that mark certain genes as "permanently off"
+1. **DNA methylation**: Adding chemical tags directly to DNA that mark certain genes as "permanently off" 
 2. **Histone modifications**: Adding chemical tags to the proteins that DNA wraps around, which either mark regions as "accessible for reading" or "locked away"
 
 These chemical locks are self-maintaining - when a cell divides, the new cells inherit the same pattern of locked and unlocked genes. This is how a liver cell produces two liver cells, not two random cell types.
@@ -453,7 +452,7 @@ These chemical locks are self-maintaining - when a cell divides, the new cells i
 
 The host solves this through chemical locks on DNA. Think of your genome as a massive library where every cell type needs access to only certain books (genes) while keeping others permanently sealed. The locking mechanism works through two main systems:
 
-1. **DNA methylation**: Adding chemical tags directly to DNA that mark certain genes as "permanently off"
+1. **DNA methylation**: Adding chemical tags directly to DNA that mark certain genes as "permanently off" 
 2. **Histone modifications**: Adding chemical tags to the proteins that DNA wraps around, which either mark regions as "accessible for reading" or "locked away"
 
 These chemical locks are self-maintaining - when a cell divides, the new cells inherit the same pattern of locked and unlocked genes. This is how a liver cell produces two liver cells, not two random cell types.

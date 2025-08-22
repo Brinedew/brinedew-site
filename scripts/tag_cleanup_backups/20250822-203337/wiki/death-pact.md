@@ -1,10 +1,9 @@
 ---
-title: Death Pact
+title: "Death Pact"
 date: 2025-08-10
-tags:
-- status/complete
-- type/wiki
+tags: [type/wiki, category/concept, topic/biology, topic/aging, status/complete]
 ---
+
 # Death Pact
 
 Collective punishment mechanisms where any individual's defection triggers severe consequences for the entire group, including the defector.
@@ -38,7 +37,7 @@ Under group liability, anyone's default kills credit access for everyone:
 
 **Player 1's decision when Player 2 is about to default:**
 - Report/stop Player 2: Costs me effort (-1), but preserves group credit access (+10) = +9 total
-- Ignore Player 2's default: No effort cost (0), but group loses credit access (-5) = -5 total
+- Ignore Player 2's default: No effort cost (0), but group loses credit access (-5) = -5 total  
 - Help Player 2 cover their payment: Costs me money (-2), but preserves credit access (+10) = +8 total
 
 **Optimal strategy**: Actively prevent Player 2's default, either by reporting early warning signs or by helping them cover the payment. Ignoring their problem is now the worst option because their failure becomes my failure.
@@ -171,7 +170,7 @@ The point of the math here is to show how “make the off‑path outcome collect
 - One‑time gain from secretly cheating while others collude: gainCheat.
 - Time‑preference (how patient firms are): discountFactor between 0 and 1.
 - Self‑enforcement condition (no one wants to cheat):
- discountFactor ≥ (gainCheat − profitMonopoly) ÷ (profitMonopoly − profitWar).
+  discountFactor ≥ (gainCheat − profitMonopoly) ÷ (profitMonopoly − profitWar).
 - Words: the future pain from triggering price wars must outweigh the one‑time cheating gain.
 
 ### M2. Joint‑liability group (n borrowers)
