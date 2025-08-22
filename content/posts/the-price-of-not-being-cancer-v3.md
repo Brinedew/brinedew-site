@@ -5,7 +5,7 @@ date: 2025-08-10
 
 # The Price of Not Being Cancer
 
-The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness Book of World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
+The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
 
 Individual cell lines can be immortal. The Canine Transmissible Venereal Tumor (CTVT) has been making identical copies of itself for 11,000 years across the globe, transmitted between dogs during mating. Tasmanian Devil Facial Tumor Disease (DFTD) has spread between devils for decades, far outliving the 7-year lifespan of its hosts. In labs, immortalizing normal human cells often requires tweaking just a few pathways: p53, Rb, telomerase.
 
@@ -23,7 +23,7 @@ Let's try to find satisfying answers beyond just "cancer cells are just broken a
 
 (And yes, fair warning: I'm about to anthropomorphize evolution more than a Pixar movie. If that bothers you, mentally replace every "evolution decided" with "selective pressures resulted in." We both know what's really happening.)
 
-## Why large animals should be extinct from cancer
+## Peto's paradox: cancer incidence vs body size
 
 Every time a cell divides, DNA replication introduces random errors. Most are harmless, but occasionally you get a mutation that gives a cell a growth advantage - faster division, resistance to suicide commands, ability to grow without external permission signals. That cell outcompetes its neighbors and expands into a clone. Within that larger clone, more mutations occur, some of which provide additional advantages. After accumulating several key mutations, you get cancer.
 
@@ -155,7 +155,7 @@ The physical mechanism is straightforward: crowded cells literally can't expand 
 
 This fails in cancer because tumor cells often lose their cadherin proteins or ignore the "stop" signals from crowding. They start dividing anyway, piling up on top of each other in disorganized masses instead of forming the neat, organized tissue layers that contact inhibition normally creates.
 
-**Anchorage licensing:** Cells must be tethered to their designated tissue location to survive. Surface receptors called integrins must bind to the extracellular matrix scaffolding, providing a constant "life signal." Detached cells undergo programmed death (anoikis). This prevents metastasis but makes tissue remodeling extremely slow.
+**Anchorage dependence:** In many tissues, "stay attached or die" is a safety policy, not a law. Epithelial cells expect an integrin "OK" signal from the surrounding matrix; when that confirmation disappears, a built‑in program (anoikis) kills the detached cell. This reduces the risk of cells surviving in the wrong place, at the cost of slower remodeling. Not universal: blood and immune cells normally travel unattached, and cancer cells often disable anoikis.
 
 **Stem cell geographic leashing:** Stem cells can only survive and divide within their specialized niche microenvironments, which provide unique survival signals like Wnt. If stem cells leave their niche, they lose proliferation licenses. This limits repair range and speed but prevents stem cell escape.
 
@@ -313,9 +313,9 @@ The hyperactive p53 experiment provides the answer. Mice with enhanced anti-canc
 
 This framework leads to a surprising prediction: what if, when prevention and policing start to fail, organisms essentially choose aging over cancer?
 
-What if the only way to reliably prevent cancer is to gradually shut down the very processes that keep you alive? I find it best to think of this kind of adaptation as the aging body transitioning into a low-trust, paranoid police state, trading vitality for security. Think about what happens in human societies when trust breaks down. You don't just add more police - you fundamentally change how everything operates. Curfews. Checkpoints. Neighbors reporting neighbors. Everyone becomes a potential threat, so you lock everything down.
+What if the only way to reliably reduce malignant transformation is to progressively restrict normal growth and repair? In that view, late‑life physiology shifts toward a low‑permissiveness regime: fewer divisions, stricter checkpoints, broader use of senescence and apoptosis, and increased immune scrutiny. The net effect is lower cancer incidence at the cost of reduced function. 
 
-Through the lens of multicellular organization, observable features and proxies of aging appear less like an unwanted decline and more like an adaptive late-life, low-trust somatic state, wringing a few extra years of life from a defector-riddled multicellular body. Not a gentle fading, but a series of increasingly desperate, self-inflicted wounds designed to make the organism an ever-more-barren wasteland for rogue, ambitious cells.
+Through the lens of multicellular organization, observable features and proxies of aging appear less like an unwanted decline and more like an adaptive late-life, low-trust somatic state, wringing a few extra years of life from a defector-riddled multicellular body. Not a gentle fading, but a series of increasingly desperate, self-inflicted wounds designed to make the organism an ever-more-barren wasteland for cells that opt to defect in ever increasing numbers. The intuition that comes to my mind is that of a police state getting more and more paranoid with each attempted coup, trading vitality for stability
 
 ![](https://lh7-rt.googleusercontent.com/docsz/AD_4nXemjZKraamutaeJ0XKtU4rI-janzUO3xbA5khdbicrK3XoIb9IXDN321pgdXVDSyv8UIVx0YOl5TDybBL3xo-jyI7dRwg-z2k5sQFXldN-bf5KwtEQTR54J9aH2ukb0cz85XFfLaQ?key=UbsS3t3qSKqRUUxPuIsPVg)
 
