@@ -4,8 +4,8 @@ enableToc: false
 ---
 Personal research notes on aging, evolution, and trade-offs of cellular immortality.
 
-[[posts|Posts]] are for opinions, discussion, and informed speculation - no AI writing.
+[[wiki|Wiki]] pages are single-topic information primers, resource tables, and evidence collections compiled with LLM assistance.
 
-[[wiki|Wiki]] pages are single-topic information primers and collections of evidence compiled with LLM assistance.
+[[posts|Posts]] are for my opinions, discussion, and informed speculation - no AI writing.
 
-A good place to start is the post [[posts/the-price-of-not-being-cancer-v3|The Price of Not Being Cancer]]
+A good post to start with is [[posts/the-price-of-not-being-cancer-v3|The Price of Not Being Cancer]]
