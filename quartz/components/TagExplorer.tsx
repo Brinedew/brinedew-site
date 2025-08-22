@@ -240,7 +240,6 @@ export default ((user?: Options) => {
           type="button"
           class="tag-explorer-header"
           aria-controls={id}
-          aria-expanded="true"
         >
           <h3>{opts.title}</h3>
           <svg

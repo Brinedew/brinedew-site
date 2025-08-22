@@ -110,18 +110,19 @@ function setupTagExplorer() {
   const tagExplorer = document.querySelector(".tag-explorer")
   if (!tagExplorer) return
 
-  // Set up main header toggle functionality
+  // Set up main header toggle functionality  
   const headerButton = tagExplorer.querySelector(".tag-explorer-header") as HTMLElement
   if (headerButton) {
-    // Load and restore collapsed state
+    // Load and restore collapsed state immediately to prevent flash
     const collapsedKey = "TagExplorer.collapsed"
     const isCollapsed = localStorage.getItem(collapsedKey) === "true"
     
+    // Apply state synchronously
     if (isCollapsed) {
       tagExplorer.classList.add("collapsed")
       headerButton.setAttribute("aria-expanded", "false")
     } else {
-      tagExplorer.classList.remove("collapsed")
+      tagExplorer.classList.remove("collapsed")  
       headerButton.setAttribute("aria-expanded", "true")
     }
     
