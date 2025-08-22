@@ -106,12 +106,20 @@ button.tag-explorer-header {
     cursor: pointer;
     border-radius: 3px;
     padding: 0.1rem 0.3rem;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
     
+    // Default hover: toggle behavior (brightness change)
     &:hover {
-      background-color: var(--lightgray);
+      opacity: 0.8;
     }
   }
+
+  // When tag is expanded, tag name should show link behavior (teal)
+  .tag-group.tag-expanded .tag-name-area:hover {
+    opacity: 1;
+    background-color: var(--lightgray);
+  }
+}
 
   .tag-name {
     font-size: 0.95rem;
@@ -130,7 +138,7 @@ button.tag-explorer-header {
 .tag-icon {
   color: var(--secondary);
   cursor: pointer;
-  transition: transform 0.3s ease, color 0.2s ease;
+  transition: transform 0.3s ease, opacity 0.2s ease;
   backface-visibility: visible;
   flex-shrink: 0;
   width: 16px;
@@ -138,9 +146,9 @@ button.tag-explorer-header {
   padding: 0.2rem;
   border-radius: 3px;
   
+  // Arrow always shows toggle behavior (brightness change)
   &:hover {
-    color: var(--tertiary);
-    background-color: var(--lightgray);
+    opacity: 0.8;
   }
 }
 

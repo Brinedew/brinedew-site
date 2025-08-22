@@ -21,10 +21,14 @@ function toggleTagSection(tagGroup: HTMLElement, tag: string, forceState?: boole
     tagPagesOuter.classList.add("open") 
     tagPagesOuter.classList.remove("closed")
     tagPagesOuter.style.display = "block"
+    tagGroup.classList.add("tag-expanded")
+    tagGroup.classList.remove("tag-collapsed")
   } else {
     tagPagesOuter.classList.remove("open")
     tagPagesOuter.classList.add("closed")
     tagPagesOuter.style.display = "none"
+    tagGroup.classList.add("tag-collapsed")
+    tagGroup.classList.remove("tag-expanded")
   }
 
   // Save state to localStorage using hierarchical paths
@@ -108,11 +112,15 @@ function setupTagExplorer() {
         tagPagesOuter.classList.add("open")
         tagPagesOuter.classList.remove("closed")
         tagPagesOuter.style.display = "block"
+        tagGroup.classList.add("tag-expanded")
+        tagGroup.classList.remove("tag-collapsed")
         expandedTags.add(tag) // Ensure it's in the saved state
       } else {
         tagPagesOuter.classList.remove("open")
         tagPagesOuter.classList.add("closed")
         tagPagesOuter.style.display = "none"
+        tagGroup.classList.add("tag-collapsed")
+        tagGroup.classList.remove("tag-expanded")
       }
       
       // Add separate click handlers for tag name and icon

@@ -1,113 +1,104 @@
-# hierarchical tag system implementation and posts page fix - aug 21, 2025
+# website tagexplorer fixes - aug 22, 2025
 
-## what i was actually working on
-
-Had two main problems to solve:
-
-1. **Posts page was completely empty** - brinedew.com/posts showed just a heading with no content, while /wiki worked fine
-2. **TagExplorer sidebar was showing flat tags** - instead of hierarchical structure like "topic" → "aging", "biology", it was listing "topic/aging", "topic/biology" as separate flat entries
-
-The real issue was that the custom TagExplorer component was breaking Quartz's native hierarchical tag support by treating "/" as literal text instead of parsing it into parent-child relationships.
+I was working on fixing the hierarchical tag system in the sidebar. The user spotted some inconsistencies that were making the navigation confusing.
 
 ## what actually works now
 
-**Posts page is partially fixed:**
-- Added proper frontmatter and content to `content/posts.md` 
-- Page now displays "Posts" title and content instead of being completely empty
-- BUT still doesn't actually list the posts - just shows the placeholder text
-- The automatic post listing functionality isn't working yet
-- Committed in: 0b9fd48
+**Posts page listing is fixed**: The posts page (brinedew.com/posts) now properly lists all 20 posts instead of just showing placeholder text. 
 
-**Hierarchical tag system is 95% working:**
-- Completely rewrote TagExplorer component to parse "/" separators into tree structure
-- Tags now display properly nested: "topic (14)" with children "aging (4)", "biology (4)", "cancer (3)", etc.
-- Aggregate counts work: parents show sum of all descendant pages
-- Visual hierarchy with proper indentation (12px per level)
-- Maintains all existing CSS classes for compatibility
+Root cause was `content/posts.md` vs `content/posts/index.md` - Quartz treats these completely differently. The first creates a terminal page, the second creates a folder listing with custom content.
 
 Files I changed:
-- `quartz/components/TagExplorer.tsx` - complete rewrite from flat map to hierarchical tree building (lines 17-137)
-- `quartz/components/scripts/tagExplorer.inline.ts` - updated JavaScript to handle both CSS classes and inline styles (lines 16-84)
-- `quartz.layout.ts` - added hierarchical configuration options (lines 44-51)
+- moved `content/posts.md` → `content/posts/index.md` 
+- Quartz's FolderContent component now works properly
+
+**TagExplorer arrows are consistent**: All tags now have collapse arrows, not just hierarchical ones like "topic" and "status". Previously "glossary" and "protein" were missing arrows because they only had direct pages, not sub-hierarchies.
+
+Files I changed:
+- `quartz/components/TagExplorer.tsx` line 183: changed logic from `hasChildren` to `shouldShowArrow = hasChildren || hasPages`
+- Now every tag with any content (46 protein entries, 6 excalidraw files, etc.) gets a collapse arrow
+
+**Hierarchical click behavior works**: The tag sidebar now has proper click behavior:
+- Collapsed state: tag name OR arrow → expand 
+- Expanded state: arrow → collapse, tag name → navigate to tag page
+
+Files I changed:
+- `quartz/components/TagExplorer.tsx` lines 193-196: wrapped tag name/count in `.tag-name-area` span for better click targeting
+- `quartz/components/scripts/tagExplorer.inline.ts`: complete rewrite of click handlers
+  - `handleTagNameClick()` function checks collapsed/expanded state and routes accordingly
+  - `handleTagIconClick()` always toggles regardless of state
+  - Separate event listeners for name area vs arrow icon
+- `quartz/components/styles/tagExplorer.scss`: added hover states and styling for clickable areas
+
+Commands that work:
+```bash
+cd "D:\Coding\Website"
+npx quartz build    # builds to public/
+git status         # shows clean state, everything committed
+```
+
+**All changes are live**: GitHub Actions deployed successfully, changes are live at brinedew.com/posts
 
 ## what's broken right now
 
-**Two main issues still need fixing:**
+**Hover state inconsistency**: I was in the middle of fixing hover visual feedback when the handoff was called. The issue is:
 
-1. **Posts page doesn't list actual posts** - shows title and placeholder text but no post listing
-2. **Click handlers for collapse/expand aren't working** - this is the 5% that needs fixing for tags:
-- The hierarchical structure displays perfectly
-- But clicking on tag containers like "topic (14)" doesn't collapse the children
-- Tags remain expanded and don't respond to clicks
-- JavaScript seems to not be attaching event handlers properly
+- Teal highlight (lightgray background) should only show for "link redirect" behavior  
+- Brightness change (opacity) should show for "toggle collapse" behavior
 
-Testing reveals:
-- DOM structure is correct with proper class names and data attributes
-- Visual layout and indentation working perfectly  
-- Default open state works (configured to depth 1)
-- But `toggleTag()` function in tagExplorer.inline.ts isn't responding to clicks
+But currently they're not consistent. User wants:
+- **Collapsed tags**: both tag name and arrow should show brightness change (toggle behavior)
+- **Expanded tags**: tag name should show teal highlight (link behavior), arrow should show brightness change (toggle behavior)
+
+I started implementing this in:
+- `quartz/components/styles/tagExplorer.scss` lines 111-121: added conditional CSS for expanded state
+- `quartz/components/scripts/tagExplorer.inline.ts` lines 24-31: added `.tag-expanded` class management
+- BUT the build was interrupted before testing
 
 ## where things stand
 
-**Current environment:**
-- All changes committed and pushed to GitHub (commit 2932fc7)
-- GitHub Actions deployment successful - changes are live at brinedew.com
-- Posts page working: https://brinedew.com/posts shows proper content
-- Hierarchical tags visible: https://brinedew.com/posts sidebar shows nested structure
+**Environment**: Website builds and deploys fine, Quartz 4.5.1 working properly
 
-**Working commands:**
+**Current state**: 
+- All major navigation is working
+- Posts page lists properly 
+- Tag collapse/expand works functionally
+- Just the visual feedback isn't consistent yet
+
+**Commands that work**:
 ```bash
 cd "D:\Coding\Website"
-git status    # should show clean state
-npx quartz build    # builds locally to test
+npx quartz build
+git add . && git commit -m "message" && git push
 ```
 
-**Current tag structure working:**
-- topic (14) → aging (4), biology (4), cancer (3), analysis (1), longevity (1), psychology (1)
-- status (7) → complete (4), published (3)  
-- type (7) → wiki (4), post (2), misconception (1)
-- category (4) → theory (2), concept (1), mechanism (1)
+GitHub Actions typically deploys in ~60 seconds, you can check at https://github.com/Brinedew/brinedew-site/actions
 
 ## what to do next
 
-**Two urgent fixes needed:**
+**Most urgent**: Finish the hover state consistency fix in `quartz/components/styles/tagExplorer.scss`
 
-1. **Fix posts page to actually list posts** - the FolderPage plugin or component isn't generating the post listing
-2. **Fix the click handlers for hierarchical tag collapse/expand**
+The logic should be:
+- Default: all elements show opacity change on hover (toggle behavior)  
+- Override: when `.tag-group.tag-expanded .tag-name-area:hover`, show teal background instead (link behavior)
+- Keep arrows always showing opacity change (they always toggle)
 
-The issue is likely in `quartz/components/scripts/tagExplorer.inline.ts` around lines 54-80. The `setupTagExplorer()` function needs to:
+Test by:
+1. Build and push changes
+2. Check live site - hover over collapsed "glossary" tag name → should dim (toggle)
+3. Expand "glossary", hover tag name again → should highlight teal (link)  
+4. Hover arrow in either state → should dim (toggle)
 
-1. **Check DOM selectors** - verify that `.tag-container` elements are being found correctly in the hierarchical structure
-2. **Debug event attachment** - the click handlers might not be attaching to the right elements
-3. **Test the toggle logic** - `toggleTag()` function expects certain CSS classes that might not match the new inline style approach
+The CSS I started should work, just needs testing and maybe tweaking the selectors.
 
-**Why it matters:** The hierarchical display is perfect but useless without interactive collapse/expand. Users need to be able to close categories to reduce clutter.
-
-**Where to look:**
-- Check if `container.addEventListener("click", toggleTag)` is actually being called
-- Verify `data-tag` attributes are set correctly on hierarchical elements  
-- Test if the `tagPagesOuter.style.display` logic works with the new structure
-
-**Alternative approach:** Consider making categories closed by default (`defaultOpenDepth: 0`) until the click handlers are fixed.
+**Secondary**: There's a blocked Sprint 4 for YouTube transcription, but that's a completely separate Flask backend issue. Focus on the hover states first.
 
 ## stuff to remember
 
-**Why I rewrote instead of patching:**
-- Original TagExplorer used flat Map structure incompatible with hierarchy
-- Tried to preserve all existing CSS classes and JavaScript patterns  
-- Used inline styles for indentation to avoid CSS surgery
-- Kept same component interface so layout config didn't break
+**Why the posts page was broken**: Quartz treats `posts.md` and `posts/index.md` fundamentally differently. This isn't obvious from the docs but it's critical - the first blocks folder listing, the second enables it.
 
-**Architecture choices:**
-- `buildTagTree()` function parses "/" into parent-child relationships
-- `aggregateCount()` makes parents show sum of descendants  
-- `renderNode()` recursive function creates proper nesting
-- Preserved `data-tag` attributes for JavaScript compatibility
+**Tag hierarchy logic**: The TagExplorer component builds a proper tree from slash-separated tags like "topic/aging". The `shouldShowArrow` logic determines what gets collapse arrows - I changed it to include direct pages, not just hierarchical children.
 
-**Testing approach that works:**
-- Use Playwright to verify visual structure: https://brinedew.com/posts
-- Check that tag counts are correct (topic=14, status=7, etc.)
-- Test click responsiveness on tag containers
-- Verify localStorage state persistence
+**Click handler architecture**: Had to separate tag name clicks from arrow clicks with different event handlers because they have different behavior in expanded state. Used `.tag-name-area` wrapper and careful event targeting.
 
-**Key insight:** The hierarchical parsing and rendering is working perfectly. The problem is purely in the JavaScript interaction layer, not the data processing or visual layout.
+**Deployment is fast**: This Quartz setup with GitHub Actions works really well - changes are live in about a minute. No manual deployment needed.
