@@ -1,11 +1,12 @@
 ---
 title: Wnt proteins
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [WNT family]
+aliases:
+- WNT family
 ---
-
 # Wnt proteins
 
 **What it is.** Family of secreted proteins that regulate stem-cell maintenance and proliferation.

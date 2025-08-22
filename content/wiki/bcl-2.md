@@ -1,11 +1,11 @@
 ---
 title: BCL‑2
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
 aliases: []
 ---
-
 # BCL‑2
 
 **What it is.** Mitochondrial membrane protein that blocks apoptosis.

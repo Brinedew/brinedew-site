@@ -1,11 +1,12 @@
 ---
 title: MMPs (Matrix Metalloproteinases)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [MMP family]
+aliases:
+- MMP family
 ---
-
 # MMPs (Matrix Metalloproteinases)
 
 **What it is.** Enzymes that cut extracellular matrix proteins.

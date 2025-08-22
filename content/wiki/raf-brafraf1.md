@@ -1,11 +1,13 @@
 ---
 title: RAF (BRAF/RAF1)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [BRAF, RAF1]
+aliases:
+- BRAF
+- RAF1
 ---
-
 # RAF (BRAF/RAF1)
 
 **What it is.** Kinases that relay RAS signals to MEK/ERK.

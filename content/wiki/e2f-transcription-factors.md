@@ -1,11 +1,12 @@
 ---
 title: E2F transcription factors
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [E2F1 family]
+aliases:
+- E2F1 family
 ---
-
 # E2F transcription factors
 
 **What it is.** Proteins that turn on DNA replication genes; normally restrained by Rb.

@@ -1,11 +1,12 @@
 ---
 title: YAP (YAP1)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [YAP1]
+aliases:
+- YAP1
 ---
-
 # YAP (YAP1)
 
 **What it is.** Transcriptional co-activator controlled by the Hippo pathway and mechanical cues.

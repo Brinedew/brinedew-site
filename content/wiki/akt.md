@@ -1,15 +1,13 @@
 ---
 title: AKT
 tags:
-  - glossary
-  - protein
+- protein
 date: 2025-08-21
 status: draft
 aliases:
-  - AKT1
-  - AKT2
+- AKT1
+- AKT2
 ---
-
 # AKT
 
 **What it is.** Central kinase promoting cell survival, metabolism, and growth.

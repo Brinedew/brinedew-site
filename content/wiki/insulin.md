@@ -1,11 +1,11 @@
 ---
 title: Insulin
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
 aliases: []
 ---
-
 # Insulin
 
 **What it is.** Pancreatic hormone controlling glucose uptake and anabolic metabolism.

@@ -1,11 +1,13 @@
 ---
 title: ARF (p14^ARF)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [p14ARF, CDKN2A-ARF]
+aliases:
+- p14ARF
+- CDKN2A-ARF
 ---
-
 # ARF (p14^ARF)
 
 **What it is.** Tumor suppressor produced from the CDKN2A locus; stabilizes p53 by inhibiting MDM2.

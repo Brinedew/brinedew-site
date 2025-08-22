@@ -1,11 +1,12 @@
 ---
 title: ATR
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [ATM and Rad3-related]
+aliases:
+- ATM and Rad3-related
 ---
-
 # ATR
 
 **What it is.** DNA replication stress sensor kinase; responds to single-stranded DNA and stalled forks.

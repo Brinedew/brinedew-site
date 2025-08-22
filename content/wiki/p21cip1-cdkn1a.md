@@ -1,11 +1,13 @@
 ---
 title: p21^CIP1 (CDKN1A)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [CDKN1A, CIP1]
+aliases:
+- CDKN1A
+- CIP1
 ---
-
 # p21^CIP1 (CDKN1A)
 
 **What it is.** p53-induced inhibitor of multiple cyclin–CDK complexes.

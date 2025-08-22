@@ -1,11 +1,12 @@
 ---
 title: MYC
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [c-Myc]
+aliases:
+- c-Myc
 ---
-
 # MYC
 
 **What it is.** Transcription factor that increases biosynthetic capacity and drives cell growth.

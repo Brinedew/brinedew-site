@@ -1,11 +1,12 @@
 ---
 title: IGF‑1
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [Insulin-like growth factor 1]
+aliases:
+- Insulin-like growth factor 1
 ---
-
 # IGF‑1
 
 **What it is.** Hormone that promotes growth and survival downstream of nutrition and endocrine status.

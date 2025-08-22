@@ -1,11 +1,13 @@
 ---
 title: Telomerase (TERT)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [TERT, hTERT]
+aliases:
+- TERT
+- hTERT
 ---
-
 # Telomerase (TERT)
 
 **What it is.** Reverse transcriptase that extends telomeres at chromosome ends.

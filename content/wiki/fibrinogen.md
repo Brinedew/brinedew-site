@@ -1,11 +1,12 @@
 ---
 title: Fibrin(ogen)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [Fibrinogen]
+aliases:
+- Fibrinogen
 ---
-
 # Fibrin(ogen)
 
 **What it is.** Blood‑clot mesh protein formed from fibrinogen during coagulation.

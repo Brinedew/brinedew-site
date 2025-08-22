@@ -1,11 +1,12 @@
 ---
 title: PD‑1 (PDCD1)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [PDCD1]
+aliases:
+- PDCD1
 ---
-
 # PD‑1 (PDCD1)
 
 **What it is.** Receptor on T cells that, when engaged by PD‑L1, reduces T‑cell activity.

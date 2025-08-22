@@ -1,11 +1,12 @@
 ---
 title: IL‑8 (CXCL8)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [CXCL8]
+aliases:
+- CXCL8
 ---
-
 # IL‑8 (CXCL8)
 
 **What it is.** Chemokine that recruits neutrophils and remodels microenvironments.

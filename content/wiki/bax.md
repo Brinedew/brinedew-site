@@ -1,11 +1,11 @@
 ---
 title: BAX
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
 aliases: []
 ---
-
 # BAX
 
 **What it is.** Pro-apoptotic effector that perforates the mitochondrial outer membrane.

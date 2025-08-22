@@ -1,11 +1,14 @@
 ---
 title: RAS (KRAS/NRAS/HRAS)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [KRAS, NRAS, HRAS]
+aliases:
+- KRAS
+- NRAS
+- HRAS
 ---
-
 # RAS (KRAS/NRAS/HRAS)
 
 **What it is.** Molecular switch downstream of many growth factor receptors.

@@ -1,11 +1,12 @@
 ---
 title: VEGF (VEGFA)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [VEGFA]
+aliases:
+- VEGFA
 ---
-
 # VEGF (VEGFA)
 
 **What it is.** Vascular growth factor that stimulates new blood vessel formation.

@@ -1,11 +1,11 @@
 ---
 title: IL‑6
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
 aliases: []
 ---
-
 # IL‑6
 
 **What it is.** Inflammatory cytokine that promotes acute‑phase responses and can support growth.

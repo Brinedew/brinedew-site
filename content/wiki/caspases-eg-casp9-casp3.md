@@ -1,11 +1,13 @@
 ---
 title: Caspases (e.g., CASP9, CASP3)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [Caspase‑9, Caspase‑3]
+aliases:
+- Caspase‑9
+- Caspase‑3
 ---
-
 # Caspases (e.g., CASP9, CASP3)
 
 **What it is.** Proteases that dismantle the cell during apoptosis.

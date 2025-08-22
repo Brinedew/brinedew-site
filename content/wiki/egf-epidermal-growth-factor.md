@@ -1,11 +1,12 @@
 ---
 title: EGF (Epidermal Growth Factor)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [Epidermal Growth Factor]
+aliases:
+- Epidermal Growth Factor
 ---
-
 # EGF (Epidermal Growth Factor)
 
 **What it is.** Mitogen that binds EGFR to stimulate cell division.

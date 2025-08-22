@@ -1,11 +1,13 @@
 ---
 title: MEK (MAP2K1/2)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [MAP2K1, MAP2K2]
+aliases:
+- MAP2K1
+- MAP2K2
 ---
-
 # MEK (MAP2K1/2)
 
 **What it is.** Kinases activated by RAF to phosphorylate ERK.

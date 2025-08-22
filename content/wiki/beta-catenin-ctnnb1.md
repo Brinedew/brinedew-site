@@ -1,11 +1,13 @@
 ---
 title: β-catenin (CTNNB1)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [CTNNB1, beta-catenin]
+aliases:
+- CTNNB1
+- beta-catenin
 ---
-
 # β-catenin (CTNNB1)
 
 **What it is.** Signal relay for Wnt; also links cadherins to the cytoskeleton.

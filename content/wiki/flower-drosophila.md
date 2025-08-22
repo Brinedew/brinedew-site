@@ -1,11 +1,11 @@
 ---
 title: Flower (Drosophila)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
 aliases: []
 ---
-
 # Flower (Drosophila)
 
 **What it is.** Cell-surface protein used in fly “cell competition” to mark less-fit cells.

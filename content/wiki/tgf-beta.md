@@ -1,11 +1,12 @@
 ---
 title: TGF‑β
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [TGFB1]
+aliases:
+- TGFB1
 ---
-
 # TGF‑β
 
 **What it is.** Multifunctional cytokine that can suppress early tumors yet promote late-stage invasion and immune evasion.

@@ -1,11 +1,11 @@
 ---
 title: MCL‑1
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
 aliases: []
 ---
-
 # MCL‑1
 
 **What it is.** Short‑lived anti‑apoptotic protein that buffers mitochondrial death signals.

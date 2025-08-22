@@ -1,11 +1,12 @@
 ---
 title: FAS (CD95)
-tags: [glossary, protein]
+tags:
+- protein
 date: 2025-08-21
 status: draft
-aliases: [CD95]
+aliases:
+- CD95
 ---
-
 # FAS (CD95)
 
 **What it is.** Death receptor on the cell surface; when engaged, triggers apoptosis.
