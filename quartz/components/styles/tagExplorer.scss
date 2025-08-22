@@ -95,10 +95,6 @@ button.tag-explorer-header {
   cursor: pointer;
   padding: 0.25rem 0;
 
-  &:hover {
-    opacity: 0.8;
-  }
-
   .tag-name-area {
     flex-grow: 1;
     display: flex;
@@ -108,17 +104,17 @@ button.tag-explorer-header {
     padding: 0.1rem 0.3rem;
     transition: background-color 0.2s ease, opacity 0.2s ease;
     
-    // Default hover: toggle behavior (brightness change)
+    // Default hover: toggle behavior (brightness change) for collapsed tags
     &:hover {
       opacity: 0.8;
     }
   }
+}
 
-  // When tag is expanded, tag name should show link behavior (teal)
-  .tag-group.tag-expanded .tag-name-area:hover {
-    opacity: 1;
-    background-color: var(--lightgray);
-  }
+// When tag is expanded, tag name should show link behavior (teal highlight)
+.tag-group.tag-expanded .tag-name-area:hover {
+  opacity: 1 !important;
+  background-color: var(--lightgray);
 }
 
   .tag-name {
