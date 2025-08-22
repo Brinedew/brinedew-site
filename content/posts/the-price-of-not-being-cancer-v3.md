@@ -315,7 +315,7 @@ This framework leads to a surprising prediction: what if, when prevention and po
 
 What if the only way to reliably prevent cancer is to gradually shut down the very processes that keep you alive? I find it best to think of this kind of adaptation as the aging body transitioning into a low-trust, paranoid police state, trading vitality for security. Think about what happens in human societies when trust breaks down. You don't just add more police - you fundamentally change how everything operates. Curfews. Checkpoints. Neighbors reporting neighbors. Everyone becomes a potential threat, so you lock everything down.
 
-That's aging: the final solution to cellular immortality. Not a gentle fading, but a series of increasingly desperate, self-inflicted wounds designed to make the organism an ever-more-barren wasteland for rogue, ambitious cells.
+Through the lens of multicellular organization, observable features and proxies of aging appear less like an unwanted decline and more like an adaptive late-life, low-trust somatic state, wringing a few extra years of life from a defector-riddled multicellular body. Not a gentle fading, but a series of increasingly desperate, self-inflicted wounds designed to make the organism an ever-more-barren wasteland for rogue, ambitious cells.
 
 ![](https://lh7-rt.googleusercontent.com/docsz/AD_4nXemjZKraamutaeJ0XKtU4rI-janzUO3xbA5khdbicrK3XoIb9IXDN321pgdXVDSyv8UIVx0YOl5TDybBL3xo-jyI7dRwg-z2k5sQFXldN-bf5KwtEQTR54J9aH2ukb0cz85XFfLaQ?key=UbsS3t3qSKqRUUxPuIsPVg)
 
