@@ -155,7 +155,7 @@ The physical mechanism is straightforward: crowded cells literally can't expand 
 
 This fails in cancer because tumor cells often lose their cadherin proteins or ignore the "stop" signals from crowding. They start dividing anyway, piling up on top of each other in disorganized masses instead of forming the neat, organized tissue layers that contact inhibition normally creates.
 
-**Anchorage dependence:** In many tissues, "stay attached or die" is a safety policy, not a law. Epithelial cells expect an integrin "OK" signal from the surrounding matrix; when that confirmation disappears, a built‑in program (anoikis) kills the detached cell. This reduces the risk of cells surviving in the wrong place, at the cost of slower remodeling. Not universal: blood and immune cells normally travel unattached, and cancer cells often disable anoikis.
+**Anchorage dependence:** In many tissues, "stay attached or die" is a great anti-defector policy. Epithelial cells expect a "stay alive" integrin signal from the surrounding matrix; when that confirmation disappears, cells are primed to execute an suicide-on-detachment internal program (anoikis) that kills the detached cell. This policy reduces the risk of cells surviving in the wrong place, at the cost of slower remodeling regeneration (can't send extra cells to where they're needed).
 
 **Stem cell geographic leashing:** Stem cells can only survive and divide within their specialized niche microenvironments, which provide unique survival signals like Wnt. If stem cells leave their niche, they lose proliferation licenses. This limits repair range and speed but prevents stem cell escape.
 

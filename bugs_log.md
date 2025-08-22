@@ -305,30 +305,25 @@ date: 2025-08-21
 
 ---
 
-### 14. TagExplorer Hierarchical Tags Not Nesting - PARTIALLY FIXED ⚠️
-**Status**: 🟡 **95% RESOLVED** - August 21, 2025  
-**Issue**: TagExplorer displayed flat tags ("topic/aging", "type/post") instead of hierarchical nesting ("topic" → "aging", "post")
+### 14. TagExplorer UI Issues - MOSTLY FIXED ✅
+**Status**: ✅ **MOSTLY RESOLVED** - August 22, 2025  
+**Issue**: Multiple TagExplorer problems affecting usability
 
-**Root Cause**: Custom TagExplorer component treated "/" as literal text instead of parsing into parent-child relationships. Original flat Map structure incompatible with hierarchy.
-
-**Fix Applied**: Complete rewrite of TagExplorer component:
-- Added hierarchical data types (TagNode) and tree building logic
-- Replaced flat tag processing with recursive renderNode function  
-- Implemented aggregate counts showing parent + descendant page totals
-- Preserved all existing CSS classes for compatibility
-- Enhanced JavaScript to handle both CSS classes and inline styles
+**Issues Fixed**:
+- ✅ **Hierarchical display working**: "topic (14)" → aging (4), biology (4), cancer (3) with proper nesting
+- ✅ **Click handlers working**: All collapse/expand functionality responds correctly to clicks  
+- ✅ **Main header persistence**: Clicking "Tags" title properly collapses/expands entire sidebar across navigation
+- ✅ **Hover state visual feedback**: Collapsed tags dim on hover, expanded tag names show teal highlight, arrows always dim
+- ✅ **CSS opacity cascade conflict**: Fixed parent hover opacity blocking child highlights
 
 **Files Fixed**:
-- `quartz/components/TagExplorer.tsx` - complete rewrite (lines 17-137)
-- `quartz/components/scripts/tagExplorer.inline.ts` - updated for hierarchy (lines 16-84)  
-- `quartz.layout.ts` - added hierarchical configuration (lines 44-51)
+- `quartz/components/TagExplorer.tsx` - removed hardcoded aria-expanded, hierarchical rendering (lines 17-243)
+- `quartz/components/scripts/tagExplorer.inline.ts` - complete rewrite of click handlers and persistence (lines 89-151)  
+- `quartz/components/styles/tagExplorer.scss` - fixed hover states and CSS cascade (lines 89-118)
 
-**Resolution Status**:
-- ✅ Perfect hierarchical display: "topic (14)" → aging (4), biology (4), cancer (3)
-- ✅ Aggregate counts working: parents show sum of all descendants  
-- ✅ Visual hierarchy with proper indentation and nesting
-- ❌ Click handlers not responding: collapse/expand functionality broken
+**Remaining Issue**: 
+- ❌ **Selective nested tag persistence**: "glossary" and "protein" tags reset to expanded on navigation, but "aging" and other hierarchical tags persist correctly
 
-**Remaining Issue**: JavaScript click handlers for collapse/expand not working. Tags display correctly but don't respond to clicks for toggling visibility.
+**Evidence**: Can reproduce by collapsing "glossary"/"protein" tags then navigating - they expand again while "topic/aging" stays collapsed.
 
-**Next Steps**: Debug event attachment in `setupTagExplorer()` function around lines 54-80 of tagExplorer.inline.ts.
+**Next Steps**: Debug localStorage key mismatch for flat vs hierarchical tag types in `setupTagExplorer()` restoration logic.
