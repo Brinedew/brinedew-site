@@ -1,8 +1,8 @@
 ---
 title: {{VALUE:title}}
 tags:
-  - type/post
+- type/post
+- status/draft
 date: {{DATE:YYYY-MM-DD}}
-status: draft
 ---
 # {{VALUE:title}}
