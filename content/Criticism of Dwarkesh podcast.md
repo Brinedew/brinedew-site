@@ -866,3 +866,5 @@ Transcript:
 > **Jacob Kimmel** _01:44:08_
 > 
 > Awesome. Thanks, Dwarkesh.
+
+
