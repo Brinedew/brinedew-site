@@ -1,88 +1,91 @@
-# QuickAdd Note Creation Workflow - 2025-08-23
+# Quartz Draft System Implementation - 2025-08-23
 
-The user wanted a custom note creation workflow where hitting Ctrl+N brings up a dialog with 4 options: Post (goes to posts/ folder), Wiki Page (goes to wiki/ folder), Protein Page (goes to wiki/ folder with special protein template), or Default Note (normal Obsidian behavior). Plus they wanted the protein option to eventually fetch data from UniProt API.
+I just finished implementing a proper draft system for the Quartz 4 blog and got QuickAdd working properly. The user wanted new content to default to draft instead of published, plus they needed a working note creation workflow.
 
 ## what actually works now
 
-Nothing. The QuickAdd plugin is completely clean after reinstalling it.
+**QuickAdd is finally working:**
+- Fixed the vault location issue - QuickAdd was installed in wrong .obsidian folder
+- Fixed PowerShell UTF-8 BOM encoding that was breaking JSON parsing
+- All 3 templates work: Post, Wiki Page, Protein Page
+- Ctrl+N brings up the dialog and creates files properly
 
-But here's what we built that's ready to work:
+**Draft system is implemented:**
+- Switched from tag-based (`status/published`) to proper frontmatter (`draft: true/false`)
+- All 111 existing content files now have `draft: true` by default
+- Site structure pages (About, index, apps) stay published
+- RemoveDrafts filter completely excludes draft files from build (they don't exist on live site)
 
-**Files created:**
-- `content/Templates/Post Template.md` - basic post template with proper frontmatter
-- `content/Templates/Smart Wiki Template.md` - existed already, prompts for protein vs regular wiki page
-- `.obsidian/scripts/default-new-note.js` - script to trigger Obsidian's core "new note" command
-- `.obsidian/hotkeys.json` - has binding for Ctrl+N but references a dead QuickAdd choice UUID
-- `setup-quickadd.ps1` - PowerShell script that creates the full QuickAdd configuration
-- `reset-quickadd.ps1` - More robust version that wipes QuickAdd config completely and recreates it
+**Content cleanup completed:**
+- Deleted test files and untitled junk
+- Fixed image references (`posts/image.png` → `Attachments/anoikis-illustration.png`)  
+- Moved misplaced content to correct folders
+- Updated dark-mode-test-page to Quartz 4 standards with transclusion test
 
-**What the configuration should do:**
-- Multi choice called "Create New Note" containing 4 sub-choices
-- Post choice: uses Post Template, creates in content/posts/
-- Wiki Page choice: uses Smart Wiki Template, creates in content/wiki/, asks protein/not protein
-- Protein Page choice: uses Smart Wiki Template, creates in content/wiki/ (placeholder for UniProt integration)
-- Default Note choice: macro that runs the default-new-note.js script
+Files I changed:
+- `content/Templates/*.md` - all templates now use `draft: true` instead of status tags
+- `content/.obsidian/plugins/quickadd/data.json` - fixed template paths and folder targets
+- `content/posts/dark-mode-test-page.md` - converted MkDocs syntax to Quartz callouts, added transclusion
+- `content/wiki/cellular-senescence.md` - published for transclusion test with block reference
+- `scripts/add-draft-property.ps1` - bulk script that added draft property to all content
 
 ## what's broken
 
-QuickAdd plugin configuration gets wiped when you reinstall the plugin. We discovered the original QuickAdd installation was corrupted - it only had data.json but was missing main.js, manifest.json, and styles.css files. That's why our JSON configuration wasn't working.
+**Posts page shows published drafts:** The user noticed 3 posts appear on brinedew.com/posts but there's no "posts" tag in the sidebar. This suggests either:
+- The draft filter isn't working properly for folder listings 
+- The posts have `draft: false` already (cellular-senescence and dark-mode-test-page were set to false for testing)
 
-When we reinstalled QuickAdd properly, it came back completely clean. The user said "Now there's nothing. Completely clean. Not even an old multi."
+**Test page link name too long:** The dark-mode-test-page URL is unwieldy - should probably be shortened to just "test-page" or similar.
+
+**Sidebar tag issues:** The user mentioned posts aren't showing up in the tag explorer properly. Might be related to the draft filtering or tag structure changes.
 
 ## where things stand
 
-**Current QuickAdd state:** Fresh installation, no choices configured
-**Templates:** All exist and ready
-**Scripts:** Default note script exists and should work
-**Hotkeys:** Has a dead reference to our old Multi choice UUID
+**Current environment:**
+- QuickAdd working in content vault (`D:\Coding\Website\content`)
+- All changes pushed to GitHub and deployed live
+- Draft system active - most content hidden from live site
+- Only 2-3 pages actually published for testing
 
-**Working commands right now:**
+**Working commands:**
 ```bash
-# Check if templates exist
-ls "D:\Coding\Website\content\Templates\"
-# Should show: Post Template.md, Smart Wiki Template.md
+# Test QuickAdd workflow
+cd "D:\Coding\Website\content" 
+# Open Obsidian, press Ctrl+N, should see 3-option dialog
 
-# Check if script exists  
-ls "D:\Coding\Website\.obsidian\scripts\"
-# Should show: default-new-note.js
+# Check draft filtering locally
+cd "D:\Coding\Website"
+npx quartz build
+# Should only build non-draft content
+
+# Bulk publish content (remove draft property)
+cd "D:\Coding\Website"
+# Edit files to remove `draft: true` or change to `draft: false`
 ```
 
 ## what to do next
 
-The most urgent thing is to get the QuickAdd configuration working. The user has been trying to set this up for a while and got frustrated with the GUI approach.
+**Fix the posts page issue:** Check why published posts aren't showing tag associations properly. Look at:
+1. `content/posts/index.md` - might need draft property removed
+2. Tag structure after the status tag cleanup 
+3. Whether FolderPage plugin respects draft filtering
 
-**Option 1: Run the reset script again**
-```bash
-cd "D:\Coding\Website"
-pwsh -File "reset-quickadd.ps1"
-```
+**Clean up test page:** Either shorten the filename or add a better title/slug. The URL `brinedew.com/posts/dark-mode-test-page` is too verbose.
 
-This should create a fresh QuickAdd configuration with:
-- Multi choice "Create New Note" 
-- 4 sub-choices with proper folder routing
-- Fresh UUIDs for everything
-- New hotkey binding for Ctrl+N
+**Publish key content:** The user probably wants some actual posts visible. Look for high-quality content in posts/ and wiki/ and remove `draft: true` from the good stuff.
 
-**Option 2: Try the GUI approach**
-Go to Settings → QuickAdd and manually create:
-1. Multi choice called "Create New Note"
-2. Add 4 sub-choices to it
-3. Configure each choice's template path and folder
-
-The PowerShell approach is more reliable because QuickAdd's GUI is confusing and prone to conflicts.
+**Test transclusions:** Verify the `![[cellular-senescence#^what-it-is]]` transclusion actually works on the live site.
 
 ## stuff to remember
 
-**Why we chose the JSON approach:** QuickAdd's GUI is terrible. The "Add Choice" button doesn't let you select choice type - it defaults to Template and there's no obvious way to change it to Multi. We tried for hours to make a Multi choice through the GUI and failed.
+**UTF-8 BOM was the real culprit:** The consultant was right - Windows PowerShell writing UTF-8 with BOM broke JSON.parse in QuickAdd. Using `System.Text.UTF8Encoding $false` fixed it.
 
-**The corruption discovery:** Spent a lot of time debugging why our perfect JSON configuration wasn't loading. Turns out QuickAdd was missing its main.js and manifest.json files - it wasn't actually running as a plugin, just had leftover config data.
+**Vault location matters:** QuickAdd needs to be in the same .obsidian folder as the vault you actually have open in Obsidian. The user opens `content/` as the vault, not the parent `Website/` folder.
 
-**Uninstall behavior:** Obsidian smartly preserves user data (data.json) when uninstalling plugins, only removing the executable files. This is good for users but meant our config survived the corrupted installation.
+**Draft filtering is build-time, not runtime:** Files with `draft: true` literally don't exist on the live site - they're excluded during build, not just hidden.
 
-**UniProt integration:** Not implemented yet. The plan was to enhance the "Protein Page" choice with a macro that prompts for protein symbol/UniProt ID, fetches data from UniProt API, and auto-populates template fields. We have the basic template structure ready for this.
+**Tag cleanup already happened:** The user ran scripts to remove status tags before this session, so the tag structure is already flattened.
 
-**Templates work well:** The Smart Wiki Template with Templater integration asks protein/not-protein and creates appropriate frontmatter. Meta Bind plugin is installed for interactive property editing.
+**Site is live at brinedew.com:** Changes pushed to GitHub deploy automatically via Actions. The user can immediately see results.
 
-**Static site integration:** The ProteinInfobox component is already built and working on brinedew.com - it reads the protein frontmatter properties and renders Wikipedia-style infoboxes. So once the note creation workflow works, the protein pages will display beautifully on the published site.
-
-The user really wants this workflow to work. They've been patient but I can tell they're getting frustrated with how long it's taking. The technical pieces are all there - we just need to get QuickAdd configured properly.
+The user seems happy that QuickAdd finally works, but they caught some issues with the draft filtering that need attention. The technical implementation is solid - just need to tune which content gets published.
