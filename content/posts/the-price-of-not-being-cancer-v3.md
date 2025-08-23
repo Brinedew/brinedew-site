@@ -387,11 +387,13 @@ If aging is largely an anti-cancer program, then naive approaches to "anti-aging
 
 Every simplistic "anti-aging" therapy risks becoming pro-cancer. The correct order matters: FIRST enhance genomic stability, THEN improve detection and elimination, ONLY THEN reduce the paranoid mechanisms. Skip steps and you court disaster.
 
-**Practical corner: red flags for longevity investors**
+A robust scientific model does more than explain existing data; it should make specific, falsifiable predictions. If the framework of aging as an active, costly anti-cancer program holds true, it provides a lens through which to evaluate future therapeutic strategies. It leads to a set of concrete, testable hypotheses:
 
-1. If an "anti-aging" therapeutic claims to extend lifespan by "making cells more resilient" or "making cells immortal", it's best to assume it's a scam. Lack of cellular resilience is likely to be a feature, not a bug. Cells being too resilient is bad! Watch out for buzzwords like "cellular rejuvenation," "resetting the aging clock," or "restoring youthful gene expression" - these are the "quantum" of longevity marketing.
+## Predictions of the Anti-Cancer Model
 
-2. Be by default suspicious of any "longevity therapy" that suppresses one or a small number of genes. Evolution preserved these genes for a reason, and as Chesterton's fence tells us, it's best to be very sure what that reason is before getting rid of them. The exception here is for developmentally active oncogenes that should always be silenced in adults anyway - making those oncogenes harder to reactivate in adult cells is probably a good idea.
+1. The model predicts that therapies aiming for simple 'cellular resilience' or 'immortality' are likely to fail or be dangerous, as they would work against the body's core strategy of managed fragility. Lack of cellular resilience is likely to be a feature, not a bug. Cells being too resilient is bad! Watch out for buzzwords like "cellular rejuvenation," "resetting the aging clock," or "restoring youthful gene expression" - these are the "quantum" of longevity marketing.
+
+2. A high degree of caution is warranted for therapies that suppress single genes without addressing the systemic trade-offs, as evolution has likely preserved these genes for reasons of organismal stability. The exception here is for developmentally active oncogenes that should always be silenced in adults anyway - making those oncogenes harder to reactivate in adult cells is probably a good idea.
 
 3. More healthspan doesn't necessarily translate to more lifespan. It's very possible for a therapy to make an organism look healthier in mid-life, and even perform better on health metrics, while at the same time shortening this organism's lifespan. Vigor and frailty aren't necessarily reliable proxies of lifespan. Always demand your anti-aging therapy to show actual lifespan data, not just frailty proxies.
 

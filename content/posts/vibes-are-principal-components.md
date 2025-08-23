@@ -1,11 +1,8 @@
+> **[This is a raw, unedited transcript of a voice note. It contains errors, incomplete thoughts, and is not a polished essay. It is preserved here as a record of an early, unfiltered exploration of an idea.]**
+
 ---
 title: Vibes are principal components
-date: |-
-  ---
-  title: Vibes are principal components
-  date: 2025-08-10
-  tags: [type/post, topic/psychology, topic/analysis, status/published]
-  ---
+date: 2025-08-10
 ---
 
 Title: Vibes are principal components
