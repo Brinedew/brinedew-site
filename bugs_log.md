@@ -327,3 +327,42 @@ date: 2025-08-21
 **Evidence**: Can reproduce by collapsing "glossary"/"protein" tags then navigating - they expand again while "topic/aging" stays collapsed.
 
 **Next Steps**: Debug localStorage key mismatch for flat vs hierarchical tag types in `setupTagExplorer()` restoration logic.
+
+---
+
+### 15. QuickAdd Plugin Configuration Issues - RESEARCHED ❌
+**Status**: 🔴 **UNRESOLVED** - Custom note creation workflow blocked
+**Issue**: User wants Ctrl+N to show dialog with 4 choices (Post, Wiki Page, Protein Page, Default Note) with folder routing and templates
+
+**Root Causes Discovered**:
+1. **Original QuickAdd Installation Corrupted**: Plugin folder missing `main.js`, `manifest.json`, `styles.css` - only had leftover `data.json`
+2. **GUI Approach Failed**: QuickAdd's "Add Choice" button defaults to Template type with no obvious way to change to Multi type
+3. **Configuration Wiped on Reinstall**: Fresh QuickAdd installation comes completely clean, no preserved settings
+
+**Technical Investigation**:
+- Built comprehensive JSON configuration scripts (`setup-quickadd.ps1`, `reset-quickadd.ps1`) 
+- Created all supporting files (templates, scripts, hotkey bindings)
+- Configuration structure was perfect but plugin wasn't loading due to missing executable files
+- Obsidian preserves user data (`data.json`) during uninstall but removes plugin executables
+
+**Files Created**:
+- `content/Templates/Post Template.md` - basic post template with frontmatter
+- `content/Templates/Smart Wiki Template.md` - existing, asks protein vs regular
+- `.obsidian/scripts/default-new-note.js` - script for default Obsidian new note behavior
+- `setup-quickadd.ps1` / `reset-quickadd.ps1` - PowerShell scripts for JSON configuration
+
+**What Should Work**:
+- Multi choice "Create New Note" with 4 sub-choices
+- Post → content/posts/ folder with Post Template
+- Wiki Page → content/wiki/ folder with Smart Wiki Template (asks protein/not protein)
+- Protein Page → content/wiki/ folder (placeholder for UniProt API integration)
+- Default Note → macro executing core Obsidian new note command
+
+**Current State**: Fresh QuickAdd installation, all supporting files exist, configuration approach validated
+
+**Next Steps**: 
+1. Run `reset-quickadd.ps1` to recreate JSON configuration
+2. Alternative: Manual GUI setup if PowerShell approach still fails
+3. Future: Add UniProt API integration to Protein Page choice for auto-populating template fields
+
+**User Impact**: High - this is a core workflow improvement they've been requesting

@@ -215,6 +215,28 @@ getComputedStyle(document.documentElement).getPropertyValue('--light').trim()
 - Layers panel (More tools → Layers) to visualize z-index stacking
 - Check for `@media (prefers-color-scheme)` blocks that might override theme variables later in cascade
 
+## obsidian plugin debugging patterns
+
+**Check for corrupted plugin installations first:**
+```bash
+# Plugin should have these 3 files at minimum:
+ls .obsidian/plugins/plugin-name/
+# Expected: main.js, manifest.json, data.json
+# Missing main.js/manifest.json = corrupted installation
+```
+
+**Plugin data persistence across uninstall/reinstall:**
+- Obsidian preserves `data.json` (user settings) when uninstalling plugins
+- Removes `main.js`, `manifest.json`, `styles.css` (executable files)
+- This means broken configs can survive reinstallation
+- For clean slate: manually delete entire plugin folder before reinstalling
+
+**QuickAdd GUI is broken - use JSON configuration:**
+- "Add Choice" button defaults to Template type with no way to change to Multi
+- Direct JSON editing in `data.json` is more reliable than GUI
+- Use UUIDs for choice IDs: `[System.Guid]::NewGuid().ToString()` in PowerShell
+- Multi choice format: `"children": ["uuid1", "uuid2"]` array of child choice IDs
+
 ## gemini analysis templates
 
 Use these prompts with the `gemini -p "prompt" @file.md` command to get structural analysis of documents:
