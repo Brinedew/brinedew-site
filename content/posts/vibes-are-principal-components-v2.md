@@ -2,8 +2,8 @@
 title: Vibes are principal components
 date: 2025-08-10
 tags:
-- status/published
 - type/post
+draft: true
 ---
 Title: Vibes are principal components
 Outline (audio transcription with errors):

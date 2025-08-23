@@ -1,6 +1,7 @@
 ---
 title: "Aging research is different from most research"
 date: 2025-08-10
+draft: true
 ---
 
 In research, there's a constant tension between hedgehogs and foxes. Foxes have a distaste for "grand unified theories" and prefer incremental evidence-based progress. This is a great idea in many fields of study, and I wholeheartedly recommend this approach in most of the fields. However, I would argue aging research is not one of those fields.

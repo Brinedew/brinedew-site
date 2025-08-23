@@ -7,6 +7,7 @@ status: draft
 aliases:
 - Caspase‑9
 - Caspase‑3
+draft: true
 ---
 # Caspases (e.g., CASP9, CASP3)
 

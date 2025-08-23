@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - Insulin-like growth factor 1
+draft: true
 ---
 # IGF‑1
 

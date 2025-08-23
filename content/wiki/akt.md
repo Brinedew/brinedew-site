@@ -7,6 +7,7 @@ status: draft
 aliases:
 - AKT1
 - AKT2
+draft: true
 ---
 # AKT
 

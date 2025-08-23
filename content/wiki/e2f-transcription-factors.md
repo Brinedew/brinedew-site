@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - E2F1 family
+draft: true
 ---
 # E2F transcription factors
 

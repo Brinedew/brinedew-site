@@ -1,6 +1,7 @@
 ---
 title: "The parable of the thermometer"
 date: 2025-08-10
+draft: true
 ---
 
 Imagine youre the first guy in your tribe to discover temperature and make a termometer. You can measure temperature of people now. You notice a pattern: most people have a temperature around 37C. But a few have a temperature of 40+C, and they soon die. You discover that being above 40C is a good predictive factor for death this week. You give a name to this condition: hyperthermia.

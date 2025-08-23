@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - CD274
+draft: true
 ---
 # PD‑L1 (CD274)
 

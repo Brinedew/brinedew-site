@@ -7,6 +7,7 @@ status: draft
 aliases:
 - RB1
 - Retinoblastoma protein
+draft: true
 ---
 # Rb (RB1)
 

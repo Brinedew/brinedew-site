@@ -2,8 +2,8 @@
 title: Atavistic Theory of Cancer
 date: 2025-08-10
 tags:
-- status/complete
 - type/wiki
+draft: true
 ---
 # Atavistic Theory of Cancer
 

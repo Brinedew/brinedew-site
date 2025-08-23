@@ -1,6 +1,7 @@
 ---
 title: "Principal-Agent Problem"
 date: 2025-08-10
+draft: true
 ---
 
 # Principal-Agent Problem

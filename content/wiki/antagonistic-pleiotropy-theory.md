@@ -1,6 +1,7 @@
 ---
 title: "Antagonistic Pleiotropy Theory"
 date: 2025-08-10
+draft: true
 ---
 
 # Antagonistic Pleiotropy Theory

@@ -7,6 +7,7 @@ status: draft
 aliases:
 - MAP2K1
 - MAP2K2
+draft: true
 ---
 # MEK (MAP2K1/2)
 

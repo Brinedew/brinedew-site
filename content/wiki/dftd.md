@@ -1,6 +1,7 @@
 ---
 title: "Devil Facial Tumor Disease (DFTD)"
 date: 2025-08-10
+draft: true
 ---
 
 # Devil Facial Tumor Disease (DFTD)

@@ -7,6 +7,7 @@ status: draft
 aliases:
 - PIK3CA
 - Class I PI3K
+draft: true
 ---
 # PI3K (class I)
 

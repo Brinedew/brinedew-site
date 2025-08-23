@@ -2,8 +2,8 @@
 title: {{VALUE:title}}
 tags:
 - type/wiki
-- status/stub
 date: {{DATE:YYYY-MM-DD}}
+draft: true
 aliases:
 - 
 ---

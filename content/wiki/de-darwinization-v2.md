@@ -1,6 +1,7 @@
 ---
 title: "de-darwinization-v2"
 date: 2025-08-10
+draft: true
 ---
 
 ﻿# De-Darwinization

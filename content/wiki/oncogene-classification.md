@@ -1,6 +1,7 @@
 ---
 title: "How malignant cells evade host coordination systems"
 date: 2025-08-10
+draft: true
 ---
 
 # How malignant cells evade host coordination systems

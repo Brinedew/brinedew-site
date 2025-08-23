@@ -3,7 +3,7 @@ title: {{VALUE:title}}
 tags:
 - protein
 date: {{DATE:YYYY-MM-DD}}
-status: draft
+draft: true
 aliases:
 - {{VALUE:Gene symbol (if different)}}
 symbol: {{VALUE:Gene symbol}}

@@ -7,6 +7,7 @@ status: draft
 aliases:
 - CTNNB1
 - beta-catenin
+draft: true
 ---
 # β-catenin (CTNNB1)
 

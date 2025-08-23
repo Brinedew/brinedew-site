@@ -2,12 +2,12 @@
 title: Cellular Senescence
 date: 2025-08-10
 tags:
-- status/complete
 - type/wiki
+draft: false
 ---
 # Cellular Senescence
 
-Irreversible cell cycle arrest accompanied by altered cellular metabolism and secretory activity. This is one of the ways multicellular organisms prevent damaged cells from becoming cancerous.
+Irreversible cell cycle arrest accompanied by altered cellular metabolism and secretory activity. This is one of the ways multicellular organisms prevent damaged cells from becoming cancerous. ^what-it-is
 
 ## Molecular pathways
 

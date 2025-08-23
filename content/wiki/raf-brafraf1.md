@@ -7,6 +7,7 @@ status: draft
 aliases:
 - BRAF
 - RAF1
+draft: true
 ---
 # RAF (BRAF/RAF1)
 

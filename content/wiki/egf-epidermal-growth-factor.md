@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - Epidermal Growth Factor
+draft: true
 ---
 # EGF (Epidermal Growth Factor)
 

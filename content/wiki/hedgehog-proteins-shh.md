@@ -7,6 +7,7 @@ status: draft
 aliases:
 - Sonic Hedgehog
 - Shh
+draft: true
 ---
 # Hedgehog proteins (Shh)
 

@@ -2,8 +2,8 @@
 title: One-Hit Cancer
 date: 2025-08-10
 tags:
-- status/published
 - type/post
+draft: true
 ---
 # One-Hit Cancer
 

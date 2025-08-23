@@ -1,6 +1,7 @@
 ---
 title: "CTVT - Canine Transmissible Venereal Tumor"
 date: 2025-08-10
+draft: true
 ---
 
 # CTVT - Canine Transmissible Venereal Tumor

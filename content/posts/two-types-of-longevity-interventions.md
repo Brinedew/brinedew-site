@@ -1,6 +1,7 @@
 ---
 title: "Two types of longevity interventions"
 date: 2025-08-10
+draft: true
 ---
 
 Submarine analogy

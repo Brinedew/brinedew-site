@@ -1,6 +1,7 @@
 ---
 title: "Defensive Degeneration Theory"
 date: 2025-08-10
+draft: true
 ---
 
 # Defensive Degeneration Theory

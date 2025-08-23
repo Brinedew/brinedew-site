@@ -1,6 +1,7 @@
 ---
 title: "Disposable Soma Theory"
 date: 2025-08-10
+draft: true
 ---
 
 # Disposable Soma Theory

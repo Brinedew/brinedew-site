@@ -7,6 +7,7 @@ status: draft
 aliases:
 - TERT
 - hTERT
+draft: true
 ---
 # Telomerase (TERT)
 

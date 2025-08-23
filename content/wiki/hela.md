@@ -1,6 +1,7 @@
 ---
 title: "HeLa Cells"
 date: 2025-08-10
+draft: true
 ---
 
 # HeLa Cells

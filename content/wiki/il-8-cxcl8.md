@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - CXCL8
+draft: true
 ---
 # IL‑8 (CXCL8)
 

@@ -7,6 +7,7 @@ status: draft
 aliases:
   - p14ARF
   - CDKN2A-ARF
+draft: true
 ---
 # ARF (p14^ARF)
 

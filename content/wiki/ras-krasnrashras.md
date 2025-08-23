@@ -8,6 +8,7 @@ aliases:
 - KRAS
 - NRAS
 - HRAS
+draft: true
 ---
 # RAS (KRAS/NRAS/HRAS)
 

@@ -1,6 +1,7 @@
 ---
 title: "gemini-output"
 date: 2025-08-10
+draft: true
 ---
 
 ## The Anti-Cancer Playbook: A Multi-Layered Defense

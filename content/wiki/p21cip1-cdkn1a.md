@@ -7,6 +7,7 @@ status: draft
 aliases:
 - CDKN1A
 - CIP1
+draft: true
 ---
 # p21^CIP1 (CDKN1A)
 

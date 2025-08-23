@@ -1,6 +1,7 @@
 ---
 title: "p53 Guardian"
 date: 2025-08-10
+draft: true
 ---
 
 # p53 Guardian

@@ -2,8 +2,8 @@
 title: Tumor Suppressor Theory of Aging
 date: 2025-08-10
 tags:
-- status/complete
 - type/wiki
+draft: true
 ---
 # Tumor Suppressor Theory of Aging
 

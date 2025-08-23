@@ -2,7 +2,7 @@
 title: {{VALUE:title}}
 tags:
 - type/post
-- status/draft
 date: {{DATE:YYYY-MM-DD}}
+draft: true
 ---
 # {{VALUE:title}}

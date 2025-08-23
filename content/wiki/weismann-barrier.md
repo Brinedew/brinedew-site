@@ -1,6 +1,7 @@
 ---
 title: "Weismann Barrier"
 date: 2025-08-10
+draft: true
 ---
 
 # Weismann Barrier

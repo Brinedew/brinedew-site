@@ -1,6 +1,7 @@
 ---
 title: "Eutely"
 date: 2025-08-20
+draft: true
 ---
 
 # Eutely

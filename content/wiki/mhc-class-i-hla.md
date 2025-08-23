@@ -8,6 +8,7 @@ aliases:
 - HLA‑A
 - HLA‑B
 - HLA‑C
+draft: true
 ---
 # MHC class I (HLA)
 

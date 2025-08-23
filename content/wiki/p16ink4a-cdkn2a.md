@@ -7,6 +7,7 @@ status: draft
 aliases:
 - CDKN2A
 - INK4a
+draft: true
 ---
 # p16^INK4a (CDKN2A)
 

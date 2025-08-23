@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - PDCD1
+draft: true
 ---
 # PD‑1 (PDCD1)
 

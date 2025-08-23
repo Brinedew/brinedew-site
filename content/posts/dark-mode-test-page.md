@@ -1,6 +1,9 @@
 ---
 title: "Dark Mode Test Page"
 date: 2025-08-10
+noindex: true
+draft: false
+tags:
 ---
 
 # Dark Mode Test Page
@@ -37,9 +40,9 @@ Here is some `inline code` in a sentence.
 
 ## Keyboard Keys
 
-Press ++ctrl+alt+delete++ to restart.
+Press <kbd>Ctrl+Alt+Delete</kbd> to restart.
 
-Use ++cmd+c++ to copy and ++cmd+v++ to paste.
+Use <kbd>Cmd+C</kbd> to copy and <kbd>Cmd+V</kbd> to paste.
 
 ## Marked/Highlighted Text
 
@@ -55,17 +58,17 @@ This is ==highlighted text== that should be visible.
 
 ## Admonitions/Callouts
 
-!!! note "Note Admonition"
-    This is a note admonition with some content.
+> [!note] Note Callout
+> This is a note callout with some content.
 
-!!! warning "Warning Admonition"
-    This is a warning with important information.
+> [!warning] Warning Callout
+> This is a warning with important information.
 
-!!! tip "Tip Admonition"
-    This is a helpful tip for users.
+> [!tip] Tip Callout
+> This is a helpful tip for users.
 
-!!! danger "Danger Admonition"
-    This indicates something dangerous or critical.
+> [!danger] Danger Callout
+> This indicates something dangerous or critical.
 
 ## Blockquotes
 
@@ -83,36 +86,33 @@ This is ==highlighted text== that should be visible.
 
 ## Content Tabs
 
-=== "Tab 1"
+> [!note]- Tab 1
+> Content for the first tab with some text and formatting.
 
-    Content for the first tab with some text and formatting.
+> [!note]- Tab 2  
+> Content for the second tab.
+> 
+> ```python
+> # Code in a tab
+> print("Hello from tab 2")
+> ```
 
-=== "Tab 2"
-
-    Content for the second tab.
-    
-    ```python
-    # Code in a tab
-    print("Hello from tab 2")
-    ```
-
-=== "Tab 3"
-
-    - List item 1
-    - List item 2
-    - List item 3
+> [!note]- Tab 3
+> - List item 1
+> - List item 2
+> - List item 3
 
 ## Details/Summary Elements
 
-??? "Collapsible Section"
-    This content is hidden by default and can be expanded.
-    
-    - Item 1
-    - Item 2
-    - Item 3
+> [!info]- Collapsible Section
+> This content is hidden by default and can be expanded.
+> 
+> - Item 1
+> - Item 2
+> - Item 3
 
-??? note "Collapsible Note"
-    This is a collapsible note with additional information.
+> [!note]- Collapsible Note
+> This is a collapsible note with additional information.
 
 ## Footnotes
 
@@ -125,12 +125,10 @@ Here's another footnote[^2].
 
 ## Math Expressions (if MathJax is enabled)
 
-Inline math: \(E = mc^2\)
+Inline math: $E = mc^2$
 
 Block math:
-\[
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-\]
+$$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
 
 ## Links
 
@@ -156,9 +154,15 @@ Block math:
   - Another nested bullet
 - Third bullet
 
-## Images (if any exist)
+## Images and Transclusions
 
-*Note: Images would be tested here if they exist in the assets*
+![Anoikis illustration](../Attachments/anoikis-illustration.png)
+
+### Transclusion Test
+
+![[cellular-senescence#^what-it-is]]
+
+*The above should show a transclusion of the cellular senescence definition*
 
 ## Navigation Elements
 

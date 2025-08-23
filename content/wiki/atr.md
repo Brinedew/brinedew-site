@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - ATM and Rad3-related
+draft: true
 ---
 # ATR
 

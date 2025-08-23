@@ -6,6 +6,7 @@ date: 2025-08-21
 status: draft
 aliases:
 - BCL2L1
+draft: true
 ---
 # BCL‑XL (BCL2L1)
 

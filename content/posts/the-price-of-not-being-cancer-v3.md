@@ -1,6 +1,7 @@
 ---
 title: "The Price of Not Being Cancer"
 date: 2025-08-10
+draft: true
 ---
 
 # The Price of Not Being Cancer
@@ -157,7 +158,7 @@ This fails in cancer because tumor cells often lose their cadherin proteins or i
 
 **Anchorage dependence:** In many tissues, "stay attached or die" is a great anti-defector policy. Epithelial cells expect a "stay alive" integrin signal from the surrounding matrix; when that confirmation disappears, cells are primed to execute an suicide-on-detachment internal program (anoikis) that kills the detached cell. This policy reduces the risk of cells surviving in the wrong place, at the cost of slower remodeling regeneration (can't send extra cells to where they're needed).
 
-![illustration of anoikis](image.png)
+![illustration of anoikis](../Attachments/anoikis-illustration.png)
 Source: https://www.nature.com/articles/cddis2017363
 
 **Stem cell geographic leashing:** Stem cells can only survive and divide within their specialized niche microenvironments, which provide unique survival signals like Wnt. If stem cells leave their niche, they lose proliferation licenses. This limits repair range and speed but prevents stem cell escape.

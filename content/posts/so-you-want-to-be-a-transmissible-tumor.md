@@ -1,6 +1,7 @@
 ---
 title: "So you want to be a transmissible tumor"
 date: 2025-08-10
+draft: true
 ---
 
 # So you want to be a transmissible tumor
