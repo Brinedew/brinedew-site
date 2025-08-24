@@ -1,5 +1,5 @@
 ---
-title: ""
+title: "The Brinedew Essays"
 enableToc: false
 draft: false
 ---

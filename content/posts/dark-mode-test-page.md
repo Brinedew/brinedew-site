@@ -1,9 +1,10 @@
 ---
-title: "Dark Mode Test Page"
+title: Dark Mode Test Page
 date: 2025-08-10
 noindex: true
 draft: false
 tags:
+  - meta
 ---
 
 # Dark Mode Test Page

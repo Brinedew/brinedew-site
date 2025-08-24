@@ -1,0 +1,26 @@
+views:
+  - type: cards
+    name: Unpublished
+    filters:
+      and:
+        - draft == true
+    order:
+      - title
+      - file.mtime
+    sort:
+      - property: file.size
+        direction: DESC
+    imageFit: ""
+    cardSize: 190
+    imageAspectRatio: 1
+  - type: cards
+    name: Published
+    filters:
+      and:
+        - draft == false
+    order:
+      - title
+      - file.mtime
+    sort:
+      - property: file.mtime
+        direction: DESC
