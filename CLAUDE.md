@@ -379,6 +379,8 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 
 **Content organization during migrations:** Always check for referenced files before deletion. `grep` for filenames/paths to avoid breaking image links or important data files disguised as "test" content.
 
+**Put scripts in scripts/ folder:** Don't create PowerShell or Python scripts in the project root. Always use `scripts/` directory to keep tools organized and separate from content.
+
 ---
 
 *Last updated: August 2025 (post-QuickAdd/Draft system implementation)*

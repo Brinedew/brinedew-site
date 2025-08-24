@@ -1,3 +1,7 @@
+---
+draft: true
+---
+
 
 https://www.dwarkesh.com/p/jacob-kimmel
 

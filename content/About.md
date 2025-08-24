@@ -2,6 +2,7 @@
 title: About
 hide:
   - navigation
+draft: false
 ---
 <p align="justify">I'm Brinedew. Here you can find my collection of posts, simulations and resources on evolution of longevity and agent-based modelling.  ^137b09
 

@@ -1,3 +1,7 @@
+---
+draft: true
+---
+
 > **[This is a raw, unedited transcript of a voice note. It contains errors, incomplete thoughts, and is not a polished essay. It is preserved here as a record of an early, unfiltered exploration of an idea.]**
 
 ---

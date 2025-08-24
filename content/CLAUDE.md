@@ -1,3 +1,7 @@
+---
+draft: true
+---
+
 # content folder notes
 
 *Specific to working with files in the content/ directory*
