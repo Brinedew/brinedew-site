@@ -350,6 +350,35 @@ If you encounter components with inline CSS/JS (legacy code), don't copy those p
 
 **The rule**: If Explorer or TOC doesn't do it that way, you probably shouldn't either.
 
+## obsidian quickadd plugin debugging patterns
+
+**Windows UTF-8 BOM breaks JSON parsing:** The most common QuickAdd failure is PowerShell writing UTF-8 with BOM when creating config files. QuickAdd's JSON.parse() chokes on the BOM and falls back to empty config.
+
+**Always check vault location first:** QuickAdd must be in the `.obsidian` folder of the vault you actually have open. If user opens `Website/content/` as vault, QuickAdd needs to be in `content/.obsidian/plugins/quickadd/`, not `Website/.obsidian/`.
+
+**UTF-8 No BOM PowerShell pattern:**
+```powershell
+# WRONG - creates BOM
+$config | ConvertTo-Json -Depth 10 | Set-Content file.json -Encoding UTF8
+
+# RIGHT - no BOM
+$json = $config | ConvertTo-Json -Depth 10
+$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($filePath, $json, $Utf8NoBom)
+```
+
+**Plugin installation corruption signs:** Missing `main.js`, `manifest.json`, `styles.css` but `data.json` exists means corrupted install. Obsidian preserves user data during uninstall but removes executables.
+
+## quartz draft system patterns
+
+**RemoveDrafts is build-time filtering:** Files with `draft: true` don't exist on live site at all - they're excluded during build, not just hidden from navigation. Much stronger than tag-based hiding.
+
+**Draft property vs status tags:** Use frontmatter `draft: true/false` instead of `status/published` tags. Integrates with Quartz's built-in filtering and follows static site conventions.
+
+**Bulk content property changes:** When switching systems (tags → properties), use PowerShell scripts with regex frontmatter parsing instead of YAML libraries to avoid dependency issues.
+
+**Content organization during migrations:** Always check for referenced files before deletion. `grep` for filenames/paths to avoid breaking image links or important data files disguised as "test" content.
+
 ---
 
-*Last updated: August 2025 (post-TagExplorer architecture lesson)*
+*Last updated: August 2025 (post-QuickAdd/Draft system implementation)*
