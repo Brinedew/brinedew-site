@@ -1,7 +1,8 @@
 ---
 title: Scriptotic — YouTube Transcript Generator
 description: Submit a YouTube URL, track progress, and download transcripts.
-tags: [apps]
+tags:
+  - type/apps
 noindex: false
 draft: false
 ---

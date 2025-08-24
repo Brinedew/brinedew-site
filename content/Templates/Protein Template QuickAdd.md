@@ -1,19 +1,23 @@
 ---
-title: {{VALUE:title}}
+title:
+  "{ VALUE:title }":
 tags:
-- protein
-date: {{DATE:YYYY-MM-DD}}
+  - protein
+  - type/wiki
+date:
+  "{ DATE:YYYY-MM-DD }":
 draft: true
 aliases:
-- {{VALUE:Gene symbol (if different)}}
-symbol: {{VALUE:Gene symbol}}
-mass: 
-length (aa): 
-protein_type: 
+  - "{ VALUE:Gene symbol (if different) }":
+symbol:
+  "{ VALUE:Gene symbol }":
+mass:
+length (aa):
+protein_type:
 pathways:
-- 
-uniprot_id: 
-Image link: 
+  - 
+uniprot_id:
+Image link:
 ---
 # {{VALUE:title}}
 
