@@ -13,10 +13,8 @@ tags:
 ## Cell lines can be immortal. Why aren't bodies?
 Paradox: immortal cell lineages vs mortal multicellular bodies.
 
-Context and questions.
-
 <!--section: 2.1-->
-
+Context and questions.
 
 <!--section: 2.1.1-->
 The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
@@ -41,10 +39,8 @@ Let's try to find satisfying answers beyond just "cancer cells are just broken a
 ## Peto's paradox: cancer incidence vs body size
 Larger species evolved stronger anti‑cancer surveillance despite more cells.
 
-Scaling paradox and species-level anti-cancer upgrades.
-
 <!--section: 3.1-->
-
+Scaling paradox and species-level anti-cancer upgrades.
 
 <!--section: 3.1.1-->
 Every time a cell divides, DNA replication introduces random errors. Most are harmless, but occasionally you get a mutation that gives a cell a growth advantage - faster division, resistance to suicide commands, ability to grow without external permission signals. That cell outcompetes its neighbors and expands into a clone. Within that larger clone, more mutations occur, some of which provide additional advantages. After accumulating several key mutations, you get cancer.
@@ -65,10 +61,8 @@ This observation shows that more stringent cellular control is possible, but imp
 ## Evolved to stop evolving
 Cancer replays unicellular competition; multicellularity suppresses it.
 
-Reversion to unicellular competition.
-
 <!--section: 4.1-->
-
+Reversion to unicellular competition.
 
 <!--section: 4.1.1-->
 Let's talk about what cancer cells actually do:
@@ -87,10 +81,8 @@ For billions of years, this was life: unicellular organisms compete; mutations f
 ## The coordination framework
 Principal–agent framing: de‑Darwinize cells to coordinate the body.
 
-Multicellular control as principal–agent coordination.
-
 <!--section: 5.1-->
-
+Multicellular control as principal–agent coordination.
 
 <!--section: 5.1.1-->
 This pattern points to a deeper principle: multicellular life is fundamentally a coordination problem between competing agents.
