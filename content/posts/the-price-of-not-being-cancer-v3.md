@@ -19,9 +19,6 @@ Context and questions.
 
 
 <!--section: 2.1.1-->
-
-
-<!--section: 2.1.2-->
 The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
 
 Individual cell lines can be immortal. The Canine Transmissible Venereal Tumor (CTVT) has been making identical copies of itself for 11,000 years across the globe, transmitted between dogs during mating. Tasmanian Devil Facial Tumor Disease (DFTD) has spread between devils for decades, far outliving the 7-year lifespan of its hosts. In labs, immortalizing normal human cells often requires tweaking just a few pathways: p53, Rb, telomerase.
