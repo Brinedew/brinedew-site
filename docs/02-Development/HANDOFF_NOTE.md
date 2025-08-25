@@ -1,91 +1,93 @@
-# Quartz Draft System Implementation - 2025-08-23
+# major document restructuring - august 25, 2025
 
-I just finished implementing a proper draft system for the Quartz 4 blog and got QuickAdd working properly. The user wanted new content to default to draft instead of published, plus they needed a working note creation workflow.
+The user wanted me to fix a massive academic document that had terrible structure - walls of text, broken section hierarchies, and content that was organized more like a research paper than something people would actually want to read.
 
 ## what actually works now
 
-**QuickAdd is finally working:**
-- Fixed the vault location issue - QuickAdd was installed in wrong .obsidian folder
-- Fixed PowerShell UTF-8 BOM encoding that was breaking JSON parsing
-- All 3 templates work: Post, Wiki Page, Protein Page
-- Ctrl+N brings up the dialog and creates files properly
+I completely restructured "the-price-of-not-being-cancer-v3.md" using Gingko-style editing principles:
 
-**Draft system is implemented:**
-- Switched from tag-based (`status/published`) to proper frontmatter (`draft: true/false`)
-- All 111 existing content files now have `draft: true` by default
-- Site structure pages (About, index, apps) stay published
-- RemoveDrafts filter completely excludes draft files from build (they don't exist on live site)
+**Fixed the broken structure:**
+- Had 19 sections, 6 of which were "orphan" sections with only one subsection (bad Gingko practice)
+- Consolidated down to 14 sections with balanced hierarchies
+- Merged sections 9+10 into complete governance architecture  
+- Eliminated sections 16-18 by merging into unified applications section
+- Removed section 19 appendix entirely
 
-**Content cleanup completed:**
-- Deleted test files and untitled junk
-- Fixed image references (`posts/image.png` → `Attachments/anoikis-illustration.png`)  
-- Moved misplaced content to correct folders
-- Updated dark-mode-test-page to Quartz 4 standards with transclusion test
+**Added structural signposting:**
+- Every second-level heading now has bracketed signposts like `[Hook with striking examples]` or `[Present the dangerous implications]`
+- These are instructions for the writer, not visible to readers
+- Tell the writer what rhetorical job each section is supposed to do
 
-Files I changed:
-- `content/Templates/*.md` - all templates now use `draft: true` instead of status tags
-- `content/.obsidian/plugins/quickadd/data.json` - fixed template paths and folder targets
-- `content/posts/dark-mode-test-page.md` - converted MkDocs syntax to Quartz callouts, added transclusion
-- `content/wiki/cellular-senescence.md` - published for transclusion test with block reference
-- `scripts/add-draft-property.ps1` - bulk script that added draft property to all content
+**Split massive content dumps:**
+- Section 5 went from one giant blob to 6 focused subsections
+- Section 8 became 11 logical progression steps  
+- Section 12 got broken into 10 specific mechanism questions
+- Each subsection now answers one focused question instead of covering everything
 
-## what's broken
+Files changed:
+- `content/posts/the-price-of-not-being-cancer-v3.md` - complete restructure, 188 insertions, 179 deletions
 
-**Posts page shows published drafts:** The user noticed 3 posts appear on brinedew.com/posts but there's no "posts" tag in the sidebar. This suggests either:
-- The draft filter isn't working properly for folder listings 
-- The posts have `draft: false` already (cellular-senescence and dark-mode-test-page were set to false for testing)
+## what's broken right now
 
-**Test page link name too long:** The dark-mode-test-page URL is unwieldy - should probably be shortened to just "test-page" or similar.
+**The site build is failing.** Local build with `npx quartz build` gives this error:
+```
+Failed to process html `content/posts/the-price-of-not-being-cancer-v3.md`: Cannot read properties of null (reading 'data')
+```
 
-**Sidebar tag issues:** The user mentioned posts aren't showing up in the tag explorer properly. Might be related to the draft filtering or tag structure changes.
+We fixed the most obvious structural issues (empty sections, missing headings) but Quartz is still choking on something in the markdown. The frontmatter looks fine, so it's probably something with the section comment structure or content formatting.
+
+The site isn't updating at brinedew.com because the GitHub Actions build is failing with the same error.
 
 ## where things stand
 
-**Current environment:**
-- QuickAdd working in content vault (`D:\Coding\Website\content`)
-- All changes pushed to GitHub and deployed live
-- Draft system active - most content hidden from live site
-- Only 2-3 pages actually published for testing
+**Git status:** Everything is committed locally but not pushed yet because we're testing the build first
+- Last commit: "Fix document structure after Gingko reorganization" (e7a8ccd)
+- Ready to push once the build works
 
-**Working commands:**
-```bash
-# Test QuickAdd workflow
-cd "D:\Coding\Website\content" 
-# Open Obsidian, press Ctrl+N, should see 3-option dialog
+**Document structure:** Clean 3-column Gingko hierarchy:
+- Column 1: Major sections (1-14) with main headings
+- Column 2: Focused questions with structural signposting  
+- Column 3: Detailed explanations that answer the questions
 
-# Check draft filtering locally
-cd "D:\Coding\Website"
-npx quartz build
-# Should only build non-draft content
-
-# Bulk publish content (remove draft property)
-cd "D:\Coding\Website"
-# Edit files to remove `draft: true` or change to `draft: false`
-```
+**GitHub pull requests:** There are 2 dependency update PRs waiting:
+- #5: CI dependencies update (opened 7 hours ago)
+- #4: Production dependencies update (opened 7 hours ago)
 
 ## what to do next
 
-**Fix the posts page issue:** Check why published posts aren't showing tag associations properly. Look at:
-1. `content/posts/index.md` - might need draft property removed
-2. Tag structure after the status tag cleanup 
-3. Whether FolderPage plugin respects draft filtering
+**Fix the build first:** The Quartz error suggests there's still something wrong with the markdown structure. Check for:
+1. Malformed section comments (`<!--section: X-->` patterns)
+2. Missing newlines at end of file (I noticed "No newline at end of file" in the cat output)
+3. Weird characters or encoding issues
+4. Image links that point to non-existent files
 
-**Clean up test page:** Either shorten the filename or add a better title/slug. The URL `brinedew.com/posts/dark-mode-test-page` is too verbose.
+**Commands to test:**
+```bash
+cd "D:\Coding\Website"
+npx quartz build  # Should complete without errors
+```
 
-**Publish key content:** The user probably wants some actual posts visible. Look for high-quality content in posts/ and wiki/ and remove `draft: true` from the good stuff.
+**Handle those GitHub PRs:** The dependency updates are probably safe to merge. Use these commands:
+```bash
+gh pr merge 5 --squash  # Merge CI dependencies 
+gh pr merge 4 --squash  # Merge production dependencies
+```
 
-**Test transclusions:** Verify the `![[cellular-senescence#^what-it-is]]` transclusion actually works on the live site.
+**After build works, push and deploy:**
+```bash
+git push
+# Wait 60 seconds, then check https://brinedw.com/posts/the-price-of-not-being-cancer-v3/
+```
 
 ## stuff to remember
 
-**UTF-8 BOM was the real culprit:** The consultant was right - Windows PowerShell writing UTF-8 with BOM broke JSON.parse in QuickAdd. Using `System.Text.UTF8Encoding $false` fixed it.
+**Why this restructuring mattered:** The original document was a classic case of academic writing that dumped information instead of guiding readers. Each section had massive paragraphs covering multiple concepts. The Gingko restructuring creates a logical flow where:
+- Each major section poses a problem
+- Each subsection asks a specific question about that problem
+- Each sub-subsection gives a focused answer
 
-**Vault location matters:** QuickAdd needs to be in the same .obsidian folder as the vault you actually have open in Obsidian. The user opens `content/` as the vault, not the parent `Website/` folder.
+**The signposting system:** Those bracketed instructions like `[Establish the core problem]` are for the writer, not the reader. They make sure each section has a clear rhetorical purpose instead of just being a content dump.
 
-**Draft filtering is build-time, not runtime:** Files with `draft: true` literally don't exist on the live site - they're excluded during build, not just hidden.
+**Quartz is picky about markdown:** This isn't the first time Quartz has failed on structural issues. The error message "Cannot read properties of null" usually means it hit something in the markdown that doesn't parse right - empty sections, malformed frontmatter, or weird section nesting.
 
-**Tag cleanup already happened:** The user ran scripts to remove status tags before this session, so the tag structure is already flattened.
-
-**Site is live at brinedew.com:** Changes pushed to GitHub deploy automatically via Actions. The user can immediately see results.
-
-The user seems happy that QuickAdd finally works, but they caught some issues with the draft filtering that need attention. The technical implementation is solid - just need to tune which content gets published.
+The document transformation worked great conceptually, but there's still some technical issue preventing it from building. Focus on that first before pushing anything live.

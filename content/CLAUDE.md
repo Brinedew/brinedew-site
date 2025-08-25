@@ -31,9 +31,9 @@ new_string: 'date: 2025-08-10\ntags: [type/post, topic/cancer]'
 
 **Tag system for new content:**
 - `type/wiki` - all wiki content
-- `category/concept`, `category/mechanism`, `category/theory` - what kind of thing it is
-- `topic/aging`, `topic/cancer`, `topic/biology` - subject areas
-- `status/stub`, `status/complete` - how finished the content is
+- `type/post` - all posts
+- `type/apps` - all apps
+- `meta` - technical site maintenance
 
 **To add new wiki content:**
 1. Create markdown files directly in `wiki/` with proper frontmatter
@@ -71,7 +71,7 @@ new_string: 'date: 2025-08-10\ntags: [type/post, topic/cancer]'
 ---
 title: "Your Post Title"
 date: 2025-08-10
-tags: [type/post, topic/aging, status/published]
+tags: [type/post]
 ---
 ```
 
@@ -80,7 +80,7 @@ tags: [type/post, topic/aging, status/published]
 ---
 title: "Concept Name"
 date: 2025-08-10
-tags: [type/wiki, category/concept, topic/aging, status/stub]
+tags: [type/wiki]
 aliases:
   - old-path/concept-name
   - concept-name
