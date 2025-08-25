@@ -5,16 +5,21 @@ draft: false
 tags:
   - type/post
 ---
-<!--outline: Aging as the systemic cost of suppressing cellular immortality.-->
 
 <!--section: 1-->
 # The Price of Not Being Cancer
 
 <!--outline: Paradox: immortal cell lineages vs mortal multicellular bodies.-->
 
-<!--section: 1.1-->
+<!--section: 2-->
 ## Cell lines can be immortal. Why aren't bodies?
 
+<!--outline: Context and questions.-->
+
+<!--section: 2.1-->
+
+
+<!--section: 2.1.1-->
 The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
 
 Individual cell lines can be immortal. The Canine Transmissible Venereal Tumor (CTVT) has been making identical copies of itself for 11,000 years across the globe, transmitted between dogs during mating. Tasmanian Devil Facial Tumor Disease (DFTD) has spread between devils for decades, far outliving the 7-year lifespan of its hosts. In labs, immortalizing normal human cells often requires tweaking just a few pathways: p53, Rb, telomerase.
@@ -35,9 +40,15 @@ Let's try to find satisfying answers beyond just "cancer cells are just broken a
 
 <!--outline: Larger species evolved stronger anti‑cancer surveillance despite more cells.-->
 
-<!--section: 1.2-->
+<!--section: 3-->
 ## Peto's paradox: cancer incidence vs body size
 
+<!--outline: Scaling paradox and species-level anti-cancer upgrades.-->
+
+<!--section: 3.1-->
+
+
+<!--section: 3.1.1-->
 Every time a cell divides, DNA replication introduces random errors. Most are harmless, but occasionally you get a mutation that gives a cell a growth advantage - faster division, resistance to suicide commands, ability to grow without external permission signals. That cell outcompetes its neighbors and expands into a clone. Within that larger clone, more mutations occur, some of which provide additional advantages. After accumulating several key mutations, you get cancer.
 
 The mathematics are unforgiving. If mutation rate per division is fixed, then more cells dividing for longer periods should equal vastly higher cancer risk. Compare species: mice (~10^9 cells, 2 years), humans (~10^13 cells, 80 years), blue whales (~10^17 cells, 80-90 years).
@@ -54,9 +65,15 @@ This observation shows that more stringent cellular control is possible, but imp
 
 <!--outline: Cancer replays unicellular competition; multicellularity suppresses it.-->
 
-<!--section: 1.3-->
+<!--section: 4-->
 ## Evolved to stop evolving
 
+<!--outline: Reversion to unicellular competition.-->
+
+<!--section: 4.1-->
+
+
+<!--section: 4.1.1-->
 Let's talk about what cancer cells actually do:
 
 - Multiply blazingly fast
@@ -71,9 +88,15 @@ For billions of years, this was life: unicellular organisms compete; mutations f
 
 <!--outline: Principal–agent framing: de‑Darwinize cells to coordinate the body.-->
 
-<!--section: 1.4-->
+<!--section: 5-->
 ## The coordination framework
 
+<!--outline: Multicellular control as principal–agent coordination.-->
+
+<!--section: 5.1-->
+
+
+<!--section: 5.1.1-->
 This pattern points to a deeper principle: multicellular life is fundamentally a coordination problem between competing agents.
 
 For four billion years, cellular success meant rapid replication, resource consumption, resistance to death, invasion of new territories, and evolution to get better at all of the above. Cancer cells exhibit this exact repertoire - the only difference is they're doing it inside a multicellular body instead of a primordial soup.
@@ -96,9 +119,15 @@ This internal evolutionary pressure necessitates layered defenses. Each layer co
 
 <!--outline: Reduce mutation rate; buy limited replication credits for tissues.-->
 
-<!--section: 1.5-->
+<!--section: 6-->
 ## Layer 0: An ounce of prevention
 
+<!--outline: DNA repair lowers mutation rates; buys division credits.-->
+
+<!--section: 6.1-->
+
+
+<!--section: 6.1.1-->
 Consider the fundamental problem first: every time a cell divides, DNA replication introduces errors. Think of it as biological counterfeiting - most mistakes are harmless, but occasionally you get a mutation that gives a cell a selective advantage over its neighbors. If the error rate is too high, you're basically handing out lottery tickets for cellular rebellion.
 
 Evolution's response was to build incredibly sophisticated quality control systems. Multiple layers of proofreading during DNA replication, plus repair mechanisms that can fix different types of damage after the fact. These systems dramatically reduce the effective mutation rate - instead of getting dangerous mutations every few hundred cell divisions, you might get them every few thousand or tens of thousands.
@@ -109,9 +138,15 @@ Organisms with extreme regenerative abilities - think flatworms that can regrow 
 
 <!--outline: Divide labor: protected stem factories make disposable worker cells.-->
 
-<!--section: 1.6-->
+<!--section: 7-->
 ## Layer 1: Cellular class system
 
+<!--outline: Germline-soma split; enforced roles limit somatic evolution.-->
+
+<!--section: 7.1-->
+
+
+<!--section: 7.1.1-->
 Quality control isn't enough. You need governance structure that prevents somatic evolution from becoming heritable.
 
 **Weismann barrier:** Germline cells reproduce and pass genes to offspring. Somatic cells work, age, and die without genetic descendants. If any body cell could contribute to the next generation, every beneficial mutation for cellular selfishness would spread through the population. The organism would degrade into competing cellular lineages.
@@ -138,9 +173,15 @@ The cost: specialized cells have limited growth potential. Good for preventing d
 
 <!--outline: Regeneration trades off with safety; brains/hearts are non‑renewable.-->
 
-<!--section: 1.7-->
+<!--section: 8-->
 ## The regeneration problem
 
+<!--outline: Factory tissues; regeneration vs safety tradeoffs.-->
+
+<!--section: 8.1-->
+
+
+<!--section: 8.1.1-->
 The cellular class system creates a dilemma: if you want to prevent cancer, you make cells that can't divide and reproduce. But if you can't make new cells, you can't repair damage or regrow lost body parts.
 
 To understand how bodies solve this, you need to completely reframe how tissues work. Most people imagine bodies as just cells scattered around randomly like components in a computer. That's wrong. Bodies are organized as **production systems** where small populations of protected stem cells continuously manufacture streams of disposable working cells.
@@ -173,9 +214,15 @@ The trade-off becomes starker as you scale up: elephants and whales achieve canc
 
 <!--outline: Local governance: contact inhibition, anchorage, niches, morphogens.-->
 
-<!--section: 1.8-->
+<!--section: 9-->
 ## Layer 2: Governance Architecture
 
+<!--outline: Crowding, attachment, niches, morphogens shape local control.-->
+
+<!--section: 9.1-->
+
+
+<!--section: 9.1.1-->
 Even with cellular class systems and quality control, you still have trillions of cells that could potentially go rogue. Layer 2 manages cellular agents across different scales, from immediate neighbors to entire organ systems.
 
 **Local control:** Cell division requires consensus from surrounding tissue. A cell needs persistent growth signals from neighbors plus completion of internal checkpoints - a two-key nuclear launch system. Cancer typically hotwires this by forging growth signals or bypassing checkpoints.
@@ -201,14 +248,15 @@ This rigid developmental programming makes it extremely difficult to regrow comp
 
 <!--outline: Global governance links hormones and energy state to proliferation.-->
 
-<!--section: 1.9-->
+<!--section: 10-->
 ## Centralized/Systemic Governance
 
 <!--outline: Stress and GH/IGF‑1 impose system‑wide vetoes on division.-->
 
-<!--section: 1.9.1-->
+<!--section: 10.1-->
 ### I. Hormonal Override Authority
 
+<!--section: 10.1.1-->
 How does the organism's overall state (famine, systemic stress) influence individual cell behavior? Local conditions might be good for division, but the organism as a whole might need to conserve resources.
 
 The body has system-wide hormonal governance that can issue central "vetoes," overriding local permissions to divide. Stress hormones (glucocorticoids) can command a system-wide halt to non-essential cell division, particularly in the immune system. The Growth Hormone/IGF-1 axis acts as a master regulator, linking the organism's global energy status to cellular proliferation; during calorie restriction, this axis is down-regulated, putting a brake on growth across the body. It's a central command system that synchronizes trillions of agents with the state of the whole.
@@ -223,23 +271,30 @@ With multiple layers of governance in place, how does any cell ever achieve unco
 
 <!--outline: Escalation tier: intrinsic, extrinsic, and immune elimination.-->
 
-<!--section: 1.10-->
+<!--section: 11-->
 ## Layer 3: Elimination Mechanisms - how to kill a cell
 
+<!--outline: Three elimination modes overview and rationale.-->
+
+<!--section: 11.1-->
+
+
+<!--section: 11.1.1-->
 When the governance systems fail and defectors emerge, the organism needs elimination mechanisms. These operate through three distinct approaches that mirror the governance architecture: **intrinsic suicide** (cell detects internal problems), **assisted suicide** (external signals convince cell to die), and **murder** (external forces directly eliminate the cell).
 
 <!--outline: Intrinsic apoptosis: detect internal faults; repair, senesce, or die.-->
 
-<!--section: 1.11-->
+<!--section: 12-->
 ## Avoiding Suicide (Intrinsic Apoptosis)
 
 Cells that detect internal problems can self-destruct through their own decision-making machinery. Cancer cells must systematically disable these internal quality control systems.
 
 <!--outline: ATM/ATR→p53 choose repair, senescence, or apoptosis.-->
 
-<!--section: 1.11.1-->
+<!--section: 12.1-->
 ### I. DNA Damage Checkpoints
 
+<!--section: 12.1.1-->
 The cell's genetic blueprint is constantly being damaged by radiation, chemical mutagens, and replication errors. Replicating damaged DNA passes potentially cancerous mutations to descendants.
 
 The cell operates a strict "fix first, then replicate" policy. The p53 system works like a quality control checkpoint with three possible outcomes. When DNA gets damaged - say, by radiation or chemical exposure - the breaks in the DNA strands activate sensor proteins called ATM and ATR. These sensors are basically molecular damage detectors that patrol the DNA constantly.
@@ -254,99 +309,110 @@ This process is slow and overly cautious. Minor, repairable damage might trigger
 
 <!--outline: Finite telomeres enforce division limits; telomerase cheats.-->
 
-<!--section: 1.11.2-->
+<!--section: 12.2-->
 ### II. Telomere Countdown
 
+<!--section: 12.2.1-->
 How do you enforce a hard limit on total cell divisions? Most somatic cells carry a non-renewable "punch card" with finite divisions (around 50 for human cells). This punch card is a physical structure called a telomere that shortens with each division. When critically short, the exposed chromosome end triggers p53-mediated permanent division halt.
 
 This finite limit drives replicative senescence. Tissues eventually lose repair capacity as cellular punch cards expire. We trade regenerative capacity for cancer suppression. Cancer cells reactivate telomerase to counterfeit new punch cards.
 
 <!--outline: AMPK/ROS checkpoints halt division under stress.-->
 
-<!--section: 1.11.3-->
+<!--section: 12.3-->
 ### III. Metabolic Stress Sensors
 
+<!--section: 12.3.1-->
 Cells monitor internal conditions before dividing. The enzyme AMPK checks energy reserves (ATP), while stress pathways (p38-MAPK) monitor oxidative damage (ROS). If energy is too low or pollution too high, division halts to prevent creating compromised daughter cells.
 
 This creates "fair-weather" division policies. During metabolic stress (common in aging), even necessary replacement is halted. The organism prioritizes preventing defective cells over maintaining tissue in suboptimal conditions.
 
 <!--outline: cGAS–STING flags cytosolic DNA; drives interferon/apoptosis.-->
 
-<!--section: 1.11.4-->
+<!--section: 12.4-->
 ### IV. Cytosolic DNA Alarms
 
+<!--section: 12.4.1-->
 DNA belongs in the nucleus. DNA in the cytoplasm signals viral invasion or catastrophic genomic failure (chromothripsis). The cGAS-STING pathway detects cytosolic DNA, producing cGAMP that activates STING. This triggers massive interferon production and intrinsic apoptosis.
 
 The cost is autoimmune interferonopathies—constant antiviral panic. Cancers often delete STING to conduct genomic chaos in peace.
 
 <!--outline: RLR/PKR detect dsRNA; shut translation; trigger death.-->
 
-<!--section: 1.11.5-->
+<!--section: 12.5-->
 ### V. dsRNA Tripwire
 
+<!--section: 12.5.1-->
 A cell's transcriptional machinery is normally a tightly controlled affair. In cancer, it often descends into chaos, producing aberrant double-stranded RNA (dsRNA)—a molecular pattern usually pathognomonic of a viral infection. The cell repurposes its ancient antiviral defenses to deal with this internal threat. RIG-I-like receptors (RLRs) and Protein Kinase R (PKR) are tripwires designed to detect dsRNA. When triggered, they assume the worst and act decisively, shutting down all protein synthesis to halt the "infection" and initiating apoptosis or another blast of interferon. This interferon signature attracts CTLs to the affected cell. The flaw in this otherwise clever system is its imperfect specificity. The genome is littered with ancient, dormant retroelements that can occasionally be transcribed into dsRNA. This means the tripwire can be tripped by the cell's own legitimate, if somewhat archaic, transcripts—false positive activation from the cell's own transcripts.
 
 <!--outline: RQC rescues stalls; overactivity invokes p53/inflammasome.-->
 
-<!--section: 1.11.6-->
+<!--section: 12.6-->
 ### VI. Ribosomal Quality Control
 
+<!--section: 12.6.1-->
 The cell's protein factories can stall on defective mRNA templates, creating toxic traffic jams and spitting out useless, misfolded protein fragments. This is a crisis in the cellular supply chain. A system called Ribosome Quality Control (RQC) acts as the floor manager, finding stalled ribosomes and tagging their nascent polypeptide chains with ubiquitin for immediate destruction. But if the RQC is working overtime, it's a sign of a deeper systemic failure. Excessive RQC activity trips a secondary alarm, activating p53 and the NLRP1 inflammasome, which effectively marks the entire factory for demolition via pyroptosis. The price for this vigilance is a reduced tolerance for stress. A hyper-sensitive RQC, while excellent at maintaining purity, can make a cell brittle, throttling protein production in harsh environments where a "good enough" approach might be the only way to survive.
 
 <!--outline: Extrinsic apoptosis: resist death‑receptor and senescence cues.-->
 
-<!--section: 1.12-->
+<!--section: 13-->
 ## Avoiding Assisted Suicide (Death Receptor Pathways)
 
 External forces can convince cells to trigger their own death machinery. Cancer cells must learn to ignore these assisted suicide signals while maintaining enough normal cellular behavior to avoid triggering direct elimination.
 
 <!--outline: Fas/TRAIL trigger caspases; collateral risk to normal cells.-->
 
-<!--section: 1.12.1-->
+<!--section: 13.1-->
 ### I. Death-Receptor Roulette
 
+<!--section: 13.1.1-->
 Some cells resist direct killing by perforin and granzymes. For these targets, immune cells use death receptor ligands like FasL and TRAIL to trigger the target cell's own apoptosis machinery. When they encounter a target cell bearing the corresponding receptors—Fas (CD95) or DR4/5—they hand over the pill, but the target cell has to swallow it itself. This triggers the target cell's own extrinsic apoptosis machinery, a clean act of cellular suicide initiated by an external signal but executed by the cell's internal caspase cascades. The target cell executes its own death program rather than being directly killed. The price of this elegant solution is that the "suicide receptors" are not exclusive to criminals. For brief, terrifying moments, they also appear on wound-edge keratinocytes and activated lymphocytes—cells that might dutifully kill themselves when presented with the death signal. This is a feature, not a bug: a brutal but necessary mechanism of self-thinning to prevent the system's own agents from running amok.
 
 <!--outline: SASP broadcasts summon clearance; chronic signaling harms tissue.-->
 
-<!--section: 1.12.2-->
+<!--section: 13.2-->
 ### II. Senescence Alarm (SASP)
 
+<!--section: 13.2.1-->
 What to do with a cell too damaged to divide, yet not quite dead? A cell that might still be holding tissue together but represents a systemic risk? The state's answer is a form of house arrest: senescence. Driven by tumor suppressors like p53 or p16^INK4A, the cell's cycle is permanently locked. But it doesn't just sit there quietly. It is forced to "call the cops on itself" by secreting a pro-inflammatory cocktail of cytokines and chemokines (IL-6, IL-8, CCL2) known as the Senescence-Associated Secretory Phenotype, or SASP. This alarm summons NK cells and macrophages to the scene for a final, clean removal. A few such calls are a sign of a healthy, self-policing tissue. The price is paid when the calls become chronic. Widespread senescence during aging turns entire tissues into smouldering cytokine swamps, driving fibrosis, cachexia, and a system-wide decline. The alarm system itself becomes the source of the decay.
 
 <!--outline: Cytokines request cooperative suicide of bystanders.-->
 
-<!--section: 1.12.3-->
+<!--section: 13.3-->
 ### III. Cytokine Death Signals
 
+<!--section: 13.3.1-->
 Sometimes the immune system needs to eliminate cells that are perfectly healthy but in the wrong place at the wrong time - like during an immune response where you need to clear out bystander cells to make room for action. The solution is cytokine-mediated assisted suicide. Immune cells release signals like TNF-α that bind to death receptors and politely ask target cells to die for the greater good. Unlike direct assassination, this gives the target cell a chance to tidy up its affairs first - packaging its DNA neatly, avoiding inflammatory spillage, dying like a gentleman. The target cell can theoretically refuse, but the social pressure is enormous. The problem is that this "die for the team" signal doesn't distinguish between cells that should die and cells that just happen to be in a bad neighborhood. Cancer cells exploit this by becoming deaf to these social death cues while healthy bystander cells dutifully commit suicide around them.
 
 <!--outline: Survival depends on growth factors; tumors go autarkic.-->
 
-<!--section: 1.12.4-->
+<!--section: 13.4-->
 ### IV. Growth Factor Withdrawal
 
+<!--section: 13.4.1-->
 Most cells require constant growth factor signals to survive. Without these signals, they undergo apoptosis. This creates a quality control system where only cells in their proper tissue locations receive the necessary survival signals. Cells that migrate to inappropriate locations lose access to these factors and die. Cancer cells must learn to synthesize their own growth factors or become independent of external supply, essentially learning to live off-grid while everyone else remains dependent on the centralized life support system.
 
 <!--outline: Fitter cells cull neighbors; tumors win or ignore cues.-->
 
-<!--section: 1.12.5-->
+<!--section: 13.5-->
 ### V. Cell Competition
 
+<!--section: 13.5.1-->
 When cells with different fitness levels are neighbors, the fitter cells don't just outcompete the weaker ones - they actively eliminate them through elimination through cell competition. Less fit cells receive molecular signals from their fitter neighbors that trigger apoptosis. This system prevents tissues from being clogged with suboptimal cells, but it also means that cancer cells need to either become the local winners (through mutations that make them more fit) or learn to ignore the social death signals that tell them they're losers.
 
 <!--outline: Immune murder: evade CTLs, NKs, macrophages, complement.-->
 
-<!--section: 1.13-->
+<!--section: 14-->
 ## Avoiding Murder (Immune Elimination)
 
 When intrinsic and extrinsic apoptosis fail, immune surveillance systems actively eliminate aberrant cells.
 
 <!--outline: MHC‑I peptidome exposes state to CTLs; tumors hide.-->
 
-<!--section: 1.13.1-->
+<!--section: 14.1-->
 ### I. Immune Surveillance - "Papers, Please"
 
+<!--section: 14.1.1-->
 Every cell continuously samples its own protein production through a built-in monitoring system. Inside each cell, a protein complex called the proteasome randomly cuts up small amounts of every protein being made, creating short fragments 8-11 amino acids long. These fragments get loaded onto transport proteins called MHC-I molecules, which carry them to the cell surface.
 
 This creates a constantly updated display of what's happening inside the cell. T cells have receptors that scan these displayed fragments like reading a ticker tape of cellular activity. If a T cell recognizes a fragment that shouldn't be there - like a piece of viral protein or a mutated cancer protein - it interprets this as evidence of infection or malignancy.
@@ -357,44 +423,50 @@ Cancer cells often escape this surveillance by breaking their MHC-I transport sy
 
 <!--outline: NKs kill MHC‑I‑low cells via default‑kill logic.-->
 
-<!--section: 1.13.2-->
+<!--section: 14.2-->
 ### II. Natural Killer Cell Patrol - "Guilty Until Proven Innocent"
 
+<!--section: 14.2.1-->
 Cells can escape this surveillance by stopping their protein display. Cells can down-regulate their MHC-I expression to avoid T cell recognition. This triggers Natural Killer (NK) cell responses, which detect the absence of MHC-I molecules rather than their contents. Their logic is brutally simple: cells that don't display MHC-I are targeted for elimination. The MHC-I molecule itself is the safety signal; its presence actively inhibits the NK cell's default "kill everything" instinct. Take away the flagpole, and the inhibition is lost. The NK cell, interpreting silence as guilt, executes the cell—either by direct injection of cytotoxic granules or by presenting death signals that force the target to commit suicide. No trial, no appeal. This "guilty until proven innocent" system creates both strength and weakness. Some of the most important cells in the body, like neurons, are naturally quiet reporters and barely express any MHC-I. They survive because they express other inhibitory signals that prevent NK cell activation.
 
 <!--outline: NKG2D ligands flag stressed cells for removal.-->
 
-<!--section: 1.13.3-->
+<!--section: 14.3-->
 ### III. Stress Signal Detection
 
+<!--section: 14.3.1-->
 But these two systems only handle cells that are either actively broadcasting treason or are suspiciously silent. What about a cell that's just starting to crack under the pressure? It's still flying the flag, but it's also started screaming. A cell undergoing DNA damage or oncogenic stress begins to stud its surface with molecular distress beacons called NKG2D ligands (things like MICA/B and ULBPs). These stress signals are recognized by NK cells and γδ T-cells, which eliminate the stressed cell. The alarm can be triggered by things other than cancer. A bad case of heat shock or a nearby viral infection can make a perfectly healthy cell hit the panic button, triggering elimination by immune cells. It's the price you pay for a system that prefers a little collateral damage over letting a single traitor escape.
 
 <!--outline: Eat‑me/don’t‑eat‑me signals govern phagocytosis.-->
 
-<!--section: 1.13.4-->
+<!--section: 14.4-->
 ### IV. Macrophage Street Cleaning
 
+<!--section: 14.4.1-->
 A functional trillion-celled society cannot be clogged with the corpses of its citizens. Macrophages distinguish between healthy and dying cells through surface markers. Healthy cells express CD47 ("don't eat me" signal) while dying cells expose phosphatidylserine and other "eat me" signals. Macrophages engulf cells that display the wrong marker ratio. This system can be gamed. Tumor cells often overexpress CD47, effectively cloaking themselves from the cleaners. While anti-CD47 therapies can unmask these impostors, they risk a dangerous side effect: the body's own young erythrocytes use the same shield, and stripping it away can lead to a wave of self-inflicted anemia as the newly empowered macrophages get a bit too enthusiastic.
 
 <!--outline: C3b/MAC opsonize and lyse targets; antibody aid.-->
 
-<!--section: 1.13.5-->
+<!--section: 14.5-->
 ### V. Complement System
 
+<!--section: 14.5.1-->
 The complement system provides another elimination mechanism through blood-borne protein cascades. The component C3b can stick directly to abnormal cell membranes, "opsonizing" them as a target. This either flags the cell for phagocytosis or initiates assembly of the Membrane Attack Complex (MAC), which creates pores in the cell membrane causing lysis. Tumor-specific antibodies can enhance this system by linking innate and adaptive responses. In tissues with high complement activity, this can cause collateral damage to nearby healthy cells, leading to inflammation.
 
 <!--outline: Resource denial starves clones; also impairs CTLs.-->
 
-<!--section: 1.13.6-->
+<!--section: 14.6-->
 ### VI. Nutrient Starvation
 
+<!--section: 14.6.1-->
 Rapidly dividing cancer cells are greedy, hogging local amino acids to fuel their expansion. The body can turn this greed into a weapon. Myeloid cells adjacent to a tumor can be induced to express enzymes like IDO1, which depletes tryptophan, or ARG1, which depletes arginine. This creates a nutritional desert, starving the proliferative clones into submission. It's a clever scorched-earth tactic, but it's a booby-trap with a fatal design flaw. The very same nutrient depletion that hobbles tumors also paralyzes the anti-tumor CTLs that require those same amino acids to function. Cancers have ruthlessly exploited this, learning to actively promote this starvation field as a defensive shield, turning a state-designed weapon into their own private fortress.
 
 <!--outline: Physical barriers constrain spread when eradication fails.-->
 
-<!--section: 1.13.7-->
+<!--section: 14.7-->
 ### VII. Physical Containment
 
+<!--section: 14.7.1-->
 When all else fails—when eradication is off the table—the final strategy is containment. If you can't kill the rogue state, you wall it off. Activated fibroblasts are summoned to the lesion, where they lay down a dense capsule of collagen, forming a fibrotic firebreak. This scar tissue physically constrains the tumor, while the resulting increase in intratumoral pressure and hypoxia can stunt its growth and limit metastasis. It is the biological equivalent of entombing a failed nuclear reactor in concrete. But this is a strategy of desperation. Scar tissue is not functional tissue. In the long run, excessive scarring—the cirrhosis in a liver, the fibrosis in a lung—crushes the healthy parenchyma it was meant to protect, strangling regeneration and ultimately ensuring the organ's demise.
 
 The evidence for this arms race is visible in normal tissue. By middle age, more than half of the esophageal epithelium is colonized by mutant cell populations with growth advantages. Every square centimeter of adult skin contains hundreds of cells with cancer-promoting mutations. Most of these mutant populations are held in check by the layered defense systems, but the probability that at least one escapes control increases with time.
@@ -403,9 +475,15 @@ What happens when an organism starts losing this arms race?
 
 <!--outline: With age, defenses intensify; anti‑cancer escalation drives decline.-->
 
-<!--section: 1.14-->
+<!--section: 15-->
 ## Layer 4: When the defenses escalate
 
+<!--outline: Aging as escalated anti-cancer policing.-->
+
+<!--section: 15.1-->
+
+
+<!--section: 15.1.1-->
 The three-layer defense system should deteriorate with age. Evolution stops maintaining systems after reproduction, so we'd expect declining DNA repair, weakening cellular surveillance, and failing immune function. This should lead to rising cancer rates and passive decay from neglect.
 
 The data shows the opposite pattern.
@@ -484,9 +562,15 @@ The p53 experiments demonstrate that anti-cancer mechanisms actively consume res
 
 <!--outline: Naive anti‑aging boosts are pro‑cancer; fix order first.-->
 
-<!--section: 1.15-->
+<!--section: 16-->
 ## Why simple solutions won't work
 
+<!--outline: Order-of-operations to avoid pro-cancer anti-aging.-->
+
+<!--section: 16.1-->
+
+
+<!--section: 16.1.1-->
 If aging is largely an anti-cancer program, then naive approaches to "anti-aging" become actively dangerous:
 
 - Clear senescent cells? You're removing the guards
@@ -500,9 +584,15 @@ A robust scientific model does more than explain existing data; it should make s
 
 <!--outline: Model yields cautious, falsifiable predictions.-->
 
-<!--section: 1.16-->
+<!--section: 17-->
 ## Predictions of the Anti-Cancer Model
 
+<!--outline: Concrete, falsifiable expectations of the framework.-->
+
+<!--section: 17.1-->
+
+
+<!--section: 17.1.1-->
 1. The model predicts that therapies aiming for simple 'cellular resilience' or 'immortality' are likely to fail or be dangerous, as they would work against the body's core strategy of managed fragility. Lack of cellular resilience is likely to be a feature, not a bug. Cells being too resilient is bad! Watch out for buzzwords like "cellular rejuvenation," "resetting the aging clock," or "restoring youthful gene expression" - these are the "quantum" of longevity marketing.
 
 2. A high degree of caution is warranted for therapies that suppress single genes without addressing the systemic trade-offs, as evolution has likely preserved these genes for reasons of organismal stability. The exception here is for developmentally active oncogenes that should always be silenced in adults anyway - making those oncogenes harder to reactivate in adult cells is probably a good idea.
@@ -514,9 +604,15 @@ A robust scientific model does more than explain existing data; it should make s
 
 <!--outline: Reframes biology, interventions, and trade‑offs in aging.-->
 
-<!--section: 1.17-->
+<!--section: 18-->
 ## Implications
 
+<!--outline: Biology, interventions, and philosophy consequences.-->
+
+<!--section: 18.1-->
+
+
+<!--section: 18.1.1-->
 **For understanding biology**: This framework explains Peto's paradox (why elephants don't get proportionally more cancer), unifies the hallmarks of aging under a single evolutionary logic, and reframes regeneration as "domesticated cancer."
 
 **For longevity research**: Most startups are attacking symptoms rather than causes. "Cellular immortality" claims should be red flags. We need to respect Chesterton's fence - those aging mechanisms exist for reasons. Better approaches focus on improving genomic stability and enhancing surveillance before trying to dial back the paranoid responses.
@@ -536,9 +632,15 @@ We started with a paradox: cells can be immortal, but organisms can't. The expla
 
 <!--outline: Historical milestones evidencing cellular control and tumor suppression.-->
 
-<!--section: 1.18-->
+<!--section: 19-->
 ## Appendix: Historical Evidence for Cellular Control Mechanisms
 
+<!--outline: Milestones evidencing cellular control mechanisms.-->
+
+<!--section: 19.1-->
+
+
+<!--section: 19.1.1-->
 *This section contains the chronological development of key discoveries about cellular control mechanisms, extracted from the main text to improve flow while preserving important historical context.*
 
 In 1961, Hayflick discovered that normal human cells undergo only ~50 population doublings in culture before entering _senescence_ – a state of proliferative pause. This pointed at a built-in cutoff switch inside cells that prevents indefinite cell line proliferation.
