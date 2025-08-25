@@ -37,8 +37,10 @@ export const LineageFilter: QuartzTransformerPlugin<Options> = (opts?: Options) 
           return (tree: Root, file: any) => {
             // Simple production check - will show in GitHub Actions logs
             if (file.path?.includes('the-price-of-not-being-cancer-v3')) {
-              console.log(`[LineageFilter] PRODUCTION: Processing ${file.path}`)
+              const beforeCount = tree.children?.length || 0
+              console.log(`[LineageFilter] PRODUCTION: Processing ${file.path} - ${beforeCount} children before`)
             }
+            
             function process(parent: any): void {
               if (!parent || !Array.isArray(parent.children)) return
               const kids: Content[] = parent.children as Content[]
@@ -71,6 +73,11 @@ export const LineageFilter: QuartzTransformerPlugin<Options> = (opts?: Options) 
             }
 
             process(tree)
+            
+            if (file.path?.includes('the-price-of-not-being-cancer-v3')) {
+              const afterCount = tree.children?.length || 0
+              console.log(`[LineageFilter] PRODUCTION: ${file.path} - ${afterCount} children after filtering`)
+            }
           }
         },
       ]
