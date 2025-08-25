@@ -34,7 +34,11 @@ export const LineageFilter: QuartzTransformerPlugin<Options> = (opts?: Options) 
     markdownPlugins() {
       return [
         () => {
-          return (tree: Root) => {
+          return (tree: Root, file: any) => {
+            // Simple production check - will show in GitHub Actions logs
+            if (file.path?.includes('the-price-of-not-being-cancer-v3')) {
+              console.log(`[LineageFilter] PRODUCTION: Processing ${file.path}`)
+            }
             function process(parent: any): void {
               if (!parent || !Array.isArray(parent.children)) return
               const kids: Content[] = parent.children as Content[]
