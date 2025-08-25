@@ -13,7 +13,7 @@ interface Options {
   minDepthToShow?: number
 }
 
-const SPAN_RE = /<span[^>]*\bdata-lineage-section=["']?([0-9]+(?:\.[0-9]+)*)["']?[^>]*><\/span>\s*$/i
+const SPAN_RE = /<span[^>]*\bdata-lineage-section=["']?([0-9]+(?:\.[0-9]+)*)["']?[^>]*>\s*$/i
 const COMMENT_RE = /<!--\s*section:\s*([0-9]+(?:\.[0-9]+)*)\s*-->\s*$/i
 
 function markerDepth(node: any): number | null {
