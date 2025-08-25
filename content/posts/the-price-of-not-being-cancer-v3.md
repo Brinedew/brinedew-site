@@ -1,7 +1,9 @@
 ---
-title: "The Price of Not Being Cancer"
+title: The Price of Not Being Cancer
 date: 2025-08-10
-draft: true
+draft: false
+tags:
+  - type/post
 ---
 
 # The Price of Not Being Cancer
