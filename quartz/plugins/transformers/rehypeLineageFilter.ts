@@ -53,10 +53,31 @@ export default function rehypeLineageFilter(
   }
 
   return () => (tree: Root, file: any) => {
-    // Debug logging for production
-    if (file?.path?.includes('the-price-of-not-being-cancer-v3')) {
-      console.log(`[rehypeLineageFilter] Processing ${file.path}`)
+    // Aggressive debugging - always log when processing any file
+    console.log(`[rehypeLineageFilter] PRODUCTION: Processing file: ${file?.path || 'unknown'}`)
+    console.log(`[rehypeLineageFilter] PRODUCTION: Tree type: ${tree.type}, children count: ${tree.children?.length || 0}`)
+    
+    // Count markers before processing
+    const countMarkers = (parent: Parent): number => {
+      let count = 0
+      if (!Array.isArray(parent.children)) return count
+      
+      for (const child of parent.children) {
+        if (isMarker(child as any)) count++
+        if (Array.isArray((child as any)?.children)) {
+          count += countMarkers(child as Parent)
+        }
+      }
+      return count
     }
+    
+    const markersBefore = countMarkers(tree as Parent)
+    console.log(`[rehypeLineageFilter] PRODUCTION: Found ${markersBefore} markers before processing`)
+    
     process(tree as Parent)
+    
+    const markersAfter = countMarkers(tree as Parent)
+    console.log(`[rehypeLineageFilter] PRODUCTION: Found ${markersAfter} markers after processing (should be 0)`)
+    console.log(`[rehypeLineageFilter] PRODUCTION: Final tree children count: ${tree.children?.length || 0}`)
   }
 }

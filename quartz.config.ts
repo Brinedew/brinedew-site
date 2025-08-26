@@ -59,8 +59,9 @@ const config: QuartzConfig = {
   },
   plugins: {
     transformers: [
+      Plugin.LineageTextFilter({ minDepthToShow: 3 }),   // new text-based filter - must be first
       Plugin.FrontMatter(),
-      Plugin.LineageFilter({ minDepthToShow: 3 }),
+      // Plugin.LineageFilter({ minDepthToShow: 3 }),    // old rehype filter - disabled
       Plugin.CreatedModifiedDate({
         priority: ["frontmatter", "filesystem"],
       }),
