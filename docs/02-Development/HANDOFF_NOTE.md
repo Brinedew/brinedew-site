@@ -1,78 +1,120 @@
-# gingko structure filtering - august 25, 2025
+# what i was working on - january 26, 2025
 
-The user complained that https://brinedw.com/posts/the-price-of-not-being-cancer-v3 was showing the whole Gingko document structure instead of just the content readers should see. The page was displaying first column headings, second column signposting like "[Hook with striking examples]", AND the third column explanations - when it should only show the third column.
+The user wanted to fix two major bugs that have been sitting around being annoying:
 
-The problem: visitors see the full 3-column Gingko editing structure instead of a clean article.
+1. **The content filtering system was completely broken** - the big longevity essay was supposed to show readers only the clean explanations (depth 3+ content) but was showing all the messy Gingko editing structure instead
+2. **List text colors were inconsistent** - list items were dimmer than body text for no good reason, making the typography look weird
+
+Plus they wanted help tagging a bunch of untagged markdown files and rearranging the essay structure.
 
 ## what actually works now
 
-I fixed the original Quartz build error that was blocking everything. That sed command from the consultant worked perfectly:
+### content filtering - COMPLETELY FIXED ✅
 
+The rehype plugin approach was fundamentally broken because Quartz runs rehype in workers where the plugins weren't actually executing. I replaced it with a `textTransform` approach that processes the raw markdown before any HTML parsing happens.
+
+**Files changed:**
+- `quartz/plugins/transformers/lineageTextFilter.ts` - new plugin that actually works
+- `quartz/plugins/transformers/index.ts` - exported the new plugin  
+- `quartz.config.ts:63` - switched from old LineageFilter to new LineageTextFilter
+- `quartz/plugins/transformers/lineageFilter.ts` - added debug logging (kept for reference)
+
+**What it does:** Takes markdown with `<span data-lineage-section="1.2.3"></span>` markers, groups by depth, keeps only depth 3+ sections. Tested locally: processed 174 markers, kept 80 sections (the actual content), filtered out 94 signposting sections.
+
+**Commands that work:**
 ```bash
-sed -i 's/<!--section: \([0-9.]*\)-->/<span data-lineage-section="\1"><\/span>/g' path/to/file.md
+cd "D:\Coding\Website" 
+npx quartz build  # Should show no filtering debug logs now - it's working silently
 ```
 
-The build now succeeds without errors. The site deploys fine. The document exists at the right URL.
+The live site at brinedw.com/posts/the-price-of-not-being-cancer-v3 now shows only clean reader-focused content instead of the messy editing structure.
 
-Files I changed:
-- Added the regex fix to `D:\Coding\CLAUDE.md` at line 398-410  
-- Converted all `<!--section: X-->` comments to `<span data-lineage-section="X"></span>` in the main document
-- Created `quartz/plugins/transformers/lineageFilter.ts` - a remark plugin that didn't work
-- Created `quartz/plugins/transformers/rehypeLineageFilter.ts` - a rehype plugin that doesn't run
+### list colors - FIXED ✅
+
+List items were using `var(--darkgray)` while body text used `var(--dark)`, making lists look dimmed. Instead of overriding with `!important`, I removed `li` from the base color rule so lists inherit properly.
+
+**Files changed:**
+- `quartz/styles/base.scss:32-45` - removed `li` from the selector that forces darkgray color
+- `quartz/styles/base.scss:47-57` - kept `li` in overflow-wrap rule (still needed)
+
+Lists now inherit `color: var(--dark)` from their parent article elements. All the UI lists (sidebar, TOC, etc.) already had explicit colors in custom.css so they're unaffected.
+
+### essay structure rearrangement - DONE ✅
+
+User wanted the essay restructured so depth 1-2 sections (outline) come first, then depth 3+ sections (content) stack at the bottom. 
+
+**Files changed:**
+- `scripts/rearrange-sections.cjs` - Carmack-style script that parses Gingko markers, groups by depth, reassembles
+- `content/posts/the-price-of-not-being-cancer-v3.md` - rearranged with perfect size preservation (78,095 bytes before and after)
+- `content/posts/the-price-of-not-being-cancer-v3.md.backup` - backup of original structure
+
+**Result:** Essay now has clean outline structure at the top (1, 1.1, 1.2, etc.) followed by all content chunks (1.1.1, 1.2.1, etc.). The content filtering still works perfectly on the new structure.
 
 ## what's broken
 
-The filtering plugins don't actually run. I built two different approaches:
+Nothing major. I was in the middle of helping tag untagged markdown pages when the handoff command got triggered. The user has 40+ untagged files that need proper frontmatter tags like `type/post`, `type/wiki`, etc.
 
-1. **Remark plugin approach**: Filters markdown AST before HTML conversion. Build logs showed it was detecting markers and filtering correctly locally, but consultant's analysis revealed this happens in the wrong pipeline pass - the HTML emitter uses a different processor that doesn't include our modifications.
-
-2. **Rehype plugin approach**: Filters HTML AST after conversion. This should work according to the consultant, but GitHub Actions logs show NO console output from either plugin. Neither `[LineageFilter] PRODUCTION: Processing ...` nor `[rehypeLineageFilter] Processing ...` appears in the build logs.
-
-Current symptom: The article shows as completely empty (`<article class="popover-hint"></article>`) but the TOC still shows all the structural headings. This suggests the rehype plugin might be running and filtering EVERYTHING instead of just columns 1&2, OR the plugins aren't loading at all.
-
-Commands that work:
-- `npx quartz build` - builds successfully, no errors
-- Local build shows plugin console output, GitHub Actions shows none
-
-Commands that don't work:
-- The actual filtering - all content still visible on live site
+**Incomplete work:**
+- Started analyzing tagging patterns but didn't finish tagging the files
+- Found current pattern: `type/post`, `type/apps`, `type/wiki` based on directory
 
 ## where things stand
 
-- Quartz 4.5.1 site builds and deploys successfully 
-- Document exists but shows wrong content structure to readers
-- Plugins are configured in `quartz.config.ts` but don't appear to run in production
-- GitHub Actions environment might be different from local build environment
+**Environment:** Windows 11, Node.js, Quartz 4.5.1 static site
+**Current directory:** D:\Coding\Website  
+**Git status:** Clean, all changes committed and pushed to GitHub
+**Deployment:** GitHub Actions handles automatic deployment to brinedw.com
 
-The rehype approach should work according to the consultant. The plugin structure follows Quartz patterns correctly. Something about plugin loading or execution is broken between local and production.
+**Commands that work right now:**
+```bash
+cd "D:\Coding\Website"
+npx quartz build              # Builds site locally - should complete in ~2 seconds
+find content -name "*.md" -exec grep -L "tags:" {} \;  # Shows untagged files
+```
+
+**Services:** 
+- Content filtering: Working via textTransform
+- Site deployment: Automatic via GitHub Actions
+- Font loading: Fixed (self-hosted fonts working)
 
 ## what to do next
 
-**Most urgent thing**: Debug why the rehype plugin isn't running in GitHub Actions.
+**Most urgent:** If the user wants to continue with the tagging project, there are 40+ markdown files that need tags added to their frontmatter. The pattern is:
 
-Check these possibilities:
-1. Import/export issue - maybe `rehypeLineageFilter` isn't being imported correctly in production
-2. Plugin registration problem - the `htmlPlugins()` array might not be processed the same way locally vs. production  
-3. Build environment difference - maybe rehype-raw isn't available in GitHub Actions
+- Files in `content/posts/` need `tags: [type/post]` 
+- Files in `content/wiki/` need `tags: [type/wiki]`
+- Files in `content/apps/` need `tags: [type/apps]`
+- Root navigation files probably need `tags: [type/page]`
 
-Start by adding more aggressive debugging:
-- Add console.log to the main LineageFilter function (not just inside the processor)
-- Add try-catch blocks around the plugin imports
-- Check if rehype-raw is actually loading
+Start with the posts directory - there are about 15 untagged posts that should be straightforward.
 
-Files to check:
-- `quartz/plugins/transformers/lineageFilter.ts` line 15-25 (the main export)
-- `quartz.config.ts` line 63 (where the plugin is registered)
-- GitHub Actions logs for any import errors that might be getting swallowed
+**Commands to get started:**
+```bash
+# See what needs tagging
+find content/posts -name "*.md" -exec grep -L "tags:" {} \;
 
-The rehype approach is the right direction according to the consultant - the issue is execution, not design.
+# Example of what to add to frontmatter
+---
+title: "Existing Title"
+date: 2025-08-10
+tags:
+  - type/post
+draft: false
+---
+```
+
+**Context:** Check `content/CLAUDE.md` for frontmatter patterns that work. There was some frontmatter corruption earlier this year (dates and tags got merged) but that's fixed now.
 
 ## stuff to remember
 
-The consultant's analysis was spot-on: filtering at the markdown stage doesn't work because Quartz rebuilds multiple processor passes and our modifications get lost. The rehype stage is where HTML emitting happens, so modifications there should stick.
+**The content filtering breakthrough:** The key insight was that rehype plugins don't actually run in the pipeline that produces the final HTML. `textTransform` runs on the main thread before any parsing, so it's bulletproof. If anyone tries to make more content filtering plugins, start with textTransform, not rehype.
 
-The empty `<article>` element suggests the plugin IS running but filtering too aggressively. If it wasn't running at all, we'd see all the original content. The fact that we see nothing means the plugin is probably working but has a logic bug in the range detection.
+**CSS philosophy:** Instead of fighting specificity with `!important`, remove the source of the conflict. Much cleaner code.
 
-Don't go back to CSS hiding approaches - that loads all the content then hides it, which sucks for SEO and page performance. The build-time filtering approach is correct.
+**Gingko structure:** The essay uses a three-depth system where 1.x.x is outline/signposting, 2.x.x is section headers, and 3.x.x (1.1.1, 1.2.1, etc.) is the actual readable content. The rearrangement script preserves this perfectly while making it more readable.
 
-The sed regex fix for the Quartz build error should be kept - that part definitely works and prevents the "Cannot read properties of null" error when processing HTML comments in markdown.
+**Don't delete the old lineageFilter plugin yet** - it has good debugging code that might be useful for reference, even though the rehype approach doesn't work.
+
+**Windows CLI gotchas:** Use CommonJS (.cjs) for Node scripts because package.json has "type": "module". PowerShell scripts need forward slashes in arguments, not backslashes.
+
+The site is in really good shape now. Both major bugs are completely fixed, the essay structure is much more readable, and the deployment pipeline works smoothly. The only loose end is finishing the tagging project if that's what the user wants to do next.
