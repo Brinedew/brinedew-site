@@ -366,3 +366,53 @@ date: 2025-08-21
 3. Future: Add UniProt API integration to Protein Page choice for auto-populating template fields
 
 **User Impact**: High - this is a core workflow improvement they've been requesting
+
+---
+
+### 16. Quartz Build Error from HTML Comments - FIXED ✅
+**Status**: ✅ **RESOLVED** - August 25, 2025
+**Issue**: Quartz build failed with "Cannot read properties of null (reading 'data')" when processing Gingko-structured document
+
+**Root Cause**: Quartz markdown-to-HTML transforms expect element nodes but HTML comments (`<!--section: X-->`) have no `.data` property. Some plugins naively access `node.data` without checking node type.
+
+**Fix Applied**: 
+```bash
+sed -i 's/<!--section: \([0-9.]*\)-->/<span data-lineage-section="\1"><\/span>/g' file.md
+```
+
+**Files Fixed**:
+- `content/posts/the-price-of-not-being-cancer-v3.md` - converted all section comments to spans
+- `D:\Coding\CLAUDE.md` - documented the regex fix for future reference
+
+**Resolution Verified**: ✅ Build succeeds, site deploys without errors
+
+---
+
+### 17. Gingko Document Structure Filtering - UNRESOLVED ❌  
+**Status**: 🔴 **UNRESOLVED** - Live site showing wrong content structure
+**Issue**: https://brinedw.com/posts/the-price-of-not-being-cancer-v3 displays full 3-column Gingko editing structure instead of just third-column content for readers
+
+**Problem**: Visitors see first column headings + second column signposting like "[Hook with striking examples]" + third column explanations, when they should only see the explanations.
+
+**Attempted Fixes**:
+1. **Remark Plugin**: Created markdown AST filter but consultant analysis revealed it runs in wrong pipeline pass - HTML emitter uses different processor
+2. **Rehype Plugin**: Created HTML AST filter that should work, but GitHub Actions logs show NO console output from plugin - plugins aren't running in production
+
+**Technical Evidence**:
+- Local build shows plugin console output: `[LineageFilter] Found marker with depth X`
+- GitHub Actions shows zero plugin output, neither remark nor rehype versions
+- Live site shows empty `<article>` element but TOC shows all structural headings
+- Empty article suggests plugin IS running but filtering everything instead of just columns 1&2
+
+**Files Created**:
+- `quartz/plugins/transformers/lineageFilter.ts` - main plugin wrapper  
+- `quartz/plugins/transformers/rehypeLineageFilter.ts` - HTML AST filter logic
+- Plugin registered in `quartz.config.ts` at line 63
+
+**Next Steps Required**:
+- Debug why rehype plugin doesn't run in GitHub Actions (import/export issue?)
+- Add aggressive debugging with try-catch blocks around plugin imports
+- Check if rehype-raw is available in production environment  
+- Fix range detection logic if plugin IS running but filtering too broadly
+
+**User Impact**: High - main site content shows wrong structure to all visitors

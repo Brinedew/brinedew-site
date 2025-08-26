@@ -1,93 +1,78 @@
-# major document restructuring - august 25, 2025
+# gingko structure filtering - august 25, 2025
 
-The user wanted me to fix a massive academic document that had terrible structure - walls of text, broken section hierarchies, and content that was organized more like a research paper than something people would actually want to read.
+The user complained that https://brinedw.com/posts/the-price-of-not-being-cancer-v3 was showing the whole Gingko document structure instead of just the content readers should see. The page was displaying first column headings, second column signposting like "[Hook with striking examples]", AND the third column explanations - when it should only show the third column.
+
+The problem: visitors see the full 3-column Gingko editing structure instead of a clean article.
 
 ## what actually works now
 
-I completely restructured "the-price-of-not-being-cancer-v3.md" using Gingko-style editing principles:
+I fixed the original Quartz build error that was blocking everything. That sed command from the consultant worked perfectly:
 
-**Fixed the broken structure:**
-- Had 19 sections, 6 of which were "orphan" sections with only one subsection (bad Gingko practice)
-- Consolidated down to 14 sections with balanced hierarchies
-- Merged sections 9+10 into complete governance architecture  
-- Eliminated sections 16-18 by merging into unified applications section
-- Removed section 19 appendix entirely
-
-**Added structural signposting:**
-- Every second-level heading now has bracketed signposts like `[Hook with striking examples]` or `[Present the dangerous implications]`
-- These are instructions for the writer, not visible to readers
-- Tell the writer what rhetorical job each section is supposed to do
-
-**Split massive content dumps:**
-- Section 5 went from one giant blob to 6 focused subsections
-- Section 8 became 11 logical progression steps  
-- Section 12 got broken into 10 specific mechanism questions
-- Each subsection now answers one focused question instead of covering everything
-
-Files changed:
-- `content/posts/the-price-of-not-being-cancer-v3.md` - complete restructure, 188 insertions, 179 deletions
-
-## what's broken right now
-
-**The site build is failing.** Local build with `npx quartz build` gives this error:
-```
-Failed to process html `content/posts/the-price-of-not-being-cancer-v3.md`: Cannot read properties of null (reading 'data')
+```bash
+sed -i 's/<!--section: \([0-9.]*\)-->/<span data-lineage-section="\1"><\/span>/g' path/to/file.md
 ```
 
-We fixed the most obvious structural issues (empty sections, missing headings) but Quartz is still choking on something in the markdown. The frontmatter looks fine, so it's probably something with the section comment structure or content formatting.
+The build now succeeds without errors. The site deploys fine. The document exists at the right URL.
 
-The site isn't updating at brinedew.com because the GitHub Actions build is failing with the same error.
+Files I changed:
+- Added the regex fix to `D:\Coding\CLAUDE.md` at line 398-410  
+- Converted all `<!--section: X-->` comments to `<span data-lineage-section="X"></span>` in the main document
+- Created `quartz/plugins/transformers/lineageFilter.ts` - a remark plugin that didn't work
+- Created `quartz/plugins/transformers/rehypeLineageFilter.ts` - a rehype plugin that doesn't run
+
+## what's broken
+
+The filtering plugins don't actually run. I built two different approaches:
+
+1. **Remark plugin approach**: Filters markdown AST before HTML conversion. Build logs showed it was detecting markers and filtering correctly locally, but consultant's analysis revealed this happens in the wrong pipeline pass - the HTML emitter uses a different processor that doesn't include our modifications.
+
+2. **Rehype plugin approach**: Filters HTML AST after conversion. This should work according to the consultant, but GitHub Actions logs show NO console output from either plugin. Neither `[LineageFilter] PRODUCTION: Processing ...` nor `[rehypeLineageFilter] Processing ...` appears in the build logs.
+
+Current symptom: The article shows as completely empty (`<article class="popover-hint"></article>`) but the TOC still shows all the structural headings. This suggests the rehype plugin might be running and filtering EVERYTHING instead of just columns 1&2, OR the plugins aren't loading at all.
+
+Commands that work:
+- `npx quartz build` - builds successfully, no errors
+- Local build shows plugin console output, GitHub Actions shows none
+
+Commands that don't work:
+- The actual filtering - all content still visible on live site
 
 ## where things stand
 
-**Git status:** Everything is committed locally but not pushed yet because we're testing the build first
-- Last commit: "Fix document structure after Gingko reorganization" (e7a8ccd)
-- Ready to push once the build works
+- Quartz 4.5.1 site builds and deploys successfully 
+- Document exists but shows wrong content structure to readers
+- Plugins are configured in `quartz.config.ts` but don't appear to run in production
+- GitHub Actions environment might be different from local build environment
 
-**Document structure:** Clean 3-column Gingko hierarchy:
-- Column 1: Major sections (1-14) with main headings
-- Column 2: Focused questions with structural signposting  
-- Column 3: Detailed explanations that answer the questions
-
-**GitHub pull requests:** There are 2 dependency update PRs waiting:
-- #5: CI dependencies update (opened 7 hours ago)
-- #4: Production dependencies update (opened 7 hours ago)
+The rehype approach should work according to the consultant. The plugin structure follows Quartz patterns correctly. Something about plugin loading or execution is broken between local and production.
 
 ## what to do next
 
-**Fix the build first:** The Quartz error suggests there's still something wrong with the markdown structure. Check for:
-1. Malformed section comments (`<!--section: X-->` patterns)
-2. Missing newlines at end of file (I noticed "No newline at end of file" in the cat output)
-3. Weird characters or encoding issues
-4. Image links that point to non-existent files
+**Most urgent thing**: Debug why the rehype plugin isn't running in GitHub Actions.
 
-**Commands to test:**
-```bash
-cd "D:\Coding\Website"
-npx quartz build  # Should complete without errors
-```
+Check these possibilities:
+1. Import/export issue - maybe `rehypeLineageFilter` isn't being imported correctly in production
+2. Plugin registration problem - the `htmlPlugins()` array might not be processed the same way locally vs. production  
+3. Build environment difference - maybe rehype-raw isn't available in GitHub Actions
 
-**Handle those GitHub PRs:** The dependency updates are probably safe to merge. Use these commands:
-```bash
-gh pr merge 5 --squash  # Merge CI dependencies 
-gh pr merge 4 --squash  # Merge production dependencies
-```
+Start by adding more aggressive debugging:
+- Add console.log to the main LineageFilter function (not just inside the processor)
+- Add try-catch blocks around the plugin imports
+- Check if rehype-raw is actually loading
 
-**After build works, push and deploy:**
-```bash
-git push
-# Wait 60 seconds, then check https://brinedw.com/posts/the-price-of-not-being-cancer-v3/
-```
+Files to check:
+- `quartz/plugins/transformers/lineageFilter.ts` line 15-25 (the main export)
+- `quartz.config.ts` line 63 (where the plugin is registered)
+- GitHub Actions logs for any import errors that might be getting swallowed
+
+The rehype approach is the right direction according to the consultant - the issue is execution, not design.
 
 ## stuff to remember
 
-**Why this restructuring mattered:** The original document was a classic case of academic writing that dumped information instead of guiding readers. Each section had massive paragraphs covering multiple concepts. The Gingko restructuring creates a logical flow where:
-- Each major section poses a problem
-- Each subsection asks a specific question about that problem
-- Each sub-subsection gives a focused answer
+The consultant's analysis was spot-on: filtering at the markdown stage doesn't work because Quartz rebuilds multiple processor passes and our modifications get lost. The rehype stage is where HTML emitting happens, so modifications there should stick.
 
-**The signposting system:** Those bracketed instructions like `[Establish the core problem]` are for the writer, not the reader. They make sure each section has a clear rhetorical purpose instead of just being a content dump.
+The empty `<article>` element suggests the plugin IS running but filtering too aggressively. If it wasn't running at all, we'd see all the original content. The fact that we see nothing means the plugin is probably working but has a logic bug in the range detection.
 
-**Quartz is picky about markdown:** This isn't the first time Quartz has failed on structural issues. The error message "Cannot read properties of null" usually means it hit something in the markdown that doesn't parse right - empty sections, malformed frontmatter, or weird section nesting.
+Don't go back to CSS hiding approaches - that loads all the content then hides it, which sucks for SEO and page performance. The build-time filtering approach is correct.
 
-The document transformation worked great conceptually, but there's still some technical issue preventing it from building. Focus on that first before pushing anything live.
+The sed regex fix for the Quartz build error should be kept - that part definitely works and prevents the "Cannot read properties of null" error when processing HTML comments in markdown.
