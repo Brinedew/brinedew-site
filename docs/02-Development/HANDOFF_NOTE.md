@@ -27,7 +27,7 @@ cd "D:\Coding\Website"
 npx quartz build  # Should show no filtering debug logs now - it's working silently
 ```
 
-The live site at brinedw.com/posts/the-price-of-not-being-cancer-v3 now shows only clean reader-focused content instead of the messy editing structure.
+The live site at brinedew.com/posts/the-price-of-not-being-cancer-v3 now shows only clean reader-focused content instead of the messy editing structure.
 
 ### list colors - FIXED ✅
 
@@ -63,7 +63,7 @@ Nothing major. I was in the middle of helping tag untagged markdown pages when t
 **Environment:** Windows 11, Node.js, Quartz 4.5.1 static site
 **Current directory:** D:\Coding\Website  
 **Git status:** Clean, all changes committed and pushed to GitHub
-**Deployment:** GitHub Actions handles automatic deployment to brinedw.com
+**Deployment:** GitHub Actions handles automatic deployment to brinedew.com
 
 **Commands that work right now:**
 ```bash

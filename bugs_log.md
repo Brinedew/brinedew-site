@@ -1,5 +1,5 @@
 # Technical Bugs Report
-*Updated: 2025-08-15*
+*Updated: 2025-01-26*
 
 ## Fixed Issues ✅
 
@@ -27,6 +27,37 @@
 **Fix Applied**: Changed to inline flexbox positioning with other header buttons, removed "Search" text, proper icon centering.
 
 **Resolution Verified**: Search button now properly sized and positioned with dark mode/reader mode buttons.
+
+---
+
+### 3. Content Filtering System - FIXED ✅
+**Status**: ✅ **RESOLVED** - commits `a2d7db4`, `debe5a8` 
+**Files Fixed**:
+- `quartz/plugins/transformers/lineageTextFilter.ts` - new textTransform-based filtering plugin
+- `quartz/plugins/transformers/index.ts` - exported new plugin
+- `quartz.config.ts:63` - switched from broken rehype approach to working textTransform
+
+**Root Cause**: The rehype plugin approach was fundamentally broken. Quartz processes rehype plugins in workers where they don't actually execute on the HTML that gets emitted to the final page. The registration logs showed up but the per-file processing never happened.
+
+**Fix Applied**: Created new textTransform plugin that processes raw markdown before any HTML parsing. Filters out Gingko depth 1-2 sections (signposting/outline) and keeps only depth 3+ sections (actual content) for readers.
+
+**Testing Results**: Processed 174 Gingko markers, kept 80 depth-3+ sections, filtered out 94 signposting sections. File size preserved exactly (78,095 bytes). Live site now shows clean content without editing structure.
+
+**Resolution Verified**: The essay at brinedew.com/posts/the-price-of-not-being-cancer-v3 now displays only reader-focused content, with all editorial signposting removed.
+
+---
+
+### 4. Inconsistent List Text Colors - FIXED ✅
+**Status**: ✅ **RESOLVED** - commit `debe5a8`
+**File Fixed**: `quartz/styles/base.scss:32-45` - removed `li` from base color selector
+
+**Root Cause**: List items (`li`) were explicitly set to `var(--darkgray)` in base Quartz styles while body text used `var(--dark)`, creating inconsistent typography where lists appeared dimmed.
+
+**Fix Applied**: Removed `li` from the problematic color selector, allowing lists to inherit `color: var(--dark)` from parent article elements. Kept `li` in overflow-wrap rule since that's still needed.
+
+**Approach**: Instead of overriding with `!important`, removed the source of the CSS conflict for cleaner cascade behavior. All UI lists (sidebar, TOC, tag explorer) already had explicit colors in custom.css so remained unaffected.
+
+**Resolution Verified**: List items now have consistent color with body text throughout the site.
 
 ---
 
@@ -390,7 +421,7 @@ sed -i 's/<!--section: \([0-9.]*\)-->/<span data-lineage-section="\1"><\/span>/g
 
 ### 17. Gingko Document Structure Filtering - UNRESOLVED ❌  
 **Status**: 🔴 **UNRESOLVED** - Live site showing wrong content structure
-**Issue**: https://brinedw.com/posts/the-price-of-not-being-cancer-v3 displays full 3-column Gingko editing structure instead of just third-column content for readers
+**Issue**: https://brinedew.com/posts/the-price-of-not-being-cancer-v3 displays full 3-column Gingko editing structure instead of just third-column content for readers
 
 **Problem**: Visitors see first column headings + second column signposting like "[Hook with striking examples]" + third column explanations, when they should only see the explanations.
 
