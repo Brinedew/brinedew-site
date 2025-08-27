@@ -14,9 +14,18 @@ https://en.wikipedia.org/wiki/Chernoff_face
 
 https://slatestarcodex.com/2013/08/14/extreme-mnemonics/
 
-| Protein            | Human       |
-| ------------------ | ----------- |
-| Length (aa)        | Height (mm) |
-| Weight (kDa)       | Weight (kg) |
-| Half-life          | Age         |
-| Fibrillar/Globular | Man/Woman   |
+| Protein                          | Human              |
+| -------------------------------- | ------------------ |
+| Length (aa)                      | Height (mm)        |
+| Weight (kDa)                     | Weight (kg)        |
+| Half-life (h)                    | Hair length (cm)   |
+| Fibrillar/Globular               | Man/Woman          |
+| Alpha/Beta % (SCOP fold classes) |                    |
+|                                  | Skin color (R/G/B) |
+|                                  | Hair color (R/G/B) |
+| pI (isoelectric point)           |                    |
+
+
+| Protein name |     |     |     |     |     |     |
+| ------------ | --- | --- | --- | --- | --- | --- |
+|              |     |     |     |     |     |     |
