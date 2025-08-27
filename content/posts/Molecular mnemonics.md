@@ -24,7 +24,7 @@ https://slatestarcodex.com/2013/08/14/extreme-mnemonics/
 |                                  | Skin color (R/G/B) |
 |                                  | Hair color (R/G/B) |
 | pI (isoelectric point)           |                    |
-|                                  |                    |
+| Svedberg Sedimentation           |                    |
 
 
 | Protein name |     |     |     |     |     |     |
