@@ -19,7 +19,7 @@ https://slatestarcodex.com/2013/08/14/extreme-mnemonics/
 | Length (aa)                      | Height (mm)        |
 | Weight (kDa)                     | Weight (kg)        |
 | Half-life (h)                    | Hair length (cm)   |
-| Fibrillar/Globular               | Man/Woman          |
+| Globular/Transmembrane           | Women/Men          |
 | Alpha/Beta % (SCOP fold classes) |                    |
 |                                  | Skin color (R/G/B) |
 |                                  | Hair color (R/G/B) |
