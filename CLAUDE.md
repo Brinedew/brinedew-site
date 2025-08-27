@@ -24,21 +24,23 @@ npx quartz build    # builds static site to public/
 4. Wait a minute, check brinedew.com
 
 **Device setup:**
-- **Mobile devices**: Obsidian with Git plugins disabled, Syncthing enabled
-- **PC**: Obsidian with Git enabled, Syncthing enabled with `.stignore` protection
-- **Syncthing ignores**: `.git` folder (prevents corruption) and `public/` folder (build output)
+- **All devices**: Single shared Obsidian vault in `content/` folder
+- **Mobile devices**: Full Obsidian functionality, git plugin folder ignored by Syncthing
+- **PC**: Same vault plus git plugin for commits/pushes
+- **Syncthing ignores**: `.git` folder, git plugin folder, and build outputs via `.stignore`
 
 Don't overthink it. Edit anywhere, publish from PC, CI does the rest.
 
 ## file structure that matters
 
-- `content/` - all your markdown content lives here (migrated from `docs/`)
-- `content/posts/assets/images/` - throw images here
+- `content/` - **main Obsidian vault** with all markdown content
+- `content/.obsidian/` - Obsidian vault settings and plugins (shared across devices)
+- `content/posts/` - blog posts with `type/post` tags
+- `content/wiki/` - **flat structure** with tag-based organization
+- `content/Attachments/` - images and Excalidraw drawings
+- `content/Templates/` - QuickAdd templates for posts, wiki pages, proteins
 - `quartz.config.ts` - site config (theme, plugins, nav)
-- `.github/workflows/deploy-quartz.yml` - GitHub Actions workflow for Quartz builds
-- `public/` - build output (git ignores this, CI handles it)
-- `quartz/static/` - static assets like CSS, images that get copied to public
-- `scripts/` - migration and utility scripts
+- `public/` - build output (ignored by git and Syncthing)
 
 ## navigation works automatically
 
@@ -79,12 +81,10 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 - Check git history: `git log --oneline --grep="app\|html\|frontend"`
 - Embedded HTML gets nuked during static site migrations - use external JS/CSS files instead
 
-**Excalidraw drawings showing as text links instead of images?** You need to enable PNG auto-export in Obsidian:
+**Excalidraw drawings showing as text links instead of images?** Current settings have PNG auto-export **disabled** but SVG export enabled. Drawings appear as embedded SVG images on the website. If you want PNG export instead:
 1. Open Obsidian → Settings → Community plugins → Excalidraw
 2. ✅ Enable "Auto export PNG" 
-3. ✅ Enable "Keep same folder as drawing"
-4. Your drawings will now automatically export as PNG files alongside the .excalidraw files
-5. The website will display the PNG images instead of text links
+3. Note: PNG files are ignored by git via `.gitignore` but SVG files are committed
 
 **Git corruption (fatal: loose object is corrupt)?** This happens when Syncthing and Git conflict:
 1. Back up your `content/` directory to a safe location
@@ -215,27 +215,22 @@ getComputedStyle(document.documentElement).getPropertyValue('--light').trim()
 - Layers panel (More tools → Layers) to visualize z-index stacking
 - Check for `@media (prefers-color-scheme)` blocks that might override theme variables later in cascade
 
-## obsidian plugin debugging patterns
+## current obsidian plugin setup
 
-**Check for corrupted plugin installations first:**
-```bash
-# Plugin should have these 3 files at minimum:
-ls .obsidian/plugins/plugin-name/
-# Expected: main.js, manifest.json, data.json
-# Missing main.js/manifest.json = corrupted installation
-```
+**Active plugins in content vault:**
+- **obsidian-excalidraw-plugin** - drawing integration with SVG export
+- **quickadd** - automated note creation (Ctrl+N → Post/Wiki/Protein templates)
+- **obsidian-git** - PC only, ignored on mobile via Syncthing
+- **dataview** - dynamic content queries
+- **templater-obsidian** - advanced templating
+- **tag-wrangler** - tag management tools
+- **obsidian-admonition** - callout blocks
+- Plus: editing-toolbar, table-editor, multi-column-markdown, etc.
 
-**Plugin data persistence across uninstall/reinstall:**
-- Obsidian preserves `data.json` (user settings) when uninstalling plugins
-- Removes `main.js`, `manifest.json`, `styles.css` (executable files)
-- This means broken configs can survive reinstallation
-- For clean slate: manually delete entire plugin folder before reinstalling
-
-**QuickAdd GUI is broken - use JSON configuration:**
-- "Add Choice" button defaults to Template type with no way to change to Multi
-- Direct JSON editing in `data.json` is more reliable than GUI
-- Use UUIDs for choice IDs: `[System.Guid]::NewGuid().ToString()` in PowerShell
-- Multi choice format: `"children": ["uuid1", "uuid2"]` array of child choice IDs
+**Plugin configuration notes:**
+- QuickAdd has working multi-choice setup: "Create New Note" → Post/Wiki Page/Protein Page
+- Git plugin auto-pulls every 4 minutes, auto-commits after file changes
+- All plugin settings sync between devices except git plugin (Syncthing ignores it)
 
 ## gemini analysis templates
 
@@ -350,24 +345,21 @@ If you encounter components with inline CSS/JS (legacy code), don't copy those p
 
 **The rule**: If Explorer or TOC doesn't do it that way, you probably shouldn't either.
 
-## obsidian quickadd plugin debugging patterns
+## quickadd workflow automation
 
-**Windows UTF-8 BOM breaks JSON parsing:** The most common QuickAdd failure is PowerShell writing UTF-8 with BOM when creating config files. QuickAdd's JSON.parse() chokes on the BOM and falls back to empty config.
+**Current working setup:**
+- **Ctrl+N** opens multi-choice dialog: Post, Wiki Page, Protein Page
+- **Post template** creates in `posts/` with `type/post` tag and draft: true
+- **Wiki template** creates in `wiki/` with `type/wiki` tag
+- **Protein template** creates structured protein pages with UniProt fields
+- All templates use proper frontmatter with title, date, tags
 
-**Always check vault location first:** QuickAdd must be in the `.obsidian` folder of the vault you actually have open. If user opens `Website/content/` as vault, QuickAdd needs to be in `content/.obsidian/plugins/quickadd/`, not `Website/.obsidian/`.
+**Template locations:**
+- `content/Templates/Post Template.md`
+- `content/Templates/Wiki Template QuickAdd.md` 
+- `content/Templates/Protein Template QuickAdd.md`
 
-**UTF-8 No BOM PowerShell pattern:**
-```powershell
-# WRONG - creates BOM
-$config | ConvertTo-Json -Depth 10 | Set-Content file.json -Encoding UTF8
-
-# RIGHT - no BOM
-$json = $config | ConvertTo-Json -Depth 10
-$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($filePath, $json, $Utf8NoBom)
-```
-
-**Plugin installation corruption signs:** Missing `main.js`, `manifest.json`, `styles.css` but `data.json` exists means corrupted install. Obsidian preserves user data during uninstall but removes executables.
+**QuickAdd configuration stored in:** `content/.obsidian/plugins/quickadd/data.json`
 
 ## quartz draft system patterns
 

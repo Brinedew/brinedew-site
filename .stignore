@@ -1,5 +1,12 @@
 // Ignore the Git directory to prevent corruption
 .git
 
+// Keep git plugin local to PC only - don't sync to other devices
+content/.obsidian/plugins/obsidian-git/
+
 // Optional: Ignore the MkDocs build output
 site
+
+// Build outputs and caches
+public/
+.quartz-cache/
