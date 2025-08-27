@@ -1,9 +1,9 @@
 ---
-title: Criticism of Dwarkesh Podcast - Jacob Kimmel Interview
 date: 2025-08-23
-tags:
-  - type/post
 draft: true
+tags:
+- content/post
+title: Criticism of Dwarkesh Podcast - Jacob Kimmel Interview
 ---
 
 

@@ -1,9 +1,9 @@
 ---
-title: One-Hit Cancer
 date: 2025-08-10
-tags:
-- type/post
 draft: true
+tags:
+- content/post
+title: One-Hit Cancer
 ---
 # One-Hit Cancer
 

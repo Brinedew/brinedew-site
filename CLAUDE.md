@@ -161,35 +161,38 @@ This survives Quartz's dynamic navigation and won't get nuked by migration scrip
 - `quartz.config.ts` core configuration (themes, plugins)
 - Don't append CSS to .scss files (breaks Sass compilation)
 
-## wiki structure
+## current wiki folder structure (flattened)
 
-`content/wiki/` has hierarchical organization for longevity research concepts. Navigation auto-generates from file structure. Each category gets its own subfolder with an index page.
+`content/wiki/` uses **flat organization with tags** instead of folder hierarchy. All 65+ wiki entries live directly in `/wiki/` root.
+
+**Current tag taxonomy:**
+- `type/wiki` - all wiki content
+- `type/post` - blog posts
+- `type/apps` - interactive pages
+- `meta` - technical, infrastructure and maintenance pages
+- `protein` tag for protein pages (AKT, p53, etc.)
 
 **To add new wiki content:**
-1. Create markdown files in the appropriate folder with proper frontmatter
-2. That's it - navigation updates automatically
-3. Cross-reference everything with wikilinks or relative links
+1. Create markdown file directly in `wiki/` folder
+2. Add proper tags instead of using subfolders
+3. Use QuickAdd (Ctrl+N → Wiki Page) for automated setup
+4. Cross-reference with wikilinks: `[[cellular-senescence]]`
 
-**Current categories:** concepts, theories, mechanisms, organisms
+## excalidraw integration (current setup)
 
-**Quartz handles all navigation automatically** - no manual configuration files needed.
+**How drawings work now:**
+1. Create drawings using Excalidraw plugin: `![[drawing.excalidraw]]`
+2. Drawings stored as `.excalidraw.md` files in `Attachments/` folder
+3. **SVG auto-export enabled**, PNG auto-export disabled
+4. Both .excalidraw.md and .svg files sync via Syncthing
+5. Website displays embedded SVG images (vector graphics, scalable)
 
-## excalidraw integration
+**Current settings:**
+- Auto-export SVG: ✅ Enabled (committed to git)
+- Auto-export PNG: ❌ Disabled (ignored by git anyway)
+- Folder: `Excalidraw/` (but drawings can be anywhere)
 
-Excalidraw drawings work seamlessly across all devices and auto-convert to images on the website.
-
-**How it works:**
-1. Create drawings in Obsidian using Excalidraw plugin on any device
-2. Use standard Obsidian syntax: `![[drawing.excalidraw]]` in your markdown
-3. Enable auto-export in Excalidraw settings (PNG format, same folder as drawing)
-4. Syncthing syncs both the .excalidraw.md file and the exported PNG
-5. When published, mkdocs-obsidian-excalidraw-plugin converts the syntax to standard markdown images
-
-**Setup (one time):**
-- Excalidraw plugin settings → ✅ Auto export PNG → ✅ Keep same folder as drawing
-- No manual syntax conversion needed - it's fully automatic
-
-**Result:** Mobile editing, cross-device sync, automatic web publishing. Draw on phone, appears on website.
+**Result:** Draw on any device, SVG versions appear on website as crisp vector graphics.
 
 ## debugging css problems properly
 
@@ -260,28 +263,30 @@ This site's audience includes LessWrong veterans, researchers, and people who re
 Wrong: "Think of it as evolution turning against itself to stop cells from competing"
 Right: "Multicellular organisms suppress intra-organismal evolution through..."
 
-## current workflow (quartz 4 setup)
+## current workflow (updated for single vault)
 
 **Working publishing workflow:**
-1. Write/edit content in Obsidian on any device
-2. Syncthing syncs content automatically across devices (mobile ↔ PC)
-3. Git commit and push from PC only (when ready to publish)
-4. GitHub Actions builds and deploys via Quartz 4
+1. Write/edit content in shared Obsidian vault (`content/`) on any device
+2. Syncthing syncs vault automatically across all devices
+3. Git operations happen from PC only (git plugin ignored on mobile)
+4. Push commits → GitHub Actions builds and deploys via Quartz 4
 
-**Critical workflow requirements:**
-- **PC**: Both Syncthing + Git enabled
-- **Mobile**: Syncthing only - Git plugin must be DISABLED on mobile devices
-- **Syncthing**: `.stignore` file protects `.git` and `public/` from sync conflicts
+**Device synchronization:**
+- **All devices**: Share same `content/` vault via Syncthing
+- **PC**: Git plugin active, handles commits/pushes automatically
+- **Mobile**: Git plugin folder ignored, no git operations
+- **Syncthing**: `.stignore` prevents git conflicts and build output sync
 
-**Excalidraw integration:**
-- Create drawings using `![[drawing.excalidraw]]` syntax in Obsidian
-- Must enable PNG auto-export in Obsidian Excalidraw plugin settings
-- Drawings sync across devices via Syncthing, display as images on web
+**Content creation workflow:**
+- **PC or Mobile**: Ctrl+N → Choose Post/Wiki/Protein template
+- **PC or Mobile**: Edit with full Obsidian features (tags, links, drawings)
+- **PC only**: Git commits happen automatically after changes
+- **All devices**: See updates via Syncthing within seconds
 
-**Build commands:**
+**Build commands (PC only):**
 ```bash
 npx quartz build    # local build to public/
-npm run docs        # build + serve locally
+npm run docs        # build + serve locally at localhost:8080
 ```
 
 ## Quartz Component Architecture Patterns

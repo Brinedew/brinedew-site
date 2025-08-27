@@ -3,7 +3,7 @@ title:
   "{ VALUE:title }":
 tags:
   - protein
-  - type/wiki
+  - content/wiki
 date:
   "{ DATE:YYYY-MM-DD }":
 draft: true

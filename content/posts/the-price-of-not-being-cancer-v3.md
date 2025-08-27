@@ -1,9 +1,11 @@
+
+<!--section: 1-->
 ---
-title: The Price of Not Being Cancer
 date: 2025-08-10
 draft: false
 tags:
-  - type/post
+- content/post
+title: The Price of Not Being Cancer
 ---
 
 <span data-lineage-section="1"></span>

@@ -1,9 +1,9 @@
 ---
-title: Cellular Senescence
 date: 2025-08-10
-tags:
-- type/wiki
 draft: false
+tags:
+- content/wiki
+title: Cellular Senescence
 ---
 # Cellular Senescence
 

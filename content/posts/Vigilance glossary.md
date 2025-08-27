@@ -1,9 +1,9 @@
 ---
-title: Vigilance glossary
-tags:
-- type/post
 date: 2025-08-24
 draft: true
+tags:
+- content/post
+title: Vigilance glossary
 ---
 # Vigilance glossary
 **We reversed aging** - did you actually measure the reduction in late-life mortality rates of the treatment group compared to controls? Did you observe the treatment group breaking lifespan records for the species? Or did you just score better on frailty measures? 

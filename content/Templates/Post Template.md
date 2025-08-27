@@ -2,7 +2,7 @@
 title:
   "{ VALUE:title }":
 tags:
-  - type/post
+  - content/post
 date:
   "{ DATE:YYYY-MM-DD }":
 draft: true
