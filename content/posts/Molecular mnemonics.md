@@ -14,17 +14,22 @@ https://en.wikipedia.org/wiki/Chernoff_face
 
 https://slatestarcodex.com/2013/08/14/extreme-mnemonics/
 
-| Protein                          | Human              |
+| Protein                          | Character          |
 | -------------------------------- | ------------------ |
-| Length (aa)                      | Height (mm)        |
-| Weight (kDa)                     | Weight (kg)        |
+| Length (aa)                      |                    |
+| Weight (kDa)                     |                    |
+| Svedberg Sedimentation           |                    |
+|                                  | Weight (kg)        |
+|                                  | Height (mm)        |
+|                                  | BMI                |
 | Half-life (h)                    | Hair length (cm)   |
 | Globular/Transmembrane           | Women/Men          |
 | Alpha/Beta % (SCOP fold classes) |                    |
-|                                  | Skin color (R/G/B) |
-|                                  | Hair color (R/G/B) |
+|                                  | Skin color (H/S/L) |
+|                                  | Hair color (H/S/L) |
 | pI (isoelectric point)           |                    |
-| Svedberg Sedimentation           |                    |
+| GRAVY score                      |                    |
+|                                  | Face roundness     |
 
 
 | Protein name |     |     |     |     |     |     |
