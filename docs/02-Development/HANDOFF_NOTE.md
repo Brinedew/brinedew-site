@@ -101,3 +101,83 @@ The consultant's architecture is right, but we violated the idempotent property 
 **The architecture is right**: Single source of truth with stable UIDs and normalized layout. The implementation just has a basic bug that needs fixing.
 
 Next person should focus on making normalization actually idempotent before attempting any Lineage integration. The foundation is good but needs to be rock-solid first.
+
+---
+
+## Appendix: Complete Consultant Response
+
+*Preserving the full architectural guidance for future reference*
+
+Consultant's reply: think, then implement. You're right to reject the "two files" plan. It violates single-source-of-truth and invites temporal coupling—exactly the kind of complexity Carmack warns against. The architecture that respects your constraints is:
+
+* **One canonical file.**
+* **Explicit, local metadata** on each section (stable identity; no inference from position).
+* **Order-agnostic parse** for reading.
+* **Deterministic, idempotent normalize-on-save** for writing that preserves your *grouped-by-depth* layout regardless of what the editor did in memory.
+
+This keeps state in the data, not in tooling; favors simple, linear passes over clever pipelines; and makes the invariant ("scaffold first, leaves later") mechanically enforced. That's the Carmack way: make the format do the work; keep transforms obvious; avoid hidden magic.
+
+Below is a concrete, **single-file** solution: a tiny Obsidian companion plugin that (1) adds a **stable UID** to each section marker once, (2) uses an **order-agnostic parser** to build the tree for Lineage, and (3) **normalizes the file in place on save** so depths 1–2 remain in the "scaffold block" and depths ≥3 remain in the "content block." No shadow files, no desync, no manual steps.
+
+### 0) On-disk schema (simple, explicit)
+
+Keep your current markers, but add one stable identity the first time we touch a file:
+
+```html
+<span data-lineage-uid="6f7e…b2" data-lineage-section="1"></span>
+<span data-lineage-uid="a9c1…32" data-lineage-section="1.1"></span>
+<span data-lineage-uid="e3a8…77" data-lineage-section="1.1.1"></span>
+```
+
+* `data-lineage-uid` = stable UUID per section (never reused).
+* `data-lineage-section` = display path (dot path) that Lineage can keep updating when you move cards. It's *derived*, not authoritative.
+* Physical layout is your invariant:
+  * **Block A**: all depth ≤ 2 ("scaffold")
+  * **Block B**: all depth ≥ 3 ("content")
+* Optional guard rails (first normalize will insert them once):
+  `<!-- lineage:scaffold start --> … <!-- lineage:scaffold end -->`
+  `<!-- lineage:content start --> … <!-- lineage:content end -->`
+
+This decouples **identity** from **order**: edits update attributes, while layout remains grouped.
+
+### 1) Order-agnostic parser (read)
+
+We use dot-paths or parent chains only to compute *depth* and *display path*. Position in the file is irrelevant.
+
+### 2) Idempotent normalize-on-save (write)
+
+This is the key: whenever the file is saved (by Lineage or any LLM), we **reassemble the same file** into your two blocks. We do *not* reorder within a block beyond your chosen policy.
+
+* **Scaffold policy (depth ≤ 2):** keep the exact order they appear in the saved file (or sort numerically—toggleable).
+* **Leaves policy (depth ≥ 3):** keep the exact order they appear (which reflects your edits in Lineage).
+
+Frontmatter and any text outside marker ranges are preserved.
+
+### 3) Obsidian integration (single file; no desync)
+
+A minimal plugin that ensures the invariant on every save, and backfills `data-lineage-uid` once. It doesn't fork Lineage. If you've already added the order-agnostic reader to Lineage (your earlier work), the UI stays correct regardless of file layout.
+
+**Why this avoids desync**
+
+* There is **one file**.
+* Any edit source (Lineage UI, raw editor, LLM bulk change, frontmatter tweak) funnels through the same **normalize-on-save** pass.
+* The **parser ignores physical order**, so Lineage will always display a correct tree immediately after the write.
+* Because normalization is **idempotent** and **local**, you can keep it on without fear of slow drift.
+
+### Why this is "Carmack-clean"
+
+* **Single source of truth** (no mirrors).
+* **Data-driven**: identity and relationships live in the data; code is a straight pass.
+* **Determinism & idempotence**: run it a hundred times; same bytes out. Easy to diff.
+* **Small, linear passes**: one parse, one normalize. No clever incremental state machines.
+* **Local complexity** only where needed; zero global coordination.
+* **Human-friendly**: open the file; the invariant is legible. No hidden SQLite, no opaque blobs.
+
+### Bottom line
+
+* Keep **one file**.
+* Make **identity explicit** (`data-lineage-uid`).
+* Read with an **order-agnostic** parser.
+* Enforce **grouped layout** with a **normalize-on-save** pass.
+
+You get full Lineage editing (create/move/delete), and your grouped structure persists no matter what. It's small, deterministic, and obvious—the kind of thing that earns a nod from Carmack.
