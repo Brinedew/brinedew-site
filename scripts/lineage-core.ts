@@ -1,9 +1,8 @@
 // Core parsing and normalization functions for Lineage grouped-by-depth workflow
-// Based on consultant's architecture for bidirectional editing
+// Simplified path-only approach - section path IS the identity
 
 export type Section = {
-  uid: string
-  path: string        // "1.2.3" (display path)
+  path: string        // "1.2.3" (path and identity)
   depth: number
   start: number       // marker start index in file
   after: number       // index right after marker close
@@ -11,64 +10,52 @@ export type Section = {
   content: string
 }
 
-// Match both UID and section markers in any order
-const MARKER_RX = /<span[^>]*\bdata-lineage-uid=["']?([0-9a-fA-F-]{8,})["'][^>]*\bdata-lineage-section=["']?([0-9]+(?:\.[0-9]+)*)["'][^>]*>\s*<\/span>/ig
-const SECTION_ONLY_RX = /<span[^>]*\bdata-lineage-section=["']?([0-9]+(?:\.[0-9]+)*)["'][^>]*>\s*<\/span>/ig
-const UID_CHECK_RX = /\bdata-lineage-uid=["'][0-9a-fA-F-]{8,}["']/i
+// Preprocessing patterns for idempotency
+const NL_RX = /\r\n?/g
+const LINEAGE_WRAPPERS_RX = /(?:\n)?\s*<!--\s*lineage:(?:scaffold|content)\s+(?:start|end)\s*-->\s*(?:\n)?/gi
+
+// Single attribute approach - path is the identity
+const MARKER_RX = /<span(?=[^>]*\bdata-lineage-section=["']?([0-9]+(?:\.[0-9]+)*)["']?)[^>]*>\s*<\/span>/ig
+
+/**
+ * Normalize newlines to LF and strip any lineage block comments for idempotency.
+ */
+function prepareForParse(src: string): string {
+  return src.replace(NL_RX, "\n").replace(LINEAGE_WRAPPERS_RX, "")
+}
 
 /**
  * Parse all sections from document, ignoring physical order.
  * Returns sections sorted by their position in the document (not by path).
  */
 export function parseSections(src: string): Section[] {
-  const hits: { uid: string; path: string; s: number; e: number }[] = []
+  const hits: { path: string; s: number; e: number }[] = []
   MARKER_RX.lastIndex = 0
   let m: RegExpExecArray | null
   
   while ((m = MARKER_RX.exec(src)) !== null) {
-    hits.push({ uid: m[1], path: m[2], s: m.index, e: MARKER_RX.lastIndex })
+    const path = m[1]
+    hits.push({ path, s: m.index, e: MARKER_RX.lastIndex })
   }
   
   const out: Section[] = []
   for (let i = 0; i < hits.length; i++) {
     const cur = hits[i]
-    const nextS = i + 1 < hits.length ? hits[i + 1].s : src.length
+    const nextStart = i + 1 < hits.length ? hits[i + 1].s : src.length
     out.push({
-      uid: cur.uid,
       path: cur.path,
       depth: cur.path.split(".").length,
       start: cur.s,
       after: cur.e,
-      end: nextS,
-      content: src.slice(cur.e, nextS),
+      end: nextStart,
+      content: src.slice(cur.e, nextStart), // raw slice; trimming handled later
     })
   }
   
   return out
 }
 
-/**
- * Check if document already has UIDs assigned to markers.
- */
-export function hasUids(src: string): boolean {
-  return UID_CHECK_RX.test(src)
-}
-
-/**
- * Assign stable UIDs to any markers missing them.
- * Uses timestamp + counter for deterministic but unique IDs.
- */
-export function assignUidsOnce(src: string): string {
-  if (hasUids(src)) return src
-  
-  const timestamp = Date.now().toString(16)
-  let counter = 0
-  
-  return src.replace(SECTION_ONLY_RX, (match, path) => {
-    const uid = `${timestamp}-${(counter++).toString(16).padStart(4, '0')}`
-    return match.replace('<span', `<span data-lineage-uid="${uid}"`)
-  })
-}
+// UID assignment removed - path is the identity
 
 /**
  * Numeric comparison for dot-separated paths (1.2.10 comes after 1.2.2)
@@ -87,27 +74,27 @@ export function numericPathCompare(a: string, b: string): number {
 }
 
 /**
- * Split document into frontmatter and body
+ * Split document into frontmatter and body with normalized newlines
  */
 export function splitFrontmatter(src: string): { head: string; body: string } {
-  if (!src.startsWith("---")) return { head: "", body: src }
+  const s = src.replace(NL_RX, "\n")
+  if (!s.startsWith("---\n")) return { head: "", body: s }
   
-  const endIndex = src.indexOf("\n---", 3)
-  if (endIndex < 0) return { head: "", body: src }
+  const end = s.indexOf("\n---\n", 4)
+  if (end === -1) return { head: "", body: s }
   
-  const frontmatterEnd = endIndex + 4
-  return {
-    head: src.slice(0, frontmatterEnd) + "\n\n",
-    body: src.slice(frontmatterEnd)
-  }
+  const fmEnd = end + 5
+  return { head: s.slice(0, fmEnd) + "\n", body: s.slice(fmEnd) }
 }
 
 /**
- * Emit a section as HTML marker + content
+ * Emit a section as HTML marker + content with stable formatting
  */
 function emitSection(section: Section): string {
-  return `<span data-lineage-uid="${section.uid}" data-lineage-section="${section.path}"></span>\n` +
-         section.content.trimStart() + "\n\n"
+  // Normalize leading newlines to at most one LF so emission is stable
+  const canon = section.content.replace(NL_RX, "\n").replace(/^\n+/, "\n")
+  return `<span data-lineage-section="${section.path}"></span>\n` +
+         canon.trimEnd() + "\n\n"
 }
 
 export interface NormalizeOptions {
@@ -124,57 +111,42 @@ export interface NormalizeOptions {
  * This is idempotent - running it multiple times produces the same result.
  */
 export function normalizeGrouped(src: string, options: NormalizeOptions = {}): string {
+  // 1) Split frontmatter first, then clean the body portion
   const { head, body } = splitFrontmatter(src)
-  const sections = parseSections(body)
-  
-  if (sections.length === 0) return src // Nothing to normalize
-  
-  // Split by depth
-  const scaffoldSections = sections.filter(s => s.depth <= 2)
-  const contentSections = sections.filter(s => s.depth >= 3)
-  
-  // Sort scaffold if requested, otherwise preserve document order
-  if (options.sortScaffold) {
-    scaffoldSections.sort((a, b) => numericPathCompare(a.path, b.path))
+  const cleanedBody = prepareForParse(body)
+
+  // 2) Parse sections (no UID assignment needed - path is the identity)
+  const sections = parseSections(cleanedBody)
+  if (sections.length === 0) return head + cleanedBody  // nothing to do
+
+  // 3) Partition by depth
+  const scaffold = sections.filter(s => s.depth <= 2)
+  const content  = sections.filter(s => s.depth >= 3)
+
+  if (options.sortScaffold) scaffold.sort((a, b) => numericPathCompare(a.path, b.path))
+  // content order is preserved as edited; if you want numeric, sort here consistently
+
+  // 4) Emit canonical form (LF only; wrappers injected once)
+  const out: string[] = [head]
+
+  if (options.addComments) out.push(`<!-- lineage:scaffold start -->\n\n`)
+  for (const s of scaffold) out.push(emitSection(s))
+  if (options.addComments) out.push(`<!-- lineage:scaffold end -->\n\n`)
+
+  if (content.length > 0) {
+    if (options.addComments) out.push(`<!-- lineage:content start -->\n\n`)
+    for (const s of content) out.push(emitSection(s))
+    if (options.addComments) out.push(`<!-- lineage:content end -->\n`)
   }
-  
-  // Build normalized document
-  const parts: string[] = [head]
-  
-  if (options.addComments) {
-    parts.push("<!-- lineage:scaffold start -->\n\n")
-  }
-  
-  for (const section of scaffoldSections) {
-    parts.push(emitSection(section))
-  }
-  
-  if (options.addComments) {
-    parts.push("<!-- lineage:scaffold end -->\n\n")
-  }
-  
-  if (contentSections.length > 0) {
-    if (options.addComments) {
-      parts.push("<!-- lineage:content start -->\n\n")
-    }
-    
-    for (const section of contentSections) {
-      parts.push(emitSection(section))
-    }
-    
-    if (options.addComments) {
-      parts.push("<!-- lineage:content end -->\n")
-    }
-  }
-  
-  return parts.join("")
+
+  return out.join("")
 }
 
 /**
  * Build tree structure ignoring document order (for Lineage integration)
  */
 export type LineageNode = {
-  id: string
+  id: string           // Uses path as ID
   path: string
   depth: number
   title?: string
@@ -186,10 +158,10 @@ export function buildTreeIgnoringOrder(src: string): LineageNode[] {
   const sections = parseSections(src)
   const nodeMap = new Map<string, LineageNode>()
   
-  // Create all nodes
+  // Create all nodes - path is the ID
   for (const section of sections) {
     nodeMap.set(section.path, {
-      id: section.uid,
+      id: section.path,    // Path is the identity
       path: section.path,
       depth: section.depth,
       title: deriveTitle(section.content),

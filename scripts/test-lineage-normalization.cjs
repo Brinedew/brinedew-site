@@ -87,8 +87,16 @@ This creates evolutionary pressure for organisms...
 // Simplified JavaScript versions of core functions for testing
 class LineageNormalizerTest {
   constructor() {
-    this.MARKER_RX = /<span[^>]*\bdata-lineage-section=["']?([0-9]+(?:\.[0-9]+)*)["'][^>]*>\s*<\/span>/ig;
-    this.UID_CHECK_RX = /\bdata-lineage-uid=["'][0-9a-fA-F-]{8,}["']/i;
+    // Preprocessing patterns for idempotency
+    this.NL_RX = /\r\n?/g;
+    this.LINEAGE_WRAPPERS_RX = /(?:\n)?\s*<!--\s*lineage:(?:scaffold|content)\s+(?:start|end)\s*-->\s*(?:\n)?/gi;
+    
+    // Single attribute approach - path is the identity
+    this.MARKER_RX = /<span(?=[^>]*\bdata-lineage-section=["']?([0-9]+(?:\.[0-9]+)*)["']?)[^>]*>\s*<\/span>/ig;
+  }
+
+  prepareForParse(src) {
+    return src.replace(this.NL_RX, "\n").replace(this.LINEAGE_WRAPPERS_RX, "");
   }
 
   parseSections(src) {
@@ -99,7 +107,6 @@ class LineageNormalizerTest {
     while ((match = this.MARKER_RX.exec(src)) !== null) {
       const path = match[1];
       hits.push({
-        uid: this.extractUid(match[0]) || 'missing-uid',
         path: path,
         depth: path.split('.').length,
         start: match.index,
@@ -111,44 +118,23 @@ class LineageNormalizerTest {
     for (let i = 0; i < hits.length; i++) {
       const cur = hits[i];
       const nextStart = i + 1 < hits.length ? hits[i + 1].start : src.length;
-      cur.content = src.slice(cur.end, nextStart);
+      cur.content = src.slice(cur.end, nextStart); // raw slice; trimming handled later
     }
     
     return hits;
   }
 
-  extractUid(markerHtml) {
-    const uidMatch = markerHtml.match(/data-lineage-uid=["']([^"']+)["']/);
-    return uidMatch ? uidMatch[1] : null;
-  }
-
-  hasUids(src) {
-    return this.UID_CHECK_RX.test(src);
-  }
-
-  assignUidsOnce(src) {
-    if (this.hasUids(src)) return src;
-    
-    const timestamp = Date.now().toString(16);
-    let counter = 0;
-    
-    return src.replace(this.MARKER_RX, (match, path) => {
-      const uid = `${timestamp}-${(counter++).toString(16).padStart(4, '0')}`;
-      return match.replace('<span', `<span data-lineage-uid="${uid}"`);
-    });
-  }
+  // UID assignment removed - path is the identity
 
   splitFrontmatter(src) {
-    if (!src.startsWith("---")) return { head: "", body: src };
+    const s = src.replace(this.NL_RX, "\n");
+    if (!s.startsWith("---\n")) return { head: "", body: s };
     
-    const endIndex = src.indexOf("\n---", 3);
-    if (endIndex < 0) return { head: "", body: src };
+    const end = s.indexOf("\n---\n", 4);
+    if (end === -1) return { head: "", body: s };
     
-    const frontmatterEnd = endIndex + 4;
-    return {
-      head: src.slice(0, frontmatterEnd) + "\n\n",
-      body: src.slice(frontmatterEnd)
-    };
+    const fmEnd = end + 5;
+    return { head: s.slice(0, fmEnd) + "\n", body: s.slice(fmEnd) };
   }
 
   numericPathCompare(a, b) {
@@ -164,66 +150,48 @@ class LineageNormalizerTest {
   }
 
   emitSection(section) {
-    return `<span data-lineage-uid="${section.uid}" data-lineage-section="${section.path}"></span>\n` +
-           section.content.trimStart() + "\n\n";
+    // Normalize leading newlines to at most one LF so emission is stable
+    const canon = section.content.replace(this.NL_RX, "\n").replace(/^\n+/, "\n");
+    return `<span data-lineage-section="${section.path}"></span>\n` +
+           canon.trimEnd() + "\n\n";
   }
 
   normalizeGrouped(src, options = {}) {
-    // First ensure UIDs are assigned
-    const withUids = this.assignUidsOnce(src);
-    
-    const { head, body } = this.splitFrontmatter(withUids);
-    const sections = this.parseSections(body);
-    
-    if (sections.length === 0) return withUids;
-    
-    // Split by depth
-    const scaffoldSections = sections.filter(s => s.depth <= 2);
-    const contentSections = sections.filter(s => s.depth >= 3);
-    
-    // Sort scaffold if requested
-    if (options.sortScaffold) {
-      scaffoldSections.sort((a, b) => this.numericPathCompare(a.path, b.path));
+    // 1) Split frontmatter first, then clean the body portion
+    const { head, body } = this.splitFrontmatter(src);
+    const cleanedBody = this.prepareForParse(body);
+
+    // 2) Parse sections (no UID assignment needed - path is the identity)
+    const sections = this.parseSections(cleanedBody);
+    if (sections.length === 0) return head + cleanedBody;  // nothing to do
+
+    // 4) Partition
+    const scaffold = sections.filter(s => s.depth <= 2);
+    const content  = sections.filter(s => s.depth >= 3);
+
+    if (options.sortScaffold) scaffold.sort((a, b) => this.numericPathCompare(a.path, b.path));
+    // content order is preserved as edited; if you want numeric, sort here consistently
+
+    // 5) Emit canonical form (LF only; wrappers injected once)
+    const out = [head];
+
+    if (options.addComments) out.push(`<!-- lineage:scaffold start -->\n\n`);
+    for (const s of scaffold) out.push(this.emitSection(s));
+    if (options.addComments) out.push(`<!-- lineage:scaffold end -->\n\n`);
+
+    if (content.length > 0) {
+      if (options.addComments) out.push(`<!-- lineage:content start -->\n\n`);
+      for (const s of content) out.push(this.emitSection(s));
+      if (options.addComments) out.push(`<!-- lineage:content end -->\n`);
     }
-    
-    // Sort content numerically
-    contentSections.sort((a, b) => this.numericPathCompare(a.path, b.path));
-    
-    const parts = [head];
-    
-    if (options.addComments) {
-      parts.push("<!-- lineage:scaffold start -->\n\n");
-    }
-    
-    for (const section of scaffoldSections) {
-      parts.push(this.emitSection(section));
-    }
-    
-    if (options.addComments) {
-      parts.push("<!-- lineage:scaffold end -->\n\n");
-    }
-    
-    if (contentSections.length > 0) {
-      if (options.addComments) {
-        parts.push("<!-- lineage:content start -->\n\n");
-      }
-      
-      for (const section of contentSections) {
-        parts.push(this.emitSection(section));
-      }
-      
-      if (options.addComments) {
-        parts.push("<!-- lineage:content end -->\n");
-      }
-    }
-    
-    return parts.join("");
+
+    return out.join("");
   }
 
   runTests() {
     console.log("Testing Lineage Normalization Functions\n");
     
-    // Test 1: Parse sections from mixed document
+    // Test 1: Parse sections from mixed document  
     console.log("Test 1: Parsing sections from mixed document");
     const sections = this.parseSections(sampleDocument);
     console.log(`Found ${sections.length} sections:`);
@@ -240,15 +208,8 @@ class LineageNormalizerTest {
     console.log(`Scaffold sections (depth ≤ 2): ${scaffoldSections.map(s => s.path).join(', ')}`);
     console.log(`Content sections (depth ≥ 3): ${contentSections.map(s => s.path).join(', ')}`);
     
-    // Test 3: Assign UIDs
-    console.log("\nTest 3: Assigning UIDs");
-    console.log(`Document has UIDs: ${this.hasUids(sampleDocument)}`);
-    
-    const withUids = this.assignUidsOnce(sampleDocument);
-    console.log(`After assignment: ${this.hasUids(withUids)}`);
-    
-    // Test 4: Full normalization
-    console.log("\nTest 4: Full normalization");
+    // Test 3: Full normalization
+    console.log("\nTest 3: Full normalization");
     const normalized = this.normalizeGrouped(sampleDocument, { 
       sortScaffold: true, 
       addComments: true 
@@ -264,8 +225,14 @@ class LineageNormalizerTest {
     const scaffoldFirst = firstContentIndex === -1 || lastScaffoldIndex < firstContentIndex;
     console.log(`Scaffold sections come before content sections: ${scaffoldFirst}`);
     
-    // Test 5: Idempotency
-    console.log("\nTest 5: Testing idempotency");
+    // Test 4: Idempotency
+    console.log("\nTest 4: Testing idempotency");
+    
+    // Simplified debug for path-only approach
+    console.log("DEBUG: Checking first normalized result...");
+    const firstNormSections = this.parseSections(normalized);
+    console.log(`First normalized has ${firstNormSections.length} sections`);
+    
     const normalized2 = this.normalizeGrouped(normalized, { 
       sortScaffold: true, 
       addComments: true 
