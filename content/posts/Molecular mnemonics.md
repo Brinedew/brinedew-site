@@ -1,10 +1,8 @@
 ---
-title:
-  "{ VALUE:title }":
+title: Molecular mnemonics
 tags:
   - content/post
-date:
-  "{ DATE:YYYY-MM-DD }":
+date: 2025-08-28
 draft: true
 ---
 # Molecular mnemonics
