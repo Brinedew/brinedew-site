@@ -3,7 +3,7 @@ title: Brinedew
 enableToc: false
 draft: false
 ---
-Personal research notes on aging, evolution, and trade-offs of cellular immortality.
+Personal research notes on aging, multicellularity, and molecular biology through the lens of agents, trade-offs, and sacrifices.
 
 [[https://brinedew.com/tags/type/wiki|Wiki]] pages are single-topic primers, resource tables, and evidence collections compiled with LLM assistance.
 
