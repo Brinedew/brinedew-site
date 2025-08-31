@@ -1,6 +1,73 @@
 # Technical Bugs Report
 *Updated: 2025-01-26*
 
+## Open Issues 🔴
+
+### BUG-006: Lineage Plugin Single-Column Display Issue - OPEN 🔴
+**Status**: 🔴 **ACTIVE INVESTIGATION** - Sprint planning session August 30, 2025
+**Issue**: Content with `<span data-lineage-section="X">` markers displays as single column in Lineage plugin instead of proper 3-column hierarchical tree view.
+
+**Root Cause**: Confirmed that Lineage plugin parses content in document order, but the content is organized by depth groups (scaffold sections 1-2 first, then content sections 3+ later) instead of hierarchical order (1 → 1.1 → 1.1.1 → 2).
+
+**Content Structure Problem**:
+```markdown
+<span data-lineage-section="1"></span>
+## Section 1
+
+<span data-lineage-section="1.1"></span>  
+### Section 1.1
+
+<span data-lineage-section="2"></span>
+## Section 2
+
+<span data-lineage-section="1.1.1"></span>  ← This appears AFTER Section 2!
+Content for 1.1.1
+
+<span data-lineage-section="2.1.1"></span>
+Content for 2.1.1
+```
+
+**Debugging Attempts Made**:
+
+1. **Configuration Fix Attempt**: Changed Lineage parsing mode from `"sections"` to `"html-element"` in `data.json`. 
+   - **Result**: No change - still single column display.
+
+2. **View Patching Shim Plugin**: Built comprehensive shim plugin to intercept and transform content at view boundaries.
+   - **File**: `content/.obsidian/plugins/lineage-order-agnostic-shim/`
+   - **Approach**: Patch `setViewData`/`getViewData` to transform grouped→sequential for display, sequential→grouped for save
+   - **Status**: Plugin loads successfully, patches views correctly, but transformation methods never called on load path
+   - **Finding**: Lineage uses `getViewData()` for saves but NOT `setViewData()` for loads
+
+3. **Method Discovery**: Identified Lineage's actual loading methods through debugging:
+   - `loadInitialData`, `loadDocumentToStore`, `debouncedLoadDocumentToStore`
+   - Patched `loadDocumentToStore` to transform content before parsing
+   - **Result**: Still single column - either wrong method or transformation not working
+
+4. **View Instance Debugging**: Discovered multiple Lineage view instances exist simultaneously
+   - Confirmed patches applied to correct active views with unique patch IDs
+   - Verified transformations work on save path (`INTERCEPTED getViewData call!`)
+   - **Problem**: Load path transformations never trigger (`INTERCEPTED setViewData call!` never seen)
+
+**Current Technical Status**:
+- ✅ Plugin successfully loads and patches Lineage views
+- ✅ Transformation logic exists and works (confirmed on save path)  
+- ✅ Order-agnostic parser built and ready (`scripts/order-agnostic-lineage-parser.ts`)
+- ❌ Load-time transformation not working - content still parsed in original depth-grouped order
+- ❌ Single column display persists across all attempts
+
+**Next Investigation Steps**:
+1. Research Lineage's actual document parsing pipeline - may need to patch earlier in the data flow
+2. Consider direct modification of Lineage plugin vs. continued shim approach
+3. Test transformation logic independently to verify it produces correct hierarchical structure
+
+**Files Involved**:
+- `content/posts/the-price-of-not-being-cancer-v3.md` (test file)
+- `content/posts/the-price-of-not-being-cancer-v3-SIMPLIFIED.md` (test file)  
+- `content/.obsidian/plugins/lineage-order-agnostic-shim/` (debugging shim)
+- `scripts/order-agnostic-lineage-parser.ts` (transformation logic)
+
+---
+
 ## Fixed Issues ✅
 
 ### 1. Dark Mode Toggle - FIXED ✅
