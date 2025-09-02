@@ -1,12 +1,24 @@
 ---
 title: APAF1
 tags:
-- protein
+  - protein
 date: 2025-08-21
-status: draft
-aliases:
-- Apaf‑1
 draft: true
+aliases:
+  - Apaf‑1
+symbol: APAF1
+mass: 141.8
+length (aa): 1248
+protein_type: globular
+Domains:
+  - CARD
+  - NBD
+  - WD40 repeats
+pathways:
+  - apoptosome
+  - apoptosis
+uniprot_id: O14727
+image_link: 
 ---
 # APAF1
 

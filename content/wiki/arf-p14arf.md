@@ -3,11 +3,22 @@ title: ARF (p14^ARF)
 tags:
   - protein
 date: 2025-08-21
-status: draft
+draft: true
 aliases:
   - p14ARF
   - CDKN2A-ARF
-draft: true
+symbol: CDKN2A
+mass: 13.9
+length (aa): 132
+protein_type: globular
+Domains:
+  - 
+pathways:
+  - p53 pathway
+  - senescence
+  - MDM2 regulation
+uniprot_id: Q8N726
+image_link: 
 ---
 # ARF (p14^ARF)
 

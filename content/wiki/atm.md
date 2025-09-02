@@ -1,12 +1,24 @@
 ---
 title: ATM
 tags:
-- protein
+  - protein
 date: 2025-08-21
-status: draft
-aliases:
-- Ataxia telangiectasia mutated
 draft: true
+aliases:
+  - Ataxia telangiectasia mutated
+symbol: ATM
+mass: 350.7
+length (aa): 3056
+protein_type: globular
+Domains:
+  - kinase domain
+  - HEAT repeats
+pathways:
+  - DNA damage response
+  - p53 pathway
+  - homologous recombination
+uniprot_id: Q13315
+image_link: 
 ---
 # ATM
 
