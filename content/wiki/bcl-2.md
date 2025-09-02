@@ -9,6 +9,7 @@ symbol: BCL2
 mass: 26.3
 length (aa): 239
 protein_type: globular
+transmembrane: true
 domains:
   - BH1
   - BH2

@@ -9,6 +9,7 @@ symbol: BAX
 mass: 21.2
 length (aa): 192
 protein_type: globular
+transmembrane: true
 domains:
   - BH1
   - BH2

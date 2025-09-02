@@ -12,6 +12,7 @@ symbol: CDKN1A
 mass: 18.1
 length (aa): 164
 protein_type: CDK inhibitor
+transmembrane: false
 domains: []
 pathways:
   - p53 pathway

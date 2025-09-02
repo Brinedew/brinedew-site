@@ -11,6 +11,7 @@ symbol: MYC
 mass: 50.6
 length (aa): 454
 protein_type: transcription factor
+transmembrane: false
 domains:
   - bHLH-LZ domain
 pathways:

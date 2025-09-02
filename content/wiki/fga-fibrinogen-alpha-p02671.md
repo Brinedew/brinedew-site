@@ -12,6 +12,7 @@ symbol: FGA
 mass: 95.0
 length (aa): 865
 protein_type: blood clotting protein
+transmembrane: false
 domains:
   - coiled-coil region
   - fibrinopeptide A

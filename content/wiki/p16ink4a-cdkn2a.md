@@ -12,6 +12,7 @@ symbol: CDKN2A
 mass: 16.5
 length (aa): 156
 protein_type: CDK inhibitor
+transmembrane: false
 domains: []
 pathways:
   - RB–E2F axis
