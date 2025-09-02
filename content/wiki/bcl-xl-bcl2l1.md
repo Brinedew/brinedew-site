@@ -1,12 +1,27 @@
 ---
 title: BCL‑XL (BCL2L1)
 tags:
-- protein
+  - protein
 date: 2025-08-21
-status: draft
-aliases:
-- BCL2L1
 draft: true
+aliases:
+  - BCL2L1
+symbol: BCL2L1
+mass: 26.0
+length (aa): 233
+protein_type: globular
+Domains:
+  - BH1
+  - BH2
+  - BH3
+  - BH4
+  - transmembrane domain
+pathways:
+  - apoptosis
+  - mitochondrial membrane permeability
+  - caspase inhibition
+uniprot_id: Q07817
+image_link: 
 ---
 # BCL‑XL (BCL2L1)
 

@@ -1,11 +1,25 @@
 ---
 title: BCL‑2
 tags:
-- protein
+  - protein
 date: 2025-08-21
-status: draft
-aliases: []
 draft: true
+aliases: []
+symbol: BCL2
+mass: 26.3
+length (aa): 239
+protein_type: globular
+Domains:
+  - BH1
+  - BH2
+  - BH4
+  - transmembrane domain
+pathways:
+  - apoptosis
+  - mitochondrial membrane permeability
+  - autophagy regulation
+uniprot_id: P10415
+image_link: 
 ---
 # BCL‑2
 

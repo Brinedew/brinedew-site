@@ -1,11 +1,25 @@
 ---
 title: BAX
 tags:
-- protein
+  - protein
 date: 2025-08-21
-status: draft
-aliases: []
 draft: true
+aliases: []
+symbol: BAX
+mass: 21.2
+length (aa): 192
+protein_type: globular
+Domains:
+  - BH1
+  - BH2
+  - BH3
+  - transmembrane domain
+pathways:
+  - apoptosis
+  - mitochondrial permeabilization
+  - caspase activation
+uniprot_id: Q07812
+image_link: 
 ---
 # BAX
 

@@ -1,12 +1,24 @@
 ---
 title: ATR
 tags:
-- protein
+  - protein
 date: 2025-08-21
-status: draft
-aliases:
-- ATM and Rad3-related
 draft: true
+aliases:
+  - ATM and Rad3-related
+symbol: ATR
+mass: 301.4
+length (aa): 2644
+protein_type: globular
+Domains:
+  - kinase domain
+  - HEAT repeats
+pathways:
+  - DNA damage response
+  - replication stress
+  - CHK1 signaling
+uniprot_id: Q13535
+image_link: 
 ---
 # ATR
 

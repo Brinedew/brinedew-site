@@ -1,183 +1,77 @@
-# what i was working on - august 27, 2025
+# protein wiki migration to uniprot IDs - september 2, 2025
 
-Started with sprint planning but ended up solving a much bigger problem: how to make Lineage plugin work with content that's organized by depth instead of hierarchical order.
-
-The user has a long essay where sections 1-2 are editorial scaffolding (signposts, transitions) and sections 3+ are actual content. This separation helps LLMs work on one layer at a time. But Lineage expects standard tree order (1 → 1.1 → 1.1.1 → 1.2), so it couldn't build the tree correctly from grouped content.
-
-Got a consultation from an expert who provided a complete architectural solution based on stable UIDs and deterministic normalization. The approach is solid - single source of truth, idempotent operations, explicit state. But the implementation has a bug.
+I was working on converting the protein wiki from family-based pages (like "wnt-proteins.md") to individual UniProt ID pages. The problem was that 46 protein pages were inconsistently organized - some covered protein families, others single proteins, and most were missing structured metadata that would work with the Proteins.base table view.
 
 ## what actually works now
 
-**Fixed mobile/desktop git sync issue**: Added `content/.obsidian/plugins/obsidian-git/` to `.stignore` so the git plugin only exists on PC. Mobile devices get full Obsidian functionality without git interference.
+**Analysis and automation tools**: Built working Python scripts in `scripts/` folder:
+- `analyze-protein-pages.py` - identifies which pages need splitting vs UniProt ID addition
+- `uniprot-fetcher.py` - fetches protein data from UniProt API with local caching
+- `generate-protein-pages.py` - creates new pages with proper metadata (fixed template issues)
 
-**Updated all documentation**: `Website/CLAUDE.md` now reflects actual current setup instead of outdated workflow docs:
-- Single shared vault in `content/` folder (not separate mobile/desktop configs)
-- Flat wiki structure with 65+ entries using tags instead of folders  
-- Working QuickAdd automation with proper templates
-- 22 active plugins documented with their actual purposes
+**Manual curation progress**: Completed 9 protein pages with proper UniProt integration:
+- APAF1 (O14727) - 141.8 kDa, 1248 aa
+- ARF/p14ARF (Q8N726) - 13.9 kDa, 132 aa  
+- ATM (Q13315) - 350.7 kDa, 3056 aa
+- ATR (Q13535) - 301.4 kDa, 2644 aa
+- AKT1 (P31749) - 55.7 kDa, 480 aa (completely rewritten from bad auto-generated version)
+- BAK1 (Q16611) - 23.4 kDa, 211 aa
+- BAX (Q07812) - 21.2 kDa, 192 aa
+- BCL2 (P10415) - 26.3 kDa, 239 aa
+- BCL2L1 (Q07817) - 26.0 kDa, 233 aa
 
-**Modernized tag taxonomy**: Bulk renamed all `type/*` tags to `content/*` across entire site:
-- `type/post` → `content/post` (11 files updated)
-- `type/wiki` → `content/wiki` 
-- `type/apps` → `content/apps`
+All updated pages now have:
+- Correct YAML frontmatter with `uniprot_id:`, `mass:`, `length (aa):`, etc.
+- Individual domain arrays (not comma-separated strings)
+- Clean pathway terms for searchability
+- `protein_type: globular` (removed hardcoded classification logic)
 
-Used proper Python script (`scripts/rename-type-to-content.py`) with automatic backups. All QuickAdd templates work correctly with new taxonomy.
+Files I changed:
+- All the above protein files - added complete UniProt metadata
+- `scripts/generate-protein-pages.py` - fixed template to avoid data dumps, removed hardcoded text generation
+- `content/wiki/p53-tp53.md` - fixed domains to be individual array items instead of comma-separated
 
-**Built Lineage normalization core logic**: Created the foundation for bidirectional editing with grouped-by-depth content:
-
-- `scripts/lineage-core.ts` - parsing and normalization functions (300 lines)
-- `scripts/lineage-normalizer-plugin.ts` - complete Obsidian plugin (200+ lines)
-- `scripts/test-lineage-normalization.cjs` - test suite validating core logic
-
-The system assigns stable UIDs to sections (`data-lineage-uid`) and can reconstruct proper tree view regardless of document order.
-
-**Commands that work:**
-```bash
-cd "D:\Coding\Website"
-python scripts/rename-type-to-content.py  # completed successfully, 11 files updated
-node scripts/test-lineage-normalization.cjs  # runs tests, shows structure working
-npx quartz build  # builds site with new tag structure
-```
+**QuickAdd integration attempt**: Created `.obsidian/scripts/create-protein-page.js` for automatic UniProt fetching, but decided manual curation was better approach.
 
 ## what's broken
 
-**Critical idempotency bug**: The normalization function isn't idempotent - running it twice produces different output. Test shows:
-- First normalization: 1236 characters
-- Second normalization: 1344 characters  
-- Difference appears around line 14 in output
+Nothing's broken now, but there are known limitations:
 
-This breaks the core requirement that normalize-on-save should be safe to run repeatedly.
+**Template generation issues were fixed**: The auto-generated pages were creating horrible walls of text with 50+ pathway entries and massive function descriptions. Fixed by extracting only first sentence of function and limiting pathways.
 
-**Lineage integration incomplete**: Built the order-agnostic parser but never hooked it into actual Lineage plugin. The tree builder exists but needs to replace Lineage's default conversion function.
-
-**Plugin not deployed**: The normalizer plugin is TypeScript that needs compilation and installation in Obsidian. Architecture is complete but not tested in real environment.
-
-**Test failure details:**
-```bash
-node scripts/test-lineage-normalization.cjs
-# Look for "Normalization is idempotent: false"  
-# Shows where first vs second run differ
-```
+**Obsidian title display**: There was an "[object object]" issue in Obsidian when protein titles were too long. Fixed by using simple gene symbols as titles.
 
 ## where things stand
 
-**Git repo clean**: All changes pushed to main branch (commit 2190308). GitHub Actions deployed tag taxonomy changes to live site successfully.
+**Current workflow**: Manual curation using alphabetical progression through the 39 remaining protein pages. The pattern works:
+1. Search UniProt for protein using `python scripts/uniprot-fetcher.py --search "GENE human"`
+2. Get full data with `python scripts/uniprot-fetcher.py UNIPROT_ID`  
+3. Add structured metadata to existing page
+4. Use proper domains (individual array items) and clean pathway terms
 
-**Content structure solid**:
-- 110 markdown files processed without corruption
-- Flat wiki with proper tag organization working
-- QuickAdd templates generating correct frontmatter with `content/*` tags
-- Mobile/desktop sync working properly
+**Environment**: All scripts work on Windows with proper encoding fixes. UniProt API calls are cached in `scripts/uniprot_cache/` to avoid rate limiting.
 
-**Development environment ready**:
-- Node.js project with TypeScript setup
-- Script infrastructure with proper backup patterns  
-- Test framework validates most core logic (except idempotency)
+**Family pages identified**: 6 family pages need splitting (WNT, PI3K, Notch, E2F, Hedgehog, MHC). The AKT family page was updated to include AKT3 alias and marked with `uniprot_id: "family"`.
 
 ## what to do next
 
-**Fix the idempotency bug first** - this is blocking everything else. The bug is in `scripts/test-lineage-normalization.cjs` around the normalization logic.
+**Continue alphabetical curation**: Next protein is **beta-catenin (CTNNB1)**. The pattern is established - just need to systematically work through the remaining 37 pages.
 
-Debug approach:
-1. Check if `assignUidsOnce` is being called multiple times when UIDs already exist
-2. Look at whitespace handling in `emitSection` function - likely adding extra newlines
-3. Compare the two normalization outputs character by character to find exact difference
+**Handle family pages**: After individual proteins are done, decide on family page strategy:
+- Keep as overview/index pages linking to individual members
+- Create individual pages for major family members (3-5 per family)
+- Use the working scripts to generate family member pages
 
-The consultant's architecture is right, but we violated the idempotent property somewhere in the implementation.
-
-**Then integrate with Lineage** - once normalization works reliably, hook the order-agnostic parser into Lineage. The consultant provided three approaches:
-- Virtual file (create temporary sequential version for Lineage)
-- Fork Lineage and replace tree builder
-- Runtime monkey-patch (riskiest but no fork needed)
+**Update Proteins.base**: Once migration is complete, verify that all the new metadata fields populate the table view correctly. May need to add new columns for domains and pathways.
 
 ## stuff to remember
 
-**The consultant's insight was brilliant**: Use stable UIDs for identity, keep layout implicit through deterministic normalization. Avoids "two files get out of sync" problem completely. This is the Carmack approach - explicit state, simple linear passes, idempotent operations.
+**Don't use the auto-generation scripts for final pages**: They're useful for data fetching, but manual curation produces much better content. The existing page descriptions are often better than what UniProt provides.
 
-**Why the grouped structure matters**: The depth separation (1-2 scaffold, 3+ content) isn't just for Lineage. It lets LLMs work on editorial layer separately from content layer, which is crucial for the writing workflow.
+**Domains must be arrays**: Use individual YAML array items, not comma-separated strings. This makes them searchable in the base table.
 
-**Don't trust passing tests yet**: The "scaffold first" test passed but idempotency failed, meaning the core operation isn't solid. Fix the fundamental correctness issue before adding Lineage integration complexity.
+**Keep pathways simple**: Use terms like "apoptosis", "DNA damage response", not verbose Reactome names like "Activation of BAD and translocation to mitochondria".
 
-**The architecture is right**: Single source of truth with stable UIDs and normalized layout. The implementation just has a basic bug that needs fixing.
+**Windows encoding**: All scripts have emoji-free output to avoid `UnicodeEncodeError` with cp1252 encoding.
 
-Next person should focus on making normalization actually idempotent before attempting any Lineage integration. The foundation is good but needs to be rock-solid first.
-
----
-
-## Appendix: Complete Consultant Response
-
-*Preserving the full architectural guidance for future reference*
-
-Consultant's reply: think, then implement. You're right to reject the "two files" plan. It violates single-source-of-truth and invites temporal coupling—exactly the kind of complexity Carmack warns against. The architecture that respects your constraints is:
-
-* **One canonical file.**
-* **Explicit, local metadata** on each section (stable identity; no inference from position).
-* **Order-agnostic parse** for reading.
-* **Deterministic, idempotent normalize-on-save** for writing that preserves your *grouped-by-depth* layout regardless of what the editor did in memory.
-
-This keeps state in the data, not in tooling; favors simple, linear passes over clever pipelines; and makes the invariant ("scaffold first, leaves later") mechanically enforced. That's the Carmack way: make the format do the work; keep transforms obvious; avoid hidden magic.
-
-Below is a concrete, **single-file** solution: a tiny Obsidian companion plugin that (1) adds a **stable UID** to each section marker once, (2) uses an **order-agnostic parser** to build the tree for Lineage, and (3) **normalizes the file in place on save** so depths 1–2 remain in the "scaffold block" and depths ≥3 remain in the "content block." No shadow files, no desync, no manual steps.
-
-### 0) On-disk schema (simple, explicit)
-
-Keep your current markers, but add one stable identity the first time we touch a file:
-
-```html
-<span data-lineage-uid="6f7e…b2" data-lineage-section="1"></span>
-<span data-lineage-uid="a9c1…32" data-lineage-section="1.1"></span>
-<span data-lineage-uid="e3a8…77" data-lineage-section="1.1.1"></span>
-```
-
-* `data-lineage-uid` = stable UUID per section (never reused).
-* `data-lineage-section` = display path (dot path) that Lineage can keep updating when you move cards. It's *derived*, not authoritative.
-* Physical layout is your invariant:
-  * **Block A**: all depth ≤ 2 ("scaffold")
-  * **Block B**: all depth ≥ 3 ("content")
-* Optional guard rails (first normalize will insert them once):
-  `<!-- lineage:scaffold start --> … <!-- lineage:scaffold end -->`
-  `<!-- lineage:content start --> … <!-- lineage:content end -->`
-
-This decouples **identity** from **order**: edits update attributes, while layout remains grouped.
-
-### 1) Order-agnostic parser (read)
-
-We use dot-paths or parent chains only to compute *depth* and *display path*. Position in the file is irrelevant.
-
-### 2) Idempotent normalize-on-save (write)
-
-This is the key: whenever the file is saved (by Lineage or any LLM), we **reassemble the same file** into your two blocks. We do *not* reorder within a block beyond your chosen policy.
-
-* **Scaffold policy (depth ≤ 2):** keep the exact order they appear in the saved file (or sort numerically—toggleable).
-* **Leaves policy (depth ≥ 3):** keep the exact order they appear (which reflects your edits in Lineage).
-
-Frontmatter and any text outside marker ranges are preserved.
-
-### 3) Obsidian integration (single file; no desync)
-
-A minimal plugin that ensures the invariant on every save, and backfills `data-lineage-uid` once. It doesn't fork Lineage. If you've already added the order-agnostic reader to Lineage (your earlier work), the UI stays correct regardless of file layout.
-
-**Why this avoids desync**
-
-* There is **one file**.
-* Any edit source (Lineage UI, raw editor, LLM bulk change, frontmatter tweak) funnels through the same **normalize-on-save** pass.
-* The **parser ignores physical order**, so Lineage will always display a correct tree immediately after the write.
-* Because normalization is **idempotent** and **local**, you can keep it on without fear of slow drift.
-
-### Why this is "Carmack-clean"
-
-* **Single source of truth** (no mirrors).
-* **Data-driven**: identity and relationships live in the data; code is a straight pass.
-* **Determinism & idempotence**: run it a hundred times; same bytes out. Easy to diff.
-* **Small, linear passes**: one parse, one normalize. No clever incremental state machines.
-* **Local complexity** only where needed; zero global coordination.
-* **Human-friendly**: open the file; the invariant is legible. No hidden SQLite, no opaque blobs.
-
-### Bottom line
-
-* Keep **one file**.
-* Make **identity explicit** (`data-lineage-uid`).
-* Read with an **order-agnostic** parser.
-* Enforce **grouped layout** with a **normalize-on-save** pass.
-
-You get full Lineage editing (create/move/delete), and your grouped structure persists no matter what. It's small, deterministic, and obvious—the kind of thing that earns a nod from Carmack.
+The infrastructure is solid and the pattern works. Just needs systematic execution through the remaining proteins.
