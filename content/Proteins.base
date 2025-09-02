@@ -18,3 +18,5 @@ views:
         direction: ASC
     columnSize:
       file.name: 258
+      note.mass: 85
+      note.Image link: 125

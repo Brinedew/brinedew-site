@@ -45,9 +45,9 @@ class ProteinPageGenerator:
         return self._get_default_template()
     
     def _get_default_template(self) -> str:
-        """Default protein page template."""
+        """Default protein page template - concise style matching existing wiki pages."""
         return """---
-title: {title}
+title: {gene_symbol}
 tags:
   - protein
   - content/wiki
@@ -59,20 +59,19 @@ symbol: {gene_symbol}
 mass: {mass_kda}
 length (aa): {length_aa}
 protein_type: {protein_type}
+Domains: {domains}
 pathways:
 {pathways_yaml}
 uniprot_id: {uniprot_id}
-image_link: {image_link}
+image_link: 
 ---
-# {title}
+# {gene_symbol}
 
 **What it is.** {function}
 
 **Why it matters here.** {significance}
 
-**Notes.** UniProt ID: {uniprot_id}; Mass: {mass_kda} kDa; Length: {length_aa} amino acids.
-
-{additional_sections}
+**Notes.** Type: {protein_type}; Pathways: {pathways_brief}.
 """
     
     def generate_page_filename(self, gene_symbol: str, uniprot_id: str) -> str:
@@ -82,6 +81,38 @@ image_link: {image_link}
         clean_uniprot = uniprot_id.lower()
         
         return f"{clean_symbol}-{clean_uniprot}.md"
+    
+    def _extract_first_sentence(self, function_text: str) -> str:
+        """Extract just the first sentence from function description."""
+        if not function_text or function_text == 'Function not available.':
+            return 'Function not available.'
+        
+        # Split on period followed by space and capital letter, or PubMed reference
+        import re
+        sentences = re.split(r'\.(?:\s+[A-Z]|\s+\(PubMed)', function_text)
+        
+        if sentences:
+            first_sentence = sentences[0].strip()
+            # Make sure it ends with a period
+            if not first_sentence.endswith('.'):
+                first_sentence += '.'
+            return first_sentence
+        
+        return function_text
+    
+    def _format_pathways_brief(self, pathways: List[str]) -> str:
+        """Format pathways as brief comma-separated string."""
+        if not pathways:
+            return ''
+        
+        # Take first 3 pathways and clean them
+        brief_pathways = []
+        for pathway in pathways[:3]:
+            # Remove "Reactome:" prefix and keep it short
+            clean = pathway.replace('Reactome: ', '').strip()
+            brief_pathways.append(clean)
+        
+        return ', '.join(brief_pathways)
     
     def _format_pathways_yaml(self, pathways: List[str]) -> str:
         """Format pathways list as YAML."""
@@ -97,52 +128,14 @@ image_link: {image_link}
         return "\n".join(formatted)
     
     def _infer_protein_type(self, data: Dict) -> str:
-        """Infer protein type from UniProt data."""
-        function = data.get('function', '').lower()
-        title = data.get('title', '').lower()
-        
-        # Common protein type patterns
-        if any(term in function or term in title for term in ['kinase', 'phosphorylates']):
-            return 'protein kinase'
-        elif any(term in function or term in title for term in ['transcription factor', 'transcriptional']):
-            return 'transcription factor'  
-        elif any(term in function or term in title for term in ['receptor', 'binding']):
-            return 'receptor'
-        elif any(term in function or term in title for term in ['tumor suppressor', 'suppressor']):
-            return 'tumor suppressor'
-        elif any(term in function or term in title for term in ['oncogene', 'proto-oncogene']):
-            return 'oncogene'
-        elif any(term in function or term in title for term in ['enzyme', 'catalyzes']):
-            return 'enzyme'
-        elif any(term in function or term in title for term in ['cytokine', 'growth factor']):
-            return 'growth factor'
-        else:
-            return 'protein'
+        """Extract protein type from UniProt data."""
+        # Use the protein description or let it be empty
+        return ''
     
     def _generate_significance_text(self, data: Dict) -> str:
         """Generate 'Why it matters here' text based on protein function."""
-        function = data.get('function', '').lower()
-        protein_type = self._infer_protein_type(data)
-        
-        # Context-specific significance for longevity research
-        if 'tumor suppressor' in protein_type:
-            return "Critical guardian against cellular transformation and cancer development."
-        elif 'oncogene' in protein_type or 'proto-oncogene' in protein_type:
-            return "Key driver of cell proliferation that can promote cancer when dysregulated."
-        elif 'kinase' in protein_type:
-            return "Phosphorylation-mediated signaling controls cellular processes relevant to aging."
-        elif 'transcription factor' in protein_type:
-            return "Controls gene expression programs that influence cellular aging and longevity."
-        elif 'cytokine' in function or 'inflammation' in function:
-            return "Inflammatory signaling component that affects aging and age-related disease."
-        elif 'dna repair' in function or 'damage' in function:
-            return "DNA damage response pathway critical for maintaining genomic stability during aging."
-        elif 'apoptosis' in function or 'cell death' in function:
-            return "Programmed cell death pathway that removes damaged cells and prevents cancer."
-        elif 'senescence' in function:
-            return "Cellular senescence pathway that limits proliferation but may contribute to aging."
-        else:
-            return "Cellular process with relevance to aging and longevity research."
+        # Leave empty for manual editing
+        return ""
     
     def _generate_additional_sections(self, data: Dict) -> str:
         """Generate additional content sections."""
@@ -196,18 +189,17 @@ image_link: {image_link}
         
         # Prepare template variables
         template_vars = {
-            'title': data.get('title', f"{gene_symbol} ({uniprot_id})"),
             'gene_symbol': gene_symbol,
             'uniprot_id': uniprot_id,
             'mass_kda': data.get('mass_kda', ''),
             'length_aa': data.get('length_aa', ''),
             'protein_type': self._infer_protein_type(data),
             'pathways_yaml': self._format_pathways_yaml(data.get('pathways', [])),
-            'function': data.get('function', 'Function not available.'),
+            'function': self._extract_first_sentence(data.get('function', 'Function not available.')),
             'significance': self._generate_significance_text(data),
             'date': datetime.now().strftime('%Y-%m-%d'),
-            'image_link': '',  # Can be populated later
-            'additional_sections': self._generate_additional_sections(data)
+            'pathways_brief': self._format_pathways_brief(data.get('pathways', [])),
+            'domains': ', '.join(data.get('domains', [])[:3]) if data.get('domains') else ''
         }
         
         # Generate page content
