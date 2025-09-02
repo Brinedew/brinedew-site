@@ -48,9 +48,10 @@ All the sophisticated shim plugin debugging was attacking a secondary problem (c
 - Any content with lineage sections opened in Lineage view will be automatically restructured from depth-grouped to hierarchical order
 
 **Next Steps Required**:
-1. Debug why shim plugin save-path transformation isn't working
-2. Ensure LineageTextFilter can handle hierarchical content order
-3. Or prevent Lineage from automatically saving reorganized content
+1. **URGENT**: Debug why enhanced shim plugin save-path transformation isn't working - added `saveDocument` patching logic but it's not preventing hierarchical reorganization
+2. Check console logs in Obsidian for "INTERCEPTED saveDocument call!" messages during Lineage saves
+3. Consider alternative intervention points if current approach fails
+4. Verify LineageTextFilter still works with current hierarchical content order
 
 **Lessons Learned**:
 1. Always verify basic parsing assumptions before debugging complex logic
