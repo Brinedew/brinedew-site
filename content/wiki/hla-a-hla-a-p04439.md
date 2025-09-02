@@ -1,3 +1,4 @@
+---
 title: HLA-A (HLA-A)
 tags:
   - protein
@@ -17,6 +18,7 @@ pathways:
   - antigen presentation
 uniprot_id: P04439
 image_link:
+---
 # HLA-A (HLA-A)
 
 **What it is.** Cell-surface receptor that presents peptide fragments to CD8 T cells.

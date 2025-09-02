@@ -1,3 +1,4 @@
+---
 title: PIK3CA (PIK3CA)
 tags:
   - protein
@@ -17,6 +18,7 @@ pathways:
   - PI3K/AKT signaling
 uniprot_id: P42336
 image_link:
+---
 # PIK3CA (PIK3CA)
 
 **What it is.** Catalytic subunit of class I PI3K that generates PIP3 to recruit AKT.

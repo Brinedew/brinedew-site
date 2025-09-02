@@ -1,3 +1,4 @@
+---
 title: KRAS (KRAS)
 tags:
   - protein
@@ -16,6 +17,7 @@ pathways:
   - MAPK signaling
 uniprot_id: P01116
 image_link:
+---
 # KRAS (KRAS)
 
 **What it is.** Molecular switch downstream of many growth factor receptors.

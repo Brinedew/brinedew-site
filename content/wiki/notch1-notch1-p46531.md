@@ -1,3 +1,4 @@
+---
 title: NOTCH1 (NOTCH1)
 tags:
   - protein
@@ -18,6 +19,7 @@ pathways:
   - Notch signaling
 uniprot_id: P46531
 image_link:
+---
 # NOTCH1 (NOTCH1)
 
 **What it is.** Contact-dependent signaling receptor that decides cell fates and proliferation restraint.

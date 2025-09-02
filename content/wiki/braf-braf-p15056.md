@@ -1,3 +1,4 @@
+---
 title: BRAF (BRAF)
 tags:
   - protein
@@ -17,6 +18,7 @@ pathways:
   - MAPK signaling
 uniprot_id: P15056
 image_link:
+---
 # BRAF (BRAF)
 
 **What it is.** Kinase that relays RAS signals to MEK/ERK.
