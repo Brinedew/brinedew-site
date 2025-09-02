@@ -18,3 +18,4 @@ draft: true
 **Why it matters here.** Integrates IGF/insulin and PI3K signals; tilts cells away from apoptosis.
 
 **Notes.** Pathway: PI3K–AKT–mTOR.
+---

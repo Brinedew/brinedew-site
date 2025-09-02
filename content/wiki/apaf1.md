@@ -10,7 +10,7 @@ symbol: APAF1
 mass: 141.8
 length (aa): 1248
 protein_type: globular
-Domains:
+domains:
   - CARD
   - NBD
   - WD40 repeats

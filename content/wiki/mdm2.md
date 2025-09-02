@@ -6,6 +6,17 @@ date: 2025-08-21
 status: draft
 aliases: []
 draft: true
+symbol: MDM2
+mass: 55.2
+length (aa): 491
+protein_type: E3 ubiquitin ligase
+domains:
+  - RING finger
+  - p53-binding domain
+pathways:
+  - p53 regulation
+uniprot_id: Q00987
+image_link:
 ---
 # MDM2
 

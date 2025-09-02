@@ -8,6 +8,17 @@ aliases:
 - RB1
 - Retinoblastoma protein
 draft: true
+symbol: RB1
+mass: 106.2
+length (aa): 928
+protein_type: tumor suppressor
+domains:
+  - pocket domain
+pathways:
+  - cell cycle control
+  - RB–E2F axis
+uniprot_id: P06400
+image_link:
 ---
 # Rb (RB1)
 

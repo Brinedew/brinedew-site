@@ -10,7 +10,7 @@ symbol: ATR
 mass: 301.4
 length (aa): 2644
 protein_type: globular
-Domains:
+domains:
   - kinase domain
   - HEAT repeats
 pathways:

@@ -8,6 +8,16 @@ aliases:
 - CDKN2A
 - INK4a
 draft: true
+symbol: CDKN2A
+mass: 16.5
+length (aa): 156
+protein_type: CDK inhibitor
+domains: []
+pathways:
+  - RB–E2F axis
+  - cell cycle arrest
+uniprot_id: P42771
+image_link:
 ---
 # p16^INK4a (CDKN2A)
 

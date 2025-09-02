@@ -11,8 +11,7 @@ symbol: CDKN2A
 mass: 13.9
 length (aa): 132
 protein_type: globular
-Domains:
-  - 
+domains: []
 pathways:
   - p53 pathway
   - senescence

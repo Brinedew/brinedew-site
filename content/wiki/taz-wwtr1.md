@@ -7,6 +7,16 @@ status: draft
 aliases:
 - WWTR1
 draft: true
+symbol: WWTR1
+mass: 44.1
+length (aa): 400
+protein_type: transcriptional co-activator
+domains:
+  - WW domain
+pathways:
+  - Hippo signaling
+uniprot_id: Q9GZV5
+image_link:
 ---
 # TAZ (WWTR1)
 

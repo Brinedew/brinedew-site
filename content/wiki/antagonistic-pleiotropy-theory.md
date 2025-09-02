@@ -49,3 +49,4 @@ Cancer represents a particularly clear case where tumor suppressor mechanisms pr
 ---
 
 *Antagonistic pleiotropy shows that aging isn't just accumulated damage - it's the price paid for traits that made our ancestors reproductively successful.*
+---

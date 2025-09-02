@@ -1,13 +1,23 @@
 ---
-title: IL‑6
+title: IL-6
 tags:
 - protein
 date: 2025-08-21
 status: draft
 aliases: []
 draft: true
+symbol: IL6
+mass: 23.7
+length (aa): 212
+protein_type: cytokine
+domains: []
+pathways:
+  - inflammatory signaling
+  - JAK/STAT signaling
+uniprot_id: P05231
+image_link:
 ---
-# IL‑6
+# IL-6
 
 **What it is.** Inflammatory cytokine that promotes acute‑phase responses and can support growth.
 

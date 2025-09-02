@@ -8,6 +8,17 @@ aliases:
 - TERT
 - hTERT
 draft: true
+symbol: TERT
+mass: 127.0
+length (aa): 1132
+protein_type: reverse transcriptase
+domains:
+  - RT domain
+  - TEN domain
+pathways:
+  - telomere maintenance
+uniprot_id: O14746
+image_link:
 ---
 # Telomerase (TERT)
 

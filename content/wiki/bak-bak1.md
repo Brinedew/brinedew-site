@@ -10,7 +10,7 @@ symbol: BAK1
 mass: 23.4
 length (aa): 211
 protein_type: globular
-Domains:
+domains:
   - BH1
   - BH2
   - BH3

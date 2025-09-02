@@ -7,6 +7,17 @@ status: draft
 aliases:
 - c-Myc
 draft: true
+symbol: MYC
+mass: 50.6
+length (aa): 454
+protein_type: transcription factor
+domains:
+  - bHLH-LZ domain
+pathways:
+  - cell growth
+  - transcriptional regulation
+uniprot_id: P01106
+image_link:
 ---
 # MYC
 

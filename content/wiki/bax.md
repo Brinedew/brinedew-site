@@ -9,7 +9,7 @@ symbol: BAX
 mass: 21.2
 length (aa): 192
 protein_type: globular
-Domains:
+domains:
   - BH1
   - BH2
   - BH3

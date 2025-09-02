@@ -11,7 +11,7 @@ symbol: GAPDH
 mass: 36.1
 length (aa): 335
 protein_type: receptor
-Domains: 
+domains: []
 pathways:
   - "Reactome: Gluconeogenesis"
   - "Carbohydrate degradation; glycolysis; pyruvate from D-glyceraldehyde 3-phosphate: step 1/5"

@@ -8,6 +8,16 @@ aliases:
 - CDKN1A
 - CIP1
 draft: true
+symbol: CDKN1A
+mass: 18.1
+length (aa): 164
+protein_type: CDK inhibitor
+domains: []
+pathways:
+  - p53 pathway
+  - cell cycle arrest
+uniprot_id: P38936
+image_link:
 ---
 # p21^CIP1 (CDKN1A)
 

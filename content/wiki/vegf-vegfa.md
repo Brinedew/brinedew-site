@@ -7,6 +7,15 @@ status: draft
 aliases:
 - VEGFA
 draft: true
+symbol: VEGFA
+mass: 43.6
+length (aa): 395
+protein_type: growth factor
+domains: []
+pathways:
+  - angiogenesis
+uniprot_id: P15692
+image_link:
 ---
 # VEGF (VEGFA)
 

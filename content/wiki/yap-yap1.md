@@ -7,6 +7,16 @@ status: draft
 aliases:
 - YAP1
 draft: true
+symbol: YAP1
+mass: 54.5
+length (aa): 504
+protein_type: transcriptional co-activator
+domains:
+  - WW domains
+pathways:
+  - Hippo signaling
+uniprot_id: P46937
+image_link:
 ---
 # YAP (YAP1)
 
