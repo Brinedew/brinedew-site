@@ -1,3 +1,9 @@
+---
+title: The Price of Not Being Cancer (Simplified)
+tags:
+  - post
+draft: true
+---
 <!-- lineage:scaffold start -->
 
 <span data-lineage-section="1"></span>
