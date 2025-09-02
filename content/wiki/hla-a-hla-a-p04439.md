@@ -18,6 +18,7 @@ domains:
 pathways:
   - antigen presentation
 uniprot_id: P04439
+species: Homo sapiens (Human)
 image_link:
 ---
 # HLA-A (HLA-A)
