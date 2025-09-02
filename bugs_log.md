@@ -28,17 +28,35 @@ var htmlElementRegex = /<span data-section="((\d\.?)*(\d))"\s*(\/>|><\/span>)/;
 **Why Previous Debugging Failed**:
 All the sophisticated shim plugin debugging was attacking a secondary problem (content ordering) while missing the primary blocker (unparseable attribute names). Lineage couldn't even see the sections to reorganize them.
 
-**Secondary Issue Remains**:
-Content ordering problem is real but now secondary - sections appear out of hierarchical order due to depth-grouped organization. However, this may be acceptable for the writing workflow, or the existing shim plugin approach could now be applied to the correctly-parsed content.
+**Secondary Issue Discovered - BLOCKING WEBSITE FILTERING**:
+✅ Lineage now parses sections and displays multiple columns correctly
+❌ **NEW PROBLEM**: Lineage automatically reorganizes content from depth-grouped to hierarchical order and saves it that way, breaking the website content filtering system
+
+**Technical Impact**: 
+- LineageTextFilter expects depth-grouped order (sections 1-2 first, then 3+ later)
+- Lineage saves content in hierarchical order (1 → 1.1 → 1.1.1 → 1.2 → 1.2.1...)
+- Website filtering can no longer distinguish scaffolding from content
+- Editorial markers like "[Hook with striking examples]" may appear on live site again
+
+**Root Cause**: Lineage working correctly conflicts with website content processing expectations. The shim plugin should handle save-path transformation (sequential→grouped) but isn't intercepting properly.
 
 **Files Updated**:
 - `content/posts/lineage-test-post.md` - attribute names corrected (working test case)
-- Main document would need same attribute name fix to resolve fully
+- `content/posts/the-price-of-not-being-cancer-v3.md` - attribute names corrected, content reorganized by Lineage
+
+**Files Affected by Reorganization**:
+- Any content with lineage sections opened in Lineage view will be automatically restructured from depth-grouped to hierarchical order
+
+**Next Steps Required**:
+1. Debug why shim plugin save-path transformation isn't working
+2. Ensure LineageTextFilter can handle hierarchical content order
+3. Or prevent Lineage from automatically saving reorganized content
 
 **Lessons Learned**:
 1. Always verify basic parsing assumptions before debugging complex logic
-2. Wrong attribute names can completely break plugin functionality while appearing to be a different issue
+2. Wrong attribute names can completely break plugin functionality while appearing to be a different issue  
 3. Reading the actual plugin source code reveals ground truth that debugging logs might miss
+4. **Fixing one system can break dependent systems that relied on the original "broken" behavior**
 
 ---
 
