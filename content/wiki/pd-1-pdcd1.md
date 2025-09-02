@@ -11,6 +11,7 @@ symbol: PDCD1
 mass: 31.6
 length (aa): 288
 protein_type: immune checkpoint receptor
+transmembrane: true
 domains:
   - Ig-like domain
   - transmembrane helix

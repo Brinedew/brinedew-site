@@ -11,6 +11,7 @@ symbol: BRAF
 mass: 84.4
 length (aa): 766
 protein_type: serine/threonine kinase
+transmembrane: false
 domains:
   - RAS-binding domain
   - kinase domain

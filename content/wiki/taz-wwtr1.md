@@ -11,6 +11,7 @@ symbol: WWTR1
 mass: 44.1
 length (aa): 400
 protein_type: transcriptional co-activator
+transmembrane: false
 domains:
   - WW domain
 pathways:

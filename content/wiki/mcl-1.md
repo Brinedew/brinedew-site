@@ -10,6 +10,7 @@ symbol: MCL1
 mass: 37.3
 length (aa): 350
 protein_type: anti-apoptotic protein
+transmembrane: true
 domains:
   - BH1
   - BH2

@@ -10,6 +10,7 @@ symbol: APAF1
 mass: 141.8
 length (aa): 1248
 protein_type: globular
+transmembrane: false
 domains:
   - CARD
   - NBD

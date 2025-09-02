@@ -11,6 +11,7 @@ symbol: CXCL8
 mass: 11.1
 length (aa): 99
 protein_type: chemokine
+transmembrane: false
 domains: []
 pathways:
   - chemotaxis

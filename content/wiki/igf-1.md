@@ -11,6 +11,7 @@ symbol: IGF1
 mass: 21.8
 length (aa): 195
 protein_type: growth factor hormone
+transmembrane: false
 domains:
   - signal peptide
   - propeptide

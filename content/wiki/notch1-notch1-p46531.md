@@ -11,6 +11,7 @@ symbol: NOTCH1
 mass: 272.5
 length (aa): 2555
 protein_type: receptor
+transmembrane: true
 domains:
   - EGF-like repeats (extracellular)
   - transmembrane helix

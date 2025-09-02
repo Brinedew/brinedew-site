@@ -12,6 +12,7 @@ symbol: TERT
 mass: 127.0
 length (aa): 1132
 protein_type: reverse transcriptase
+transmembrane: false
 domains:
   - RT domain
   - TEN domain

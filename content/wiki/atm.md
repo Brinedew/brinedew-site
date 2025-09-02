@@ -10,6 +10,7 @@ symbol: ATM
 mass: 350.7
 length (aa): 3056
 protein_type: globular
+transmembrane: false
 domains:
   - kinase domain
   - HEAT repeats

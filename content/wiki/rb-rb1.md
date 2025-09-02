@@ -12,6 +12,7 @@ symbol: RB1
 mass: 106.2
 length (aa): 928
 protein_type: tumor suppressor
+transmembrane: false
 domains:
   - pocket domain
 pathways:

@@ -10,6 +10,7 @@ symbol: MDM2
 mass: 55.2
 length (aa): 491
 protein_type: E3 ubiquitin ligase
+transmembrane: false
 domains:
   - RING finger
   - p53-binding domain

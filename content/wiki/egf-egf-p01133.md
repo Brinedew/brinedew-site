@@ -12,6 +12,7 @@ symbol: EGF
 mass: 134.0
 length (aa): 1207
 protein_type: growth factor ligand
+transmembrane: false
 domains:
   - EGF-like repeats
 pathways:

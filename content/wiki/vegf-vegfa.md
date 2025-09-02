@@ -11,6 +11,7 @@ symbol: VEGFA
 mass: 43.6
 length (aa): 395
 protein_type: growth factor
+transmembrane: false
 domains: []
 pathways:
   - angiogenesis

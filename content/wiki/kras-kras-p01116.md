@@ -11,6 +11,7 @@ symbol: KRAS
 mass: 21.7
 length (aa): 189
 protein_type: small GTPase
+transmembrane: false
 domains:
   - GTPase domain
 pathways:

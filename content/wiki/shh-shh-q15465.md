@@ -12,6 +12,7 @@ symbol: SHH
 mass: 49.6
 length (aa): 462
 protein_type: secreted morphogen
+transmembrane: false
 domains:
   - N-terminal signaling domain (ShhN)
   - C-terminal autoprocessing domain (ShhC)

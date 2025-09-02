@@ -11,6 +11,7 @@ symbol: TNF
 mass: 25.6
 length (aa): 233
 protein_type: cytokine
+transmembrane: false
 domains: []
 pathways:
   - inflammatory signaling
@@ -25,4 +26,3 @@ image_link:
 **Why it matters here.** Part of extrinsic apoptosis pathways; also central to inflammation around tumors.
 
 **Notes.** Type: cytokine; Receptors: TNFR1/TNFR2.
-

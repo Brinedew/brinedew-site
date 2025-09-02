@@ -11,6 +11,7 @@ symbol: PIK3CA
 mass: 124.3
 length (aa): 1068
 protein_type: lipid kinase (PI3K catalytic subunit)
+transmembrane: false
 domains:
   - p85-binding domain
   - kinase domain

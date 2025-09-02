@@ -12,6 +12,7 @@ symbol: EGFR
 mass: 134.3
 length (aa): 1210
 protein_type: receptor tyrosine kinase
+transmembrane: true
 domains:
   - EGF-like ligand-binding domain
   - transmembrane helix
@@ -29,4 +30,3 @@ image_link:
 **Why it matters here.** Oncogenic driver via amplification/mutation; central node for growth control and a classic drug target.
 
 **Notes.** Ligand: EGF; Pathways: EGFR→RAS→MAPK; EGFR→PI3K→AKT.
-

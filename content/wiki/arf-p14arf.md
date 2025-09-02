@@ -11,6 +11,7 @@ symbol: CDKN2A
 mass: 13.9
 length (aa): 132
 protein_type: globular
+transmembrane: false
 domains: []
 pathways:
   - p53 pathway

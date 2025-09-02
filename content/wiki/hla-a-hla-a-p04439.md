@@ -11,6 +11,7 @@ symbol: HLA-A
 mass: 40.8
 length (aa): 365
 protein_type: antigen presentation receptor
+transmembrane: true
 domains:
   - Ig-like domains
   - transmembrane helix

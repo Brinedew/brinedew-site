@@ -10,6 +10,7 @@ symbol: INS
 mass: 12.0
 length (aa): 110
 protein_type: hormone
+transmembrane: false
 domains:
   - signal peptide
   - proinsulin

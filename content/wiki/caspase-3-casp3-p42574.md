@@ -12,6 +12,7 @@ symbol: CASP3
 mass: 31.6
 length (aa): 277
 protein_type: cysteine protease
+transmembrane: false
 domains:
   - CARD-like prodomain (zymogen)
 pathways:

@@ -11,6 +11,7 @@ symbol: CD274
 mass: 33.3
 length (aa): 290
 protein_type: immune checkpoint ligand
+transmembrane: true
 domains:
   - Ig-like domains
   - transmembrane helix

@@ -10,6 +10,7 @@ symbol: IL6
 mass: 23.7
 length (aa): 212
 protein_type: cytokine
+transmembrane: false
 domains: []
 pathways:
   - inflammatory signaling

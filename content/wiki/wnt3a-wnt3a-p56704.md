@@ -11,6 +11,7 @@ symbol: WNT3A
 mass: 39.4
 length (aa): 352
 protein_type: secreted glycoprotein
+transmembrane: false
 domains:
   - Wnt domain
 pathways:
@@ -25,4 +26,3 @@ image_link:
 **Why it matters here.** Defines tissue zones where division is allowed; misregulation fuels overgrowth.
 
 **Notes.** Pathway: Wnt/beta-catenin; Mode: paracrine morphogen.
-

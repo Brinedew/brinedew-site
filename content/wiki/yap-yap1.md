@@ -11,6 +11,7 @@ symbol: YAP1
 mass: 54.5
 length (aa): 504
 protein_type: transcriptional co-activator
+transmembrane: false
 domains:
   - WW domains
 pathways:

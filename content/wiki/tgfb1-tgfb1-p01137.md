@@ -11,6 +11,7 @@ symbol: TGFB1
 mass: 44.3
 length (aa): 390
 protein_type: cytokine
+transmembrane: false
 domains: []
 pathways:
   - TGF-beta/SMAD signaling
@@ -24,4 +25,3 @@ image_link:
 **Why it matters here.** Part of the wound-healing program that tumors appropriate to grow and hide.
 
 **Notes.** Pathway: SMADs.
-

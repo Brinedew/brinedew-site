@@ -12,6 +12,7 @@ symbol: CTLA4
 mass: 24.7
 length (aa): 223
 protein_type: immune checkpoint receptor
+transmembrane: true
 domains:
   - Ig-like domain
 pathways:
