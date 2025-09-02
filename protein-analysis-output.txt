@@ -1,0 +1,45 @@
+Protein Page Migration Analysis
+========================================
+Total protein pages: 46
+[OK] Single protein pages: 1
+[SPLIT] Family pages needing split: 6
+[MISSING] Pages needing UniProt ID: 39
+
+NEEDS UNIPROT ID (39 pages):
+------------------------------
+FILE: akt.md
+   Title: AKT
+
+FILE: apaf1.md
+   Title: APAF1
+
+FILE: arf-p14arf.md
+   Title: ARF (p14^ARF)
+
+FILE: atm.md
+   Title: ATM
+
+FILE: atr.md
+   Title: ATR
+
+FILE: bak-bak1.md
+   Title: BAK (BAK1)
+
+FILE: bax.md
+   Title: BAX
+
+FILE: bcl-2.md
+Traceback (most recent call last):
+  File "D:\Coding\Website\scripts\analyze-protein-pages.py", line 199, in <module>
+    main()
+    ~~~~^^
+  File "D:\Coding\Website\scripts\analyze-protein-pages.py", line 190, in main
+    analyzer.print_report(report)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "D:\Coding\Website\scripts\analyze-protein-pages.py", line 171, in print_report
+    print(f"   Title: {page['title']}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2011' in position 13: character maps to <undefined>
