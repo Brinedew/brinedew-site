@@ -1,12 +1,14 @@
 ---
 title: AKT
 tags:
-- protein
+  - protein
 date: 2025-08-21
 status: draft
-aliases:
-- AKT1
-- AKT2
+aliases: |-
+  - AKT1
+  - AKT2
+  - AKT3
+  uniprot_id: "family"
 draft: true
 ---
 # AKT

@@ -161,8 +161,15 @@ function New-TemplateChoice($id, $name, $tplPath, $targetFolder) {
 Upsert-Choice "Post" (New-TemplateChoice $postId "Post" "content/Templates/Post Template.md" "content/posts")
 Upsert-Choice "Wiki Page" (New-TemplateChoice $wikiId "Wiki Page" "content/Templates/Smart Wiki Template.md" "content/wiki")
 
-# Protein page - for now just uses Smart Wiki Template, we'll enhance this later
-Upsert-Choice "Protein Page" (New-TemplateChoice $proteinId "Protein Page" "content/Templates/Smart Wiki Template.md" "content/wiki")
+# Protein page - UserScript that fetches UniProt data
+$proteinChoice = [pscustomobject]@{
+  id   = $proteinId
+  name = "Protein Page"
+  type = "UserScript"
+  command = $true
+  path = ".obsidian/scripts/create-protein-page.js"
+}
+Upsert-Choice "Protein Page" $proteinChoice
 
 # Macro for Default Note
 $macroObj = [pscustomobject]@{
