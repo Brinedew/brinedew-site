@@ -486,31 +486,18 @@ sed -i 's/<!--section: \([0-9.]*\)-->/<span data-lineage-section="\1"><\/span>/g
 
 ---
 
-### 17. Gingko Document Structure Filtering - UNRESOLVED ❌  
-**Status**: 🔴 **UNRESOLVED** - Live site showing wrong content structure
-**Issue**: https://brinedew.com/posts/the-price-of-not-being-cancer-v3 displays full 3-column Gingko editing structure instead of just third-column content for readers
+### 17. Gingko Document Structure Filtering - FIXED ✅
+**Status**: ✅ **RESOLVED** - September 2, 2025
+**Issue**: Live site now correctly displays only depth 3+ content without editorial scaffolding
 
-**Problem**: Visitors see first column headings + second column signposting like "[Hook with striking examples]" + third column explanations, when they should only see the explanations.
+**Resolution**: The LineageTextFilter plugin (textTransform approach) is working correctly on the live site. The content at https://brinedew.com/posts/the-price-of-not-being-cancer-v3 shows clean, polished text starting with "The title of the oldest human being..." without any editorial markers like "[Hook with striking examples]".
 
-**Attempted Fixes**:
-1. **Remark Plugin**: Created markdown AST filter but consultant analysis revealed it runs in wrong pipeline pass - HTML emitter uses different processor
-2. **Rehype Plugin**: Created HTML AST filter that should work, but GitHub Actions logs show NO console output from plugin - plugins aren't running in production
+**What Fixed It**: The textTransform-based plugin approach in `quartz/plugins/transformers/lineageTextFilter.ts` proved successful where the rehype approach failed. This runs in the correct pipeline phase and actually processes content in production builds.
 
-**Technical Evidence**:
-- Local build shows plugin console output: `[LineageFilter] Found marker with depth X`
-- GitHub Actions shows zero plugin output, neither remark nor rehype versions
-- Live site shows empty `<article>` element but TOC shows all structural headings
-- Empty article suggests plugin IS running but filtering everything instead of just columns 1&2
+**Files Working**:
+- `quartz/plugins/transformers/lineageTextFilter.ts` - functional text-based filter
+- `quartz.config.ts` line 62 - Plugin.LineageTextFilter({ minDepthToShow: 3 })
 
-**Files Created**:
-- `quartz/plugins/transformers/lineageFilter.ts` - main plugin wrapper  
-- `quartz/plugins/transformers/rehypeLineageFilter.ts` - HTML AST filter logic
-- Plugin registered in `quartz.config.ts` at line 63
+**Technical Resolution**: The earlier rehype approach failed because it ran in the wrong pipeline phase. The textTransform approach processes raw markdown before HTML parsing, which is why it works correctly in production GitHub Actions builds.
 
-**Next Steps Required**:
-- Debug why rehype plugin doesn't run in GitHub Actions (import/export issue?)
-- Add aggressive debugging with try-catch blocks around plugin imports
-- Check if rehype-raw is available in production environment  
-- Fix range detection logic if plugin IS running but filtering too broadly
-
-**User Impact**: High - main site content shows wrong structure to all visitors
+**User Impact**: Resolved - all visitors now see properly filtered content without editorial scaffolding
