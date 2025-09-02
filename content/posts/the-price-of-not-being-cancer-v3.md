@@ -11,11 +11,13 @@ title: The Price of Not Being Cancer
 <span data-section="1.1"></span>
 ### [Hook with striking examples] How can individual cells be immortal?
 
+<span data-section="1.1.1"></span>
+# The Price Of Not Being Cancer
+
 <span data-section="1.2"></span>
 ### [Establish contrast with multicellular mortality] Why do multicellular organisms age and die?
 
-<span data-section="1.2.1"></span>The Price Of Not Being Cancer
-Multicellular organisms are not immortal. The cells that make up a dog's body age and die within decades while the CTVT lineage thrives for millennia.
+<span data-section="1.2.1"></span>Multicellular organisms are not immortal. The cells that make up a dog's body age and die within decades while the CTVT lineage thrives for millennia.
 
 <span data-section="1.3"></span>
 ### [Pose the core evolutionary puzzle] Why do multicellular organisms suppress cellular immortality?
