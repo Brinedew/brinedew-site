@@ -393,6 +393,11 @@ With age, defenses intensify; anti‑cancer escalation drives decline.
 
 <span data-section="14.3"></span>
 
+Present Reverse Capacity Framework of Weinstein for telomeres
+https://pubmed.ncbi.nlm.nih.gov/11909679/
+
+<span data-section="14.4"></span>
+
 ### [Pose the key question] Why maintain systems that harm the organism?
 
 <span data-section="15"></span>
@@ -424,18 +429,6 @@ Historical milestones evidencing cellular control and tumor suppression.
 %% lineage:scaffold end %%
 
 %% lineage:content start %%
-
-<span data-section="3.1.1"></span>
-
-# The Price Of Not Being Cancer
-
-The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
-
-Individual cell lines can be immortal. The Canine Transmissible Venereal Tumor (CTVT) has been making identical copies of itself for 11,000 years across the globe, transmitted between dogs during mating. Tasmanian Devil Facial Tumor Disease (DFTD) has spread between devils for decades, far outliving the 7-year lifespan of its hosts. In labs, immortalizing normal human cells often requires tweaking just a few pathways: p53, Rb, telomerase.
-
-<span data-section="3.2.1"></span>
-
-Multicellular organisms are not immortal. The cells that make up a dog's body age and die within decades while the CTVT lineage thrives for millennia.
 
 <span data-section="3.3.1"></span>
 
@@ -821,6 +814,11 @@ Stem cell populations don't wear out randomly. They're systematically suppressed
 
 <span data-section="14.3.1"></span>
 
+https://pubmed.ncbi.nlm.nih.gov/11909679/
+Reverse Capacity Framework of Weinstein for telomeres
+
+<span data-section="14.4.1"></span>
+
 These systems are becoming more active with age, consuming more resources, causing more tissue damage. If evolution stopped caring about post-reproductive function, why maintain increasingly expensive systems that actively harm the organism?
 
 The hyperactive p53 experiment provides the answer. Mice with enhanced anti-cancer systems lived 20% shorter lives, dying from accelerated organ failure rather than cancer. Strengthening the defense systems caused faster aging.
@@ -930,6 +928,18 @@ We started with a paradox: cells can be immortal, but organisms can't. The expla
 ---
 
 <span data-section="16.1.1"></span>
+
+Multicellular organisms are not immortal. The cells that make up a dog's body age and die within decades while the CTVT lineage thrives for millennia.
+
+<span data-section="16.1.2"></span>
+
+# The Price Of Not Being Cancer
+
+The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)). Henrietta Lacks's cervical cancer cells (_HeLa_), taken in 1951 when she was 31, are still dividing in labs worldwide; in 2043, this cell line will have "lived" for 122 years, matching Calment's record, with no signs of stopping. _Guinness World Records_ will probably have to take an explicit stance on whether to exclude contenders with unicellular body plans.
+
+Individual cell lines can be immortal. The Canine Transmissible Venereal Tumor (CTVT) has been making identical copies of itself for 11,000 years across the globe, transmitted between dogs during mating. Tasmanian Devil Facial Tumor Disease (DFTD) has spread between devils for decades, far outliving the 7-year lifespan of its hosts. In labs, immortalizing normal human cells often requires tweaking just a few pathways: p53, Rb, telomerase.
+
+<span data-section="16.1.3"></span>
 
 *This section contains the chronological development of key discoveries about cellular control mechanisms, extracted from the main text to improve flow while preserving important historical context.*
 
