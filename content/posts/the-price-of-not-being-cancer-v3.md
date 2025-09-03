@@ -1,3 +1,11 @@
+---
+title: The Price of Not Being Cancer
+date: 2025-08-10
+draft: false
+tags:
+  - type/post
+---
+
 <!-- lineage:scaffold start -->
 
 <span data-section="1"></span>
