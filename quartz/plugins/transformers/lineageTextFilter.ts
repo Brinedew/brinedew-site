@@ -4,13 +4,13 @@ interface Options { minDepthToShow?: number; attribute?: string }
 
 /**
  * Keep only content that follows markers with depth >= minDepthToShow.
- * Markers are <span data-lineage-section="1.2.3"></span>
+ * Markers are <span data-section="1.2.3"></span>
  */
 export const LineageTextFilter: QuartzTransformerPlugin<Options> = (opts) => {
   const keepDepth = opts?.minDepthToShow ?? 3
-  const attr = opts?.attribute ?? "data-lineage-section"
+  const attr = opts?.attribute ?? "data-section"
 
-  // Matches a closed span marker: <span ... data-lineage-section="1.2.3" ...></span>
+  // Matches a closed span marker: <span ... data-section="1.2.3" ...></span>
   const MARKER = new RegExp(
     `<span[^>]*\\b${attr}=["']?([0-9]+(?:\\.[0-9]+)*)["']?[^>]*>\\s*</span>`,
     "ig",
@@ -19,7 +19,7 @@ export const LineageTextFilter: QuartzTransformerPlugin<Options> = (opts) => {
   return {
     name: "LineageTextFilter",
     textTransform(_ctx, src) {
-      const hasMarkers = src.includes('data-lineage-section')
+      const hasMarkers = src.includes('data-section')
       
       // Only process files that have markers to avoid unnecessary work
       if (!hasMarkers) {
