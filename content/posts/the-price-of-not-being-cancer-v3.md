@@ -6,7 +6,7 @@ tags:
   - type/post
 ---
 
-<!-- lineage:scaffold start -->
+%% lineage:scaffold start %%
 
 <span data-section="1"></span>
 
@@ -415,9 +415,9 @@ Historical milestones evidencing cellular control and tumor suppression.
 
 ### [Present supporting evidence] Historical milestones in cellular control
 
-<!-- lineage:scaffold end -->
+%% lineage:scaffold end %%
 
-<!-- lineage:content start -->
+%% lineage:content start %%
 
 <span data-section="1.1.1"></span>
 
@@ -945,4 +945,4 @@ Similarly, in the early 1990s, Carol Greider and colleagues discovered that _tel
 
 All these findings – limited cell divisions, immune policing of tumors, dominance of normal growth regulators, cell competition – converged on a common theme: cancer is a coordination problem.
 
-<!-- lineage:content end -->
+%% lineage:content end %%
