@@ -3,6 +3,34 @@
 
 ## Open Issues 🔴
 
+### BUG-007: Quartz Build Error from Lineage HTML Comments - FIXED ✅
+**Status**: ✅ **RESOLVED** - September 3, 2025
+**Issue**: Quartz build failed with "Cannot read properties of null (reading 'data')" after implementing Lineage shim plugin that added HTML wrapper comments to markdown files.
+
+**Root Cause**: HTML comments (`<!-- lineage:scaffold start -->`) are processed by Quartz's HTML parser which has null data access errors. Quartz's Obsidian-flavored markdown transformer expects certain data structures that custom HTML comments break.
+
+**Technical Investigation**:
+1. Isolated issue systematically by testing components individually
+2. Confirmed HTML comments were breaking parser, not `<span data-section>` tags or YAML frontmatter
+3. Tested with minimal example that reproduced error consistently
+
+**Solution Applied**: Switched from HTML comments to Obsidian comments in shim plugin:
+```javascript
+// Before: <!-- lineage:scaffold start -->
+// After:  %% lineage:scaffold start %%
+```
+
+**Files Fixed**:
+- `content/.obsidian/plugins/lineage-order-agnostic-shim/main.js` - Changed WRAP_RX regex and comment generation
+- `content/posts/the-price-of-not-being-cancer-v3.md` - Replaced all HTML comments with Obsidian comments
+- `quartz/plugins/transformers/lineageTextFilter.ts` - Updated attribute names to match `data-section`
+
+**Resolution Verified**: ✅ Quartz builds successfully, processes all 117 files without errors, generates clean output
+
+**Technical Insight**: Obsidian comments (`%% %%`) are processed at markdown level and stripped before HTML parsing, while HTML comments reach the HTML parser where they cause null data errors. This approach leverages Quartz's existing Obsidian compatibility.
+
+---
+
 ### BUG-006: Lineage Plugin Single-Column Display Issue - FIXED ✅
 **Status**: ✅ **RESOLVED** - September 2, 2025
 **Issue**: Content with lineage section markers displayed as single column instead of proper 3-column hierarchical tree view.
