@@ -3,6 +3,50 @@
 
 ## Open Issues 🔴
 
+### BUG-008: Lineage Shim Content Scrambling - CRITICAL 🔴
+**Status**: 🔴 **CRITICAL UNRESOLVED** - September 6, 2025
+**Issue**: Lineage shim plugin completely scrambles content-to-section associations during save operations, corrupting document structure.
+
+**Root Cause**: Lineage renumbers sections during hierarchical processing (1, 2, 1.1, 2.1, 1.1.1 → 1, 2, 2.1, 3, 3.1, 3.2), but the shim tries to rebuild content using these unstable section paths. The `parseSections()` content slicing logic is actually correct, but operates on renumbered sections, causing content to be associated with wrong section identifiers.
+
+**Evidence from Test File** (`shim-bug-test.md`):
+- Section 1: Content stolen → now empty
+- Section 2: Content stolen → now empty  
+- Section 2: Gets "This content should stay in section 1" (WRONG section)
+- Section 3: Gets "This content should stay in section 2" (WRONG section)
+- Section 3.1: Gets "This content should stay in section 1.1" (WRONG section)
+- Section 3.2.2: Gets "This content should stay in section 1.1.1" (WRONG section)
+
+**Impact**: 
+- **CRITICAL**: Every file touched by the shim gets content corruption
+- **Website filtering broken**: Sections 1,2,3 in cancer post are empty because content was scrambled
+- **Content integrity compromised**: Editorial content may be mixed with reader content
+- **Data loss risk**: Original content associations are permanently lost
+
+**Technical Analysis**: 
+The bug is in `main.js` lines 25-35 where `parseSections()` uses `text.slice(cur.after, end)` to extract content between markers. The `end` boundary calculation is incorrect, causing content to be sliced from wrong positions and attached to wrong section paths.
+
+**Files Affected**:
+- `content/posts/the-price-of-not-being-cancer-v3.md` - sections 1,2,3 corrupted (empty)
+- `content/posts/shim-bug-test.md` - test case showing content scrambling
+- Any other files opened/saved in Lineage view with the shim active
+
+**Solution Implemented**: Ephemeral ID approach to preserve content-section associations
+- Added `injectEphemeralIds()` to inject stable IDs in memory only during editing
+- Added `parseSectionsWithEid()` to parse sections with ephemeral ID tracking
+- Added `sequentialToGrouped_EphemeralIds()` to transform back to clean disk format
+- Updated save/load pipeline to use ephemeral IDs for stable content mapping
+- Ephemeral IDs exist only in memory - files remain clean with path-only format
+
+**Next Steps**:
+1. **URGENT**: Test the fix with the existing test file to verify content scrambling is resolved
+2. If fix works, restore corrupted content from git history before shim deployment
+3. Monitor console logs during Lineage editing to confirm ephemeral IDs prevent renumbering issues
+
+**Status Update**: Fix implemented but untested - requires validation before marking resolved
+
+**Priority**: CRITICAL - fix ready for testing
+
 ### BUG-007: Quartz Build Error from Lineage HTML Comments - FIXED ✅
 **Status**: ✅ **RESOLVED** - September 3, 2025
 **Issue**: Quartz build failed with "Cannot read properties of null (reading 'data')" after implementing Lineage shim plugin that added HTML wrapper comments to markdown files.
