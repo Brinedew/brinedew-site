@@ -43,9 +43,23 @@ The bug is in `main.js` lines 25-35 where `parseSections()` uses `text.slice(cur
 2. If fix works, restore corrupted content from git history before shim deployment
 3. Monitor console logs during Lineage editing to confirm ephemeral IDs prevent renumbering issues
 
-**Status Update**: Fix implemented but untested - requires validation before marking resolved
+**Status Update**: ❌ **EPHEMERAL ID FIX FAILED** - September 6, 2025
 
-**Priority**: CRITICAL - fix ready for testing
+**Test Results After Plugin Reload**: Same content scrambling occurs plus new corruption:
+- Content still scrambled: "section 1 content" appears in section 2, etc.
+- Section renumbering persists: 1,1.1,2,2.1,3,3.1 → 1,2,2.1,3,3.1,4,4.1
+- **NEW**: Comment duplication (3x scaffold/content blocks)  
+- **NEW**: Structural corruption with comments in wrong positions
+
+**Ephemeral ID Approach Assessment**: FAILED
+- Either not being injected during load phase
+- Save interception not working at correct pipeline point
+- Multiple transformation passes creating compounding errors
+- May indicate fundamental parsing logic flaws beyond renumbering
+
+**Required Action**: Complete redesign of fix approach needed
+
+**Priority**: CRITICAL - current fix approach fundamentally broken
 
 ### BUG-007: Quartz Build Error from Lineage HTML Comments - FIXED ✅
 **Status**: ✅ **RESOLVED** - September 3, 2025
