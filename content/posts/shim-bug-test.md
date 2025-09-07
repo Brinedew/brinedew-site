@@ -7,34 +7,61 @@ tags: [type/post]
 %% lineage:scaffold start %%
 
 <span data-section="1"></span>
-This content should stay in section 1.
-
-<span data-section="1.1"></span>
-This content should stay in section 1.1.
+%% lineage:scaffold start %%
 
 <span data-section="2"></span>
-This content should stay in section 2.
-
-<span data-section="2.1"></span>
-This content should stay in section 2.1.
+%% lineage:scaffold start %%
 
 <span data-section="3"></span>
-This content should stay in section 3.
+%% lineage:scaffold start %%
 
-<span data-section="3.1"></span>
+<span data-section="4"></span>
+This content should stay in section 1. test
+
+<span data-section="4.1"></span>
+This content should stay in section 1.1.
+
+<span data-section="5"></span>
+This content should stay in section 2. test
+
+<span data-section="5.1"></span>
+This content should stay in section 2.1.
+
+<span data-section="6"></span>
+This content should stay in section 3. test
+
+<span data-section="6.1"></span>
 This content should stay in section 3.1.
 
 %% lineage:scaffold end %%
 
 %% lineage:content start %%
 
-<span data-section="1.1.1"></span>
-This content should stay in section 1.1.1.
+%% lineage:scaffold end %%
 
-<span data-section="2.1.1"></span>
+%% lineage:content start %%
+
+%% lineage:scaffold end %%
+
+%% lineage:content start %%
+
+%% lineage:scaffold end %%
+
+%% lineage:content start %%
+
+<span data-section="6.1.1"></span>
 This content should stay in section 2.1.1.
 
-<span data-section="3.1.1"></span>
+<span data-section="6.1.2"></span>
+This content should stay in section 1.1.1.
+
+<span data-section="6.1.3"></span>
 This content should stay in section 3.1.1.
+
+%% lineage:content end %%
+
+%% lineage:content end %%
+
+%% lineage:content end %%
 
 %% lineage:content end %%

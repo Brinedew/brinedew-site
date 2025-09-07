@@ -43,23 +43,23 @@ The bug is in `main.js` lines 25-35 where `parseSections()` uses `text.slice(cur
 2. If fix works, restore corrupted content from git history before shim deployment
 3. Monitor console logs during Lineage editing to confirm ephemeral IDs prevent renumbering issues
 
-**Status Update**: ❌ **EPHEMERAL ID FIX FAILED** - September 6, 2025
+**Status Update**: ❌ **ALL THREE BUG FIXES FAILED** - September 6, 2025
 
-**Test Results After Plugin Reload**: Same content scrambling occurs plus new corruption:
-- Content still scrambled: "section 1 content" appears in section 2, etc.
-- Section renumbering persists: 1,1.1,2,2.1,3,3.1 → 1,2,2.1,3,3.1,4,4.1
-- **NEW**: Comment duplication (3x scaffold/content blocks)  
-- **NEW**: Structural corruption with comments in wrong positions
+**Test Results After Complete Rewrite**: All original bugs persist:
+- **Content scrambling**: "section 1 content" moved to section 3, section renumbering 1,1.1,2,2.1,3,3.1 → 1,2,3,3.1,4,4.1,5,5.1  
+- **Comment duplication**: Multiple `%% lineage:scaffold start %%` blocks throughout file
+- **Wrapper accumulation**: 3 separate comment blocks at file end
 
-**Ephemeral ID Approach Assessment**: FAILED
-- Either not being injected during load phase
-- Save interception not working at correct pipeline point
-- Multiple transformation passes creating compounding errors
-- May indicate fundamental parsing logic flaws beyond renumbering
+**Root Cause Identified**: Plugin instance patching completely failed
+- Log shows "Lineage plugin not found" - couldn't locate correct plugin name
+- Only buggy view-level patching ran, plugin-instance fixes never activated
+- All three bug fixes depend on plugin-instance level interception
 
-**Required Action**: Complete redesign of fix approach needed
+**Critical Discovery**: Need to identify actual Lineage plugin name in Obsidian's plugin registry
 
-**Priority**: CRITICAL - current fix approach fundamentally broken
+**Required Action**: Debug plugin detection, find correct plugin identifier
+
+**Priority**: CRITICAL - fix architecture wrong from start
 
 ### BUG-007: Quartz Build Error from Lineage HTML Comments - FIXED ✅
 **Status**: ✅ **RESOLVED** - September 3, 2025
