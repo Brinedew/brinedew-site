@@ -12,6 +12,7 @@ aliases:
 ## A
 
 - **Agent-based model (ABM)**: Approach to simulation where individual entities (such as cells) are agents who follow a set of rules, and interactions between agents produce emergent behavior.
+- **Allele:** One of several forms of the same gene, for example the ABCC11 gene has alleles 538G (wet earwax) and 538A (dry earwax).
 - **Angiogenesis**: Formation of new blood vessels that supply nutrients and oxygen to growing tissues and tumors.
 - **Anoikis**: Programmed cell suicide triggered when cells lose appropriate attachment to the extracellular matrix.
 - **[[antagonistic-pleiotropy-theory|Antagonistic pleiotropy theory]]**: Idea that evolution selects genes which increase early-life fitness but decrease late-life fitness, contributing to aging.
@@ -77,16 +78,15 @@ aliases:
 - **Immune checkpoints**: T-cell receptors that restrain T-cells from attacking the body's own cells, but also from attacking some cancer cells.
 - **[[immune-surveillance|Immune surveillance]]**: The process by which immune cells detect and remove emerging cancer cells.
 - **[[Indeterminate growth|Indeterminate growth]]**: A life-history pattern where organisms continue growing after maturity through continued cell proliferation.
-- **Inflammaging**: Chronic, low-grade inflammation that increases with age and contributes to tissue dysfunction.
+- **Inflammaging**: Persistent inflammation-like tissue state that increases with age and contributes to tissue dysfunction.
 
 ## K
 
-- **Kinase signaling**: Enzyme-driven phosphorylation cascades (such as MAPK or PI3K-AKT) that transmit growth and survival signals.
-- **[[kras-kras-p01116|KRAS]]**: A small GTPase that activates RAF-MEK-ERK signaling when mutated in many cancers.
+- **Kinase signaling**: Protein modification cascades (such as MAPK or PI3K-AKT) that transmit signals from cell membrane receptors to transcription factors.
 
 ## L
 
-- **LEGI (local excitation, global inhibition)**: A sensory computation motif that enables gradient detection and adaptation in the model.
+- **LEGI (local excitation, global inhibition)**: Computation method that enables cell models to sense chemical gradients and adapt to them.
 - **Loss of heterozygosity (LOH)**: Loss of a functional allele that unmasks recessive tumor suppressor mutations.
 
 ## M
