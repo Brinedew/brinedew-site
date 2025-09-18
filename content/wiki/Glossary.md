@@ -74,6 +74,7 @@ aliases:
 - **EMT (epithelial-mesenchymal transition)**: Cell identity shift from epithelial (sedentary) state to a mesenchymal (mobile) state, granting increased motility and invasiveness - happens both in normal development and in cancer.
 - **Endocrine signalling**: Type of cell signalling where signals are transmitted via central circulatory system (bloodstream).
 - **Epigenetics:** Changes in gene activity that are heritable through cell divisions without altering the DNA sequence, typically via DNA methylation or chromatin changes.
+- **Epigenetic landscape**: 2D visualization of potential cell states as a height map, forming valleys that correspond to progression of cell types.
 - **[[eutely|Eutely]]**: Developmental pattern in some species where adults have a fixed number of somatic cells and growth occurs only by cell enlargement.
 - **Evolutionarily stable strategy:** Behavior pattern that, once common in a group, cannot be easily displaced by an alternative strategy.
 
@@ -88,6 +89,7 @@ aliases:
 - **Gene expression**: Level of gene activity, tracking whether the specific gene is transcribed to RNA or stays silent.
 - **Gene regulatory network (GRN)**: Computational model of a gene network that calculates internal gene states that drive effector outputs based on sensory inputs in the cell model.
 - **Genome instability**: Collection of various mutations and chromosomal alterations that drive somatic evolution.
+- **Germline**: Immortal lineage of reproductive cells (such as egg and sperm cells) that passes its genetic material from one generation to another (as opposed to mortal soma that forms the rest of the body)
 - **Gradient (chemical)**: Spatial variation in morphogen concentration that cells can sense to bias movement or growth.
 - **Growth factors**: Extracellular proteins such as EGF and IGF that bind to cell receptors and stimulate cell proliferation and survival pathways.
 
@@ -157,17 +159,23 @@ aliases:
 
 - **[[oncogene-classification|Oncogene]]**: Gene that promotes cell proliferation or survival during development, and, if inappropriately activated or overexpressed, can also drive cancer.
 - **Oncovirus**: Virus that increases the risk of cancer upon infection, such as Human Papillomavirus (HPV)
+- **Organoids:** Lab-grown tissue structures that mimic features of real organs for large-scale experimental assays.
+- **Oxidative phosphorylation (OXPHOS):** Cell’s main way to make ATP (energy currency) in mitochondria by using oxygen to power an electron-driven turbine.
 - **Oxidative stress**: Imbalance between the production of toxic reactive oxygen species and the production of defensive antioxidant molecules, leading to high rates of damaged biomolecules such as DNA mutation.
 
 ## P
 
-- **Paracrine signaling**: Type of cell signaling where signals are transmitted short distances to nearby cells.
-- **Passenger mutation**: A genetic change that does not confer a selective advantage to the cell but co-occurs with beneficial driver mutations.
 - **[[p16ink4a-cdkn2a|p16-RB pathway]]**: Tumor-suppressive protein pathway that enforces cell-cycle arrest by inhibiting CDK4/6 and maintaining RB activity.
 - **[[p53-tp53|p53 pathway]]**: Central damage-response protein network that triggers repair, arrest, senescence, or apoptosis depending on context.
+- **Paracrine signaling**: Type of cell signaling where signals are transmitted short distances to nearby cells.
+- **Passenger mutation**: A genetic change that does not confer a selective advantage to the cell but co-occurs with beneficial driver mutations.
+- **Peto’s paradox:** Observation that large animals have similar cancer rates to small animals, despite having orders of magnitude more cells, implying stronger cancer defenses scaling with organism size.
 - **PI3K-AKT-mTOR pathway**: Central growth and survival pathway activated by growth factors and oncogenic mutations.
+- **Planar cell polarity (PCP):** Coordinated head-to-tail or left-to-right alignment of cells across a flat 2D tissue sheet.
+- **Pluripotent cell:** Stem cell that can make almost any cell type in the body but not an entire organism on its own.
 - **[[principal-agent-problem|Principal-agent problem]]**: Coordination problem between an entity with a goal (principal) who delegates power to an entity with selfish incentives (agent).
 - **Proliferation**: Regulated increase in cell number through mitosis, constrained by checkpoints, growth signal availability, and crowding.
+- **Public goods:** Shared resources that cells produce (such as growth factors or matrix) and other cells can benefit from without paying the cost of production.
 
 ## Q
 
@@ -186,6 +194,9 @@ aliases:
 - **[[cellular-senescence|Senescent cells]]**: Cells in a state of irreversible proliferation arrest, unable to properly function but also cancer-resistant.
 - **Semelparity**: Life-history strategy where organisms reproduce once and then die, as opposed to iteroparity (multiple reproduction events).
 - **Senolytic therapy**: Category of putative anti-aging treatments that selectively eliminate senescent cells accumulated over the lifespan of the organism.
+- **Single-cell RNA-seq:** RNA sequencing method that reads which genes are active in each individual cell, revealing the mix of cell types and states in a sample.
+- **Soma**: Non-reproductive tissues of the body, cells that won't form a new organism and will die with the body (as opposed to immortal germline)
+- **Somatic mosaicism:** Presence of genetically different cells within the same person due to mutations that arise after fertilization.
 - **Stem cell niche**: Specialized tissue microenvironment, such as the base of intestinal crypts, that maintains stemness and allows stem cells to undergo proliferation and differentiation.
 
 ## T
@@ -193,9 +204,13 @@ aliases:
 - **[[telomeres|Telomeres]]**: Repetitive chromosome ends that shorten with each cell division, telomeres act as a replication counter and a protective mutagen sink.
 - **[[telomerase-tert|Telomerase]]**: Enzyme that extends telomeres and supports replicative immortality in stem cells and many cancer cells.
 - **[[tgfb1-tgfb1-p01137|TGF-beta signaling]]**: Protein pathway that normally promotes tissue fibrosis and inhibits immune response, in cancer depending on the context it can either suppress early tumor growth or promote invasion and metastasis later.
+- **Totipotent cell:** Cell type that can form all cell types, including extra-embryonic tissues, creating a whole organism from itself.
+- **Tragedy of the commons:** Coordination problem where individuals overuse a shared public good, harming the group because each individual gains by taking more.
 - **Transcription factors (TF)**: Central components in the cell decision-making network, proteins that integrate incoming signals, bind DNA, and regulate gene expression.
+- **Transit amplifying cells:** Short-lived progenitor cells that rapidly divide to produce many non-dividing cells, intermediates between stem cells and fully differentiated cells in rapidly cycling tissues like skin and intestines.
 - **Transmissible cancer**: Cancer that spreads between individuals via clonal transmission of living cancer cells (as opposed to infection by an oncovirus).
 - **Tumor microenvironment (TME)**: Ecosystem of cancer cells, stromal cells, immune cells, and ECM that maintains and shapes tumor progression.
+- **Tumor mutational burden (TMB):** The total number of DNA mutations found in a tumor, often used as a rough marker of how visible it may be to the immune system.
 - **Tumor suppressor**: Gene whose loss drives tumor formation, typically acts by constraining the cell cycle.
 - **[[tumor-suppressor-theory-of-aging|Tumor-suppressor theory of aging]]**: Idea that mechanisms preventing cancer, like senescence, contribute to aging by limiting regeneration over the lifespan of the organism.
 
@@ -206,7 +221,9 @@ aliases:
 
 ## W
 
+- **Warburg effect:** Tendency of many cancer cells to favor sugar-burning pathways that are less efficient but support fast growth, even when oxygen is available.
 - **[[weismann-barrier|Weismann barrier]]**: In some species, the irreversible separation between germline cells and somatic cell lineages in the developing embryo, limiting inheritance of acquired somatic mutations.
+- **Whole-genome doubling:** Event in which a cell accidentally duplicates its entire set of chromosomes, which benefits cancer cells by supporting higher mutational load.
 - **[[wnt3a-wnt3a-p56704|Wnt signaling]]**: Developmental signaling pathway that stabilizes beta-catenin to drive proliferation and patterning.
 
 ## Y
