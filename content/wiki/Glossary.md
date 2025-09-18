@@ -51,32 +51,30 @@ aliases:
 - **ECM**: ExtraCellular Matrix, a part of tissue outside of the cells, consisting of a network of macromolecules and minerals that provides structural and biochemical support to surrounding cells.
 - **ECM remodeling**: Changes to the extracellular matrix that alter tissue stiffness, signaling, and cell behavior, often via matrix metalloproteinases.
 - **EMT (epithelial-mesenchymal transition)**: Cell identity shift from epithelial (sedentary) state to a mesenchymal (mobile) state, granting increased motility and invasiveness at the expense of .
-- **[[eutely|Eutely]]**: A developmental pattern in some species where adults have a fixed number of somatic cells and growth occurs only by cell enlargement.
-- **[[egfr-erbb1-p00533|EGFR signaling]]**: A receptor tyrosine kinase pathway activated by EGF that drives proliferation and survival and is often dysregulated in cancer.
-- 
+- **[[eutely|Eutely]]**: Developmental pattern in some species where adults have a fixed number of somatic cells and growth occurs only by cell enlargement.
+- **[[egfr-erbb1-p00533|EGFR signaling]]**: Proliferation and survival pathway activated by EGF, often activated in cancer.
 
 ## F
 
-- **Fast-slow scheduling**: A performance optimization that updates some processes less frequently to speed simulation without losing key dynamics.
 - **[[flower-drosophila|Flower (Drosophila)]]**: A cell-surface protein that marks relative fitness for cell competition in flies.
 
 ## G
 
-- **Gene regulatory network (GRN)**: A computational model of a gene network that computes internal gene states that drive effector outputs based on sensory inputs in the cell model.
-- **Genome instability**: The measure of how quickly the genome of a cell in a multicellular body accumulates mutations and chromosomal alterations that drive somatic evolution.
-- **Gradient (chemical)**: A spatial variation in morphogen concentration that cells can sense to bias movement or growth.
+- **Gene regulatory network (GRN)**: Computational model of a gene network that calculates internal gene states that drive effector outputs based on sensory inputs in the cell model.
+- **Genome instability**: Measure of how quickly the genome of a cell in a multicellular body accumulates mutations and chromosomal alterations that drive somatic evolution.
+- **Gradient (chemical)**: Spatial variation in morphogen concentration that cells can sense to bias movement or growth.
 - **Growth factors**: Extracellular proteins such as EGF and IGF that bind to cell receptors and stimulate cell proliferation and survival pathways.
 
 ## H
 
-- **[[hela|HeLa cells]]**: An immortalized human cancer cell line widely used in research.
-- **[[shh-shh-q15465|Hedgehog signaling]]**: A cell pathway active during embryonic development, it allows tissue patterning but can be activated in cancers.
+- **[[hela|HeLa cells]]**: Immortalized human cancer cell line widely used in research.
+- **[[shh-shh-q15465|Hedgehog signaling]]**: Cell pathway active during embryonic development, it regulates tissue patterning but can also be activated in cancers.
 - **Hypoxia**: Low oxygen conditions common in densely packed tumor interior, triggers HIF-driven adaptive responses.
 
 ## I
 
-- **[[igf-1|IGF signaling]]**: The insulin-like growth factor pathway that promotes growth and survival through PI3K-AKT activation.
-- **Immune checkpoints**: Inhibitory receptors such as PD-1 and CTLA-4 that restrain T cells and are targets of cancer therapy.
+- **[[igf-1|IGF signaling]]**: Insulin-like growth factor pathway that promotes growth and survival, often activated in cancers.
+- **Immune checkpoints**: T-cell receptors that restrain T-cells from attacking the body's own cells, but also from attacking some cancer cells.
 - **[[immune-surveillance|Immune surveillance]]**: The process by which immune cells detect and remove emerging cancer cells.
 - **[[Indeterminate growth|Indeterminate growth]]**: A life-history pattern where organisms continue growing after maturity through continued cell proliferation.
 - **Inflammaging**: Chronic, low-grade inflammation that increases with age and contributes to tissue dysfunction.
