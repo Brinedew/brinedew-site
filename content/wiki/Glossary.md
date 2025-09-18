@@ -180,6 +180,7 @@ aliases:
 ## Q
 
 - **Quiescence**: A reversible, non-dividing cell state where cells reduce metabolism and can re-enter the cell cycle at a later point.
+- **Quorum sensing**: coordination mechanism in bacteria, based on collective action upon secretion of autoinducer molecules, vulnerable to cheaters.
 
 ## R
 
