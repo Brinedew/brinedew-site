@@ -11,25 +11,24 @@ aliases:
 
 ## A
 
-- **Agent-based model (ABM)**: A simulation approach where individual agents (such as cells) follow rules whose interactions produce emergent tissue-level behavior.
+- **Agent-based model (ABM)**: Approach to simulation where individual entities (such as cells) are agents who follow a set of rules, and interactions between agents produce emergent behavior.
 - **Angiogenesis**: Formation of new blood vessels that supply nutrients and oxygen to growing tissues and tumors.
 - **Anoikis**: Programmed cell suicide triggered when cells lose appropriate attachment to the extracellular matrix.
-- **[[antagonistic-pleiotropy-theory|Antagonistic pleiotropy]]**: The idea that traits beneficial early in life can have harmful late-life effects such as aging or cancer risk.
-- **Apoptosis (intrinsic)**: A cell suicide pathway activated by the cell itself after intracellular stress or damage.
-- **Apoptosis (extrinsic)**: A cell suicide pathway activated by other cells
-- **Autophagy**: An intracellular recycling process that degrades damaged components to maintain homeostasis or survive stress.
+- **[[antagonistic-pleiotropy-theory|Antagonistic pleiotropy theory]]**: Idea that evolution selects genes which increase early-life fitness but decrease late-life fitness, contributing to aging.
+- **Apoptosis**: Cell suicide process initiated by the cell itself (intrinsic apoptosis) or by other cells (extrinsic apoptosis) after intracellular stress or oncogene activation.
+- **Autophagy**: Intracellular recycling process that degrades damaged components to maintain homeostasis or survive stress.
 
 ## B
 
-- **[[bcl-2|BCL-2]]**: An anti-apoptotic mitochondrial membrane protein that blocks cell death and can enable therapy resistance.
-- **[[beta-catenin-ctnnb1|Beta-catenin]]**: A Wnt pathway mediator that regulates gene expression and can drive proliferation when stabilized.
+- **[[bcl-2|BCL-2]]**: Anti-apoptotic mitochondrial membrane protein that blocks cell death and can enable therapy resistance.
+- **[[beta-catenin-ctnnb1|Beta-catenin]]**: Wnt pathway mediator that regulates gene expression and can drive proliferation when stabilized.
 
 ## C
 
-- **[[ctvt|Canine transmissible venereal tumor (CTVT)]]**: A naturally transmissible cancer lineage that spreads between dogs by cell transfer.
-- **[[caspase-3-casp3-p42574|Caspase-3]]**: An executioner protease in apoptosis that cleaves many substrates to dismantle the cell.
-- **Cell competition**: A process where fitter cells eliminate less-fit neighbors, helping maintain tissue quality.
-- **[[cellular-senescence|Cellular senescence]]**: Irreversible cell-cycle arrest with characteristic secretory changes that suppress tumors but can impair tissue function with age.
+- **[[ctvt|Canine transmissible venereal tumor (CTVT)]]**: Naturally transmissible cancer lineage that spreads between dogs by cell transfer.
+- **[[caspase-3-casp3-p42574|Caspase-3]]**: Executioner protease in apoptosis that cleaves many substrates to dismantle the cell.
+- **Cell competition**: Process where fitter cells eliminate less-fit neighbors, preserving tissue quality in the presence of mutation.
+- **[[cellular-senescence|Cellular senescence]]**: Irreversible cell proliferation arrest with specific secretory signature, suppresses tumors but can degrade tissue function.
 - **Chemokines**: Small secreted proteins that guide immune cell migration and shape inflammatory responses.
 - **Chemotaxis**: Directed cell movement along chemical gradients of attractants or repellents.
 - **Clonal cooperation**: Interactions between distinct cell clones that collectively enhance growth, survival, or invasion beyond what single clones achieve.
@@ -39,21 +38,22 @@ aliases:
 
 ## D
 
-- **[[death-pact|Death pact]]**: A governance rule that enforces organization-level priorities by triggering collective agent death under specific failures or contexts.
-- **[[de-darwinization|De-Darwinization]]**: An evolutionary pressure to reduce competition among cells in a multicellular organism.
-- **[[dftd|Devil facial tumor disease (DFTD)]]**: A transmissible cancer threatening Tasmanian devils that spreads by biting.
-- **DNA damage response (DDR)**: A cellular network that senses DNA lesions and coordinates repair, checkpoint activation, or cell death.
-- **[[disposable-soma-theory|Disposable soma theory]]**: The idea that limited resources favor reproduction over long-term somatic maintenance, contributing to aging.
-- **Driver mutation**: A genetic change to a cell within a tissue that confers it a fitness advantage over its peers and promotes cancer development.
+- **[[death-pact|Death pact]]**: Governance strategy that enforces organization-level priorities by triggering collective agent death under specific failures or contexts.
+- **[[de-darwinization|De-Darwinization]]**: Evolutionary pressure to reduce competition among cells in a multicellular organism.
+- **[[dftd|Devil facial tumor disease (DFTD)]]**: Transmissible cancer threatening Tasmanian devils that spreads by biting.
+- **DNA damage response (DDR)**: Cellular network that senses DNA lesions and coordinates repair, checkpoint activation, or cell death.
+- **[[disposable-soma-theory|Disposable soma theory]]**: Idea that evolution de-prioritizes long-term maintenance in favor of routing limited resources to reproduction, contributing to aging.
+- **Driver mutation**: Genetic change to a cell within a tissue that confers it a fitness advantage over its peers and promotes cancer development.
 
 ## E
 
-- **[[e2f1-e2f1-q01094|E2F transcription factors]]**: Proteins that drive expression of genes required for mitosis S-phase entry and are restrained by the RB pathway.
+- **[[e2f1-e2f1-q01094|E2F transcription factors]]**: Proteins that drive expression of cell proliferation genes required for mitosis S-phase entry.
+- **ECM**: ExtraCellular Matrix, a part of tissue outside of the cells, consisting of a network of macromolecules and minerals that provides structural and biochemical support to surrounding cells.
 - **ECM remodeling**: Changes to the extracellular matrix that alter tissue stiffness, signaling, and cell behavior, often via matrix metalloproteinases.
-- **EMT (epithelial-mesenchymal transition)**: A cell-state change that increases motility and invasiveness at the expense of epithelial traits.
+- **EMT (epithelial-mesenchymal transition)**: Cell identity shift from epithelial (sedentary) state to a mesenchymal (mobile) state, granting increased motility and invasiveness at the expense of .
 - **[[eutely|Eutely]]**: A developmental pattern in some species where adults have a fixed number of somatic cells and growth occurs only by cell enlargement.
 - **[[egfr-erbb1-p00533|EGFR signaling]]**: A receptor tyrosine kinase pathway activated by EGF that drives proliferation and survival and is often dysregulated in cancer.
-- **Extracellular matrix**: a part of tissue outside of the cells, consisting of a network of macromolecules and minerals that provides structural and biochemical support to surrounding cells.
+- 
 
 ## F
 
