@@ -1,11 +1,11 @@
 ---
 title: Glossary
 tags:
-- content/wiki
+  - content/wiki
 date: 2025-09-18
-draft: true
+draft: false
 aliases:
-- 
+  -
 ---
 # Glossary
 
