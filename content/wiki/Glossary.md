@@ -111,6 +111,7 @@ aliases:
 - **[[Indeterminate growth|Indeterminate growth]]**: A life-history pattern where organisms continue growing after maturity through continued cell proliferation.
 - **Inflammaging**: Persistent inflammation-like tissue state that increases with age and contributes to tissue dysfunction.
 - **Integrins:** Receptor proteins that connect cells to the extracellular matrix and relay mechanical and chemical signals.
+- **iPSC**: Induced Pluripotent Stem Cells, an adult somatic cell line that has been artificially induced to undergo reprogramming into a stem-like state.
 - **Iteroparity**: Life-history strategy where organisms reproduce multiple times over the lifespan, as opposed to semelparity (single reproduction event).
 
 ## J
@@ -230,3 +231,4 @@ aliases:
 ## Y
 
 - **[[yap-yap1|YAP]] / [[taz-wwtr1|TAZ]] – Hippo pathway**: Mechanosensitive signaling pathway that regulates organ size, cell proliferation and apoptosis via either YAP/TAZ (promoting proliferation) or Hippo (inhibiting proliferation)
+- **Yamanaka factors:** Transcription factors Oct-4, Sox2, Klf4 and Myc (aka OSKM) that, when simultaneously active in a cell line, reprogram it to an embryonic-like stem cell state (iPS cells)
