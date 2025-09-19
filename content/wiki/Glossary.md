@@ -129,7 +129,7 @@ aliases:
 - **Lineage commitment:** Step in embryogenesis where a developing cell narrows its options and chooses a particular future identity.
 - **Lineage hierarchy:** Ordered tree of stem cells, intermediate progenitors, and mature cells that builds and maintains a tissue.
 - **Lineage tracing:** Experimental methods that label cells and follow their descendants to map how tissues develop and regenerate.
-- **Loss of heterozygosity (LOH)**: A way to start a tumor: in cells where one copy of the tumor suppressor gene is mutated but the second copy of the tumor suppressor gene is healthy, deletion of the healthy copy makes the cell tumorigenic.
+- **Loss of heterozygosity (LOH)**: A way to start a tumor: in cells where one copy of the tumor suppressor gene is mutated but the second copy of the tumor suppressor gene is healthy, deletion of the only healthy copy makes the cell tumorigenic.
 
 ## M
 
