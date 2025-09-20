@@ -16,7 +16,7 @@ body {
   box-sizing: border-box;
   background-color: var(--light);
   font-family: var(--bodyFont);
-  color: var(--darkgray);
+  color: var(--dark);
 }
 
 .text-highlight {
@@ -29,18 +29,13 @@ body {
   color: var(--darkgray);
 }
 
+/* Let text inherit color from body/article; only enable hyphenation */
 p,
 ul,
-text,
-a,
-tr,
-td,
 ol,
-ul,
+li,
 .katex,
 .math {
-  color: var(--darkgray);
-  fill: var(--darkgray);
   hyphens: auto;
 }
 
@@ -175,7 +170,7 @@ a {
     & li:has(> input[type="checkbox"]:checked) {
       text-decoration: line-through;
       text-decoration-color: var(--gray);
-      color: var(--gray);
+      color: inherit;
     }
 
     & li > * {
