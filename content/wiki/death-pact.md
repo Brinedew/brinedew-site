@@ -1,8 +1,8 @@
 ---
 date: 2025-08-10
-draft: true
+draft: false
 tags:
-- content/wiki
+  - content/wiki
 title: Death Pact
 ---
 # Death Pact
