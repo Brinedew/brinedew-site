@@ -127,6 +127,7 @@ aliases:
 
 - **Lateral inhibition:** Tissue patterning mechanism where a cell adopting one fate actively prevents its neighbors from doing the same.
 - **LEGI (local excitation, global inhibition)**: Computation method that enables cell models to sense chemical gradients and adapt to them.
+- **[[Lewontin's conditions|Lewontin's conditions]]**: Three minimal requirements for evolution by natural selection: phenotypic variation, differential fitness, and heritability of fitness-related traits.
 - **Lineage commitment:** Step in embryogenesis where a developing cell narrows its options and chooses a particular future identity.
 - **Lineage hierarchy:** Ordered tree of stem cells, intermediate progenitors, and mature cells that builds and maintains a tissue.
 - **Lineage tracing:** Experimental methods that label cells and follow their descendants to map how tissues develop and regenerate.

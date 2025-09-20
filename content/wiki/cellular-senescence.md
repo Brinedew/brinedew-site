@@ -13,9 +13,9 @@ Irreversible cell cycle arrest accompanied by altered cellular metabolism and se
 
 Cells have built-in quality control systems that can permanently shut down damaged cells. Senescence is triggered through two primary pathways:
 
-**p53/p21 pathway**: When DNA gets damaged, cellular damage sensors (ATM-CHK2 proteins) activate p53, a master regulatory protein. p53 then turns on p21, which blocks the enzymes (CDKs) that normally drive cell division, stopping the cell in G1 phase before it can replicate.
+**p53/p21 pathway**: When DNA gets damaged, cellular damage sensors (ATM-CHK2 proteins) activate [[p53-tp53|p53]], a master regulatory protein. p53 then turns on [[p21cip1-cdkn1a|p21]], which blocks the enzymes (CDKs) that normally drive cell division, stopping the cell in G1 phase before it can replicate.
 
-**p16/RB pathway**: The p16 protein directly blocks cell-division enzymes (CDK4/6), which keeps the retinoblastoma (RB) proteins active. Active RB proteins prevent the cell from turning on genes needed for division (E2F factors), maintaining permanent shutdown.
+**p16/RB pathway**: The [[p16ink4a-cdkn2a|p16]] protein directly blocks cell-division enzymes (CDK4/6), which keeps the retinoblastoma (RB) proteins active. Active RB proteins prevent the cell from turning on genes needed for division ([[e2f1-e2f1-q01094|E2F factors]]), maintaining permanent shutdown.
 
 Recent research shows that [p21high and p16high cells represent distinct populations](https://molecular-cancer.biomedcentral.com/articles/10.1186/s12943-024-02096-7) with different functions and secretory profiles.
 
@@ -26,10 +26,10 @@ These pathways work in sequence: p53/p21 acts as the emergency brake when damage
 ## Senescence-associated secretory phenotype (SASP)
 
 Senescent cells secrete bioactive molecules including:
-- Inflammatory cytokines (IL-1β, IL-6, TNF-α)
+- Inflammatory cytokines (IL-1β, [[il-6|IL-6]], TNF-α)
 - Growth factors (PDGF, FGF)
 - Matrix metalloproteinases (MMP-1, MMP-3)
-- Chemokines (CCL2, CXCL8)
+- Chemokines (CCL2, [[il-8-cxcl8|CXCL8]])
 
 Recent studies identify distinct secretory profiles: p21-activated secretory phenotype (PASP) differs from classical SASP and [changes dynamically over time](https://pmc.ncbi.nlm.nih.gov/articles/PMC11564947/).
 

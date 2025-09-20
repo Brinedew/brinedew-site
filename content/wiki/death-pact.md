@@ -7,7 +7,7 @@ title: Death Pact
 ---
 # Death Pact
 
-A **death pact** is a cooperation strategy relying on an internally enforced collective-punishment mechanism, making any single member's defection catastrophically costly for all members. Death pacts serve as tools for solving principal-agent and collective action problems by turning passive beneficiaries of compliance into active, self-interested enforcers.
+A **death pact** is a cooperation strategy relying on an internally enforced collective-punishment mechanism, making any single member's defection catastrophically costly for all members. Death pacts serve as tools for solving [[principal-agent-problem|principal-agent]] and collective action problems by turning passive beneficiaries of compliance into active, self-interested enforcers.
 ## Core Logic and Mechanism
 
 The primary function of a death pact is to solve the free-rider problem in mutual monitoring. 
@@ -94,12 +94,12 @@ The organization of multicellular life offers a powerful, if imperfect, analogy.
 
 - In **facultative multicellularity** (e.g., slime molds), where cells can switch between solitary and collective states, the "pact" is temporary. Cheating—where some cells contribute less to the collective good (the stalk) to favor their own transmission (the spores)—is a persistent evolutionary problem.
     
-- In **obligate multicellularity** (e.g., vertebrates), the pact is absolute and enforced by iron-clad mechanisms of **somatic de-Darwinization**. A developmental bottleneck (starting from a single cell) and germline sequestration ensure that only a specialized lineage of cells can reproduce the whole. The immune system acts as a brutal policing mechanism. Widespread cellular defection (**cancer**) represents a breach of this pact, which typically ends in the death of the host—and the rebelling cells with it.
+- In **obligate multicellularity** (e.g., vertebrates), the pact is absolute and enforced by iron-clad mechanisms of **[[De-Darwinization|somatic de-Darwinization]]**. A developmental bottleneck (starting from a single cell) and germline sequestration ensure that only a specialized lineage of cells can reproduce the whole. The immune system acts as a brutal policing mechanism. Widespread cellular defection (**cancer**) represents a breach of this pact, which typically ends in the death of the host—and the rebelling cells with it.
     
 
 ## See Also
 
-- De-Darwinization
+- [[De-Darwinization]]
     
 - Doomsday device
     
@@ -109,7 +109,7 @@ The organization of multicellular life offers a powerful, if imperfect, analogy.
     
 - Mutual monitoring
     
-- Principal-agent problem
+- [[principal-agent-problem|Principal-agent problem]]
     
 - Proof-of-stake
     
