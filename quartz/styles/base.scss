@@ -169,7 +169,8 @@ a {
 
     & li:has(> input[type="checkbox"]:checked) {
       text-decoration: line-through;
-      text-decoration-color: var(--gray);
+      /* Match strike color to current text color for both themes */
+      text-decoration-color: currentColor;
       color: inherit;
     }
 
@@ -535,6 +536,9 @@ th {
   text-align: left;
   padding: 0.4rem 0.7rem;
   border-bottom: 2px solid var(--gray);
+  /* Ensure table headers use site font */
+  font-family: "Crimson Pro", serif;
+  font-weight: 600;
 }
 
 td {
