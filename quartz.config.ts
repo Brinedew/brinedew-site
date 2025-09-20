@@ -3,7 +3,7 @@ import * as Plugin from "./quartz/plugins"
 
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "The Brinedew Essays",
+    pageTitle: "B",
     enableSPA: true,
     enablePopovers: true,
     analytics: null,
