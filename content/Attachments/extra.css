@@ -473,3 +473,13 @@
   max-width: 100%;
   height: auto;
 }
+
+/* Ensure list markers match body text color in all themes */
+.md-typeset ul,
+.md-typeset ol {
+  color: var(--md-default-fg-color) !important;
+}
+
+.md-typeset li::marker {
+  color: var(--md-default-fg-color) !important;
+}

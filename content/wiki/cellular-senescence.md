@@ -62,7 +62,7 @@ This accumulation contributes to age-related tissue dysfunction and chronic infl
 ## Related mechanisms
 
 - [[tumor-suppressor-theory-of-aging]] - senescence as a driver of aging through tumor suppression
-- [[p53-guardian]] - key regulator of senescence induction
+- [[p53-tp53|p53]] - key regulator of senescence induction
 - [[telomeres]] - telomere shortening triggers senescence
 
 ---

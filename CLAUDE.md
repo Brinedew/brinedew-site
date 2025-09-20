@@ -35,7 +35,7 @@ Don't overthink it. Edit anywhere, publish from PC, CI does the rest.
 
 - `content/` - **main Obsidian vault** with all markdown content
 - `content/.obsidian/` - Obsidian vault settings and plugins (shared across devices)
-- `content/posts/` - blog posts with `type/post` tags
+- `content/posts/` - blog posts with `content/post` tags
 - `content/wiki/` - **flat structure** with tag-based organization
 - `content/Attachments/` - images and Excalidraw drawings
 - `content/Templates/` - QuickAdd templates for posts, wiki pages, proteins
@@ -166,9 +166,9 @@ This survives Quartz's dynamic navigation and won't get nuked by migration scrip
 `content/wiki/` uses **flat organization with tags** instead of folder hierarchy. All 65+ wiki entries live directly in `/wiki/` root.
 
 **Current tag taxonomy:**
-- `type/wiki` - all wiki content
-- `type/post` - blog posts
-- `type/apps` - interactive pages
+- `content/wiki` - all wiki content
+- `content/post` - blog posts
+- `content/apps` - interactive pages
 - `meta` - technical, infrastructure and maintenance pages
 - `protein` tag for protein pages (AKT, p53, etc.)
 
@@ -354,8 +354,8 @@ If you encounter components with inline CSS/JS (legacy code), don't copy those p
 
 **Current working setup:**
 - **Ctrl+N** opens multi-choice dialog: Post, Wiki Page, Protein Page
-- **Post template** creates in `posts/` with `type/post` tag and draft: true
-- **Wiki template** creates in `wiki/` with `type/wiki` tag
+- **Post template** creates in `posts/` with `content/post` tag and draft: true
+- **Wiki template** creates in `wiki/` with `content/wiki` tag
 - **Protein template** creates structured protein pages with UniProt fields
 - All templates use proper frontmatter with title, date, tags
 

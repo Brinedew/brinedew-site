@@ -2,8 +2,9 @@
 title: BCL‑2
 tags:
   - protein
+  - content/wiki
 date: 2025-08-21
-draft: true
+draft: false
 aliases: []
 symbol: BCL2
 mass: 26.3

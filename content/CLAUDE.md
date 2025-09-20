@@ -12,15 +12,15 @@ draft: true
 
 **Problem that happened:** Date and tags fields got merged in YAML like this:
 ```yaml
-date: "2025-08-10tags: [type/post, topic/cancer]"
+date: "2025-08-10tags: [content/post, topic/cancer]"
 ```
 
 **How to spot it:** Files show up as "untagged" in Obsidian even though they look like they have tags.
 
 **How to fix it:** Use MultiEdit to surgically replace just the broken frontmatter:
 ```javascript
-old_string: 'date: "2025-08-10tags: [type/post, topic/cancer]"'
-new_string: 'date: 2025-08-10\ntags: [type/post, topic/cancer]'
+old_string: 'date: "2025-08-10tags: [content/post, topic/cancer]"'
+new_string: 'date: 2025-08-10\ntags: [content/post, topic/cancer]'
 ```
 
 **Don't** use the Obsidian MCP patch tool for frontmatter - it creates nested YAML that's even more broken.
@@ -30,9 +30,9 @@ new_string: 'date: 2025-08-10\ntags: [type/post, topic/cancer]'
 `content/wiki/` is now flat - everything lives directly in `wiki/` with tags instead of folders.
 
 **Tag system for new content:**
-- `type/wiki` - all wiki content
-- `type/post` - all posts
-- `type/apps` - all apps
+- `content/wiki` - all wiki content
+- `content/post` - all posts
+- `content/apps` - all apps
 - `meta` - technical site maintenance
 
 **To add new wiki content:**
@@ -71,7 +71,7 @@ new_string: 'date: 2025-08-10\ntags: [type/post, topic/cancer]'
 ---
 title: "Your Post Title"
 date: 2025-08-10
-tags: [type/post]
+tags: [content/post]
 ---
 ```
 
@@ -80,7 +80,7 @@ tags: [type/post]
 ---
 title: "Concept Name"
 date: 2025-08-10
-tags: [type/wiki]
+tags: [content/wiki]
 aliases:
   - old-path/concept-name
   - concept-name
@@ -91,7 +91,7 @@ aliases:
 ```yaml
 ---
 title: "App Name"
-tags: [type/app]
+tags: [content/apps]
 noindex: false
 ---
 ```

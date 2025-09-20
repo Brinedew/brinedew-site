@@ -6,90 +6,90 @@ const migrationMap = {
   // Concepts
   'wiki/concepts/de-darwinization.md': {
     target: 'wiki/de-darwinization.md',
-    tags: ['type/wiki', 'category/concept', 'topic/biology', 'topic/evolution', 'status/complete'],
+    tags: ['content/wiki', 'category/concept', 'topic/biology', 'topic/evolution', 'status/complete'],
     aliases: ['wiki/concepts/de-darwinization', 'concepts/de-darwinization']
   },
   'wiki/concepts/de-darwinization-v2.md': {
     target: 'wiki/de-darwinization-v2.md',
-    tags: ['type/wiki', 'category/concept', 'topic/biology', 'topic/evolution', 'status/complete'],
+    tags: ['content/wiki', 'category/concept', 'topic/biology', 'topic/evolution', 'status/complete'],
     aliases: ['wiki/concepts/de-darwinization-v2', 'concepts/de-darwinization-v2']
   },
   
   // Mechanisms  
   'wiki/mechanisms/immune-surveillance.md': {
     target: 'wiki/immune-surveillance.md',
-    tags: ['type/wiki', 'category/mechanism', 'topic/biology', 'topic/aging', 'status/stub'],
+    tags: ['content/wiki', 'category/mechanism', 'topic/biology', 'topic/aging', 'status/stub'],
     aliases: ['wiki/mechanisms/immune-surveillance', 'mechanisms/immune-surveillance']
   },
   'wiki/mechanisms/p53-guardian.md': {
     target: 'wiki/p53-guardian.md', 
-    tags: ['type/wiki', 'category/mechanism', 'protein/p53', 'topic/aging', 'topic/cancer', 'status/stub'],
+    tags: ['content/wiki', 'category/mechanism', 'protein/p53', 'topic/aging', 'topic/cancer', 'status/stub'],
     aliases: ['wiki/mechanisms/p53-guardian', 'mechanisms/p53-guardian']
   },
   'wiki/mechanisms/telomeres.md': {
     target: 'wiki/telomeres.md',
-    tags: ['type/wiki', 'category/mechanism', 'topic/aging', 'mechanism/telomeres', 'status/stub'], 
+    tags: ['content/wiki', 'category/mechanism', 'topic/aging', 'mechanism/telomeres', 'status/stub'], 
     aliases: ['wiki/mechanisms/telomeres', 'mechanisms/telomeres']
   },
   'wiki/mechanisms/weismann-barrier.md': {
     target: 'wiki/weismann-barrier.md',
-    tags: ['type/wiki', 'category/mechanism', 'topic/biology', 'topic/evolution', 'status/stub'],
+    tags: ['content/wiki', 'category/mechanism', 'topic/biology', 'topic/evolution', 'status/stub'],
     aliases: ['wiki/mechanisms/weismann-barrier', 'mechanisms/weismann-barrier']
   },
   
   // Theories
   'wiki/theories/Atavistic-theory-of-cancer.md': {
     target: 'wiki/atavistic-theory-of-cancer.md',
-    tags: ['type/wiki', 'category/theory', 'topic/cancer', 'topic/evolution', 'theory/atavistic', 'status/stub'],
+    tags: ['content/wiki', 'category/theory', 'topic/cancer', 'topic/evolution', 'theory/atavistic', 'status/stub'],
     aliases: ['wiki/theories/Atavistic-theory-of-cancer', 'theories/atavistic-theory-of-cancer']
   },
   'wiki/theories/antagonistic-pleiotropy-theory.md': {
     target: 'wiki/antagonistic-pleiotropy-theory.md', 
-    tags: ['type/wiki', 'category/theory', 'topic/aging', 'theory/antagonistic-pleiotropy', 'status/complete'],
+    tags: ['content/wiki', 'category/theory', 'topic/aging', 'theory/antagonistic-pleiotropy', 'status/complete'],
     aliases: ['wiki/theories/antagonistic-pleiotropy-theory', 'theories/antagonistic-pleiotropy-theory']
   },
   'wiki/theories/defensive-degeneration-theory.md': {
     target: 'wiki/defensive-degeneration-theory.md',
-    tags: ['type/wiki', 'category/theory', 'topic/aging', 'theory/defensive-degeneration', 'status/stub'], 
+    tags: ['content/wiki', 'category/theory', 'topic/aging', 'theory/defensive-degeneration', 'status/stub'], 
     aliases: ['wiki/theories/defensive-degeneration-theory', 'theories/defensive-degeneration-theory']
   },
   'wiki/theories/disposable-soma-theory.md': {
     target: 'wiki/disposable-soma-theory.md',
-    tags: ['type/wiki', 'category/theory', 'topic/aging', 'theory/disposable-soma', 'status/stub'],
+    tags: ['content/wiki', 'category/theory', 'topic/aging', 'theory/disposable-soma', 'status/stub'],
     aliases: ['wiki/theories/disposable-soma-theory', 'theories/disposable-soma-theory']
   },
   'wiki/theories/selection-shadow-theory.md': {
     target: 'wiki/selection-shadow-theory.md',
-    tags: ['type/wiki', 'category/theory', 'topic/aging', 'theory/selection-shadow', 'status/stub'],
+    tags: ['content/wiki', 'category/theory', 'topic/aging', 'theory/selection-shadow', 'status/stub'],
     aliases: ['wiki/theories/selection-shadow-theory', 'theories/selection-shadow-theory']
   },
   'wiki/theories/tumor-suppressor-theory-of-aging.md': {
     target: 'wiki/tumor-suppressor-theory-of-aging.md',
-    tags: ['type/wiki', 'category/theory', 'topic/aging', 'topic/cancer', 'theory/tumor-suppressor', 'status/stub'],
+    tags: ['content/wiki', 'category/theory', 'topic/aging', 'topic/cancer', 'theory/tumor-suppressor', 'status/stub'],
     aliases: ['wiki/theories/tumor-suppressor-theory-of-aging', 'theories/tumor-suppressor-theory-of-aging']
   },
   
   // Organisms - cancer lineages
   'wiki/organisms/cancer-lineages/ctvt.md': {
     target: 'wiki/ctvt.md',
-    tags: ['type/wiki', 'category/organism', 'organism/cancer-cell-line', 'specific/ctvt', 'topic/cancer', 'status/stub'],
+    tags: ['content/wiki', 'category/organism', 'organism/cancer-cell-line', 'specific/ctvt', 'topic/cancer', 'status/stub'],
     aliases: ['wiki/organisms/cancer-lineages/ctvt', 'organisms/cancer-lineages/ctvt', 'cancer-lineages/ctvt']
   },
   'wiki/organisms/cancer-lineages/dftd.md': {
     target: 'wiki/dftd.md', 
-    tags: ['type/wiki', 'category/organism', 'organism/cancer-cell-line', 'specific/dftd', 'topic/cancer', 'status/stub'],
+    tags: ['content/wiki', 'category/organism', 'organism/cancer-cell-line', 'specific/dftd', 'topic/cancer', 'status/stub'],
     aliases: ['wiki/organisms/cancer-lineages/dftd', 'organisms/cancer-lineages/dftd', 'cancer-lineages/dftd']
   },
   'wiki/organisms/cancer-lineages/hela.md': {
     target: 'wiki/hela.md',
-    tags: ['type/wiki', 'category/organism', 'organism/cancer-cell-line', 'specific/hela', 'topic/cancer', 'status/stub'], 
+    tags: ['content/wiki', 'category/organism', 'organism/cancer-cell-line', 'specific/hela', 'topic/cancer', 'status/stub'], 
     aliases: ['wiki/organisms/cancer-lineages/hela', 'organisms/cancer-lineages/hela', 'cancer-lineages/hela']
   },
   
   // Proteins
   'wiki/proteins/oncogenes/oncogene-classification.md': {
     target: 'wiki/oncogene-classification.md',
-    tags: ['type/wiki', 'category/protein', 'protein/oncogene', 'topic/cancer', 'status/stub'],
+    tags: ['content/wiki', 'category/protein', 'protein/oncogene', 'topic/cancer', 'status/stub'],
     aliases: ['wiki/proteins/oncogenes/oncogene-classification', 'proteins/oncogenes/oncogene-classification', 'oncogenes/oncogene-classification']
   }
 };

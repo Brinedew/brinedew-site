@@ -50,7 +50,7 @@ if (-not (Test-Path $postTemplate)) {
 ---
 title: {{VALUE:title}}
 tags:
-  - type/post
+  - content/post
 date: {{DATE:YYYY-MM-DD}}
 status: draft
 ---

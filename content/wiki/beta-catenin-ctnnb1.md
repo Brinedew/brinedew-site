@@ -4,7 +4,7 @@ tags:
   - protein
   - content/wiki
 date: 2025-08-21
-draft: true
+draft: false
 aliases:
   - CTNNB1
   - beta-catenin

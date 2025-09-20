@@ -1,7 +1,9 @@
 ---
 title: "Antagonistic Pleiotropy Theory"
 date: 2025-08-10
-draft: true
+draft: false
+tags:
+  - content/wiki
 ---
 
 # Antagonistic Pleiotropy Theory

@@ -59,7 +59,7 @@ const TAG_RULES = [
   { prefix: 'wiki/concepts', add: ['category/concept'] },
 ];
 
-const BASE_TAGS = ['type/wiki']; // always present
+const BASE_TAGS = ['content/wiki']; // always present
 
 // Files that should be treated as backups and moved out of the build path.
 const BACKUP_PATTERNS = [

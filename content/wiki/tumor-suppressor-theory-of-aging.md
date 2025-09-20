@@ -1,6 +1,6 @@
 ---
 date: 2025-08-10
-draft: true
+draft: false
 tags:
 - content/wiki
 title: Tumor Suppressor Theory of Aging
@@ -58,7 +58,7 @@ This theory connects directly to several other aging mechanisms:
 
 - [[cellular-senescence]] - the end result of chronic tumor suppressor activation
 - [[disposable-soma-theory]] - another theory about evolutionary trade-offs in aging
-- [[p53-guardian]] - the key protein that mediates this trade-off
+- [[p53-tp53|p53]] - the key protein that mediates this trade-off
 
 The tumor suppressor theory doesn't explain all of aging, but it provides a framework for understanding why organisms that are so good at preventing cancer still age and die.
 
