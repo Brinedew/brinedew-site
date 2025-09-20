@@ -207,9 +207,8 @@ a {
       grid-template-areas: #{map.get($mobileGrid, templateAreas)};
     }
 
-    @media all and not ($desktop) {
-      padding: 0 1rem;
-    }
+    /* Consistent small side gutters on all breakpoints */
+    padding: 0 1rem;
     @media all and ($mobile) {
       margin: 0 auto;
     }
