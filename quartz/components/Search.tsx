@@ -37,7 +37,7 @@ export default ((userOpts?: Partial<SearchOptions>) => {
               name="search"
               type="text"
               aria-label={searchPlaceholder}
-              placeholder={searchPlaceholder}
+              placeholder=""
             />
             <div class="search-layout" data-preview={opts.enablePreview}></div>
           </div>
