@@ -138,8 +138,20 @@ a {
 }
 
 .flex-component .page-title .site-logo {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
+}
+
+/* On mobile, hide the inline logo next to the search bar and keep only the top logo */
+@media all and ($mobile) {
+  .sidebar.left .flex-component .page-title {
+    display: none !important;
+  }
+  /* If shown in other contexts, prefer smaller icon on mobile */
+  .flex-component .page-title .site-logo {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 .desktop-only {
