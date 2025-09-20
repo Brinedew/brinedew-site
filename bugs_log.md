@@ -3,6 +3,48 @@
 
 ## Open Issues 🔴
 
+### BUG-009: MkDocs Material Theme Remnants in Quartz Site 🔴
+**Status**: 🔴 **ACTIVE** - September 21, 2025
+**Issue**: Found leftover MkDocs Material theme code that's incompatible with Quartz's theming system, causing theme toggle failures and styling issues.
+
+**Root Cause**: During MkDocs→Quartz migration, custom CSS and JavaScript files retained MkDocs Material-specific selectors, variables, and patterns instead of being converted to Quartz equivalents.
+
+**Files Affected**:
+- `content/Attachments/extra.css` (lines 231-273) - Contains MkDocs theme selectors and variables
+- `content/Attachments/theme-toggle.js` (entire file) - Uses MkDocs theme switching logic
+
+**MkDocs Remnants Found**:
+
+**In extra.css:**
+- CSS Variables: `--md-text-font`, `--md-code-font`, `--md-default-fg-color*`, `--md-accent-fg-color`, etc.
+- Selectors: `.md-typeset`, `.md-tabs__theme-toggle`, `.md-header*`, `.md-nav*`, `.md-sidebar*`, etc.
+- Data attributes: `[data-md-color-scheme="slate"]`, `[data-md-color-scheme="default"]`
+
+**In theme-toggle.js:**
+- Theme detection: `getCurrentScheme() === 'slate'` (should check for 'dark')
+- DOM attributes: Setting `data-md-color-scheme` (should set `data-theme`)
+- Palette inputs: `input[data-md-color-scheme="slate"]` (don't exist in Quartz)
+- Storage: `localStorage.setItem('data-md-color-scheme', ...)` (wrong storage pattern)
+
+**Expected Quartz Patterns**:
+- Use `data-theme="dark|light"` instead of `data-md-color-scheme="slate|default"`
+- Target Quartz's actual DOM structure (check existing Quartz components)
+- Use Quartz CSS custom properties from `quartz.config.ts` theme configuration
+- Follow pattern from `quartz/util/theme.ts:164`: `:root[data-theme="dark"]`
+
+**Impact**:
+- Theme toggle doesn't work properly (flipping switches that control nothing)
+- CSS trying to style elements that don't exist in Quartz's DOM structure
+- Inconsistent theming behavior between different parts of site
+
+**Solution Required**: Convert MkDocs Material theme code to Quartz theme patterns
+1. Replace all `.md-*` selectors with Quartz equivalents
+2. Convert `data-md-color-scheme` to `data-theme` in both CSS and JS
+3. Update CSS variables to use Quartz's theme system
+4. Rewrite theme toggle logic to work with Quartz's theming
+
+**Discovery Method**: Systematic search for MkDocs references + Gemini analysis of theme mismatches
+
 ### BUG-008: Lineage Shim Content Scrambling - CRITICAL 🔴
 **Status**: 🔴 **CRITICAL UNRESOLVED** - September 6, 2025
 **Issue**: Lineage shim plugin completely scrambles content-to-section associations during save operations, corrupting document structure.
