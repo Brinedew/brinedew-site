@@ -174,9 +174,9 @@ $$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
 
 1. First item
 2. Second item
-   3. Nested item
-   4. Another nested item
-5. Third item
+	1. Nested item
+	2. Another nested item
+3. Third item
 ### Unordered Lists
 
 - First bullet
