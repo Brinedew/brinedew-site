@@ -12,7 +12,9 @@ draft: true
 
 Every multicellular organism faces the same basic problem: keeping trillions of cells working together when evolution originally trained them to compete. Your cells descend from billions of years of single-celled ancestors that got really good at outcompeting their neighbors. But now those same cellular descendants have to cooperate to build and maintain complex organisms.
 
-**De-darwinization** is the collection of mechanisms that solve this cooperation problem. Natural selection built systems that suppress natural selection - using evolution to prevent evolution from happening inside organisms. The result is a hierarchy where what's good for the organism trumps what's good for individual cells.
+**De-darwinization** is the collection of mechanisms that suppress intra-entity evolution is a general principle in **major transitions** (unicells to multicells, cells to colonies, etc.). For instance, a review on plant evolution calls the process _“variously dubbed de-Darwinization or machinification”_ and notes _“this concept also applies to eusocial insects”_ just as it does to cells in an organism. Thus, de-Darwinization is a unifying idea across biology wherever cooperation must trump competition.
+
+this cooperation problem. Natural selection built systems that suppress natural selection - using evolution to prevent evolution from happening inside organisms. The result is a hierarchy where what's good for the organism trumps what's good for individual cells.
 
 When de-darwinization breaks down, you get cancer - cells reverting to their ancestral competitive behavior and growing without regard for the organism's welfare. When it works too well, you get aging - the cellular police state that prevents cancer also prevents effective tissue repair and regeneration.
 
