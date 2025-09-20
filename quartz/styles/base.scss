@@ -126,6 +126,20 @@ a {
 
 .flex-component {
   display: flex;
+  align-items: center; /* vertically center icons and controls */
+}
+
+/* Compact logo alignment when PageTitle is used inside control row */
+.flex-component .page-title {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  line-height: 1;
+}
+
+.flex-component .page-title .site-logo {
+  width: 20px;
+  height: 20px;
 }
 
 .desktop-only {
