@@ -474,12 +474,7 @@
   height: auto;
 }
 
-/* Ensure list markers match body text color in all themes */
-.md-typeset ul,
-.md-typeset ol {
-  color: var(--md-default-fg-color) !important;
-}
-
-.md-typeset li::marker {
+/* Ensure list text uses the standard body color in all themes */
+.md-typeset li {
   color: var(--md-default-fg-color) !important;
 }
