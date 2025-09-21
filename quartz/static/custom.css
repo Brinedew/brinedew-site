@@ -64,22 +64,38 @@ body {
   /* Dark mode: True dark academia with softer text */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
-      --light: oklch(8% 0.02 45);       /* Rich dark background */
-      --lightgray: oklch(18% 0.02 50);  /* Dark warm gray */
-      --gray: oklch(40% 0.025 55);      /* Medium warm gray */
-      --darkgray: oklch(62% 0.02 60);   /* Light warm gray */
-      --dark: oklch(85% 0.015 65);      /* Soft warm white - not harsh */
-      --accent: oklch(68% 0.08 185);    /* Brighter teal for dark mode */
-      
-      --ui-border: oklch(20% 0.025 50);
-      --ui-bg: oklch(12% 0.02 45);
-      
-      --secondary: oklch(70% 0.02 60);  /* Lighter secondary for dark mode */
-      --tertiary: var(--accent);         /* Use accent for tertiary - unified teal */
+      /* Synced to explicit :root[data-theme="dark"] values to avoid first-paint flash */
+      --light: oklch(16% 0.01 45);
+      --lightgray: oklch(36% 0.02 50);
+      --gray: oklch(58% 0.025 55);
+      --darkgray: oklch(80% 0.02 60);
+      --dark: oklch(85% 0.015 65);
+      --accent: oklch(68% 0.08 185);
+
+      --ui-border: oklch(38% 0.025 50);
+      --ui-bg: oklch(30% 0.02 45);
+
+      --secondary: oklch(70% 0.02 60);
+      --tertiary: var(--accent);
     }
   }
 }
 
+/* =============================================================
+   THIS IS THE ONLY PLACE WHERE YOU SHOULD EDIT RUNTIME COLORS
+   -------------------------------------------------------------
+   Edit the explicit theme palettes below. These control the
+   on-page colors at runtime when data-theme is set by JS.
+
+   Do NOT hand-edit the palettes in @layer base or the
+   prefers-color-scheme fallback above; those exist to avoid
+   first-paint flashes and for no-JS users only.
+
+   Note: Build-time assets (OG images, RSS, sitemap) still use
+   the palette in quartz.config.ts. Changing values here will not
+   affect those generated assets; rebuild with updated config if
+   you want them to match.
+   ============================================================= */
 /* User choice ALWAYS wins */
 :root[data-theme="light"] {
   --light: oklch(96% 0.015 75);

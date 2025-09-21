@@ -85,12 +85,36 @@ export default (() => {
         <link rel="icon" href={iconPath} />
         <meta name="description" content={description} />
         <meta name="generator" content="Quartz" />
-        
+
+        {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('theme');if(t){document.documentElement.setAttribute('data-theme',t)}}catch(e){}`,
+          }}
+        />
+
         {/* Load Quartz CSS first */}
         {css.map((resource) => CSSResourceToStyleElement(resource, true))}
-        
-        {/* Custom CSS last with self-hosted fonts */}
-        <link href="/static/custom.css?v=a7f434e" rel="stylesheet" type="text/css" />
+
+        {/* Preload critical assets to reduce flash (fonts, logo mask) */}
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/static/fonts/CrimsonPro-VariableFont_wght.woff2"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/static/fonts/IBMPlexMono-Regular.woff2"
+          crossOrigin="anonymous"
+        />
+        <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
+
+        {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
+        <link href="/static/custom.css?v=bio1" rel="stylesheet" type="text/css" />
         
         {/* Scriptotic app assets */}
         <link rel="stylesheet" href="/static/apps/scriptotic/app.css?v=1" />
