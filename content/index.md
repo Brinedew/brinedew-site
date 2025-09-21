@@ -9,4 +9,4 @@ Personal research notes on molecular cell biology through the lens of agents, co
 
 [[https://brinedew.com/tags/content/post|Posts]] are for my longform takes, personal opinions and informed speculation - no AI writing.
 
-If you're looking for an introductory post, read [[posts/the-price-of-not-being-cancer-v3|The Price of Not Being Cancer]]
+If you're looking for an introductory post, I would recommend  [[posts/the-price-of-not-being-cancer-v3|The Price of Not Being Cancer]]
