@@ -95,15 +95,16 @@ body {
 }
 
 :root[data-theme="dark"] {
-  --light: oklch(8% 0.02 45);
-  --lightgray: oklch(18% 0.02 50);
-  --gray: oklch(40% 0.025 55);
-  --darkgray: oklch(62% 0.02 60);
-  --dark: oklch(85% 0.015 65);
-  --accent: oklch(68% 0.08 185);
-  --ui-border: oklch(20% 0.025 50);
-  --ui-bg: oklch(12% 0.02 45);
-  --secondary: oklch(70% 0.02 60);
+  /* Dark mode: doubled background brightness while preserving contrast offsets */
+  --light: oklch(56% 0.02 45);      /* was 8% */
+  --lightgray: oklch(36% 0.02 50);  /* was 18% (bg+10) */
+  --gray: oklch(58% 0.025 55);      /* was 40% (bg+32) */
+  --darkgray: oklch(80% 0.02 60);   /* was 62% (bg+54) */
+  --dark: oklch(85% 0.015 65);      /* body text unchanged */
+  --accent: oklch(68% 0.08 185);    /* unchanged */
+  --ui-border: oklch(38% 0.025 50); /* was 20% (bg+12) */
+  --ui-bg: oklch(30% 0.02 45);      /* was 12% (bg+4) */
+  --secondary: oklch(70% 0.02 60);  /* unchanged */
   --tertiary: var(--accent);
 }
 
@@ -189,7 +190,7 @@ a:hover {
 .search svg {
   width: 20px;
   height: 20px;
-  fill: var(--darkgray);
+  fill: currentColor;
   transition: opacity 0.1s ease;
 }
 
@@ -197,6 +198,14 @@ a:hover {
 .search p {
   display: none;
 }
+
+/* Hide placeholder text inside the search input */
+.search-bar::placeholder { color: transparent; }
+/* Vendor placeholders for broader support */
+.search-bar::-webkit-input-placeholder { color: transparent; }
+.search-bar::-moz-placeholder { color: transparent; }
+.search-bar:-ms-input-placeholder { color: transparent; }
+.search-bar:-moz-placeholder { color: transparent; }
 
 /* Make backlinks subtle, not dominant */
 .backlinks {
@@ -269,6 +278,21 @@ img {
 :root {
   --content-width: 750px;
   --right-sidebar-width: 250px;
+}
+
+/* Fix: Table headers should use site font (Crimson Pro) */
+article table th {
+  font-family: "Crimson Pro", serif !important;
+  font-weight: 600;
+  color: inherit;
+}
+
+/* Fix: Task list strike-through should match current text color */
+article li:has(> input[type="checkbox"]:checked) {
+  text-decoration: line-through;
+  text-decoration-color: currentColor !important;
+  text-decoration-thickness: 1px;
+  color: inherit;
 }
 
 /* Fix Explorer Sidebar - Remove Blue Colors and Bold Text */
@@ -424,3 +448,4 @@ ul.toc-content.overflow {
     }
   }
 }
+
