@@ -8,7 +8,7 @@ const config: QuartzConfig = {
     enablePopovers: true,
     analytics: null,
     locale: "en-US",
-    baseUrl: "brinedew.com",
+    baseUrl: "brinedew.bio",
     ignorePatterns: [
       // existing
       "private",
