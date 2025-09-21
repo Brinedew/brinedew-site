@@ -15,8 +15,8 @@
     width: 20px;
     height: 20px;
     top: calc(50% - 10px);
-    fill: var(--darkgray);
-    stroke: var(--darkgray);
+    fill: currentColor;
+    stroke: currentColor;
     transition: opacity 0.1s ease;
   }
 }

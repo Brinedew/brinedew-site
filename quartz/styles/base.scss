@@ -127,6 +127,8 @@ a {
 .flex-component {
   display: flex;
   align-items: center; /* vertically center icons and controls */
+  /* Unify default icon/text color; hover state below */
+  color: var(--darkgray);
 }
 
 /* Compact logo alignment when PageTitle is used inside control row */
@@ -152,6 +154,19 @@ a {
     width: 20px;
     height: 20px;
   }
+}
+
+/* Hover highlight: make links/buttons adopt accent color, icons follow via currentColor */
+.flex-component a {
+  color: inherit;
+  text-decoration: none;
+}
+.flex-component button {
+  color: inherit;
+}
+.flex-component a:hover,
+.flex-component button:hover {
+  color: var(--accent);
 }
 
 .desktop-only {

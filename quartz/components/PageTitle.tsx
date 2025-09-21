@@ -20,6 +20,8 @@ PageTitle.css = `
   font-size: 1.75rem;
   margin: 0;
   font-family: var(--titleFont);
+  /* Unify default logo color to match icons */
+  color: var(--darkgray);
 }
 
 .page-title .site-brand {
@@ -32,8 +34,8 @@ PageTitle.css = `
   display: inline-block;
   width: 28px;
   height: 28px;
-  /* Paint the glyph using the unified icon/text token */
-  background-color: var(--darkgray);
+  /* Paint the glyph using the surrounding text color */
+  background-color: currentColor;
   /* Use the rotated B PNG as a mask to keep transparent background */
   -webkit-mask-image: url('/static/logo-mask.png');
   mask-image: url('/static/logo-mask.png');
