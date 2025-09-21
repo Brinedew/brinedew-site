@@ -96,7 +96,7 @@ body {
 
 :root[data-theme="dark"] {
   /* Dark mode: doubled background brightness while preserving contrast offsets */
-  --light: oklch(16% 0.02 45);      /* was 8% */
+  --light: oklch(16% 0.01 45);      /* was 8% */
   --lightgray: oklch(36% 0.02 50);  /* was 18% (bg+10) */
   --gray: oklch(58% 0.025 55);      /* was 40% (bg+32) */
   --darkgray: oklch(80% 0.02 60);   /* was 62% (bg+54) */
