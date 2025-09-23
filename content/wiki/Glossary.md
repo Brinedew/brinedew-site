@@ -11,9 +11,15 @@ aliases:
 
 ## A
 
-- **Agent-based model (ABM)**: Approach to simulation where individual entities (such as cells) are agents who follow a set of rules, and interactions between agents produce emergent behavior.
-- **Allele:** One of several forms of the same gene, for example the ABCC11 gene has alleles 538G (wet earwax) and 538A (dry earwax).
-- **Anabolism**: Constructive metabolic processes where complex biomolecules are built from the simpler ones, consuming energy.
+**Agent-based model (ABM)**
+Approach to simulation where individual entities (such as cells) are agents who follow a set of rules, and interactions between agents produce emergent behavior.
+
+**Allele**
+One of several forms of the same gene, for example the ABCC11 gene has alleles 538G (wet earwax) and 538A (dry earwax).
+
+**Anabolism**
+Constructive metabolic processes where complex biomolecules are built from the simpler ones, consuming energy.
+
 - **Aneuploidy:** Abnormal number of chromosomes in a cell (extra or missing), which commonly disrupts function and is frequent in cancers.
 - **Angiogenesis**: Formation of new blood vessels that supply nutrients and oxygen to growing tissues and tumors.
 - **Anoikis**: Programmed cell suicide triggered when cells lose appropriate attachment to the extracellular matrix.
