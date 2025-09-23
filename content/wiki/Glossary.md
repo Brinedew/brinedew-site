@@ -12,10 +12,10 @@ aliases:
 ## A
 
 **Agent-based model (ABM)**
-Approach to simulation where individual entities (such as cells) are agents who follow a set of rules, and interactions between agents produce emergent behavior.
+Simulation that includes multiple independent *agents* who follow a set of rules, and emergent system behavior can be studied as a product of interactions between agents.
 
 **Allele**
-One of several forms of the same gene, for example the ABCC11 gene has alleles 538G (wet earwax) and 538A (dry earwax).
+One of several variants of the same gene, for example the ABCC11 gene has alleles 538G (wet earwax) and 538A (dry earwax).
 
 **Anabolism**
 Constructive metabolic processes where complex biomolecules are built from the simpler ones, consuming energy.
