@@ -8,7 +8,8 @@ export const sharedPageComponents: SharedLayout = {
   afterBody: [Component.ViewTransitions()],
   footer: Component.Footer({
     links: {
-      "About": "About",
+      // Use an absolute link so it doesn't change based on current page depth
+      "About": "/About.html",
     },
   }),
 }
