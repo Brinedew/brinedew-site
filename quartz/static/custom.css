@@ -165,17 +165,21 @@ article p {
   color: var(--dark);
 }
 
-/* Unified accent color for all link states */
+/* Links: one shade lighter than body text, no bold */
 a {
-  color: inherit;
+  color: var(--darkgray);
   text-decoration-color: var(--accent);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 0.2em;
+  font-weight: 400; /* remove bolding */
 }
 
 a:hover {
-  color: var(--accent);
+  color: var(--dark); /* subtle hover */
 }
+
+/* Hide external link glyph (also disabled in config) */
+a.external .external-icon { display: none !important; }
 
 /* Text selection highlighting with proper contrast */
 ::selection {

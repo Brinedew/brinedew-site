@@ -83,7 +83,7 @@ const config: QuartzConfig = {
         showByDefault: true,
         collapseByDefault: false,
       }),
-      Plugin.CrawlLinks({ markdownLinkResolution: "shortest" }),
+      Plugin.CrawlLinks({ markdownLinkResolution: "shortest", externalLinkIcon: false }),
       Plugin.Description({ descriptionLength: 150 }),
     ],
     filters: [Plugin.RemoveDrafts()],
