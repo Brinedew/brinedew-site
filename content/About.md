@@ -4,7 +4,6 @@ hide:
   - navigation
 draft: false
 ---
-
 ## About me
 I'm Brinedew, a postdoctoral researcher in the field of molecular cell biology.
 
