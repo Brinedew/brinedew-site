@@ -198,6 +198,7 @@ aliases:
 - **Semelparity**: Life-history strategy where organisms reproduce once and then die, as opposed to iteroparity (multiple reproduction events).
 - **Senolytic therapy**: Category of putative anti-aging treatments that selectively eliminate senescent cells accumulated over the lifespan of the organism.
 - **Single-cell RNA-seq:** RNA sequencing method that reads which genes are active in each individual cell, revealing the mix of cell types and states in a sample.
+- **SNP**: Single nucleotide polymorphism, an allele with a single-letter substitution in the gene, such as 538G>A substitution in ABCC11 gene manifesting as "dry earwax" trait in humans.
 - **Soma**: Non-reproductive tissues of the body, cells that won't form a new organism and will die with the body (as opposed to immortal germline)
 - **Somatic mosaicism:** Presence of genetically different cells within the same person due to mutations that arise after fertilization.
 - **Stem cell niche**: Specialized tissue microenvironment, such as the base of intestinal crypts, that maintains stemness and allows stem cells to undergo proliferation and differentiation.

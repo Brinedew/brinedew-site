@@ -22,17 +22,25 @@ In 1957, George Williams proposes a mechanism for selection of late-life harmful
 
 ## The basic trade-off
 
-Pleiotropy means one gene affects multiple traits. Antagonistic pleiotropy occurs when a gene has opposite effects on fitness at different life stages - beneficial when young, harmful when old.
+*Pleiotropy* is a term from genetics, which describes a situation where one gene affects multiple traits. One example of a pleiotropic gene is ABCC11 in humans. A single 
+
+
+means one gene affects multiple traits. Antagonistic pleiotropy occurs when a gene has opposite effects on fitness at different life stages - beneficial when young, harmful when old.
 
 Since natural selection weighs early effects more heavily than late effects, genes with this pattern can be strongly favored despite causing aging. The early benefits outweigh the late costs in evolutionary terms.
 
-## Classic examples
+## Examples
 
 **p53**: Prevents cancer early in life by stopping damaged cells from dividing, but the same mechanism causes tissue dysfunction and aging later through cellular senescence.
 
 **Testosterone**: Enhances male reproductive success early through muscle development and competitive behavior, but increases cardiovascular disease and cancer risk with age.
 
 **Calcium regulation**: Strong bones during reproductive years, but the same mechanisms can lead to arterial calcification later.
+
+## Hamilton's indicators
+
+In his 1966 paper, WD Hamilton formalized AP with indicators of the force of selection.
+
 
 ## Evidence and research
 
