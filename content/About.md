@@ -4,7 +4,7 @@ hide:
   - navigation
 draft: false
 ---
-![[BrinedewLogo3.jpg|400x400]]
+
 ## About me
 I'm Brinedew, a postdoctoral researcher in the field of molecular cell biology.
 
@@ -18,3 +18,6 @@ I tag the content here based on whether or not it was written with LLM assistanc
 [[https://brinedew.bio/tags/content/wiki|Wiki]] pages are single-topic primers compiled with LLM assistance. I use them as quick reference materials. I still manually verify each citation and take responsibility for any hallucinations or miscalculations.
 
 You're welcome to contact me if you notice any errors in my writing or my code.
+
+
+![[BrinedewLogo4.png]]
