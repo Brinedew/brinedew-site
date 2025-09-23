@@ -4,6 +4,7 @@ hide:
   - navigation
 draft: false
 ---
+![[BrinedewLogo3.jpg|400x400]]
 ## About me
 I'm Brinedew, a postdoctoral researcher in the field of molecular cell biology.
 
