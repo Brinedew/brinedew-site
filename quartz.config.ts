@@ -77,6 +77,8 @@ const config: QuartzConfig = {
       Plugin.GitHubFlavoredMarkdown(),
       // Render single newlines as <br> to match Obsidian preview
       Plugin.HardLineBreaks(),
+      // Convert images with alt text into <figure><img/><figcaption>alt</figcaption></figure>
+      Plugin.ImageCaptions({ requireAlt: true }),
       Plugin.TableOfContents({
         maxDepth: 3,
         minEntries: 1,
