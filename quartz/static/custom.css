@@ -165,9 +165,9 @@ article p {
   color: var(--dark);
 }
 
-/* Links: one shade lighter than body text, no bold */
+/* Links: two shades lighter than body text, no bold */
 a {
-  color: var(--darkgray);
+  color: var(--gray);
   text-decoration-color: var(--accent);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 0.2em;
@@ -175,7 +175,7 @@ a {
 }
 
 a:hover {
-  color: var(--dark); /* subtle hover */
+  color: var(--accent); /* restore accent hover */
 }
 
 /* Hide external link glyph (also disabled in config) */
