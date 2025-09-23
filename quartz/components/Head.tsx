@@ -114,7 +114,7 @@ export default (() => {
         <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
 
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
-        <link href="/static/custom.css?v=bio1" rel="stylesheet" type="text/css" />
+        <link href="/static/custom.css?v=bio2" rel="stylesheet" type="text/css" />
         
         {/* Scriptotic app assets */}
         <link rel="stylesheet" href="/static/apps/scriptotic/app.css?v=1" />
