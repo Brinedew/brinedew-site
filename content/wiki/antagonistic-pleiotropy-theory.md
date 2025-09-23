@@ -8,7 +8,17 @@ tags:
 
 # Antagonistic Pleiotropy Theory
 
-George Williams' 1957 theory explains aging through genes that benefit early life but harm later life. Unlike Medawar's passive accumulation of late-acting mutations, Williams proposed that aging results from genes actively selected for their early benefits despite late costs.
+Antagonistic pleiotropy theory of aging explains aging as a result of evolution favoring the selection of genes that improve the organism's fitness in early life, but reduce fitness later in life. It was proposed by George Williams in 1957.
+
+## Historical context
+As of 1957, one evolutionary explanation of aging is Peter Medawar's mutation accumulation theory of aging (which introduced the concept of [selection shadow](selection-shadow-theory.md)), published in 1952. Medawar's theory models aging as a result of passive accumulation of late-acting mutations.
+
+However, Medawar's theory only models the appearance of "aging genes" as a result of, essentially, random drift. The open question is, could "aging genes" be favored by selection pressure?
+
+In 1957, George Williams proposes a mechanism for selection of late-life harmful traits in his paper [Pleiotropy, Natural Selection, and the Evolution of Senescence](https://doi.org/10.2307/2406060)
+
+![George C. Williams (1926-2010)](../Attachments/george20C.20williams2011[1].jpg)
+
 
 ## The basic trade-off
 
