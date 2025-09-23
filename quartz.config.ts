@@ -75,6 +75,8 @@ const config: QuartzConfig = {
       }),
       Plugin.ObsidianFlavoredMarkdown({ enableInHtmlEmbed: true }),
       Plugin.GitHubFlavoredMarkdown(),
+      // Render single newlines as <br> to match Obsidian preview
+      Plugin.HardLineBreaks(),
       Plugin.TableOfContents({
         maxDepth: 3,
         minEntries: 1,
