@@ -10,16 +10,23 @@ tags:
 
 CTVT is a cancer that spreads between dogs during mating by transferring living tumor cells. The cancer cell lineage has survived continuously for thousands of years, making it one of the oldest known somatic cell lineages on Earth.
 
+> [!info]- Image of CTVT on a dog's penis
+>  ![[image-6.png|Photo credit: Karina Ferreira de Castro / Source: https://www.tcg.vet.cam.ac.uk/about/ctvt ]]
+
 ## Background
 
 #### Early Observations
-Veterinarians in the mid-19th century began documenting cauliflower-like, bleeding masses on the genitals of city dogs. They called it *infectious sarcoma*, recognizing its transmissibility, while its venereal nature led others to speculate about a canine form of syphilis. The general thinking at the time was heavily influenced by Rudolf Virchow's theory that cancers arose from sites of chronic inflammation.
+Veterinarians in the mid-19th century began documenting cauliflower-like, bleeding masses on the genitals of city dogs. They called it *infectious sarcoma*, recognizing its transmissibility, and its venereal nature led many to speculate about a canine form of syphilis. 
 
 #### Novinsky's Transmission Experiment
-In 1876, the Russian veterinarian M. A. Novinsky performed an experiment on dogs suffering from infectious sarcoma. He took tumor tissue from an afflicted dog and transplanted it onto the genitals and noses of healthy dogs. The tumors grew. He then took tissue from those secondary tumors and transplanted it to a third set of dogs. Again, the tumors grew. His conclusion was simple: the tumor was being transmitted by the cells themselves [[Novinsky, M.A. (1876)]](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5484218/). This was the first successful experimental transmission of any tumor.
+In 1876, the Russian veterinarian Mstislav Novinsky performed an experiment on dogs suffering from infectious sarcoma. He took tumor tissue from an afflicted dog and transplanted it onto the genitals and noses of healthy dogs. The tumors grew. He then took tissue from those secondary tumors and transplanted it to a third set of dogs. Again, the tumors grew. His conclusion was straightforward: the tumor was being transmitted with the cells themselves [Novinsky, M.A. (1876)](https://babel.hathitrust.org/cgi/pt?id=mdp.39015070428183&seq=796). This was the first successful experimental transmission of any tumor.
+
+> [!info]- Novinsky's 1876 report and translation
+> ![[image-7.png|Novinsky, M. A. Zur Frage über die Impfung der krebsigen Geschwülste. Centralblatt für die medicinischen Wissenschaften. 1876; 14: 790–791]]
+
 
 #### Competing Models of Infectious Sarcoma
-The idea of a rogue cell line acting as a parasite was too strange to fit into the established models of what cancer *was* at the time. The scientific consensus of this period was boxed into two categories: cancer was either an *internal* failure of the host's own body or an infection by an external *microbe* (like a virus or bacterium).  To appreciate how bizarre Novinsky's idea seemed, here are the dominant cancer theories of the late 19th and early 20th centuries:
+The idea of a rogue cell line acting as a parasite was too strange to fit into the established models of what cancer *was* at the time. The scientific consensus of this period was boxed into two categories: cancer was triggered either by an external *microbe* (like a virus or bacterium) or by an *internal* failure of the host's own body.  To appreciate how bizarre Novinsky's idea seemed, here are the dominant cancer theories of the late 19th and early 20th centuries:
 *   **Cohnheim's Embryonic-Rest Theory:** Julius Cohnheim argued that cancers arose from dormant pockets of embryonic cells left over from development. These "rests," when triggered, would begin proliferating uncontrollably [[Triolo, V. A. (1965)]](https://cancerres.aacrjournals.org/content/25/2_Part_1/75). This model explained cancer as a dysfunction of the host's own development.
 *   **Viral Oncogenesis:** Following Peyton Rous's 1911 discovery of a virus that caused sarcomas in chickens, the idea that viruses were the primary cause of cancer gained significant traction. This fit neatly into the successful germ theory of disease: an external pathogen infects host cells and transforms them into tumors.
 *   **Chronic Irritation:** Virchow's idea that chronic inflammation could trigger cancer also remained popular.
