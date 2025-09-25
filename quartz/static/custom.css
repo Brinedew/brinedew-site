@@ -30,8 +30,12 @@
 
 /* Apply fonts directly - no variables, no fights */
 html, body, article { font-family: "Crimson Pro", serif; }
-h1,h2,h3,.page-title,.breadcrumbs,nav,button { font-family: "Crimson Pro", serif; }
+/* Ensure all headings use Crimson Pro regardless of theme defaults */
+h1,h2,h3,h4,h5,h6,.page-title,.breadcrumbs,nav,button { font-family: "Crimson Pro", serif !important; }
 code, pre { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+/* Also override Quartz variable so any var(--headerFont) usages resolve to Crimson Pro */
+:root { --headerFont: "Crimson Pro", serif; }
 
 body { 
   font-synthesis: none; 

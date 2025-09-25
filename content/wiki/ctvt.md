@@ -8,18 +8,20 @@ tags:
 
 # CTVT - Canine Transmissible Venereal Tumor
 
-CTVT is a cancer that spreads between dogs during mating by transferring living tumor cells. The cancer cell lineage has survived continuously for thousands of years, making it one of the oldest known somatic cell lineages on Earth.
+CTVT is a lineage of cancer cells that spreads between dogs during mating with the transfer of living tumor cells. The cancer cell lineage has survived continuously for thousands of years, making it one the oldest known somatic cell lineages on Earth.
 
 > [!info]- Image of CTVT on a dog's penis
 >  ![[image-6.png|Photo credit: Karina Ferreira de Castro / Source: https://www.tcg.vet.cam.ac.uk/about/ctvt ]]
 
 ## Background
 
-#### Early Observations
-Veterinarians in the mid-19th century began documenting cauliflower-like, bleeding masses on the genitals of city dogs. They called it *infectious sarcoma*, recognizing its transmissibility, and its venereal nature led many to speculate about a canine form of syphilis. 
+#### Novinsky's Dog Tumor Grafts
+In 1876, the Russian veterinarian Mstislav Novinsky reported the first successful experimental transmission of a tumor. He took fragments of "medullary carcinoma" from the nose of a dog, and grafted them onto healthy dogs. While most grafts onto inflamed skin failed, two of the 15 grafts placed under normal skin successfully grew. One such tumor, transplanted as a 2 mm fragment, "grew fairly rapidly, so that on 1 April—about three months after the inoculation—it had reached the size of a walnut." Critically, Novinsky then took tissue from this secondary tumor and successfully transplanted it to a third dog. His conclusion was direct: "Thus the infection of the cancerous neoplasm is beyond doubt." This was the first successful experimental transmission of any malignant tumor and laid the groundwork for the concept of cellular transplantation, though its full implications for CTVT wouldn't be understood for nearly a century.
 
-#### Novinsky's Transmission Experiment
-In 1876, the Russian veterinarian Mstislav Novinsky performed an experiment on dogs suffering from infectious sarcoma. He took tumor tissue from an afflicted dog and transplanted it onto the genitals and noses of healthy dogs. The tumors grew. He then took tissue from those secondary tumors and transplanted it to a third set of dogs. Again, the tumors grew. His conclusion was straightforward: the tumor was being transmitted with the cells themselves [Novinsky, M.A. (1876)](https://babel.hathitrust.org/cgi/pt?id=mdp.39015070428183&seq=796). This was the first successful experimental transmission of any tumor.
+> [!warning]  Novinsky's cancer cells weren't CTVT
+> After a century of chain-citation, Novinsky's work sometimes gets confusingly presented by CTVT papers as the origin of transmissible venereal tumor research (as in Makino, 1963). But as we see in his report, the tumor he worked on wasn't venereal, he took it from the dog's nose. It's still appropriate to cite him as a pioneer of the general concept of tumor transplantation.
+
+
 
 > [!info]- Novinsky's 1876 report and translation
 > ![[image-7.png|Novinsky, M. A. Zur Frage über die Impfung der krebsigen Geschwülste. Centralblatt für die medicinischen Wissenschaften. 1876; 14: 790–791]]
@@ -31,20 +33,28 @@ _Preliminary communication by Mstislaw Nowinsky. (From the zoosurgical cabinet o
  From these experiments it appears that, under favourable conditions, small pieces of cancerous tumours, when transferred beneath the skin of dogs, engraft themselves. Thus the infection of the cancerous neoplasm is beyond doubt. The experiments will be continued, and a more detailed description will be given later. <p align="right">Translated with ChatGPT 5 Thinking.</p>
 
 #### Competing Models of Infectious Sarcoma
-The idea of a rogue cell line acting as a parasite was too strange to fit into the established models of what cancer *was* at the time. The scientific consensus of this period was boxed into two categories: cancer was triggered either by an external *microbe* (like a virus or bacterium) or by an *internal* failure of the host's own body.  To appreciate how bizarre Novinsky's idea seemed, here are the dominant cancer theories of the late 19th and early 20th centuries:
-*   **Cohnheim's Embryonic-Rest Theory:** Julius Cohnheim argued that cancers arose from dormant pockets of embryonic cells left over from development. These "rests," when triggered, would begin proliferating uncontrollably [[Triolo, V. A. (1965)]](https://cancerres.aacrjournals.org/content/25/2_Part_1/75). This model explained cancer as a dysfunction of the host's own development.
+The idea of a rogue cell line acting as a parasite did not fit into the established models of cancer origin at the time. The scientific consensus of the late 19th and early 20th centuries was host-centric: 
+*   **Cohnheim's Embryonic-Rest Theory:** Julius Cohnheim argued that cancers arose from dormant pockets of embryonic cells left over from development. These "rests," when triggered, would begin proliferating uncontrollably. This model explained cancer as a dysfunction of the host's own development.
 *   **Viral Oncogenesis:** Following Peyton Rous's 1911 discovery of a virus that caused sarcomas in chickens, the idea that viruses were the primary cause of cancer gained significant traction. This fit neatly into the successful germ theory of disease: an external pathogen infects host cells and transforms them into tumors.
-*   **Chronic Irritation:** Virchow's idea that chronic inflammation could trigger cancer also remained popular.
+*   **Chronic Irritation:** Rudolph Virchow's hypothesis that chronic inflammation could trigger cancer also remained popular since first publication in 1863.
 
-These theories, while competing, all made the same prediction: the cancer in a given dog arose *from that dog's own cells*. The concept of cancer cells being an independent, transmissible organism didn't have a place in discourse at the time. Novinsky's proposal that the cancer cell itself was the infectious agent, required a conceptual leap that biology was not ready to make. This idea was almost completely ignored for the better part of a century. 
+These theories, while competing, made the same operational prediction: in any given dog, the tumour arose *from that dog’s own cells*. A free-living cancer cell was conceptually out of bounds.
 
-It would take another 100 years and the tools of molecular genetics to prove Novinsky right.
+Despite this, veterinarians began recognizing in CTVT a distinct clinical entity. Between **1902 and 1905**, German veterinarian **Anton Sticker** performed extensive transmission studies that confirmed the tumor's infectious and venereal nature, leading it to be widely known as "**Sticker's sarcoma**."
 #### Falsifying the Virus Hypothesis
-The previously commonly accepted model of CTVT was a viral transmission hypothesis. In this model, the virus would be transmitted between dogs, and in each new host, it would infect that host's cells and transform them into a tumor.
+For decades, the viral hypothesis remained the most plausible explanation for CTVT's origin: a virus was transmitted during mating, which then transformed the new host's cells into a tumor. The first major piece of evidence against this model came from cytogenetics.
 
-The first major piece of evidence against the viral hypothesis came in 1976. A healthy dog's cells contain 78 chromosomes. Analysis of CTVT cells from dogs worldwide consistently revealed a bizarre, rearranged karyotype of only 57-59 chromosomes [[Weber, W. T. (1976)]](https://www.cancer.gov/about-cancer/causes-prevention/risk/infectious-agents/transmissible-cancers-fact-sheet).
+In 1963, Sajiro Makino published a paper
+
+In 1965, Weber, Nowell & Hare responded to Makino in a [paper](https://doi.org/10.1093/jnci/35.3.537) analyzing the chromosomes of CTVT cells taken from two different dogs: a fresh sample from Philadelphia and a serially transplanted tumor originally from Pennsylvania. Cells from these two tumors have reported a heavily rearranged karyotype of only 59 chromosomes (a healthy dog's cells contain 78 chromosomes). And this number stayed relatively constant between CTVT cells taken from different dogs. 
+
+![[image-8.png]]
+
+
 
 The consistency of this altered karyotype was a hit against the viral hypothesis. It is one thing for a virus to induce cancer. It is another thing entirely to propose that a virus induces the *exact same* set of dozens of complex chromosomal fusions and deletions, independently, in every new host it infects. The probability of such a specific, complex outcome recurring identically by chance is vanishingly small. The far simpler explanation is that a single cell underwent this massive genomic rearrangement once, and all CTVT cells in the world are its direct descendants.
+
+The fact that cell-free filtrates also failed to transmit CTVT was another strike against a classical oncogenic virus explanation.
 
 #### Genomic Proof of a Single Lineage
 The final nail in the coffin for the viral theory came in 2006 with a genetic analysis by Murgia et al. They analyzed two types of genetic markers from CTVT samples collected on five continents:
@@ -53,6 +63,8 @@ The final nail in the coffin for the viral theory came in 2006 with a genetic an
 2.  **Nuclear Microsatellites:** These are short, repetitive sequences of DNA in the main (nuclear) genome that are highly variable between individuals, making them useful for genetic fingerprinting. The patterns from tumors all over the world were nearly identical to each other, but completely different from their respective hosts.
 
 This was conclusive. All CTVT tumors worldwide are members of a single, ancient clonal lineage, a parasitic organism descended from a single founder dog that lived thousands of years ago [[Murgia, C. et al. (2006)]](https://www.cell.com/cell/fulltext/S0092-8674(06)00852-7).
+
+ Subsequent whole-genome studies refined the age estimate and documented long-run genomic stability.
 ## Organism Without a Body
 The core weirdness of CTVT is that it forces us to reconsider the boundaries of a biological "individual." A cooperative of somatic cells (also known as a dog) gives rise to a defector cell lineage (cancer cells). That cell lineage then escapes its native organism and continues to propagate indefinitely as a parasite, living on other dogs. It is, functionally, a new unicellular organism derived from a multicellular one. It has a genome, it evolves, and it reproduces, but it lacks a body of its own, borrowing one from each host it infects.
 
