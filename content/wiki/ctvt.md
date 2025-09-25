@@ -33,7 +33,7 @@ _Preliminary communication by Mstislaw Nowinsky. (From the zoosurgical cabinet o
  From these experiments it appears that, under favourable conditions, small pieces of cancerous tumours, when transferred beneath the skin of dogs, engraft themselves. Thus the infection of the cancerous neoplasm is beyond doubt. The experiments will be continued, and a more detailed description will be given later. <p align="right">Translated with ChatGPT 5 Thinking.</p>
 
 #### Competing Models of Infectious Sarcoma
-The idea of a rogue cell line acting as a parasite did not fit into the established models of cancer origin at the time. The scientific consensus of the late 19th and early 20th centuries was host-centric: 
+The idea of a rogue cell line acting as a parasite did not fit into the established models of cancer origin at the time. The scientific consensus of the late 19th and early 20th centuries was host-centric. 
 *   **Cohnheim's Embryonic-Rest Theory:** Julius Cohnheim argued that cancers arose from dormant pockets of embryonic cells left over from development. These "rests," when triggered, would begin proliferating uncontrollably. This model explained cancer as a dysfunction of the host's own development.
 *   **Viral Oncogenesis:** Following Peyton Rous's 1911 discovery of a virus that caused sarcomas in chickens, the idea that viruses were the primary cause of cancer gained significant traction. This fit neatly into the successful germ theory of disease: an external pathogen infects host cells and transforms them into tumors.
 *   **Chronic Irritation:** Rudolph Virchow's hypothesis that chronic inflammation could trigger cancer also remained popular since first publication in 1863.
