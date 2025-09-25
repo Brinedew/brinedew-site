@@ -3,7 +3,7 @@ title: Brinedew
 enableToc: false
 draft: false
 ---
-Personal research notes on molecular cell biology through the lens of agents, cooperation, and sacrifice.
+Research notes on molecular cell biology through the lens of agents, cooperation, and sacrifice.
 
 [[https://brinedew.bio/tags/content/post|Posts]] are my longform takes, personal opinions and informed speculation.
 
