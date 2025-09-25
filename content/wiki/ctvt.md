@@ -106,32 +106,8 @@ CTVT lineages we see today are descendants of those cells who have found a solut
 We have learned that CTVT has adapted to keep itself mild. But we also know that CTVT is a grossly corrupted lifeform born from the ultimate act of cellular defection. Why isn't it defecting more? Just like any other cancer, we would expect to find genomic instability, subclone proliferation, and internal competition. How has this lineage of defectors maintained its own clonal integrity and avoided collapsing into a chaotic mess of "cancers of the cancer" for 11,000 years?
 
 #### Maintaining Clonal Integrity
-CTVT appears to undergo strong **negative selection**. While CTVT has accumulated an enormous number of mutations and chromosomal aberrations compared to its dog host, it didn't seem to acquire most of them by slowly gaining new advantageous traits over time (positive selection). Instead, it seems to be ruthlessly purging any new mutations that threaten its core, essential functions for being a transmissible parasite [[Strakova, A. et al. (2021)]](https://www.science.org/doi/10.1126/science.aay9924). The lineage has found a successful formula and now aggressively maintains it. Any "internal defector" cell that arises within a tumor, for instance, one that stops cooperating in the immune-evasion strategy, is presumably eliminated. How do cooperators enforce this state of affairs?
+CTVT appears to undergo strong **negative selection**. While CTVT has accumulated an enormous number of mutations and chromosomal aberrations compared to its dog host, it didn't seem to acquire most of them by slowly gaining new advantageous traits over time (positive selection). Instead, selection seems to be ruthlessly purging any new mutations that threaten CTVT's core, essential functions for being a transmissible parasite [[Strakova, A. et al. (2021)]](https://www.science.org/doi/10.1126/science.aay9924). 
 
-#### A Living Fossil Record
-Genetic analysis reveals distinct geographical clades of CTVT. These clades tell the story of its global expansion, tracking human and dog migration patterns over the last 500 years. The mutations within the tumor's genome act as a historical record of the environments it has passed through. For example, tumors collected at lower latitudes show a distinct mutational signature associated with UV light exposure, providing a remarkable link between the tumor's genetics and its geography [[Baez-Ortega, A. et al. (2019)]](https://www.science.org/doi/10.1126/science.aau9923).
+What mutation would make a CTVT cell over-proliferate in the late phase of infection, compared to its neighbors? From [(Siddle, Kaufman 2014)](https://onlinelibrary.wiley.com/doi/10.1111/imm.12377), IFN-γ signal from the host's immune system seems to be the driver of CTVT's late-phase immune-sensitivity. So it seems likely to me that knocking out IFN-γ receptors on CTVT cells would be a good start for defection.
 
-#### Cancer Suppression as a Defense Against Somatic Parasitism
-The existence of CTVT and DFTD forces a reframing of why multicellular organisms invest so heavily in cancer suppression. Mechanisms like apoptosis and cellular senescence aren't just about ensuring an individual lives a long life; they are a fundamental defense system to prevent the organism's own cells from defecting and creating a new parasitic lineage. The body is a multi-agent cooperative, and cancer suppression is its alignment and enforcement strategy.
-
-> [!info]- Hypothesis: Actuarial Aging as a Defense
-> This raises an interesting hypothesis: could some aspects of actuarial aging be an adaptive trade-off to prevent the emergence of somatic parasites like CTVT?
->
-> Consider a toy model. A young organism needs high regenerative capacity to grow and heal from injury. But this high capacity (e.g., active stem cell populations) also provides a fertile ground for cancerous mutations to arise and take hold. An older organism, having already reproduced, gains less fitness from perfect regeneration.
->
-> It's possible that the gradual decline in regenerative capacity we observe in physiological aging is not simply a system "wearing out," but an active, programmed downregulation to reduce the risk of cancer later in life. In this view, the body smartly reduces its ability to regenerate in proportion to the accumulated mutational load in its somatic cells. By making the cellular environment less hospitable to proliferation, it raises the barrier for a proto-oncogenic cell to successfully defect.
->
-> **This implies that actuarial aging might, in part, "extend the functional lifespan" of the organism by strategically trading off perfect tissue maintenance for a reduced probability of catastrophic somatic defection—either as a terminal cancer for the individual or, in the worst-case scenario, the birth of a new parasitic cell line.**
-
-##### Predictable Failure Modes
-The fact that transmissible cancers exist at all, however rare, demonstrates that this defense system has exploitable failure modes.
-*   **Immune Loopholes:** Both CTVT and DFTD found a way to bypass MHC recognition.
-*   **Host Genetics:** DFTD was likely aided by low genetic diversity in the Tasmanian devil population, making it easier for the tumor to pass as "self."
-*   **Transmission Vector:** Both cancers found a reliable physical route (sex and biting) to transmit living cells.
-
-##### Evidence That Would Change Our Mind
-What evidence would suggest that robust cancer suppression evolved primarily for individual longevity, rather than to prevent somatic parasitism?
-*   If we observed that the robustness of cancer suppression mechanisms across different species correlated perfectly with maximum lifespan, even in species where a plausible route for cell transmission is absent (e.g., solitary, non-social animals).
-*   If we found that cancer suppression mechanisms degraded sharply and immediately after the typical reproductive window closes, suggesting their only selective advantage was tied to keeping the individual alive long enough to reproduce.
-
-The very existence of CTVT—a defector that broke the rules of multicellularity and has outlived its founder dog by 11,000 years—is strong evidence that the threat of somatic parasitism is a real and potent selective pressure that has shaped the evolution of all complex life.
+Unfortunately for any meta-defector cell, the immune-insensitive subclone would presumably overtake the rest of the tumor's cells, cripple the host, and fail to transmit to a new host. This way, any act of defection can only betray the local CTVT neighbors and die out, not affecting the global CTVT population.
