@@ -1,15 +1,8 @@
 {
-  "mcp": {
-    "allowed": [
-      "mcp-obsidian"
-    ]
-  },
   "mcpServers": {
     "mcp-obsidian": {
       "command": "uvx",
-      "args": [
-        "mcp-obsidian"
-      ],
+      "args": ["mcp-obsidian"],
       "env": {
         "OBSIDIAN_API_KEY": "${OBSIDIAN_API_KEY}",
         "OBSIDIAN_HOST": "127.0.0.1",
@@ -17,5 +10,6 @@
       },
       "trust": false
     }
-  }
+  },
+  "allowMCPServers": ["mcp-obsidian"]
 }
