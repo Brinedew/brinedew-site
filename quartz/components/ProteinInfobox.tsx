@@ -1,6 +1,8 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
-import mappingConfig from "../../data/thoteins/mapping.json"
+
+// Import mapping config from Thoteins source
+import mappingConfig from "../../../Thoteins/data/mapping.json"
 
 interface Mapping {
   source: string
@@ -44,19 +46,19 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
   const hexcode = fm?.persona_hexcode || '#cccccc'
   const geneSymbol = fm?.symbol || fm?.gene_symbol || fm?.title || 'Protein'
 
-  // Helper to prettify field names
+  // Helper to prettify field names and format values with units
   const prettifyLabel = (fieldName: string): string => {
     const labelMap: Record<string, string> = {
-      'mass': 'Mass (kDa)',
-      'length': 'Length (aa)',
-      'percent_disordered': 'Disorder (%)',
-      'rvis_percentile': 'RVIS %ile',
+      'mass': 'Mass',
+      'length': 'Length',
+      'percent_disordered': 'Disorder',
+      'rvis_percentile': 'RVIS',
       'alignment': 'Classification',
       'first_letter': 'First Letter',
       'Has transmembrane domains': 'Transmembrane',
       'membrane_depth': 'Membrane Depth',
       'tissue_tau': 'Tissue Specificity',
-      'height': 'Height (cm)',
+      'height': 'Height',
       'Sex': 'Gender',
       'Politics': 'Politics',
       'Skintone Hue ': 'Skin Hue',
@@ -67,6 +69,22 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
       'Age': 'Age'
     }
     return labelMap[fieldName] || fieldName
+  }
+
+  const formatValue = (fieldName: string, value: any): string => {
+    const unitMap: Record<string, string> = {
+      'mass': ' kDa',
+      'length': ' aa',
+      'percent_disordered': '%',
+      'rvis_percentile': '',
+      'height': ' cm',
+      'Age': '',
+      'Skintone Hue ': '°',
+      'Skintone Saturation': '%',
+      'Skintone Lightness': '%'
+    }
+    const unit = unitMap[fieldName] || ''
+    return `${value}${unit}`
   }
 
   return (
@@ -106,12 +124,12 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
               <div class="mapping-row">
                 <div class="mapping-molecular">
                   <span class="mapping-label">{prettifyLabel(m.source)}</span>
-                  <span class="mapping-value">{fm[m.source]}</span>
+                  <span class="mapping-value">{formatValue(m.source, fm[m.source])}</span>
                 </div>
                 <span class="mapping-arrow">→</span>
                 <div class="mapping-persona">
                   <span class="mapping-label">{prettifyLabel(m.target)}</span>
-                  <span class="mapping-value">{fm[personaKey]}</span>
+                  <span class="mapping-value">{formatValue(m.target, fm[personaKey])}</span>
                 </div>
               </div>
             )
@@ -222,18 +240,22 @@ ProteinInfobox.css = `
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  text-align: center;
+  align-items: center;
 }
 
 .mapping-label {
   font-size: 0.7rem;
   color: var(--darkgray);
   font-weight: 500;
+  text-align: center;
 }
 
 .mapping-value {
   font-size: 0.85rem;
   color: var(--dark);
   font-weight: 600;
+  text-align: center;
 }
 
 .mapping-arrow {
