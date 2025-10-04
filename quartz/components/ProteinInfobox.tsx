@@ -191,11 +191,11 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
               const hueColor = hsluvToHex(hue, 100, 50)
               
               // Convert letter to enclosed alphanumeric UTF-8 character
-              // A-Z: U+1F130 to U+1F149
+              // A-Z: U+1F170 to U+1F189
               const letterCode = letter.charCodeAt(0)
               let enclosedChar = letter
               if (letterCode >= 65 && letterCode <= 90) { // A-Z
-                enclosedChar = String.fromCodePoint(0x1F130 + (letterCode - 65))
+                enclosedChar = String.fromCodePoint(0x1F170 + (letterCode - 65))
               }
               
               return (
