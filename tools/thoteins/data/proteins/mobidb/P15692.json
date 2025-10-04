@@ -1,0 +1,5521 @@
+{
+  "acc": "P15692",
+  "reviewed": true,
+  "gene": "VEGFA",
+  "proteome": "UP000005640",
+  "name": "Vascular endothelial growth factor A, long form",
+  "length": 395,
+  "organism": "Homo sapiens (Human)",
+  "ncbi_taxon_id": 9606,
+  "taxonomy": [
+    "Eukaryota",
+    "Metazoa",
+    "Chordata",
+    "Craniata",
+    "Vertebrata",
+    "Euteleostomi",
+    "Mammalia",
+    "Eutheria",
+    "Euarchontoglires",
+    "Primates",
+    "Haplorrhini",
+    "Catarrhini",
+    "Hominidae",
+    "Homo"
+  ],
+  "sequence": "MTDRQTDTAPSPSYHLLPGRRRTVDAAASRGQGPEPAPGGGVEGVGARGVALKLFVQLLGCSRFGGAVVRAGEAEPSGAARSASSGREEPQPEEGEEEEEKEEERGPQWRLGARKPGSWTGEAAVCADSAPAARAPQALARASGRGGRVARRGAEESGPPHSPSRRGSASRAGPGRASETMNFLLSWVHWSLALLLYLHHAKWSQAAPMAEGGGQNHHEVVKFMDVYQRSYCHPIETLVDIFQEYPDEIEYIFKPSCVPLMRCGGCCNDEGLECVPTEESNITMQIMRIKPHQGQHIGEMSFLQHNKCECRPKKDRARQEKKSVRGKGKGQKRKRKKSRYKSWSVPCGPCSERRKHLFVQDPQTCKCSCKNTDSRCKARQLELNERTCRCDKPRR",
+  "localization": [
+    "[N-VEGF]: Cytoplasm",
+    "Nucleus",
+    "[VEGFA]: Secreted"
+  ],
+  "uniref100": "UniRef100_P15692",
+  "uniref90": "UniRef90_P15692",
+  "uniref50": "UniRef50_P15692",
+  "uniparc": "UPI00005C3040",
+  "derived-binding_mode_disorder_to_disorder-mobi": {
+    "regions": [
+      [
+        207,
+        216
+      ]
+    ],
+    "content_fraction": 0.025,
+    "content_count": 10
+  },
+  "derived-binding_mode_disorder_to_disorder-priority": {
+    "regions": [
+      [
+        207,
+        216
+      ]
+    ],
+    "content_fraction": 0.025,
+    "content_count": 10
+  },
+  "derived-fixed-th_90": {
+    "regions": [
+      [
+        366,
+        393
+      ]
+    ],
+    "content_fraction": 0.071,
+    "content_count": 28
+  },
+  "derived-lip-flipper-1bj1_D": {
+    "source_id": "1bj1_D",
+    "regions": [
+      [
+        220,
+        227
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-lip-flipper-1flt_A": {
+    "source_id": "1flt_A",
+    "regions": [
+      [
+        219,
+        231
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-1flt_B": {
+    "source_id": "1flt_B",
+    "regions": [
+      [
+        218,
+        231
+      ]
+    ],
+    "content_fraction": 0.035,
+    "content_count": 14
+  },
+  "derived-lip-flipper-1kat_A": {
+    "source_id": "1kat_A",
+    "regions": [
+      [
+        217,
+        228
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-flipper-1kat_B": {
+    "source_id": "1kat_B",
+    "regions": [
+      [
+        217,
+        228
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-flipper-1mjv_A": {
+    "source_id": "1mjv_A",
+    "regions": [
+      [
+        220,
+        223
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 4
+  },
+  "derived-lip-flipper-1mjv_B": {
+    "source_id": "1mjv_B",
+    "regions": [
+      [
+        220,
+        226
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-lip-flipper-1mkg_B": {
+    "source_id": "1mkg_B",
+    "regions": [
+      [
+        220,
+        232
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-1mkg_D": {
+    "source_id": "1mkg_D",
+    "regions": [
+      [
+        220,
+        232
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-1mkk_A": {
+    "source_id": "1mkk_A",
+    "regions": [
+      [
+        220,
+        227
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-lip-flipper-1mkk_B": {
+    "source_id": "1mkk_B",
+    "regions": [
+      [
+        220,
+        233
+      ]
+    ],
+    "content_fraction": 0.035,
+    "content_count": 14
+  },
+  "derived-lip-flipper-1qty_C": {
+    "source_id": "1qty_C",
+    "regions": [
+      [
+        219,
+        223
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-lip-flipper-1tzh_B": {
+    "source_id": "1tzh_B",
+    "regions": [
+      [
+        220,
+        227
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-lip-flipper-1vpp_A": {
+    "source_id": "1vpp_A",
+    "regions": [
+      [
+        219,
+        233
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-1vpp_B": {
+    "source_id": "1vpp_B",
+    "regions": [
+      [
+        219,
+        231
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-2fjg_B": {
+    "source_id": "2fjg_B",
+    "regions": [
+      [
+        220,
+        225
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-lip-flipper-2fjh_A": {
+    "source_id": "2fjh_A",
+    "regions": [
+      [
+        219,
+        225
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-lip-flipper-2fjh_D": {
+    "source_id": "2fjh_D",
+    "regions": [
+      [
+        219,
+        224
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-lip-flipper-2qr0_C": {
+    "source_id": "2qr0_C",
+    "regions": [
+      [
+        219,
+        227
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-lip-flipper-2qr0_J": {
+    "source_id": "2qr0_J",
+    "regions": [
+      [
+        219,
+        231
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-2qr0_O": {
+    "source_id": "2qr0_O",
+    "regions": [
+      [
+        219,
+        228
+      ]
+    ],
+    "content_fraction": 0.025,
+    "content_count": 10
+  },
+  "derived-lip-flipper-2qr0_V": {
+    "source_id": "2qr0_V",
+    "regions": [
+      [
+        219,
+        226
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-lip-flipper-2vpf_A": {
+    "source_id": "2vpf_A",
+    "regions": [
+      [
+        219,
+        223
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-lip-flipper-2vpf_C": {
+    "source_id": "2vpf_C",
+    "regions": [
+      [
+        220,
+        227
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-lip-flipper-2vpf_F": {
+    "source_id": "2vpf_F",
+    "regions": [
+      [
+        219,
+        230
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-flipper-2vpf_G": {
+    "source_id": "2vpf_G",
+    "regions": [
+      [
+        219,
+        227
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-lip-flipper-2vpf_H": {
+    "source_id": "2vpf_H",
+    "regions": [
+      [
+        220,
+        227
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-lip-flipper-3p9w_A": {
+    "source_id": "3p9w_A",
+    "regions": [
+      [
+        218,
+        227
+      ]
+    ],
+    "content_fraction": 0.025,
+    "content_count": 10
+  },
+  "derived-lip-flipper-3p9w_E": {
+    "source_id": "3p9w_E",
+    "regions": [
+      [
+        218,
+        230
+      ],
+      [
+        294,
+        298
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 18
+  },
+  "derived-lip-flipper-3p9w_G": {
+    "source_id": "3p9w_G",
+    "regions": [
+      [
+        217,
+        230
+      ]
+    ],
+    "content_fraction": 0.035,
+    "content_count": 14
+  },
+  "derived-lip-flipper-3qtk_C": {
+    "source_id": "3qtk_C",
+    "regions": [
+      [
+        219,
+        230
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-flipper-3qtk_D": {
+    "source_id": "3qtk_D",
+    "regions": [
+      [
+        218,
+        223
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-lip-flipper-3qtk_E": {
+    "source_id": "3qtk_E",
+    "regions": [
+      [
+        219,
+        223
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-lip-flipper-3qtk_F": {
+    "source_id": "3qtk_F",
+    "regions": [
+      [
+        219,
+        223
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-lip-flipper-3s1k_C": {
+    "source_id": "3s1k_C",
+    "regions": [
+      [
+        219,
+        231
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-3s1k_D": {
+    "source_id": "3s1k_D",
+    "regions": [
+      [
+        222,
+        226
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-lip-flipper-4gln_B": {
+    "source_id": "4gln_B",
+    "regions": [
+      [
+        219,
+        233
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-4gln_C": {
+    "source_id": "4gln_C",
+    "regions": [
+      [
+        219,
+        231
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-4gls_E": {
+    "source_id": "4gls_E",
+    "regions": [
+      [
+        219,
+        233
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-4gls_F": {
+    "source_id": "4gls_F",
+    "regions": [
+      [
+        219,
+        233
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-4qaf_B": {
+    "source_id": "4qaf_B",
+    "regions": [
+      [
+        219,
+        230
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-flipper-4qaf_C": {
+    "source_id": "4qaf_C",
+    "regions": [
+      [
+        218,
+        236
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 19
+  },
+  "derived-lip-flipper-4zff_C": {
+    "source_id": "4zff_C",
+    "regions": [
+      [
+        219,
+        235
+      ]
+    ],
+    "content_fraction": 0.043,
+    "content_count": 17
+  },
+  "derived-lip-flipper-4zff_D": {
+    "source_id": "4zff_D",
+    "regions": [
+      [
+        217,
+        236
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 20
+  },
+  "derived-lip-flipper-5dn2_G": {
+    "source_id": "5dn2_G",
+    "regions": [
+      [
+        388,
+        395
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-lip-flipper-5fv1_D": {
+    "source_id": "5fv1_D",
+    "regions": [
+      [
+        219,
+        223
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-lip-flipper-5fv2_D": {
+    "source_id": "5fv2_D",
+    "regions": [
+      [
+        219,
+        225
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-lip-flipper-5fv2_E": {
+    "source_id": "5fv2_E",
+    "regions": [
+      [
+        218,
+        226
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-lip-flipper-5hhc_A": {
+    "source_id": "5hhc_A",
+    "regions": [
+      [
+        219,
+        233
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-5hhc_B": {
+    "source_id": "5hhc_B",
+    "regions": [
+      [
+        219,
+        233
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-5hhd_B": {
+    "source_id": "5hhd_B",
+    "regions": [
+      [
+        219,
+        233
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-5o4e_E": {
+    "source_id": "5o4e_E",
+    "regions": [
+      [
+        219,
+        239
+      ]
+    ],
+    "content_fraction": 0.053,
+    "content_count": 21
+  },
+  "derived-lip-flipper-5o4e_F": {
+    "source_id": "5o4e_F",
+    "regions": [
+      [
+        219,
+        239
+      ]
+    ],
+    "content_fraction": 0.053,
+    "content_count": 21
+  },
+  "derived-lip-flipper-5t89_A": {
+    "source_id": "5t89_A",
+    "regions": [
+      [
+        219,
+        241
+      ]
+    ],
+    "content_fraction": 0.058,
+    "content_count": 23
+  },
+  "derived-lip-flipper-5t89_B": {
+    "source_id": "5t89_B",
+    "regions": [
+      [
+        219,
+        224
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-lip-flipper-6t9d_C": {
+    "source_id": "6t9d_C",
+    "regions": [
+      [
+        218,
+        234
+      ]
+    ],
+    "content_fraction": 0.043,
+    "content_count": 17
+  },
+  "derived-lip-flipper-6t9d_D": {
+    "source_id": "6t9d_D",
+    "regions": [
+      [
+        218,
+        235
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 18
+  },
+  "derived-lip-flipper-6v7k_B": {
+    "source_id": "6v7k_B",
+    "regions": [
+      [
+        219,
+        224
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-lip-flipper-6z13_B": {
+    "source_id": "6z13_B",
+    "regions": [
+      [
+        219,
+        236
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 18
+  },
+  "derived-lip-flipper-6z13_C": {
+    "source_id": "6z13_C",
+    "regions": [
+      [
+        219,
+        239
+      ]
+    ],
+    "content_fraction": 0.053,
+    "content_count": 21
+  },
+  "derived-lip-flipper-6z3f_B": {
+    "source_id": "6z3f_B",
+    "regions": [
+      [
+        219,
+        230
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-flipper-6z3f_C": {
+    "source_id": "6z3f_C",
+    "regions": [
+      [
+        219,
+        236
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 18
+  },
+  "derived-lip-flipper-6zbr_B": {
+    "source_id": "6zbr_B",
+    "regions": [
+      [
+        219,
+        231
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-lip-flipper-6zbr_C": {
+    "source_id": "6zbr_C",
+    "regions": [
+      [
+        219,
+        236
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 18
+  },
+  "derived-lip-flipper-6zcd_B": {
+    "source_id": "6zcd_B",
+    "regions": [
+      [
+        225,
+        231
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-lip-flipper-6zcd_C": {
+    "source_id": "6zcd_C",
+    "regions": [
+      [
+        222,
+        236
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-lip-flipper-6zfl_A": {
+    "source_id": "6zfl_A",
+    "regions": [
+      [
+        219,
+        236
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 18
+  },
+  "derived-lip-flipper-6zfl_B": {
+    "source_id": "6zfl_B",
+    "regions": [
+      [
+        219,
+        236
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 18
+  },
+  "derived-lip-flipper-7kf0_C": {
+    "source_id": "7kf0_C",
+    "regions": [
+      [
+        219,
+        224
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-lip-flipper-7ll8_A": {
+    "source_id": "7ll8_A",
+    "regions": [
+      [
+        223,
+        231
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-lip-flipper-7ll8_B": {
+    "source_id": "7ll8_B",
+    "regions": [
+      [
+        219,
+        227
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-lip-flipper-7ll9_B": {
+    "source_id": "7ll9_B",
+    "regions": [
+      [
+        217,
+        228
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-flipper-7ll9_F": {
+    "source_id": "7ll9_F",
+    "regions": [
+      [
+        217,
+        228
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-lip-merge": {
+    "regions": [
+      [
+        217,
+        241
+      ]
+    ],
+    "content_fraction": 0.063,
+    "content_count": 25
+  },
+  "derived-lip-priority": {
+    "regions": [
+      [
+        217,
+        241
+      ]
+    ],
+    "content_fraction": 0.063,
+    "content_count": 25
+  },
+  "derived-missing_residues-mobi-1bj1_C": {
+    "source_id": "1bj1_C",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1bj1_D": {
+    "source_id": "1bj1_D",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1flt_A": {
+    "source_id": "1flt_A",
+    "regions": [
+      [
+        218,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 3
+  },
+  "derived-missing_residues-mobi-1mkg_A": {
+    "source_id": "1mkg_A",
+    "regions": [
+      [
+        314,
+        314
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-1mkg_B": {
+    "source_id": "1mkg_B",
+    "regions": [
+      [
+        314,
+        314
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-1mkg_C": {
+    "source_id": "1mkg_C",
+    "regions": [
+      [
+        314,
+        314
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-1mkg_D": {
+    "source_id": "1mkg_D",
+    "regions": [
+      [
+        314,
+        314
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-1mkk_A": {
+    "source_id": "1mkk_A",
+    "regions": [
+      [
+        313,
+        314
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1mkk_B": {
+    "source_id": "1mkk_B",
+    "regions": [
+      [
+        313,
+        314
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1qty_A": {
+    "source_id": "1qty_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-1qty_B": {
+    "source_id": "1qty_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-1qty_C": {
+    "source_id": "1qty_C",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-1qty_D": {
+    "source_id": "1qty_D",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-1tzh_A": {
+    "source_id": "1tzh_A",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1tzh_B": {
+    "source_id": "1tzh_B",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1tzi_C": {
+    "source_id": "1tzi_C",
+    "regions": [
+      [
+        214,
+        218
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-1vpf_A": {
+    "source_id": "1vpf_A",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1vpf_B": {
+    "source_id": "1vpf_B",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1vpf_C": {
+    "source_id": "1vpf_C",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1vpf_D": {
+    "source_id": "1vpf_D",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-1vpp_A": {
+    "source_id": "1vpp_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-1vpp_B": {
+    "source_id": "1vpp_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        243,
+        248
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-missing_residues-mobi-2fjg_A": {
+    "source_id": "2fjg_A",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-2fjg_B": {
+    "source_id": "2fjg_B",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-2fjh_A": {
+    "source_id": "2fjh_A",
+    "regions": [
+      [
+        214,
+        217
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 4
+  },
+  "derived-missing_residues-mobi-2fjh_D": {
+    "source_id": "2fjh_D",
+    "regions": [
+      [
+        214,
+        218
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-2qr0_C": {
+    "source_id": "2qr0_C",
+    "regions": [
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-2qr0_I": {
+    "source_id": "2qr0_I",
+    "regions": [
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-2qr0_O": {
+    "source_id": "2qr0_O",
+    "regions": [
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-2qr0_U": {
+    "source_id": "2qr0_U",
+    "regions": [
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-2vpf_A": {
+    "source_id": "2vpf_A",
+    "regions": [
+      [
+        214,
+        218
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-2vpf_B": {
+    "source_id": "2vpf_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-2vpf_C": {
+    "source_id": "2vpf_C",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        313,
+        315
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-missing_residues-mobi-2vpf_D": {
+    "source_id": "2vpf_D",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-2vpf_E": {
+    "source_id": "2vpf_E",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-2vpf_F": {
+    "source_id": "2vpf_F",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-2vpf_G": {
+    "source_id": "2vpf_G",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-2vpf_H": {
+    "source_id": "2vpf_H",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-3bdy_C": {
+    "source_id": "3bdy_C",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-3p9w_A": {
+    "source_id": "3p9w_A",
+    "regions": [
+      [
+        215,
+        217
+      ],
+      [
+        314,
+        318
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-3p9w_C": {
+    "source_id": "3p9w_C",
+    "regions": [
+      [
+        215,
+        217
+      ],
+      [
+        315,
+        318
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-3p9w_E": {
+    "source_id": "3p9w_E",
+    "regions": [
+      [
+        215,
+        217
+      ],
+      [
+        315,
+        318
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-3p9w_G": {
+    "source_id": "3p9w_G",
+    "regions": [
+      [
+        215,
+        216
+      ],
+      [
+        314,
+        318
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-3qtk_A": {
+    "source_id": "3qtk_A",
+    "regions": [
+      [
+        214,
+        219
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-3qtk_B": {
+    "source_id": "3qtk_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-3qtk_C": {
+    "source_id": "3qtk_C",
+    "regions": [
+      [
+        214,
+        218
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-3qtk_D": {
+    "source_id": "3qtk_D",
+    "regions": [
+      [
+        214,
+        217
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-3qtk_E": {
+    "source_id": "3qtk_E",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-3qtk_F": {
+    "source_id": "3qtk_F",
+    "regions": [
+      [
+        214,
+        218
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-3s1k_C": {
+    "source_id": "3s1k_C",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-3s1k_D": {
+    "source_id": "3s1k_D",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        313,
+        315
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-missing_residues-mobi-3v2a_B": {
+    "source_id": "3v2a_B",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        314,
+        320
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 19
+  },
+  "derived-missing_residues-mobi-4gln_B": {
+    "source_id": "4gln_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-4gln_C": {
+    "source_id": "4gln_C",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-4gls_E": {
+    "source_id": "4gls_E",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-4gls_F": {
+    "source_id": "4gls_F",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-4kzn_A": {
+    "source_id": "4kzn_A",
+    "regions": [
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4qaf_B": {
+    "source_id": "4qaf_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-4qaf_C": {
+    "source_id": "4qaf_C",
+    "regions": [
+      [
+        214,
+        217
+      ],
+      [
+        313,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-4wpb_A": {
+    "source_id": "4wpb_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-4wpb_B": {
+    "source_id": "4wpb_B",
+    "regions": [
+      [
+        214,
+        219
+      ],
+      [
+        313,
+        315
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-missing_residues-mobi-4zff_C": {
+    "source_id": "4zff_C",
+    "regions": [
+      [
+        217,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 3
+  },
+  "derived-missing_residues-mobi-5dn2_E": {
+    "source_id": "5dn2_E",
+    "regions": [
+      [
+        368,
+        391
+      ]
+    ],
+    "content_fraction": 0.061,
+    "content_count": 24
+  },
+  "derived-missing_residues-mobi-5dn2_F": {
+    "source_id": "5dn2_F",
+    "regions": [
+      [
+        368,
+        391
+      ]
+    ],
+    "content_fraction": 0.061,
+    "content_count": 24
+  },
+  "derived-missing_residues-mobi-5dn2_G": {
+    "source_id": "5dn2_G",
+    "regions": [
+      [
+        368,
+        387
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 20
+  },
+  "derived-missing_residues-mobi-5fv1_C": {
+    "source_id": "5fv1_C",
+    "regions": [
+      [
+        207,
+        219
+      ],
+      [
+        315,
+        316
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-missing_residues-mobi-5fv1_D": {
+    "source_id": "5fv1_D",
+    "regions": [
+      [
+        207,
+        218
+      ]
+    ],
+    "content_fraction": 0.03,
+    "content_count": 12
+  },
+  "derived-missing_residues-mobi-5fv2_D": {
+    "source_id": "5fv2_D",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        315,
+        316
+      ]
+    ],
+    "content_fraction": 0.035,
+    "content_count": 14
+  },
+  "derived-missing_residues-mobi-5fv2_E": {
+    "source_id": "5fv2_E",
+    "regions": [
+      [
+        207,
+        217
+      ],
+      [
+        315,
+        316
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-missing_residues-mobi-5fv2_F": {
+    "source_id": "5fv2_F",
+    "regions": [
+      [
+        207,
+        217
+      ],
+      [
+        315,
+        316
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 13
+  },
+  "derived-missing_residues-mobi-5hhc_A": {
+    "source_id": "5hhc_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-5hhc_B": {
+    "source_id": "5hhc_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-5hhd_A": {
+    "source_id": "5hhd_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-5hhd_B": {
+    "source_id": "5hhd_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-5o4e_E": {
+    "source_id": "5o4e_E",
+    "regions": [
+      [
+        314,
+        314
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-5o4e_F": {
+    "source_id": "5o4e_F",
+    "regions": [
+      [
+        314,
+        314
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-5t89_A": {
+    "source_id": "5t89_A",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        315,
+        321
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 19
+  },
+  "derived-missing_residues-mobi-5t89_B": {
+    "source_id": "5t89_B",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        315,
+        321
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 19
+  },
+  "derived-missing_residues-mobi-6bft_E": {
+    "source_id": "6bft_E",
+    "regions": [
+      [
+        216,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-6bft_F": {
+    "source_id": "6bft_F",
+    "regions": [
+      [
+        216,
+        219
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-6d3o_A": {
+    "source_id": "6d3o_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-6d3o_B": {
+    "source_id": "6d3o_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-6t9d_C": {
+    "source_id": "6t9d_C",
+    "regions": [
+      [
+        207,
+        217
+      ],
+      [
+        290,
+        294
+      ],
+      [
+        314,
+        321
+      ]
+    ],
+    "content_fraction": 0.061,
+    "content_count": 24
+  },
+  "derived-missing_residues-mobi-6t9d_D": {
+    "source_id": "6t9d_D",
+    "regions": [
+      [
+        207,
+        217
+      ],
+      [
+        314,
+        321
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 19
+  },
+  "derived-missing_residues-mobi-6v7k_A": {
+    "source_id": "6v7k_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-6v7k_B": {
+    "source_id": "6v7k_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-7kez_C": {
+    "source_id": "7kez_C",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        313,
+        316
+      ]
+    ],
+    "content_fraction": 0.041,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-7kf0_C": {
+    "source_id": "7kf0_C",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        314,
+        316
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-missing_residues-mobi-7kf0_F": {
+    "source_id": "7kf0_F",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        314,
+        316
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-missing_residues-mobi-7kf1_C": {
+    "source_id": "7kf1_C",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        314,
+        316
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-missing_residues-mobi-7kf1_F": {
+    "source_id": "7kf1_F",
+    "regions": [
+      [
+        207,
+        219
+      ],
+      [
+        314,
+        316
+      ]
+    ],
+    "content_fraction": 0.041,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-7kf1_I": {
+    "source_id": "7kf1_I",
+    "regions": [
+      [
+        207,
+        218
+      ],
+      [
+        314,
+        316
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 15
+  },
+  "derived-missing_residues-mobi-7kf1_L": {
+    "source_id": "7kf1_L",
+    "regions": [
+      [
+        207,
+        219
+      ],
+      [
+        314,
+        316
+      ]
+    ],
+    "content_fraction": 0.041,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-7ll8_A": {
+    "source_id": "7ll8_A",
+    "regions": [
+      [
+        214,
+        218
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-7ll8_B": {
+    "source_id": "7ll8_B",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        314,
+        315
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-7ll9_A": {
+    "source_id": "7ll9_A",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-7ll9_B": {
+    "source_id": "7ll9_B",
+    "regions": [
+      [
+        214,
+        216
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 3
+  },
+  "derived-missing_residues-mobi-7ll9_E": {
+    "source_id": "7ll9_E",
+    "regions": [
+      [
+        214,
+        218
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-7ll9_F": {
+    "source_id": "7ll9_F",
+    "regions": [
+      [
+        214,
+        216
+      ],
+      [
+        315,
+        315
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 4
+  },
+  "derived-missing_residues-priority": {
+    "regions": [
+      [
+        207,
+        217
+      ]
+    ],
+    "content_fraction": 0.028,
+    "content_count": 11
+  },
+  "derived-missing_residues-th_90": {
+    "regions": [
+      [
+        207,
+        217
+      ]
+    ],
+    "content_fraction": 0.028,
+    "content_count": 11
+  },
+  "derived-missing_residues_context_dependent-th_90": {
+    "regions": [
+      [
+        368,
+        391
+      ]
+    ],
+    "content_fraction": 0.061,
+    "content_count": 24
+  },
+  "derived-mobile-mobi-1kmx_A": {
+    "source_id": "1kmx_A",
+    "regions": [
+      [
+        346,
+        350
+      ],
+      [
+        394,
+        394
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 6
+  },
+  "derived-mobile-mobi-1vgh_A": {
+    "source_id": "1vgh_A",
+    "regions": [
+      [
+        346,
+        347
+      ],
+      [
+        350,
+        355
+      ],
+      [
+        365,
+        365
+      ]
+    ],
+    "content_fraction": 0.023,
+    "content_count": 9
+  },
+  "derived-observed-mobi-1bj1_C": {
+    "source_id": "1bj1_C",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1bj1_D": {
+    "source_id": "1bj1_D",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1cz8_A": {
+    "source_id": "1cz8_A",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1cz8_B": {
+    "source_id": "1cz8_B",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1flt_A": {
+    "source_id": "1flt_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-1flt_B": {
+    "source_id": "1flt_B",
+    "regions": [
+      [
+        218,
+        315
+      ]
+    ],
+    "content_fraction": 0.248,
+    "content_count": 98
+  },
+  "derived-observed-mobi-1kat_A": {
+    "source_id": "1kat_A",
+    "regions": [
+      [
+        217,
+        315
+      ]
+    ],
+    "content_fraction": 0.251,
+    "content_count": 99
+  },
+  "derived-observed-mobi-1kat_B": {
+    "source_id": "1kat_B",
+    "regions": [
+      [
+        217,
+        315
+      ]
+    ],
+    "content_fraction": 0.251,
+    "content_count": 99
+  },
+  "derived-observed-mobi-1kmx_A": {
+    "source_id": "1kmx_A",
+    "regions": [
+      [
+        346,
+        395
+      ]
+    ],
+    "content_fraction": 0.127,
+    "content_count": 50
+  },
+  "derived-observed-mobi-1mjv_A": {
+    "source_id": "1mjv_A",
+    "regions": [
+      [
+        220,
+        314
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-1mjv_B": {
+    "source_id": "1mjv_B",
+    "regions": [
+      [
+        220,
+        314
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-1mkg_A": {
+    "source_id": "1mkg_A",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1mkg_B": {
+    "source_id": "1mkg_B",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1mkg_C": {
+    "source_id": "1mkg_C",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1mkg_D": {
+    "source_id": "1mkg_D",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1mkk_A": {
+    "source_id": "1mkk_A",
+    "regions": [
+      [
+        220,
+        312
+      ]
+    ],
+    "content_fraction": 0.235,
+    "content_count": 93
+  },
+  "derived-observed-mobi-1mkk_B": {
+    "source_id": "1mkk_B",
+    "regions": [
+      [
+        220,
+        312
+      ]
+    ],
+    "content_fraction": 0.235,
+    "content_count": 93
+  },
+  "derived-observed-mobi-1qty_A": {
+    "source_id": "1qty_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-1qty_B": {
+    "source_id": "1qty_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-1qty_C": {
+    "source_id": "1qty_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-1qty_D": {
+    "source_id": "1qty_D",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-1tzh_A": {
+    "source_id": "1tzh_A",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1tzh_B": {
+    "source_id": "1tzh_B",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1tzi_C": {
+    "source_id": "1tzi_C",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-1vgh_A": {
+    "source_id": "1vgh_A",
+    "regions": [
+      [
+        346,
+        395
+      ]
+    ],
+    "content_fraction": 0.127,
+    "content_count": 50
+  },
+  "derived-observed-mobi-1vpf_A": {
+    "source_id": "1vpf_A",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1vpf_B": {
+    "source_id": "1vpf_B",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1vpf_C": {
+    "source_id": "1vpf_C",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1vpf_D": {
+    "source_id": "1vpf_D",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-1vpp_A": {
+    "source_id": "1vpp_A",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-1vpp_B": {
+    "source_id": "1vpp_B",
+    "regions": [
+      [
+        219,
+        242
+      ],
+      [
+        249,
+        314
+      ]
+    ],
+    "content_fraction": 0.228,
+    "content_count": 90
+  },
+  "derived-observed-mobi-2fjg_A": {
+    "source_id": "2fjg_A",
+    "regions": [
+      [
+        220,
+        314
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-2fjg_B": {
+    "source_id": "2fjg_B",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-2fjh_A": {
+    "source_id": "2fjh_A",
+    "regions": [
+      [
+        218,
+        315
+      ]
+    ],
+    "content_fraction": 0.248,
+    "content_count": 98
+  },
+  "derived-observed-mobi-2fjh_D": {
+    "source_id": "2fjh_D",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-2qr0_C": {
+    "source_id": "2qr0_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-2qr0_D": {
+    "source_id": "2qr0_D",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-2qr0_I": {
+    "source_id": "2qr0_I",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-2qr0_J": {
+    "source_id": "2qr0_J",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-2qr0_O": {
+    "source_id": "2qr0_O",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-2qr0_P": {
+    "source_id": "2qr0_P",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-2qr0_U": {
+    "source_id": "2qr0_U",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-2qr0_V": {
+    "source_id": "2qr0_V",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-2vgh_A": {
+    "source_id": "2vgh_A",
+    "regions": [
+      [
+        346,
+        395
+      ]
+    ],
+    "content_fraction": 0.127,
+    "content_count": 50
+  },
+  "derived-observed-mobi-2vpf_A": {
+    "source_id": "2vpf_A",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-2vpf_B": {
+    "source_id": "2vpf_B",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-2vpf_C": {
+    "source_id": "2vpf_C",
+    "regions": [
+      [
+        220,
+        312
+      ]
+    ],
+    "content_fraction": 0.235,
+    "content_count": 93
+  },
+  "derived-observed-mobi-2vpf_D": {
+    "source_id": "2vpf_D",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-2vpf_E": {
+    "source_id": "2vpf_E",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-2vpf_F": {
+    "source_id": "2vpf_F",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-2vpf_G": {
+    "source_id": "2vpf_G",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-2vpf_H": {
+    "source_id": "2vpf_H",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-3bdy_C": {
+    "source_id": "3bdy_C",
+    "regions": [
+      [
+        220,
+        314
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-3p9w_A": {
+    "source_id": "3p9w_A",
+    "regions": [
+      [
+        218,
+        313
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-3p9w_C": {
+    "source_id": "3p9w_C",
+    "regions": [
+      [
+        218,
+        314
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-3p9w_E": {
+    "source_id": "3p9w_E",
+    "regions": [
+      [
+        218,
+        314
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-3p9w_G": {
+    "source_id": "3p9w_G",
+    "regions": [
+      [
+        217,
+        313
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-3qtk_A": {
+    "source_id": "3qtk_A",
+    "regions": [
+      [
+        220,
+        315
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-3qtk_B": {
+    "source_id": "3qtk_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-3qtk_C": {
+    "source_id": "3qtk_C",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-3qtk_D": {
+    "source_id": "3qtk_D",
+    "regions": [
+      [
+        218,
+        313
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-3qtk_E": {
+    "source_id": "3qtk_E",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-3qtk_F": {
+    "source_id": "3qtk_F",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-3s1b_A": {
+    "source_id": "3s1b_A",
+    "regions": [
+      [
+        218,
+        313
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-3s1k_C": {
+    "source_id": "3s1k_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-3s1k_D": {
+    "source_id": "3s1k_D",
+    "regions": [
+      [
+        220,
+        312
+      ]
+    ],
+    "content_fraction": 0.235,
+    "content_count": 93
+  },
+  "derived-observed-mobi-3v2a_B": {
+    "source_id": "3v2a_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4deq_A": {
+    "source_id": "4deq_A",
+    "regions": [
+      [
+        346,
+        395
+      ]
+    ],
+    "content_fraction": 0.127,
+    "content_count": 50
+  },
+  "derived-observed-mobi-4deq_B": {
+    "source_id": "4deq_B",
+    "regions": [
+      [
+        346,
+        395
+      ]
+    ],
+    "content_fraction": 0.127,
+    "content_count": 50
+  },
+  "derived-observed-mobi-4gln_B": {
+    "source_id": "4gln_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4gln_C": {
+    "source_id": "4gln_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4gls_E": {
+    "source_id": "4gls_E",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4gls_F": {
+    "source_id": "4gls_F",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4kzn_A": {
+    "source_id": "4kzn_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4qaf_B": {
+    "source_id": "4qaf_B",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-4qaf_C": {
+    "source_id": "4qaf_C",
+    "regions": [
+      [
+        218,
+        312
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4wpb_A": {
+    "source_id": "4wpb_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-4wpb_B": {
+    "source_id": "4wpb_B",
+    "regions": [
+      [
+        220,
+        312
+      ]
+    ],
+    "content_fraction": 0.235,
+    "content_count": 93
+  },
+  "derived-observed-mobi-4zff_C": {
+    "source_id": "4zff_C",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-4zff_D": {
+    "source_id": "4zff_D",
+    "regions": [
+      [
+        217,
+        315
+      ]
+    ],
+    "content_fraction": 0.251,
+    "content_count": 99
+  },
+  "derived-observed-mobi-5dn2_E": {
+    "source_id": "5dn2_E",
+    "regions": [
+      [
+        392,
+        395
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 4
+  },
+  "derived-observed-mobi-5dn2_F": {
+    "source_id": "5dn2_F",
+    "regions": [
+      [
+        392,
+        395
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 4
+  },
+  "derived-observed-mobi-5dn2_G": {
+    "source_id": "5dn2_G",
+    "regions": [
+      [
+        388,
+        395
+      ]
+    ],
+    "content_fraction": 0.02,
+    "content_count": 8
+  },
+  "derived-observed-mobi-5fv1_C": {
+    "source_id": "5fv1_C",
+    "regions": [
+      [
+        220,
+        314
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-5fv1_D": {
+    "source_id": "5fv1_D",
+    "regions": [
+      [
+        219,
+        316
+      ]
+    ],
+    "content_fraction": 0.248,
+    "content_count": 98
+  },
+  "derived-observed-mobi-5fv2_D": {
+    "source_id": "5fv2_D",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-5fv2_E": {
+    "source_id": "5fv2_E",
+    "regions": [
+      [
+        218,
+        314
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-5fv2_F": {
+    "source_id": "5fv2_F",
+    "regions": [
+      [
+        218,
+        314
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-5hhc_A": {
+    "source_id": "5hhc_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-5hhc_B": {
+    "source_id": "5hhc_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-5hhd_A": {
+    "source_id": "5hhd_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-5hhd_B": {
+    "source_id": "5hhd_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-5o4e_E": {
+    "source_id": "5o4e_E",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-5o4e_F": {
+    "source_id": "5o4e_F",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-5t89_A": {
+    "source_id": "5t89_A",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-5t89_B": {
+    "source_id": "5t89_B",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-6bft_E": {
+    "source_id": "6bft_E",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6bft_F": {
+    "source_id": "6bft_F",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-6d3o_A": {
+    "source_id": "6d3o_A",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-6d3o_B": {
+    "source_id": "6d3o_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6t9d_C": {
+    "source_id": "6t9d_C",
+    "regions": [
+      [
+        218,
+        289
+      ],
+      [
+        295,
+        313
+      ]
+    ],
+    "content_fraction": 0.23,
+    "content_count": 91
+  },
+  "derived-observed-mobi-6t9d_D": {
+    "source_id": "6t9d_D",
+    "regions": [
+      [
+        218,
+        313
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-6v7k_A": {
+    "source_id": "6v7k_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6v7k_B": {
+    "source_id": "6v7k_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6z13_B": {
+    "source_id": "6z13_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6z13_C": {
+    "source_id": "6z13_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6z3f_B": {
+    "source_id": "6z3f_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6z3f_C": {
+    "source_id": "6z3f_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6zbr_B": {
+    "source_id": "6zbr_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6zbr_C": {
+    "source_id": "6zbr_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6zcd_B": {
+    "source_id": "6zcd_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6zcd_C": {
+    "source_id": "6zcd_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6zfl_A": {
+    "source_id": "6zfl_A",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-6zfl_B": {
+    "source_id": "6zfl_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-7kez_C": {
+    "source_id": "7kez_C",
+    "regions": [
+      [
+        219,
+        312
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-7kf0_C": {
+    "source_id": "7kf0_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-7kf0_F": {
+    "source_id": "7kf0_F",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-7kf1_C": {
+    "source_id": "7kf1_C",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-7kf1_F": {
+    "source_id": "7kf1_F",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-7kf1_I": {
+    "source_id": "7kf1_I",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-7kf1_L": {
+    "source_id": "7kf1_L",
+    "regions": [
+      [
+        220,
+        313
+      ]
+    ],
+    "content_fraction": 0.238,
+    "content_count": 94
+  },
+  "derived-observed-mobi-7ll8_A": {
+    "source_id": "7ll8_A",
+    "regions": [
+      [
+        219,
+        315
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 97
+  },
+  "derived-observed-mobi-7ll8_B": {
+    "source_id": "7ll8_B",
+    "regions": [
+      [
+        219,
+        313
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 95
+  },
+  "derived-observed-mobi-7ll9_A": {
+    "source_id": "7ll9_A",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-7ll9_B": {
+    "source_id": "7ll9_B",
+    "regions": [
+      [
+        217,
+        315
+      ]
+    ],
+    "content_fraction": 0.251,
+    "content_count": 99
+  },
+  "derived-observed-mobi-7ll9_E": {
+    "source_id": "7ll9_E",
+    "regions": [
+      [
+        219,
+        314
+      ]
+    ],
+    "content_fraction": 0.243,
+    "content_count": 96
+  },
+  "derived-observed-mobi-7ll9_F": {
+    "source_id": "7ll9_F",
+    "regions": [
+      [
+        217,
+        314
+      ]
+    ],
+    "content_fraction": 0.248,
+    "content_count": 98
+  },
+  "derived-observed-priority": {
+    "regions": [
+      [
+        220,
+        313
+      ],
+      [
+        346,
+        367
+      ]
+    ],
+    "content_fraction": 0.294,
+    "content_count": 116
+  },
+  "derived-observed-th_90": {
+    "regions": [
+      [
+        220,
+        313
+      ],
+      [
+        346,
+        367
+      ]
+    ],
+    "content_fraction": 0.294,
+    "content_count": 116
+  },
+  "homology-domain-gene3d": {
+    "regions": [
+      [
+        215,
+        327
+      ],
+      [
+        342,
+        395
+      ]
+    ],
+    "content_fraction": 0.423,
+    "content_count": 167,
+    "regions_ids": [
+      "2.10.90.10",
+      "2.10.160.10"
+    ],
+    "regions_names": [
+      "Cystine-knot cytokine",
+      "Vascular endothelial growth factor, heparin-binding domain superfamily"
+    ]
+  },
+  "homology-domain-merge": {
+    "regions": [
+      [
+        215,
+        327
+      ],
+      [
+        342,
+        395
+      ]
+    ],
+    "content_fraction": 0.423,
+    "content_count": 167
+  },
+  "homology-domain-pfam": {
+    "regions": [
+      [
+        232,
+        310
+      ],
+      [
+        346,
+        395
+      ]
+    ],
+    "content_fraction": 0.327,
+    "content_count": 129,
+    "regions_ids": [
+      "PF00341",
+      "PF14554"
+    ],
+    "regions_names": [
+      "PDGF/VEGF domain",
+      "Vascular endothelial growth factor, heparin-binding domain"
+    ]
+  },
+  "level": 1,
+  "prediction-compact-mobidb_lite_sub": {
+    "regions": [
+      [
+        72,
+        175
+      ]
+    ],
+    "content_count": 104,
+    "content_fraction": 0.263,
+    "regions_params": [
+      0.46
+    ]
+  },
+  "prediction-disorder-alphafold": {
+    "scores": [
+      0.719,
+      0.728,
+      0.732,
+      0.737,
+      0.735,
+      0.729,
+      0.725,
+      0.718,
+      0.712,
+      0.714,
+      0.713,
+      0.699,
+      0.694,
+      0.688,
+      0.675,
+      0.676,
+      0.678,
+      0.684,
+      0.706,
+      0.711,
+      0.714,
+      0.724,
+      0.724,
+      0.746,
+      0.754,
+      0.77,
+      0.779,
+      0.781,
+      0.778,
+      0.777,
+      0.785,
+      0.787,
+      0.772,
+      0.783,
+      0.767,
+      0.761,
+      0.766,
+      0.749,
+      0.731,
+      0.712,
+      0.689,
+      0.664,
+      0.646,
+      0.635,
+      0.61,
+      0.61,
+      0.573,
+      0.553,
+      0.513,
+      0.494,
+      0.487,
+      0.465,
+      0.446,
+      0.449,
+      0.456,
+      0.433,
+      0.442,
+      0.453,
+      0.44,
+      0.446,
+      0.421,
+      0.419,
+      0.425,
+      0.43,
+      0.442,
+      0.427,
+      0.435,
+      0.418,
+      0.402,
+      0.393,
+      0.371,
+      0.377,
+      0.39,
+      0.408,
+      0.4,
+      0.395,
+      0.407,
+      0.432,
+      0.432,
+      0.405,
+      0.412,
+      0.389,
+      0.374,
+      0.377,
+      0.372,
+      0.388,
+      0.383,
+      0.376,
+      0.384,
+      0.383,
+      0.407,
+      0.398,
+      0.425,
+      0.413,
+      0.417,
+      0.416,
+      0.418,
+      0.402,
+      0.404,
+      0.437,
+      0.444,
+      0.439,
+      0.427,
+      0.423,
+      0.439,
+      0.428,
+      0.446,
+      0.438,
+      0.442,
+      0.425,
+      0.423,
+      0.41,
+      0.403,
+      0.39,
+      0.399,
+      0.381,
+      0.39,
+      0.37,
+      0.389,
+      0.41,
+      0.422,
+      0.445,
+      0.471,
+      0.488,
+      0.485,
+      0.485,
+      0.503,
+      0.517,
+      0.537,
+      0.542,
+      0.57,
+      0.58,
+      0.619,
+      0.631,
+      0.671,
+      0.689,
+      0.722,
+      0.752,
+      0.77,
+      0.788,
+      0.817,
+      0.838,
+      0.871,
+      0.891,
+      0.901,
+      0.915,
+      0.917,
+      0.92,
+      0.915,
+      0.909,
+      0.916,
+      0.904,
+      0.888,
+      0.888,
+      0.888,
+      0.89,
+      0.882,
+      0.882,
+      0.885,
+      0.878,
+      0.882,
+      0.879,
+      0.879,
+      0.885,
+      0.88,
+      0.885,
+      0.882,
+      0.864,
+      0.863,
+      0.857,
+      0.86,
+      0.836,
+      0.821,
+      0.817,
+      0.792,
+      0.782,
+      0.792,
+      0.803,
+      0.777,
+      0.778,
+      0.77,
+      0.746,
+      0.714,
+      0.702,
+      0.681,
+      0.659,
+      0.656,
+      0.657,
+      0.643,
+      0.624,
+      0.613,
+      0.593,
+      0.59,
+      0.56,
+      0.553,
+      0.523,
+      0.533,
+      0.525,
+      0.522,
+      0.54,
+      0.512,
+      0.501,
+      0.499,
+      0.514,
+      0.518,
+      0.498,
+      0.515,
+      0.514,
+      0.507,
+      0.528,
+      0.549,
+      0.527,
+      0.49,
+      0.483,
+      0.473,
+      0.458,
+      0.477,
+      0.478,
+      0.507,
+      0.52,
+      0.551,
+      0.55,
+      0.569,
+      0.558,
+      0.54,
+      0.558,
+      0.533,
+      0.512,
+      0.521,
+      0.518,
+      0.522,
+      0.506
+    ],
+    "content_fraction": 0.461,
+    "content_count": 107,
+    "regions": [
+      [
+        1,
+        46
+      ],
+      [
+        133,
+        193
+      ]
+    ]
+  },
+  "prediction-disorder-dis465": {
+    "regions": [
+      [
+        1,
+        11
+      ],
+      [
+        23,
+        41
+      ],
+      [
+        73,
+        108
+      ],
+      [
+        117,
+        122
+      ],
+      [
+        128,
+        177
+      ],
+      [
+        209,
+        215
+      ],
+      [
+        312,
+        344
+      ],
+      [
+        387,
+        390
+      ],
+      [
+        392,
+        395
+      ]
+    ],
+    "content_count": 170,
+    "content_fraction": 0.43
+  },
+  "prediction-disorder-disHL": {
+    "regions": [
+      [
+        1,
+        20
+      ],
+      [
+        30,
+        42
+      ],
+      [
+        73,
+        118
+      ],
+      [
+        130,
+        135
+      ],
+      [
+        139,
+        146
+      ],
+      [
+        151,
+        173
+      ],
+      [
+        304,
+        305
+      ],
+      [
+        308,
+        376
+      ],
+      [
+        378,
+        395
+      ]
+    ],
+    "content_count": 205,
+    "content_fraction": 0.519
+  },
+  "prediction-disorder-espD": {
+    "regions": [
+      [
+        1,
+        93
+      ],
+      [
+        392,
+        392
+      ]
+    ],
+    "content_count": 94,
+    "content_fraction": 0.238
+  },
+  "prediction-disorder-espN": {
+    "regions": [
+      [
+        1,
+        48
+      ],
+      [
+        65,
+        185
+      ],
+      [
+        199,
+        220
+      ],
+      [
+        314,
+        357
+      ],
+      [
+        390,
+        395
+      ]
+    ],
+    "content_count": 241,
+    "content_fraction": 0.61
+  },
+  "prediction-disorder-espX": {
+    "regions": [
+      [
+        1,
+        182
+      ],
+      [
+        195,
+        202
+      ],
+      [
+        307,
+        362
+      ],
+      [
+        370,
+        395
+      ]
+    ],
+    "content_count": 272,
+    "content_fraction": 0.689
+  },
+  "prediction-disorder-glo": {
+    "regions": [
+      [
+        1,
+        2
+      ],
+      [
+        5,
+        7
+      ],
+      [
+        9,
+        17
+      ],
+      [
+        28,
+        45
+      ],
+      [
+        78,
+        91
+      ],
+      [
+        110,
+        116
+      ],
+      [
+        150,
+        176
+      ],
+      [
+        208,
+        213
+      ],
+      [
+        259,
+        273
+      ],
+      [
+        342,
+        350
+      ],
+      [
+        365,
+        370
+      ],
+      [
+        386,
+        386
+      ],
+      [
+        390,
+        390
+      ],
+      [
+        392,
+        392
+      ]
+    ],
+    "content_count": 119,
+    "content_fraction": 0.301
+  },
+  "prediction-disorder-iupl": {
+    "regions": [
+      [
+        1,
+        46
+      ],
+      [
+        66,
+        118
+      ],
+      [
+        120,
+        175
+      ],
+      [
+        207,
+        211
+      ],
+      [
+        214,
+        215
+      ],
+      [
+        285,
+        290
+      ],
+      [
+        319,
+        335
+      ]
+    ],
+    "content_count": 185,
+    "content_fraction": 0.468
+  },
+  "prediction-disorder-iups": {
+    "regions": [
+      [
+        1,
+        42
+      ],
+      [
+        75,
+        117
+      ],
+      [
+        120,
+        120
+      ],
+      [
+        122,
+        123
+      ],
+      [
+        125,
+        128
+      ],
+      [
+        130,
+        130
+      ],
+      [
+        136,
+        174
+      ],
+      [
+        285,
+        290
+      ],
+      [
+        292,
+        293
+      ],
+      [
+        295,
+        300
+      ],
+      [
+        307,
+        340
+      ],
+      [
+        394,
+        395
+      ]
+    ],
+    "content_count": 182,
+    "content_fraction": 0.461
+  },
+  "prediction-disorder-mobidb_lite": {
+    "regions": [
+      [
+        1,
+        45
+      ],
+      [
+        73,
+        175
+      ],
+      [
+        314,
+        344
+      ]
+    ],
+    "content_count": 179,
+    "content_fraction": 0.453,
+    "scores": [
+      1,
+      1,
+      0.875,
+      0.875,
+      1,
+      1,
+      1,
+      0.875,
+      1,
+      1,
+      1,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.75,
+      0.75,
+      0.75,
+      0.625,
+      0.625,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.875,
+      0.875,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0.875,
+      0.625,
+      0.625,
+      0.625,
+      0.5,
+      0.375,
+      0.375,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.375,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.75,
+      0.75,
+      0.875,
+      0.875,
+      0.875,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0.875,
+      0.875,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.625,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.625,
+      0.375,
+      0.625,
+      0.5,
+      0.625,
+      0.5,
+      0.375,
+      0.5,
+      0.5,
+      0.5,
+      0.625,
+      0.5,
+      0.75,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.625,
+      0.625,
+      0.625,
+      0.75,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.75,
+      0.625,
+      0.5,
+      0.375,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.125,
+      0.125,
+      0.125,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.25,
+      0.375,
+      0.5,
+      0.5,
+      0.5,
+      0.375,
+      0.375,
+      0.375,
+      0.375,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0,
+      0.125,
+      0.125,
+      0,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0,
+      0,
+      0,
+      0.125,
+      0.125,
+      0,
+      0.25,
+      0.375,
+      0.375,
+      0.375,
+      0.375,
+      0.5,
+      0.5,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.625,
+      0.5,
+      0.625,
+      0.625,
+      0.625,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.375,
+      0.375,
+      0.375,
+      0.375,
+      0.375,
+      0.375,
+      0.375,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.125,
+      0.125,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.375,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.125,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.375,
+      0.375,
+      0.375,
+      0.375,
+      0.625,
+      0.375,
+      0.75,
+      0.5,
+      0.625,
+      0.625
+    ]
+  },
+  "prediction-disorder-priority": {
+    "regions": [
+      [
+        1,
+        46
+      ],
+      [
+        73,
+        193
+      ],
+      [
+        314,
+        344
+      ]
+    ],
+    "content_fraction": 0.501,
+    "content_count": 198
+  },
+  "prediction-disorder-th_50": {
+    "regions": [
+      [
+        1,
+        46
+      ],
+      [
+        66,
+        118
+      ],
+      [
+        120,
+        123
+      ],
+      [
+        125,
+        176
+      ],
+      [
+        209,
+        211
+      ],
+      [
+        312,
+        350
+      ],
+      [
+        390,
+        390
+      ],
+      [
+        392,
+        395
+      ]
+    ],
+    "content_count": 202,
+    "content_fraction": 0.511
+  },
+  "prediction-extended-mobidb_lite_sub": {
+    "regions": [
+      [
+        313,
+        344
+      ]
+    ],
+    "content_count": 32,
+    "content_fraction": 0.081,
+    "regions_params": [
+      0.594
+    ]
+  },
+  "prediction-lip-alphafold": {
+    "scores": [
+      0.837,
+      0.862,
+      0.88,
+      0.905,
+      0.902,
+      0.904,
+      0.921,
+      0.936,
+      0.934,
+      0.939,
+      0.945,
+      0.948,
+      0.949,
+      0.95,
+      0.949,
+      0.947,
+      0.943,
+      0.93,
+      0.919,
+      0.897,
+      0.879,
+      0.881,
+      0.844,
+      0.827,
+      0.818,
+      0.811,
+      0.784,
+      0.806,
+      0.766,
+      0.775,
+      0.778,
+      0.742,
+      0.744,
+      0.733,
+      0.792,
+      0.793,
+      0.84,
+      0.897,
+      0.939,
+      0.96,
+      0.969,
+      0.984,
+      0.985,
+      0.988,
+      0.984,
+      0.986,
+      0.573,
+      0.553,
+      0.513,
+      0.494,
+      0.487,
+      0.465,
+      0.446,
+      0.449,
+      0.456,
+      0.433,
+      0.442,
+      0.453,
+      0.44,
+      0.446,
+      0.421,
+      0.419,
+      0.425,
+      0.43,
+      0.442,
+      0.427,
+      0.435,
+      0.418,
+      0.402,
+      0.393,
+      0.371,
+      0.377,
+      0.39,
+      0.408,
+      0.4,
+      0.395,
+      0.407,
+      0.432,
+      0.432,
+      0.405,
+      0.412,
+      0.389,
+      0.374,
+      0.377,
+      0.372,
+      0.388,
+      0.383,
+      0.376,
+      0.384,
+      0.383,
+      0.407,
+      0.398,
+      0.425,
+      0.413,
+      0.417,
+      0.416,
+      0.418,
+      0.402,
+      0.404,
+      0.437,
+      0.444,
+      0.439,
+      0.427,
+      0.423,
+      0.439,
+      0.428,
+      0.446,
+      0.438,
+      0.442,
+      0.425,
+      0.423,
+      0.41,
+      0.403,
+      0.39,
+      0.399,
+      0.381,
+      0.39,
+      0.37,
+      0.389,
+      0.41,
+      0.422,
+      0.445,
+      0.471,
+      0.488,
+      0.485,
+      0.485,
+      0.503,
+      0.517,
+      0.537,
+      0.542,
+      0.57,
+      0.58,
+      0.969,
+      0.938,
+      0.876,
+      0.828,
+      0.808,
+      0.796,
+      0.792,
+      0.805,
+      0.806,
+      0.777,
+      0.79,
+      0.811,
+      0.786,
+      0.782,
+      0.792,
+      0.786,
+      0.799,
+      0.789,
+      0.799,
+      0.797,
+      0.805,
+      0.804,
+      0.791,
+      0.798,
+      0.8,
+      0.777,
+      0.779,
+      0.781,
+      0.777,
+      0.765,
+      0.748,
+      0.781,
+      0.776,
+      0.785,
+      0.774,
+      0.748,
+      0.782,
+      0.782,
+      0.79,
+      0.79,
+      0.788,
+      0.801,
+      0.82,
+      0.765,
+      0.761,
+      0.794,
+      0.817,
+      0.807,
+      0.842,
+      0.829,
+      0.877,
+      0.88,
+      0.878,
+      0.883,
+      0.885,
+      0.866,
+      0.841,
+      0.818,
+      0.84,
+      0.848,
+      0.892,
+      0.56,
+      0.553,
+      0.523,
+      0.533,
+      0.525,
+      0.522,
+      0.54,
+      0.512,
+      0.501,
+      0.499,
+      0.514,
+      0.518,
+      0.498,
+      0.515,
+      0.514,
+      0.507,
+      0.528,
+      0.549,
+      0.527,
+      0.49,
+      0.483,
+      0.473,
+      0.458,
+      0.477,
+      0.478,
+      0.507,
+      0.52,
+      0.551,
+      0.55,
+      0.569,
+      0.558,
+      0.54,
+      0.558,
+      0.533,
+      0.512,
+      0.521,
+      0.518,
+      0.522,
+      0.506
+    ],
+    "content_fraction": 0.422,
+    "content_count": 98,
+    "regions": [
+      [
+        1,
+        28
+      ],
+      [
+        35,
+        46
+      ],
+      [
+        133,
+        161
+      ],
+      [
+        169,
+        175
+      ],
+      [
+        178,
+        193
+      ]
+    ]
+  },
+  "prediction-lip-anchor": {
+    "regions": [
+      [
+        9,
+        28
+      ],
+      [
+        43,
+        72
+      ],
+      [
+        108,
+        147
+      ],
+      [
+        182,
+        199
+      ],
+      [
+        301,
+        302
+      ]
+    ],
+    "content_count": 110,
+    "content_fraction": 0.278
+  },
+  "prediction-lip-priority": {
+    "regions": [
+      [
+        1,
+        28
+      ],
+      [
+        35,
+        72
+      ],
+      [
+        108,
+        161
+      ],
+      [
+        169,
+        175
+      ],
+      [
+        178,
+        199
+      ],
+      [
+        301,
+        302
+      ]
+    ],
+    "content_fraction": 0.382,
+    "content_count": 151
+  },
+  "prediction-low_complexity-mobidb_lite_sub": {
+    "regions": [
+      [
+        73,
+        85
+      ],
+      [
+        123,
+        143
+      ],
+      [
+        165,
+        175
+      ]
+    ],
+    "content_count": 45,
+    "content_fraction": 0.114
+  },
+  "prediction-low_complexity-seg": {
+    "regions": [
+      [
+        30,
+        51
+      ],
+      [
+        70,
+        108
+      ],
+      [
+        123,
+        178
+      ],
+      [
+        321,
+        342
+      ]
+    ],
+    "content_count": 139,
+    "content_fraction": 0.352
+  },
+  "prediction-negative_polyelectrolyte-mobidb_lite_sub": {
+    "regions": [
+      [
+        91,
+        102
+      ]
+    ],
+    "content_count": 12,
+    "content_fraction": 0.03
+  },
+  "prediction-plddt-alphafold": {
+    "scores": [
+      0.61,
+      0.671,
+      0.714,
+      0.773,
+      0.766,
+      0.772,
+      0.811,
+      0.848,
+      0.843,
+      0.854,
+      0.869,
+      0.875,
+      0.878,
+      0.88,
+      0.878,
+      0.875,
+      0.864,
+      0.832,
+      0.806,
+      0.753,
+      0.711,
+      0.716,
+      0.627,
+      0.587,
+      0.566,
+      0.55,
+      0.485,
+      0.538,
+      0.44,
+      0.462,
+      0.469,
+      0.383,
+      0.389,
+      0.363,
+      0.504,
+      0.506,
+      0.619,
+      0.755,
+      0.855,
+      0.905,
+      0.926,
+      0.963,
+      0.965,
+      0.972,
+      0.961,
+      0.966,
+      0.956,
+      0.956,
+      0.962,
+      0.966,
+      0.973,
+      0.98,
+      0.977,
+      0.981,
+      0.974,
+      0.977,
+      0.978,
+      0.978,
+      0.968,
+      0.964,
+      0.957,
+      0.937,
+      0.934,
+      0.942,
+      0.942,
+      0.93,
+      0.916,
+      0.87,
+      0.877,
+      0.894,
+      0.923,
+      0.931,
+      0.957,
+      0.953,
+      0.971,
+      0.958,
+      0.968,
+      0.972,
+      0.977,
+      0.977,
+      0.981,
+      0.98,
+      0.979,
+      0.968,
+      0.964,
+      0.965,
+      0.971,
+      0.937,
+      0.939,
+      0.915,
+      0.927,
+      0.96,
+      0.967,
+      0.974,
+      0.974,
+      0.978,
+      0.971,
+      0.979,
+      0.981,
+      0.977,
+      0.974,
+      0.971,
+      0.977,
+      0.972,
+      0.98,
+      0.968,
+      0.958,
+      0.955,
+      0.944,
+      0.933,
+      0.909,
+      0.899,
+      0.893,
+      0.905,
+      0.945,
+      0.947,
+      0.959,
+      0.943,
+      0.964,
+      0.953,
+      0.969,
+      0.976,
+      0.975,
+      0.972,
+      0.982,
+      0.975,
+      0.982,
+      0.978,
+      0.974,
+      0.975,
+      0.961,
+      0.951,
+      0.925,
+      0.852,
+      0.704,
+      0.588,
+      0.542,
+      0.513,
+      0.503,
+      0.535,
+      0.538,
+      0.469,
+      0.499,
+      0.548,
+      0.488,
+      0.479,
+      0.503,
+      0.489,
+      0.521,
+      0.495,
+      0.521,
+      0.516,
+      0.534,
+      0.533,
+      0.502,
+      0.518,
+      0.523,
+      0.467,
+      0.472,
+      0.478,
+      0.467,
+      0.439,
+      0.399,
+      0.478,
+      0.464,
+      0.488,
+      0.46,
+      0.398,
+      0.479,
+      0.48,
+      0.499,
+      0.5,
+      0.494,
+      0.525,
+      0.571,
+      0.438,
+      0.43,
+      0.509,
+      0.564,
+      0.54,
+      0.624,
+      0.592,
+      0.705,
+      0.713,
+      0.708,
+      0.721,
+      0.725,
+      0.679,
+      0.621,
+      0.565,
+      0.617,
+      0.637,
+      0.743,
+      0.755,
+      0.775,
+      0.802,
+      0.776,
+      0.75,
+      0.751,
+      0.734,
+      0.817,
+      0.797,
+      0.828,
+      0.819,
+      0.854,
+      0.867,
+      0.859,
+      0.848,
+      0.859,
+      0.865,
+      0.868,
+      0.877,
+      0.889,
+      0.889,
+      0.905,
+      0.873,
+      0.856,
+      0.903,
+      0.866,
+      0.883,
+      0.849,
+      0.826,
+      0.789,
+      0.81,
+      0.854,
+      0.851,
+      0.892,
+      0.871,
+      0.849,
+      0.783,
+      0.715,
+      0.675
+    ],
+    "content_fraction": 0.698,
+    "content_count": 162,
+    "regions": [
+      [
+        3,
+        22
+      ],
+      [
+        38,
+        135
+      ],
+      [
+        183,
+        187
+      ],
+      [
+        193,
+        231
+      ]
+    ]
+  },
+  "prediction-polyampholyte-mobidb_lite_sub": {
+    "regions": [
+      [
+        314,
+        323
+      ]
+    ],
+    "content_count": 10,
+    "content_fraction": 0.025
+  },
+  "prediction-positive_polyelectrolyte-mobidb_lite_sub": {
+    "regions": [
+      [
+        324,
+        340
+      ]
+    ],
+    "content_count": 17,
+    "content_fraction": 0.043
+  }
+}

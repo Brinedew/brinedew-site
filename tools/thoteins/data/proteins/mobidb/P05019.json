@@ -1,0 +1,3161 @@
+{
+  "acc": "P05019",
+  "reviewed": true,
+  "gene": "IGF1",
+  "proteome": "UP000005640",
+  "name": "Insulin-like growth factor I",
+  "length": 195,
+  "organism": "Homo sapiens (Human)",
+  "ncbi_taxon_id": 9606,
+  "taxonomy": [
+    "Eukaryota",
+    "Metazoa",
+    "Chordata",
+    "Craniata",
+    "Vertebrata",
+    "Euteleostomi",
+    "Mammalia",
+    "Eutheria",
+    "Euarchontoglires",
+    "Primates",
+    "Haplorrhini",
+    "Catarrhini",
+    "Hominidae",
+    "Homo"
+  ],
+  "sequence": "MGKISSLPTQLFKCCFCDFLKVKMHTMSSSHLFYLALCLLTFTSSATAGPETLCGAELVDALQFVCGDRGFYFNKPTGYGSSSRRAPQTGIVDECCFRSCDLRRLEMYCAPLKPAKSARSVRAQRHTDMPKTQKYQPPSTNKNTKSQRRKGWPKTHPGGEQKEGTEASLQIRGKKKEQRREIGSRNAECRGKKGK",
+  "localization": [
+    "Secreted"
+  ],
+  "uniref100": "UniRef100_P05019",
+  "uniref90": "UniRef90_P05019",
+  "uniref50": "UniRef50_P05019",
+  "uniparc": "UPI0000115ED4",
+  "processing": {
+    "positions": [
+      [
+        49,
+        77
+      ],
+      [
+        78,
+        89
+      ],
+      [
+        90,
+        110
+      ],
+      [
+        111,
+        118
+      ]
+    ],
+    "names": [
+      "B",
+      "C",
+      "A",
+      "D"
+    ]
+  },
+  "curated-disorder-disprot": {
+    "source_id": "DP03857",
+    "regions": [
+      [
+        70,
+        90
+      ]
+    ],
+    "content_fraction": 0.108,
+    "content_count": 21
+  },
+  "curated-disorder-merge": {
+    "regions": [
+      [
+        70,
+        90
+      ]
+    ],
+    "content_fraction": 0.108,
+    "content_count": 21
+  },
+  "curated-disorder-priority": {
+    "regions": [
+      [
+        70,
+        90
+      ]
+    ],
+    "content_fraction": 0.108,
+    "content_count": 21
+  },
+  "derived-binding_mode_disorder_to_disorder-mobi": {
+    "regions": [
+      [
+        1,
+        39
+      ],
+      [
+        119,
+        195
+      ]
+    ],
+    "content_fraction": 0.595,
+    "content_count": 116
+  },
+  "derived-binding_mode_disorder_to_disorder-priority": {
+    "regions": [
+      [
+        1,
+        39
+      ],
+      [
+        119,
+        195
+      ]
+    ],
+    "content_fraction": 0.595,
+    "content_count": 116
+  },
+  "derived-lip-flipper-1gzy_A": {
+    "source_id": "1gzy_A",
+    "regions": [
+      [
+        60,
+        64
+      ]
+    ],
+    "content_fraction": 0.026,
+    "content_count": 5
+  },
+  "derived-lip-flipper-1h59_A": {
+    "source_id": "1h59_A",
+    "regions": [
+      [
+        52,
+        69
+      ]
+    ],
+    "content_fraction": 0.092,
+    "content_count": 18
+  },
+  "derived-lip-flipper-1tgr_A": {
+    "source_id": "1tgr_A",
+    "regions": [
+      [
+        52,
+        77
+      ],
+      [
+        90,
+        91
+      ]
+    ],
+    "content_fraction": 0.144,
+    "content_count": 28
+  },
+  "derived-lip-flipper-1tgr_B": {
+    "source_id": "1tgr_B",
+    "regions": [
+      [
+        53,
+        77
+      ]
+    ],
+    "content_fraction": 0.128,
+    "content_count": 25
+  },
+  "derived-lip-flipper-1wqj_B": {
+    "source_id": "1wqj_B",
+    "regions": [
+      [
+        52,
+        76
+      ]
+    ],
+    "content_fraction": 0.128,
+    "content_count": 25
+  },
+  "derived-lip-flipper-2dsr_C": {
+    "source_id": "2dsr_C",
+    "regions": [
+      [
+        50,
+        72
+      ]
+    ],
+    "content_fraction": 0.118,
+    "content_count": 23
+  },
+  "derived-lip-flipper-4xss_A": {
+    "source_id": "4xss_A",
+    "regions": [
+      [
+        51,
+        74
+      ],
+      [
+        89,
+        111
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 47
+  },
+  "derived-lip-flipper-5u8q_B": {
+    "source_id": "5u8q_B",
+    "regions": [
+      [
+        52,
+        74
+      ],
+      [
+        87,
+        111
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 48
+  },
+  "derived-lip-flipper-6ff3_B": {
+    "source_id": "6ff3_B",
+    "regions": [
+      [
+        49,
+        69
+      ],
+      [
+        91,
+        106
+      ]
+    ],
+    "content_fraction": 0.19,
+    "content_count": 37
+  },
+  "derived-lip-flipper-6pyh_B": {
+    "source_id": "6pyh_B",
+    "regions": [
+      [
+        52,
+        85
+      ],
+      [
+        89,
+        107
+      ]
+    ],
+    "content_fraction": 0.272,
+    "content_count": 53
+  },
+  "derived-lip-flipper-7s0q_C": {
+    "source_id": "7s0q_C",
+    "regions": [
+      [
+        51,
+        99
+      ]
+    ],
+    "content_fraction": 0.251,
+    "content_count": 49
+  },
+  "derived-lip-flipper-7wrq_C": {
+    "source_id": "7wrq_C",
+    "regions": [
+      [
+        49,
+        92
+      ]
+    ],
+    "content_fraction": 0.226,
+    "content_count": 44
+  },
+  "derived-lip-flipper-7yrr_C": {
+    "source_id": "7yrr_C",
+    "regions": [
+      [
+        52,
+        70
+      ],
+      [
+        87,
+        111
+      ]
+    ],
+    "content_fraction": 0.226,
+    "content_count": 44
+  },
+  "derived-lip-flipper-7yrr_D": {
+    "source_id": "7yrr_D",
+    "regions": [
+      [
+        52,
+        70
+      ],
+      [
+        87,
+        111
+      ]
+    ],
+    "content_fraction": 0.226,
+    "content_count": 44
+  },
+  "derived-lip-flipper-8eyr_C": {
+    "source_id": "8eyr_C",
+    "regions": [
+      [
+        52,
+        86
+      ],
+      [
+        89,
+        106
+      ]
+    ],
+    "content_fraction": 0.272,
+    "content_count": 53
+  },
+  "derived-lip-flipper-8eyr_D": {
+    "source_id": "8eyr_D",
+    "regions": [
+      [
+        52,
+        86
+      ],
+      [
+        89,
+        106
+      ]
+    ],
+    "content_fraction": 0.272,
+    "content_count": 53
+  },
+  "derived-lip-merge": {
+    "regions": [
+      [
+        49,
+        111
+      ]
+    ],
+    "content_fraction": 0.323,
+    "content_count": 63
+  },
+  "derived-lip-priority": {
+    "regions": [
+      [
+        49,
+        111
+      ]
+    ],
+    "content_fraction": 0.323,
+    "content_count": 63
+  },
+  "derived-missing_residues-mobi-1gzr_A": {
+    "source_id": "1gzr_A",
+    "regions": [
+      [
+        49,
+        50
+      ],
+      [
+        84,
+        86
+      ],
+      [
+        115,
+        118
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 9
+  },
+  "derived-missing_residues-mobi-1gzy_A": {
+    "source_id": "1gzy_A",
+    "regions": [
+      [
+        49,
+        50
+      ],
+      [
+        80,
+        86
+      ],
+      [
+        115,
+        118
+      ]
+    ],
+    "content_fraction": 0.067,
+    "content_count": 13
+  },
+  "derived-missing_residues-mobi-1gzz_A": {
+    "source_id": "1gzz_A",
+    "regions": [
+      [
+        80,
+        85
+      ],
+      [
+        115,
+        118
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 10
+  },
+  "derived-missing_residues-mobi-1h02_A": {
+    "source_id": "1h02_A",
+    "regions": [
+      [
+        49,
+        50
+      ],
+      [
+        84,
+        85
+      ],
+      [
+        117,
+        118
+      ]
+    ],
+    "content_fraction": 0.031,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-1h59_A": {
+    "source_id": "1h59_A",
+    "regions": [
+      [
+        49,
+        49
+      ],
+      [
+        80,
+        88
+      ],
+      [
+        113,
+        118
+      ]
+    ],
+    "content_fraction": 0.082,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-1imx_A": {
+    "source_id": "1imx_A",
+    "regions": [
+      [
+        49,
+        50
+      ],
+      [
+        83,
+        88
+      ],
+      [
+        113,
+        118
+      ]
+    ],
+    "content_fraction": 0.072,
+    "content_count": 14
+  },
+  "derived-missing_residues-mobi-1wqj_B": {
+    "source_id": "1wqj_B",
+    "regions": [
+      [
+        49,
+        49
+      ],
+      [
+        112,
+        118
+      ]
+    ],
+    "content_fraction": 0.041,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-2dsr_C": {
+    "source_id": "2dsr_C",
+    "regions": [
+      [
+        49,
+        49
+      ],
+      [
+        83,
+        85
+      ],
+      [
+        113,
+        118
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 10
+  },
+  "derived-missing_residues-mobi-4xss_A": {
+    "source_id": "4xss_A",
+    "regions": [
+      [
+        49,
+        50
+      ],
+      [
+        75,
+        88
+      ],
+      [
+        112,
+        118
+      ]
+    ],
+    "content_fraction": 0.118,
+    "content_count": 23
+  },
+  "derived-missing_residues-mobi-5u8q_B": {
+    "source_id": "5u8q_B",
+    "regions": [
+      [
+        49,
+        51
+      ],
+      [
+        75,
+        86
+      ],
+      [
+        112,
+        118
+      ]
+    ],
+    "content_fraction": 0.113,
+    "content_count": 22
+  },
+  "derived-missing_residues-mobi-6ff3_B": {
+    "source_id": "6ff3_B",
+    "regions": [
+      [
+        70,
+        90
+      ],
+      [
+        110,
+        118
+      ]
+    ],
+    "content_fraction": 0.154,
+    "content_count": 30
+  },
+  "derived-missing_residues-mobi-6pyh_B": {
+    "source_id": "6pyh_B",
+    "regions": [
+      [
+        49,
+        51
+      ],
+      [
+        86,
+        88
+      ],
+      [
+        112,
+        118
+      ]
+    ],
+    "content_fraction": 0.067,
+    "content_count": 13
+  },
+  "derived-missing_residues-mobi-7s0q_C": {
+    "source_id": "7s0q_C",
+    "regions": [
+      [
+        49,
+        50
+      ],
+      [
+        112,
+        118
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 9
+  },
+  "derived-missing_residues-mobi-7wrq_C": {
+    "source_id": "7wrq_C",
+    "regions": [
+      [
+        114,
+        118
+      ]
+    ],
+    "content_fraction": 0.026,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-7yrr_C": {
+    "source_id": "7yrr_C",
+    "regions": [
+      [
+        71,
+        86
+      ]
+    ],
+    "content_fraction": 0.082,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-7yrr_D": {
+    "source_id": "7yrr_D",
+    "regions": [
+      [
+        71,
+        86
+      ]
+    ],
+    "content_fraction": 0.082,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-8eyr_C": {
+    "source_id": "8eyr_C",
+    "regions": [
+      [
+        1,
+        51
+      ],
+      [
+        87,
+        88
+      ],
+      [
+        112,
+        195
+      ]
+    ],
+    "content_fraction": 0.703,
+    "content_count": 137
+  },
+  "derived-missing_residues-mobi-8eyr_D": {
+    "source_id": "8eyr_D",
+    "regions": [
+      [
+        1,
+        51
+      ],
+      [
+        87,
+        88
+      ],
+      [
+        112,
+        195
+      ]
+    ],
+    "content_fraction": 0.703,
+    "content_count": 137
+  },
+  "derived-missing_residues-priority": {
+    "regions": [
+      [
+        1,
+        39
+      ],
+      [
+        119,
+        195
+      ]
+    ],
+    "content_fraction": 0.595,
+    "content_count": 116
+  },
+  "derived-missing_residues-th_90": {
+    "regions": [
+      [
+        1,
+        39
+      ],
+      [
+        119,
+        195
+      ]
+    ],
+    "content_fraction": 0.595,
+    "content_count": 116
+  },
+  "derived-missing_residues_context_dependent-th_90": {
+    "regions": [
+      [
+        40,
+        51
+      ],
+      [
+        71,
+        88
+      ]
+    ],
+    "content_fraction": 0.154,
+    "content_count": 30
+  },
+  "derived-mobile-mobi-1bqt_A": {
+    "source_id": "1bqt_A",
+    "regions": [
+      [
+        49,
+        59
+      ],
+      [
+        66,
+        94
+      ],
+      [
+        97,
+        105
+      ],
+      [
+        108,
+        118
+      ]
+    ],
+    "content_fraction": 0.308,
+    "content_count": 60
+  },
+  "derived-mobile-mobi-3gf1_A": {
+    "source_id": "3gf1_A",
+    "regions": [
+      [
+        49,
+        54
+      ],
+      [
+        73,
+        92
+      ],
+      [
+        107,
+        118
+      ]
+    ],
+    "content_fraction": 0.195,
+    "content_count": 38
+  },
+  "derived-mobile-mobi-3lri_A": {
+    "source_id": "3lri_A",
+    "regions": [
+      [
+        40,
+        55
+      ],
+      [
+        72,
+        88
+      ],
+      [
+        108,
+        118
+      ]
+    ],
+    "content_fraction": 0.226,
+    "content_count": 44
+  },
+  "derived-mobile-mobi-6rva_A": {
+    "source_id": "6rva_A",
+    "regions": [
+      [
+        49,
+        56
+      ],
+      [
+        65,
+        91
+      ],
+      [
+        97,
+        102
+      ],
+      [
+        108,
+        118
+      ]
+    ],
+    "content_fraction": 0.267,
+    "content_count": 52
+  },
+  "derived-mobile-th_90": {
+    "regions": [
+      [
+        40,
+        54
+      ],
+      [
+        73,
+        88
+      ],
+      [
+        108,
+        118
+      ]
+    ],
+    "content_fraction": 0.215,
+    "content_count": 42
+  },
+  "derived-observed-mobi-1b9g_A": {
+    "source_id": "1b9g_A",
+    "regions": [
+      [
+        49,
+        76
+      ],
+      [
+        90,
+        118
+      ]
+    ],
+    "content_fraction": 0.292,
+    "content_count": 57
+  },
+  "derived-observed-mobi-1bqt_A": {
+    "source_id": "1bqt_A",
+    "regions": [
+      [
+        49,
+        118
+      ]
+    ],
+    "content_fraction": 0.359,
+    "content_count": 70
+  },
+  "derived-observed-mobi-1gzr_A": {
+    "source_id": "1gzr_A",
+    "regions": [
+      [
+        51,
+        83
+      ],
+      [
+        87,
+        114
+      ]
+    ],
+    "content_fraction": 0.313,
+    "content_count": 61
+  },
+  "derived-observed-mobi-1gzy_A": {
+    "source_id": "1gzy_A",
+    "regions": [
+      [
+        51,
+        79
+      ],
+      [
+        87,
+        114
+      ]
+    ],
+    "content_fraction": 0.292,
+    "content_count": 57
+  },
+  "derived-observed-mobi-1gzz_A": {
+    "source_id": "1gzz_A",
+    "regions": [
+      [
+        49,
+        79
+      ],
+      [
+        86,
+        114
+      ]
+    ],
+    "content_fraction": 0.308,
+    "content_count": 60
+  },
+  "derived-observed-mobi-1h02_A": {
+    "source_id": "1h02_A",
+    "regions": [
+      [
+        51,
+        83
+      ],
+      [
+        86,
+        116
+      ]
+    ],
+    "content_fraction": 0.328,
+    "content_count": 64
+  },
+  "derived-observed-mobi-1h59_A": {
+    "source_id": "1h59_A",
+    "regions": [
+      [
+        50,
+        79
+      ],
+      [
+        89,
+        112
+      ]
+    ],
+    "content_fraction": 0.277,
+    "content_count": 54
+  },
+  "derived-observed-mobi-1imx_A": {
+    "source_id": "1imx_A",
+    "regions": [
+      [
+        51,
+        82
+      ],
+      [
+        89,
+        112
+      ]
+    ],
+    "content_fraction": 0.287,
+    "content_count": 56
+  },
+  "derived-observed-mobi-1pmx_A": {
+    "source_id": "1pmx_A",
+    "regions": [
+      [
+        49,
+        118
+      ]
+    ],
+    "content_fraction": 0.359,
+    "content_count": 70
+  },
+  "derived-observed-mobi-1tgr_A": {
+    "source_id": "1tgr_A",
+    "regions": [
+      [
+        49,
+        77
+      ],
+      [
+        90,
+        110
+      ]
+    ],
+    "content_fraction": 0.256,
+    "content_count": 50
+  },
+  "derived-observed-mobi-1tgr_B": {
+    "source_id": "1tgr_B",
+    "regions": [
+      [
+        49,
+        77
+      ],
+      [
+        90,
+        110
+      ]
+    ],
+    "content_fraction": 0.256,
+    "content_count": 50
+  },
+  "derived-observed-mobi-1wqj_B": {
+    "source_id": "1wqj_B",
+    "regions": [
+      [
+        50,
+        111
+      ]
+    ],
+    "content_fraction": 0.318,
+    "content_count": 62
+  },
+  "derived-observed-mobi-2dsr_C": {
+    "source_id": "2dsr_C",
+    "regions": [
+      [
+        50,
+        82
+      ],
+      [
+        86,
+        112
+      ]
+    ],
+    "content_fraction": 0.308,
+    "content_count": 60
+  },
+  "derived-observed-mobi-2gf1_A": {
+    "source_id": "2gf1_A",
+    "regions": [
+      [
+        49,
+        118
+      ]
+    ],
+    "content_fraction": 0.359,
+    "content_count": 70
+  },
+  "derived-observed-mobi-3gf1_A": {
+    "source_id": "3gf1_A",
+    "regions": [
+      [
+        49,
+        118
+      ]
+    ],
+    "content_fraction": 0.359,
+    "content_count": 70
+  },
+  "derived-observed-mobi-3lri_A": {
+    "source_id": "3lri_A",
+    "regions": [
+      [
+        40,
+        118
+      ]
+    ],
+    "content_fraction": 0.405,
+    "content_count": 79
+  },
+  "derived-observed-mobi-4xss_A": {
+    "source_id": "4xss_A",
+    "regions": [
+      [
+        51,
+        74
+      ],
+      [
+        89,
+        111
+      ]
+    ],
+    "content_fraction": 0.241,
+    "content_count": 47
+  },
+  "derived-observed-mobi-5u8q_B": {
+    "source_id": "5u8q_B",
+    "regions": [
+      [
+        52,
+        74
+      ],
+      [
+        87,
+        111
+      ]
+    ],
+    "content_fraction": 0.246,
+    "content_count": 48
+  },
+  "derived-observed-mobi-6ff3_B": {
+    "source_id": "6ff3_B",
+    "regions": [
+      [
+        49,
+        69
+      ],
+      [
+        91,
+        109
+      ]
+    ],
+    "content_fraction": 0.205,
+    "content_count": 40
+  },
+  "derived-observed-mobi-6pyh_B": {
+    "source_id": "6pyh_B",
+    "regions": [
+      [
+        52,
+        85
+      ],
+      [
+        89,
+        111
+      ]
+    ],
+    "content_fraction": 0.292,
+    "content_count": 57
+  },
+  "derived-observed-mobi-6rva_A": {
+    "source_id": "6rva_A",
+    "regions": [
+      [
+        49,
+        118
+      ]
+    ],
+    "content_fraction": 0.359,
+    "content_count": 70
+  },
+  "derived-observed-mobi-7s0q_C": {
+    "source_id": "7s0q_C",
+    "regions": [
+      [
+        51,
+        111
+      ]
+    ],
+    "content_fraction": 0.313,
+    "content_count": 61
+  },
+  "derived-observed-mobi-7wrq_C": {
+    "source_id": "7wrq_C",
+    "regions": [
+      [
+        49,
+        113
+      ]
+    ],
+    "content_fraction": 0.333,
+    "content_count": 65
+  },
+  "derived-observed-mobi-7yrr_C": {
+    "source_id": "7yrr_C",
+    "regions": [
+      [
+        52,
+        70
+      ],
+      [
+        87,
+        111
+      ]
+    ],
+    "content_fraction": 0.226,
+    "content_count": 44
+  },
+  "derived-observed-mobi-7yrr_D": {
+    "source_id": "7yrr_D",
+    "regions": [
+      [
+        52,
+        70
+      ],
+      [
+        87,
+        111
+      ]
+    ],
+    "content_fraction": 0.226,
+    "content_count": 44
+  },
+  "derived-observed-mobi-8eyr_C": {
+    "source_id": "8eyr_C",
+    "regions": [
+      [
+        52,
+        86
+      ],
+      [
+        89,
+        111
+      ]
+    ],
+    "content_fraction": 0.297,
+    "content_count": 58
+  },
+  "derived-observed-mobi-8eyr_D": {
+    "source_id": "8eyr_D",
+    "regions": [
+      [
+        52,
+        86
+      ],
+      [
+        89,
+        111
+      ]
+    ],
+    "content_fraction": 0.297,
+    "content_count": 58
+  },
+  "derived-observed-priority": {
+    "regions": [
+      [
+        52,
+        69
+      ],
+      [
+        91,
+        111
+      ]
+    ],
+    "content_fraction": 0.2,
+    "content_count": 39
+  },
+  "derived-observed-th_90": {
+    "regions": [
+      [
+        52,
+        70
+      ],
+      [
+        89,
+        111
+      ]
+    ],
+    "content_fraction": 0.215,
+    "content_count": 42
+  },
+  "homology-domain-merge": {
+    "regions": [
+      [
+        51,
+        109
+      ]
+    ],
+    "content_fraction": 0.303,
+    "content_count": 59
+  },
+  "homology-domain-pfam": {
+    "regions": [
+      [
+        51,
+        109
+      ]
+    ],
+    "content_fraction": 0.303,
+    "content_count": 59,
+    "regions_ids": [
+      "PF00049"
+    ],
+    "regions_names": [
+      "Insulin-like"
+    ]
+  },
+  "homology-msa_conservation": {
+    "scores": [
+      1.295,
+      0.633,
+      1.238,
+      0.94,
+      0.644,
+      1.169,
+      1.241,
+      0.724,
+      1.227,
+      1.208,
+      1.177,
+      0.953,
+      1.174,
+      1.225,
+      1.056,
+      0.941,
+      1.701,
+      1.506,
+      1.12,
+      1.277,
+      1.669,
+      1.287,
+      1.84,
+      2.087,
+      1.282,
+      0.968,
+      0.705,
+      2.647,
+      1.138,
+      1.051,
+      2.402,
+      1.172,
+      1.721,
+      1.484,
+      2.507,
+      1.001,
+      2.53,
+      2.238,
+      1.568,
+      2.737,
+      1.691,
+      1.608,
+      2.108,
+      1.284,
+      1.386,
+      1.99,
+      1.013,
+      3.226,
+      2.264,
+      1.966,
+      4.046,
+      4.046,
+      4.046,
+      4.097,
+      4.046,
+      2.461,
+      3.951,
+      4.097,
+      4.046,
+      3.995,
+      2.052,
+      4.046,
+      3.995,
+      3.995,
+      3.951,
+      3.995,
+      3.077,
+      2.537,
+      3.743,
+      3.977,
+      4.029,
+      3.799,
+      3.75,
+      2.348,
+      2.679,
+      3.68,
+      2.841,
+      2.802,
+      2.569,
+      2.727,
+      1.885,
+      2.096,
+      1.808,
+      3.681,
+      3.701,
+      0.696,
+      0.941,
+      0.871,
+      1.258,
+      4.177,
+      4.177,
+      4.177,
+      2.467,
+      3.921,
+      4.23,
+      4.177,
+      4.09,
+      1.694,
+      4.029,
+      4.177,
+      2.681,
+      4.08,
+      1.831,
+      2.588,
+      4.132,
+      4.038,
+      2.616,
+      4.177,
+      4.23,
+      4.177,
+      2.627,
+      0.747,
+      4.23,
+      2.691,
+      1.316,
+      4.23,
+      2.49,
+      2.016,
+      3.89,
+      2.617,
+      2.714,
+      2.564,
+      3.024,
+      2.616,
+      2.398,
+      2.383,
+      2.499,
+      2.57,
+      1.711,
+      3.759,
+      1.717,
+      1.193,
+      1.468,
+      3.096,
+      0.479,
+      0.676,
+      0.656,
+      0.978,
+      0.699,
+      0.553,
+      0.598,
+      0.715,
+      0.304,
+      0.62,
+      1.096,
+      0.543,
+      0.52,
+      0.969,
+      0.863,
+      0.541,
+      0.543,
+      0.517,
+      0.542,
+      0.564,
+      0.444,
+      0.372,
+      0.538,
+      0.537,
+      0.537,
+      0.457,
+      0.493,
+      0.439,
+      0.421,
+      0.724,
+      0.419,
+      0.512,
+      0.55,
+      0.406,
+      0.391,
+      0.429,
+      0.248,
+      0.372,
+      0.368,
+      0.411,
+      0.414,
+      0.476,
+      0.478,
+      0.415,
+      0.527,
+      0.522,
+      0.469,
+      0.278,
+      0.496,
+      0.262,
+      0.456,
+      0.367,
+      0.147,
+      0.191,
+      0.105,
+      0.169,
+      0.191,
+      0.191,
+      0.126,
+      0.148,
+      0.17
+    ]
+  },
+  "homology-msa_entropy-psiblast": {
+    "scores": [
+      0.365,
+      0.683,
+      0.417,
+      0.65,
+      0.622,
+      0.515,
+      0.471,
+      0.601,
+      0.515,
+      0.635,
+      0.612,
+      0.811,
+      0.741,
+      0.699,
+      0.829,
+      0.857,
+      0.5,
+      0.691,
+      0.91,
+      0.861,
+      0.82,
+      1.229,
+      0.837,
+      0.81,
+      1.354,
+      1.473,
+      1.528,
+      0.601,
+      1.33,
+      1.486,
+      0.823,
+      1.547,
+      0.966,
+      1.283,
+      0.827,
+      1.663,
+      0.794,
+      0.991,
+      1.27,
+      0.735,
+      1.303,
+      1.091,
+      1.113,
+      1.612,
+      1.576,
+      1.145,
+      1.703,
+      0.547,
+      1.053,
+      1.184,
+      0.085,
+      0.085,
+      0.085,
+      0.054,
+      0.085,
+      0.708,
+      0.141,
+      0.054,
+      0.085,
+      0.116,
+      0.745,
+      0.085,
+      0.116,
+      0.116,
+      0.141,
+      0.116,
+      0.539,
+      0.758,
+      0.276,
+      0.136,
+      0.127,
+      0.259,
+      0.291,
+      0.796,
+      0.764,
+      0.367,
+      0.835,
+      0.722,
+      0.84,
+      0.821,
+      1.265,
+      1,
+      1.368,
+      0.344,
+      0.344,
+      1.872,
+      1.595,
+      1.549,
+      1.337,
+      0.061,
+      0.061,
+      0.061,
+      0.755,
+      0.195,
+      0.03,
+      0.061,
+      0.107,
+      0.951,
+      0.148,
+      0.061,
+      0.712,
+      0.117,
+      1.405,
+      0.659,
+      0.086,
+      0.139,
+      0.776,
+      0.061,
+      0.03,
+      0.061,
+      0.63,
+      1.587,
+      0.03,
+      0.821,
+      1.575,
+      0.03,
+      0.876,
+      0.991,
+      0.228,
+      0.671,
+      0.837,
+      0.747,
+      0.653,
+      0.826,
+      0.957,
+      1.028,
+      0.937,
+      0.864,
+      1.35,
+      0.258,
+      1.285,
+      1.347,
+      1.554,
+      0.564,
+      1.589,
+      1.466,
+      1.426,
+      1.3,
+      1.43,
+      1.418,
+      1.338,
+      1.297,
+      1.513,
+      1.304,
+      0.983,
+      1.213,
+      1.051,
+      0.885,
+      0.888,
+      0.921,
+      0.903,
+      0.845,
+      0.675,
+      0.651,
+      0.712,
+      0.689,
+      0.568,
+      0.575,
+      0.577,
+      0.604,
+      0.621,
+      0.589,
+      0.586,
+      0.389,
+      0.599,
+      0.474,
+      0.482,
+      0.546,
+      0.5,
+      0.51,
+      0.59,
+      0.499,
+      0.534,
+      0.501,
+      0.467,
+      0.446,
+      0.426,
+      0.456,
+      0.358,
+      0.392,
+      0.329,
+      0.445,
+      0.282,
+      0.383,
+      0.27,
+      0.336,
+      0.21,
+      0.167,
+      0.209,
+      0.175,
+      0.167,
+      0.167,
+      0.205,
+      0.171,
+      0.156
+    ]
+  },
+  "homology-msa_information_content-psiblast": {
+    "scores": [
+      4.026,
+      3.707,
+      3.974,
+      3.741,
+      3.768,
+      3.876,
+      3.92,
+      3.789,
+      3.875,
+      3.756,
+      3.778,
+      3.58,
+      3.65,
+      3.692,
+      3.562,
+      3.534,
+      3.89,
+      3.7,
+      3.481,
+      3.53,
+      3.571,
+      3.161,
+      3.554,
+      3.581,
+      3.037,
+      2.918,
+      2.863,
+      3.789,
+      3.061,
+      2.904,
+      3.567,
+      2.843,
+      3.424,
+      3.108,
+      3.563,
+      2.728,
+      3.597,
+      3.4,
+      3.121,
+      3.655,
+      3.088,
+      3.3,
+      3.278,
+      2.778,
+      2.815,
+      3.245,
+      2.688,
+      3.844,
+      3.337,
+      3.207,
+      4.306,
+      4.306,
+      4.306,
+      4.337,
+      4.306,
+      3.683,
+      4.25,
+      4.337,
+      4.306,
+      4.274,
+      3.646,
+      4.306,
+      4.274,
+      4.274,
+      4.25,
+      4.274,
+      3.851,
+      3.633,
+      4.115,
+      4.255,
+      4.264,
+      4.131,
+      4.1,
+      3.595,
+      3.627,
+      4.024,
+      3.556,
+      3.668,
+      3.551,
+      3.57,
+      3.126,
+      3.39,
+      3.023,
+      4.047,
+      4.047,
+      2.519,
+      2.796,
+      2.842,
+      3.054,
+      4.33,
+      4.33,
+      4.33,
+      3.636,
+      4.195,
+      4.361,
+      4.33,
+      4.283,
+      3.44,
+      4.242,
+      4.33,
+      3.679,
+      4.274,
+      2.986,
+      3.731,
+      4.305,
+      4.252,
+      3.615,
+      4.33,
+      4.361,
+      4.33,
+      3.761,
+      2.804,
+      4.361,
+      3.57,
+      2.816,
+      4.361,
+      3.515,
+      3.399,
+      4.162,
+      3.72,
+      3.554,
+      3.644,
+      3.738,
+      3.565,
+      3.434,
+      3.363,
+      3.453,
+      3.527,
+      3.04,
+      4.132,
+      3.106,
+      3.044,
+      2.837,
+      3.826,
+      2.802,
+      2.924,
+      2.965,
+      3.09,
+      2.961,
+      2.973,
+      3.053,
+      3.094,
+      2.877,
+      3.087,
+      3.408,
+      3.178,
+      3.34,
+      3.506,
+      3.503,
+      3.47,
+      3.488,
+      3.546,
+      3.716,
+      3.74,
+      3.679,
+      3.701,
+      3.823,
+      3.816,
+      3.813,
+      3.786,
+      3.77,
+      3.802,
+      3.805,
+      4.002,
+      3.791,
+      3.917,
+      3.909,
+      3.845,
+      3.891,
+      3.881,
+      3.801,
+      3.892,
+      3.857,
+      3.89,
+      3.923,
+      3.945,
+      3.965,
+      3.935,
+      4.032,
+      3.999,
+      4.062,
+      3.946,
+      4.109,
+      4.008,
+      4.121,
+      4.054,
+      4.181,
+      4.224,
+      4.182,
+      4.215,
+      4.224,
+      4.224,
+      4.186,
+      4.22,
+      4.235
+    ]
+  },
+  "homology-msa_occupancy-psiblast": {
+    "scores": [
+      0.322,
+      0.322,
+      0.322,
+      0.327,
+      0.337,
+      0.337,
+      0.337,
+      0.342,
+      0.352,
+      0.387,
+      0.387,
+      0.417,
+      0.417,
+      0.422,
+      0.422,
+      0.467,
+      0.467,
+      0.477,
+      0.497,
+      0.518,
+      0.588,
+      0.653,
+      0.683,
+      0.729,
+      0.729,
+      0.744,
+      0.754,
+      0.784,
+      0.794,
+      0.794,
+      0.824,
+      0.834,
+      0.834,
+      0.834,
+      0.869,
+      0.869,
+      0.869,
+      0.874,
+      0.874,
+      0.874,
+      0.874,
+      0.874,
+      0.884,
+      0.884,
+      0.889,
+      0.894,
+      0.899,
+      0.935,
+      0.94,
+      0.94,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.94,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.945,
+      0.95,
+      0.95,
+      0.96,
+      0.96,
+      0.96,
+      0.965,
+      1,
+      0.985,
+      0.985,
+      0.975,
+      0.975,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.97,
+      0.96,
+      0.96,
+      0.955,
+      0.955,
+      0.955,
+      0.955,
+      0.955,
+      0.945,
+      0.945,
+      0.915,
+      0.915,
+      0.915,
+      0.905,
+      0.583,
+      0.583,
+      0.568,
+      0.573,
+      0.558,
+      0.558,
+      0.558,
+      0.538,
+      0.538,
+      0.533,
+      0.487,
+      0.452,
+      0.452,
+      0.447,
+      0.432,
+      0.367,
+      0.327,
+      0.327,
+      0.266,
+      0.256,
+      0.231,
+      0.221,
+      0.216,
+      0.216,
+      0.216,
+      0.216,
+      0.216,
+      0.206,
+      0.201,
+      0.196,
+      0.191,
+      0.191,
+      0.181,
+      0.181,
+      0.181,
+      0.181,
+      0.181,
+      0.181,
+      0.171,
+      0.171,
+      0.171,
+      0.171,
+      0.166,
+      0.156,
+      0.156,
+      0.156,
+      0.131,
+      0.131,
+      0.126,
+      0.116,
+      0.116,
+      0.116,
+      0.055,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.045,
+      0.045
+    ]
+  },
+  "level": 2,
+  "msa_consensus": "MEKINSLSTQLFKCCFCDFLKVKMHTMSSSHLFYLALCLLTLTSSATAGPETLCGAELVDALQFVCGDRGFYFSKPTGYGSSSRRAHQRGIVDECCFRSCDLRRLEMYCAPLKPAKSARSVRAQRHTDMPKAQKYQPPSTNKKTKSQRRKGWPKKHPGGEQKEGTEASQQMKGKKKEQRRETGARNAECRGKKGK",
+  "prediction-disorder-alphafold": {
+    "scores": [
+      0.751,
+      0.751,
+      0.748,
+      0.742,
+      0.739,
+      0.738,
+      0.744,
+      0.739,
+      0.749,
+      0.734,
+      0.72,
+      0.72,
+      0.717,
+      0.688,
+      0.681,
+      0.661,
+      0.64,
+      0.625,
+      0.623,
+      0.615,
+      0.615,
+      0.615,
+      0.611,
+      0.602,
+      0.591,
+      0.588,
+      0.591,
+      0.593,
+      0.595,
+      0.601,
+      0.599,
+      0.59,
+      0.574,
+      0.565,
+      0.585,
+      0.591,
+      0.579,
+      0.578,
+      0.6,
+      0.596,
+      0.592,
+      0.588,
+      0.596,
+      0.598,
+      0.587,
+      0.562,
+      0.545,
+      0.55,
+      0.543,
+      0.526,
+      0.528,
+      0.538,
+      0.517,
+      0.493,
+      0.484,
+      0.5,
+      0.491,
+      0.494,
+      0.477,
+      0.464,
+      0.454,
+      0.451,
+      0.435,
+      0.415,
+      0.434,
+      0.454,
+      0.471,
+      0.48,
+      0.494,
+      0.507,
+      0.54,
+      0.565,
+      0.577,
+      0.596,
+      0.624,
+      0.637,
+      0.618,
+      0.617,
+      0.616,
+      0.615,
+      0.594,
+      0.587,
+      0.575,
+      0.567,
+      0.573,
+      0.582,
+      0.596,
+      0.594,
+      0.61,
+      0.597,
+      0.595,
+      0.578,
+      0.551,
+      0.532,
+      0.517,
+      0.483,
+      0.451,
+      0.419,
+      0.417,
+      0.42,
+      0.421,
+      0.44,
+      0.464,
+      0.504,
+      0.519,
+      0.534,
+      0.557,
+      0.588,
+      0.616,
+      0.627,
+      0.633,
+      0.621,
+      0.644,
+      0.652,
+      0.664,
+      0.666,
+      0.689,
+      0.716,
+      0.736,
+      0.757,
+      0.795,
+      0.828,
+      0.86,
+      0.868,
+      0.866,
+      0.864,
+      0.86,
+      0.864,
+      0.862,
+      0.867,
+      0.873,
+      0.879,
+      0.887,
+      0.884,
+      0.879,
+      0.872,
+      0.887,
+      0.886,
+      0.885,
+      0.886,
+      0.878,
+      0.879,
+      0.882,
+      0.879,
+      0.883,
+      0.88,
+      0.879,
+      0.881,
+      0.884,
+      0.89,
+      0.885,
+      0.884,
+      0.882,
+      0.866,
+      0.848,
+      0.833,
+      0.82,
+      0.802,
+      0.802,
+      0.8,
+      0.79,
+      0.78,
+      0.779,
+      0.769,
+      0.755,
+      0.752,
+      0.747,
+      0.738,
+      0.722,
+      0.706,
+      0.69,
+      0.678,
+      0.663,
+      0.645,
+      0.633,
+      0.629,
+      0.627,
+      0.627,
+      0.63,
+      0.642,
+      0.655,
+      0.663,
+      0.682,
+      0.688,
+      0.695,
+      0.707,
+      0.702,
+      0.702,
+      0.704,
+      0.705,
+      0.705,
+      0.693,
+      0.691,
+      0.695,
+      0.692
+    ],
+    "content_fraction": 0.738,
+    "content_count": 144,
+    "regions": [
+      [
+        1,
+        32
+      ],
+      [
+        39,
+        45
+      ],
+      [
+        74,
+        82
+      ],
+      [
+        86,
+        91
+      ],
+      [
+        108,
+        195
+      ]
+    ]
+  },
+  "prediction-disorder-dis465": {
+    "regions": [
+      [
+        1,
+        6
+      ],
+      [
+        80,
+        87
+      ],
+      [
+        114,
+        195
+      ]
+    ],
+    "content_count": 96,
+    "content_fraction": 0.492
+  },
+  "prediction-disorder-disHL": {
+    "regions": [
+      [
+        1,
+        11
+      ],
+      [
+        75,
+        94
+      ],
+      [
+        111,
+        122
+      ],
+      [
+        126,
+        195
+      ]
+    ],
+    "content_count": 113,
+    "content_fraction": 0.579
+  },
+  "prediction-disorder-espD": {
+    "regions": [
+      [
+        138,
+        195
+      ]
+    ],
+    "content_count": 58,
+    "content_fraction": 0.297
+  },
+  "prediction-disorder-espN": {
+    "regions": [
+      [
+        1,
+        9
+      ],
+      [
+        45,
+        49
+      ],
+      [
+        69,
+        92
+      ],
+      [
+        108,
+        195
+      ]
+    ],
+    "content_count": 126,
+    "content_fraction": 0.646
+  },
+  "prediction-disorder-espX": {
+    "regions": [
+      [
+        1,
+        9
+      ],
+      [
+        78,
+        85
+      ],
+      [
+        108,
+        195
+      ]
+    ],
+    "content_count": 105,
+    "content_fraction": 0.538
+  },
+  "prediction-disorder-glo": {
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        4,
+        5
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        69,
+        87
+      ],
+      [
+        130,
+        162
+      ],
+      [
+        190,
+        190
+      ],
+      [
+        193,
+        193
+      ]
+    ],
+    "content_count": 59,
+    "content_fraction": 0.303
+  },
+  "prediction-disorder-iupl": {
+    "regions": [
+      [
+        83,
+        84
+      ],
+      [
+        119,
+        195
+      ]
+    ],
+    "content_count": 79,
+    "content_fraction": 0.405
+  },
+  "prediction-disorder-iups": {
+    "regions": [
+      [
+        1,
+        4
+      ],
+      [
+        119,
+        195
+      ]
+    ],
+    "content_count": 81,
+    "content_fraction": 0.415
+  },
+  "prediction-disorder-mobidb_lite": {
+    "regions": [
+      [
+        119,
+        195
+      ]
+    ],
+    "content_count": 77,
+    "content_fraction": 0.395,
+    "scores": [
+      0.75,
+      0.625,
+      0.625,
+      0.75,
+      0.625,
+      0.5,
+      0.5,
+      0.5,
+      0.375,
+      0.125,
+      0.125,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.375,
+      0.375,
+      0.375,
+      0.5,
+      0.5,
+      0.625,
+      0.625,
+      0.625,
+      0.75,
+      0.75,
+      0.625,
+      0.5,
+      0.5,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.125,
+      0.125,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.25,
+      0.25,
+      0.25,
+      0.375,
+      0.375,
+      0.375,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.625,
+      0.625,
+      0.625,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      0.875,
+      1,
+      0.875,
+      0.875,
+      1,
+      0.875,
+      0.875
+    ]
+  },
+  "prediction-disorder-priority": {
+    "regions": [
+      [
+        40,
+        45
+      ],
+      [
+        112,
+        118
+      ]
+    ],
+    "content_fraction": 0.067,
+    "content_count": 13
+  },
+  "prediction-disorder-th_50": {
+    "regions": [
+      [
+        1,
+        8
+      ],
+      [
+        78,
+        87
+      ],
+      [
+        114,
+        195
+      ]
+    ],
+    "content_count": 100,
+    "content_fraction": 0.513
+  },
+  "prediction-extended-mobidb_lite_sub": {
+    "regions": [
+      [
+        118,
+        195
+      ]
+    ],
+    "content_count": 78,
+    "content_fraction": 0.4,
+    "regions_params": [
+      0.584
+    ]
+  },
+  "prediction-lip-alphafold": {
+    "scores": [
+      0.739,
+      0.782,
+      0.781,
+      0.823,
+      0.807,
+      0.815,
+      0.811,
+      0.805,
+      0.802,
+      0.802,
+      0.809,
+      0.806,
+      0.821,
+      0.812,
+      0.802,
+      0.807,
+      0.803,
+      0.806,
+      0.813,
+      0.787,
+      0.807,
+      0.802,
+      0.774,
+      0.812,
+      0.799,
+      0.817,
+      0.824,
+      0.86,
+      0.866,
+      0.887,
+      0.892,
+      0.883,
+      0.574,
+      0.565,
+      0.89,
+      0.902,
+      0.579,
+      0.578,
+      0.872,
+      0.861,
+      0.852,
+      0.83,
+      0.811,
+      0.804,
+      0.795,
+      0.562,
+      0.545,
+      0.55,
+      0.543,
+      0.526,
+      0.528,
+      0.538,
+      0.517,
+      0.493,
+      0.484,
+      0.5,
+      0.491,
+      0.494,
+      0.477,
+      0.464,
+      0.454,
+      0.451,
+      0.435,
+      0.415,
+      0.434,
+      0.454,
+      0.471,
+      0.48,
+      0.494,
+      0.507,
+      0.54,
+      0.565,
+      0.577,
+      0.894,
+      0.868,
+      0.83,
+      0.829,
+      0.815,
+      0.814,
+      0.804,
+      0.816,
+      0.803,
+      0.575,
+      0.567,
+      0.573,
+      0.809,
+      0.81,
+      0.83,
+      0.835,
+      0.876,
+      0.898,
+      0.578,
+      0.551,
+      0.532,
+      0.517,
+      0.483,
+      0.451,
+      0.419,
+      0.417,
+      0.42,
+      0.421,
+      0.44,
+      0.464,
+      0.504,
+      0.519,
+      0.534,
+      0.557,
+      0.927,
+      0.943,
+      0.934,
+      0.911,
+      0.878,
+      0.828,
+      0.816,
+      0.803,
+      0.807,
+      0.806,
+      0.775,
+      0.789,
+      0.781,
+      0.807,
+      0.8,
+      0.785,
+      0.795,
+      0.773,
+      0.788,
+      0.811,
+      0.75,
+      0.804,
+      0.757,
+      0.75,
+      0.761,
+      0.755,
+      0.735,
+      0.72,
+      0.744,
+      0.734,
+      0.733,
+      0.736,
+      0.735,
+      0.721,
+      0.746,
+      0.698,
+      0.731,
+      0.695,
+      0.702,
+      0.722,
+      0.718,
+      0.759,
+      0.716,
+      0.698,
+      0.704,
+      0.737,
+      0.775,
+      0.717,
+      0.737,
+      0.765,
+      0.711,
+      0.729,
+      0.756,
+      0.749,
+      0.761,
+      0.78,
+      0.779,
+      0.832,
+      0.834,
+      0.844,
+      0.839,
+      0.883,
+      0.889,
+      0.887,
+      0.894,
+      0.902,
+      0.912,
+      0.916,
+      0.918,
+      0.919,
+      0.929,
+      0.896,
+      0.917,
+      0.903,
+      0.928,
+      0.909,
+      0.908,
+      0.899,
+      0.89,
+      0.894,
+      0.893,
+      0.852,
+      0.874,
+      0.836,
+      0.845,
+      0.824,
+      0.814,
+      0.791
+    ],
+    "content_fraction": 0.559,
+    "content_count": 109,
+    "regions": [
+      [
+        2,
+        32
+      ],
+      [
+        39,
+        45
+      ],
+      [
+        74,
+        82
+      ],
+      [
+        86,
+        91
+      ],
+      [
+        108,
+        124
+      ],
+      [
+        163,
+        195
+      ]
+    ]
+  },
+  "prediction-lip-anchor": {
+    "regions": [
+      [
+        102,
+        112
+      ],
+      [
+        166,
+        177
+      ],
+      [
+        181,
+        195
+      ]
+    ],
+    "content_count": 38,
+    "content_fraction": 0.195
+  },
+  "prediction-lip-priority": {
+    "regions": [
+      [
+        2,
+        32
+      ],
+      [
+        39,
+        45
+      ],
+      [
+        112,
+        124
+      ],
+      [
+        163,
+        195
+      ]
+    ],
+    "content_fraction": 0.431,
+    "content_count": 84
+  },
+  "prediction-plddt-alphafold": {
+    "scores": [
+      0.377,
+      0.48,
+      0.478,
+      0.578,
+      0.539,
+      0.559,
+      0.55,
+      0.534,
+      0.527,
+      0.528,
+      0.543,
+      0.538,
+      0.573,
+      0.552,
+      0.526,
+      0.538,
+      0.531,
+      0.537,
+      0.554,
+      0.492,
+      0.54,
+      0.527,
+      0.46,
+      0.551,
+      0.519,
+      0.562,
+      0.579,
+      0.665,
+      0.681,
+      0.729,
+      0.743,
+      0.72,
+      0.748,
+      0.78,
+      0.739,
+      0.766,
+      0.704,
+      0.69,
+      0.695,
+      0.669,
+      0.648,
+      0.595,
+      0.55,
+      0.532,
+      0.511,
+      0.506,
+      0.48,
+      0.487,
+      0.407,
+      0.447,
+      0.538,
+      0.479,
+      0.545,
+      0.665,
+      0.701,
+      0.733,
+      0.771,
+      0.785,
+      0.823,
+      0.829,
+      0.816,
+      0.838,
+      0.826,
+      0.845,
+      0.852,
+      0.869,
+      0.849,
+      0.839,
+      0.83,
+      0.857,
+      0.849,
+      0.831,
+      0.785,
+      0.747,
+      0.685,
+      0.594,
+      0.591,
+      0.559,
+      0.555,
+      0.532,
+      0.561,
+      0.529,
+      0.589,
+      0.559,
+      0.484,
+      0.545,
+      0.547,
+      0.595,
+      0.607,
+      0.704,
+      0.757,
+      0.723,
+      0.685,
+      0.698,
+      0.747,
+      0.742,
+      0.681,
+      0.621,
+      0.641,
+      0.702,
+      0.78,
+      0.755,
+      0.748,
+      0.739,
+      0.812,
+      0.818,
+      0.803,
+      0.827,
+      0.863,
+      0.841,
+      0.789,
+      0.71,
+      0.59,
+      0.562,
+      0.53,
+      0.54,
+      0.536,
+      0.462,
+      0.497,
+      0.476,
+      0.54,
+      0.523,
+      0.486,
+      0.51,
+      0.457,
+      0.494,
+      0.55,
+      0.403,
+      0.532,
+      0.421,
+      0.404,
+      0.43,
+      0.414,
+      0.369,
+      0.333,
+      0.389,
+      0.366,
+      0.363,
+      0.37,
+      0.368,
+      0.334,
+      0.393,
+      0.28,
+      0.358,
+      0.271,
+      0.29,
+      0.338,
+      0.328,
+      0.424,
+      0.323,
+      0.28,
+      0.294,
+      0.371,
+      0.464,
+      0.325,
+      0.372,
+      0.439,
+      0.311,
+      0.353,
+      0.417,
+      0.402,
+      0.43,
+      0.475,
+      0.471,
+      0.598,
+      0.603,
+      0.628,
+      0.615,
+      0.721,
+      0.736,
+      0.731,
+      0.748,
+      0.766,
+      0.79,
+      0.798,
+      0.804,
+      0.807,
+      0.83,
+      0.752,
+      0.801,
+      0.769,
+      0.828,
+      0.782,
+      0.78,
+      0.76,
+      0.738,
+      0.747,
+      0.746,
+      0.647,
+      0.699,
+      0.609,
+      0.63,
+      0.579,
+      0.556,
+      0.501
+    ],
+    "content_fraction": 0.338,
+    "content_count": 66,
+    "regions": [
+      [
+        30,
+        37
+      ],
+      [
+        55,
+        74
+      ],
+      [
+        100,
+        112
+      ],
+      [
+        169,
+        188
+      ]
+    ]
+  },
+  "prediction-polar-mobidb_lite_sub": {
+    "regions": [
+      [
+        133,
+        144
+      ]
+    ],
+    "content_count": 12,
+    "content_fraction": 0.062
+  },
+  "prediction-polyampholyte-mobidb_lite_sub": {
+    "regions": [
+      [
+        178,
+        195
+      ]
+    ],
+    "content_count": 18,
+    "content_fraction": 0.092
+  },
+  "prediction-signal_peptide-uniprot": {
+    "regions": [
+      [
+        1,
+        21
+      ]
+    ],
+    "content_count": 21,
+    "content_fraction": 0.1076923076923077
+  }
+}

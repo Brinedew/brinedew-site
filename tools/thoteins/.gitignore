@@ -15,8 +15,9 @@ apps/**/mapping-studio.pid
 # Mapping autosave (kept outside source by default)
 data/mapping.json
 
-# Runtime caches (keep out of source control)
-data/proteins/
+# Runtime caches (keep out of source control) - DISABLED for mono-repo
+# data/proteins/ 
+# Re-enabled data/proteins/ for mono-repo - we need CSVs in git
 !data/.gitkeep
 
 # Stray app-local logs (standardize on root logs/)

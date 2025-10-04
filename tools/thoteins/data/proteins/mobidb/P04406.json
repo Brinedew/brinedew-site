@@ -1,0 +1,3621 @@
+{
+  "acc": "P04406",
+  "reviewed": true,
+  "gene": "GAPDH",
+  "proteome": "UP000005640",
+  "name": "Glyceraldehyde-3-phosphate dehydrogenase",
+  "length": 335,
+  "organism": "Homo sapiens (Human)",
+  "ncbi_taxon_id": 9606,
+  "taxonomy": [
+    "Eukaryota",
+    "Metazoa",
+    "Chordata",
+    "Craniata",
+    "Vertebrata",
+    "Euteleostomi",
+    "Mammalia",
+    "Eutheria",
+    "Euarchontoglires",
+    "Primates",
+    "Haplorrhini",
+    "Catarrhini",
+    "Hominidae",
+    "Homo"
+  ],
+  "sequence": "MGKVKVGVNGFGRIGRLVTRAAFNSGKVDIVAINDPFIDLNYMVYMFQYDSTHGKFHGTVKAENGKLVINGNPITIFQERDPSKIKWGDAGAEYVVESTGVFTTMEKAGAHLQGGAKRVIISAPSADAPMFVMGVNHEKYDNSLKIISNASCTTNCLAPLAKVIHDNFGIVEGLMTTVHAITATQKTVDGPSGKLWRDGRGALQNIIPASTGAAKAVGKVIPELNGKLTGMAFRVPTANVSVVDLTCRLEKPAKYDDIKKVVKQASEGPLKGILGYTEHQVVSSDFNSDTHSSTFDAGAGIALNDHFVKLISWYDNEFGYSNRVVDLMAHMASKE",
+  "localization": [
+    "Cytoplasm, cytosol",
+    "Nucleus",
+    "Cytoplasm, perinuclear region",
+    "Membrane",
+    "Cytoplasm, cytoskeleton"
+  ],
+  "uniref100": "UniRef100_P04406",
+  "uniref90": "UniRef90_P04406",
+  "uniref50": "UniRef50_P04406",
+  "uniparc": "UPI000013C8ED",
+  "ptms": {
+    "names": [
+      "N6,N6-dimethyllysine",
+      "Deamidated asparagine",
+      "Phosphotyrosine",
+      "Methionine sulfoxide; in vitro",
+      "N6-acetyllysine",
+      "Deamidated asparagine",
+      "N6,N6-dimethyllysine",
+      "Deamidated asparagine",
+      "Phosphothreonine",
+      "Phosphoserine",
+      "Phosphoserine",
+      "Phosphoserine",
+      "Deamidated asparagine",
+      "Phosphoserine",
+      "ADP-ribosylcysteine; by autocatalysis; i",
+      "Cysteine persulfide",
+      "S-(2-succinyl)cysteine",
+      "S-nitrosocysteine; in reversibly inhibited form",
+      "Phosphothreonine",
+      "Deamidated asparagine",
+      "Phosphothreonine",
+      "Phosphothreonine",
+      "Phosphothreonine",
+      "N6,N6-dimethyllysine; alternate",
+      "N6-acetyllysine; alternate",
+      "N6-malonyllysine; alternate",
+      "Phosphothreonine",
+      "N6,N6-dimethyllysine; alternate",
+      "N6-malonyllysine; alternate",
+      "N6-acetyllysine",
+      "Deamidated asparagine",
+      "N6,N6-dimethyllysine; alternate",
+      "N6-acetyllysine; alternate",
+      "Phosphothreonine",
+      "Phosphothreonine",
+      "Phosphoserine",
+      "S-(2-succinyl)cysteine",
+      "S-nitrosocysteine",
+      "N6-acetyllysine",
+      "N6,N6-dimethyllysine",
+      "N6,N6-dimethyllysine",
+      "Phosphoserine",
+      "Deamidated asparagine",
+      "Phosphoserine",
+      "N6,N6-dimethyllysine"
+    ],
+    "positions": [
+      [
+        5,
+        5
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        42,
+        42
+      ],
+      [
+        46,
+        46
+      ],
+      [
+        61,
+        61
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        70,
+        70
+      ],
+      [
+        75,
+        75
+      ],
+      [
+        83,
+        83
+      ],
+      [
+        122,
+        122
+      ],
+      [
+        148,
+        148
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        151,
+        151
+      ],
+      [
+        152,
+        152
+      ],
+      [
+        152,
+        152
+      ],
+      [
+        152,
+        152
+      ],
+      [
+        152,
+        152
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        155,
+        155
+      ],
+      [
+        177,
+        177
+      ],
+      [
+        182,
+        182
+      ],
+      [
+        184,
+        184
+      ],
+      [
+        194,
+        194
+      ],
+      [
+        194,
+        194
+      ],
+      [
+        194,
+        194
+      ],
+      [
+        211,
+        211
+      ],
+      [
+        215,
+        215
+      ],
+      [
+        215,
+        215
+      ],
+      [
+        219,
+        219
+      ],
+      [
+        225,
+        225
+      ],
+      [
+        227,
+        227
+      ],
+      [
+        227,
+        227
+      ],
+      [
+        229,
+        229
+      ],
+      [
+        237,
+        237
+      ],
+      [
+        241,
+        241
+      ],
+      [
+        247,
+        247
+      ],
+      [
+        247,
+        247
+      ],
+      [
+        254,
+        254
+      ],
+      [
+        260,
+        260
+      ],
+      [
+        263,
+        263
+      ],
+      [
+        312,
+        312
+      ],
+      [
+        316,
+        316
+      ],
+      [
+        333,
+        333
+      ],
+      [
+        334,
+        334
+      ]
+    ]
+  },
+  "processing": {
+    "positions": [
+      [
+        2,
+        148
+      ]
+    ],
+    "names": [
+      "Interaction with WARS1"
+    ]
+  },
+  "derived-lip-flipper-1u8f_A": {
+    "source_id": "1u8f_A",
+    "regions": [
+      [
+        199,
+        203
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 5
+  },
+  "derived-lip-flipper-1u8f_B": {
+    "source_id": "1u8f_B",
+    "regions": [
+      [
+        198,
+        206
+      ]
+    ],
+    "content_fraction": 0.027,
+    "content_count": 9
+  },
+  "derived-lip-flipper-1znq_A": {
+    "source_id": "1znq_A",
+    "regions": [
+      [
+        199,
+        203
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 5
+  },
+  "derived-lip-flipper-1znq_C": {
+    "source_id": "1znq_C",
+    "regions": [
+      [
+        199,
+        203
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 5
+  },
+  "derived-lip-flipper-1znq_D": {
+    "source_id": "1znq_D",
+    "regions": [
+      [
+        199,
+        204
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 6
+  },
+  "derived-lip-flipper-4wnc_B": {
+    "source_id": "4wnc_B",
+    "regions": [
+      [
+        195,
+        207
+      ]
+    ],
+    "content_fraction": 0.039,
+    "content_count": 13
+  },
+  "derived-lip-flipper-4wnc_C": {
+    "source_id": "4wnc_C",
+    "regions": [
+      [
+        188,
+        208
+      ]
+    ],
+    "content_fraction": 0.063,
+    "content_count": 21
+  },
+  "derived-lip-flipper-4wnc_D": {
+    "source_id": "4wnc_D",
+    "regions": [
+      [
+        194,
+        207
+      ]
+    ],
+    "content_fraction": 0.042,
+    "content_count": 14
+  },
+  "derived-lip-flipper-4wnc_E": {
+    "source_id": "4wnc_E",
+    "regions": [
+      [
+        194,
+        207
+      ]
+    ],
+    "content_fraction": 0.042,
+    "content_count": 14
+  },
+  "derived-lip-flipper-4wnc_F": {
+    "source_id": "4wnc_F",
+    "regions": [
+      [
+        190,
+        209
+      ]
+    ],
+    "content_fraction": 0.06,
+    "content_count": 20
+  },
+  "derived-lip-flipper-4wnc_G": {
+    "source_id": "4wnc_G",
+    "regions": [
+      [
+        194,
+        211
+      ]
+    ],
+    "content_fraction": 0.054,
+    "content_count": 18
+  },
+  "derived-lip-flipper-4wnc_H": {
+    "source_id": "4wnc_H",
+    "regions": [
+      [
+        194,
+        211
+      ]
+    ],
+    "content_fraction": 0.054,
+    "content_count": 18
+  },
+  "derived-lip-flipper-4wni_B": {
+    "source_id": "4wni_B",
+    "regions": [
+      [
+        184,
+        207
+      ]
+    ],
+    "content_fraction": 0.072,
+    "content_count": 24
+  },
+  "derived-lip-flipper-4wni_D": {
+    "source_id": "4wni_D",
+    "regions": [
+      [
+        190,
+        209
+      ]
+    ],
+    "content_fraction": 0.06,
+    "content_count": 20
+  },
+  "derived-lip-flipper-6iq6_C": {
+    "source_id": "6iq6_C",
+    "regions": [
+      [
+        199,
+        203
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 5
+  },
+  "derived-lip-flipper-6iq6_D": {
+    "source_id": "6iq6_D",
+    "regions": [
+      [
+        199,
+        204
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 6
+  },
+  "derived-lip-flipper-6iq6_E": {
+    "source_id": "6iq6_E",
+    "regions": [
+      [
+        199,
+        205
+      ]
+    ],
+    "content_fraction": 0.021,
+    "content_count": 7
+  },
+  "derived-lip-flipper-6iq6_F": {
+    "source_id": "6iq6_F",
+    "regions": [
+      [
+        199,
+        203
+      ]
+    ],
+    "content_fraction": 0.015,
+    "content_count": 5
+  },
+  "derived-lip-flipper-6iq6_H": {
+    "source_id": "6iq6_H",
+    "regions": [
+      [
+        199,
+        204
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 6
+  },
+  "derived-lip-flipper-6m61_A": {
+    "source_id": "6m61_A",
+    "regions": [
+      [
+        199,
+        204
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 6
+  },
+  "derived-lip-flipper-6m61_B": {
+    "source_id": "6m61_B",
+    "regions": [
+      [
+        198,
+        206
+      ]
+    ],
+    "content_fraction": 0.027,
+    "content_count": 9
+  },
+  "derived-lip-flipper-6m61_C": {
+    "source_id": "6m61_C",
+    "regions": [
+      [
+        198,
+        205
+      ]
+    ],
+    "content_fraction": 0.024,
+    "content_count": 8
+  },
+  "derived-lip-flipper-6m61_D": {
+    "source_id": "6m61_D",
+    "regions": [
+      [
+        198,
+        208
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 11
+  },
+  "derived-lip-flipper-6yne_A": {
+    "source_id": "6yne_A",
+    "regions": [
+      [
+        190,
+        203
+      ]
+    ],
+    "content_fraction": 0.042,
+    "content_count": 14
+  },
+  "derived-lip-flipper-6yne_B": {
+    "source_id": "6yne_B",
+    "regions": [
+      [
+        191,
+        205
+      ]
+    ],
+    "content_fraction": 0.045,
+    "content_count": 15
+  },
+  "derived-lip-flipper-6yne_C": {
+    "source_id": "6yne_C",
+    "regions": [
+      [
+        188,
+        207
+      ]
+    ],
+    "content_fraction": 0.06,
+    "content_count": 20
+  },
+  "derived-lip-flipper-6yne_D": {
+    "source_id": "6yne_D",
+    "regions": [
+      [
+        188,
+        208
+      ]
+    ],
+    "content_fraction": 0.063,
+    "content_count": 21
+  },
+  "derived-lip-flipper-8g13_A": {
+    "source_id": "8g13_A",
+    "regions": [
+      [
+        199,
+        205
+      ]
+    ],
+    "content_fraction": 0.021,
+    "content_count": 7
+  },
+  "derived-lip-flipper-8g13_B": {
+    "source_id": "8g13_B",
+    "regions": [
+      [
+        200,
+        207
+      ]
+    ],
+    "content_fraction": 0.024,
+    "content_count": 8
+  },
+  "derived-lip-flipper-8g13_C": {
+    "source_id": "8g13_C",
+    "regions": [
+      [
+        199,
+        205
+      ]
+    ],
+    "content_fraction": 0.021,
+    "content_count": 7
+  },
+  "derived-lip-flipper-8g13_D": {
+    "source_id": "8g13_D",
+    "regions": [
+      [
+        200,
+        205
+      ]
+    ],
+    "content_fraction": 0.018,
+    "content_count": 6
+  },
+  "derived-lip-merge": {
+    "regions": [
+      [
+        184,
+        211
+      ]
+    ],
+    "content_fraction": 0.084,
+    "content_count": 28
+  },
+  "derived-lip-priority": {
+    "regions": [
+      [
+        184,
+        211
+      ]
+    ],
+    "content_fraction": 0.084,
+    "content_count": 28
+  },
+  "derived-missing_residues-mobi-1u8f_A": {
+    "source_id": "1u8f_A",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1u8f_B": {
+    "source_id": "1u8f_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1u8f_C": {
+    "source_id": "1u8f_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1u8f_D": {
+    "source_id": "1u8f_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1znq_A": {
+    "source_id": "1znq_A",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1znq_B": {
+    "source_id": "1znq_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1znq_C": {
+    "source_id": "1znq_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-1znq_D": {
+    "source_id": "1znq_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_A": {
+    "source_id": "4wnc_A",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_B": {
+    "source_id": "4wnc_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_C": {
+    "source_id": "4wnc_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_D": {
+    "source_id": "4wnc_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_E": {
+    "source_id": "4wnc_E",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_F": {
+    "source_id": "4wnc_F",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_G": {
+    "source_id": "4wnc_G",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wnc_H": {
+    "source_id": "4wnc_H",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wni_A": {
+    "source_id": "4wni_A",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wni_B": {
+    "source_id": "4wni_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wni_C": {
+    "source_id": "4wni_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-4wni_D": {
+    "source_id": "4wni_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6ade_A": {
+    "source_id": "6ade_A",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6ade_B": {
+    "source_id": "6ade_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6ade_C": {
+    "source_id": "6ade_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_A": {
+    "source_id": "6iq6_A",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_B": {
+    "source_id": "6iq6_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_C": {
+    "source_id": "6iq6_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_D": {
+    "source_id": "6iq6_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_E": {
+    "source_id": "6iq6_E",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_F": {
+    "source_id": "6iq6_F",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_G": {
+    "source_id": "6iq6_G",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6iq6_H": {
+    "source_id": "6iq6_H",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6m61_B": {
+    "source_id": "6m61_B",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6m61_D": {
+    "source_id": "6m61_D",
+    "regions": [
+      [
+        1,
+        3
+      ],
+      [
+        332,
+        335
+      ]
+    ],
+    "content_fraction": 0.021,
+    "content_count": 7
+  },
+  "derived-missing_residues-mobi-6ynd_A": {
+    "source_id": "6ynd_A",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynd_B": {
+    "source_id": "6ynd_B",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynd_C": {
+    "source_id": "6ynd_C",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynd_D": {
+    "source_id": "6ynd_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6ynd_E": {
+    "source_id": "6ynd_E",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynd_F": {
+    "source_id": "6ynd_F",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynd_G": {
+    "source_id": "6ynd_G",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6ynd_H": {
+    "source_id": "6ynd_H",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6yne_A": {
+    "source_id": "6yne_A",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6yne_B": {
+    "source_id": "6yne_B",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6yne_C": {
+    "source_id": "6yne_C",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6yne_D": {
+    "source_id": "6yne_D",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynf_D": {
+    "source_id": "6ynf_D",
+    "regions": [
+      [
+        2,
+        2
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynf_E": {
+    "source_id": "6ynf_E",
+    "regions": [
+      [
+        2,
+        2
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynf_G": {
+    "source_id": "6ynf_G",
+    "regions": [
+      [
+        2,
+        2
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynf_H": {
+    "source_id": "6ynf_H",
+    "regions": [
+      [
+        2,
+        2
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynh_A": {
+    "source_id": "6ynh_A",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynh_B": {
+    "source_id": "6ynh_B",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynh_C": {
+    "source_id": "6ynh_C",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-6ynh_D": {
+    "source_id": "6ynh_D",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-8dns_A": {
+    "source_id": "8dns_A",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-8dns_B": {
+    "source_id": "8dns_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-8dns_C": {
+    "source_id": "8dns_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-8dns_D": {
+    "source_id": "8dns_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-8p5f_A": {
+    "source_id": "8p5f_A",
+    "regions": [
+      [
+        1,
+        1
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-8p5f_B": {
+    "source_id": "8p5f_B",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-8p5f_C": {
+    "source_id": "8p5f_C",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-8p5f_D": {
+    "source_id": "8p5f_D",
+    "regions": [
+      [
+        1,
+        2
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 2
+  },
+  "derived-observed-mobi-1u8f_A": {
+    "source_id": "1u8f_A",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-1u8f_B": {
+    "source_id": "1u8f_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-1u8f_C": {
+    "source_id": "1u8f_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-1u8f_D": {
+    "source_id": "1u8f_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-1znq_A": {
+    "source_id": "1znq_A",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-1znq_B": {
+    "source_id": "1znq_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-1znq_C": {
+    "source_id": "1znq_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-1znq_D": {
+    "source_id": "1znq_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-3gpd_A": {
+    "source_id": "3gpd_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-3gpd_B": {
+    "source_id": "3gpd_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-4wnc_A": {
+    "source_id": "4wnc_A",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wnc_B": {
+    "source_id": "4wnc_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wnc_C": {
+    "source_id": "4wnc_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wnc_D": {
+    "source_id": "4wnc_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wnc_E": {
+    "source_id": "4wnc_E",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wnc_F": {
+    "source_id": "4wnc_F",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wnc_G": {
+    "source_id": "4wnc_G",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wnc_H": {
+    "source_id": "4wnc_H",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wni_A": {
+    "source_id": "4wni_A",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wni_B": {
+    "source_id": "4wni_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wni_C": {
+    "source_id": "4wni_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-4wni_D": {
+    "source_id": "4wni_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ade_A": {
+    "source_id": "6ade_A",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ade_B": {
+    "source_id": "6ade_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ade_C": {
+    "source_id": "6ade_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_A": {
+    "source_id": "6iq6_A",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_B": {
+    "source_id": "6iq6_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_C": {
+    "source_id": "6iq6_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_D": {
+    "source_id": "6iq6_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_E": {
+    "source_id": "6iq6_E",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_F": {
+    "source_id": "6iq6_F",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_G": {
+    "source_id": "6iq6_G",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6iq6_H": {
+    "source_id": "6iq6_H",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6m61_A": {
+    "source_id": "6m61_A",
+    "regions": [
+      [
+        1,
+        335
+      ]
+    ],
+    "content_fraction": 1,
+    "content_count": 335
+  },
+  "derived-observed-mobi-6m61_B": {
+    "source_id": "6m61_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6m61_C": {
+    "source_id": "6m61_C",
+    "regions": [
+      [
+        1,
+        335
+      ]
+    ],
+    "content_fraction": 1,
+    "content_count": 335
+  },
+  "derived-observed-mobi-6m61_D": {
+    "source_id": "6m61_D",
+    "regions": [
+      [
+        4,
+        331
+      ]
+    ],
+    "content_fraction": 0.979,
+    "content_count": 328
+  },
+  "derived-observed-mobi-6ynd_A": {
+    "source_id": "6ynd_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynd_B": {
+    "source_id": "6ynd_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynd_C": {
+    "source_id": "6ynd_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynd_D": {
+    "source_id": "6ynd_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ynd_E": {
+    "source_id": "6ynd_E",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynd_F": {
+    "source_id": "6ynd_F",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynd_G": {
+    "source_id": "6ynd_G",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ynd_H": {
+    "source_id": "6ynd_H",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6yne_A": {
+    "source_id": "6yne_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6yne_B": {
+    "source_id": "6yne_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6yne_C": {
+    "source_id": "6yne_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6yne_D": {
+    "source_id": "6yne_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynf_A": {
+    "source_id": "6ynf_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynf_B": {
+    "source_id": "6ynf_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynf_C": {
+    "source_id": "6ynf_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynf_D": {
+    "source_id": "6ynf_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ynf_E": {
+    "source_id": "6ynf_E",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ynf_F": {
+    "source_id": "6ynf_F",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynf_G": {
+    "source_id": "6ynf_G",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ynf_H": {
+    "source_id": "6ynf_H",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-6ynh_A": {
+    "source_id": "6ynh_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynh_B": {
+    "source_id": "6ynh_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynh_C": {
+    "source_id": "6ynh_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-6ynh_D": {
+    "source_id": "6ynh_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8dns_A": {
+    "source_id": "8dns_A",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-8dns_B": {
+    "source_id": "8dns_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-8dns_C": {
+    "source_id": "8dns_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-8dns_D": {
+    "source_id": "8dns_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-8g12_A": {
+    "source_id": "8g12_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g12_B": {
+    "source_id": "8g12_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g12_C": {
+    "source_id": "8g12_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g12_D": {
+    "source_id": "8g12_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g13_A": {
+    "source_id": "8g13_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g13_B": {
+    "source_id": "8g13_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g13_C": {
+    "source_id": "8g13_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g13_D": {
+    "source_id": "8g13_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g14_A": {
+    "source_id": "8g14_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g14_B": {
+    "source_id": "8g14_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g14_C": {
+    "source_id": "8g14_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g14_D": {
+    "source_id": "8g14_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g15_A": {
+    "source_id": "8g15_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g15_B": {
+    "source_id": "8g15_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g15_C": {
+    "source_id": "8g15_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g15_D": {
+    "source_id": "8g15_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g16_A": {
+    "source_id": "8g16_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g16_B": {
+    "source_id": "8g16_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g16_C": {
+    "source_id": "8g16_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g16_D": {
+    "source_id": "8g16_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g17_A": {
+    "source_id": "8g17_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g17_B": {
+    "source_id": "8g17_B",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g17_C": {
+    "source_id": "8g17_C",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8g17_D": {
+    "source_id": "8g17_D",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8p5f_A": {
+    "source_id": "8p5f_A",
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334
+  },
+  "derived-observed-mobi-8p5f_B": {
+    "source_id": "8p5f_B",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-8p5f_C": {
+    "source_id": "8p5f_C",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-mobi-8p5f_D": {
+    "source_id": "8p5f_D",
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-priority": {
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "derived-observed-th_90": {
+    "regions": [
+      [
+        3,
+        335
+      ]
+    ],
+    "content_fraction": 0.994,
+    "content_count": 333
+  },
+  "homology-domain-merge": {
+    "regions": [
+      [
+        4,
+        104
+      ],
+      [
+        157,
+        314
+      ]
+    ],
+    "content_fraction": 0.773,
+    "content_count": 259
+  },
+  "homology-domain-pfam": {
+    "regions": [
+      [
+        157,
+        314
+      ],
+      [
+        4,
+        104
+      ]
+    ],
+    "content_fraction": 0.773,
+    "content_count": 259,
+    "regions_ids": [
+      "PF02800",
+      "PF00044"
+    ],
+    "regions_names": [
+      "Glyceraldehyde 3-phosphate dehydrogenase, catalytic domain",
+      "Glyceraldehyde 3-phosphate dehydrogenase, NAD(P) binding domain"
+    ]
+  },
+  "level": 1,
+  "prediction-disorder-alphafold": {
+    "scores": [
+      0.249,
+      0.248,
+      0.234,
+      0.237,
+      0.234,
+      0.233,
+      0.233,
+      0.235,
+      0.235,
+      0.216,
+      0.221,
+      0.23,
+      0.21,
+      0.182,
+      0.167,
+      0.148,
+      0.16,
+      0.142,
+      0.149,
+      0.149,
+      0.149,
+      0.149,
+      0.15,
+      0.16,
+      0.175,
+      0.168,
+      0.179,
+      0.187,
+      0.213,
+      0.232,
+      0.232,
+      0.24,
+      0.263,
+      0.272,
+      0.271,
+      0.271,
+      0.264,
+      0.252,
+      0.28,
+      0.27,
+      0.274,
+      0.276,
+      0.3,
+      0.295,
+      0.335,
+      0.347,
+      0.372,
+      0.372,
+      0.381,
+      0.368,
+      0.382,
+      0.403,
+      0.422,
+      0.409,
+      0.39,
+      0.393,
+      0.385,
+      0.378,
+      0.395,
+      0.416,
+      0.431,
+      0.41,
+      0.416,
+      0.383,
+      0.379,
+      0.395,
+      0.395,
+      0.398,
+      0.413,
+      0.374,
+      0.371,
+      0.371,
+      0.367,
+      0.372,
+      0.357,
+      0.359,
+      0.351,
+      0.331,
+      0.327,
+      0.327,
+      0.338,
+      0.339,
+      0.321,
+      0.295,
+      0.274,
+      0.256,
+      0.27,
+      0.284,
+      0.301,
+      0.302,
+      0.293,
+      0.286,
+      0.274,
+      0.292,
+      0.311,
+      0.303,
+      0.285,
+      0.29,
+      0.265,
+      0.281,
+      0.291,
+      0.265,
+      0.279,
+      0.271,
+      0.29,
+      0.277,
+      0.277,
+      0.277,
+      0.277,
+      0.281,
+      0.285,
+      0.289,
+      0.268,
+      0.275,
+      0.286,
+      0.277,
+      0.281,
+      0.267,
+      0.234,
+      0.213,
+      0.217,
+      0.218,
+      0.22,
+      0.223,
+      0.214,
+      0.209,
+      0.228,
+      0.21,
+      0.223,
+      0.224,
+      0.248,
+      0.257,
+      0.277,
+      0.28,
+      0.275,
+      0.266,
+      0.248,
+      0.246,
+      0.22,
+      0.208,
+      0.208,
+      0.194,
+      0.191,
+      0.189,
+      0.189,
+      0.186,
+      0.177,
+      0.171,
+      0.168,
+      0.173,
+      0.151,
+      0.125,
+      0.129,
+      0.133,
+      0.129,
+      0.109,
+      0.107,
+      0.088,
+      0.096,
+      0.115,
+      0.119,
+      0.146,
+      0.147,
+      0.152,
+      0.145,
+      0.159,
+      0.161,
+      0.16,
+      0.168,
+      0.179,
+      0.215,
+      0.238,
+      0.241,
+      0.256,
+      0.276,
+      0.3,
+      0.321,
+      0.331,
+      0.345,
+      0.337,
+      0.364,
+      0.396,
+      0.419,
+      0.446,
+      0.451,
+      0.451,
+      0.425,
+      0.443,
+      0.432,
+      0.433,
+      0.448,
+      0.477,
+      0.487,
+      0.508,
+      0.498,
+      0.474,
+      0.456,
+      0.486,
+      0.483,
+      0.476,
+      0.45,
+      0.429,
+      0.442,
+      0.409,
+      0.4,
+      0.371,
+      0.355,
+      0.333,
+      0.298,
+      0.296,
+      0.319,
+      0.318,
+      0.327,
+      0.364,
+      0.377,
+      0.349,
+      0.34,
+      0.338,
+      0.321,
+      0.322,
+      0.324,
+      0.326,
+      0.3,
+      0.307,
+      0.295,
+      0.321,
+      0.323,
+      0.296,
+      0.294,
+      0.3,
+      0.297,
+      0.282,
+      0.282,
+      0.287,
+      0.266,
+      0.255,
+      0.255,
+      0.255,
+      0.243,
+      0.251,
+      0.25,
+      0.251,
+      0.25,
+      0.264,
+      0.281,
+      0.267,
+      0.268,
+      0.29,
+      0.276,
+      0.264,
+      0.252,
+      0.277,
+      0.28,
+      0.284,
+      0.304,
+      0.323,
+      0.349,
+      0.351,
+      0.374,
+      0.388,
+      0.376,
+      0.376,
+      0.352,
+      0.335,
+      0.316,
+      0.338,
+      0.346,
+      0.375,
+      0.357,
+      0.361,
+      0.372,
+      0.384,
+      0.379,
+      0.375,
+      0.393,
+      0.391,
+      0.375,
+      0.387,
+      0.394,
+      0.369,
+      0.349,
+      0.317,
+      0.316,
+      0.286,
+      0.273,
+      0.291,
+      0.311,
+      0.313,
+      0.332,
+      0.341,
+      0.352,
+      0.34,
+      0.318,
+      0.326,
+      0.319,
+      0.308,
+      0.301,
+      0.278,
+      0.28,
+      0.261,
+      0.255,
+      0.246,
+      0.23,
+      0.222,
+      0.223,
+      0.227,
+      0.224,
+      0.226,
+      0.225,
+      0.228,
+      0.207,
+      0.188,
+      0.182,
+      0.161,
+      0.147,
+      0.114,
+      0.105,
+      0.096,
+      0.08,
+      0.073,
+      0.097,
+      0.1,
+      0.122,
+      0.133,
+      0.157,
+      0.159,
+      0.158,
+      0.162,
+      0.17,
+      0.167,
+      0.163,
+      0.169,
+      0.167,
+      0.167,
+      0.164
+    ],
+    "content_fraction": 0,
+    "content_count": 0
+  },
+  "prediction-disorder-dis465": {
+    "regions": [
+      [
+        1,
+        4
+      ],
+      [
+        111,
+        114
+      ],
+      [
+        188,
+        190
+      ],
+      [
+        211,
+        214
+      ],
+      [
+        284,
+        291
+      ],
+      [
+        330,
+        330
+      ],
+      [
+        332,
+        335
+      ]
+    ],
+    "content_count": 28,
+    "content_fraction": 0.084
+  },
+  "prediction-disorder-disHL": {
+    "regions": [
+      [
+        1,
+        15
+      ],
+      [
+        19,
+        30
+      ],
+      [
+        73,
+        86
+      ],
+      [
+        183,
+        194
+      ],
+      [
+        208,
+        214
+      ],
+      [
+        232,
+        242
+      ],
+      [
+        250,
+        259
+      ],
+      [
+        267,
+        272
+      ],
+      [
+        333,
+        335
+      ]
+    ],
+    "content_count": 90,
+    "content_fraction": 0.269
+  },
+  "prediction-disorder-espN": {
+    "regions": [
+      [
+        1,
+        6
+      ],
+      [
+        285,
+        298
+      ],
+      [
+        331,
+        335
+      ]
+    ],
+    "content_count": 25,
+    "content_fraction": 0.075
+  },
+  "prediction-disorder-espX": {
+    "regions": [
+      [
+        1,
+        5
+      ],
+      [
+        332,
+        335
+      ]
+    ],
+    "content_count": 9,
+    "content_fraction": 0.027
+  },
+  "prediction-disorder-glo": {
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        6,
+        6
+      ],
+      [
+        8,
+        10
+      ],
+      [
+        56,
+        57
+      ],
+      [
+        188,
+        198
+      ],
+      [
+        285,
+        297
+      ],
+      [
+        332,
+        332
+      ]
+    ],
+    "content_count": 32,
+    "content_fraction": 0.096
+  },
+  "prediction-disorder-iupl": {
+    "regions": [
+      [
+        189,
+        189
+      ],
+      [
+        192,
+        194
+      ]
+    ],
+    "content_count": 4,
+    "content_fraction": 0.012
+  },
+  "prediction-disorder-iups": {
+    "regions": [
+      [
+        1,
+        5
+      ],
+      [
+        192,
+        196
+      ],
+      [
+        332,
+        335
+      ]
+    ],
+    "content_count": 14,
+    "content_fraction": 0.042
+  },
+  "prediction-disorder-th_50": {
+    "regions": [
+      [
+        1,
+        5
+      ],
+      [
+        189,
+        189
+      ],
+      [
+        192,
+        194
+      ],
+      [
+        332,
+        335
+      ]
+    ],
+    "content_count": 13,
+    "content_fraction": 0.039
+  },
+  "prediction-lip-alphafold": {
+    "scores": [
+      0.249,
+      0.248,
+      0.234,
+      0.237,
+      0.234,
+      0.233,
+      0.233,
+      0.235,
+      0.235,
+      0.216,
+      0.221,
+      0.23,
+      0.21,
+      0.182,
+      0.167,
+      0.148,
+      0.16,
+      0.142,
+      0.149,
+      0.149,
+      0.149,
+      0.149,
+      0.15,
+      0.16,
+      0.175,
+      0.168,
+      0.179,
+      0.187,
+      0.213,
+      0.232,
+      0.232,
+      0.24,
+      0.263,
+      0.272,
+      0.271,
+      0.271,
+      0.264,
+      0.252,
+      0.28,
+      0.27,
+      0.274,
+      0.276,
+      0.3,
+      0.295,
+      0.335,
+      0.347,
+      0.372,
+      0.372,
+      0.381,
+      0.368,
+      0.382,
+      0.403,
+      0.422,
+      0.409,
+      0.39,
+      0.393,
+      0.385,
+      0.378,
+      0.395,
+      0.416,
+      0.431,
+      0.41,
+      0.416,
+      0.383,
+      0.379,
+      0.395,
+      0.395,
+      0.398,
+      0.413,
+      0.374,
+      0.371,
+      0.371,
+      0.367,
+      0.372,
+      0.357,
+      0.359,
+      0.351,
+      0.331,
+      0.327,
+      0.327,
+      0.338,
+      0.339,
+      0.321,
+      0.295,
+      0.274,
+      0.256,
+      0.27,
+      0.284,
+      0.301,
+      0.302,
+      0.293,
+      0.286,
+      0.274,
+      0.292,
+      0.311,
+      0.303,
+      0.285,
+      0.29,
+      0.265,
+      0.281,
+      0.291,
+      0.265,
+      0.279,
+      0.271,
+      0.29,
+      0.277,
+      0.277,
+      0.277,
+      0.277,
+      0.281,
+      0.285,
+      0.289,
+      0.268,
+      0.275,
+      0.286,
+      0.277,
+      0.281,
+      0.267,
+      0.234,
+      0.213,
+      0.217,
+      0.218,
+      0.22,
+      0.223,
+      0.214,
+      0.209,
+      0.228,
+      0.21,
+      0.223,
+      0.224,
+      0.248,
+      0.257,
+      0.277,
+      0.28,
+      0.275,
+      0.266,
+      0.248,
+      0.246,
+      0.22,
+      0.208,
+      0.208,
+      0.194,
+      0.191,
+      0.189,
+      0.189,
+      0.186,
+      0.177,
+      0.171,
+      0.168,
+      0.173,
+      0.151,
+      0.125,
+      0.129,
+      0.133,
+      0.129,
+      0.109,
+      0.107,
+      0.088,
+      0.096,
+      0.115,
+      0.119,
+      0.146,
+      0.147,
+      0.152,
+      0.145,
+      0.159,
+      0.161,
+      0.16,
+      0.168,
+      0.179,
+      0.215,
+      0.238,
+      0.241,
+      0.256,
+      0.276,
+      0.3,
+      0.321,
+      0.331,
+      0.345,
+      0.337,
+      0.364,
+      0.396,
+      0.419,
+      0.446,
+      0.451,
+      0.451,
+      0.425,
+      0.443,
+      0.432,
+      0.433,
+      0.448,
+      0.477,
+      0.487,
+      0.508,
+      0.498,
+      0.474,
+      0.456,
+      0.486,
+      0.483,
+      0.476,
+      0.45,
+      0.429,
+      0.442,
+      0.409,
+      0.4,
+      0.371,
+      0.355,
+      0.333,
+      0.298,
+      0.296,
+      0.319,
+      0.318,
+      0.327,
+      0.364,
+      0.377,
+      0.349,
+      0.34,
+      0.338,
+      0.321,
+      0.322,
+      0.324,
+      0.326,
+      0.3,
+      0.307,
+      0.295,
+      0.321,
+      0.323,
+      0.296,
+      0.294,
+      0.3,
+      0.297,
+      0.282,
+      0.282,
+      0.287,
+      0.266,
+      0.255,
+      0.255,
+      0.255,
+      0.243,
+      0.251,
+      0.25,
+      0.251,
+      0.25,
+      0.264,
+      0.281,
+      0.267,
+      0.268,
+      0.29,
+      0.276,
+      0.264,
+      0.252,
+      0.277,
+      0.28,
+      0.284,
+      0.304,
+      0.323,
+      0.349,
+      0.351,
+      0.374,
+      0.388,
+      0.376,
+      0.376,
+      0.352,
+      0.335,
+      0.316,
+      0.338,
+      0.346,
+      0.375,
+      0.357,
+      0.361,
+      0.372,
+      0.384,
+      0.379,
+      0.375,
+      0.393,
+      0.391,
+      0.375,
+      0.387,
+      0.394,
+      0.369,
+      0.349,
+      0.317,
+      0.316,
+      0.286,
+      0.273,
+      0.291,
+      0.311,
+      0.313,
+      0.332,
+      0.341,
+      0.352,
+      0.34,
+      0.318,
+      0.326,
+      0.319,
+      0.308,
+      0.301,
+      0.278,
+      0.28,
+      0.261,
+      0.255,
+      0.246,
+      0.23,
+      0.222,
+      0.223,
+      0.227,
+      0.224,
+      0.226,
+      0.225,
+      0.228,
+      0.207,
+      0.188,
+      0.182,
+      0.161,
+      0.147,
+      0.114,
+      0.105,
+      0.096,
+      0.08,
+      0.073,
+      0.097,
+      0.1,
+      0.122,
+      0.133,
+      0.157,
+      0.159,
+      0.158,
+      0.162,
+      0.17,
+      0.167,
+      0.163,
+      0.169,
+      0.167,
+      0.167,
+      0.164
+    ],
+    "content_fraction": 0,
+    "content_count": 0
+  },
+  "prediction-plddt-alphafold": {
+    "scores": [
+      0.575,
+      0.781,
+      0.91,
+      0.969,
+      0.986,
+      0.989,
+      0.989,
+      0.99,
+      0.989,
+      0.987,
+      0.988,
+      0.985,
+      0.986,
+      0.988,
+      0.988,
+      0.989,
+      0.988,
+      0.988,
+      0.988,
+      0.985,
+      0.983,
+      0.984,
+      0.976,
+      0.948,
+      0.949,
+      0.953,
+      0.953,
+      0.981,
+      0.984,
+      0.988,
+      0.987,
+      0.989,
+      0.989,
+      0.989,
+      0.987,
+      0.982,
+      0.983,
+      0.981,
+      0.983,
+      0.986,
+      0.986,
+      0.988,
+      0.988,
+      0.988,
+      0.989,
+      0.987,
+      0.988,
+      0.987,
+      0.988,
+      0.988,
+      0.987,
+      0.987,
+      0.985,
+      0.982,
+      0.984,
+      0.982,
+      0.962,
+      0.971,
+      0.982,
+      0.987,
+      0.988,
+      0.988,
+      0.986,
+      0.974,
+      0.974,
+      0.987,
+      0.987,
+      0.988,
+      0.986,
+      0.98,
+      0.98,
+      0.981,
+      0.985,
+      0.989,
+      0.988,
+      0.987,
+      0.986,
+      0.981,
+      0.985,
+      0.982,
+      0.981,
+      0.983,
+      0.978,
+      0.984,
+      0.987,
+      0.986,
+      0.988,
+      0.984,
+      0.983,
+      0.983,
+      0.98,
+      0.987,
+      0.984,
+      0.988,
+      0.989,
+      0.99,
+      0.989,
+      0.988,
+      0.983,
+      0.964,
+      0.97,
+      0.983,
+      0.983,
+      0.986,
+      0.985,
+      0.983,
+      0.986,
+      0.987,
+      0.985,
+      0.986,
+      0.988,
+      0.986,
+      0.978,
+      0.973,
+      0.982,
+      0.986,
+      0.983,
+      0.986,
+      0.989,
+      0.989,
+      0.989,
+      0.988,
+      0.976,
+      0.958,
+      0.973,
+      0.949,
+      0.975,
+      0.983,
+      0.982,
+      0.986,
+      0.988,
+      0.989,
+      0.988,
+      0.986,
+      0.988,
+      0.987,
+      0.986,
+      0.981,
+      0.981,
+      0.982,
+      0.956,
+      0.965,
+      0.976,
+      0.982,
+      0.984,
+      0.988,
+      0.988,
+      0.988,
+      0.988,
+      0.985,
+      0.985,
+      0.982,
+      0.987,
+      0.988,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.988,
+      0.989,
+      0.989,
+      0.988,
+      0.987,
+      0.988,
+      0.988,
+      0.988,
+      0.989,
+      0.988,
+      0.988,
+      0.988,
+      0.988,
+      0.988,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.987,
+      0.985,
+      0.979,
+      0.974,
+      0.948,
+      0.98,
+      0.982,
+      0.983,
+      0.982,
+      0.985,
+      0.982,
+      0.98,
+      0.977,
+      0.949,
+      0.932,
+      0.967,
+      0.982,
+      0.986,
+      0.979,
+      0.982,
+      0.986,
+      0.986,
+      0.985,
+      0.974,
+      0.983,
+      0.988,
+      0.989,
+      0.987,
+      0.987,
+      0.979,
+      0.959,
+      0.953,
+      0.927,
+      0.954,
+      0.959,
+      0.965,
+      0.971,
+      0.981,
+      0.972,
+      0.967,
+      0.983,
+      0.986,
+      0.983,
+      0.985,
+      0.986,
+      0.983,
+      0.98,
+      0.987,
+      0.987,
+      0.985,
+      0.98,
+      0.985,
+      0.987,
+      0.988,
+      0.986,
+      0.988,
+      0.987,
+      0.987,
+      0.984,
+      0.988,
+      0.988,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.988,
+      0.987,
+      0.987,
+      0.987,
+      0.987,
+      0.988,
+      0.988,
+      0.987,
+      0.989,
+      0.989,
+      0.988,
+      0.988,
+      0.989,
+      0.988,
+      0.988,
+      0.988,
+      0.988,
+      0.987,
+      0.985,
+      0.981,
+      0.987,
+      0.987,
+      0.983,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.988,
+      0.987,
+      0.986,
+      0.988,
+      0.988,
+      0.988,
+      0.987,
+      0.988,
+      0.989,
+      0.987,
+      0.986,
+      0.988,
+      0.988,
+      0.989,
+      0.989,
+      0.989,
+      0.99,
+      0.989,
+      0.989,
+      0.988,
+      0.985,
+      0.987,
+      0.987,
+      0.988,
+      0.988,
+      0.986,
+      0.987,
+      0.988,
+      0.988,
+      0.989,
+      0.989,
+      0.99,
+      0.989,
+      0.989,
+      0.99,
+      0.989,
+      0.989,
+      0.989,
+      0.988,
+      0.988,
+      0.987,
+      0.988,
+      0.989,
+      0.989,
+      0.988,
+      0.989,
+      0.989,
+      0.988,
+      0.986,
+      0.987,
+      0.986,
+      0.978,
+      0.98,
+      0.98,
+      0.972,
+      0.962,
+      0.955,
+      0.889
+    ],
+    "content_fraction": 0.997,
+    "content_count": 334,
+    "regions": [
+      [
+        2,
+        335
+      ]
+    ]
+  }
+}

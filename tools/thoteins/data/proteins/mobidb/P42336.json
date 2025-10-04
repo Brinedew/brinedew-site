@@ -1,0 +1,10714 @@
+{
+  "acc": "P42336",
+  "reviewed": true,
+  "gene": "PIK3CA",
+  "proteome": "UP000005640",
+  "name": "Phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit alpha isoform",
+  "length": 1068,
+  "organism": "Homo sapiens (Human)",
+  "ncbi_taxon_id": 9606,
+  "taxonomy": [
+    "Eukaryota",
+    "Metazoa",
+    "Chordata",
+    "Craniata",
+    "Vertebrata",
+    "Euteleostomi",
+    "Mammalia",
+    "Eutheria",
+    "Euarchontoglires",
+    "Primates",
+    "Haplorrhini",
+    "Catarrhini",
+    "Hominidae",
+    "Homo"
+  ],
+  "sequence": "MPPRPSSGELWGIHLMPPRILVECLLPNGMIVTLECLREATLITIKHELFKEARKYPLHQLLQDESSYIFVSVTQEAEREEFFDETRRLCDLRLFQPFLKVIEPVGNREEKILNREIGFAIGMPVCEFDMVKDPEVQDFRRNILNVCKEAVDLRDLNSPHSRAMYVYPPNVESSPELPKHIYNKLDKGQIIVVIWVIVSPNNDKQKYTLKINHDCVPEQVIAEAIRKKTRSMLLSSEQLKLCVLEYQGKYILKVCGCDEYFLEKYPLSQYKYIRSCIMLGRMPNLMLMAKESLYSQLPMDCFTMPSYSRRISTATPYMNGETSTKSLWVINSALRIKILCATYVNVNIRDIDKIYVRTGIYHGGEPLCDNVNTQRVPCSNPRWNEWLNYDIYIPDLPRAARLCLSICSVKGRKGAKEEHCPLAWGNINLFDYTDTLVSGKMALNLWPVPHGLEDLLNPIGVTGSNPNKETPCLELEFDWFSSVVKFPDMSVIEEHANWSVSREAGFSYSHAGLSNRLARDNELRENDKEQLKAISTRDPLSEITEQEKDFLWSHRHYCVTIPEILPKLLLSVKWNSRDEVAQMYCLVKDWPPIKPEQAMELLDCNYPDPMVRGFAVRCLEKYLTDDKLSQYLIQLVQVLKYEQYLDNLLVRFLLKKALTNQRIGHFFFWHLKSEMHNKTVSQRFGLLLESYCRACGMYLKHLNRQVEAMEKLINLTDILKQEKKDETQKVQMKFLVEQMRRPDFMDALQGFLSPLNPAHQLGNLRLEECRIMSSAKRPLWLNWENPDIMSELLFQNNEIIFKNGDDLRQDMLTLQIIRIMENIWQNQGLDLRMLPYGCLSIGDCVGLIEVVRNSHTIMQIQCKGGLKGALQFNSHTLHQWLKDKNKGEIYDAAIDLFTRSCAGYCVATFILGIGDRHNSNIMVKDDGQLFHIDFGHFLDHKKKKFGYKRERVPFVLTQDFLIVISKGAQECTKTREFERFQEMCYKAYLAIRQHANLFINLFSMMLGSGMPELQSFDDIAYIRKTLALDKTEQEALEYFMKQMNDAHHGGWTTKMDWIFHTIKQHALN",
+  "uniref100": "UniRef100_P42336",
+  "uniref90": "UniRef90_P42336",
+  "uniref50": "UniRef50_P42336",
+  "uniparc": "UPI000013D494",
+  "processing": {
+    "positions": [
+      [
+        771,
+        777
+      ],
+      [
+        912,
+        920
+      ],
+      [
+        931,
+        957
+      ]
+    ],
+    "names": [
+      "G-loop",
+      "Catalytic loop",
+      "Activation loop"
+    ]
+  },
+  "derived-fixed-th_90": {
+    "regions": [
+      [
+        332,
+        448
+      ],
+      [
+        454,
+        481
+      ]
+    ],
+    "content_fraction": 0.136,
+    "content_count": 145
+  },
+  "derived-lip-flipper-7l1b_C": {
+    "source_id": "7l1b_C",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-lip-flipper-7l1c_C": {
+    "source_id": "7l1c_C",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-lip-flipper-7l1d_C": {
+    "source_id": "7l1d_C",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-lip-flipper-7rrg_E": {
+    "source_id": "7rrg_E",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-lip-flipper-8v8h_C": {
+    "source_id": "8v8h_C",
+    "regions": [
+      [
+        1060,
+        1064
+      ]
+    ],
+    "content_fraction": 0.005,
+    "content_count": 5
+  },
+  "derived-missing_residues-mobi-2rd0_A": {
+    "source_id": "2rd0_A",
+    "regions": [
+      [
+        1,
+        7
+      ],
+      [
+        307,
+        324
+      ],
+      [
+        415,
+        423
+      ],
+      [
+        506,
+        527
+      ],
+      [
+        941,
+        950
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.079,
+    "content_count": 84
+  },
+  "derived-missing_residues-mobi-3hhm_A": {
+    "source_id": "3hhm_A",
+    "regions": [
+      [
+        1,
+        4
+      ],
+      [
+        310,
+        320
+      ],
+      [
+        414,
+        420
+      ],
+      [
+        517,
+        523
+      ],
+      [
+        941,
+        952
+      ],
+      [
+        1063,
+        1068
+      ]
+    ],
+    "content_fraction": 0.044,
+    "content_count": 47
+  },
+  "derived-missing_residues-mobi-3hiz_A": {
+    "source_id": "3hiz_A",
+    "regions": [
+      [
+        1,
+        4
+      ],
+      [
+        310,
+        320
+      ],
+      [
+        418,
+        420
+      ],
+      [
+        517,
+        523
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        941,
+        952
+      ],
+      [
+        971,
+        971
+      ],
+      [
+        1049,
+        1055
+      ],
+      [
+        1063,
+        1068
+      ]
+    ],
+    "content_fraction": 0.057,
+    "content_count": 61
+  },
+  "derived-missing_residues-mobi-3zim_A": {
+    "source_id": "3zim_A",
+    "regions": [
+      [
+        234,
+        244
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        348,
+        351
+      ],
+      [
+        409,
+        418
+      ],
+      [
+        940,
+        948
+      ],
+      [
+        966,
+        970
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 54
+  },
+  "derived-missing_residues-mobi-4jps_A": {
+    "source_id": "4jps_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        228,
+        243
+      ],
+      [
+        314,
+        323
+      ],
+      [
+        498,
+        524
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        1062,
+        1068
+      ]
+    ],
+    "content_fraction": 0.065,
+    "content_count": 69
+  },
+  "derived-missing_residues-mobi-4l1b_A": {
+    "source_id": "4l1b_A",
+    "regions": [
+      [
+        1,
+        7
+      ],
+      [
+        227,
+        241
+      ],
+      [
+        309,
+        319
+      ],
+      [
+        411,
+        413
+      ],
+      [
+        503,
+        520
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        1059,
+        1068
+      ]
+    ],
+    "content_fraction": 0.069,
+    "content_count": 74
+  },
+  "derived-missing_residues-mobi-4l23_A": {
+    "source_id": "4l23_A",
+    "regions": [
+      [
+        1,
+        7
+      ],
+      [
+        228,
+        232
+      ],
+      [
+        309,
+        319
+      ],
+      [
+        411,
+        413
+      ],
+      [
+        505,
+        514
+      ],
+      [
+        864,
+        872
+      ],
+      [
+        1060,
+        1068
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 54
+  },
+  "derived-missing_residues-mobi-4l2y_A": {
+    "source_id": "4l2y_A",
+    "regions": [
+      [
+        1,
+        7
+      ],
+      [
+        228,
+        237
+      ],
+      [
+        309,
+        323
+      ],
+      [
+        411,
+        413
+      ],
+      [
+        503,
+        519
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.072,
+    "content_count": 77
+  },
+  "derived-missing_residues-mobi-4ovu_A": {
+    "source_id": "4ovu_A",
+    "regions": [
+      [
+        1,
+        5
+      ],
+      [
+        309,
+        318
+      ],
+      [
+        410,
+        415
+      ],
+      [
+        515,
+        518
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 41
+  },
+  "derived-missing_residues-mobi-4ovv_A": {
+    "source_id": "4ovv_A",
+    "regions": [
+      [
+        1,
+        3
+      ],
+      [
+        309,
+        320
+      ],
+      [
+        410,
+        417
+      ],
+      [
+        515,
+        519
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.04,
+    "content_count": 43
+  },
+  "derived-missing_residues-mobi-4tuu_A": {
+    "source_id": "4tuu_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        234,
+        245
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        348,
+        351
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        865,
+        871
+      ],
+      [
+        940,
+        950
+      ],
+      [
+        966,
+        971
+      ],
+      [
+        1047,
+        1048
+      ]
+    ],
+    "content_fraction": 0.061,
+    "content_count": 65
+  },
+  "derived-missing_residues-mobi-4tv3_A": {
+    "source_id": "4tv3_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        234,
+        245
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        348,
+        351
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        865,
+        871
+      ],
+      [
+        940,
+        950
+      ],
+      [
+        966,
+        971
+      ],
+      [
+        1047,
+        1048
+      ]
+    ],
+    "content_fraction": 0.061,
+    "content_count": 65
+  },
+  "derived-missing_residues-mobi-4waf_A": {
+    "source_id": "4waf_A",
+    "regions": [
+      [
+        231,
+        233
+      ],
+      [
+        313,
+        322
+      ],
+      [
+        501,
+        523
+      ],
+      [
+        865,
+        871
+      ],
+      [
+        1062,
+        1068
+      ]
+    ],
+    "content_fraction": 0.047,
+    "content_count": 50
+  },
+  "derived-missing_residues-mobi-4ykn_A": {
+    "source_id": "4ykn_A",
+    "regions": [
+      [
+        2,
+        9
+      ],
+      [
+        310,
+        322
+      ],
+      [
+        349,
+        350
+      ],
+      [
+        412,
+        414
+      ],
+      [
+        504,
+        522
+      ],
+      [
+        945,
+        949
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.062,
+    "content_count": 66
+  },
+  "derived-missing_residues-mobi-4zop_A": {
+    "source_id": "4zop_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        229,
+        245
+      ],
+      [
+        315,
+        322
+      ],
+      [
+        497,
+        524
+      ],
+      [
+        865,
+        871
+      ],
+      [
+        1062,
+        1068
+      ]
+    ],
+    "content_fraction": 0.064,
+    "content_count": 68
+  },
+  "derived-missing_residues-mobi-5dxh_A": {
+    "source_id": "5dxh_A",
+    "regions": [
+      [
+        307,
+        322
+      ],
+      [
+        411,
+        417
+      ],
+      [
+        500,
+        522
+      ],
+      [
+        864,
+        868
+      ],
+      [
+        937,
+        950
+      ],
+      [
+        1047,
+        1053
+      ],
+      [
+        1063,
+        1068
+      ]
+    ],
+    "content_fraction": 0.073,
+    "content_count": 78
+  },
+  "derived-missing_residues-mobi-5dxh_C": {
+    "source_id": "5dxh_C",
+    "regions": [
+      [
+        308,
+        322
+      ],
+      [
+        350,
+        353
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        500,
+        522
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        939,
+        952
+      ],
+      [
+        1047,
+        1053
+      ],
+      [
+        1063,
+        1068
+      ]
+    ],
+    "content_fraction": 0.081,
+    "content_count": 86
+  },
+  "derived-missing_residues-mobi-5dxt_A": {
+    "source_id": "5dxt_A",
+    "regions": [
+      [
+        199,
+        202
+      ],
+      [
+        233,
+        247
+      ],
+      [
+        311,
+        321
+      ],
+      [
+        348,
+        353
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        450,
+        453
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        941,
+        948
+      ],
+      [
+        969,
+        969
+      ],
+      [
+        1052,
+        1068
+      ]
+    ],
+    "content_fraction": 0.078,
+    "content_count": 83
+  },
+  "derived-missing_residues-mobi-5fi4_A": {
+    "source_id": "5fi4_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        232,
+        235
+      ],
+      [
+        312,
+        322
+      ],
+      [
+        495,
+        523
+      ],
+      [
+        863,
+        870
+      ],
+      [
+        1063,
+        1068
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 59
+  },
+  "derived-missing_residues-mobi-5itd_A": {
+    "source_id": "5itd_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        228,
+        244
+      ],
+      [
+        312,
+        322
+      ],
+      [
+        498,
+        524
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        1060,
+        1068
+      ]
+    ],
+    "content_fraction": 0.068,
+    "content_count": 73
+  },
+  "derived-missing_residues-mobi-5sw8_A": {
+    "source_id": "5sw8_A",
+    "regions": [
+      [
+        310,
+        320
+      ],
+      [
+        347,
+        347
+      ],
+      [
+        381,
+        382
+      ],
+      [
+        410,
+        419
+      ],
+      [
+        513,
+        520
+      ],
+      [
+        945,
+        948
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 51
+  },
+  "derived-missing_residues-mobi-5swg_A": {
+    "source_id": "5swg_A",
+    "regions": [
+      [
+        309,
+        321
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        516,
+        519
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.037,
+    "content_count": 40
+  },
+  "derived-missing_residues-mobi-5swo_A": {
+    "source_id": "5swo_A",
+    "regions": [
+      [
+        309,
+        318
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.031,
+    "content_count": 33
+  },
+  "derived-missing_residues-mobi-5swp_A": {
+    "source_id": "5swp_A",
+    "regions": [
+      [
+        309,
+        318
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        1055,
+        1068
+      ]
+    ],
+    "content_fraction": 0.029,
+    "content_count": 31
+  },
+  "derived-missing_residues-mobi-5swr_A": {
+    "source_id": "5swr_A",
+    "regions": [
+      [
+        309,
+        320
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 35
+  },
+  "derived-missing_residues-mobi-5swt_A": {
+    "source_id": "5swt_A",
+    "regions": [
+      [
+        309,
+        319
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        947,
+        947
+      ],
+      [
+        1055,
+        1068
+      ]
+    ],
+    "content_fraction": 0.031,
+    "content_count": 33
+  },
+  "derived-missing_residues-mobi-5sx8_A": {
+    "source_id": "5sx8_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        318
+      ],
+      [
+        410,
+        417
+      ],
+      [
+        521,
+        523
+      ],
+      [
+        1055,
+        1068
+      ]
+    ],
+    "content_fraction": 0.034,
+    "content_count": 36
+  },
+  "derived-missing_residues-mobi-5sx9_A": {
+    "source_id": "5sx9_A",
+    "regions": [
+      [
+        309,
+        323
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        870,
+        871
+      ],
+      [
+        945,
+        947
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.041,
+    "content_count": 44
+  },
+  "derived-missing_residues-mobi-5sxa_A": {
+    "source_id": "5sxa_A",
+    "regions": [
+      [
+        1,
+        2
+      ],
+      [
+        5,
+        6
+      ],
+      [
+        309,
+        316
+      ],
+      [
+        410,
+        417
+      ],
+      [
+        517,
+        519
+      ],
+      [
+        946,
+        948
+      ],
+      [
+        1059,
+        1068
+      ]
+    ],
+    "content_fraction": 0.034,
+    "content_count": 36
+  },
+  "derived-missing_residues-mobi-5sxb_A": {
+    "source_id": "5sxb_A",
+    "regions": [
+      [
+        309,
+        319
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        947,
+        947
+      ],
+      [
+        1057,
+        1068
+      ]
+    ],
+    "content_fraction": 0.029,
+    "content_count": 31
+  },
+  "derived-missing_residues-mobi-5sxc_A": {
+    "source_id": "5sxc_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        322
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        946,
+        948
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.04,
+    "content_count": 43
+  },
+  "derived-missing_residues-mobi-5sxd_A": {
+    "source_id": "5sxd_A",
+    "regions": [
+      [
+        309,
+        321
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        947,
+        947
+      ],
+      [
+        1055,
+        1068
+      ]
+    ],
+    "content_fraction": 0.035,
+    "content_count": 37
+  },
+  "derived-missing_residues-mobi-5sxe_A": {
+    "source_id": "5sxe_A",
+    "regions": [
+      [
+        309,
+        321
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        945,
+        948
+      ],
+      [
+        1055,
+        1068
+      ]
+    ],
+    "content_fraction": 0.037,
+    "content_count": 40
+  },
+  "derived-missing_residues-mobi-5sxf_A": {
+    "source_id": "5sxf_A",
+    "regions": [
+      [
+        1,
+        3
+      ],
+      [
+        199,
+        199
+      ],
+      [
+        309,
+        323
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        514,
+        521
+      ],
+      [
+        868,
+        871
+      ],
+      [
+        945,
+        948
+      ],
+      [
+        1052,
+        1068
+      ]
+    ],
+    "content_fraction": 0.057,
+    "content_count": 61
+  },
+  "derived-missing_residues-mobi-5sxi_A": {
+    "source_id": "5sxi_A",
+    "regions": [
+      [
+        1,
+        4
+      ],
+      [
+        309,
+        322
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        945,
+        947
+      ],
+      [
+        1057,
+        1068
+      ]
+    ],
+    "content_fraction": 0.037,
+    "content_count": 40
+  },
+  "derived-missing_residues-mobi-5sxj_A": {
+    "source_id": "5sxj_A",
+    "regions": [
+      [
+        1,
+        2
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        309,
+        315
+      ],
+      [
+        410,
+        419
+      ],
+      [
+        517,
+        520
+      ],
+      [
+        867,
+        869
+      ],
+      [
+        946,
+        947
+      ],
+      [
+        1052,
+        1068
+      ]
+    ],
+    "content_fraction": 0.043,
+    "content_count": 46
+  },
+  "derived-missing_residues-mobi-5sxk_A": {
+    "source_id": "5sxk_A",
+    "regions": [
+      [
+        309,
+        319
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        517,
+        519
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.035,
+    "content_count": 37
+  },
+  "derived-missing_residues-mobi-5ubr_A": {
+    "source_id": "5ubr_A",
+    "regions": [
+      [
+        233,
+        247
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        347,
+        352
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        943,
+        948
+      ]
+    ],
+    "content_fraction": 0.053,
+    "content_count": 57
+  },
+  "derived-missing_residues-mobi-5uk8_A": {
+    "source_id": "5uk8_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        231,
+        237
+      ],
+      [
+        314,
+        322
+      ],
+      [
+        500,
+        523
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        1058,
+        1068
+      ]
+    ],
+    "content_fraction": 0.056,
+    "content_count": 60
+  },
+  "derived-missing_residues-mobi-5ukj_A": {
+    "source_id": "5ukj_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        229,
+        236
+      ],
+      [
+        314,
+        322
+      ],
+      [
+        503,
+        521
+      ],
+      [
+        864,
+        870
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 59
+  },
+  "derived-missing_residues-mobi-5ul1_A": {
+    "source_id": "5ul1_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        230,
+        236
+      ],
+      [
+        312,
+        323
+      ],
+      [
+        501,
+        523
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.064,
+    "content_count": 68
+  },
+  "derived-missing_residues-mobi-5xgh_A": {
+    "source_id": "5xgh_A",
+    "regions": [
+      [
+        228,
+        247
+      ],
+      [
+        309,
+        319
+      ],
+      [
+        411,
+        413
+      ],
+      [
+        505,
+        515
+      ],
+      [
+        863,
+        872
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 55
+  },
+  "derived-missing_residues-mobi-5xgi_A": {
+    "source_id": "5xgi_A",
+    "regions": [
+      [
+        228,
+        232
+      ],
+      [
+        309,
+        319
+      ],
+      [
+        412,
+        413
+      ],
+      [
+        505,
+        515
+      ],
+      [
+        863,
+        872
+      ]
+    ],
+    "content_fraction": 0.037,
+    "content_count": 39
+  },
+  "derived-missing_residues-mobi-5xgj_A": {
+    "source_id": "5xgj_A",
+    "regions": [
+      [
+        228,
+        247
+      ],
+      [
+        299,
+        319
+      ],
+      [
+        411,
+        413
+      ],
+      [
+        505,
+        521
+      ],
+      [
+        866,
+        872
+      ]
+    ],
+    "content_fraction": 0.064,
+    "content_count": 68
+  },
+  "derived-missing_residues-mobi-6gvf_A": {
+    "source_id": "6gvf_A",
+    "regions": [
+      [
+        311,
+        323
+      ],
+      [
+        501,
+        506
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        943,
+        948
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 35
+  },
+  "derived-missing_residues-mobi-6gvg_A": {
+    "source_id": "6gvg_A",
+    "regions": [
+      [
+        311,
+        323
+      ],
+      [
+        501,
+        506
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        943,
+        948
+      ],
+      [
+        1052,
+        1068
+      ]
+    ],
+    "content_fraction": 0.049,
+    "content_count": 52
+  },
+  "derived-missing_residues-mobi-6gvh_A": {
+    "source_id": "6gvh_A",
+    "regions": [
+      [
+        311,
+        321
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        943,
+        948
+      ],
+      [
+        1052,
+        1068
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 49
+  },
+  "derived-missing_residues-mobi-6gvi_A": {
+    "source_id": "6gvi_A",
+    "regions": [
+      [
+        311,
+        323
+      ],
+      [
+        501,
+        506
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        943,
+        948
+      ],
+      [
+        1052,
+        1068
+      ]
+    ],
+    "content_fraction": 0.049,
+    "content_count": 52
+  },
+  "derived-missing_residues-mobi-6nct_A": {
+    "source_id": "6nct_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        320
+      ],
+      [
+        410,
+        415
+      ],
+      [
+        514,
+        520
+      ],
+      [
+        944,
+        949
+      ],
+      [
+        1058,
+        1068
+      ]
+    ],
+    "content_fraction": 0.04,
+    "content_count": 43
+  },
+  "derived-missing_residues-mobi-6oac_A": {
+    "source_id": "6oac_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        232,
+        245
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        346,
+        353
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        500,
+        522
+      ],
+      [
+        725,
+        727
+      ],
+      [
+        865,
+        871
+      ],
+      [
+        940,
+        950
+      ],
+      [
+        966,
+        971
+      ],
+      [
+        1047,
+        1048
+      ]
+    ],
+    "content_fraction": 0.091,
+    "content_count": 97
+  },
+  "derived-missing_residues-mobi-6pys_A": {
+    "source_id": "6pys_A",
+    "regions": [
+      [
+        200,
+        202
+      ],
+      [
+        233,
+        245
+      ],
+      [
+        310,
+        321
+      ],
+      [
+        348,
+        350
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        864,
+        872
+      ],
+      [
+        941,
+        948
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 55
+  },
+  "derived-missing_residues-mobi-6vo7_A": {
+    "source_id": "6vo7_A",
+    "regions": [
+      [
+        199,
+        202
+      ]
+    ],
+    "content_fraction": 0.004,
+    "content_count": 4
+  },
+  "derived-missing_residues-mobi-7jiu_A": {
+    "source_id": "7jiu_A",
+    "regions": [
+      [
+        199,
+        202
+      ],
+      [
+        233,
+        245
+      ],
+      [
+        311,
+        321
+      ],
+      [
+        348,
+        349
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        864,
+        865
+      ],
+      [
+        868,
+        868
+      ],
+      [
+        943,
+        948
+      ]
+    ],
+    "content_fraction": 0.043,
+    "content_count": 46
+  },
+  "derived-missing_residues-mobi-7k6m_A": {
+    "source_id": "7k6m_A",
+    "regions": [
+      [
+        105,
+        108
+      ],
+      [
+        232,
+        246
+      ],
+      [
+        309,
+        323
+      ],
+      [
+        346,
+        350
+      ],
+      [
+        413,
+        415
+      ],
+      [
+        501,
+        523
+      ],
+      [
+        1048,
+        1048
+      ]
+    ],
+    "content_fraction": 0.062,
+    "content_count": 66
+  },
+  "derived-missing_residues-mobi-7k6n_A": {
+    "source_id": "7k6n_A",
+    "regions": [
+      [
+        105,
+        108
+      ],
+      [
+        232,
+        246
+      ],
+      [
+        308,
+        323
+      ],
+      [
+        345,
+        350
+      ],
+      [
+        413,
+        415
+      ],
+      [
+        518,
+        523
+      ],
+      [
+        940,
+        955
+      ],
+      [
+        1046,
+        1048
+      ]
+    ],
+    "content_fraction": 0.065,
+    "content_count": 69
+  },
+  "derived-missing_residues-mobi-7k6o_A": {
+    "source_id": "7k6o_A",
+    "regions": [
+      [
+        105,
+        108
+      ],
+      [
+        232,
+        246
+      ],
+      [
+        300,
+        302
+      ],
+      [
+        309,
+        323
+      ],
+      [
+        346,
+        350
+      ],
+      [
+        413,
+        415
+      ],
+      [
+        501,
+        523
+      ],
+      [
+        940,
+        953
+      ],
+      [
+        965,
+        971
+      ],
+      [
+        1046,
+        1048
+      ]
+    ],
+    "content_fraction": 0.086,
+    "content_count": 92
+  },
+  "derived-missing_residues-mobi-7k71_A": {
+    "source_id": "7k71_A",
+    "regions": [
+      [
+        105,
+        108
+      ],
+      [
+        232,
+        246
+      ],
+      [
+        309,
+        323
+      ],
+      [
+        346,
+        350
+      ],
+      [
+        377,
+        380
+      ],
+      [
+        410,
+        415
+      ],
+      [
+        501,
+        523
+      ],
+      [
+        864,
+        872
+      ],
+      [
+        940,
+        955
+      ],
+      [
+        1045,
+        1048
+      ]
+    ],
+    "content_fraction": 0.095,
+    "content_count": 101
+  },
+  "derived-missing_residues-mobi-7mlk_A": {
+    "source_id": "7mlk_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        234,
+        245
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        348,
+        351
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        940,
+        950
+      ],
+      [
+        968,
+        971
+      ],
+      [
+        1047,
+        1048
+      ]
+    ],
+    "content_fraction": 0.052,
+    "content_count": 56
+  },
+  "derived-missing_residues-mobi-7myn_A": {
+    "source_id": "7myn_A",
+    "regions": [
+      [
+        1,
+        6
+      ],
+      [
+        230,
+        246
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        866,
+        872
+      ],
+      [
+        941,
+        949
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.085,
+    "content_count": 91
+  },
+  "derived-missing_residues-mobi-7myo_B": {
+    "source_id": "7myo_B",
+    "regions": [
+      [
+        1,
+        17
+      ],
+      [
+        234,
+        239
+      ],
+      [
+        319,
+        322
+      ],
+      [
+        503,
+        521
+      ],
+      [
+        868,
+        871
+      ],
+      [
+        943,
+        950
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.071,
+    "content_count": 76
+  },
+  "derived-missing_residues-mobi-7pg5_A": {
+    "source_id": "7pg5_A",
+    "regions": [
+      [
+        1,
+        2
+      ],
+      [
+        314,
+        321
+      ],
+      [
+        502,
+        522
+      ],
+      [
+        865,
+        870
+      ],
+      [
+        1066,
+        1068
+      ]
+    ],
+    "content_fraction": 0.037,
+    "content_count": 40
+  },
+  "derived-missing_residues-mobi-7pg6_A": {
+    "source_id": "7pg6_A",
+    "regions": [
+      [
+        1,
+        2
+      ],
+      [
+        314,
+        322
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        865,
+        870
+      ],
+      [
+        1066,
+        1068
+      ]
+    ],
+    "content_fraction": 0.039,
+    "content_count": 42
+  },
+  "derived-missing_residues-mobi-7r9v_A": {
+    "source_id": "7r9v_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        232,
+        245
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        346,
+        353
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        500,
+        522
+      ],
+      [
+        940,
+        951
+      ],
+      [
+        966,
+        971
+      ],
+      [
+        1046,
+        1048
+      ]
+    ],
+    "content_fraction": 0.083,
+    "content_count": 89
+  },
+  "derived-missing_residues-mobi-7r9y_A": {
+    "source_id": "7r9y_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        232,
+        246
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        346,
+        353
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        500,
+        522
+      ],
+      [
+        940,
+        952
+      ],
+      [
+        966,
+        971
+      ],
+      [
+        1046,
+        1048
+      ]
+    ],
+    "content_fraction": 0.085,
+    "content_count": 91
+  },
+  "derived-missing_residues-mobi-7tz7_A": {
+    "source_id": "7tz7_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        188,
+        189
+      ],
+      [
+        229,
+        252
+      ],
+      [
+        312,
+        322
+      ],
+      [
+        502,
+        520
+      ],
+      [
+        864,
+        870
+      ],
+      [
+        1053,
+        1068
+      ]
+    ],
+    "content_fraction": 0.075,
+    "content_count": 80
+  },
+  "derived-missing_residues-mobi-8am0_A": {
+    "source_id": "8am0_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        315,
+        322
+      ],
+      [
+        505,
+        520
+      ],
+      [
+        865,
+        870
+      ],
+      [
+        1063,
+        1068
+      ]
+    ],
+    "content_fraction": 0.035,
+    "content_count": 37
+  },
+  "derived-missing_residues-mobi-8bfu_A": {
+    "source_id": "8bfu_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        232,
+        247
+      ],
+      [
+        311,
+        323
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        940,
+        951
+      ],
+      [
+        1047,
+        1048
+      ]
+    ],
+    "content_fraction": 0.06,
+    "content_count": 64
+  },
+  "derived-missing_residues-mobi-8dcp_A": {
+    "source_id": "8dcp_A",
+    "regions": [
+      [
+        1,
+        19
+      ],
+      [
+        239,
+        241
+      ],
+      [
+        311,
+        323
+      ],
+      [
+        504,
+        513
+      ],
+      [
+        519,
+        521
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.059,
+    "content_count": 63
+  },
+  "derived-missing_residues-mobi-8dcx_A": {
+    "source_id": "8dcx_A",
+    "regions": [
+      [
+        1,
+        25
+      ],
+      [
+        34,
+        36
+      ],
+      [
+        103,
+        106
+      ],
+      [
+        200,
+        203
+      ],
+      [
+        229,
+        244
+      ],
+      [
+        312,
+        322
+      ],
+      [
+        412,
+        418
+      ],
+      [
+        500,
+        526
+      ],
+      [
+        721,
+        733
+      ],
+      [
+        865,
+        873
+      ],
+      [
+        943,
+        949
+      ],
+      [
+        1057,
+        1068
+      ]
+    ],
+    "content_fraction": 0.129,
+    "content_count": 138
+  },
+  "derived-missing_residues-mobi-8dd4_A": {
+    "source_id": "8dd4_A",
+    "regions": [
+      [
+        1,
+        18
+      ],
+      [
+        230,
+        247
+      ],
+      [
+        311,
+        320
+      ],
+      [
+        499,
+        523
+      ],
+      [
+        866,
+        872
+      ],
+      [
+        1060,
+        1068
+      ]
+    ],
+    "content_fraction": 0.081,
+    "content_count": 87
+  },
+  "derived-missing_residues-mobi-8dd8_A": {
+    "source_id": "8dd8_A",
+    "regions": [
+      [
+        1,
+        5
+      ],
+      [
+        313,
+        318
+      ],
+      [
+        501,
+        524
+      ],
+      [
+        866,
+        870
+      ],
+      [
+        1052,
+        1068
+      ]
+    ],
+    "content_fraction": 0.053,
+    "content_count": 57
+  },
+  "derived-missing_residues-mobi-8exl_A": {
+    "source_id": "8exl_A",
+    "regions": [
+      [
+        7,
+        106
+      ],
+      [
+        200,
+        202
+      ],
+      [
+        233,
+        247
+      ],
+      [
+        311,
+        321
+      ],
+      [
+        349,
+        350
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        942,
+        948
+      ],
+      [
+        1052,
+        1052
+      ]
+    ],
+    "content_fraction": 0.144,
+    "content_count": 154
+  },
+  "derived-missing_residues-mobi-8exo_A": {
+    "source_id": "8exo_A",
+    "regions": [
+      [
+        7,
+        106
+      ],
+      [
+        233,
+        245
+      ],
+      [
+        311,
+        321
+      ],
+      [
+        349,
+        350
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        945,
+        948
+      ],
+      [
+        1052,
+        1052
+      ]
+    ],
+    "content_fraction": 0.137,
+    "content_count": 146
+  },
+  "derived-missing_residues-mobi-8exu_A": {
+    "source_id": "8exu_A",
+    "regions": [
+      [
+        7,
+        106
+      ],
+      [
+        233,
+        245
+      ],
+      [
+        311,
+        321
+      ],
+      [
+        349,
+        350
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        943,
+        948
+      ],
+      [
+        1052,
+        1052
+      ]
+    ],
+    "content_fraction": 0.139,
+    "content_count": 148
+  },
+  "derived-missing_residues-mobi-8exv_A": {
+    "source_id": "8exv_A",
+    "regions": [
+      [
+        7,
+        106
+      ],
+      [
+        200,
+        202
+      ],
+      [
+        233,
+        245
+      ],
+      [
+        311,
+        321
+      ],
+      [
+        349,
+        350
+      ],
+      [
+        410,
+        416
+      ],
+      [
+        864,
+        871
+      ],
+      [
+        943,
+        948
+      ],
+      [
+        1052,
+        1052
+      ]
+    ],
+    "content_fraction": 0.141,
+    "content_count": 151
+  },
+  "derived-missing_residues-mobi-8gua_A": {
+    "source_id": "8gua_A",
+    "regions": [
+      [
+        1,
+        106
+      ],
+      [
+        231,
+        247
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        348,
+        351
+      ],
+      [
+        410,
+        418
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        864,
+        872
+      ],
+      [
+        941,
+        956
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.199,
+    "content_count": 213
+  },
+  "derived-missing_residues-mobi-8gub_A": {
+    "source_id": "8gub_A",
+    "regions": [
+      [
+        1,
+        18
+      ],
+      [
+        230,
+        246
+      ],
+      [
+        312,
+        321
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        866,
+        871
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.085,
+    "content_count": 91
+  },
+  "derived-missing_residues-mobi-8gud_A": {
+    "source_id": "8gud_A",
+    "regions": [
+      [
+        1,
+        106
+      ],
+      [
+        226,
+        247
+      ],
+      [
+        310,
+        324
+      ],
+      [
+        347,
+        352
+      ],
+      [
+        409,
+        418
+      ],
+      [
+        498,
+        522
+      ],
+      [
+        721,
+        726
+      ],
+      [
+        866,
+        872
+      ],
+      [
+        940,
+        957
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.218,
+    "content_count": 233
+  },
+  "derived-missing_residues-mobi-8ilr_A": {
+    "source_id": "8ilr_A",
+    "regions": [
+      [
+        1,
+        6
+      ],
+      [
+        230,
+        246
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        866,
+        872
+      ],
+      [
+        941,
+        949
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.085,
+    "content_count": 91
+  },
+  "derived-missing_residues-mobi-8ils_A": {
+    "source_id": "8ils_A",
+    "regions": [
+      [
+        1,
+        6
+      ],
+      [
+        230,
+        246
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        866,
+        872
+      ],
+      [
+        941,
+        949
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.085,
+    "content_count": 91
+  },
+  "derived-missing_residues-mobi-8ilv_A": {
+    "source_id": "8ilv_A",
+    "regions": [
+      [
+        1,
+        6
+      ],
+      [
+        12,
+        16
+      ],
+      [
+        230,
+        246
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        865,
+        872
+      ],
+      [
+        941,
+        949
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.091,
+    "content_count": 97
+  },
+  "derived-missing_residues-mobi-8ow2_A": {
+    "source_id": "8ow2_A",
+    "regions": [
+      [
+        105,
+        106
+      ],
+      [
+        310,
+        321
+      ],
+      [
+        505,
+        516
+      ],
+      [
+        865,
+        871
+      ],
+      [
+        940,
+        954
+      ],
+      [
+        1048,
+        1048
+      ]
+    ],
+    "content_fraction": 0.046,
+    "content_count": 49
+  },
+  "derived-missing_residues-mobi-8sbc_A": {
+    "source_id": "8sbc_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        196,
+        205
+      ],
+      [
+        226,
+        250
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        499,
+        523
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.092,
+    "content_count": 98
+  },
+  "derived-missing_residues-mobi-8sbj_A": {
+    "source_id": "8sbj_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        226,
+        248
+      ],
+      [
+        312,
+        322
+      ],
+      [
+        500,
+        522
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        1055,
+        1068
+      ]
+    ],
+    "content_fraction": 0.077,
+    "content_count": 82
+  },
+  "derived-missing_residues-mobi-8tdu_A": {
+    "source_id": "8tdu_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        322
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        503,
+        522
+      ],
+      [
+        1062,
+        1068
+      ]
+    ],
+    "content_fraction": 0.044,
+    "content_count": 47
+  },
+  "derived-missing_residues-mobi-8tdu_B": {
+    "source_id": "8tdu_B",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        322
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        499,
+        521
+      ],
+      [
+        864,
+        872
+      ],
+      [
+        1048,
+        1055
+      ],
+      [
+        1062,
+        1068
+      ]
+    ],
+    "content_fraction": 0.064,
+    "content_count": 68
+  },
+  "derived-missing_residues-mobi-8tgd_A": {
+    "source_id": "8tgd_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        310,
+        321
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        503,
+        520
+      ],
+      [
+        1064,
+        1068
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 41
+  },
+  "derived-missing_residues-mobi-8tgd_C": {
+    "source_id": "8tgd_C",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        310,
+        320
+      ],
+      [
+        412,
+        415
+      ],
+      [
+        500,
+        520
+      ],
+      [
+        864,
+        869
+      ],
+      [
+        944,
+        948
+      ],
+      [
+        1051,
+        1055
+      ],
+      [
+        1062,
+        1068
+      ]
+    ],
+    "content_fraction": 0.056,
+    "content_count": 60
+  },
+  "derived-missing_residues-mobi-8ts7_A": {
+    "source_id": "8ts7_A",
+    "regions": [
+      [
+        2,
+        10
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        503,
+        523
+      ],
+      [
+        943,
+        948
+      ],
+      [
+        1052,
+        1053
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 55
+  },
+  "derived-missing_residues-mobi-8ts8_A": {
+    "source_id": "8ts8_A",
+    "regions": [
+      [
+        2,
+        10
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        413,
+        415
+      ],
+      [
+        503,
+        523
+      ],
+      [
+        943,
+        951
+      ],
+      [
+        1048,
+        1053
+      ]
+    ],
+    "content_fraction": 0.056,
+    "content_count": 60
+  },
+  "derived-missing_residues-mobi-8ts9_A": {
+    "source_id": "8ts9_A",
+    "regions": [
+      [
+        2,
+        5
+      ],
+      [
+        313,
+        322
+      ],
+      [
+        413,
+        414
+      ],
+      [
+        502,
+        522
+      ],
+      [
+        943,
+        950
+      ]
+    ],
+    "content_fraction": 0.042,
+    "content_count": 45
+  },
+  "derived-missing_residues-mobi-8tsa_A": {
+    "source_id": "8tsa_A",
+    "regions": [
+      [
+        311,
+        322
+      ],
+      [
+        411,
+        414
+      ],
+      [
+        503,
+        522
+      ],
+      [
+        943,
+        950
+      ]
+    ],
+    "content_fraction": 0.041,
+    "content_count": 44
+  },
+  "derived-missing_residues-mobi-8tsb_A": {
+    "source_id": "8tsb_A",
+    "regions": [
+      [
+        2,
+        7
+      ],
+      [
+        311,
+        322
+      ],
+      [
+        411,
+        414
+      ],
+      [
+        503,
+        522
+      ],
+      [
+        943,
+        950
+      ],
+      [
+        1051,
+        1053
+      ]
+    ],
+    "content_fraction": 0.05,
+    "content_count": 53
+  },
+  "derived-missing_residues-mobi-8tsc_A": {
+    "source_id": "8tsc_A",
+    "regions": [
+      [
+        2,
+        4
+      ],
+      [
+        313,
+        322
+      ],
+      [
+        503,
+        522
+      ],
+      [
+        943,
+        950
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 41
+  },
+  "derived-missing_residues-mobi-8tsd_A": {
+    "source_id": "8tsd_A",
+    "regions": [
+      [
+        2,
+        4
+      ],
+      [
+        313,
+        322
+      ],
+      [
+        502,
+        522
+      ],
+      [
+        943,
+        951
+      ],
+      [
+        1050,
+        1053
+      ]
+    ],
+    "content_fraction": 0.044,
+    "content_count": 47
+  },
+  "derived-missing_residues-mobi-8tu6_A": {
+    "source_id": "8tu6_A",
+    "regions": [
+      [
+        2,
+        21
+      ],
+      [
+        309,
+        322
+      ],
+      [
+        497,
+        523
+      ],
+      [
+        865,
+        870
+      ],
+      [
+        945,
+        948
+      ],
+      [
+        1054,
+        1068
+      ]
+    ],
+    "content_fraction": 0.081,
+    "content_count": 86
+  },
+  "derived-missing_residues-mobi-8v8h_A": {
+    "source_id": "8v8h_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        310,
+        320
+      ],
+      [
+        351,
+        352
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        499,
+        523
+      ],
+      [
+        1065,
+        1068
+      ]
+    ],
+    "content_fraction": 0.045,
+    "content_count": 48
+  },
+  "derived-missing_residues-mobi-8v8h_C": {
+    "source_id": "8v8h_C",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        310,
+        320
+      ],
+      [
+        351,
+        352
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        499,
+        523
+      ],
+      [
+        941,
+        948
+      ],
+      [
+        1065,
+        1068
+      ]
+    ],
+    "content_fraction": 0.052,
+    "content_count": 56
+  },
+  "derived-missing_residues-mobi-8v8i_A": {
+    "source_id": "8v8i_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        321
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        498,
+        523
+      ],
+      [
+        866,
+        872
+      ],
+      [
+        942,
+        951
+      ],
+      [
+        1049,
+        1055
+      ],
+      [
+        1060,
+        1068
+      ]
+    ],
+    "content_fraction": 0.073,
+    "content_count": 78
+  },
+  "derived-missing_residues-mobi-8v8i_C": {
+    "source_id": "8v8i_C",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        322
+      ],
+      [
+        412,
+        416
+      ],
+      [
+        498,
+        523
+      ],
+      [
+        865,
+        873
+      ],
+      [
+        942,
+        951
+      ],
+      [
+        1049,
+        1055
+      ],
+      [
+        1061,
+        1068
+      ]
+    ],
+    "content_fraction": 0.075,
+    "content_count": 80
+  },
+  "derived-missing_residues-mobi-8v8j_A": {
+    "source_id": "8v8j_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        310,
+        320
+      ],
+      [
+        351,
+        352
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        499,
+        523
+      ],
+      [
+        942,
+        944
+      ],
+      [
+        1065,
+        1068
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 51
+  },
+  "derived-missing_residues-mobi-8v8j_C": {
+    "source_id": "8v8j_C",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        310,
+        320
+      ],
+      [
+        351,
+        352
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        499,
+        523
+      ],
+      [
+        942,
+        948
+      ],
+      [
+        1065,
+        1068
+      ]
+    ],
+    "content_fraction": 0.051,
+    "content_count": 55
+  },
+  "derived-missing_residues-mobi-8v8u_A": {
+    "source_id": "8v8u_A",
+    "regions": [
+      [
+        309,
+        322
+      ]
+    ],
+    "content_fraction": 0.013,
+    "content_count": 14
+  },
+  "derived-missing_residues-mobi-8v8u_C": {
+    "source_id": "8v8u_C",
+    "regions": [
+      [
+        309,
+        322
+      ],
+      [
+        1048,
+        1068
+      ]
+    ],
+    "content_fraction": 0.033,
+    "content_count": 35
+  },
+  "derived-missing_residues-mobi-8v8v_A": {
+    "source_id": "8v8v_A",
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        309,
+        322
+      ],
+      [
+        499,
+        520
+      ],
+      [
+        1050,
+        1068
+      ]
+    ],
+    "content_fraction": 0.052,
+    "content_count": 56
+  },
+  "derived-missing_residues-mobi-8v8v_C": {
+    "source_id": "8v8v_C",
+    "regions": [
+      [
+        309,
+        322
+      ],
+      [
+        411,
+        416
+      ],
+      [
+        500,
+        515
+      ],
+      [
+        865,
+        872
+      ],
+      [
+        967,
+        967
+      ],
+      [
+        1048,
+        1068
+      ]
+    ],
+    "content_fraction": 0.062,
+    "content_count": 66
+  },
+  "derived-missing_residues-mobi-8w9a_A": {
+    "source_id": "8w9a_A",
+    "regions": [
+      [
+        1,
+        18
+      ],
+      [
+        230,
+        246
+      ],
+      [
+        312,
+        321
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        866,
+        872
+      ],
+      [
+        944,
+        950
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.093,
+    "content_count": 99
+  },
+  "derived-missing_residues-mobi-8w9b_A": {
+    "source_id": "8w9b_A",
+    "regions": [
+      [
+        1,
+        20
+      ],
+      [
+        230,
+        247
+      ],
+      [
+        312,
+        321
+      ],
+      [
+        501,
+        522
+      ],
+      [
+        866,
+        871
+      ],
+      [
+        942,
+        949
+      ],
+      [
+        1051,
+        1068
+      ]
+    ],
+    "content_fraction": 0.096,
+    "content_count": 102
+  },
+  "derived-missing_residues_context_dependent-th_90": {
+    "regions": [
+      [
+        1,
+        20
+      ],
+      [
+        228,
+        247
+      ],
+      [
+        499,
+        523
+      ],
+      [
+        863,
+        872
+      ],
+      [
+        940,
+        951
+      ],
+      [
+        1050,
+        1063
+      ]
+    ],
+    "content_fraction": 0.095,
+    "content_count": 101
+  },
+  "derived-mobile-mobi-2enq_A": {
+    "source_id": "2enq_A",
+    "regions": [
+      [
+        331,
+        331
+      ],
+      [
+        449,
+        453
+      ]
+    ],
+    "content_fraction": 0.006,
+    "content_count": 6
+  },
+  "derived-observed-mobi-2enq_A": {
+    "source_id": "2enq_A",
+    "regions": [
+      [
+        331,
+        481
+      ]
+    ],
+    "content_fraction": 0.141,
+    "content_count": 151
+  },
+  "derived-observed-mobi-2rd0_A": {
+    "source_id": "2rd0_A",
+    "regions": [
+      [
+        8,
+        306
+      ],
+      [
+        325,
+        414
+      ],
+      [
+        424,
+        505
+      ],
+      [
+        528,
+        940
+      ],
+      [
+        951,
+        1050
+      ]
+    ],
+    "content_fraction": 0.921,
+    "content_count": 984
+  },
+  "derived-observed-mobi-3hhm_A": {
+    "source_id": "3hhm_A",
+    "regions": [
+      [
+        5,
+        309
+      ],
+      [
+        321,
+        413
+      ],
+      [
+        421,
+        516
+      ],
+      [
+        524,
+        940
+      ],
+      [
+        953,
+        1062
+      ]
+    ],
+    "content_fraction": 0.956,
+    "content_count": 1021
+  },
+  "derived-observed-mobi-3hiz_A": {
+    "source_id": "3hiz_A",
+    "regions": [
+      [
+        5,
+        309
+      ],
+      [
+        321,
+        417
+      ],
+      [
+        421,
+        516
+      ],
+      [
+        524,
+        862
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        953,
+        970
+      ],
+      [
+        972,
+        1048
+      ],
+      [
+        1056,
+        1062
+      ]
+    ],
+    "content_fraction": 0.943,
+    "content_count": 1007
+  },
+  "derived-observed-mobi-3zim_A": {
+    "source_id": "3zim_A",
+    "regions": [
+      [
+        107,
+        233
+      ],
+      [
+        245,
+        309
+      ],
+      [
+        325,
+        347
+      ],
+      [
+        352,
+        408
+      ],
+      [
+        419,
+        939
+      ],
+      [
+        949,
+        965
+      ],
+      [
+        971,
+        1046
+      ]
+    ],
+    "content_fraction": 0.83,
+    "content_count": 886
+  },
+  "derived-observed-mobi-4jps_A": {
+    "source_id": "4jps_A",
+    "regions": [
+      [
+        2,
+        227
+      ],
+      [
+        244,
+        313
+      ],
+      [
+        324,
+        497
+      ],
+      [
+        525,
+        863
+      ],
+      [
+        872,
+        1061
+      ]
+    ],
+    "content_fraction": 0.935,
+    "content_count": 999
+  },
+  "derived-observed-mobi-4l1b_A": {
+    "source_id": "4l1b_A",
+    "regions": [
+      [
+        8,
+        226
+      ],
+      [
+        242,
+        308
+      ],
+      [
+        320,
+        410
+      ],
+      [
+        414,
+        502
+      ],
+      [
+        521,
+        862
+      ],
+      [
+        873,
+        1058
+      ]
+    ],
+    "content_fraction": 0.931,
+    "content_count": 994
+  },
+  "derived-observed-mobi-4l23_A": {
+    "source_id": "4l23_A",
+    "regions": [
+      [
+        8,
+        227
+      ],
+      [
+        233,
+        308
+      ],
+      [
+        320,
+        410
+      ],
+      [
+        414,
+        504
+      ],
+      [
+        515,
+        863
+      ],
+      [
+        873,
+        1059
+      ]
+    ],
+    "content_fraction": 0.949,
+    "content_count": 1014
+  },
+  "derived-observed-mobi-4l2y_A": {
+    "source_id": "4l2y_A",
+    "regions": [
+      [
+        8,
+        227
+      ],
+      [
+        238,
+        308
+      ],
+      [
+        324,
+        410
+      ],
+      [
+        414,
+        502
+      ],
+      [
+        520,
+        862
+      ],
+      [
+        873,
+        1053
+      ]
+    ],
+    "content_fraction": 0.928,
+    "content_count": 991
+  },
+  "derived-observed-mobi-4ovu_A": {
+    "source_id": "4ovu_A",
+    "regions": [
+      [
+        6,
+        308
+      ],
+      [
+        319,
+        409
+      ],
+      [
+        416,
+        514
+      ],
+      [
+        519,
+        1052
+      ]
+    ],
+    "content_fraction": 0.962,
+    "content_count": 1027
+  },
+  "derived-observed-mobi-4ovv_A": {
+    "source_id": "4ovv_A",
+    "regions": [
+      [
+        4,
+        308
+      ],
+      [
+        321,
+        409
+      ],
+      [
+        418,
+        514
+      ],
+      [
+        520,
+        1053
+      ]
+    ],
+    "content_fraction": 0.96,
+    "content_count": 1025
+  },
+  "derived-observed-mobi-4tuu_A": {
+    "source_id": "4tuu_A",
+    "regions": [
+      [
+        107,
+        233
+      ],
+      [
+        246,
+        309
+      ],
+      [
+        325,
+        347
+      ],
+      [
+        352,
+        410
+      ],
+      [
+        417,
+        864
+      ],
+      [
+        872,
+        939
+      ],
+      [
+        951,
+        965
+      ],
+      [
+        972,
+        1046
+      ]
+    ],
+    "content_fraction": 0.823,
+    "content_count": 879
+  },
+  "derived-observed-mobi-4tv3_A": {
+    "source_id": "4tv3_A",
+    "regions": [
+      [
+        107,
+        233
+      ],
+      [
+        246,
+        309
+      ],
+      [
+        325,
+        347
+      ],
+      [
+        352,
+        410
+      ],
+      [
+        417,
+        864
+      ],
+      [
+        872,
+        939
+      ],
+      [
+        951,
+        965
+      ],
+      [
+        972,
+        1046
+      ]
+    ],
+    "content_fraction": 0.823,
+    "content_count": 879
+  },
+  "derived-observed-mobi-4waf_A": {
+    "source_id": "4waf_A",
+    "regions": [
+      [
+        2,
+        230
+      ],
+      [
+        234,
+        312
+      ],
+      [
+        323,
+        500
+      ],
+      [
+        524,
+        864
+      ],
+      [
+        872,
+        1061
+      ]
+    ],
+    "content_fraction": 0.952,
+    "content_count": 1017
+  },
+  "derived-observed-mobi-4ykn_A": {
+    "source_id": "4ykn_A",
+    "regions": [
+      [
+        10,
+        309
+      ],
+      [
+        323,
+        348
+      ],
+      [
+        351,
+        411
+      ],
+      [
+        415,
+        503
+      ],
+      [
+        523,
+        944
+      ],
+      [
+        950,
+        1052
+      ]
+    ],
+    "content_fraction": 0.937,
+    "content_count": 1001
+  },
+  "derived-observed-mobi-4zop_A": {
+    "source_id": "4zop_A",
+    "regions": [
+      [
+        2,
+        228
+      ],
+      [
+        246,
+        314
+      ],
+      [
+        323,
+        496
+      ],
+      [
+        525,
+        864
+      ],
+      [
+        872,
+        1061
+      ]
+    ],
+    "content_fraction": 0.936,
+    "content_count": 1000
+  },
+  "derived-observed-mobi-5dxh_A": {
+    "source_id": "5dxh_A",
+    "regions": [
+      [
+        2,
+        306
+      ],
+      [
+        323,
+        410
+      ],
+      [
+        418,
+        499
+      ],
+      [
+        523,
+        863
+      ],
+      [
+        869,
+        936
+      ],
+      [
+        951,
+        1046
+      ],
+      [
+        1054,
+        1062
+      ]
+    ],
+    "content_fraction": 0.926,
+    "content_count": 989
+  },
+  "derived-observed-mobi-5dxh_C": {
+    "source_id": "5dxh_C",
+    "regions": [
+      [
+        2,
+        307
+      ],
+      [
+        323,
+        349
+      ],
+      [
+        354,
+        409
+      ],
+      [
+        419,
+        499
+      ],
+      [
+        523,
+        863
+      ],
+      [
+        872,
+        938
+      ],
+      [
+        953,
+        1046
+      ],
+      [
+        1054,
+        1062
+      ]
+    ],
+    "content_fraction": 0.919,
+    "content_count": 981
+  },
+  "derived-observed-mobi-5dxt_A": {
+    "source_id": "5dxt_A",
+    "regions": [
+      [
+        107,
+        198
+      ],
+      [
+        203,
+        232
+      ],
+      [
+        248,
+        310
+      ],
+      [
+        322,
+        347
+      ],
+      [
+        354,
+        409
+      ],
+      [
+        417,
+        449
+      ],
+      [
+        454,
+        862
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        949,
+        968
+      ],
+      [
+        970,
+        1051
+      ]
+    ],
+    "content_fraction": 0.823,
+    "content_count": 879
+  },
+  "derived-observed-mobi-5fi4_A": {
+    "source_id": "5fi4_A",
+    "regions": [
+      [
+        2,
+        231
+      ],
+      [
+        236,
+        311
+      ],
+      [
+        323,
+        494
+      ],
+      [
+        524,
+        862
+      ],
+      [
+        871,
+        1062
+      ]
+    ],
+    "content_fraction": 0.945,
+    "content_count": 1009
+  },
+  "derived-observed-mobi-5itd_A": {
+    "source_id": "5itd_A",
+    "regions": [
+      [
+        2,
+        227
+      ],
+      [
+        245,
+        311
+      ],
+      [
+        323,
+        497
+      ],
+      [
+        525,
+        863
+      ],
+      [
+        872,
+        1059
+      ]
+    ],
+    "content_fraction": 0.932,
+    "content_count": 995
+  },
+  "derived-observed-mobi-5sw8_A": {
+    "source_id": "5sw8_A",
+    "regions": [
+      [
+        1,
+        309
+      ],
+      [
+        321,
+        346
+      ],
+      [
+        348,
+        380
+      ],
+      [
+        383,
+        409
+      ],
+      [
+        420,
+        512
+      ],
+      [
+        521,
+        944
+      ],
+      [
+        949,
+        1053
+      ]
+    ],
+    "content_fraction": 0.952,
+    "content_count": 1017
+  },
+  "derived-observed-mobi-5swg_A": {
+    "source_id": "5swg_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        322,
+        409
+      ],
+      [
+        417,
+        515
+      ],
+      [
+        520,
+        1052
+      ]
+    ],
+    "content_fraction": 0.963,
+    "content_count": 1028
+  },
+  "derived-observed-mobi-5swo_A": {
+    "source_id": "5swo_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        319,
+        409
+      ],
+      [
+        417,
+        1052
+      ]
+    ],
+    "content_fraction": 0.969,
+    "content_count": 1035
+  },
+  "derived-observed-mobi-5swp_A": {
+    "source_id": "5swp_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        319,
+        409
+      ],
+      [
+        417,
+        1054
+      ]
+    ],
+    "content_fraction": 0.971,
+    "content_count": 1037
+  },
+  "derived-observed-mobi-5swr_A": {
+    "source_id": "5swr_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        321,
+        409
+      ],
+      [
+        417,
+        1052
+      ]
+    ],
+    "content_fraction": 0.967,
+    "content_count": 1033
+  },
+  "derived-observed-mobi-5swt_A": {
+    "source_id": "5swt_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        320,
+        409
+      ],
+      [
+        417,
+        946
+      ],
+      [
+        948,
+        1054
+      ]
+    ],
+    "content_fraction": 0.969,
+    "content_count": 1035
+  },
+  "derived-observed-mobi-5sx8_A": {
+    "source_id": "5sx8_A",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        319,
+        409
+      ],
+      [
+        418,
+        520
+      ],
+      [
+        524,
+        1054
+      ]
+    ],
+    "content_fraction": 0.966,
+    "content_count": 1032
+  },
+  "derived-observed-mobi-5sx9_A": {
+    "source_id": "5sx9_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        324,
+        409
+      ],
+      [
+        419,
+        869
+      ],
+      [
+        872,
+        944
+      ],
+      [
+        948,
+        1053
+      ]
+    ],
+    "content_fraction": 0.959,
+    "content_count": 1024
+  },
+  "derived-observed-mobi-5sxa_A": {
+    "source_id": "5sxa_A",
+    "regions": [
+      [
+        3,
+        4
+      ],
+      [
+        7,
+        308
+      ],
+      [
+        317,
+        409
+      ],
+      [
+        418,
+        516
+      ],
+      [
+        520,
+        945
+      ],
+      [
+        949,
+        1058
+      ]
+    ],
+    "content_fraction": 0.966,
+    "content_count": 1032
+  },
+  "derived-observed-mobi-5sxb_A": {
+    "source_id": "5sxb_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        320,
+        409
+      ],
+      [
+        417,
+        946
+      ],
+      [
+        948,
+        1056
+      ]
+    ],
+    "content_fraction": 0.971,
+    "content_count": 1037
+  },
+  "derived-observed-mobi-5sxc_A": {
+    "source_id": "5sxc_A",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        323,
+        409
+      ],
+      [
+        419,
+        945
+      ],
+      [
+        949,
+        1052
+      ]
+    ],
+    "content_fraction": 0.96,
+    "content_count": 1025
+  },
+  "derived-observed-mobi-5sxd_A": {
+    "source_id": "5sxd_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        322,
+        409
+      ],
+      [
+        419,
+        946
+      ],
+      [
+        948,
+        1054
+      ]
+    ],
+    "content_fraction": 0.965,
+    "content_count": 1031
+  },
+  "derived-observed-mobi-5sxe_A": {
+    "source_id": "5sxe_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        322,
+        409
+      ],
+      [
+        419,
+        944
+      ],
+      [
+        949,
+        1054
+      ]
+    ],
+    "content_fraction": 0.963,
+    "content_count": 1028
+  },
+  "derived-observed-mobi-5sxf_A": {
+    "source_id": "5sxf_A",
+    "regions": [
+      [
+        4,
+        198
+      ],
+      [
+        200,
+        308
+      ],
+      [
+        324,
+        409
+      ],
+      [
+        419,
+        513
+      ],
+      [
+        522,
+        867
+      ],
+      [
+        872,
+        944
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.943,
+    "content_count": 1007
+  },
+  "derived-observed-mobi-5sxi_A": {
+    "source_id": "5sxi_A",
+    "regions": [
+      [
+        5,
+        308
+      ],
+      [
+        323,
+        409
+      ],
+      [
+        417,
+        944
+      ],
+      [
+        948,
+        1056
+      ]
+    ],
+    "content_fraction": 0.963,
+    "content_count": 1028
+  },
+  "derived-observed-mobi-5sxj_A": {
+    "source_id": "5sxj_A",
+    "regions": [
+      [
+        3,
+        4
+      ],
+      [
+        6,
+        308
+      ],
+      [
+        316,
+        409
+      ],
+      [
+        420,
+        516
+      ],
+      [
+        521,
+        866
+      ],
+      [
+        870,
+        945
+      ],
+      [
+        948,
+        1051
+      ]
+    ],
+    "content_fraction": 0.957,
+    "content_count": 1022
+  },
+  "derived-observed-mobi-5sxk_A": {
+    "source_id": "5sxk_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        320,
+        409
+      ],
+      [
+        417,
+        516
+      ],
+      [
+        520,
+        1052
+      ]
+    ],
+    "content_fraction": 0.965,
+    "content_count": 1031
+  },
+  "derived-observed-mobi-5ubr_A": {
+    "source_id": "5ubr_A",
+    "regions": [
+      [
+        107,
+        232
+      ],
+      [
+        248,
+        309
+      ],
+      [
+        325,
+        346
+      ],
+      [
+        353,
+        409
+      ],
+      [
+        417,
+        863
+      ],
+      [
+        872,
+        942
+      ],
+      [
+        949,
+        1050
+      ]
+    ],
+    "content_fraction": 0.831,
+    "content_count": 887
+  },
+  "derived-observed-mobi-5uk8_A": {
+    "source_id": "5uk8_A",
+    "regions": [
+      [
+        2,
+        230
+      ],
+      [
+        238,
+        313
+      ],
+      [
+        323,
+        499
+      ],
+      [
+        524,
+        863
+      ],
+      [
+        872,
+        1057
+      ]
+    ],
+    "content_fraction": 0.944,
+    "content_count": 1008
+  },
+  "derived-observed-mobi-5ukj_A": {
+    "source_id": "5ukj_A",
+    "regions": [
+      [
+        2,
+        228
+      ],
+      [
+        237,
+        313
+      ],
+      [
+        323,
+        502
+      ],
+      [
+        522,
+        863
+      ],
+      [
+        871,
+        1053
+      ]
+    ],
+    "content_fraction": 0.945,
+    "content_count": 1009
+  },
+  "derived-observed-mobi-5ul1_A": {
+    "source_id": "5ul1_A",
+    "regions": [
+      [
+        2,
+        229
+      ],
+      [
+        237,
+        311
+      ],
+      [
+        324,
+        500
+      ],
+      [
+        524,
+        862
+      ],
+      [
+        873,
+        1053
+      ]
+    ],
+    "content_fraction": 0.936,
+    "content_count": 1000
+  },
+  "derived-observed-mobi-5xgh_A": {
+    "source_id": "5xgh_A",
+    "regions": [
+      [
+        8,
+        227
+      ],
+      [
+        248,
+        308
+      ],
+      [
+        320,
+        410
+      ],
+      [
+        414,
+        504
+      ],
+      [
+        516,
+        862
+      ],
+      [
+        873,
+        1055
+      ]
+    ],
+    "content_fraction": 0.93,
+    "content_count": 993
+  },
+  "derived-observed-mobi-5xgi_A": {
+    "source_id": "5xgi_A",
+    "regions": [
+      [
+        8,
+        227
+      ],
+      [
+        233,
+        308
+      ],
+      [
+        320,
+        411
+      ],
+      [
+        414,
+        504
+      ],
+      [
+        516,
+        862
+      ],
+      [
+        873,
+        1059
+      ]
+    ],
+    "content_fraction": 0.949,
+    "content_count": 1013
+  },
+  "derived-observed-mobi-5xgj_A": {
+    "source_id": "5xgj_A",
+    "regions": [
+      [
+        8,
+        227
+      ],
+      [
+        248,
+        298
+      ],
+      [
+        320,
+        410
+      ],
+      [
+        414,
+        504
+      ],
+      [
+        522,
+        865
+      ],
+      [
+        873,
+        1055
+      ]
+    ],
+    "content_fraction": 0.918,
+    "content_count": 980
+  },
+  "derived-observed-mobi-6gvf_A": {
+    "source_id": "6gvf_A",
+    "regions": [
+      [
+        107,
+        310
+      ],
+      [
+        324,
+        500
+      ],
+      [
+        507,
+        862
+      ],
+      [
+        873,
+        942
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.852,
+    "content_count": 910
+  },
+  "derived-observed-mobi-6gvg_A": {
+    "source_id": "6gvg_A",
+    "regions": [
+      [
+        107,
+        310
+      ],
+      [
+        324,
+        500
+      ],
+      [
+        507,
+        862
+      ],
+      [
+        873,
+        942
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.852,
+    "content_count": 910
+  },
+  "derived-observed-mobi-6gvh_A": {
+    "source_id": "6gvh_A",
+    "regions": [
+      [
+        107,
+        310
+      ],
+      [
+        322,
+        410
+      ],
+      [
+        416,
+        862
+      ],
+      [
+        873,
+        942
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.855,
+    "content_count": 913
+  },
+  "derived-observed-mobi-6gvi_A": {
+    "source_id": "6gvi_A",
+    "regions": [
+      [
+        107,
+        310
+      ],
+      [
+        324,
+        500
+      ],
+      [
+        507,
+        862
+      ],
+      [
+        873,
+        942
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.852,
+    "content_count": 910
+  },
+  "derived-observed-mobi-6nct_A": {
+    "source_id": "6nct_A",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        321,
+        409
+      ],
+      [
+        416,
+        513
+      ],
+      [
+        521,
+        943
+      ],
+      [
+        950,
+        1057
+      ]
+    ],
+    "content_fraction": 0.96,
+    "content_count": 1025
+  },
+  "derived-observed-mobi-6oac_A": {
+    "source_id": "6oac_A",
+    "regions": [
+      [
+        107,
+        231
+      ],
+      [
+        246,
+        309
+      ],
+      [
+        325,
+        345
+      ],
+      [
+        354,
+        410
+      ],
+      [
+        417,
+        499
+      ],
+      [
+        523,
+        724
+      ],
+      [
+        728,
+        864
+      ],
+      [
+        872,
+        939
+      ],
+      [
+        951,
+        965
+      ],
+      [
+        972,
+        1046
+      ]
+    ],
+    "content_fraction": 0.793,
+    "content_count": 847
+  },
+  "derived-observed-mobi-6pys_A": {
+    "source_id": "6pys_A",
+    "regions": [
+      [
+        107,
+        199
+      ],
+      [
+        203,
+        232
+      ],
+      [
+        246,
+        309
+      ],
+      [
+        322,
+        347
+      ],
+      [
+        351,
+        409
+      ],
+      [
+        417,
+        863
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.833,
+    "content_count": 890
+  },
+  "derived-observed-mobi-6vo7_A": {
+    "source_id": "6vo7_A",
+    "regions": [
+      [
+        157,
+        198
+      ],
+      [
+        203,
+        300
+      ]
+    ],
+    "content_fraction": 0.131,
+    "content_count": 140
+  },
+  "derived-observed-mobi-7jiu_A": {
+    "source_id": "7jiu_A",
+    "regions": [
+      [
+        107,
+        198
+      ],
+      [
+        203,
+        232
+      ],
+      [
+        246,
+        310
+      ],
+      [
+        322,
+        347
+      ],
+      [
+        350,
+        409
+      ],
+      [
+        417,
+        863
+      ],
+      [
+        866,
+        867
+      ],
+      [
+        869,
+        942
+      ],
+      [
+        949,
+        1052
+      ]
+    ],
+    "content_fraction": 0.843,
+    "content_count": 900
+  },
+  "derived-observed-mobi-7k6m_A": {
+    "source_id": "7k6m_A",
+    "regions": [
+      [
+        109,
+        231
+      ],
+      [
+        247,
+        308
+      ],
+      [
+        324,
+        345
+      ],
+      [
+        351,
+        412
+      ],
+      [
+        416,
+        500
+      ],
+      [
+        524,
+        1047
+      ]
+    ],
+    "content_fraction": 0.822,
+    "content_count": 878
+  },
+  "derived-observed-mobi-7k6n_A": {
+    "source_id": "7k6n_A",
+    "regions": [
+      [
+        109,
+        231
+      ],
+      [
+        247,
+        307
+      ],
+      [
+        324,
+        344
+      ],
+      [
+        351,
+        412
+      ],
+      [
+        416,
+        517
+      ],
+      [
+        524,
+        939
+      ],
+      [
+        956,
+        1045
+      ]
+    ],
+    "content_fraction": 0.819,
+    "content_count": 875
+  },
+  "derived-observed-mobi-7k6o_A": {
+    "source_id": "7k6o_A",
+    "regions": [
+      [
+        109,
+        231
+      ],
+      [
+        247,
+        299
+      ],
+      [
+        303,
+        308
+      ],
+      [
+        324,
+        345
+      ],
+      [
+        351,
+        412
+      ],
+      [
+        416,
+        500
+      ],
+      [
+        524,
+        939
+      ],
+      [
+        954,
+        964
+      ],
+      [
+        972,
+        1045
+      ]
+    ],
+    "content_fraction": 0.798,
+    "content_count": 852
+  },
+  "derived-observed-mobi-7k71_A": {
+    "source_id": "7k71_A",
+    "regions": [
+      [
+        109,
+        231
+      ],
+      [
+        247,
+        308
+      ],
+      [
+        324,
+        345
+      ],
+      [
+        351,
+        376
+      ],
+      [
+        381,
+        409
+      ],
+      [
+        416,
+        500
+      ],
+      [
+        524,
+        863
+      ],
+      [
+        873,
+        939
+      ],
+      [
+        956,
+        1044
+      ]
+    ],
+    "content_fraction": 0.789,
+    "content_count": 843
+  },
+  "derived-observed-mobi-7l1b_C": {
+    "source_id": "7l1b_C",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-observed-mobi-7l1c_C": {
+    "source_id": "7l1c_C",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-observed-mobi-7l1d_C": {
+    "source_id": "7l1d_C",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-observed-mobi-7mlk_A": {
+    "source_id": "7mlk_A",
+    "regions": [
+      [
+        107,
+        233
+      ],
+      [
+        246,
+        309
+      ],
+      [
+        325,
+        347
+      ],
+      [
+        352,
+        410
+      ],
+      [
+        417,
+        939
+      ],
+      [
+        951,
+        967
+      ],
+      [
+        972,
+        1046
+      ]
+    ],
+    "content_fraction": 0.831,
+    "content_count": 888
+  },
+  "derived-observed-mobi-7myn_A": {
+    "source_id": "7myn_A",
+    "regions": [
+      [
+        7,
+        229
+      ],
+      [
+        247,
+        310
+      ],
+      [
+        323,
+        500
+      ],
+      [
+        523,
+        865
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        950,
+        1050
+      ]
+    ],
+    "content_fraction": 0.915,
+    "content_count": 977
+  },
+  "derived-observed-mobi-7myo_B": {
+    "source_id": "7myo_B",
+    "regions": [
+      [
+        18,
+        233
+      ],
+      [
+        240,
+        318
+      ],
+      [
+        323,
+        502
+      ],
+      [
+        522,
+        867
+      ],
+      [
+        872,
+        942
+      ],
+      [
+        951,
+        1050
+      ]
+    ],
+    "content_fraction": 0.929,
+    "content_count": 992
+  },
+  "derived-observed-mobi-7pg5_A": {
+    "source_id": "7pg5_A",
+    "regions": [
+      [
+        3,
+        313
+      ],
+      [
+        322,
+        501
+      ],
+      [
+        523,
+        864
+      ],
+      [
+        871,
+        1065
+      ]
+    ],
+    "content_fraction": 0.963,
+    "content_count": 1028
+  },
+  "derived-observed-mobi-7pg6_A": {
+    "source_id": "7pg6_A",
+    "regions": [
+      [
+        3,
+        313
+      ],
+      [
+        323,
+        500
+      ],
+      [
+        523,
+        864
+      ],
+      [
+        871,
+        1065
+      ]
+    ],
+    "content_fraction": 0.961,
+    "content_count": 1026
+  },
+  "derived-observed-mobi-7r9v_A": {
+    "source_id": "7r9v_A",
+    "regions": [
+      [
+        107,
+        231
+      ],
+      [
+        246,
+        309
+      ],
+      [
+        325,
+        345
+      ],
+      [
+        354,
+        410
+      ],
+      [
+        417,
+        499
+      ],
+      [
+        523,
+        939
+      ],
+      [
+        952,
+        965
+      ],
+      [
+        972,
+        1045
+      ]
+    ],
+    "content_fraction": 0.801,
+    "content_count": 855
+  },
+  "derived-observed-mobi-7r9y_A": {
+    "source_id": "7r9y_A",
+    "regions": [
+      [
+        107,
+        231
+      ],
+      [
+        247,
+        309
+      ],
+      [
+        325,
+        345
+      ],
+      [
+        354,
+        410
+      ],
+      [
+        417,
+        499
+      ],
+      [
+        523,
+        939
+      ],
+      [
+        953,
+        965
+      ],
+      [
+        972,
+        1045
+      ]
+    ],
+    "content_fraction": 0.799,
+    "content_count": 853
+  },
+  "derived-observed-mobi-7rrg_E": {
+    "source_id": "7rrg_E",
+    "regions": [
+      [
+        1046,
+        1054
+      ]
+    ],
+    "content_fraction": 0.008,
+    "content_count": 9
+  },
+  "derived-observed-mobi-7tz7_A": {
+    "source_id": "7tz7_A",
+    "regions": [
+      [
+        2,
+        187
+      ],
+      [
+        190,
+        228
+      ],
+      [
+        253,
+        311
+      ],
+      [
+        323,
+        501
+      ],
+      [
+        521,
+        863
+      ],
+      [
+        871,
+        1052
+      ]
+    ],
+    "content_fraction": 0.925,
+    "content_count": 988
+  },
+  "derived-observed-mobi-8am0_A": {
+    "source_id": "8am0_A",
+    "regions": [
+      [
+        2,
+        314
+      ],
+      [
+        323,
+        504
+      ],
+      [
+        521,
+        864
+      ],
+      [
+        871,
+        1062
+      ]
+    ],
+    "content_fraction": 0.965,
+    "content_count": 1031
+  },
+  "derived-observed-mobi-8bfu_A": {
+    "source_id": "8bfu_A",
+    "regions": [
+      [
+        107,
+        231
+      ],
+      [
+        248,
+        310
+      ],
+      [
+        324,
+        409
+      ],
+      [
+        419,
+        862
+      ],
+      [
+        873,
+        939
+      ],
+      [
+        952,
+        1046
+      ]
+    ],
+    "content_fraction": 0.824,
+    "content_count": 880
+  },
+  "derived-observed-mobi-8dcp_A": {
+    "source_id": "8dcp_A",
+    "regions": [
+      [
+        20,
+        238
+      ],
+      [
+        242,
+        310
+      ],
+      [
+        324,
+        503
+      ],
+      [
+        514,
+        518
+      ],
+      [
+        522,
+        1053
+      ]
+    ],
+    "content_fraction": 0.941,
+    "content_count": 1005
+  },
+  "derived-observed-mobi-8dcx_A": {
+    "source_id": "8dcx_A",
+    "regions": [
+      [
+        26,
+        33
+      ],
+      [
+        37,
+        102
+      ],
+      [
+        107,
+        199
+      ],
+      [
+        204,
+        228
+      ],
+      [
+        245,
+        311
+      ],
+      [
+        323,
+        411
+      ],
+      [
+        419,
+        499
+      ],
+      [
+        527,
+        720
+      ],
+      [
+        734,
+        864
+      ],
+      [
+        874,
+        942
+      ],
+      [
+        950,
+        1056
+      ]
+    ],
+    "content_fraction": 0.871,
+    "content_count": 930
+  },
+  "derived-observed-mobi-8dd4_A": {
+    "source_id": "8dd4_A",
+    "regions": [
+      [
+        19,
+        229
+      ],
+      [
+        248,
+        310
+      ],
+      [
+        321,
+        498
+      ],
+      [
+        524,
+        865
+      ],
+      [
+        873,
+        1059
+      ]
+    ],
+    "content_fraction": 0.919,
+    "content_count": 981
+  },
+  "derived-observed-mobi-8dd8_A": {
+    "source_id": "8dd8_A",
+    "regions": [
+      [
+        6,
+        312
+      ],
+      [
+        319,
+        500
+      ],
+      [
+        525,
+        865
+      ],
+      [
+        871,
+        1051
+      ]
+    ],
+    "content_fraction": 0.947,
+    "content_count": 1011
+  },
+  "derived-observed-mobi-8exl_A": {
+    "source_id": "8exl_A",
+    "regions": [
+      [
+        107,
+        199
+      ],
+      [
+        203,
+        232
+      ],
+      [
+        248,
+        310
+      ],
+      [
+        322,
+        348
+      ],
+      [
+        351,
+        409
+      ],
+      [
+        417,
+        863
+      ],
+      [
+        872,
+        941
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.835,
+    "content_count": 892
+  },
+  "derived-observed-mobi-8exo_A": {
+    "source_id": "8exo_A",
+    "regions": [
+      [
+        107,
+        232
+      ],
+      [
+        246,
+        310
+      ],
+      [
+        322,
+        348
+      ],
+      [
+        351,
+        409
+      ],
+      [
+        417,
+        863
+      ],
+      [
+        872,
+        944
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.843,
+    "content_count": 900
+  },
+  "derived-observed-mobi-8exu_A": {
+    "source_id": "8exu_A",
+    "regions": [
+      [
+        107,
+        232
+      ],
+      [
+        246,
+        310
+      ],
+      [
+        322,
+        348
+      ],
+      [
+        351,
+        409
+      ],
+      [
+        417,
+        863
+      ],
+      [
+        872,
+        942
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.841,
+    "content_count": 898
+  },
+  "derived-observed-mobi-8exv_A": {
+    "source_id": "8exv_A",
+    "regions": [
+      [
+        107,
+        199
+      ],
+      [
+        203,
+        232
+      ],
+      [
+        246,
+        310
+      ],
+      [
+        322,
+        348
+      ],
+      [
+        351,
+        409
+      ],
+      [
+        417,
+        863
+      ],
+      [
+        872,
+        942
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.838,
+    "content_count": 895
+  },
+  "derived-observed-mobi-8gua_A": {
+    "source_id": "8gua_A",
+    "regions": [
+      [
+        107,
+        230
+      ],
+      [
+        248,
+        310
+      ],
+      [
+        323,
+        347
+      ],
+      [
+        352,
+        409
+      ],
+      [
+        419,
+        500
+      ],
+      [
+        523,
+        863
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        957,
+        1050
+      ]
+    ],
+    "content_fraction": 0.801,
+    "content_count": 855
+  },
+  "derived-observed-mobi-8gub_A": {
+    "source_id": "8gub_A",
+    "regions": [
+      [
+        19,
+        229
+      ],
+      [
+        247,
+        311
+      ],
+      [
+        322,
+        500
+      ],
+      [
+        523,
+        865
+      ],
+      [
+        872,
+        1050
+      ]
+    ],
+    "content_fraction": 0.915,
+    "content_count": 977
+  },
+  "derived-observed-mobi-8gud_A": {
+    "source_id": "8gud_A",
+    "regions": [
+      [
+        107,
+        225
+      ],
+      [
+        248,
+        309
+      ],
+      [
+        325,
+        346
+      ],
+      [
+        353,
+        408
+      ],
+      [
+        419,
+        497
+      ],
+      [
+        523,
+        720
+      ],
+      [
+        727,
+        865
+      ],
+      [
+        873,
+        939
+      ],
+      [
+        958,
+        1050
+      ]
+    ],
+    "content_fraction": 0.782,
+    "content_count": 835
+  },
+  "derived-observed-mobi-8ilr_A": {
+    "source_id": "8ilr_A",
+    "regions": [
+      [
+        7,
+        229
+      ],
+      [
+        247,
+        310
+      ],
+      [
+        323,
+        500
+      ],
+      [
+        523,
+        865
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        950,
+        1050
+      ]
+    ],
+    "content_fraction": 0.915,
+    "content_count": 977
+  },
+  "derived-observed-mobi-8ils_A": {
+    "source_id": "8ils_A",
+    "regions": [
+      [
+        7,
+        229
+      ],
+      [
+        247,
+        310
+      ],
+      [
+        323,
+        500
+      ],
+      [
+        523,
+        865
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        950,
+        1050
+      ]
+    ],
+    "content_fraction": 0.915,
+    "content_count": 977
+  },
+  "derived-observed-mobi-8ilv_A": {
+    "source_id": "8ilv_A",
+    "regions": [
+      [
+        7,
+        11
+      ],
+      [
+        17,
+        229
+      ],
+      [
+        247,
+        310
+      ],
+      [
+        323,
+        500
+      ],
+      [
+        523,
+        864
+      ],
+      [
+        873,
+        940
+      ],
+      [
+        950,
+        1050
+      ]
+    ],
+    "content_fraction": 0.909,
+    "content_count": 971
+  },
+  "derived-observed-mobi-8ow2_A": {
+    "source_id": "8ow2_A",
+    "regions": [
+      [
+        107,
+        309
+      ],
+      [
+        322,
+        504
+      ],
+      [
+        517,
+        864
+      ],
+      [
+        872,
+        939
+      ],
+      [
+        955,
+        1047
+      ]
+    ],
+    "content_fraction": 0.838,
+    "content_count": 895
+  },
+  "derived-observed-mobi-8sbc_A": {
+    "source_id": "8sbc_A",
+    "regions": [
+      [
+        2,
+        195
+      ],
+      [
+        206,
+        225
+      ],
+      [
+        251,
+        310
+      ],
+      [
+        323,
+        498
+      ],
+      [
+        524,
+        862
+      ],
+      [
+        873,
+        1053
+      ]
+    ],
+    "content_fraction": 0.908,
+    "content_count": 970
+  },
+  "derived-observed-mobi-8sbj_A": {
+    "source_id": "8sbj_A",
+    "regions": [
+      [
+        2,
+        225
+      ],
+      [
+        249,
+        311
+      ],
+      [
+        323,
+        499
+      ],
+      [
+        523,
+        862
+      ],
+      [
+        873,
+        1054
+      ]
+    ],
+    "content_fraction": 0.923,
+    "content_count": 986
+  },
+  "derived-observed-mobi-8tdu_A": {
+    "source_id": "8tdu_A",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        323,
+        410
+      ],
+      [
+        416,
+        502
+      ],
+      [
+        523,
+        1061
+      ]
+    ],
+    "content_fraction": 0.956,
+    "content_count": 1021
+  },
+  "derived-observed-mobi-8tdu_B": {
+    "source_id": "8tdu_B",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        323,
+        410
+      ],
+      [
+        417,
+        498
+      ],
+      [
+        522,
+        863
+      ],
+      [
+        873,
+        1047
+      ],
+      [
+        1056,
+        1061
+      ]
+    ],
+    "content_fraction": 0.936,
+    "content_count": 1000
+  },
+  "derived-observed-mobi-8tgd_A": {
+    "source_id": "8tgd_A",
+    "regions": [
+      [
+        2,
+        309
+      ],
+      [
+        322,
+        410
+      ],
+      [
+        416,
+        502
+      ],
+      [
+        521,
+        1063
+      ]
+    ],
+    "content_fraction": 0.962,
+    "content_count": 1027
+  },
+  "derived-observed-mobi-8tgd_C": {
+    "source_id": "8tgd_C",
+    "regions": [
+      [
+        2,
+        309
+      ],
+      [
+        321,
+        411
+      ],
+      [
+        416,
+        499
+      ],
+      [
+        521,
+        863
+      ],
+      [
+        870,
+        943
+      ],
+      [
+        949,
+        1050
+      ],
+      [
+        1056,
+        1061
+      ]
+    ],
+    "content_fraction": 0.944,
+    "content_count": 1008
+  },
+  "derived-observed-mobi-8ts7_A": {
+    "source_id": "8ts7_A",
+    "regions": [
+      [
+        11,
+        310
+      ],
+      [
+        323,
+        410
+      ],
+      [
+        416,
+        502
+      ],
+      [
+        524,
+        942
+      ],
+      [
+        949,
+        1051
+      ]
+    ],
+    "content_fraction": 0.934,
+    "content_count": 997
+  },
+  "derived-observed-mobi-8ts8_A": {
+    "source_id": "8ts8_A",
+    "regions": [
+      [
+        11,
+        310
+      ],
+      [
+        323,
+        412
+      ],
+      [
+        416,
+        502
+      ],
+      [
+        524,
+        942
+      ],
+      [
+        952,
+        1047
+      ]
+    ],
+    "content_fraction": 0.929,
+    "content_count": 992
+  },
+  "derived-observed-mobi-8ts9_A": {
+    "source_id": "8ts9_A",
+    "regions": [
+      [
+        6,
+        312
+      ],
+      [
+        323,
+        412
+      ],
+      [
+        415,
+        501
+      ],
+      [
+        523,
+        942
+      ],
+      [
+        951,
+        1050
+      ]
+    ],
+    "content_fraction": 0.94,
+    "content_count": 1004
+  },
+  "derived-observed-mobi-8tsa_A": {
+    "source_id": "8tsa_A",
+    "regions": [
+      [
+        2,
+        310
+      ],
+      [
+        323,
+        410
+      ],
+      [
+        415,
+        502
+      ],
+      [
+        523,
+        942
+      ],
+      [
+        951,
+        1050
+      ]
+    ],
+    "content_fraction": 0.941,
+    "content_count": 1005
+  },
+  "derived-observed-mobi-8tsb_A": {
+    "source_id": "8tsb_A",
+    "regions": [
+      [
+        8,
+        310
+      ],
+      [
+        323,
+        410
+      ],
+      [
+        415,
+        502
+      ],
+      [
+        523,
+        942
+      ],
+      [
+        951,
+        1050
+      ]
+    ],
+    "content_fraction": 0.935,
+    "content_count": 999
+  },
+  "derived-observed-mobi-8tsc_A": {
+    "source_id": "8tsc_A",
+    "regions": [
+      [
+        5,
+        312
+      ],
+      [
+        323,
+        502
+      ],
+      [
+        523,
+        942
+      ],
+      [
+        951,
+        1050
+      ]
+    ],
+    "content_fraction": 0.944,
+    "content_count": 1008
+  },
+  "derived-observed-mobi-8tsd_A": {
+    "source_id": "8tsd_A",
+    "regions": [
+      [
+        5,
+        312
+      ],
+      [
+        323,
+        501
+      ],
+      [
+        523,
+        942
+      ],
+      [
+        952,
+        1049
+      ]
+    ],
+    "content_fraction": 0.941,
+    "content_count": 1005
+  },
+  "derived-observed-mobi-8tu6_A": {
+    "source_id": "8tu6_A",
+    "regions": [
+      [
+        22,
+        308
+      ],
+      [
+        323,
+        496
+      ],
+      [
+        524,
+        864
+      ],
+      [
+        871,
+        944
+      ],
+      [
+        949,
+        1053
+      ]
+    ],
+    "content_fraction": 0.919,
+    "content_count": 981
+  },
+  "derived-observed-mobi-8v8h_A": {
+    "source_id": "8v8h_A",
+    "regions": [
+      [
+        2,
+        309
+      ],
+      [
+        321,
+        350
+      ],
+      [
+        353,
+        410
+      ],
+      [
+        416,
+        498
+      ],
+      [
+        524,
+        1064
+      ]
+    ],
+    "content_fraction": 0.955,
+    "content_count": 1020
+  },
+  "derived-observed-mobi-8v8h_C": {
+    "source_id": "8v8h_C",
+    "regions": [
+      [
+        2,
+        309
+      ],
+      [
+        321,
+        350
+      ],
+      [
+        353,
+        410
+      ],
+      [
+        416,
+        498
+      ],
+      [
+        524,
+        940
+      ],
+      [
+        949,
+        1064
+      ]
+    ],
+    "content_fraction": 0.948,
+    "content_count": 1012
+  },
+  "derived-observed-mobi-8v8i_A": {
+    "source_id": "8v8i_A",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        322,
+        410
+      ],
+      [
+        416,
+        497
+      ],
+      [
+        524,
+        865
+      ],
+      [
+        873,
+        941
+      ],
+      [
+        952,
+        1048
+      ],
+      [
+        1056,
+        1059
+      ]
+    ],
+    "content_fraction": 0.927,
+    "content_count": 990
+  },
+  "derived-observed-mobi-8v8i_C": {
+    "source_id": "8v8i_C",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        323,
+        411
+      ],
+      [
+        417,
+        497
+      ],
+      [
+        524,
+        864
+      ],
+      [
+        874,
+        941
+      ],
+      [
+        952,
+        1048
+      ],
+      [
+        1056,
+        1060
+      ]
+    ],
+    "content_fraction": 0.925,
+    "content_count": 988
+  },
+  "derived-observed-mobi-8v8j_A": {
+    "source_id": "8v8j_A",
+    "regions": [
+      [
+        2,
+        309
+      ],
+      [
+        321,
+        350
+      ],
+      [
+        353,
+        410
+      ],
+      [
+        416,
+        498
+      ],
+      [
+        524,
+        941
+      ],
+      [
+        945,
+        1064
+      ]
+    ],
+    "content_fraction": 0.952,
+    "content_count": 1017
+  },
+  "derived-observed-mobi-8v8j_C": {
+    "source_id": "8v8j_C",
+    "regions": [
+      [
+        2,
+        309
+      ],
+      [
+        321,
+        350
+      ],
+      [
+        353,
+        410
+      ],
+      [
+        416,
+        498
+      ],
+      [
+        524,
+        941
+      ],
+      [
+        949,
+        1064
+      ]
+    ],
+    "content_fraction": 0.949,
+    "content_count": 1013
+  },
+  "derived-observed-mobi-8v8u_A": {
+    "source_id": "8v8u_A",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        323,
+        1068
+      ]
+    ],
+    "content_fraction": 0.987,
+    "content_count": 1054
+  },
+  "derived-observed-mobi-8v8u_C": {
+    "source_id": "8v8u_C",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        323,
+        1047
+      ]
+    ],
+    "content_fraction": 0.967,
+    "content_count": 1033
+  },
+  "derived-observed-mobi-8v8v_A": {
+    "source_id": "8v8v_A",
+    "regions": [
+      [
+        2,
+        308
+      ],
+      [
+        323,
+        498
+      ],
+      [
+        521,
+        1049
+      ]
+    ],
+    "content_fraction": 0.948,
+    "content_count": 1012
+  },
+  "derived-observed-mobi-8v8v_C": {
+    "source_id": "8v8v_C",
+    "regions": [
+      [
+        1,
+        308
+      ],
+      [
+        323,
+        410
+      ],
+      [
+        417,
+        499
+      ],
+      [
+        516,
+        864
+      ],
+      [
+        873,
+        966
+      ],
+      [
+        968,
+        1047
+      ]
+    ],
+    "content_fraction": 0.938,
+    "content_count": 1002
+  },
+  "derived-observed-mobi-8w9a_A": {
+    "source_id": "8w9a_A",
+    "regions": [
+      [
+        19,
+        229
+      ],
+      [
+        247,
+        311
+      ],
+      [
+        322,
+        500
+      ],
+      [
+        523,
+        865
+      ],
+      [
+        873,
+        943
+      ],
+      [
+        951,
+        1050
+      ]
+    ],
+    "content_fraction": 0.907,
+    "content_count": 969
+  },
+  "derived-observed-mobi-8w9b_A": {
+    "source_id": "8w9b_A",
+    "regions": [
+      [
+        21,
+        229
+      ],
+      [
+        248,
+        311
+      ],
+      [
+        322,
+        500
+      ],
+      [
+        523,
+        865
+      ],
+      [
+        872,
+        941
+      ],
+      [
+        950,
+        1050
+      ]
+    ],
+    "content_fraction": 0.904,
+    "content_count": 966
+  },
+  "derived-observed-priority": {
+    "regions": [
+      [
+        21,
+        104
+      ],
+      [
+        107,
+        227
+      ],
+      [
+        248,
+        308
+      ],
+      [
+        324,
+        347
+      ],
+      [
+        353,
+        409
+      ],
+      [
+        419,
+        498
+      ],
+      [
+        526,
+        862
+      ],
+      [
+        873,
+        939
+      ],
+      [
+        952,
+        1046
+      ]
+    ],
+    "content_fraction": 0.867,
+    "content_count": 926
+  },
+  "derived-observed-th_90": {
+    "regions": [
+      [
+        21,
+        104
+      ],
+      [
+        107,
+        227
+      ],
+      [
+        248,
+        308
+      ],
+      [
+        324,
+        347
+      ],
+      [
+        353,
+        409
+      ],
+      [
+        419,
+        498
+      ],
+      [
+        524,
+        862
+      ],
+      [
+        873,
+        939
+      ],
+      [
+        952,
+        1046
+      ]
+    ],
+    "content_fraction": 0.869,
+    "content_count": 928
+  },
+  "homology-disorder-disprot": {
+    "regions": [
+      [
+        310,
+        322
+      ],
+      [
+        501,
+        525
+      ]
+    ],
+    "content_fraction": 0.036,
+    "content_count": 38,
+    "regions_ids": [
+      "P42337(DP02792)",
+      "P42337(DP02792)"
+    ]
+  },
+  "homology-disorder-merge": {
+    "regions": [
+      [
+        310,
+        322
+      ],
+      [
+        501,
+        525
+      ]
+    ],
+    "content_fraction": 0.036,
+    "content_count": 38
+  },
+  "homology-disorder-priority": {
+    "regions": [
+      [
+        310,
+        322
+      ],
+      [
+        501,
+        525
+      ]
+    ],
+    "content_fraction": 0.036,
+    "content_count": 38
+  },
+  "homology-domain-gene3d": {
+    "regions": [
+      [
+        327,
+        478
+      ],
+      [
+        479,
+        695
+      ],
+      [
+        853,
+        1051
+      ]
+    ],
+    "content_fraction": 0.532,
+    "content_count": 568,
+    "regions_ids": [
+      "2.60.40.150",
+      "1.25.40.70",
+      "1.10.1070.11"
+    ],
+    "regions_names": [
+      "C2 domain superfamily",
+      "Phosphoinositide 3-kinase, accessory (PIK) domain superfamily",
+      "Phosphatidylinositol 3-/4-kinase, catalytic domain superfamily"
+    ]
+  },
+  "homology-domain-merge": {
+    "regions": [
+      [
+        32,
+        107
+      ],
+      [
+        174,
+        291
+      ],
+      [
+        327,
+        703
+      ],
+      [
+        798,
+        1051
+      ]
+    ],
+    "content_fraction": 0.772,
+    "content_count": 825
+  },
+  "homology-domain-pfam": {
+    "regions": [
+      [
+        174,
+        291
+      ],
+      [
+        32,
+        107
+      ],
+      [
+        351,
+        483
+      ],
+      [
+        520,
+        703
+      ],
+      [
+        798,
+        1015
+      ]
+    ],
+    "content_fraction": 0.683,
+    "content_count": 729,
+    "regions_ids": [
+      "PF00794",
+      "PF02192",
+      "PF00792",
+      "PF00613",
+      "PF00454"
+    ],
+    "regions_names": [
+      "Phosphatidylinositol 3-kinase Ras-binding (PI3K RBD) domain",
+      "Phosphatidylinositol 3-kinase, adaptor-binding domain",
+      "C2 phosphatidylinositol 3-kinase-type domain",
+      "Phosphoinositide 3-kinase, accessory (PIK) domain",
+      "Phosphatidylinositol 3-/4-kinase, catalytic domain"
+    ]
+  },
+  "level": 2,
+  "prediction-disorder-alphafold": {
+    "scores": [
+      0.324,
+      0.312,
+      0.289,
+      0.267,
+      0.286,
+      0.314,
+      0.334,
+      0.332,
+      0.347,
+      0.326,
+      0.334,
+      0.323,
+      0.318,
+      0.3,
+      0.298,
+      0.292,
+      0.316,
+      0.305,
+      0.316,
+      0.31,
+      0.326,
+      0.328,
+      0.348,
+      0.328,
+      0.318,
+      0.299,
+      0.304,
+      0.301,
+      0.31,
+      0.289,
+      0.283,
+      0.281,
+      0.278,
+      0.255,
+      0.274,
+      0.276,
+      0.276,
+      0.267,
+      0.282,
+      0.277,
+      0.272,
+      0.272,
+      0.291,
+      0.282,
+      0.306,
+      0.307,
+      0.323,
+      0.327,
+      0.351,
+      0.335,
+      0.353,
+      0.367,
+      0.373,
+      0.392,
+      0.404,
+      0.382,
+      0.365,
+      0.365,
+      0.362,
+      0.345,
+      0.341,
+      0.341,
+      0.338,
+      0.321,
+      0.33,
+      0.337,
+      0.331,
+      0.303,
+      0.299,
+      0.274,
+      0.262,
+      0.258,
+      0.24,
+      0.243,
+      0.24,
+      0.231,
+      0.206,
+      0.195,
+      0.174,
+      0.162,
+      0.163,
+      0.16,
+      0.176,
+      0.194,
+      0.202,
+      0.199,
+      0.199,
+      0.212,
+      0.212,
+      0.197,
+      0.211,
+      0.206,
+      0.229,
+      0.255,
+      0.275,
+      0.293,
+      0.303,
+      0.304,
+      0.286,
+      0.296,
+      0.299,
+      0.307,
+      0.316,
+      0.317,
+      0.317,
+      0.317,
+      0.32,
+      0.303,
+      0.285,
+      0.281,
+      0.273,
+      0.273,
+      0.26,
+      0.271,
+      0.272,
+      0.251,
+      0.245,
+      0.251,
+      0.228,
+      0.246,
+      0.24,
+      0.228,
+      0.228,
+      0.216,
+      0.208,
+      0.201,
+      0.194,
+      0.185,
+      0.184,
+      0.2,
+      0.199,
+      0.196,
+      0.223,
+      0.225,
+      0.219,
+      0.235,
+      0.255,
+      0.255,
+      0.244,
+      0.256,
+      0.278,
+      0.266,
+      0.248,
+      0.273,
+      0.259,
+      0.258,
+      0.256,
+      0.26,
+      0.267,
+      0.266,
+      0.261,
+      0.268,
+      0.268,
+      0.267,
+      0.259,
+      0.263,
+      0.267,
+      0.248,
+      0.252,
+      0.259,
+      0.256,
+      0.253,
+      0.273,
+      0.303,
+      0.29,
+      0.273,
+      0.303,
+      0.299,
+      0.264,
+      0.257,
+      0.269,
+      0.273,
+      0.266,
+      0.281,
+      0.312,
+      0.314,
+      0.318,
+      0.32,
+      0.332,
+      0.324,
+      0.323,
+      0.318,
+      0.316,
+      0.317,
+      0.319,
+      0.318,
+      0.331,
+      0.345,
+      0.344,
+      0.361,
+      0.378,
+      0.362,
+      0.37,
+      0.397,
+      0.386,
+      0.375,
+      0.36,
+      0.374,
+      0.355,
+      0.339,
+      0.342,
+      0.351,
+      0.354,
+      0.344,
+      0.347,
+      0.357,
+      0.376,
+      0.37,
+      0.365,
+      0.355,
+      0.357,
+      0.329,
+      0.295,
+      0.281,
+      0.281,
+      0.271,
+      0.258,
+      0.277,
+      0.282,
+      0.3,
+      0.323,
+      0.335,
+      0.334,
+      0.364,
+      0.375,
+      0.391,
+      0.382,
+      0.405,
+      0.421,
+      0.425,
+      0.413,
+      0.418,
+      0.437,
+      0.446,
+      0.453,
+      0.459,
+      0.48,
+      0.491,
+      0.475,
+      0.455,
+      0.443,
+      0.44,
+      0.406,
+      0.373,
+      0.351,
+      0.315,
+      0.307,
+      0.292,
+      0.26,
+      0.235,
+      0.227,
+      0.24,
+      0.227,
+      0.211,
+      0.205,
+      0.203,
+      0.182,
+      0.163,
+      0.166,
+      0.164,
+      0.142,
+      0.122,
+      0.125,
+      0.125,
+      0.128,
+      0.136,
+      0.149,
+      0.183,
+      0.206,
+      0.222,
+      0.219,
+      0.217,
+      0.215,
+      0.216,
+      0.214,
+      0.208,
+      0.195,
+      0.187,
+      0.207,
+      0.224,
+      0.224,
+      0.227,
+      0.256,
+      0.268,
+      0.265,
+      0.28,
+      0.306,
+      0.296,
+      0.327,
+      0.332,
+      0.353,
+      0.358,
+      0.325,
+      0.317,
+      0.299,
+      0.309,
+      0.338,
+      0.357,
+      0.392,
+      0.398,
+      0.423,
+      0.431,
+      0.446,
+      0.446,
+      0.462,
+      0.497,
+      0.531,
+      0.524,
+      0.541,
+      0.563,
+      0.573,
+      0.567,
+      0.579,
+      0.558,
+      0.55,
+      0.526,
+      0.537,
+      0.538,
+      0.558,
+      0.57,
+      0.579,
+      0.547,
+      0.544,
+      0.507,
+      0.506,
+      0.474,
+      0.458,
+      0.438,
+      0.411,
+      0.401,
+      0.38,
+      0.346,
+      0.358,
+      0.327,
+      0.323,
+      0.325,
+      0.34,
+      0.343,
+      0.338,
+      0.361,
+      0.37,
+      0.342,
+      0.34,
+      0.305,
+      0.301,
+      0.282,
+      0.279,
+      0.264,
+      0.268,
+      0.26,
+      0.261,
+      0.273,
+      0.287,
+      0.303,
+      0.282,
+      0.272,
+      0.3,
+      0.275,
+      0.276,
+      0.272,
+      0.247,
+      0.236,
+      0.236,
+      0.234,
+      0.227,
+      0.215,
+      0.243,
+      0.266,
+      0.27,
+      0.282,
+      0.287,
+      0.309,
+      0.318,
+      0.328,
+      0.328,
+      0.353,
+      0.339,
+      0.36,
+      0.343,
+      0.357,
+      0.353,
+      0.318,
+      0.317,
+      0.308,
+      0.292,
+      0.292,
+      0.265,
+      0.247,
+      0.245,
+      0.229,
+      0.226,
+      0.197,
+      0.174,
+      0.17,
+      0.149,
+      0.147,
+      0.125,
+      0.132,
+      0.137,
+      0.16,
+      0.173,
+      0.2,
+      0.203,
+      0.234,
+      0.238,
+      0.253,
+      0.268,
+      0.277,
+      0.282,
+      0.292,
+      0.293,
+      0.295,
+      0.295,
+      0.292,
+      0.294,
+      0.3,
+      0.3,
+      0.3,
+      0.314,
+      0.325,
+      0.335,
+      0.352,
+      0.342,
+      0.325,
+      0.308,
+      0.284,
+      0.268,
+      0.26,
+      0.241,
+      0.245,
+      0.231,
+      0.219,
+      0.201,
+      0.199,
+      0.215,
+      0.224,
+      0.238,
+      0.274,
+      0.298,
+      0.305,
+      0.337,
+      0.363,
+      0.373,
+      0.361,
+      0.355,
+      0.348,
+      0.342,
+      0.342,
+      0.346,
+      0.351,
+      0.35,
+      0.35,
+      0.32,
+      0.328,
+      0.327,
+      0.351,
+      0.38,
+      0.384,
+      0.386,
+      0.364,
+      0.352,
+      0.353,
+      0.316,
+      0.302,
+      0.294,
+      0.263,
+      0.262,
+      0.259,
+      0.288,
+      0.287,
+      0.294,
+      0.285,
+      0.293,
+      0.292,
+      0.284,
+      0.292,
+      0.291,
+      0.314,
+      0.306,
+      0.285,
+      0.271,
+      0.269,
+      0.269,
+      0.264,
+      0.286,
+      0.31,
+      0.293,
+      0.308,
+      0.323,
+      0.336,
+      0.337,
+      0.335,
+      0.359,
+      0.341,
+      0.353,
+      0.374,
+      0.399,
+      0.406,
+      0.405,
+      0.431,
+      0.441,
+      0.443,
+      0.45,
+      0.438,
+      0.446,
+      0.449,
+      0.431,
+      0.467,
+      0.506,
+      0.5,
+      0.49,
+      0.519,
+      0.529,
+      0.534,
+      0.526,
+      0.529,
+      0.531,
+      0.516,
+      0.502,
+      0.511,
+      0.495,
+      0.469,
+      0.453,
+      0.478,
+      0.462,
+      0.431,
+      0.422,
+      0.399,
+      0.401,
+      0.427,
+      0.42,
+      0.426,
+      0.407,
+      0.396,
+      0.38,
+      0.373,
+      0.352,
+      0.333,
+      0.302,
+      0.296,
+      0.29,
+      0.267,
+      0.254,
+      0.277,
+      0.265,
+      0.247,
+      0.259,
+      0.279,
+      0.252,
+      0.247,
+      0.262,
+      0.257,
+      0.248,
+      0.245,
+      0.211,
+      0.205,
+      0.188,
+      0.179,
+      0.151,
+      0.147,
+      0.159,
+      0.154,
+      0.166,
+      0.175,
+      0.184,
+      0.187,
+      0.187,
+      0.188,
+      0.165,
+      0.154,
+      0.154,
+      0.142,
+      0.127,
+      0.129,
+      0.121,
+      0.124,
+      0.155,
+      0.157,
+      0.169,
+      0.187,
+      0.189,
+      0.216,
+      0.208,
+      0.218,
+      0.229,
+      0.21,
+      0.208,
+      0.192,
+      0.183,
+      0.174,
+      0.168,
+      0.167,
+      0.177,
+      0.178,
+      0.181,
+      0.181,
+      0.197,
+      0.196,
+      0.192,
+      0.193,
+      0.175,
+      0.145,
+      0.143,
+      0.131,
+      0.128,
+      0.126,
+      0.099,
+      0.115,
+      0.134,
+      0.141,
+      0.143,
+      0.158,
+      0.167,
+      0.171,
+      0.18,
+      0.18,
+      0.189,
+      0.181,
+      0.18,
+      0.177,
+      0.183,
+      0.166,
+      0.158,
+      0.158,
+      0.158,
+      0.156,
+      0.155,
+      0.158,
+      0.163,
+      0.149,
+      0.152,
+      0.157,
+      0.139,
+      0.121,
+      0.108,
+      0.127,
+      0.112,
+      0.101,
+      0.108,
+      0.099,
+      0.1,
+      0.087,
+      0.096,
+      0.105,
+      0.104,
+      0.098,
+      0.107,
+      0.108,
+      0.112,
+      0.118,
+      0.118,
+      0.118,
+      0.115,
+      0.12,
+      0.116,
+      0.113,
+      0.108,
+      0.109,
+      0.098,
+      0.1,
+      0.081,
+      0.081,
+      0.083,
+      0.089,
+      0.099,
+      0.115,
+      0.128,
+      0.117,
+      0.111,
+      0.127,
+      0.133,
+      0.123,
+      0.122,
+      0.118,
+      0.111,
+      0.111,
+      0.112,
+      0.112,
+      0.102,
+      0.103,
+      0.105,
+      0.106,
+      0.102,
+      0.114,
+      0.123,
+      0.122,
+      0.122,
+      0.14,
+      0.143,
+      0.132,
+      0.12,
+      0.119,
+      0.118,
+      0.116,
+      0.11,
+      0.104,
+      0.105,
+      0.11,
+      0.114,
+      0.114,
+      0.122,
+      0.123,
+      0.123,
+      0.124,
+      0.13,
+      0.128,
+      0.128,
+      0.14,
+      0.151,
+      0.158,
+      0.169,
+      0.19,
+      0.204,
+      0.203,
+      0.228,
+      0.239,
+      0.262,
+      0.279,
+      0.279,
+      0.279,
+      0.305,
+      0.309,
+      0.304,
+      0.312,
+      0.334,
+      0.33,
+      0.329,
+      0.355,
+      0.361,
+      0.376,
+      0.375,
+      0.375,
+      0.373,
+      0.369,
+      0.346,
+      0.335,
+      0.319,
+      0.309,
+      0.292,
+      0.274,
+      0.258,
+      0.224,
+      0.212,
+      0.223,
+      0.219,
+      0.198,
+      0.2,
+      0.214,
+      0.202,
+      0.184,
+      0.201,
+      0.204,
+      0.189,
+      0.187,
+      0.194,
+      0.211,
+      0.212,
+      0.218,
+      0.201,
+      0.211,
+      0.248,
+      0.26,
+      0.273,
+      0.288,
+      0.289,
+      0.29,
+      0.29,
+      0.291,
+      0.279,
+      0.274,
+      0.27,
+      0.277,
+      0.264,
+      0.283,
+      0.284,
+      0.276,
+      0.272,
+      0.267,
+      0.279,
+      0.262,
+      0.261,
+      0.267,
+      0.272,
+      0.278,
+      0.271,
+      0.24,
+      0.221,
+      0.189,
+      0.172,
+      0.171,
+      0.174,
+      0.182,
+      0.187,
+      0.195,
+      0.195,
+      0.201,
+      0.189,
+      0.189,
+      0.173,
+      0.169,
+      0.154,
+      0.155,
+      0.154,
+      0.138,
+      0.126,
+      0.127,
+      0.12,
+      0.098,
+      0.098,
+      0.106,
+      0.104,
+      0.103,
+      0.1,
+      0.13,
+      0.142,
+      0.155,
+      0.154,
+      0.145,
+      0.137,
+      0.144,
+      0.138,
+      0.143,
+      0.145,
+      0.143,
+      0.15,
+      0.155,
+      0.155,
+      0.152,
+      0.154,
+      0.16,
+      0.166,
+      0.179,
+      0.18,
+      0.174,
+      0.163,
+      0.165,
+      0.182,
+      0.184,
+      0.16,
+      0.157,
+      0.167,
+      0.166,
+      0.171,
+      0.176,
+      0.169,
+      0.184,
+      0.196,
+      0.193,
+      0.194,
+      0.211,
+      0.231,
+      0.253,
+      0.269,
+      0.292,
+      0.311,
+      0.318,
+      0.345,
+      0.38,
+      0.407,
+      0.419,
+      0.425,
+      0.417,
+      0.429,
+      0.427,
+      0.412,
+      0.388,
+      0.4,
+      0.396,
+      0.392,
+      0.411,
+      0.416,
+      0.415,
+      0.419,
+      0.445,
+      0.451,
+      0.465,
+      0.465,
+      0.456,
+      0.452,
+      0.45,
+      0.42,
+      0.381,
+      0.356,
+      0.33,
+      0.317,
+      0.309,
+      0.308,
+      0.292,
+      0.288,
+      0.288,
+      0.285,
+      0.267,
+      0.263,
+      0.263,
+      0.242,
+      0.221,
+      0.204,
+      0.2,
+      0.171,
+      0.142,
+      0.103,
+      0.087,
+      0.102,
+      0.087,
+      0.08,
+      0.093,
+      0.105,
+      0.094,
+      0.093,
+      0.098,
+      0.095,
+      0.093,
+      0.102,
+      0.115,
+      0.115,
+      0.118,
+      0.118,
+      0.118,
+      0.118,
+      0.128,
+      0.148,
+      0.148,
+      0.157,
+      0.172,
+      0.171,
+      0.174,
+      0.174,
+      0.158,
+      0.165,
+      0.153,
+      0.168,
+      0.19,
+      0.217,
+      0.248,
+      0.274,
+      0.313,
+      0.34,
+      0.338,
+      0.347,
+      0.35,
+      0.354,
+      0.355,
+      0.373,
+      0.375,
+      0.383,
+      0.38,
+      0.383,
+      0.375,
+      0.363,
+      0.363,
+      0.361,
+      0.354,
+      0.349,
+      0.352,
+      0.361,
+      0.345,
+      0.348,
+      0.344,
+      0.314,
+      0.302,
+      0.292,
+      0.266,
+      0.292,
+      0.286,
+      0.283,
+      0.299,
+      0.317,
+      0.299,
+      0.3,
+      0.297,
+      0.283,
+      0.28,
+      0.279,
+      0.286,
+      0.285,
+      0.285,
+      0.286,
+      0.285,
+      0.269,
+      0.263,
+      0.271,
+      0.248,
+      0.224,
+      0.237,
+      0.224,
+      0.195,
+      0.188,
+      0.155,
+      0.141,
+      0.141,
+      0.117,
+      0.099,
+      0.1,
+      0.1,
+      0.095,
+      0.092,
+      0.116,
+      0.116,
+      0.123,
+      0.127,
+      0.127,
+      0.137,
+      0.148,
+      0.158,
+      0.184,
+      0.166,
+      0.151,
+      0.163,
+      0.152,
+      0.147,
+      0.152,
+      0.172,
+      0.171,
+      0.171,
+      0.173,
+      0.18,
+      0.211,
+      0.23,
+      0.25,
+      0.251,
+      0.267,
+      0.261,
+      0.261,
+      0.243,
+      0.257,
+      0.262,
+      0.25,
+      0.243,
+      0.257,
+      0.23,
+      0.228,
+      0.238,
+      0.249,
+      0.254,
+      0.262,
+      0.296,
+      0.292,
+      0.304,
+      0.304,
+      0.333,
+      0.34,
+      0.337,
+      0.323,
+      0.328,
+      0.347,
+      0.333,
+      0.323,
+      0.352,
+      0.368,
+      0.357,
+      0.381,
+      0.408,
+      0.429,
+      0.436,
+      0.467,
+      0.507,
+      0.534,
+      0.541,
+      0.557,
+      0.576,
+      0.565,
+      0.557,
+      0.56,
+      0.59,
+      0.566,
+      0.554,
+      0.557,
+      0.579
+    ],
+    "content_fraction": 0.001,
+    "content_count": 1
+  },
+  "prediction-disorder-dis465": {
+    "regions": [
+      [
+        1,
+        7
+      ],
+      [
+        78,
+        81
+      ],
+      [
+        411,
+        417
+      ],
+      [
+        723,
+        727
+      ],
+      [
+        1064,
+        1064
+      ],
+      [
+        1066,
+        1068
+      ]
+    ],
+    "content_count": 27,
+    "content_fraction": 0.025
+  },
+  "prediction-disorder-disHL": {
+    "regions": [
+      [
+        1,
+        14
+      ],
+      [
+        61,
+        63
+      ],
+      [
+        98,
+        110
+      ],
+      [
+        151,
+        161
+      ],
+      [
+        167,
+        176
+      ],
+      [
+        210,
+        217
+      ],
+      [
+        315,
+        322
+      ],
+      [
+        343,
+        350
+      ],
+      [
+        364,
+        374
+      ],
+      [
+        413,
+        426
+      ],
+      [
+        509,
+        510
+      ],
+      [
+        514,
+        515
+      ],
+      [
+        518,
+        521
+      ],
+      [
+        531,
+        542
+      ],
+      [
+        671,
+        674
+      ],
+      [
+        719,
+        727
+      ],
+      [
+        780,
+        781
+      ],
+      [
+        913,
+        918
+      ],
+      [
+        951,
+        962
+      ],
+      [
+        967,
+        972
+      ],
+      [
+        1068,
+        1068
+      ]
+    ],
+    "content_count": 160,
+    "content_fraction": 0.15
+  },
+  "prediction-disorder-espN": {
+    "regions": [
+      [
+        1,
+        11
+      ],
+      [
+        169,
+        174
+      ],
+      [
+        306,
+        323
+      ],
+      [
+        411,
+        415
+      ],
+      [
+        460,
+        468
+      ],
+      [
+        722,
+        727
+      ],
+      [
+        1044,
+        1054
+      ],
+      [
+        1066,
+        1068
+      ]
+    ],
+    "content_count": 69,
+    "content_fraction": 0.065
+  },
+  "prediction-disorder-espX": {
+    "regions": [
+      [
+        1,
+        9
+      ],
+      [
+        1065,
+        1068
+      ]
+    ],
+    "content_count": 13,
+    "content_fraction": 0.012
+  },
+  "prediction-disorder-glo": {
+    "regions": [
+      [
+        1,
+        2
+      ],
+      [
+        4,
+        7
+      ],
+      [
+        11,
+        11
+      ],
+      [
+        161,
+        177
+      ],
+      [
+        316,
+        319
+      ],
+      [
+        361,
+        381
+      ],
+      [
+        450,
+        471
+      ],
+      [
+        607,
+        608
+      ],
+      [
+        753,
+        757
+      ],
+      [
+        919,
+        920
+      ],
+      [
+        1047,
+        1049
+      ],
+      [
+        1060,
+        1060
+      ],
+      [
+        1067,
+        1068
+      ]
+    ],
+    "content_count": 86,
+    "content_fraction": 0.081
+  },
+  "prediction-disorder-iupl": {
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        457,
+        460
+      ],
+      [
+        519,
+        519
+      ],
+      [
+        528,
+        531
+      ],
+      [
+        534,
+        538
+      ]
+    ],
+    "content_count": 15,
+    "content_fraction": 0.014
+  },
+  "prediction-disorder-iups": {
+    "regions": [
+      [
+        1,
+        6
+      ],
+      [
+        167,
+        167
+      ],
+      [
+        519,
+        522
+      ],
+      [
+        524,
+        524
+      ],
+      [
+        528,
+        540
+      ],
+      [
+        1065,
+        1068
+      ]
+    ],
+    "content_count": 29,
+    "content_fraction": 0.027
+  },
+  "prediction-disorder-th_50": {
+    "regions": [
+      [
+        1,
+        7
+      ],
+      [
+        1066,
+        1068
+      ]
+    ],
+    "content_count": 10,
+    "content_fraction": 0.009
+  },
+  "prediction-lip-alphafold": {
+    "scores": [
+      0.324,
+      0.312,
+      0.289,
+      0.267,
+      0.286,
+      0.314,
+      0.334,
+      0.332,
+      0.347,
+      0.326,
+      0.334,
+      0.323,
+      0.318,
+      0.3,
+      0.298,
+      0.292,
+      0.316,
+      0.305,
+      0.316,
+      0.31,
+      0.326,
+      0.328,
+      0.348,
+      0.328,
+      0.318,
+      0.299,
+      0.304,
+      0.301,
+      0.31,
+      0.289,
+      0.283,
+      0.281,
+      0.278,
+      0.255,
+      0.274,
+      0.276,
+      0.276,
+      0.267,
+      0.282,
+      0.277,
+      0.272,
+      0.272,
+      0.291,
+      0.282,
+      0.306,
+      0.307,
+      0.323,
+      0.327,
+      0.351,
+      0.335,
+      0.353,
+      0.367,
+      0.373,
+      0.392,
+      0.404,
+      0.382,
+      0.365,
+      0.365,
+      0.362,
+      0.345,
+      0.341,
+      0.341,
+      0.338,
+      0.321,
+      0.33,
+      0.337,
+      0.331,
+      0.303,
+      0.299,
+      0.274,
+      0.262,
+      0.258,
+      0.24,
+      0.243,
+      0.24,
+      0.231,
+      0.206,
+      0.195,
+      0.174,
+      0.162,
+      0.163,
+      0.16,
+      0.176,
+      0.194,
+      0.202,
+      0.199,
+      0.199,
+      0.212,
+      0.212,
+      0.197,
+      0.211,
+      0.206,
+      0.229,
+      0.255,
+      0.275,
+      0.293,
+      0.303,
+      0.304,
+      0.286,
+      0.296,
+      0.299,
+      0.307,
+      0.316,
+      0.317,
+      0.317,
+      0.317,
+      0.32,
+      0.303,
+      0.285,
+      0.281,
+      0.273,
+      0.273,
+      0.26,
+      0.271,
+      0.272,
+      0.251,
+      0.245,
+      0.251,
+      0.228,
+      0.246,
+      0.24,
+      0.228,
+      0.228,
+      0.216,
+      0.208,
+      0.201,
+      0.194,
+      0.185,
+      0.184,
+      0.2,
+      0.199,
+      0.196,
+      0.223,
+      0.225,
+      0.219,
+      0.235,
+      0.255,
+      0.255,
+      0.244,
+      0.256,
+      0.278,
+      0.266,
+      0.248,
+      0.273,
+      0.259,
+      0.258,
+      0.256,
+      0.26,
+      0.267,
+      0.266,
+      0.261,
+      0.268,
+      0.268,
+      0.267,
+      0.259,
+      0.263,
+      0.267,
+      0.248,
+      0.252,
+      0.259,
+      0.256,
+      0.253,
+      0.273,
+      0.303,
+      0.29,
+      0.273,
+      0.303,
+      0.299,
+      0.264,
+      0.257,
+      0.269,
+      0.273,
+      0.266,
+      0.281,
+      0.312,
+      0.314,
+      0.318,
+      0.32,
+      0.332,
+      0.324,
+      0.323,
+      0.318,
+      0.316,
+      0.317,
+      0.319,
+      0.318,
+      0.331,
+      0.345,
+      0.344,
+      0.361,
+      0.378,
+      0.362,
+      0.37,
+      0.397,
+      0.386,
+      0.375,
+      0.36,
+      0.374,
+      0.355,
+      0.339,
+      0.342,
+      0.351,
+      0.354,
+      0.344,
+      0.347,
+      0.357,
+      0.376,
+      0.37,
+      0.365,
+      0.355,
+      0.357,
+      0.329,
+      0.295,
+      0.281,
+      0.281,
+      0.271,
+      0.258,
+      0.277,
+      0.282,
+      0.3,
+      0.323,
+      0.335,
+      0.334,
+      0.364,
+      0.375,
+      0.391,
+      0.382,
+      0.405,
+      0.421,
+      0.425,
+      0.413,
+      0.418,
+      0.437,
+      0.446,
+      0.453,
+      0.459,
+      0.48,
+      0.491,
+      0.475,
+      0.455,
+      0.443,
+      0.44,
+      0.406,
+      0.373,
+      0.351,
+      0.315,
+      0.307,
+      0.292,
+      0.26,
+      0.235,
+      0.227,
+      0.24,
+      0.227,
+      0.211,
+      0.205,
+      0.203,
+      0.182,
+      0.163,
+      0.166,
+      0.164,
+      0.142,
+      0.122,
+      0.125,
+      0.125,
+      0.128,
+      0.136,
+      0.149,
+      0.183,
+      0.206,
+      0.222,
+      0.219,
+      0.217,
+      0.215,
+      0.216,
+      0.214,
+      0.208,
+      0.195,
+      0.187,
+      0.207,
+      0.224,
+      0.224,
+      0.227,
+      0.256,
+      0.268,
+      0.265,
+      0.28,
+      0.306,
+      0.296,
+      0.327,
+      0.332,
+      0.353,
+      0.358,
+      0.325,
+      0.317,
+      0.299,
+      0.309,
+      0.338,
+      0.357,
+      0.392,
+      0.398,
+      0.423,
+      0.431,
+      0.446,
+      0.446,
+      0.462,
+      0.497,
+      0.531,
+      0.524,
+      0.541,
+      0.563,
+      0.573,
+      0.567,
+      0.579,
+      0.558,
+      0.55,
+      0.526,
+      0.537,
+      0.538,
+      0.558,
+      0.57,
+      0.579,
+      0.547,
+      0.544,
+      0.507,
+      0.506,
+      0.474,
+      0.458,
+      0.438,
+      0.411,
+      0.401,
+      0.38,
+      0.346,
+      0.358,
+      0.327,
+      0.323,
+      0.325,
+      0.34,
+      0.343,
+      0.338,
+      0.361,
+      0.37,
+      0.342,
+      0.34,
+      0.305,
+      0.301,
+      0.282,
+      0.279,
+      0.264,
+      0.268,
+      0.26,
+      0.261,
+      0.273,
+      0.287,
+      0.303,
+      0.282,
+      0.272,
+      0.3,
+      0.275,
+      0.276,
+      0.272,
+      0.247,
+      0.236,
+      0.236,
+      0.234,
+      0.227,
+      0.215,
+      0.243,
+      0.266,
+      0.27,
+      0.282,
+      0.287,
+      0.309,
+      0.318,
+      0.328,
+      0.328,
+      0.353,
+      0.339,
+      0.36,
+      0.343,
+      0.357,
+      0.353,
+      0.318,
+      0.317,
+      0.308,
+      0.292,
+      0.292,
+      0.265,
+      0.247,
+      0.245,
+      0.229,
+      0.226,
+      0.197,
+      0.174,
+      0.17,
+      0.149,
+      0.147,
+      0.125,
+      0.132,
+      0.137,
+      0.16,
+      0.173,
+      0.2,
+      0.203,
+      0.234,
+      0.238,
+      0.253,
+      0.268,
+      0.277,
+      0.282,
+      0.292,
+      0.293,
+      0.295,
+      0.295,
+      0.292,
+      0.294,
+      0.3,
+      0.3,
+      0.3,
+      0.314,
+      0.325,
+      0.335,
+      0.352,
+      0.342,
+      0.325,
+      0.308,
+      0.284,
+      0.268,
+      0.26,
+      0.241,
+      0.245,
+      0.231,
+      0.219,
+      0.201,
+      0.199,
+      0.215,
+      0.224,
+      0.238,
+      0.274,
+      0.298,
+      0.305,
+      0.337,
+      0.363,
+      0.373,
+      0.361,
+      0.355,
+      0.348,
+      0.342,
+      0.342,
+      0.346,
+      0.351,
+      0.35,
+      0.35,
+      0.32,
+      0.328,
+      0.327,
+      0.351,
+      0.38,
+      0.384,
+      0.386,
+      0.364,
+      0.352,
+      0.353,
+      0.316,
+      0.302,
+      0.294,
+      0.263,
+      0.262,
+      0.259,
+      0.288,
+      0.287,
+      0.294,
+      0.285,
+      0.293,
+      0.292,
+      0.284,
+      0.292,
+      0.291,
+      0.314,
+      0.306,
+      0.285,
+      0.271,
+      0.269,
+      0.269,
+      0.264,
+      0.286,
+      0.31,
+      0.293,
+      0.308,
+      0.323,
+      0.336,
+      0.337,
+      0.335,
+      0.359,
+      0.341,
+      0.353,
+      0.374,
+      0.399,
+      0.406,
+      0.405,
+      0.431,
+      0.441,
+      0.443,
+      0.45,
+      0.438,
+      0.446,
+      0.449,
+      0.431,
+      0.467,
+      0.506,
+      0.5,
+      0.49,
+      0.519,
+      0.529,
+      0.534,
+      0.526,
+      0.529,
+      0.531,
+      0.516,
+      0.502,
+      0.511,
+      0.495,
+      0.469,
+      0.453,
+      0.478,
+      0.462,
+      0.431,
+      0.422,
+      0.399,
+      0.401,
+      0.427,
+      0.42,
+      0.426,
+      0.407,
+      0.396,
+      0.38,
+      0.373,
+      0.352,
+      0.333,
+      0.302,
+      0.296,
+      0.29,
+      0.267,
+      0.254,
+      0.277,
+      0.265,
+      0.247,
+      0.259,
+      0.279,
+      0.252,
+      0.247,
+      0.262,
+      0.257,
+      0.248,
+      0.245,
+      0.211,
+      0.205,
+      0.188,
+      0.179,
+      0.151,
+      0.147,
+      0.159,
+      0.154,
+      0.166,
+      0.175,
+      0.184,
+      0.187,
+      0.187,
+      0.188,
+      0.165,
+      0.154,
+      0.154,
+      0.142,
+      0.127,
+      0.129,
+      0.121,
+      0.124,
+      0.155,
+      0.157,
+      0.169,
+      0.187,
+      0.189,
+      0.216,
+      0.208,
+      0.218,
+      0.229,
+      0.21,
+      0.208,
+      0.192,
+      0.183,
+      0.174,
+      0.168,
+      0.167,
+      0.177,
+      0.178,
+      0.181,
+      0.181,
+      0.197,
+      0.196,
+      0.192,
+      0.193,
+      0.175,
+      0.145,
+      0.143,
+      0.131,
+      0.128,
+      0.126,
+      0.099,
+      0.115,
+      0.134,
+      0.141,
+      0.143,
+      0.158,
+      0.167,
+      0.171,
+      0.18,
+      0.18,
+      0.189,
+      0.181,
+      0.18,
+      0.177,
+      0.183,
+      0.166,
+      0.158,
+      0.158,
+      0.158,
+      0.156,
+      0.155,
+      0.158,
+      0.163,
+      0.149,
+      0.152,
+      0.157,
+      0.139,
+      0.121,
+      0.108,
+      0.127,
+      0.112,
+      0.101,
+      0.108,
+      0.099,
+      0.1,
+      0.087,
+      0.096,
+      0.105,
+      0.104,
+      0.098,
+      0.107,
+      0.108,
+      0.112,
+      0.118,
+      0.118,
+      0.118,
+      0.115,
+      0.12,
+      0.116,
+      0.113,
+      0.108,
+      0.109,
+      0.098,
+      0.1,
+      0.081,
+      0.081,
+      0.083,
+      0.089,
+      0.099,
+      0.115,
+      0.128,
+      0.117,
+      0.111,
+      0.127,
+      0.133,
+      0.123,
+      0.122,
+      0.118,
+      0.111,
+      0.111,
+      0.112,
+      0.112,
+      0.102,
+      0.103,
+      0.105,
+      0.106,
+      0.102,
+      0.114,
+      0.123,
+      0.122,
+      0.122,
+      0.14,
+      0.143,
+      0.132,
+      0.12,
+      0.119,
+      0.118,
+      0.116,
+      0.11,
+      0.104,
+      0.105,
+      0.11,
+      0.114,
+      0.114,
+      0.122,
+      0.123,
+      0.123,
+      0.124,
+      0.13,
+      0.128,
+      0.128,
+      0.14,
+      0.151,
+      0.158,
+      0.169,
+      0.19,
+      0.204,
+      0.203,
+      0.228,
+      0.239,
+      0.262,
+      0.279,
+      0.279,
+      0.279,
+      0.305,
+      0.309,
+      0.304,
+      0.312,
+      0.334,
+      0.33,
+      0.329,
+      0.355,
+      0.361,
+      0.376,
+      0.375,
+      0.375,
+      0.373,
+      0.369,
+      0.346,
+      0.335,
+      0.319,
+      0.309,
+      0.292,
+      0.274,
+      0.258,
+      0.224,
+      0.212,
+      0.223,
+      0.219,
+      0.198,
+      0.2,
+      0.214,
+      0.202,
+      0.184,
+      0.201,
+      0.204,
+      0.189,
+      0.187,
+      0.194,
+      0.211,
+      0.212,
+      0.218,
+      0.201,
+      0.211,
+      0.248,
+      0.26,
+      0.273,
+      0.288,
+      0.289,
+      0.29,
+      0.29,
+      0.291,
+      0.279,
+      0.274,
+      0.27,
+      0.277,
+      0.264,
+      0.283,
+      0.284,
+      0.276,
+      0.272,
+      0.267,
+      0.279,
+      0.262,
+      0.261,
+      0.267,
+      0.272,
+      0.278,
+      0.271,
+      0.24,
+      0.221,
+      0.189,
+      0.172,
+      0.171,
+      0.174,
+      0.182,
+      0.187,
+      0.195,
+      0.195,
+      0.201,
+      0.189,
+      0.189,
+      0.173,
+      0.169,
+      0.154,
+      0.155,
+      0.154,
+      0.138,
+      0.126,
+      0.127,
+      0.12,
+      0.098,
+      0.098,
+      0.106,
+      0.104,
+      0.103,
+      0.1,
+      0.13,
+      0.142,
+      0.155,
+      0.154,
+      0.145,
+      0.137,
+      0.144,
+      0.138,
+      0.143,
+      0.145,
+      0.143,
+      0.15,
+      0.155,
+      0.155,
+      0.152,
+      0.154,
+      0.16,
+      0.166,
+      0.179,
+      0.18,
+      0.174,
+      0.163,
+      0.165,
+      0.182,
+      0.184,
+      0.16,
+      0.157,
+      0.167,
+      0.166,
+      0.171,
+      0.176,
+      0.169,
+      0.184,
+      0.196,
+      0.193,
+      0.194,
+      0.211,
+      0.231,
+      0.253,
+      0.269,
+      0.292,
+      0.311,
+      0.318,
+      0.345,
+      0.38,
+      0.407,
+      0.419,
+      0.425,
+      0.417,
+      0.429,
+      0.427,
+      0.412,
+      0.388,
+      0.4,
+      0.396,
+      0.392,
+      0.411,
+      0.416,
+      0.415,
+      0.419,
+      0.445,
+      0.451,
+      0.465,
+      0.465,
+      0.456,
+      0.452,
+      0.45,
+      0.42,
+      0.381,
+      0.356,
+      0.33,
+      0.317,
+      0.309,
+      0.308,
+      0.292,
+      0.288,
+      0.288,
+      0.285,
+      0.267,
+      0.263,
+      0.263,
+      0.242,
+      0.221,
+      0.204,
+      0.2,
+      0.171,
+      0.142,
+      0.103,
+      0.087,
+      0.102,
+      0.087,
+      0.08,
+      0.093,
+      0.105,
+      0.094,
+      0.093,
+      0.098,
+      0.095,
+      0.093,
+      0.102,
+      0.115,
+      0.115,
+      0.118,
+      0.118,
+      0.118,
+      0.118,
+      0.128,
+      0.148,
+      0.148,
+      0.157,
+      0.172,
+      0.171,
+      0.174,
+      0.174,
+      0.158,
+      0.165,
+      0.153,
+      0.168,
+      0.19,
+      0.217,
+      0.248,
+      0.274,
+      0.313,
+      0.34,
+      0.338,
+      0.347,
+      0.35,
+      0.354,
+      0.355,
+      0.373,
+      0.375,
+      0.383,
+      0.38,
+      0.383,
+      0.375,
+      0.363,
+      0.363,
+      0.361,
+      0.354,
+      0.349,
+      0.352,
+      0.361,
+      0.345,
+      0.348,
+      0.344,
+      0.314,
+      0.302,
+      0.292,
+      0.266,
+      0.292,
+      0.286,
+      0.283,
+      0.299,
+      0.317,
+      0.299,
+      0.3,
+      0.297,
+      0.283,
+      0.28,
+      0.279,
+      0.286,
+      0.285,
+      0.285,
+      0.286,
+      0.285,
+      0.269,
+      0.263,
+      0.271,
+      0.248,
+      0.224,
+      0.237,
+      0.224,
+      0.195,
+      0.188,
+      0.155,
+      0.141,
+      0.141,
+      0.117,
+      0.099,
+      0.1,
+      0.1,
+      0.095,
+      0.092,
+      0.116,
+      0.116,
+      0.123,
+      0.127,
+      0.127,
+      0.137,
+      0.148,
+      0.158,
+      0.184,
+      0.166,
+      0.151,
+      0.163,
+      0.152,
+      0.147,
+      0.152,
+      0.172,
+      0.171,
+      0.171,
+      0.173,
+      0.18,
+      0.211,
+      0.23,
+      0.25,
+      0.251,
+      0.267,
+      0.261,
+      0.261,
+      0.243,
+      0.257,
+      0.262,
+      0.25,
+      0.243,
+      0.257,
+      0.23,
+      0.228,
+      0.238,
+      0.249,
+      0.254,
+      0.262,
+      0.296,
+      0.292,
+      0.304,
+      0.304,
+      0.333,
+      0.34,
+      0.337,
+      0.323,
+      0.328,
+      0.347,
+      0.333,
+      0.323,
+      0.352,
+      0.368,
+      0.357,
+      0.381,
+      0.408,
+      0.429,
+      0.436,
+      0.467,
+      0.507,
+      0.534,
+      0.541,
+      0.557,
+      0.576,
+      0.565,
+      0.557,
+      0.56,
+      0.775,
+      0.566,
+      0.554,
+      0.557,
+      0.579
+    ],
+    "content_fraction": 0.001,
+    "content_count": 1
+  },
+  "prediction-lip-anchor": {
+    "regions": [
+      [
+        479,
+        480
+      ]
+    ],
+    "content_count": 2,
+    "content_fraction": 0.002
+  },
+  "prediction-lip-priority": {
+    "regions": [
+      [
+        479,
+        480
+      ]
+    ],
+    "content_fraction": 0.002,
+    "content_count": 2
+  },
+  "prediction-plddt-alphafold": {
+    "scores": [
+      0.546,
+      0.768,
+      0.755,
+      0.819,
+      0.818,
+      0.841,
+      0.826,
+      0.837,
+      0.914,
+      0.938,
+      0.923,
+      0.899,
+      0.898,
+      0.865,
+      0.899,
+      0.936,
+      0.932,
+      0.925,
+      0.964,
+      0.973,
+      0.979,
+      0.981,
+      0.984,
+      0.983,
+      0.982,
+      0.979,
+      0.97,
+      0.962,
+      0.959,
+      0.97,
+      0.979,
+      0.975,
+      0.975,
+      0.976,
+      0.979,
+      0.974,
+      0.967,
+      0.945,
+      0.936,
+      0.961,
+      0.969,
+      0.976,
+      0.973,
+      0.974,
+      0.981,
+      0.981,
+      0.976,
+      0.973,
+      0.98,
+      0.973,
+      0.965,
+      0.968,
+      0.963,
+      0.955,
+      0.963,
+      0.958,
+      0.957,
+      0.957,
+      0.938,
+      0.936,
+      0.969,
+      0.961,
+      0.952,
+      0.942,
+      0.952,
+      0.946,
+      0.957,
+      0.971,
+      0.967,
+      0.981,
+      0.973,
+      0.977,
+      0.97,
+      0.951,
+      0.927,
+      0.899,
+      0.922,
+      0.918,
+      0.938,
+      0.933,
+      0.95,
+      0.944,
+      0.924,
+      0.897,
+      0.943,
+      0.925,
+      0.93,
+      0.943,
+      0.968,
+      0.935,
+      0.925,
+      0.937,
+      0.923,
+      0.968,
+      0.964,
+      0.97,
+      0.971,
+      0.982,
+      0.985,
+      0.985,
+      0.981,
+      0.971,
+      0.957,
+      0.931,
+      0.902,
+      0.868,
+      0.895,
+      0.907,
+      0.904,
+      0.923,
+      0.918,
+      0.923,
+      0.943,
+      0.948,
+      0.926,
+      0.952,
+      0.973,
+      0.957,
+      0.947,
+      0.975,
+      0.966,
+      0.919,
+      0.914,
+      0.921,
+      0.933,
+      0.918,
+      0.915,
+      0.936,
+      0.912,
+      0.899,
+      0.912,
+      0.91,
+      0.92,
+      0.94,
+      0.966,
+      0.963,
+      0.956,
+      0.962,
+      0.978,
+      0.975,
+      0.967,
+      0.971,
+      0.983,
+      0.983,
+      0.977,
+      0.985,
+      0.984,
+      0.97,
+      0.97,
+      0.975,
+      0.966,
+      0.958,
+      0.955,
+      0.95,
+      0.93,
+      0.918,
+      0.922,
+      0.897,
+      0.941,
+      0.954,
+      0.957,
+      0.96,
+      0.97,
+      0.974,
+      0.973,
+      0.976,
+      0.979,
+      0.982,
+      0.982,
+      0.981,
+      0.98,
+      0.963,
+      0.934,
+      0.937,
+      0.963,
+      0.95,
+      0.954,
+      0.939,
+      0.925,
+      0.924,
+      0.948,
+      0.964,
+      0.949,
+      0.941,
+      0.96,
+      0.945,
+      0.943,
+      0.955,
+      0.977,
+      0.975,
+      0.979,
+      0.978,
+      0.982,
+      0.977,
+      0.97,
+      0.935,
+      0.908,
+      0.861,
+      0.807,
+      0.842,
+      0.877,
+      0.877,
+      0.905,
+      0.938,
+      0.926,
+      0.945,
+      0.944,
+      0.968,
+      0.963,
+      0.968,
+      0.967,
+      0.978,
+      0.974,
+      0.974,
+      0.968,
+      0.974,
+      0.971,
+      0.95,
+      0.951,
+      0.964,
+      0.958,
+      0.935,
+      0.933,
+      0.923,
+      0.887,
+      0.895,
+      0.895,
+      0.85,
+      0.852,
+      0.822,
+      0.762,
+      0.83,
+      0.81,
+      0.843,
+      0.855,
+      0.858,
+      0.871,
+      0.868,
+      0.857,
+      0.87,
+      0.87,
+      0.868,
+      0.872,
+      0.867,
+      0.858,
+      0.87,
+      0.867,
+      0.859,
+      0.924,
+      0.951,
+      0.967,
+      0.98,
+      0.983,
+      0.986,
+      0.984,
+      0.978,
+      0.982,
+      0.981,
+      0.984,
+      0.982,
+      0.98,
+      0.965,
+      0.96,
+      0.963,
+      0.979,
+      0.982,
+      0.981,
+      0.979,
+      0.982,
+      0.986,
+      0.978,
+      0.983,
+      0.984,
+      0.972,
+      0.956,
+      0.972,
+      0.969,
+      0.928,
+      0.911,
+      0.922,
+      0.939,
+      0.972,
+      0.983,
+      0.985,
+      0.985,
+      0.974,
+      0.957,
+      0.938,
+      0.941,
+      0.952,
+      0.94,
+      0.938,
+      0.948,
+      0.956,
+      0.938,
+      0.91,
+      0.924,
+      0.879,
+      0.841,
+      0.789,
+      0.848,
+      0.929,
+      0.933,
+      0.951,
+      0.954,
+      0.939,
+      0.939,
+      0.923,
+      0.869,
+      0.81,
+      0.684,
+      0.642,
+      0.628,
+      0.522,
+      0.405,
+      0.341,
+      0.38,
+      0.37,
+      0.35,
+      0.385,
+      0.422,
+      0.565,
+      0.762,
+      0.881,
+      0.936,
+      0.958,
+      0.976,
+      0.973,
+      0.96,
+      0.96,
+      0.958,
+      0.967,
+      0.973,
+      0.982,
+      0.981,
+      0.986,
+      0.986,
+      0.987,
+      0.984,
+      0.982,
+      0.979,
+      0.96,
+      0.941,
+      0.931,
+      0.917,
+      0.909,
+      0.899,
+      0.851,
+      0.845,
+      0.869,
+      0.893,
+      0.884,
+      0.954,
+      0.975,
+      0.984,
+      0.986,
+      0.986,
+      0.987,
+      0.985,
+      0.987,
+      0.986,
+      0.983,
+      0.952,
+      0.923,
+      0.948,
+      0.977,
+      0.984,
+      0.98,
+      0.98,
+      0.982,
+      0.986,
+      0.984,
+      0.986,
+      0.977,
+      0.972,
+      0.971,
+      0.946,
+      0.922,
+      0.922,
+      0.949,
+      0.967,
+      0.981,
+      0.984,
+      0.978,
+      0.985,
+      0.984,
+      0.985,
+      0.982,
+      0.984,
+      0.978,
+      0.978,
+      0.98,
+      0.98,
+      0.982,
+      0.985,
+      0.985,
+      0.985,
+      0.985,
+      0.985,
+      0.987,
+      0.986,
+      0.987,
+      0.987,
+      0.987,
+      0.986,
+      0.983,
+      0.976,
+      0.957,
+      0.945,
+      0.904,
+      0.809,
+      0.734,
+      0.704,
+      0.685,
+      0.707,
+      0.816,
+      0.882,
+      0.904,
+      0.943,
+      0.932,
+      0.958,
+      0.957,
+      0.977,
+      0.982,
+      0.98,
+      0.985,
+      0.985,
+      0.985,
+      0.986,
+      0.983,
+      0.967,
+      0.97,
+      0.967,
+      0.973,
+      0.975,
+      0.979,
+      0.968,
+      0.955,
+      0.958,
+      0.972,
+      0.969,
+      0.976,
+      0.98,
+      0.983,
+      0.983,
+      0.976,
+      0.961,
+      0.943,
+      0.902,
+      0.838,
+      0.798,
+      0.847,
+      0.824,
+      0.896,
+      0.963,
+      0.973,
+      0.962,
+      0.958,
+      0.931,
+      0.933,
+      0.952,
+      0.96,
+      0.942,
+      0.955,
+      0.958,
+      0.917,
+      0.915,
+      0.924,
+      0.932,
+      0.96,
+      0.97,
+      0.983,
+      0.985,
+      0.985,
+      0.984,
+      0.985,
+      0.98,
+      0.957,
+      0.926,
+      0.929,
+      0.896,
+      0.91,
+      0.945,
+      0.97,
+      0.977,
+      0.98,
+      0.975,
+      0.956,
+      0.958,
+      0.966,
+      0.973,
+      0.977,
+      0.969,
+      0.966,
+      0.966,
+      0.953,
+      0.931,
+      0.937,
+      0.903,
+      0.851,
+      0.847,
+      0.833,
+      0.798,
+      0.698,
+      0.659,
+      0.613,
+      0.571,
+      0.569,
+      0.588,
+      0.592,
+      0.59,
+      0.609,
+      0.661,
+      0.743,
+      0.801,
+      0.865,
+      0.79,
+      0.668,
+      0.655,
+      0.617,
+      0.619,
+      0.688,
+      0.799,
+      0.88,
+      0.908,
+      0.925,
+      0.928,
+      0.942,
+      0.947,
+      0.959,
+      0.964,
+      0.957,
+      0.955,
+      0.966,
+      0.957,
+      0.947,
+      0.962,
+      0.967,
+      0.962,
+      0.949,
+      0.945,
+      0.908,
+      0.933,
+      0.953,
+      0.943,
+      0.95,
+      0.964,
+      0.969,
+      0.953,
+      0.951,
+      0.967,
+      0.96,
+      0.927,
+      0.942,
+      0.952,
+      0.934,
+      0.942,
+      0.965,
+      0.967,
+      0.963,
+      0.971,
+      0.98,
+      0.968,
+      0.981,
+      0.985,
+      0.98,
+      0.979,
+      0.983,
+      0.983,
+      0.97,
+      0.976,
+      0.977,
+      0.975,
+      0.983,
+      0.979,
+      0.976,
+      0.975,
+      0.964,
+      0.973,
+      0.983,
+      0.983,
+      0.975,
+      0.984,
+      0.985,
+      0.978,
+      0.979,
+      0.983,
+      0.969,
+      0.965,
+      0.984,
+      0.984,
+      0.981,
+      0.982,
+      0.978,
+      0.982,
+      0.972,
+      0.978,
+      0.986,
+      0.986,
+      0.985,
+      0.987,
+      0.988,
+      0.977,
+      0.968,
+      0.968,
+      0.985,
+      0.985,
+      0.987,
+      0.983,
+      0.983,
+      0.988,
+      0.988,
+      0.986,
+      0.988,
+      0.988,
+      0.988,
+      0.987,
+      0.987,
+      0.987,
+      0.983,
+      0.979,
+      0.982,
+      0.982,
+      0.979,
+      0.982,
+      0.976,
+      0.979,
+      0.986,
+      0.978,
+      0.98,
+      0.987,
+      0.988,
+      0.985,
+      0.988,
+      0.988,
+      0.988,
+      0.986,
+      0.987,
+      0.987,
+      0.982,
+      0.98,
+      0.985,
+      0.98,
+      0.984,
+      0.984,
+      0.985,
+      0.987,
+      0.987,
+      0.988,
+      0.988,
+      0.988,
+      0.988,
+      0.989,
+      0.989,
+      0.988,
+      0.987,
+      0.988,
+      0.987,
+      0.982,
+      0.986,
+      0.986,
+      0.987,
+      0.989,
+      0.988,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.989,
+      0.988,
+      0.988,
+      0.984,
+      0.98,
+      0.975,
+      0.968,
+      0.941,
+      0.942,
+      0.945,
+      0.947,
+      0.966,
+      0.958,
+      0.962,
+      0.981,
+      0.985,
+      0.981,
+      0.985,
+      0.987,
+      0.988,
+      0.987,
+      0.985,
+      0.988,
+      0.986,
+      0.978,
+      0.982,
+      0.978,
+      0.96,
+      0.952,
+      0.98,
+      0.981,
+      0.966,
+      0.98,
+      0.986,
+      0.98,
+      0.979,
+      0.987,
+      0.982,
+      0.964,
+      0.976,
+      0.979,
+      0.949,
+      0.956,
+      0.975,
+      0.964,
+      0.94,
+      0.956,
+      0.961,
+      0.938,
+      0.945,
+      0.947,
+      0.912,
+      0.903,
+      0.918,
+      0.918,
+      0.916,
+      0.937,
+      0.948,
+      0.945,
+      0.925,
+      0.948,
+      0.963,
+      0.953,
+      0.962,
+      0.961,
+      0.958,
+      0.959,
+      0.95,
+      0.949,
+      0.937,
+      0.948,
+      0.957,
+      0.924,
+      0.908,
+      0.888,
+      0.927,
+      0.941,
+      0.931,
+      0.947,
+      0.973,
+      0.975,
+      0.969,
+      0.983,
+      0.986,
+      0.987,
+      0.987,
+      0.986,
+      0.983,
+      0.982,
+      0.983,
+      0.986,
+      0.985,
+      0.986,
+      0.984,
+      0.981,
+      0.978,
+      0.976,
+      0.961,
+      0.957,
+      0.965,
+      0.977,
+      0.977,
+      0.973,
+      0.946,
+      0.882,
+      0.865,
+      0.865,
+      0.897,
+      0.919,
+      0.965,
+      0.984,
+      0.984,
+      0.986,
+      0.986,
+      0.988,
+      0.985,
+      0.985,
+      0.98,
+      0.975,
+      0.958,
+      0.97,
+      0.972,
+      0.963,
+      0.972,
+      0.966,
+      0.967,
+      0.978,
+      0.979,
+      0.984,
+      0.987,
+      0.988,
+      0.987,
+      0.986,
+      0.978,
+      0.963,
+      0.932,
+      0.932,
+      0.942,
+      0.97,
+      0.97,
+      0.946,
+      0.965,
+      0.981,
+      0.981,
+      0.976,
+      0.984,
+      0.985,
+      0.986,
+      0.985,
+      0.984,
+      0.983,
+      0.986,
+      0.981,
+      0.957,
+      0.972,
+      0.978,
+      0.943,
+      0.922,
+      0.928,
+      0.932,
+      0.942,
+      0.952,
+      0.97,
+      0.957,
+      0.98,
+      0.98,
+      0.976,
+      0.983,
+      0.978,
+      0.986,
+      0.988,
+      0.985,
+      0.982,
+      0.962,
+      0.955,
+      0.965,
+      0.973,
+      0.984,
+      0.987,
+      0.987,
+      0.986,
+      0.983,
+      0.978,
+      0.955,
+      0.956,
+      0.972,
+      0.965,
+      0.957,
+      0.945,
+      0.917,
+      0.925,
+      0.935,
+      0.908,
+      0.868,
+      0.847,
+      0.751,
+      0.685,
+      0.672,
+      0.564,
+      0.594,
+      0.551,
+      0.663,
+      0.689,
+      0.763,
+      0.834,
+      0.871,
+      0.919,
+      0.939,
+      0.951,
+      0.966,
+      0.951,
+      0.963,
+      0.967,
+      0.964,
+      0.96,
+      0.966,
+      0.972,
+      0.948,
+      0.949,
+      0.915,
+      0.948,
+      0.975,
+      0.966,
+      0.956,
+      0.975,
+      0.981,
+      0.974,
+      0.975,
+      0.985,
+      0.984,
+      0.982,
+      0.983,
+      0.981,
+      0.98,
+      0.981,
+      0.978,
+      0.958,
+      0.975,
+      0.974,
+      0.951,
+      0.949,
+      0.965,
+      0.956,
+      0.929,
+      0.902,
+      0.748,
+      0.748,
+      0.891,
+      0.881,
+      0.899,
+      0.895,
+      0.932,
+      0.963,
+      0.98,
+      0.984,
+      0.983,
+      0.975,
+      0.966,
+      0.975,
+      0.982,
+      0.984,
+      0.985,
+      0.974,
+      0.961,
+      0.908,
+      0.914,
+      0.841,
+      0.875,
+      0.907,
+      0.9,
+      0.711,
+      0.696,
+      0.595,
+      0.544,
+      0.578,
+      0.589,
+      0.617,
+      0.607,
+      0.601,
+      0.545,
+      0.596,
+      0.602,
+      0.662,
+      0.698,
+      0.727,
+      0.785,
+      0.817,
+      0.867,
+      0.881,
+      0.907,
+      0.924,
+      0.957,
+      0.955,
+      0.967,
+      0.977,
+      0.973,
+      0.971,
+      0.963,
+      0.937,
+      0.944,
+      0.879,
+      0.911,
+      0.927,
+      0.904,
+      0.902,
+      0.941,
+      0.952,
+      0.96,
+      0.949,
+      0.942,
+      0.959,
+      0.969,
+      0.957,
+      0.956,
+      0.974,
+      0.973,
+      0.972,
+      0.974,
+      0.984,
+      0.984,
+      0.982,
+      0.98,
+      0.985,
+      0.982,
+      0.968,
+      0.976,
+      0.98,
+      0.974,
+      0.98,
+      0.984,
+      0.984,
+      0.981,
+      0.985,
+      0.982,
+      0.975,
+      0.985,
+      0.98,
+      0.947,
+      0.903,
+      0.92,
+      0.894,
+      0.915,
+      0.867,
+      0.897,
+      0.924,
+      0.879,
+      0.9,
+      0.92,
+      0.905,
+      0.912,
+      0.948,
+      0.936,
+      0.939,
+      0.959,
+      0.96,
+      0.943,
+      0.951,
+      0.976,
+      0.972,
+      0.967,
+      0.947,
+      0.953,
+      0.948,
+      0.948,
+      0.941,
+      0.969,
+      0.966,
+      0.957,
+      0.95,
+      0.948,
+      0.949,
+      0.927,
+      0.928,
+      0.917,
+      0.908,
+      0.895,
+      0.87,
+      0.851,
+      0.844,
+      0.817,
+      0.763,
+      0.736,
+      0.773,
+      0.641,
+      0.545,
+      0.538,
+      0.532,
+      0.531,
+      0.558,
+      0.584,
+      0.588,
+      0.582,
+      0.566,
+      0.56,
+      0.525,
+      0.464,
+      0.479,
+      0.402,
+      0.344,
+      0.293
+    ],
+    "content_fraction": 0.938,
+    "content_count": 1002,
+    "regions": [
+      [
+        2,
+        310
+      ],
+      [
+        323,
+        413
+      ],
+      [
+        415,
+        503
+      ],
+      [
+        523,
+        864
+      ],
+      [
+        872,
+        939
+      ],
+      [
+        953,
+        1051
+      ]
+    ]
+  }
+}

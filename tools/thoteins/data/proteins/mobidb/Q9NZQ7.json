@@ -1,0 +1,4050 @@
+{
+  "acc": "Q9NZQ7",
+  "reviewed": true,
+  "gene": "CD274",
+  "proteome": "UP000005640",
+  "name": "Programmed cell death 1 ligand 1",
+  "length": 290,
+  "organism": "Homo sapiens (Human)",
+  "ncbi_taxon_id": 9606,
+  "taxonomy": [
+    "Eukaryota",
+    "Metazoa",
+    "Chordata",
+    "Craniata",
+    "Vertebrata",
+    "Euteleostomi",
+    "Mammalia",
+    "Eutheria",
+    "Euarchontoglires",
+    "Primates",
+    "Haplorrhini",
+    "Catarrhini",
+    "Hominidae",
+    "Homo"
+  ],
+  "sequence": "MRIFAVFIFMTYWHLLNAFTVTVPKDLYVVEYGSNMTIECKFPVEKQLDLAALIVYWEMEDKNIIQFVHGEEDLKVQHSSYRQRARLLKDQLSLGNAALQITDVKLQDAGVYRCMISYGGADYKRITVKVNAPYNKINQRILVVDPVTSEHELTCQAEGYPKAEVIWTSSDHQVLSGKTTTTNSKREEKLFNVTSTLRINTTTNEIFYCTFRRLDPEENHTAELVIPELPLAHPPNERTHLVILGAILLCLGVALTFIFRLRKGRMMDVKKCGIQDTNSKKQSDTHLEET",
+  "localization": [
+    "Cell membrane; Single-pass type I membrane protein",
+    "Early endosome membrane; Single-pass type I membrane protein",
+    "Recycling endosome membrane; Single-pass type I membrane protein",
+    "Nucleus"
+  ],
+  "uniref100": "UniRef100_Q9NZQ7",
+  "uniref90": "UniRef90_Q9NZQ7",
+  "uniref50": "UniRef50_Q9NZQ7",
+  "uniparc": "UPI000003816A",
+  "derived-binding_mode_disorder_to_disorder-mobi": {
+    "regions": [
+      [
+        1,
+        16
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-binding_mode_disorder_to_disorder-priority": {
+    "regions": [
+      [
+        1,
+        16
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-binding_mode_disorder_to_order-mobi": {
+    "regions": [
+      [
+        139,
+        152
+      ],
+      [
+        177,
+        186
+      ]
+    ],
+    "content_fraction": 0.083,
+    "content_count": 24
+  },
+  "derived-binding_mode_disorder_to_order-priority": {
+    "regions": [
+      [
+        139,
+        152
+      ],
+      [
+        177,
+        186
+      ]
+    ],
+    "content_fraction": 0.083,
+    "content_count": 24
+  },
+  "derived-fixed-th_90": {
+    "regions": [
+      [
+        238,
+        259
+      ]
+    ],
+    "content_fraction": 0.076,
+    "content_count": 22
+  },
+  "derived-lip-flipper-5ius_C": {
+    "source_id": "5ius_C",
+    "regions": [
+      [
+        213,
+        231
+      ]
+    ],
+    "content_fraction": 0.066,
+    "content_count": 19
+  },
+  "derived-lip-flipper-5ius_D": {
+    "source_id": "5ius_D",
+    "regions": [
+      [
+        212,
+        228
+      ]
+    ],
+    "content_fraction": 0.059,
+    "content_count": 17
+  },
+  "derived-lip-merge": {
+    "regions": [
+      [
+        212,
+        231
+      ]
+    ],
+    "content_fraction": 0.069,
+    "content_count": 20
+  },
+  "derived-lip-priority": {
+    "regions": [
+      [
+        212,
+        231
+      ]
+    ],
+    "content_fraction": 0.069,
+    "content_count": 20
+  },
+  "derived-missing_residues-mobi-3bik_A": {
+    "source_id": "3bik_A",
+    "regions": [
+      [
+        230,
+        239
+      ]
+    ],
+    "content_fraction": 0.034,
+    "content_count": 10
+  },
+  "derived-missing_residues-mobi-3bis_A": {
+    "source_id": "3bis_A",
+    "regions": [
+      [
+        18,
+        18
+      ],
+      [
+        231,
+        239
+      ]
+    ],
+    "content_fraction": 0.034,
+    "content_count": 10
+  },
+  "derived-missing_residues-mobi-3bis_B": {
+    "source_id": "3bis_B",
+    "regions": [
+      [
+        230,
+        239
+      ]
+    ],
+    "content_fraction": 0.034,
+    "content_count": 10
+  },
+  "derived-missing_residues-mobi-3fn3_A": {
+    "source_id": "3fn3_A",
+    "regions": [
+      [
+        233,
+        238
+      ]
+    ],
+    "content_fraction": 0.021,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-3fn3_B": {
+    "source_id": "3fn3_B",
+    "regions": [
+      [
+        229,
+        238
+      ]
+    ],
+    "content_fraction": 0.034,
+    "content_count": 10
+  },
+  "derived-missing_residues-mobi-3sbw_C": {
+    "source_id": "3sbw_C",
+    "regions": [
+      [
+        185,
+        188
+      ],
+      [
+        230,
+        239
+      ]
+    ],
+    "content_fraction": 0.048,
+    "content_count": 14
+  },
+  "derived-missing_residues-mobi-4z18_A": {
+    "source_id": "4z18_A",
+    "regions": [
+      [
+        231,
+        239
+      ]
+    ],
+    "content_fraction": 0.031,
+    "content_count": 9
+  },
+  "derived-missing_residues-mobi-4z18_B": {
+    "source_id": "4z18_B",
+    "regions": [
+      [
+        228,
+        239
+      ]
+    ],
+    "content_fraction": 0.041,
+    "content_count": 12
+  },
+  "derived-missing_residues-mobi-5ggt_A": {
+    "source_id": "5ggt_A",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-5grj_C": {
+    "source_id": "5grj_C",
+    "regions": [
+      [
+        185,
+        187
+      ],
+      [
+        234,
+        238
+      ]
+    ],
+    "content_fraction": 0.028,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-5ius_C": {
+    "source_id": "5ius_C",
+    "regions": [
+      [
+        232,
+        239
+      ]
+    ],
+    "content_fraction": 0.028,
+    "content_count": 8
+  },
+  "derived-missing_residues-mobi-5ius_D": {
+    "source_id": "5ius_D",
+    "regions": [
+      [
+        229,
+        239
+      ]
+    ],
+    "content_fraction": 0.038,
+    "content_count": 11
+  },
+  "derived-missing_residues-mobi-5j89_A": {
+    "source_id": "5j89_A",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5j89_B": {
+    "source_id": "5j89_B",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5j89_C": {
+    "source_id": "5j89_C",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5j89_D": {
+    "source_id": "5j89_D",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5jdr_A": {
+    "source_id": "5jdr_A",
+    "regions": [
+      [
+        18,
+        21
+      ],
+      [
+        231,
+        239
+      ]
+    ],
+    "content_fraction": 0.045,
+    "content_count": 13
+  },
+  "derived-missing_residues-mobi-5jdr_B": {
+    "source_id": "5jdr_B",
+    "regions": [
+      [
+        18,
+        18
+      ],
+      [
+        228,
+        239
+      ]
+    ],
+    "content_fraction": 0.045,
+    "content_count": 13
+  },
+  "derived-missing_residues-mobi-5n2d_A": {
+    "source_id": "5n2d_A",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5n2d_B": {
+    "source_id": "5n2d_B",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5n2d_C": {
+    "source_id": "5n2d_C",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5n2d_D": {
+    "source_id": "5n2d_D",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-5x8l_A": {
+    "source_id": "5x8l_A",
+    "regions": [
+      [
+        73,
+        75
+      ],
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.014,
+    "content_count": 4
+  },
+  "derived-missing_residues-mobi-5x8l_D": {
+    "source_id": "5x8l_D",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-5x8l_G": {
+    "source_id": "5x8l_G",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-5x8l_J": {
+    "source_id": "5x8l_J",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-5x8l_M": {
+    "source_id": "5x8l_M",
+    "regions": [
+      [
+        46,
+        47
+      ],
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 3
+  },
+  "derived-missing_residues-mobi-5x8m_A": {
+    "source_id": "5x8m_A",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-5xj4_A": {
+    "source_id": "5xj4_A",
+    "regions": [
+      [
+        185,
+        186
+      ],
+      [
+        215,
+        217
+      ],
+      [
+        229,
+        238
+      ]
+    ],
+    "content_fraction": 0.052,
+    "content_count": 15
+  },
+  "derived-missing_residues-mobi-5xxy_C": {
+    "source_id": "5xxy_C",
+    "regions": [
+      [
+        45,
+        48
+      ],
+      [
+        72,
+        83
+      ],
+      [
+        133,
+        133
+      ]
+    ],
+    "content_fraction": 0.059,
+    "content_count": 17
+  },
+  "derived-missing_residues-mobi-6nnv_B": {
+    "source_id": "6nnv_B",
+    "regions": [
+      [
+        46,
+        47
+      ]
+    ],
+    "content_fraction": 0.007,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6nnv_C": {
+    "source_id": "6nnv_C",
+    "regions": [
+      [
+        46,
+        47
+      ]
+    ],
+    "content_fraction": 0.007,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6nnv_D": {
+    "source_id": "6nnv_D",
+    "regions": [
+      [
+        46,
+        47
+      ]
+    ],
+    "content_fraction": 0.007,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6np9_A": {
+    "source_id": "6np9_A",
+    "regions": [
+      [
+        45,
+        46
+      ]
+    ],
+    "content_fraction": 0.007,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-6pv9_A": {
+    "source_id": "6pv9_A",
+    "regions": [
+      [
+        184,
+        189
+      ],
+      [
+        230,
+        239
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-7c88_C": {
+    "source_id": "7c88_C",
+    "regions": [
+      [
+        1,
+        18
+      ],
+      [
+        135,
+        136
+      ]
+    ],
+    "content_fraction": 0.069,
+    "content_count": 20
+  },
+  "derived-missing_residues-mobi-7c88_F": {
+    "source_id": "7c88_F",
+    "regions": [
+      [
+        1,
+        18
+      ],
+      [
+        135,
+        136
+      ]
+    ],
+    "content_fraction": 0.069,
+    "content_count": 20
+  },
+  "derived-missing_residues-mobi-7nld_A": {
+    "source_id": "7nld_A",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-7nld_D": {
+    "source_id": "7nld_D",
+    "regions": [
+      [
+        18,
+        18
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 3
+  },
+  "derived-missing_residues-mobi-7nld_E": {
+    "source_id": "7nld_E",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-7nld_F": {
+    "source_id": "7nld_F",
+    "regions": [
+      [
+        133,
+        134
+      ]
+    ],
+    "content_fraction": 0.007,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-7oun_A": {
+    "source_id": "7oun_A",
+    "regions": [
+      [
+        17,
+        17
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-7ux5_A": {
+    "source_id": "7ux5_A",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-7ux5_G": {
+    "source_id": "7ux5_G",
+    "regions": [
+      [
+        132,
+        134
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 3
+  },
+  "derived-missing_residues-mobi-7ux5_I": {
+    "source_id": "7ux5_I",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-7ux5_K": {
+    "source_id": "7ux5_K",
+    "regions": [
+      [
+        45,
+        47
+      ],
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.014,
+    "content_count": 4
+  },
+  "derived-missing_residues-mobi-7uxp_A": {
+    "source_id": "7uxp_A",
+    "regions": [
+      [
+        132,
+        134
+      ]
+    ],
+    "content_fraction": 0.01,
+    "content_count": 3
+  },
+  "derived-missing_residues-mobi-7uxp_B": {
+    "source_id": "7uxp_B",
+    "regions": [
+      [
+        18,
+        20
+      ],
+      [
+        43,
+        53
+      ],
+      [
+        118,
+        120
+      ],
+      [
+        133,
+        134
+      ]
+    ],
+    "content_fraction": 0.066,
+    "content_count": 19
+  },
+  "derived-missing_residues-mobi-7xad_A": {
+    "source_id": "7xad_A",
+    "regions": [
+      [
+        1,
+        17
+      ],
+      [
+        228,
+        238
+      ]
+    ],
+    "content_fraction": 0.097,
+    "content_count": 28
+  },
+  "derived-missing_residues-mobi-7xad_C": {
+    "source_id": "7xad_C",
+    "regions": [
+      [
+        1,
+        18
+      ],
+      [
+        186,
+        187
+      ],
+      [
+        214,
+        217
+      ],
+      [
+        229,
+        238
+      ]
+    ],
+    "content_fraction": 0.117,
+    "content_count": 34
+  },
+  "derived-missing_residues-mobi-7xad_E": {
+    "source_id": "7xad_E",
+    "regions": [
+      [
+        1,
+        18
+      ],
+      [
+        139,
+        152
+      ],
+      [
+        162,
+        165
+      ],
+      [
+        177,
+        195
+      ],
+      [
+        204,
+        204
+      ],
+      [
+        213,
+        217
+      ],
+      [
+        226,
+        238
+      ]
+    ],
+    "content_fraction": 0.255,
+    "content_count": 74
+  },
+  "derived-missing_residues-mobi-7xad_G": {
+    "source_id": "7xad_G",
+    "regions": [
+      [
+        1,
+        17
+      ],
+      [
+        216,
+        217
+      ],
+      [
+        229,
+        238
+      ]
+    ],
+    "content_fraction": 0.1,
+    "content_count": 29
+  },
+  "derived-missing_residues-mobi-7xae_A": {
+    "source_id": "7xae_A",
+    "regions": [
+      [
+        1,
+        17
+      ],
+      [
+        230,
+        238
+      ]
+    ],
+    "content_fraction": 0.09,
+    "content_count": 26
+  },
+  "derived-missing_residues-mobi-7xae_B": {
+    "source_id": "7xae_B",
+    "regions": [
+      [
+        1,
+        17
+      ],
+      [
+        230,
+        238
+      ]
+    ],
+    "content_fraction": 0.09,
+    "content_count": 26
+  },
+  "derived-missing_residues-mobi-7xyq_A": {
+    "source_id": "7xyq_A",
+    "regions": [
+      [
+        184,
+        187
+      ]
+    ],
+    "content_fraction": 0.014,
+    "content_count": 4
+  },
+  "derived-missing_residues-mobi-7yds_A": {
+    "source_id": "7yds_A",
+    "regions": [
+      [
+        1,
+        17
+      ],
+      [
+        135,
+        136
+      ]
+    ],
+    "content_fraction": 0.066,
+    "content_count": 19
+  },
+  "derived-missing_residues-mobi-8alx_A": {
+    "source_id": "8alx_A",
+    "regions": [
+      [
+        18,
+        19
+      ]
+    ],
+    "content_fraction": 0.007,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-8aok_A": {
+    "source_id": "8aok_A",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-8aom_A": {
+    "source_id": "8aom_A",
+    "regions": [
+      [
+        216,
+        217
+      ],
+      [
+        236,
+        239
+      ]
+    ],
+    "content_fraction": 0.021,
+    "content_count": 6
+  },
+  "derived-missing_residues-mobi-8k5n_A": {
+    "source_id": "8k5n_A",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-8k5n_B": {
+    "source_id": "8k5n_B",
+    "regions": [
+      [
+        134,
+        134
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-8p1o_A": {
+    "source_id": "8p1o_A",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-8p1o_B": {
+    "source_id": "8p1o_B",
+    "regions": [
+      [
+        2,
+        17
+      ]
+    ],
+    "content_fraction": 0.055,
+    "content_count": 16
+  },
+  "derived-missing_residues-mobi-8p64_A": {
+    "source_id": "8p64_A",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-8p64_B": {
+    "source_id": "8p64_B",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-8rpb_C": {
+    "source_id": "8rpb_C",
+    "regions": [
+      [
+        132,
+        133
+      ]
+    ],
+    "content_fraction": 0.007,
+    "content_count": 2
+  },
+  "derived-missing_residues-mobi-9eo0_A": {
+    "source_id": "9eo0_A",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-9eo0_B": {
+    "source_id": "9eo0_B",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-9eo0_C": {
+    "source_id": "9eo0_C",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-9eo0_D": {
+    "source_id": "9eo0_D",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-9eo0_E": {
+    "source_id": "9eo0_E",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-mobi-9eo0_F": {
+    "source_id": "9eo0_F",
+    "regions": [
+      [
+        15,
+        15
+      ]
+    ],
+    "content_fraction": 0.003,
+    "content_count": 1
+  },
+  "derived-missing_residues-priority": {
+    "regions": [
+      [
+        1,
+        17
+      ]
+    ],
+    "content_fraction": 0.059,
+    "content_count": 17
+  },
+  "derived-missing_residues-th_90": {
+    "regions": [
+      [
+        1,
+        17
+      ]
+    ],
+    "content_fraction": 0.059,
+    "content_count": 17
+  },
+  "derived-mobile-mobi-6l8r_A": {
+    "source_id": "6l8r_A",
+    "regions": [
+      [
+        260,
+        264
+      ],
+      [
+        266,
+        280
+      ],
+      [
+        285,
+        290
+      ]
+    ],
+    "content_fraction": 0.09,
+    "content_count": 26
+  },
+  "derived-mobile-mobi-7dcv_A": {
+    "source_id": "7dcv_A",
+    "regions": [
+      [
+        232,
+        237
+      ],
+      [
+        262,
+        290
+      ]
+    ],
+    "content_fraction": 0.121,
+    "content_count": 35
+  },
+  "derived-mobile-th_90": {
+    "regions": [
+      [
+        266,
+        280
+      ]
+    ],
+    "content_fraction": 0.052,
+    "content_count": 15
+  },
+  "derived-observed-mobi-3bik_A": {
+    "source_id": "3bik_A",
+    "regions": [
+      [
+        18,
+        229
+      ]
+    ],
+    "content_fraction": 0.731,
+    "content_count": 212
+  },
+  "derived-observed-mobi-3bis_A": {
+    "source_id": "3bis_A",
+    "regions": [
+      [
+        19,
+        230
+      ]
+    ],
+    "content_fraction": 0.731,
+    "content_count": 212
+  },
+  "derived-observed-mobi-3bis_B": {
+    "source_id": "3bis_B",
+    "regions": [
+      [
+        18,
+        229
+      ]
+    ],
+    "content_fraction": 0.731,
+    "content_count": 212
+  },
+  "derived-observed-mobi-3fn3_A": {
+    "source_id": "3fn3_A",
+    "regions": [
+      [
+        19,
+        232
+      ]
+    ],
+    "content_fraction": 0.738,
+    "content_count": 214
+  },
+  "derived-observed-mobi-3fn3_B": {
+    "source_id": "3fn3_B",
+    "regions": [
+      [
+        19,
+        228
+      ]
+    ],
+    "content_fraction": 0.724,
+    "content_count": 210
+  },
+  "derived-observed-mobi-3sbw_C": {
+    "source_id": "3sbw_C",
+    "regions": [
+      [
+        19,
+        184
+      ],
+      [
+        189,
+        229
+      ]
+    ],
+    "content_fraction": 0.714,
+    "content_count": 207
+  },
+  "derived-observed-mobi-4z18_A": {
+    "source_id": "4z18_A",
+    "regions": [
+      [
+        19,
+        230
+      ]
+    ],
+    "content_fraction": 0.731,
+    "content_count": 212
+  },
+  "derived-observed-mobi-4z18_B": {
+    "source_id": "4z18_B",
+    "regions": [
+      [
+        19,
+        227
+      ]
+    ],
+    "content_fraction": 0.721,
+    "content_count": 209
+  },
+  "derived-observed-mobi-4zqk_A": {
+    "source_id": "4zqk_A",
+    "regions": [
+      [
+        18,
+        132
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-5c3t_A": {
+    "source_id": "5c3t_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5ggt_A": {
+    "source_id": "5ggt_A",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-5grj_C": {
+    "source_id": "5grj_C",
+    "regions": [
+      [
+        18,
+        184
+      ],
+      [
+        188,
+        233
+      ]
+    ],
+    "content_fraction": 0.734,
+    "content_count": 213
+  },
+  "derived-observed-mobi-5ius_C": {
+    "source_id": "5ius_C",
+    "regions": [
+      [
+        18,
+        231
+      ]
+    ],
+    "content_fraction": 0.738,
+    "content_count": 214
+  },
+  "derived-observed-mobi-5ius_D": {
+    "source_id": "5ius_D",
+    "regions": [
+      [
+        18,
+        228
+      ]
+    ],
+    "content_fraction": 0.728,
+    "content_count": 211
+  },
+  "derived-observed-mobi-5j89_A": {
+    "source_id": "5j89_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5j89_B": {
+    "source_id": "5j89_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5j89_C": {
+    "source_id": "5j89_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5j89_D": {
+    "source_id": "5j89_D",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5j8o_A": {
+    "source_id": "5j8o_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5j8o_B": {
+    "source_id": "5j8o_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5jdr_A": {
+    "source_id": "5jdr_A",
+    "regions": [
+      [
+        22,
+        230
+      ]
+    ],
+    "content_fraction": 0.721,
+    "content_count": 209
+  },
+  "derived-observed-mobi-5jdr_B": {
+    "source_id": "5jdr_B",
+    "regions": [
+      [
+        19,
+        227
+      ]
+    ],
+    "content_fraction": 0.721,
+    "content_count": 209
+  },
+  "derived-observed-mobi-5jds_B": {
+    "source_id": "5jds_B",
+    "regions": [
+      [
+        18,
+        132
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-5n2d_A": {
+    "source_id": "5n2d_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5n2d_B": {
+    "source_id": "5n2d_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5n2d_C": {
+    "source_id": "5n2d_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5n2d_D": {
+    "source_id": "5n2d_D",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5n2f_A": {
+    "source_id": "5n2f_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5n2f_B": {
+    "source_id": "5n2f_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5niu_A": {
+    "source_id": "5niu_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5niu_B": {
+    "source_id": "5niu_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5niu_C": {
+    "source_id": "5niu_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5niu_D": {
+    "source_id": "5niu_D",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-5o45_A": {
+    "source_id": "5o45_A",
+    "regions": [
+      [
+        17,
+        134
+      ]
+    ],
+    "content_fraction": 0.407,
+    "content_count": 118
+  },
+  "derived-observed-mobi-5o4y_A": {
+    "source_id": "5o4y_A",
+    "regions": [
+      [
+        18,
+        132
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-5o4y_B": {
+    "source_id": "5o4y_B",
+    "regions": [
+      [
+        18,
+        132
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-5o4y_C": {
+    "source_id": "5o4y_C",
+    "regions": [
+      [
+        18,
+        132
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-5x8l_A": {
+    "source_id": "5x8l_A",
+    "regions": [
+      [
+        18,
+        72
+      ],
+      [
+        76,
+        133
+      ]
+    ],
+    "content_fraction": 0.39,
+    "content_count": 113
+  },
+  "derived-observed-mobi-5x8l_D": {
+    "source_id": "5x8l_D",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-5x8l_G": {
+    "source_id": "5x8l_G",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-5x8l_J": {
+    "source_id": "5x8l_J",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-5x8l_M": {
+    "source_id": "5x8l_M",
+    "regions": [
+      [
+        18,
+        45
+      ],
+      [
+        48,
+        133
+      ]
+    ],
+    "content_fraction": 0.393,
+    "content_count": 114
+  },
+  "derived-observed-mobi-5x8m_A": {
+    "source_id": "5x8m_A",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-5xj4_A": {
+    "source_id": "5xj4_A",
+    "regions": [
+      [
+        19,
+        184
+      ],
+      [
+        187,
+        214
+      ],
+      [
+        218,
+        228
+      ]
+    ],
+    "content_fraction": 0.707,
+    "content_count": 205
+  },
+  "derived-observed-mobi-5xxy_C": {
+    "source_id": "5xxy_C",
+    "regions": [
+      [
+        18,
+        44
+      ],
+      [
+        49,
+        71
+      ],
+      [
+        84,
+        132
+      ]
+    ],
+    "content_fraction": 0.341,
+    "content_count": 99
+  },
+  "derived-observed-mobi-6l8r_A": {
+    "source_id": "6l8r_A",
+    "regions": [
+      [
+        260,
+        290
+      ]
+    ],
+    "content_fraction": 0.107,
+    "content_count": 31
+  },
+  "derived-observed-mobi-6nm7_A": {
+    "source_id": "6nm7_A",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-6nm7_B": {
+    "source_id": "6nm7_B",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-6nm8_A": {
+    "source_id": "6nm8_A",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-6nm8_B": {
+    "source_id": "6nm8_B",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-6nnv_A": {
+    "source_id": "6nnv_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6nnv_B": {
+    "source_id": "6nnv_B",
+    "regions": [
+      [
+        18,
+        45
+      ],
+      [
+        48,
+        134
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-6nnv_C": {
+    "source_id": "6nnv_C",
+    "regions": [
+      [
+        18,
+        45
+      ],
+      [
+        48,
+        134
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-6nnv_D": {
+    "source_id": "6nnv_D",
+    "regions": [
+      [
+        18,
+        45
+      ],
+      [
+        48,
+        134
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-6noj_A": {
+    "source_id": "6noj_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6noj_B": {
+    "source_id": "6noj_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6nos_A": {
+    "source_id": "6nos_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6nos_B": {
+    "source_id": "6nos_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6np9_A": {
+    "source_id": "6np9_A",
+    "regions": [
+      [
+        18,
+        44
+      ],
+      [
+        47,
+        134
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-6pv9_A": {
+    "source_id": "6pv9_A",
+    "regions": [
+      [
+        19,
+        183
+      ],
+      [
+        190,
+        229
+      ]
+    ],
+    "content_fraction": 0.707,
+    "content_count": 205
+  },
+  "derived-observed-mobi-6r3k_A": {
+    "source_id": "6r3k_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6r3k_B": {
+    "source_id": "6r3k_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6r3k_C": {
+    "source_id": "6r3k_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6r3k_D": {
+    "source_id": "6r3k_D",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6rpg_A": {
+    "source_id": "6rpg_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6rpg_B": {
+    "source_id": "6rpg_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6vqn_A": {
+    "source_id": "6vqn_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6vqn_B": {
+    "source_id": "6vqn_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6vqn_C": {
+    "source_id": "6vqn_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-6ycr_A": {
+    "source_id": "6ycr_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7bea_A": {
+    "source_id": "7bea_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7bea_B": {
+    "source_id": "7bea_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7c88_C": {
+    "source_id": "7c88_C",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7c88_F": {
+    "source_id": "7c88_F",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7czd_B": {
+    "source_id": "7czd_B",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7czd_D": {
+    "source_id": "7czd_D",
+    "regions": [
+      [
+        19,
+        134
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7dcv_A": {
+    "source_id": "7dcv_A",
+    "regions": [
+      [
+        232,
+        290
+      ]
+    ],
+    "content_fraction": 0.203,
+    "content_count": 59
+  },
+  "derived-observed-mobi-7dy7_A": {
+    "source_id": "7dy7_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7dy7_B": {
+    "source_id": "7dy7_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7nld_A": {
+    "source_id": "7nld_A",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7nld_B": {
+    "source_id": "7nld_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7nld_C": {
+    "source_id": "7nld_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7nld_D": {
+    "source_id": "7nld_D",
+    "regions": [
+      [
+        19,
+        44
+      ],
+      [
+        46,
+        133
+      ]
+    ],
+    "content_fraction": 0.393,
+    "content_count": 114
+  },
+  "derived-observed-mobi-7nld_E": {
+    "source_id": "7nld_E",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7nld_F": {
+    "source_id": "7nld_F",
+    "regions": [
+      [
+        18,
+        132
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-7oun_A": {
+    "source_id": "7oun_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7sjq_A": {
+    "source_id": "7sjq_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7tps_B": {
+    "source_id": "7tps_B",
+    "regions": [
+      [
+        19,
+        227
+      ]
+    ],
+    "content_fraction": 0.721,
+    "content_count": 209
+  },
+  "derived-observed-mobi-7tps_D": {
+    "source_id": "7tps_D",
+    "regions": [
+      [
+        19,
+        227
+      ]
+    ],
+    "content_fraction": 0.721,
+    "content_count": 209
+  },
+  "derived-observed-mobi-7ux5_A": {
+    "source_id": "7ux5_A",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7ux5_B": {
+    "source_id": "7ux5_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7ux5_E": {
+    "source_id": "7ux5_E",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7ux5_G": {
+    "source_id": "7ux5_G",
+    "regions": [
+      [
+        18,
+        131
+      ]
+    ],
+    "content_fraction": 0.393,
+    "content_count": 114
+  },
+  "derived-observed-mobi-7ux5_I": {
+    "source_id": "7ux5_I",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-7ux5_K": {
+    "source_id": "7ux5_K",
+    "regions": [
+      [
+        18,
+        44
+      ],
+      [
+        48,
+        133
+      ]
+    ],
+    "content_fraction": 0.39,
+    "content_count": 113
+  },
+  "derived-observed-mobi-7uxo_A": {
+    "source_id": "7uxo_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7uxp_A": {
+    "source_id": "7uxp_A",
+    "regions": [
+      [
+        18,
+        131
+      ]
+    ],
+    "content_fraction": 0.393,
+    "content_count": 114
+  },
+  "derived-observed-mobi-7uxp_B": {
+    "source_id": "7uxp_B",
+    "regions": [
+      [
+        21,
+        42
+      ],
+      [
+        54,
+        117
+      ],
+      [
+        121,
+        132
+      ]
+    ],
+    "content_fraction": 0.338,
+    "content_count": 98
+  },
+  "derived-observed-mobi-7uxq_A": {
+    "source_id": "7uxq_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7uxq_B": {
+    "source_id": "7uxq_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_A": {
+    "source_id": "7vun_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_B": {
+    "source_id": "7vun_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_C": {
+    "source_id": "7vun_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_D": {
+    "source_id": "7vun_D",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_E": {
+    "source_id": "7vun_E",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_F": {
+    "source_id": "7vun_F",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_G": {
+    "source_id": "7vun_G",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7vun_H": {
+    "source_id": "7vun_H",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-7xad_A": {
+    "source_id": "7xad_A",
+    "regions": [
+      [
+        18,
+        227
+      ]
+    ],
+    "content_fraction": 0.724,
+    "content_count": 210
+  },
+  "derived-observed-mobi-7xad_C": {
+    "source_id": "7xad_C",
+    "regions": [
+      [
+        19,
+        185
+      ],
+      [
+        188,
+        213
+      ],
+      [
+        218,
+        228
+      ]
+    ],
+    "content_fraction": 0.703,
+    "content_count": 204
+  },
+  "derived-observed-mobi-7xad_E": {
+    "source_id": "7xad_E",
+    "regions": [
+      [
+        19,
+        138
+      ],
+      [
+        153,
+        161
+      ],
+      [
+        166,
+        176
+      ],
+      [
+        196,
+        203
+      ],
+      [
+        205,
+        212
+      ],
+      [
+        218,
+        225
+      ]
+    ],
+    "content_fraction": 0.566,
+    "content_count": 164
+  },
+  "derived-observed-mobi-7xad_G": {
+    "source_id": "7xad_G",
+    "regions": [
+      [
+        18,
+        215
+      ],
+      [
+        218,
+        228
+      ]
+    ],
+    "content_fraction": 0.721,
+    "content_count": 209
+  },
+  "derived-observed-mobi-7xae_A": {
+    "source_id": "7xae_A",
+    "regions": [
+      [
+        18,
+        229
+      ]
+    ],
+    "content_fraction": 0.731,
+    "content_count": 212
+  },
+  "derived-observed-mobi-7xae_B": {
+    "source_id": "7xae_B",
+    "regions": [
+      [
+        18,
+        229
+      ]
+    ],
+    "content_fraction": 0.731,
+    "content_count": 212
+  },
+  "derived-observed-mobi-7xyq_A": {
+    "source_id": "7xyq_A",
+    "regions": [
+      [
+        19,
+        183
+      ],
+      [
+        188,
+        225
+      ]
+    ],
+    "content_fraction": 0.7,
+    "content_count": 203
+  },
+  "derived-observed-mobi-7yds_A": {
+    "source_id": "7yds_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8alx_A": {
+    "source_id": "8alx_A",
+    "regions": [
+      [
+        20,
+        134
+      ]
+    ],
+    "content_fraction": 0.397,
+    "content_count": 115
+  },
+  "derived-observed-mobi-8aok_A": {
+    "source_id": "8aok_A",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-8aom_A": {
+    "source_id": "8aom_A",
+    "regions": [
+      [
+        19,
+        215
+      ],
+      [
+        218,
+        235
+      ]
+    ],
+    "content_fraction": 0.741,
+    "content_count": 215
+  },
+  "derived-observed-mobi-8jba_A": {
+    "source_id": "8jba_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8jba_B": {
+    "source_id": "8jba_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8k5n_A": {
+    "source_id": "8k5n_A",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-8k5n_B": {
+    "source_id": "8k5n_B",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-8or1_A": {
+    "source_id": "8or1_A",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-8or1_B": {
+    "source_id": "8or1_B",
+    "regions": [
+      [
+        18,
+        133
+      ]
+    ],
+    "content_fraction": 0.4,
+    "content_count": 116
+  },
+  "derived-observed-mobi-8p1o_A": {
+    "source_id": "8p1o_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8p1o_B": {
+    "source_id": "8p1o_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8p64_A": {
+    "source_id": "8p64_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8p64_B": {
+    "source_id": "8p64_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8r6q_A": {
+    "source_id": "8r6q_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8r6q_B": {
+    "source_id": "8r6q_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-8rpb_C": {
+    "source_id": "8rpb_C",
+    "regions": [
+      [
+        18,
+        131
+      ]
+    ],
+    "content_fraction": 0.393,
+    "content_count": 114
+  },
+  "derived-observed-mobi-9eo0_A": {
+    "source_id": "9eo0_A",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-9eo0_B": {
+    "source_id": "9eo0_B",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-9eo0_C": {
+    "source_id": "9eo0_C",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-9eo0_D": {
+    "source_id": "9eo0_D",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-9eo0_E": {
+    "source_id": "9eo0_E",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-mobi-9eo0_F": {
+    "source_id": "9eo0_F",
+    "regions": [
+      [
+        18,
+        134
+      ]
+    ],
+    "content_fraction": 0.403,
+    "content_count": 117
+  },
+  "derived-observed-priority": {
+    "regions": [
+      [
+        18,
+        133
+      ],
+      [
+        137,
+        183
+      ],
+      [
+        189,
+        214
+      ],
+      [
+        218,
+        227
+      ],
+      [
+        240,
+        290
+      ]
+    ],
+    "content_fraction": 0.862,
+    "content_count": 250
+  },
+  "derived-observed-th_90": {
+    "regions": [
+      [
+        18,
+        133
+      ],
+      [
+        137,
+        183
+      ],
+      [
+        189,
+        214
+      ],
+      [
+        218,
+        227
+      ],
+      [
+        240,
+        290
+      ]
+    ],
+    "content_fraction": 0.862,
+    "content_count": 250
+  },
+  "homology-domain-gene3d": {
+    "regions": [
+      [
+        137,
+        239
+      ],
+      [
+        17,
+        136
+      ]
+    ],
+    "content_fraction": 0.769,
+    "content_count": 223,
+    "regions_ids": [
+      "2.60.40.10",
+      "2.60.40.10"
+    ],
+    "regions_names": [
+      "Immunoglobulin-like fold",
+      "Immunoglobulin-like fold"
+    ]
+  },
+  "homology-domain-merge": {
+    "regions": [
+      [
+        17,
+        239
+      ]
+    ],
+    "content_fraction": 0.769,
+    "content_count": 223
+  },
+  "homology-domain-pfam": {
+    "regions": [
+      [
+        137,
+        219
+      ],
+      [
+        29,
+        128
+      ]
+    ],
+    "content_fraction": 0.631,
+    "content_count": 183,
+    "regions_ids": [
+      "PF08205",
+      "PF07686"
+    ],
+    "regions_names": [
+      "CD80-like, immunoglobulin C2-set",
+      "Immunoglobulin V-set domain"
+    ]
+  },
+  "level": 1,
+  "prediction-disorder-alphafold": {
+    "scores": [
+      0.66,
+      0.666,
+      0.672,
+      0.676,
+      0.685,
+      0.679,
+      0.661,
+      0.653,
+      0.629,
+      0.627,
+      0.606,
+      0.597,
+      0.582,
+      0.569,
+      0.551,
+      0.526,
+      0.522,
+      0.504,
+      0.496,
+      0.477,
+      0.467,
+      0.455,
+      0.462,
+      0.442,
+      0.431,
+      0.408,
+      0.39,
+      0.359,
+      0.351,
+      0.325,
+      0.326,
+      0.329,
+      0.348,
+      0.385,
+      0.4,
+      0.398,
+      0.4,
+      0.398,
+      0.394,
+      0.393,
+      0.389,
+      0.373,
+      0.368,
+      0.364,
+      0.357,
+      0.35,
+      0.338,
+      0.337,
+      0.369,
+      0.365,
+      0.374,
+      0.362,
+      0.363,
+      0.353,
+      0.351,
+      0.342,
+      0.357,
+      0.326,
+      0.318,
+      0.29,
+      0.296,
+      0.3,
+      0.319,
+      0.312,
+      0.3,
+      0.316,
+      0.334,
+      0.348,
+      0.335,
+      0.365,
+      0.391,
+      0.397,
+      0.375,
+      0.364,
+      0.355,
+      0.353,
+      0.375,
+      0.398,
+      0.4,
+      0.4,
+      0.411,
+      0.416,
+      0.41,
+      0.384,
+      0.376,
+      0.361,
+      0.336,
+      0.305,
+      0.288,
+      0.294,
+      0.296,
+      0.266,
+      0.26,
+      0.267,
+      0.255,
+      0.22,
+      0.228,
+      0.232,
+      0.226,
+      0.225,
+      0.233,
+      0.212,
+      0.2,
+      0.191,
+      0.204,
+      0.189,
+      0.198,
+      0.209,
+      0.235,
+      0.244,
+      0.265,
+      0.276,
+      0.292,
+      0.292,
+      0.297,
+      0.28,
+      0.305,
+      0.303,
+      0.309,
+      0.293,
+      0.295,
+      0.281,
+      0.289,
+      0.301,
+      0.309,
+      0.317,
+      0.337,
+      0.347,
+      0.359,
+      0.369,
+      0.377,
+      0.354,
+      0.354,
+      0.348,
+      0.376,
+      0.375,
+      0.378,
+      0.366,
+      0.367,
+      0.357,
+      0.356,
+      0.333,
+      0.327,
+      0.321,
+      0.32,
+      0.324,
+      0.325,
+      0.329,
+      0.316,
+      0.334,
+      0.314,
+      0.312,
+      0.295,
+      0.293,
+      0.27,
+      0.261,
+      0.25,
+      0.259,
+      0.257,
+      0.251,
+      0.255,
+      0.272,
+      0.272,
+      0.309,
+      0.319,
+      0.351,
+      0.365,
+      0.387,
+      0.395,
+      0.415,
+      0.433,
+      0.434,
+      0.455,
+      0.47,
+      0.45,
+      0.48,
+      0.486,
+      0.482,
+      0.478,
+      0.486,
+      0.481,
+      0.486,
+      0.465,
+      0.452,
+      0.423,
+      0.424,
+      0.4,
+      0.417,
+      0.38,
+      0.388,
+      0.373,
+      0.382,
+      0.378,
+      0.373,
+      0.355,
+      0.339,
+      0.337,
+      0.303,
+      0.273,
+      0.279,
+      0.246,
+      0.245,
+      0.283,
+      0.305,
+      0.32,
+      0.33,
+      0.339,
+      0.348,
+      0.36,
+      0.364,
+      0.36,
+      0.352,
+      0.343,
+      0.342,
+      0.336,
+      0.349,
+      0.341,
+      0.36,
+      0.386,
+      0.421,
+      0.448,
+      0.474,
+      0.506,
+      0.528,
+      0.548,
+      0.582,
+      0.576,
+      0.563,
+      0.564,
+      0.571,
+      0.584,
+      0.589,
+      0.597,
+      0.595,
+      0.611,
+      0.619,
+      0.649,
+      0.657,
+      0.681,
+      0.679,
+      0.674,
+      0.675,
+      0.665,
+      0.651,
+      0.642,
+      0.627,
+      0.63,
+      0.625,
+      0.623,
+      0.621,
+      0.617,
+      0.614,
+      0.617,
+      0.619,
+      0.617,
+      0.623,
+      0.632,
+      0.648,
+      0.662,
+      0.669,
+      0.666,
+      0.666,
+      0.673,
+      0.681,
+      0.694,
+      0.703,
+      0.715,
+      0.724,
+      0.739,
+      0.747,
+      0.754,
+      0.76,
+      0.763,
+      0.781,
+      0.791,
+      0.798,
+      0.823,
+      0.833,
+      0.838,
+      0.849,
+      0.859,
+      0.865,
+      0.867,
+      0.869,
+      0.869,
+      0.879,
+      0.887,
+      0.89,
+      0.888,
+      0.892
+    ],
+    "content_fraction": 0.255,
+    "content_count": 74,
+    "regions": [
+      [
+        1,
+        13
+      ],
+      [
+        231,
+        290
+      ]
+    ]
+  },
+  "prediction-disorder-dis465": {
+    "regions": [
+      [
+        1,
+        1
+      ],
+      [
+        78,
+        81
+      ],
+      [
+        149,
+        153
+      ],
+      [
+        173,
+        182
+      ],
+      [
+        276,
+        290
+      ]
+    ],
+    "content_count": 35,
+    "content_fraction": 0.121
+  },
+  "prediction-disorder-disHL": {
+    "regions": [
+      [
+        1,
+        2
+      ],
+      [
+        38,
+        44
+      ],
+      [
+        102,
+        109
+      ],
+      [
+        119,
+        125
+      ],
+      [
+        132,
+        135
+      ],
+      [
+        137,
+        140
+      ],
+      [
+        143,
+        147
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        166,
+        204
+      ],
+      [
+        229,
+        233
+      ],
+      [
+        261,
+        290
+      ]
+    ],
+    "content_count": 112,
+    "content_fraction": 0.386
+  },
+  "prediction-disorder-espN": {
+    "regions": [
+      [
+        169,
+        182
+      ],
+      [
+        216,
+        219
+      ],
+      [
+        232,
+        238
+      ],
+      [
+        269,
+        290
+      ]
+    ],
+    "content_count": 47,
+    "content_fraction": 0.162
+  },
+  "prediction-disorder-espX": {
+    "regions": [
+      [
+        1,
+        3
+      ],
+      [
+        271,
+        290
+      ]
+    ],
+    "content_count": 23,
+    "content_fraction": 0.079
+  },
+  "prediction-disorder-glo": {
+    "regions": [
+      [
+        176,
+        177
+      ],
+      [
+        232,
+        233
+      ],
+      [
+        277,
+        278
+      ],
+      [
+        282,
+        284
+      ],
+      [
+        289,
+        290
+      ]
+    ],
+    "content_count": 11,
+    "content_fraction": 0.038
+  },
+  "prediction-disorder-iupl": {
+    "regions": [
+      [
+        177,
+        181
+      ],
+      [
+        185,
+        187
+      ],
+      [
+        223,
+        229
+      ],
+      [
+        272,
+        275
+      ],
+      [
+        278,
+        290
+      ]
+    ],
+    "content_count": 32,
+    "content_fraction": 0.11
+  },
+  "prediction-disorder-iups": {
+    "regions": [
+      [
+        178,
+        181
+      ],
+      [
+        280,
+        280
+      ],
+      [
+        282,
+        290
+      ]
+    ],
+    "content_count": 14,
+    "content_fraction": 0.048
+  },
+  "prediction-disorder-priority": {
+    "regions": [
+      [
+        231,
+        239
+      ]
+    ],
+    "content_fraction": 0.031,
+    "content_count": 9
+  },
+  "prediction-disorder-th_50": {
+    "regions": [
+      [
+        176,
+        181
+      ],
+      [
+        272,
+        290
+      ]
+    ],
+    "content_count": 25,
+    "content_fraction": 0.086
+  },
+  "prediction-lip-alphafold": {
+    "scores": [
+      0.845,
+      0.873,
+      0.886,
+      0.874,
+      0.895,
+      0.904,
+      0.895,
+      0.901,
+      0.899,
+      0.887,
+      0.881,
+      0.879,
+      0.863,
+      0.569,
+      0.551,
+      0.526,
+      0.522,
+      0.504,
+      0.496,
+      0.477,
+      0.467,
+      0.455,
+      0.462,
+      0.442,
+      0.431,
+      0.408,
+      0.39,
+      0.359,
+      0.351,
+      0.325,
+      0.326,
+      0.329,
+      0.348,
+      0.385,
+      0.4,
+      0.398,
+      0.4,
+      0.398,
+      0.394,
+      0.393,
+      0.389,
+      0.373,
+      0.368,
+      0.364,
+      0.357,
+      0.35,
+      0.338,
+      0.337,
+      0.369,
+      0.365,
+      0.374,
+      0.362,
+      0.363,
+      0.353,
+      0.351,
+      0.342,
+      0.357,
+      0.326,
+      0.318,
+      0.29,
+      0.296,
+      0.3,
+      0.319,
+      0.312,
+      0.3,
+      0.316,
+      0.334,
+      0.348,
+      0.335,
+      0.365,
+      0.391,
+      0.397,
+      0.375,
+      0.364,
+      0.355,
+      0.353,
+      0.375,
+      0.398,
+      0.4,
+      0.4,
+      0.411,
+      0.416,
+      0.41,
+      0.384,
+      0.376,
+      0.361,
+      0.336,
+      0.305,
+      0.288,
+      0.294,
+      0.296,
+      0.266,
+      0.26,
+      0.267,
+      0.255,
+      0.22,
+      0.228,
+      0.232,
+      0.226,
+      0.225,
+      0.233,
+      0.212,
+      0.2,
+      0.191,
+      0.204,
+      0.189,
+      0.198,
+      0.209,
+      0.235,
+      0.244,
+      0.265,
+      0.276,
+      0.292,
+      0.292,
+      0.297,
+      0.28,
+      0.305,
+      0.303,
+      0.309,
+      0.293,
+      0.295,
+      0.281,
+      0.289,
+      0.301,
+      0.309,
+      0.317,
+      0.337,
+      0.347,
+      0.359,
+      0.369,
+      0.377,
+      0.354,
+      0.354,
+      0.348,
+      0.376,
+      0.375,
+      0.378,
+      0.366,
+      0.367,
+      0.357,
+      0.356,
+      0.333,
+      0.327,
+      0.321,
+      0.32,
+      0.324,
+      0.325,
+      0.329,
+      0.316,
+      0.334,
+      0.314,
+      0.312,
+      0.295,
+      0.293,
+      0.27,
+      0.261,
+      0.25,
+      0.259,
+      0.257,
+      0.251,
+      0.255,
+      0.272,
+      0.272,
+      0.309,
+      0.319,
+      0.351,
+      0.365,
+      0.387,
+      0.395,
+      0.415,
+      0.433,
+      0.434,
+      0.455,
+      0.47,
+      0.45,
+      0.48,
+      0.486,
+      0.482,
+      0.478,
+      0.486,
+      0.481,
+      0.486,
+      0.465,
+      0.452,
+      0.423,
+      0.424,
+      0.4,
+      0.417,
+      0.38,
+      0.388,
+      0.373,
+      0.382,
+      0.378,
+      0.373,
+      0.355,
+      0.339,
+      0.337,
+      0.303,
+      0.273,
+      0.279,
+      0.246,
+      0.245,
+      0.283,
+      0.305,
+      0.32,
+      0.33,
+      0.339,
+      0.348,
+      0.36,
+      0.364,
+      0.36,
+      0.352,
+      0.343,
+      0.342,
+      0.336,
+      0.349,
+      0.341,
+      0.36,
+      0.386,
+      0.421,
+      0.448,
+      0.474,
+      0.506,
+      0.528,
+      0.548,
+      0.984,
+      0.576,
+      0.563,
+      0.564,
+      0.571,
+      0.835,
+      0.81,
+      0.785,
+      0.794,
+      0.816,
+      0.826,
+      0.82,
+      0.835,
+      0.854,
+      0.865,
+      0.902,
+      0.915,
+      0.924,
+      0.95,
+      0.955,
+      0.96,
+      0.97,
+      0.973,
+      0.972,
+      0.97,
+      0.975,
+      0.967,
+      0.966,
+      0.959,
+      0.967,
+      0.949,
+      0.952,
+      0.951,
+      0.939,
+      0.939,
+      0.919,
+      0.901,
+      0.884,
+      0.843,
+      0.831,
+      0.819,
+      0.812,
+      0.803,
+      0.814,
+      0.79,
+      0.804,
+      0.805,
+      0.796,
+      0.815,
+      0.8,
+      0.809,
+      0.81,
+      0.795,
+      0.806,
+      0.8,
+      0.798,
+      0.801,
+      0.798,
+      0.795,
+      0.806,
+      0.803,
+      0.772,
+      0.778,
+      0.784,
+      0.774
+    ],
+    "content_fraction": 0.252,
+    "content_count": 73,
+    "regions": [
+      [
+        1,
+        13
+      ],
+      [
+        231,
+        286
+      ]
+    ]
+  },
+  "prediction-lip-anchor": {
+    "regions": [
+      [
+        206,
+        211
+      ],
+      [
+        243,
+        260
+      ]
+    ],
+    "content_count": 24,
+    "content_fraction": 0.083
+  },
+  "prediction-lip-priority": {
+    "regions": [
+      [
+        1,
+        13
+      ],
+      [
+        206,
+        211
+      ],
+      [
+        232,
+        286
+      ]
+    ],
+    "content_fraction": 0.255,
+    "content_count": 74
+  },
+  "prediction-plddt-alphafold": {
+    "scores": [
+      0.63,
+      0.697,
+      0.728,
+      0.699,
+      0.749,
+      0.77,
+      0.75,
+      0.763,
+      0.758,
+      0.731,
+      0.715,
+      0.71,
+      0.672,
+      0.658,
+      0.626,
+      0.627,
+      0.69,
+      0.813,
+      0.918,
+      0.952,
+      0.974,
+      0.977,
+      0.98,
+      0.973,
+      0.965,
+      0.953,
+      0.982,
+      0.981,
+      0.968,
+      0.974,
+      0.966,
+      0.964,
+      0.953,
+      0.974,
+      0.982,
+      0.981,
+      0.984,
+      0.983,
+      0.985,
+      0.983,
+      0.982,
+      0.972,
+      0.957,
+      0.946,
+      0.867,
+      0.861,
+      0.924,
+      0.95,
+      0.953,
+      0.951,
+      0.949,
+      0.953,
+      0.973,
+      0.976,
+      0.982,
+      0.98,
+      0.984,
+      0.975,
+      0.976,
+      0.908,
+      0.905,
+      0.966,
+      0.97,
+      0.981,
+      0.978,
+      0.973,
+      0.975,
+      0.964,
+      0.938,
+      0.922,
+      0.936,
+      0.926,
+      0.91,
+      0.917,
+      0.924,
+      0.94,
+      0.964,
+      0.975,
+      0.965,
+      0.953,
+      0.969,
+      0.953,
+      0.948,
+      0.971,
+      0.978,
+      0.967,
+      0.975,
+      0.972,
+      0.953,
+      0.949,
+      0.969,
+      0.972,
+      0.941,
+      0.958,
+      0.973,
+      0.982,
+      0.983,
+      0.984,
+      0.984,
+      0.984,
+      0.985,
+      0.983,
+      0.967,
+      0.976,
+      0.954,
+      0.95,
+      0.944,
+      0.97,
+      0.97,
+      0.977,
+      0.982,
+      0.984,
+      0.982,
+      0.98,
+      0.981,
+      0.982,
+      0.974,
+      0.961,
+      0.911,
+      0.933,
+      0.958,
+      0.978,
+      0.975,
+      0.98,
+      0.981,
+      0.985,
+      0.985,
+      0.985,
+      0.974,
+      0.969,
+      0.955,
+      0.964,
+      0.965,
+      0.975,
+      0.963,
+      0.967,
+      0.984,
+      0.981,
+      0.979,
+      0.977,
+      0.974,
+      0.958,
+      0.951,
+      0.949,
+      0.927,
+      0.899,
+      0.906,
+      0.932,
+      0.935,
+      0.96,
+      0.963,
+      0.977,
+      0.982,
+      0.986,
+      0.986,
+      0.983,
+      0.982,
+      0.975,
+      0.969,
+      0.957,
+      0.956,
+      0.958,
+      0.974,
+      0.969,
+      0.982,
+      0.981,
+      0.985,
+      0.982,
+      0.966,
+      0.951,
+      0.942,
+      0.919,
+      0.959,
+      0.971,
+      0.975,
+      0.954,
+      0.963,
+      0.978,
+      0.982,
+      0.978,
+      0.975,
+      0.969,
+      0.952,
+      0.939,
+      0.882,
+      0.836,
+      0.85,
+      0.827,
+      0.899,
+      0.96,
+      0.972,
+      0.978,
+      0.981,
+      0.984,
+      0.986,
+      0.984,
+      0.983,
+      0.971,
+      0.97,
+      0.96,
+      0.946,
+      0.919,
+      0.921,
+      0.933,
+      0.955,
+      0.974,
+      0.982,
+      0.984,
+      0.983,
+      0.983,
+      0.984,
+      0.977,
+      0.952,
+      0.922,
+      0.86,
+      0.879,
+      0.932,
+      0.954,
+      0.972,
+      0.981,
+      0.982,
+      0.982,
+      0.981,
+      0.979,
+      0.974,
+      0.962,
+      0.926,
+      0.865,
+      0.774,
+      0.723,
+      0.606,
+      0.546,
+      0.488,
+      0.507,
+      0.562,
+      0.585,
+      0.57,
+      0.607,
+      0.652,
+      0.679,
+      0.766,
+      0.798,
+      0.819,
+      0.88,
+      0.893,
+      0.905,
+      0.928,
+      0.935,
+      0.933,
+      0.928,
+      0.94,
+      0.921,
+      0.918,
+      0.903,
+      0.922,
+      0.879,
+      0.885,
+      0.882,
+      0.854,
+      0.853,
+      0.806,
+      0.763,
+      0.723,
+      0.624,
+      0.598,
+      0.569,
+      0.55,
+      0.53,
+      0.557,
+      0.498,
+      0.533,
+      0.535,
+      0.513,
+      0.559,
+      0.521,
+      0.543,
+      0.545,
+      0.51,
+      0.538,
+      0.523,
+      0.517,
+      0.525,
+      0.518,
+      0.511,
+      0.538,
+      0.529,
+      0.455,
+      0.471,
+      0.485,
+      0.46
+    ],
+    "content_fraction": 0.845,
+    "content_count": 245,
+    "regions": [
+      [
+        5,
+        12
+      ],
+      [
+        18,
+        230
+      ],
+      [
+        241,
+        263
+      ]
+    ]
+  },
+  "prediction-signal_peptide-uniprot": {
+    "regions": [
+      [
+        1,
+        18
+      ]
+    ],
+    "content_count": 18,
+    "content_fraction": 0.06206896551724138
+  },
+  "prediction-transmembrane-uniprot": {
+    "regions": [
+      [
+        239,
+        259
+      ]
+    ],
+    "content_count": 21,
+    "content_fraction": 0.07241379310344828
+  }
+}
