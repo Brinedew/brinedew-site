@@ -1,14 +1,23 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
 
-// Import mapping config from Thoteins source
-import mappingConfig from "../../../Thoteins/data/mapping.json"
-
 interface Mapping {
   source: string
   target: string
-  type: string
 }
+
+// Hardcoded mappings - these are stable and UI-only
+const MAPPINGS: Mapping[] = [
+  { source: "mass", target: "height" },
+  { source: "Has transmembrane domains", target: "Sex" },
+  { source: "membrane_depth", target: "background_setting" },
+  { source: "alignment", target: "Politics" },
+  { source: "first_letter", target: "Skintone Hue " },
+  { source: "rvis_percentile", target: "Skintone Lightness" },
+  { source: "tissue_tau", target: "Skintone Saturation" },
+  { source: "kegg_families", target: "Aesthetics" },
+  { source: "percent_disordered", target: "Age" },
+]
 
 const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzComponentProps) => {
   const fm = fileData.frontmatter
@@ -17,8 +26,8 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
     return null
   }
 
-  // Build mappings from config
-  const mappings: Mapping[] = (mappingConfig.mappings || []) as Mapping[]
+  // Build mappings from hardcoded list
+  const mappings: Mapping[] = MAPPINGS
   
   // Filter to only show pairs where both values exist in frontmatter
   const visibleMappings = mappings.filter(m => {
