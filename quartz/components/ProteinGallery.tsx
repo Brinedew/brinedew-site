@@ -6,6 +6,22 @@ interface ProteinGalleryOptions {
   showDrafts?: boolean
 }
 
+// Sort options matching the infobox attributes
+const SORT_OPTIONS = [
+  { value: "name", label: "Name (A-Z)" },
+  { value: "name-desc", label: "Name (Z-A)" },
+  { value: "mass", label: "Mass (Low-High)" },
+  { value: "mass-desc", label: "Mass (High-Low)" },
+  { value: "length", label: "Length (Short-Long)" },
+  { value: "length-desc", label: "Length (Long-Short)" },
+  { value: "percent_disordered", label: "Age (Young-Old)" },
+  { value: "percent_disordered-desc", label: "Age (Old-Young)" },
+  { value: "rvis_percentile", label: "RVIS (Low-High)" },
+  { value: "rvis_percentile-desc", label: "RVIS (High-Low)" },
+  { value: "tissue_tau", label: "Tissue Specificity (Low-High)" },
+  { value: "tissue_tau-desc", label: "Tissue Specificity (High-Low)" },
+]
+
 export default ((userOpts?: ProteinGalleryOptions) => {
   const ProteinGallery: QuartzComponent = ({ allFiles, displayClass, cfg, fileData }: QuartzComponentProps) => {
     // Only render on the gallery page
@@ -23,11 +39,6 @@ export default ((userOpts?: ProteinGalleryOptions) => {
         file.frontmatter?.tags?.includes("protein") &&
         (userOpts?.showDrafts || !file.frontmatter?.draft)
       )
-      .sort((a, b) => {
-        const aName = a.frontmatter?.title ?? ""
-        const bName = b.frontmatter?.title ?? ""
-        return aName.localeCompare(bName)
-      })
 
     if (proteins.length === 0) {
       return <p>No proteins found.</p>
@@ -36,19 +47,41 @@ export default ((userOpts?: ProteinGalleryOptions) => {
     return (
       <div class={classNames(displayClass, "protein-gallery")}>
         <div class="gallery-header">
-          <h2>{proteins.length} Protein Personas</h2>
+          <div class="gallery-header-content">
+            <h2>{proteins.length} Protein Personas</h2>
+            <div class="gallery-sort-controls">
+              <label for="protein-sort">Sort by:</label>
+              <select id="protein-sort" class="protein-sort-select">
+                {SORT_OPTIONS.map(option => (
+                  <option value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
         <div class="protein-gallery-grid">
           {proteins.map(protein => {
-            // Render each protein using the actual ProteinInfobox component
+            // Add data attributes for sorting
+            const fm = protein.frontmatter
+            const sortAttrs = {
+              'data-name': fm?.title ?? fm?.symbol ?? fm?.gene_symbol ?? '',
+              'data-mass': fm?.mass ?? '',
+              'data-length': fm?.length ?? '',
+              'data-percent-disordered': fm?.percent_disordered ?? '',
+              'data-rvis': fm?.rvis_percentile ?? '',
+              'data-tissue-tau': fm?.tissue_tau ?? '',
+            }
+            
             return (
-              <InfoboxComponent 
-                fileData={protein}
-                displayClass="in-gallery"
-                cfg={cfg}
-                allFiles={allFiles}
-                tree={null as any}
-              />
+              <div class="gallery-item" {...sortAttrs}>
+                <InfoboxComponent 
+                  fileData={protein}
+                  displayClass="in-gallery"
+                  cfg={cfg}
+                  allFiles={allFiles}
+                  tree={null as any}
+                />
+              </div>
             )
           })}
         </div>
@@ -63,9 +96,50 @@ export default ((userOpts?: ProteinGalleryOptions) => {
     margin: 2rem 0;
   }
 
-  .gallery-header h2 {
+  .gallery-header {
     margin-bottom: 1.5rem;
+  }
+
+  .gallery-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .gallery-header h2 {
+    margin: 0;
     font-size: 1.5rem;
+  }
+
+  .gallery-sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .gallery-sort-controls label {
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+
+  .protein-sort-select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--light);
+    font-size: 0.9rem;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 12px;
+  }
+
+  .protein-sort-select:hover {
+    border-color: var(--secondary);
   }
 
   .protein-gallery-grid {
@@ -74,30 +148,83 @@ export default ((userOpts?: ProteinGalleryOptions) => {
     gap: 2rem;
   }
 
-  .gallery-item-link {
-    text-decoration: none;
-    color: inherit;
-    display: block;
+  .gallery-item {
     transition: transform 0.2s, box-shadow 0.2s;
-    /* Ensure link matches infobox size exactly */
-    width: 100%;
-    height: 100%;
-  }
-  
-  .gallery-item-link > .protein-infobox {
-    /* Remove any margins that might cause size mismatch */
-    margin: 0 !important;
   }
 
-  .gallery-item-link:hover {
+  .gallery-item:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0,0,0,0.15);
   }
   
   @media (max-width: 800px) {
+    .gallery-header-content {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    
     .protein-gallery-grid {
       grid-template-columns: 1fr;
     }
+  }
+  `
+  
+  ProteinGallery.afterDOMLoaded = `
+  const sortSelect = document.getElementById('protein-sort');
+  const galleryGrid = document.querySelector('.protein-gallery-grid');
+  
+  if (sortSelect && galleryGrid) {
+    sortSelect.addEventListener('change', (e) => {
+      const sortBy = e.target.value;
+      const items = Array.from(galleryGrid.children);
+      
+      items.sort((a, b) => {
+        let aVal, bVal;
+        const [field, order] = sortBy.includes('-desc') 
+          ? [sortBy.replace('-desc', ''), 'desc'] 
+          : [sortBy, 'asc'];
+        
+        switch(field) {
+          case 'name':
+            aVal = a.getAttribute('data-name') || '';
+            bVal = b.getAttribute('data-name') || '';
+            return order === 'asc' 
+              ? aVal.localeCompare(bVal)
+              : bVal.localeCompare(aVal);
+          
+          case 'mass':
+            aVal = parseFloat(a.getAttribute('data-mass')) || 0;
+            bVal = parseFloat(b.getAttribute('data-mass')) || 0;
+            return order === 'asc' ? aVal - bVal : bVal - aVal;
+          
+          case 'length':
+            aVal = parseFloat(a.getAttribute('data-length')) || 0;
+            bVal = parseFloat(b.getAttribute('data-length')) || 0;
+            return order === 'asc' ? aVal - bVal : bVal - aVal;
+          
+          case 'percent_disordered':
+            aVal = parseFloat(a.getAttribute('data-percent-disordered')) || 0;
+            bVal = parseFloat(b.getAttribute('data-percent-disordered')) || 0;
+            return order === 'asc' ? aVal - bVal : bVal - aVal;
+          
+          case 'rvis_percentile':
+            aVal = parseFloat(a.getAttribute('data-rvis')) || 0;
+            bVal = parseFloat(b.getAttribute('data-rvis')) || 0;
+            return order === 'asc' ? aVal - bVal : bVal - aVal;
+          
+          case 'tissue_tau':
+            aVal = parseFloat(a.getAttribute('data-tissue-tau')) || 0;
+            bVal = parseFloat(b.getAttribute('data-tissue-tau')) || 0;
+            return order === 'asc' ? aVal - bVal : bVal - aVal;
+          
+          default:
+            return 0;
+        }
+      });
+      
+      // Re-append in sorted order
+      items.forEach(item => galleryGrid.appendChild(item));
+    });
   }
   `
   
