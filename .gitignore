@@ -15,3 +15,19 @@ replit.nix
 # Auto-generated Excalidraw exports (generated from .md files)
 **/*.excalidraw.png
 **/*.excalidraw.svg
+# Thoteins runtime artifacts (don't commit)
+tools/thoteins/logs/
+tools/thoteins/**/__pycache__/
+tools/thoteins/**/*.pyc
+tools/thoteins/**/*.pyo
+tools/thoteins/**/.pytest_cache/
+tools/thoteins/**/node_modules/
+tools/thoteins/**/.DS_Store
+tools/thoteins/nul
+tools/thoteins/test_mapping.py
+tools/thoteins/temp_workflow.json
+
+# Keep the data and scripts
+!tools/thoteins/data/
+!tools/thoteins/scripts/
+!tools/thoteins/apps/

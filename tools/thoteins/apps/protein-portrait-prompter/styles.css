@@ -1,0 +1,53 @@
+/* Minimal color tokens copied locally to decouple from Website */
+:root {
+  --light: oklch(96% 0.015 75);
+  --lightgray: oklch(85% 0.02 65);
+  --gray: oklch(70% 0.025 60);
+  --darkgray: oklch(45% 0.03 55);
+  --dark: oklch(20% 0.035 50);
+  --accent: oklch(50% 0.08 185);
+  --ui-border: oklch(82% 0.02 70);
+  --ui-bg: oklch(92% 0.01 75);
+  --highlight: oklch(from var(--accent) l c h / 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --light: oklch(16% 0.01 45);
+    --lightgray: oklch(36% 0.02 50);
+    --gray: oklch(58% 0.025 55);
+    --darkgray: oklch(80% 0.02 60);
+    --dark: oklch(85% 0.015 65);
+    --accent: oklch(68% 0.08 185);
+    --ui-border: oklch(38% 0.025 50);
+    --ui-bg: oklch(30% 0.02 45);
+  }
+}
+
+:root[data-theme="light"] {
+  --light: oklch(96% 0.015 75);
+  --lightgray: oklch(85% 0.02 65);
+  --gray: oklch(70% 0.025 60);
+  --darkgray: oklch(45% 0.03 55);
+  --dark: oklch(20% 0.035 50);
+  --accent: oklch(50% 0.08 185);
+  --ui-border: oklch(82% 0.02 70);
+  --ui-bg: oklch(92% 0.01 75);
+}
+
+:root[data-theme="dark"] {
+  --light: oklch(16% 0.01 45);
+  --lightgray: oklch(36% 0.02 50);
+  --gray: oklch(58% 0.025 55);
+  --darkgray: oklch(80% 0.02 60);
+  --dark: oklch(85% 0.015 65);
+  --accent: oklch(68% 0.08 185);
+  --ui-border: oklch(38% 0.025 50);
+  --ui-bg: oklch(30% 0.02 45);
+}
+
+/* Base body/background so variables apply cleanly */
+body {
+  background-color: var(--light);
+  color: var(--dark);
+}

@@ -1,0 +1,14 @@
+```json
+{
+  "DNA replication proteins": "Soviet Realism",
+  "Messenger RNA biogenesis": "Ligne Claire",
+  "Ubiquitin system": "Sovietwave",
+  "Transporters": "Dieselpunk"
+}
+```
+/*
+- **DNA replication proteins -> Soviet Realism:** This family's role as "Coffin-builders" (DNA Pol) aligns with the grand, industrial, and constructive themes of Socialist Realism, an aesthetic already listed under the Maintenance ideology. It evokes the large-scale, organized effort of duplicating the entire city's blueprint.
+- **Messenger RNA biogenesis -> Ligne Claire:** This process transcribes DNA into "edicts" (mRNA) that "Guides" (RNA Pol) read. The Ligne Claire comic art style, known for its clean, precise, and readable lines, thematically matches the creation of a clear, unambiguous message. It has a slightly retro, official feel appropriate for transcribing foundational law.
+- **Ubiquitin system -> Sovietwave:** The worldbuilding explicitly links Ubiquitin to a "long hair warning (like in USSR)". Sovietwave perfectly captures this theme of state control, paranoia, and the marking of non-conformists for punishment, mirroring the Ubiquitin system's function of tagging proteins for degradation. It's a direct fit for the Control ideology's aesthetic spectrum.
+- **Transporters -> Dieselpunk:** Transporters act as "gatekeepers" and "smugglers," managing logistics across membranes. Dieselpunk, listed under the Maintenance ideology, fits this role with its gritty, mechanical, and powerful themes of industrial transport and machinery, suiting the "riggers" and "quartermasters" of the cell.
+*/

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Protein Portrait Prompter</title>
+  <!-- Local minimal tokens (decoupled from Website) -->
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    /* Minimal layout to feel like the main site */
+    body { margin: 0; }
+    header {
+      background: var(--ui-bg);
+      border-bottom: 1px solid var(--ui-border);
+      padding: 0.75rem 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    header .brand { font-weight: 600; letter-spacing: 0.02em; }
+    main { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    .grid { display: grid; grid-template-columns: 320px 1fr; gap: 1rem; }
+    .card { background: var(--light); border: 1px solid var(--ui-border); border-radius: 8px; padding: 1rem; }
+    .muted { color: var(--darkgray); font-size: 0.9em; }
+    .drop {
+      border: 2px dashed var(--ui-border); border-radius: 8px; padding: 1rem; text-align: center; cursor: pointer;
+      background: var(--ui-bg);
+    }
+    .drop.dragover { background: var(--highlight); }
+    .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    input[type="text"], textarea, select { width: 100%; box-sizing: border-box; }
+    textarea { min-height: 140px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--ui-border); padding: 0.4rem 0.25rem; text-align: left; }
+    .btn { background: var(--accent); color: white; border: none; padding: 0.5rem 0.75rem; border-radius: 6px; cursor: pointer; }
+    .btn.secondary { background: var(--gray); color: var(--light); }
+    .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .pill { border: 1px solid var(--ui-border); border-radius: 999px; padding: 0.15rem 0.5rem; font-size: 0.8em; }
+    .results { white-space: pre-wrap; font-family: "IBM Plex Mono", ui-monospace, monospace; background: var(--ui-bg); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--ui-border); }
+    .small { font-size: 0.85em; }
+
+    /* Card Gallery Styles */
+    .card-gallery { margin: 2rem 0; }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    .protein-card {
+      background: var(--light);
+      border: 1px solid var(--ui-border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .protein-card:hover {
+      box-shadow: 0 4px 12px oklch(0% 0 0 / 0.1);
+      transform: translateY(-2px);
+    }
+    .protein-card-image {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      overflow: hidden;
+      position: relative;
+      background: var(--ui-bg);
+    }
+    .protein-card-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .protein-card-image-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--dark);
+      text-align: center;
+      padding: 1rem;
+    }
+    .protein-card-body {
+      padding: 1rem;
+    }
+    .protein-card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+      color: var(--dark);
+    }
+    .protein-card-id {
+      font-size: 0.8rem;
+      color: var(--darkgray);
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      margin: 0 0 1rem 0;
+    }
+    .protein-card-props {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem 1rem;
+      font-size: 0.85rem;
+    }
+    .protein-card-props-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .protein-card-props-col-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--darkgray);
+      margin-bottom: 0.25rem;
+    }
+    .protein-card-prop {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.25rem 0;
+      border-bottom: 1px solid var(--ui-border);
+    }
+    .protein-card-prop:last-child {
+      border-bottom: none;
+    }
+    .protein-card-prop-label {
+      color: var(--darkgray);
+      font-size: 0.8rem;
+    }
+    .protein-card-prop-value {
+      color: var(--dark);
+      font-weight: 500;
+      text-align: right;
+    }
+    .protein-card-prop-mapped {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.4rem 0.5rem;
+      background: var(--ui-bg);
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+    }
+    .protein-card-prop-mapped .protein-card-prop-label {
+      color: var(--accent);
+      font-weight: 500;
+    }
+  </style>
+  <meta name="description" content="Generate deterministic magazine-style text prompts for protein portraits from UniProt-based pages." />
+</head>
+<body>
+  <header>
+    <div class="brand">Protein Portrait Prompter</div>
+    <div class="muted">Deterministic cover text prompts for UniProt proteins</div>
+  </header>
+  <main>
+    <article>
+      <h1>Protein Portrait Prompter</h1>
+      <p class="muted">Drop your existing protein pages (*.md from Website/content/wiki), or load a CSV/JSON. This tool extracts frontmatter and emits magazine cover prompts you can paste into an image generator. It does not modify your Website folder.</p>
+
+      <!-- Card Gallery -->
+      <section id="card-gallery" class="card-gallery">
+        <h2>Protein Gallery</h2>
+        <div id="gallery-grid" class="gallery-grid"></div>
+      </section>
+
+      <div class="grid">
+        <!-- Left: Data and options -->
+        <section class="card">
+          <h2>Quick: UniProt ID → Prompt</h2>
+          <div class="row" style="gap:0.5rem; align-items:flex-end;">
+            <label style="flex:1;" class="small">UniProt ID<br><input id="single-id" type="text" placeholder="e.g., P04637" /></label>
+            <button class="btn" id="btn-single-fetch">Fetch & Generate</button>
+          </div>
+
+          <h2 style="margin-top: 1rem;">1) Load Proteins (optional)</h2>
+          <div id="drop" class="drop" tabindex="0" title="Drop .md files here">Drop Markdown files here (with YAML frontmatter), or use file picker below.</div>
+          <div class="row" style="margin-top: 0.5rem;">
+            <input id="file-input" type="file" multiple accept=".md,.json,.csv,text/markdown,application/json,text/csv" />
+          </div>
+          <div class="row" style="margin-top: 0.5rem;">
+            <input id="filter" type="text" placeholder="Filter by UniProt ID or symbol..." />
+          </div>
+          <div class="row" style="margin-top: 0.5rem; justify-content: space-between;">
+            <label class="small"><input type="checkbox" id="select-all" /> Select all</label>
+            <div class="pill"><span id="count">0</span> loaded</div>
+          </div>
+          <div class="row" style="margin-top: 0.5rem; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <div class="pill" id="mapping-status" title="Attempts ../../data/mapping.json or ./mapping.json on load">Mapping: checking...</div>
+            <button class="btn secondary" id="btn-load-mapping" title="Reload mapping file">Reload mapping</button>
+            <div class="pill" id="writer-status" title="Local writer caches fetched proteins to data/proteins/uniprot">Writer: checking...</div>
+            <button class="btn secondary" id="btn-retry-writer" title="Reconnect local writer">Reconnect writer</button>
+            <div class="pill" id="update-status" title="Update all proteins: UniProt + MobiDB">Update: idle</div>
+            <button class="btn secondary" id="btn-update-all" title="Fetch UniProt metadata and MobiDB for all loaded proteins">Update All</button>
+            <button class="btn" id="btn-generate-all" title="Generate prompts for all loaded proteins">Generate All</button>
+          </div>
+          <div style="max-height: 260px; overflow: auto; margin-top: 0.5rem; border: 1px solid var(--ui-border); border-radius: 6px;">
+            <table id="table">
+              <thead><tr><th></th><th>UniProt</th><th>Symbol</th><th>Title</th><th class="small">Mass (kDa)</th><th class="small">Len</th><th class="small">Diso %</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="row small muted" id="class-summary" style="margin-top: 0.25rem;">No proteins loaded.</div>
+
+          <h2 style="margin-top: 1rem;">2) Prompt Template</h2>
+          <p class="muted small">Variables: {symbol}, {title}, {uniprot_id}, {mass}, {length}, {domains}. Deterministic human details are seeded from UniProt ID until your mapping is ready: {age}, {gender}, {height}, {ethnicity}, {hair_color}, {expression}, {clothing_style}, {accessories_count}, {pose_description}, {background_setting}.</p>
+          <textarea id="template"></textarea>
+          <div class="row" style="margin-top: 0.5rem;">
+            <label class="small"><input type="checkbox" id="include-stats" checked /> Append a short stats line (mass/length/ID)</label>
+          </div>
+
+          
+
+          <h2 style="margin-top: 1rem;">3) Generate</h2>
+          <div class="row">
+            <button class="btn" id="btn-generate">Generate prompts for selected</button>
+            <button class="btn secondary" id="btn-export-csv">Export CSV</button>
+            <button class="btn ghost" id="btn-copy">Copy all to clipboard</button>
+          </div>
+        </section>
+
+        <!-- Right: Results -->
+        <section class="card">
+          <h2>Results</h2>
+          <div id="results" class="results" aria-live="polite">No prompts yet.</div>
+          <p class="muted small">Tip: You can paste a prompt into your preferred image generator. The choices stay stable per UniProt ID.</p>
+        </section>
+      </div>
+
+      <h2>How it integrates later</h2>
+      <ul>
+        <li class="muted">Keep prompts in a sidecar file (JSON/CSV keyed by <code>uniprot_id</code>) or add a <code>portrait_prompt</code> field to frontmatter via a scripted pass. This app already parses your existing protein pages.</li>
+        <li class="muted">When mapping rules finalize, swap the deterministic choices with true mappings without changing the output format.</li>
+      </ul>
+    </article>
+  </main>
+
+  <script type="module" src="./src/main.js"></script> 
+  <!-- legacy inline script removed; see src/main.js -->
+</body> 
+</html> 

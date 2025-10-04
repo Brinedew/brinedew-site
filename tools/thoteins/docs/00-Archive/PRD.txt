@@ -1,0 +1,241 @@
+# Product Requirements Document: Gene Portrait Database (archived)
+
+Note: This PRD captured early vision and planning. The active, developer‑facing docs now live in:
+- docs/ARCHITECTURE.md – current components and data flow
+- docs/ROADMAP.md – near/medium/long‑term tasks
+- docs/PROMPTS.md – default prompt templates
+- docs/TROUBLESHOOTING.md – common issues and fixes
+
+This file remains as historical context and high‑level intent.
+
+## Executive Summary
+A static gene database where each human gene is represented by a consistent human portrait, generated from mapped molecular parameters. Think "yearbook for the human genome" - each gene gets a deterministic face that encodes its molecular properties into human characteristics.
+
+## Core Concept
+**1 gene = 1 human portrait**
+- Molecular properties (mass, expression, function) → Human attributes (height, clothing, pose)
+- Deterministic mapping ensures consistency across all viewers
+- Editorial magazine cover aesthetic per gene
+
+## Technical Architecture
+
+### Data Pipeline
+```
+UniProt IDs → Query APIs → Parameter Extraction → Mapping Rules → Prompt Generation → Image API → Cache & Display
+```
+
+### Tech Stack (leveraging your existing setup)
+- **Static Site Generation**: Quartz 4 (visit "D:\Coding\Website")
+- **Data Storage**: JSON files in `/content/genes/`
+- **Images**: `/static/gene-portraits/`
+- **Generation Script**: Python (runs locally)
+- **Hosting**: GitHub Pages + Cloudflare (your existing)
+
+## Implementation Plan
+
+### Phase 1: Data Structure Setup
+
+Create folder structure:
+```
+content/
+  genes/
+    _index.md           # Gallery page
+    TP53.md            # Individual gene pages
+    BRCA1.md
+    ...
+static/
+  gene-portraits/
+    TP53.png
+    BRCA1.png
+    ...
+data/
+  gene_list.csv        # Your 100 UniProt IDs
+  parameter_mappings.csv
+  gene_metadata.json   # Cached API responses
+  generation_log.json  # Track what's been generated
+scripts/
+  fetch_gene_data.py
+  generate_portraits.py
+  create_pages.py
+```
+
+### Phase 1.5: Parameter dimensionality determination
+
+Make a "molecular_dimensions" table for molecular parameters.
+1 column per parameter you can fetch from databases
+Row 1: parameter name + unit of measure (if any)
+Row 2: quantitative or qualitative?
+
+For quantitative:
+Row 3: minimum value
+Row 4: minimum value gene
+Row 5: maximum value
+Row 6: maximum value gene
+
+For qualitative:
+Row 3: number of bins
+Row 4: number of genes with exactly 1 bin listed
+Row 5: number of genes with 2+ bins 
+Row 6: number of genes with unassigned/0/NA (don't listed under any bin)
+
+In the same file, on the later rows (row 10+) make a "human_dimensions" table for human parameters.
+1 column per parameter you can imagine (ask yourself: how would a policeman describe a person when alarming the station?)
+Row 1: parameter name + unit of measure (if any)
+Row 2: quantitative or qualitative?
+
+For quantitative:
+Row 3: minimum value in humans
+Row 4: maximum value in humans
+
+For qualitative:
+Row 3: number of bins
+Row 4: Can humans fall in only 1 bin? Y/N
+Row 5: Can humans fall in 2+ bins? Y/N 
+Row 6: Can humans fall into none of the bins? Y/N
+
+
+### Phase 2: Parameter Mapping Schema
+
+**parameter_mappings.csv structure:**
+```csv
+molecular_parameter,molecular_type,human_parameter,mapping_type,mapping_function
+molecular_weight,quantitative,height,linear,"150-190cm range"
+num_domains,quantitative,accessories_count,linear,"0-5 items"
+tissue_specificity,categorical,clothing_style,lookup,"brain=academic,muscle=athletic,liver=business"
+conservation_score,quantitative,age,linear,"20-70 years"
+pathogenicity,categorical,expression,lookup,"benign=smiling,pathogenic=serious"
+go_compartment,categorical,background,lookup,"nucleus=office,membrane=outdoors,cytoplasm=workshop"
+interaction_count,quantitative,pose_social,threshold,"<10=alone,10-50=small group,>50=crowd"
+```
+
+### Phase 3: Core Scripts
+
+**fetch_gene_data.py** - Aggregates data from multiple sources:
+```python
+# Queries:
+# - UniProt: mass, length, domains, subcellular location
+# - STRING-db: interaction partners count
+# - Human Protein Atlas: tissue expression
+# - gnomAD: variant frequency
+# - GO: functional categories
+# Outputs to gene_metadata.json
+```
+
+**generate_portraits.py** - Creates deterministic prompts and calls OpenAI:
+```python
+# For each gene:
+# 1. Load molecular parameters from gene_metadata.json
+# 2. Apply mappings from parameter_mappings.csv
+# 3. Fill prompt template
+# 4. Call DALL-E 3 API (with fixed seed)
+# 5. Save image to /static/gene-portraits/
+# 6. Log generation params to generation_log.json
+```
+
+**create_pages.py** - Generates Markdown files for Quartz:
+```python
+# Creates:
+# - Individual gene pages with portrait + stats
+# - Gallery index page
+# - Stats/analytics page
+# Uses Quartz frontmatter for tagging/categorization
+```
+
+### Phase 4: Prompt Template
+
+Store in `data/prompt_template.txt`:
+```
+Editorial magazine cover portrait photo. Magazine title: "{gene_symbol} MONTHLY". 
+Subject: {age} year old {gender} person, {height}cm tall, {ethnicity} appearance, {hair_color} hair, {expression} expression, wearing {clothing_style} attire with {accessories_count} accessories, {pose_description}, {background_setting}.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Magazine header text overlay, barcode in corner.
+```
+
+### Phase 5: Gene Page Template
+
+Each gene gets a Markdown page:
+```markdown
+---
+title: "TP53"
+tags: [tumor-suppressor, transcription-factor, nuclear]
+portrait: "/gene-portraits/TP53.png"
+---
+
+![TP53 Portrait](/gene-portraits/TP53.png)
+
+## The Executioner Gene
+
+### Molecular Stats
+- **Mass**: 43.7 kDa
+- **Length**: 393 aa
+- **Domains**: DNA-binding, Transactivation, Tetramerization
+- **Top Expression**: Lymphoid tissue, GI tract
+
+### Human Translation
+- **Height**: 165 cm (mapped from mass)
+- **Age**: 45 (high conservation)
+- **Style**: Military uniform (executor role)
+- **Setting**: Command center (nuclear localization)
+
+### Key Interactions
+- MDM2 (inhibitor)
+- BAX (apoptosis mediator)
+- CDKN1A (cell cycle arrest)
+```
+
+## Data Sources & Mappings
+
+### Priority 1 Mappings (Clear correlations)
+- **Molecular weight** → Height (50-500 kDa → 150-190 cm)
+- **Conservation score** → Age (0-1 → 20-70 years)
+- **Tissue specificity index** → Fashion formality (0-1 → casual-formal)
+- **Subcellular location** → Background setting
+- **Pathogenicity scores** → Facial expression intensity
+
+### Priority 2 Mappings (Interpretive)
+- **GO biological process** → Clothing category (via keyword extraction)
+- **Domain count** → Complexity of outfit/accessories
+- **Expression variance** → Hair style (uniform vs. wild)
+- **Interaction degree** → Social pose (alone vs. group)
+
+### Randomized Elements (for uniqueness)
+- Specific facial features (within type)
+- Exact pose angles
+- Color palette variations (within clothing style)
+- Minor accessories
+
+## Success Metrics
+- 100 unique gene portraits generated
+- <5% need regeneration due to prompt issues
+- Load time <2s for gallery page
+- Each gene page provides memorable visual + factual anchor
+
+## MVP Deliverables
+1. **Scripts package**: 3 Python scripts with requirements.txt
+2. **100 gene portraits**: PNG files, 1024x1024
+3. **Gene pages**: 100 Markdown files for Quartz
+4. **Gallery page**: Searchable/filterable index
+5. **Documentation**: Mapping rationale + expansion guide
+
+## Future Expansions
+- LLM-generated "personality descriptions" based on function
+- Gene family group portraits
+- Variant impact visualization (face morphing)
+- User-submitted genes
+- "Gene dating profiles" (interaction preferences)
+
+## Resource Requirements
+- **Time**: ~10 hours setup, 2 hours generation
+- **Cost**: ~$200 for 100 DALL-E 3 images
+- **Storage**: ~100MB for images
+- **APIs**: UniProt, STRING-db (free tier sufficient)
+
+## Risk Mitigations
+- **API rate limits**: Batch with delays, cache everything
+- **Prompt failures**: Fallback templates, manual overrides
+- **Duplicate appearances**: Accept as feature ("gene twins")
+- **Offensive generations**: Pre-screen sensitive genes manually
+
+---
+
+Ready to start? First step is collecting your 100 UniProt IDs and I'll write the actual Python scripts.
