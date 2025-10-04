@@ -192,6 +192,13 @@ ProteinInfobox.css = `
   clear: right;
 }
 
+/* Gallery context override */
+.protein-infobox.in-gallery {
+  float: none;
+  width: 100%;
+  margin: 0;
+}
+
 .infobox-image-container {
   position: relative;
   width: 100%;

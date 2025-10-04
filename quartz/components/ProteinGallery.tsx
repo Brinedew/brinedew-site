@@ -45,7 +45,7 @@ export default ((userOpts?: ProteinGalleryOptions) => {
               <a href={`/${protein.slug}`} class="gallery-item-link">
                 <InfoboxComponent 
                   fileData={protein}
-                  displayClass=""
+                  displayClass="in-gallery"
                   cfg={cfg}
                   allFiles={allFiles}
                   tree={null as any}
@@ -86,13 +86,6 @@ export default ((userOpts?: ProteinGalleryOptions) => {
   .gallery-item-link:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0,0,0,0.15);
-  }
-
-  /* Override infobox styles for gallery context */
-  .gallery-item-link .protein-infobox {
-    float: none !important;
-    width: 100% !important;
-    margin: 0 !important;
   }
   
   @media (max-width: 800px) {
