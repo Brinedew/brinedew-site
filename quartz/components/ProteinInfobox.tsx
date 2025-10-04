@@ -1,5 +1,6 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
+import { hsluvToHex } from "hsluv"
 
 interface Mapping {
   source: string
@@ -65,6 +66,16 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
     return `#${f(0)}${f(8)}${f(4)}`
   }
   
+  // HSLuv to RGB conversion
+  const hsluvToHex = (h: number, s: number, l: number): string => {
+    // Simplified HSLuv conversion - for proper implementation, use hsluv library
+    // For now, using an approximation via HSL with adjustments
+    const hue = h % 360
+    const sat = Math.max(0, Math.min(100, s))
+    const lum = Math.max(0, Math.min(100, l))
+    return hslToHex(hue, sat, lum)
+  }
+  
   let hexcode = fm?.persona_hexcode
   if (!hexcode || hexcode === 'null') {
     const hue = fm?.persona_skintone_hue || 0
@@ -74,6 +85,9 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
   }
   
   const geneSymbol = fm?.symbol || fm?.gene_symbol || fm?.title || 'Protein'
+  
+  // Get first letter for enclosed alphanumeric display
+  const firstLetter = fm?.first_letter || geneSymbol.charAt(0).toUpperCase()
 
   // Helper to prettify field names and format values with units
   const prettifyLabel = (fieldName: string): string => {
@@ -108,12 +122,22 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
       'rvis_percentile': '',
       'height': ' cm',
       'Age': '',
-      'Skintone Hue ': '°',
+      'Skintone Hue ': '', // Will be handled specially
       'Skintone Saturation': '%',
       'Skintone Lightness': '%'
     }
     const unit = unitMap[fieldName] || ''
     return `${value}${unit}`
+  }
+  
+  // Special formatter for hue - returns enclosed alphanumeric with color
+  const formatHue = (hue: number, letter: string): { display: string, color: string } => {
+    // Convert HSLuv hue to RGB with 50% lightness, 100% saturation
+    const color = hsluvToHex(hue, 100, 50)
+    return {
+      display: letter,
+      color: color
+    }
   }
 
   return (
@@ -154,16 +178,47 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
           {visibleMappings.map(m => {
             const targetNormalized = m.target.toLowerCase().replace(/\s+/g, '_').replace(/_+$/, '')
             const personaKey = `persona_${targetNormalized}`
+            const molecularValue = fm[m.source]
+            const personaValue = fm[personaKey]
+            
+            // Special handling for hue (first_letter -> Skintone Hue)
+            const isHueMapping = m.source === 'first_letter' && m.target === 'Skintone Hue '
+            let personaDisplay = formatValue(m.target, personaValue)
+            
+            if (isHueMapping) {
+              const hue = fm?.persona_skintone_hue || 0
+              const letter = molecularValue || 'X'
+              const hueColor = hsluvToHex(hue, 100, 50)
+              
+              return (
+                <div class="mapping-row">
+                  <div class="mapping-molecular">
+                    <span class="mapping-label">{prettifyLabel(m.source)}</span>
+                    <span class="mapping-value">{letter}</span>
+                  </div>
+                  <span class="mapping-arrow">→</span>
+                  <div class="mapping-persona">
+                    <span class="mapping-label">{prettifyLabel(m.target)}</span>
+                    <span class="mapping-value">
+                      <span class="hue-letter" style={`background-color: ${hueColor}; color: white; border-radius: 4px; padding: 2px 6px; font-weight: 700;`}>
+                        {letter}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              )
+            }
+            
             return (
               <div class="mapping-row">
                 <div class="mapping-molecular">
                   <span class="mapping-label">{prettifyLabel(m.source)}</span>
-                  <span class="mapping-value">{formatValue(m.source, fm[m.source])}</span>
+                  <span class="mapping-value">{formatValue(m.source, molecularValue)}</span>
                 </div>
                 <span class="mapping-arrow">→</span>
                 <div class="mapping-persona">
                   <span class="mapping-label">{prettifyLabel(m.target)}</span>
-                  <span class="mapping-value">{formatValue(m.target, fm[personaKey])}</span>
+                  <span class="mapping-value">{personaDisplay}</span>
                 </div>
               </div>
             )
@@ -312,6 +367,16 @@ ProteinInfobox.css = `
   color: var(--dark);
   font-weight: 600;
   text-align: center;
+}
+
+.hue-letter {
+  display: inline-block;
+  min-width: 1.5em;
+  text-align: center;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
 .mapping-arrow {
