@@ -90,9 +90,15 @@ export default ((userOpts?: ProteinGalleryOptions) => {
 
   /* Override infobox styles for gallery context */
   .gallery-item-link .protein-infobox {
-    float: none;
-    width: 100%;
-    margin: 0;
+    float: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  
+  @media (max-width: 800px) {
+    .protein-gallery-grid {
+      grid-template-columns: 1fr;
+    }
   }
   `
   

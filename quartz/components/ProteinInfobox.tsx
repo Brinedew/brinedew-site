@@ -52,7 +52,27 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
 
   // Get persona image
   const personaImage = fm?.persona_image || `/static/proteins/${fm?.uniprot_id}.png`
-  const hexcode = fm?.persona_hexcode || '#cccccc'
+  
+  // Compute hexcode from HSL if not provided
+  const hslToHex = (h: number, s: number, l: number): string => {
+    l /= 100
+    const a = s * Math.min(l, 1 - l) / 100
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+      return Math.round(255 * color).toString(16).padStart(2, '0')
+    }
+    return `#${f(0)}${f(8)}${f(4)}`
+  }
+  
+  let hexcode = fm?.persona_hexcode
+  if (!hexcode || hexcode === 'null') {
+    const hue = fm?.persona_skintone_hue || 0
+    const sat = fm?.persona_skintone_saturation || 50
+    const light = fm?.persona_skintone_lightness || 50
+    hexcode = hslToHex(hue, sat, light)
+  }
+  
   const geneSymbol = fm?.symbol || fm?.gene_symbol || fm?.title || 'Protein'
 
   // Helper to prettify field names and format values with units
