@@ -28,6 +28,7 @@ import TagExplorer from "./TagExplorer"
 import PageTags from "./PageTags"
 import MobileMenu from "./MobileMenu"
 import ProteinInfobox from "./ProteinInfobox"
+import ProteinGallery from "./ProteinGallery"
 
 export {
   ArticleTitle,
@@ -60,4 +61,5 @@ export {
   PageTags,
   MobileMenu,
   ProteinInfobox,
+  ProteinGallery,
 }

@@ -8,6 +8,14 @@ draft: false
 
 Web applications and tools built by Brinedew.
 
+## [Protein Gallery](/apps/proteins/)
+
+Browse all protein personas with sortable gallery view and colored placeholders.
+
+- **Data:** Features and persona attributes from Thoteins
+- **Sorting:** By name, lightness, or age
+- **Status:** Static display with CSV-based updates
+
 ## [Scriptotic Transcript Generator](/apps/scriptotic/)
 
 Convert YouTube videos to text transcripts using advanced AI transcription.

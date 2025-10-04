@@ -473,3 +473,6 @@ ul.toc-content.overflow {
   }
 }
 
+
+/* Protein Gallery Styles */
+@import url("/static/protein-gallery.css");
