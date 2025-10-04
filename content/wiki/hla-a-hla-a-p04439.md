@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - HLA-A
 alignment: unknown
@@ -21,14 +22,16 @@ locations: cell surface; early endosome membrane; endoplasmic reticulum; endopla
   space; Golgi apparatus; Golgi medial cisterna; Golgi membrane; lumenal side of endoplasmic
   reticulum membrane; membrane; MHC class I peptide loading complex; MHC class I protein
   complex; phagocytic vesicle membrane; plasma membrane; recycling endosome membrane
-mass: 41.0
+mass: 41
+membrane_depth: 1
 pathways:
 - antigen presentation
-percent_disordered: 35.9
+percent_disordered: 36
 persona_aesthetics: Rocketpunk; Stickerbomb
-persona_age: 35.9
+persona_age: 36
+persona_background_setting: null
 persona_height: 41
-persona_hexcode: nan
+persona_hexcode: null
 persona_image: /static/proteins/P04439.png
 persona_politics: Maintenance
 persona_sex: Male
@@ -42,6 +45,7 @@ symbol: HLA-A
 tags:
 - protein
 - content/wiki
+tissue_tau: 28
 title: HLA-A (HLA-A)
 transmembrane: true
 uniprot_id: P04439

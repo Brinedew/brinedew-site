@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases: []
 alignment: both
 date: 2025-08-21
@@ -20,27 +21,30 @@ locations: BAK complex; BAX complex; Bcl-2 family protein complex; cytoplasm; cy
   endoplasmic reticulum; endoplasmic reticulum membrane; extracellular exosome; membrane;
   mitochondrial outer membrane; mitochondrial permeability transition pore complex;
   mitochondrion; nuclear envelope; nucleus; pore complex
-mass: 21.0
+mass: 21
+membrane_depth: 1
 pathways:
 - apoptosis
 - mitochondrial permeabilization
 - caspase activation
-percent_disordered: 25.5
+percent_disordered: 26
 persona_aesthetics: Atompunk
-persona_age: 25.5
+persona_age: 26
+persona_background_setting: null
 persona_height: 21
 persona_hexcode: '#503332'
 persona_image: /static/proteins/Q07812.png
 persona_politics: Opportunist
 persona_sex: Male
 persona_skintone_hue: 14
-persona_skintone_lightness: 24.5
+persona_skintone_lightness: 24
 persona_skintone_saturation: 24
 protein_type: globular
-rvis_percentile: 24.54671405
+rvis_percentile: 25
 symbol: BAX
 tags:
 - protein
+tissue_tau: 24
 title: BAX
 transmembrane: true
 uniprot_id: Q07812

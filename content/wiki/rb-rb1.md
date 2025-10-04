@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - RB1
 - Retinoblastoma protein
@@ -17,27 +18,30 @@ kegg_families: Protein phosphatases and associated proteins; Transcription facto
 length (aa): 928
 locations: chromatin; chromatin lock complex; cytoplasm; cytosol; nucleoplasm; nucleus;
   PML body; Rb-E2F complex; spindle; SWI/SNF complex
-mass: 106.0
+mass: 106
+membrane_depth: 3
 pathways:
 - cell cycle control
 - RB–E2F axis
-percent_disordered: 33.5
+percent_disordered: 34
 persona_aesthetics: Minimalism; Dark Academia
-persona_age: 33.5
+persona_age: 34
+persona_background_setting: null
 persona_height: 106
 persona_hexcode: '#252a2e'
 persona_image: /static/proteins/P06400.png
 persona_politics: pro-Control
 persona_sex: Female
 persona_skintone_hue: 235
-persona_skintone_lightness: 16.8
+persona_skintone_lightness: 17
 persona_skintone_saturation: 20
 protein_type: tumor suppressor
-rvis_percentile: 16.78814529
+rvis_percentile: 17
 status: draft
 symbol: RB1
 tags:
 - protein
+tissue_tau: 20
 title: Rb (RB1)
 transmembrane: false
 uniprot_id: P06400

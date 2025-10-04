@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - CD274
 alignment: unknown
@@ -17,26 +18,29 @@ kegg_families: CD molecules
 length (aa): 290
 locations: actin cytoskeleton; early endosome membrane; external side of plasma membrane;
   extracellular exosome; nucleoplasm; plasma membrane; recycling endosome membrane
-mass: 33.0
+mass: 33
+membrane_depth: 1
 pathways:
 - immune checkpoint
-percent_disordered: 38.6
+percent_disordered: 39
 persona_aesthetics: Paramilitary
-persona_age: 38.6
+persona_age: 39
+persona_background_setting: null
 persona_height: 33
 persona_hexcode: '#814e3a'
 persona_image: /static/proteins/Q9NZQ7.png
 persona_politics: Maintenance
 persona_sex: Male
 persona_skintone_hue: 28
-persona_skintone_lightness: 38.6
+persona_skintone_lightness: 39
 persona_skintone_saturation: 56
 protein_type: immune checkpoint ligand
-rvis_percentile: 38.5579182
+rvis_percentile: 39
 status: draft
 symbol: CD274
 tags:
 - protein
+tissue_tau: 56
 title: PD-L1 (CD274)
 transmembrane: true
 uniprot_id: Q9NZQ7

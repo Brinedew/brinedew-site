@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - ATM and Rad3-related
 alignment: tumor_suppressor
@@ -17,27 +18,30 @@ kegg_families: Protein kinases; DNA repair and recombination proteins
 length (aa): 2644
 locations: ATR-ATRIP complex; chromosome; Golgi apparatus; nuclear envelope; nucleoplasm;
   nucleus; PML body; site of DNA damage
-mass: 301.0
+mass: 301
+membrane_depth: 3
 pathways:
 - DNA damage response
 - replication stress
 - CHK1 signaling
-percent_disordered: 16.9
+percent_disordered: 17
 persona_aesthetics: Athlete; Salvagepunk
-persona_age: 16.9
+persona_age: 17
+persona_background_setting: null
 persona_height: 301
 persona_hexcode: '#130608'
 persona_image: /static/proteins/Q13535.png
 persona_politics: pro-Control
 persona_sex: Female
 persona_skintone_hue: 0
-persona_skintone_lightness: 2.6
+persona_skintone_lightness: 3
 persona_skintone_saturation: 38
 protein_type: globular
-rvis_percentile: 2.596229143
+rvis_percentile: 3
 symbol: ATR
 tags:
 - protein
+tissue_tau: 38
 title: ATR
 transmembrane: false
 uniprot_id: Q13535

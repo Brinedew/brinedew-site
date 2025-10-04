@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - BRAF
 alignment: oncogene
@@ -18,26 +19,29 @@ length (aa): 766
 locations: cell body; centriolar satellite; ciliary basal body; cilium; cytoplasm;
   cytosol; glutamatergic synapse; intracellular membrane-bounded organelle; mitochondrion;
   neuron projection; nucleus; plasma membrane; postsynapse; presynapse
-mass: 84.0
+mass: 84
+membrane_depth: 1
 pathways:
 - MAPK signaling
-percent_disordered: 44.3
+percent_disordered: 44
 persona_aesthetics: Athlete
-persona_age: 44.3
+persona_age: 44
+persona_background_setting: null
 persona_height: 84
 persona_hexcode: '#261716'
 persona_image: /static/proteins/P15056.png
 persona_politics: pro-Growth
 persona_sex: Female
 persona_skintone_hue: 14
-persona_skintone_lightness: 9.5
+persona_skintone_lightness: 10
 persona_skintone_saturation: 22
 protein_type: serine/threonine kinase
-rvis_percentile: 9.547617613
+rvis_percentile: 10
 symbol: BRAF
 tags:
 - protein
 - content/wiki
+tissue_tau: 22
 title: BRAF (BRAF)
 transmembrane: false
 uniprot_id: P15056

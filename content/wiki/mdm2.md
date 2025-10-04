@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases: []
 alignment: oncogene
 date: 2025-08-21
@@ -18,26 +19,29 @@ length (aa): 491
 locations: centriolar satellite; cytoplasm; cytosol; endocytic vesicle membrane; glutamatergic
   synapse; nucleolus; nucleoplasm; nucleus; plasma membrane; postsynaptic density;
   protein-containing complex; transcription repressor complex
-mass: 55.0
+mass: 55
+membrane_depth: 1
 pathways:
 - p53 regulation
-percent_disordered: 69.2
+percent_disordered: 69
 persona_aesthetics: Cargopunk
-persona_age: 69.2
+persona_age: 69
+persona_background_setting: null
 persona_height: 55
 persona_hexcode: '#202826'
 persona_image: /static/proteins/Q00987.png
 persona_politics: pro-Growth
 persona_sex: Female
 persona_skintone_hue: 166
-persona_skintone_lightness: 15.4
+persona_skintone_lightness: 15
 persona_skintone_saturation: 25
 protein_type: E3 ubiquitin ligase
-rvis_percentile: 15.36654418
+rvis_percentile: 15
 status: draft
 symbol: MDM2
 tags:
 - protein
+tissue_tau: 25
 title: MDM2
 transmembrane: false
 uniprot_id: Q00987

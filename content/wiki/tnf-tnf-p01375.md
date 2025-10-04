@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - TNF-alpha
 alignment: unknown
@@ -16,27 +17,30 @@ length (aa): 233
 locations: cell surface; external side of plasma membrane; extracellular region; extracellular
   space; membrane raft; neuronal cell body; phagocytic cup; plasma membrane; recycling
   endosome
-mass: 26.0
+mass: 26
+membrane_depth: 0
 pathways:
 - inflammatory signaling
 - extrinsic apoptosis
-percent_disordered: 33.5
+percent_disordered: 34
 persona_aesthetics: Synthwave; Junglecore
-persona_age: 33.5
+persona_age: 34
+persona_background_setting: null
 persona_height: 26
 persona_hexcode: '#4f63e4'
 persona_image: /static/proteins/P01375.png
 persona_politics: Maintenance
 persona_sex: Male
 persona_skintone_hue: 263
-persona_skintone_lightness: 47.2
+persona_skintone_lightness: 47
 persona_skintone_saturation: 83
 protein_type: cytokine
-rvis_percentile: 47.23209445
+rvis_percentile: 47
 symbol: TNF
 tags:
 - protein
 - content/wiki
+tissue_tau: 83
 title: TNF (TNF)
 transmembrane: false
 uniprot_id: P01375

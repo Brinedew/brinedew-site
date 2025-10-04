@@ -1,10 +1,11 @@
 ---
+Has transmembrane domains: 'No'
 aliases: []
 alignment: unknown
 date: 2025-08-21
 domain_count: 0
 domains: []
-domains_top3: nan
+domains_top3: null
 draft: true
 first_letter: I
 full_name: Interleukin-6
@@ -14,27 +15,30 @@ kegg_families: Cytokines and neuropeptides
 length (aa): 212
 locations: endoplasmic reticulum lumen; extracellular region; extracellular space;
   interleukin-6 receptor complex
-mass: 24.0
+mass: 24
+membrane_depth: 0
 pathways:
 - inflammatory signaling
 - JAK/STAT signaling
-percent_disordered: 42.9
+percent_disordered: 43
 persona_aesthetics: Synthwave
-persona_age: 42.9
+persona_age: 43
+persona_background_setting: null
 persona_height: 24
 persona_hexcode: '#596e45'
 persona_image: /static/proteins/P05231.png
 persona_politics: Maintenance
 persona_sex: Female
 persona_skintone_hue: 111
-persona_skintone_lightness: 43.9
+persona_skintone_lightness: 44
 persona_skintone_saturation: 53
 protein_type: cytokine
-rvis_percentile: 43.88892235
+rvis_percentile: 44
 status: draft
 symbol: IL6
 tags:
 - protein
+tissue_tau: 53
 title: IL-6
 transmembrane: false
 uniprot_id: P05231

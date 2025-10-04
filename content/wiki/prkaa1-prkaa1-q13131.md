@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - AMPK alpha-1
 alignment: tumor_suppressor
@@ -18,28 +19,31 @@ length (aa): 559
 locations: apical plasma membrane; axon; chromatin; ciliary basal body; cilium; cytoplasm;
   cytosol; dendrite; neuronal cell body; nuclear speck; nucleoplasm; nucleotide-activated
   protein kinase complex; nucleus
-mass: 64.0
+mass: 64
+membrane_depth: 1
 pathways:
 - AMPK signaling
 - autophagy
-percent_disordered: 41.7
+percent_disordered: 42
 persona_aesthetics: Athlete; Cargopunk; Atompunk
-persona_age: 41.7
+persona_age: 42
+persona_background_setting: null
 persona_height: 64
 persona_hexcode: '#272d2e'
 persona_image: /static/proteins/Q13131.png
 persona_politics: pro-Control
 persona_sex: Female
 persona_skintone_hue: 208
-persona_skintone_lightness: 18.0
+persona_skintone_lightness: 18
 persona_skintone_saturation: 20
 protein_type: serine/threonine kinase
-rvis_percentile: 17.99891573
+rvis_percentile: 18
 species: Homo sapiens (Human)
 symbol: PRKAA1
 tags:
 - protein
 - content/wiki
+tissue_tau: 20
 title: PRKAA1 (AMPKα1)
 transmembrane: false
 uniprot_id: Q13131

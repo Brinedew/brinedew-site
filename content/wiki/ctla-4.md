@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - CTLA4
 - CD152
@@ -19,27 +20,30 @@ length (aa): 223
 locations: clathrin-coated endocytic vesicle; external side of plasma membrane; Golgi
   apparatus; perinuclear region of cytoplasm; plasma membrane; protein complex involved
   in cell adhesion
-mass: 25.0
+mass: 25
+membrane_depth: 1
 pathways:
 - T-cell activation
 - immune checkpoint
-percent_disordered: 40.8
+percent_disordered: 41
 persona_aesthetics: Paramilitary
-persona_age: 40.8
+persona_age: 41
+persona_background_setting: null
 persona_height: 25
 persona_hexcode: '#a2542b'
 persona_image: /static/proteins/P16410.png
 persona_politics: Maintenance
 persona_sex: Male
 persona_skintone_hue: 28
-persona_skintone_lightness: 44.5
+persona_skintone_lightness: 44
 persona_skintone_saturation: 81
 protein_type: immune checkpoint receptor
-rvis_percentile: 44.54550931
+rvis_percentile: 45
 symbol: CTLA4
 tags:
 - protein
 - content/wiki
+tissue_tau: 81
 title: CTLA-4 (CTLA4)
 transmembrane: true
 uniprot_id: P16410

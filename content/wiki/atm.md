@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - Ataxia telangiectasia mutated
 alignment: tumor_suppressor
@@ -20,27 +21,30 @@ locations: centrosome; chromosome; cytoplasm; cytosol; DNA repair complex; extri
   component of synaptic vesicle membrane; intracellular membrane-bounded organelle;
   nucleolus; nucleoplasm; nucleus; peroxisomal matrix; site of double-strand break;
   spindle
-mass: 351.0
+mass: 351
+membrane_depth: 3
 pathways:
 - DNA damage response
 - p53 pathway
 - homologous recombination
-percent_disordered: 20.0
+percent_disordered: 20
 persona_aesthetics: Athlete; Constructivism; Salvagepunk
-persona_age: 20.0
+persona_age: 20
+persona_background_setting: null
 persona_height: 351
 persona_hexcode: '#91505e'
 persona_image: /static/proteins/Q13315.png
 persona_politics: pro-Control
 persona_sex: Female
 persona_skintone_hue: 0
-persona_skintone_lightness: 42.1
+persona_skintone_lightness: 42
 persona_skintone_saturation: 36
 protein_type: globular
-rvis_percentile: 42.0998735
+rvis_percentile: 42
 symbol: ATM
 tags:
 - protein
+tissue_tau: 36
 title: ATM
 transmembrane: false
 uniprot_id: Q13315

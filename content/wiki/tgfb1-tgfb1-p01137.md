@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - TGFB1
 alignment: both
@@ -18,26 +19,29 @@ locations: axon; blood microparticle; cell surface; collagen-containing extracel
   matrix; cytoplasm; extracellular matrix; extracellular region; extracellular space;
   Golgi lumen; neuronal cell body; nucleus; plasma membrane; platelet alpha granule
   lumen
-mass: 44.0
+mass: 44
+membrane_depth: 0
 pathways:
 - TGF-beta/SMAD signaling
-percent_disordered: 35.1
+percent_disordered: 35
 persona_aesthetics: Health Goth; Synthwave; Junglecore
-persona_age: 35.1
+persona_age: 35
+persona_background_setting: null
 persona_height: 44
 persona_hexcode: '#7175a1'
 persona_image: /static/proteins/P01137.png
 persona_politics: Opportunist
 persona_sex: Female
 persona_skintone_hue: 263
-persona_skintone_lightness: 50.5
+persona_skintone_lightness: 50
 persona_skintone_saturation: 30
 protein_type: cytokine
-rvis_percentile: 50.50298175
+rvis_percentile: 51
 symbol: TGFB1
 tags:
 - protein
 - content/wiki
+tissue_tau: 30
 title: TGF-beta 1 (TGFB1)
 transmembrane: false
 uniprot_id: P01137

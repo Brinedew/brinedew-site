@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - GAPDH
 alignment: unknown
@@ -17,29 +18,32 @@ locations: cytoplasm; cytosol; extracellular exosome; GAIT complex; intracellula
   membrane-bounded organelle; lipid droplet; membrane; microtubule cytoskeleton; nuclear
   membrane; nucleus; perinuclear region of cytoplasm; plasma membrane; ribonucleoprotein
   complex; vesicle
-mass: 36.0
+mass: 36
+membrane_depth: 1
 pathways:
 - 'Reactome: Gluconeogenesis'
 - 'Carbohydrate degradation; glycolysis; pyruvate from D-glyceraldehyde 3-phosphate:
   step 1/5'
 - 'Reactome: Glycolysis'
-percent_disordered: 26.9
+percent_disordered: 27
 persona_aesthetics: Cargopunk; Rocketpunk
-persona_age: 26.9
+persona_age: 27
+persona_background_setting: null
 persona_height: 36
 persona_hexcode: '#3a392f'
 persona_image: /static/proteins/P04406.png
 persona_politics: Maintenance
 persona_sex: Female
 persona_skintone_hue: 83
-persona_skintone_lightness: 23.7
+persona_skintone_lightness: 24
 persona_skintone_saturation: 27
 protein_type: receptor
-rvis_percentile: 23.69736763
+rvis_percentile: 24
 symbol: GAPDH
 tags:
 - protein
 - content/wiki
+tissue_tau: 27
 title: GAPDH
 transmembrane: false
 uniprot_id: P04406

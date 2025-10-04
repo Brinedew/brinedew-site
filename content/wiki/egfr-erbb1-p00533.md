@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - ERBB1
 - epidermal growth factor receptor
@@ -25,27 +26,30 @@ locations: basal plasma membrane; basolateral plasma membrane; cell junction; ce
   intracellular vesicle; membrane; membrane raft; multivesicular body, internal vesicle
   lumen; nuclear membrane; nucleus; perinuclear region of cytoplasm; plasma membrane;
   protein-containing complex; receptor complex; ruffle membrane; Shc-EGFR complex
-mass: 134.0
+mass: 134
+membrane_depth: 1
 pathways:
 - EGFR signaling
 - MAPK signaling
-percent_disordered: 63.4
+percent_disordered: 63
 persona_aesthetics: Athlete; Rocketpunk
-persona_age: 63.4
+persona_age: 63
+persona_background_setting: null
 persona_height: 134
 persona_hexcode: '#0c0905'
 persona_image: /static/proteins/P00533.png
 persona_politics: pro-Growth
 persona_sex: Male
 persona_skintone_hue: 55
-persona_skintone_lightness: 2.5
+persona_skintone_lightness: 2
 persona_skintone_saturation: 39
 protein_type: receptor tyrosine kinase
-rvis_percentile: 2.517920607
+rvis_percentile: 3
 symbol: EGFR
 tags:
 - protein
 - content/wiki
+tissue_tau: 39
 title: EGFR (ERBB1)
 transmembrane: true
 uniprot_id: P00533

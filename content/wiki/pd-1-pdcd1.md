@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - PDCD1
 alignment: unknown
@@ -16,26 +17,29 @@ image_link: null
 kegg_families: CD molecules
 length (aa): 288
 locations: external side of plasma membrane; plasma membrane
-mass: 32.0
+mass: 32
+membrane_depth: 1
 pathways:
 - immune checkpoint
-percent_disordered: 58.7
+percent_disordered: 59
 persona_aesthetics: Paramilitary
-persona_age: 58.7
+persona_age: 59
+persona_background_setting: null
 persona_height: 32
 persona_hexcode: '#3b909d'
 persona_image: /static/proteins/Q15116.png
 persona_politics: Maintenance
 persona_sex: Male
 persona_skintone_hue: 208
-persona_skintone_lightness: 55.4
+persona_skintone_lightness: 55
 persona_skintone_saturation: 82
 protein_type: immune checkpoint receptor
-rvis_percentile: 55.35811096
+rvis_percentile: 55
 status: draft
 symbol: PDCD1
 tags:
 - protein
+tissue_tau: 82
 title: PD-1 (PDCD1)
 transmembrane: true
 uniprot_id: Q15116

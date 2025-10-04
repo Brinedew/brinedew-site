@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - VEGFA
 alignment: tumor_suppressor
@@ -16,26 +17,29 @@ length (aa): 395
 locations: adherens junction; cell surface; cytoplasm; endoplasmic reticulum; extracellular
   matrix; extracellular region; extracellular space; Golgi apparatus; membrane; nucleus;
   platelet alpha granule lumen; secretory granule; VEGF-A complex
-mass: 44.0
+mass: 44
+membrane_depth: 0
 pathways:
 - angiogenesis
-percent_disordered: 68.9
+percent_disordered: 69
 persona_aesthetics: Synthwave; Junglecore
-persona_age: 68.9
+persona_age: 69
+persona_background_setting: null
 persona_height: 44
 persona_hexcode: '#574462'
 persona_image: /static/proteins/P15692.png
 persona_politics: pro-Control
 persona_sex: Female
 persona_skintone_hue: 291
-persona_skintone_lightness: 31.9
+persona_skintone_lightness: 32
 persona_skintone_saturation: 26
 protein_type: growth factor
-rvis_percentile: 31.91976387
+rvis_percentile: 32
 status: draft
 symbol: VEGFA
 tags:
 - protein
+tissue_tau: 26
 title: VEGF (VEGFA)
 transmembrane: false
 uniprot_id: P15692

@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - FGA
 - Fibrinogen alpha
@@ -22,27 +23,30 @@ locations: blood microparticle; cell surface; collagen-containing extracellular 
   extracellular exosome; extracellular region; extracellular space; extracellular
   vesicle; fibrinogen complex; plasma membrane; platelet alpha granule; platelet alpha
   granule lumen
-mass: 95.0
+mass: 95
+membrane_depth: 0
 pathways:
 - coagulation
 - wound healing
-percent_disordered: 51.6
+percent_disordered: 52
 persona_aesthetics: Rocketpunk; Junglecore
-persona_age: 51.6
+persona_age: 52
+persona_background_setting: null
 persona_height: 95
 persona_hexcode: '#271f04'
 persona_image: /static/proteins/P02671.png
 persona_politics: Maintenance
 persona_sex: Female
 persona_skintone_hue: 69
-persona_skintone_lightness: 12.2
+persona_skintone_lightness: 12
 persona_skintone_saturation: 91
 protein_type: blood clotting protein
-rvis_percentile: 12.22817903
+rvis_percentile: 12
 symbol: FGA
 tags:
 - protein
 - content/wiki
+tissue_tau: 91
 title: Fibrinogen alpha chain (FGA)
 transmembrane: false
 uniprot_id: P02671

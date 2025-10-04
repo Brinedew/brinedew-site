@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases: []
 alignment: oncogene
 date: 2025-08-21
@@ -20,28 +21,31 @@ length (aa): 239
 locations: BAD-BCL-2 complex; cytoplasm; cytosol; endoplasmic reticulum; endoplasmic
   reticulum membrane; membrane; mitochondrial outer membrane; mitochondrion; myelin
   sheath; nuclear membrane; nucleus; pore complex; protein-containing complex
-mass: 26.0
+mass: 26
+membrane_depth: 2
 pathways:
 - apoptosis
 - mitochondrial membrane permeability
 - autophagy regulation
-percent_disordered: 44.8
+percent_disordered: 45
 persona_aesthetics: Minimalism
-persona_age: 44.8
+persona_age: 45
+persona_background_setting: null
 persona_height: 26
 persona_hexcode: '#8a4845'
 persona_image: /static/proteins/P10415.png
 persona_politics: pro-Growth
 persona_sex: Male
 persona_skintone_hue: 14
-persona_skintone_lightness: 38.6
+persona_skintone_lightness: 39
 persona_skintone_saturation: 40
 protein_type: globular
-rvis_percentile: 38.6121318
+rvis_percentile: 39
 symbol: BCL2
 tags:
 - protein
 - content/wiki
+tissue_tau: 40
 title: BCL‑2
 transmembrane: true
 uniprot_id: P10415

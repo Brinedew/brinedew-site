@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - KRAS
 alignment: oncogene
@@ -17,26 +18,29 @@ length (aa): 189
 locations: cytoplasm; cytoplasmic side of plasma membrane; cytosol; endoplasmic reticulum
   membrane; focal adhesion; Golgi membrane; membrane; mitochondrial outer membrane;
   plasma membrane
-mass: 22.0
+mass: 22
+membrane_depth: 1
 pathways:
 - MAPK signaling
-percent_disordered: 45.0
+percent_disordered: 45
 persona_aesthetics: Cargopunk; Abstract Tech
-persona_age: 45.0
+persona_age: 45
+persona_background_setting: null
 persona_height: 22
 persona_hexcode: '#4d5d51'
 persona_image: /static/proteins/P01116.png
 persona_politics: pro-Growth
 persona_sex: Female
 persona_skintone_hue: 138
-persona_skintone_lightness: 37.9
+persona_skintone_lightness: 38
 persona_skintone_saturation: 23
 protein_type: small GTPase
-rvis_percentile: 37.93747365
+rvis_percentile: 38
 symbol: KRAS
 tags:
 - protein
 - content/wiki
+tissue_tau: 23
 title: KRAS (KRAS)
 transmembrane: false
 uniprot_id: P01116

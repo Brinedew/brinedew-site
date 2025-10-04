@@ -169,9 +169,10 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     
     # Check if already enriched (compare key fields)
     needs_update = (
-        post.get('mass') != (float(protein_data['mass']) if pd.notna(protein_data.get('mass')) else None) or
-        post.get('alignment') != str(protein_data.get('alignment', '')) or
-        post.get('persona_politics') != str(protein_data.get('Politics', ''))
+        post.get('mass') != (round(float(protein_data['mass'])) if pd.notna(protein_data.get('mass')) else None) or
+        post.get('alignment') != clean_str(protein_data.get('alignment', '')) or
+        post.get('persona_politics') != clean_str(protein_data.get('Politics', '')) or
+        not post.get('tissue_tau')  # Force update if missing new fields
     )
     
     if not needs_update:
@@ -186,30 +187,41 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     
     print(f"  Enriching {md_file.name} ({uniprot_id})")
     
+    # Helper to handle NaN strings
+    def clean_str(value):
+        """Convert value to string, handling NaN."""
+        if pd.isna(value) or str(value).lower() == 'nan':
+            return None
+        return str(value)
+    
     # Populate molecular properties
-    post['gene_symbol'] = str(protein_data.get('gene_symbol', ''))
-    post['full_name'] = str(protein_data.get('full_name', ''))
-    post['mass'] = float(protein_data['mass']) if pd.notna(protein_data.get('mass')) else None
+    post['gene_symbol'] = clean_str(protein_data.get('gene_symbol', ''))
+    post['full_name'] = clean_str(protein_data.get('full_name', ''))
+    post['mass'] = round(float(protein_data['mass'])) if pd.notna(protein_data.get('mass')) else None
     post['length (aa)'] = int(protein_data['length']) if pd.notna(protein_data.get('length')) else None
     post['domain_count'] = int(protein_data['domain_count']) if pd.notna(protein_data.get('domain_count')) else None
-    post['domains_top3'] = str(protein_data.get('domains_top3', ''))
-    post['locations'] = str(protein_data.get('locations', ''))
-    post['alignment'] = str(protein_data.get('alignment', ''))
-    post['kegg_families'] = str(protein_data.get('kegg_families', ''))
-    post['percent_disordered'] = float(protein_data['percent_disordered']) if pd.notna(protein_data.get('percent_disordered')) else None
-    post['rvis_percentile'] = float(protein_data['rvis_percentile']) if pd.notna(protein_data.get('rvis_percentile')) else None
-    post['first_letter'] = str(protein_data.get('first_letter', ''))
+    post['domains_top3'] = clean_str(protein_data.get('domains_top3', ''))
+    post['locations'] = clean_str(protein_data.get('locations', ''))
+    post['alignment'] = clean_str(protein_data.get('alignment', ''))
+    post['kegg_families'] = clean_str(protein_data.get('kegg_families', ''))
+    post['percent_disordered'] = round(float(protein_data['percent_disordered'])) if pd.notna(protein_data.get('percent_disordered')) else None
+    post['rvis_percentile'] = round(float(protein_data['rvis_percentile'])) if pd.notna(protein_data.get('rvis_percentile')) else None
+    post['first_letter'] = clean_str(protein_data.get('first_letter', ''))
+    post['Has transmembrane domains'] = clean_str(protein_data.get('Has transmembrane domains', ''))
+    post['membrane_depth'] = int(protein_data['membrane_depth']) if pd.notna(protein_data.get('membrane_depth')) else None
+    post['tissue_tau'] = round(float(protein_data['tissue_tau']) * 100) if pd.notna(protein_data.get('tissue_tau')) else None
     
     # Populate persona properties
-    post['persona_height'] = int(protein_data['height']) if pd.notna(protein_data.get('height')) else None
-    post['persona_sex'] = str(protein_data.get('Sex', ''))
-    post['persona_politics'] = str(protein_data.get('Politics', ''))
+    post['persona_height'] = round(float(protein_data['height'])) if pd.notna(protein_data.get('height')) else None
+    post['persona_sex'] = clean_str(protein_data.get('Sex', ''))
+    post['persona_politics'] = clean_str(protein_data.get('Politics', ''))
     post['persona_skintone_hue'] = int(protein_data['Skintone Hue ']) if pd.notna(protein_data.get('Skintone Hue ')) else None
     post['persona_skintone_saturation'] = int(protein_data['Skintone Saturation']) if pd.notna(protein_data.get('Skintone Saturation')) else None
-    post['persona_skintone_lightness'] = float(protein_data['Skintone Lightness']) if pd.notna(protein_data.get('Skintone Lightness')) else None
-    post['persona_hexcode'] = str(protein_data.get('hexcode', '#cccccc'))
-    post['persona_aesthetics'] = str(protein_data.get('Aesthetics', ''))
-    post['persona_age'] = float(protein_data['Age']) if pd.notna(protein_data.get('Age')) else None
+    post['persona_skintone_lightness'] = round(float(protein_data['Skintone Lightness'])) if pd.notna(protein_data.get('Skintone Lightness')) else None
+    post['persona_hexcode'] = clean_str(protein_data.get('hexcode', '#cccccc'))
+    post['persona_aesthetics'] = clean_str(protein_data.get('Aesthetics', ''))
+    post['persona_age'] = round(float(protein_data['Age'])) if pd.notna(protein_data.get('Age')) else None
+    post['persona_background_setting'] = clean_str(protein_data.get('background_setting', ''))
     
     # Handle persona image
     image_path = f"/static/proteins/{uniprot_id}.png"

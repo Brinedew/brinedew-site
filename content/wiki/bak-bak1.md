@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - BAK1
 alignment: unknown
@@ -19,27 +20,30 @@ kegg_families: Mitochondrial biogenesis; Transporters
 length (aa): 211
 locations: BAK complex; Bcl-2 family protein complex; cytosol; endoplasmic reticulum;
   mitochondrial outer membrane; mitochondrion; pore complex
-mass: 23.0
+mass: 23
+membrane_depth: 2
 pathways:
 - apoptosis
 - mitochondrial permeabilization
 - caspase activation
-percent_disordered: 27.0
+percent_disordered: 27
 persona_aesthetics: Atompunk
-persona_age: 27.0
+persona_age: 27
+persona_background_setting: null
 persona_height: 23
 persona_hexcode: '#c79492'
 persona_image: /static/proteins/Q16611.png
 persona_politics: Maintenance
 persona_sex: Male
 persona_skintone_hue: 14
-persona_skintone_lightness: 65.9
+persona_skintone_lightness: 66
 persona_skintone_saturation: 32
 protein_type: globular
-rvis_percentile: 65.85145473
+rvis_percentile: 66
 symbol: BAK1
 tags:
 - protein
+tissue_tau: 32
 title: BAK (BAK1)
 transmembrane: true
 uniprot_id: Q16611

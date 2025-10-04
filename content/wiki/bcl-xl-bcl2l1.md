@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'Yes'
 aliases:
 - BCL2L1
 alignment: oncogene
@@ -22,27 +23,30 @@ length (aa): 233
 locations: Bcl-2 family protein complex; centrosome; cytoplasm; cytosol; endoplasmic
   reticulum; mitochondrial inner membrane; mitochondrial matrix; mitochondrial outer
   membrane; mitochondrion; nuclear membrane; synaptic vesicle membrane
-mass: 26.0
+mass: 26
+membrane_depth: 1
 pathways:
 - apoptosis
 - mitochondrial membrane permeability
 - caspase inhibition
-percent_disordered: 42.1
+percent_disordered: 42
 persona_aesthetics: Minimalism; Constructivism
-persona_age: 42.1
+persona_age: 42
+persona_background_setting: null
 persona_height: 26
 persona_hexcode: '#44302f'
 persona_image: /static/proteins/Q07817.png
 persona_politics: pro-Growth
 persona_sex: Male
 persona_skintone_hue: 14
-persona_skintone_lightness: 22.0
+persona_skintone_lightness: 22
 persona_skintone_saturation: 17
 protein_type: globular
-rvis_percentile: 21.95650864
+rvis_percentile: 22
 symbol: BCL2L1
 tags:
 - protein
+tissue_tau: 17
 title: BCL‑XL (BCL2L1)
 transmembrane: true
 uniprot_id: Q07817

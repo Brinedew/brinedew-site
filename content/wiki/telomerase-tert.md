@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - TERT
 - hTERT
@@ -20,26 +21,29 @@ locations: chromosome, telomeric region; cytosol; mitochondrial nucleoid; nuclea
   speck; nuclear telomere cap complex; nucleolus; nucleoplasm; nucleus; plasma membrane;
   PML body; RNA-directed RNA polymerase complex; telomerase catalytic core complex;
   telomerase holoenzyme complex; TERT-RMRP complex
-mass: 127.0
+mass: 127
+membrane_depth: 3
 pathways:
 - telomere maintenance
-percent_disordered: 32.0
-persona_aesthetics: nan
-persona_age: 32.0
+percent_disordered: 32
+persona_aesthetics: null
+persona_age: 32
+persona_background_setting: null
 persona_height: 127
-persona_hexcode: nan
+persona_hexcode: null
 persona_image: /static/proteins/O14746.png
 persona_politics: Maintenance
 persona_sex: Female
 persona_skintone_hue: 263
-persona_skintone_lightness: 17.4
+persona_skintone_lightness: 17
 persona_skintone_saturation: null
 protein_type: reverse transcriptase
-rvis_percentile: 17.36039998
+rvis_percentile: 17
 status: draft
 symbol: TERT
 tags:
 - protein
+tissue_tau: null
 title: Telomerase (TERT)
 transmembrane: false
 uniprot_id: O14746

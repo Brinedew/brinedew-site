@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - CDKN1A
 - CIP1
@@ -12,32 +13,35 @@ first_letter: C
 full_name: Cyclin-dependent kinase inhibitor 1
 gene_symbol: CDKN1A
 image_link: null
-kegg_families: nan
+kegg_families: null
 length (aa): 164
 locations: cyclin-dependent protein kinase holoenzyme complex; cytoplasm; cytosol;
   nuclear body; nucleolus; nucleoplasm; nucleus; PCNA-p21 complex; protein-containing
   complex
-mass: 18.0
+mass: 18
+membrane_depth: 3
 pathways:
 - p53 pathway
 - cell cycle arrest
-percent_disordered: 100.0
-persona_aesthetics: nan
-persona_age: 100.0
+percent_disordered: 100
+persona_aesthetics: null
+persona_age: 100
+persona_background_setting: null
 persona_height: 18
 persona_hexcode: '#c7afa8'
 persona_image: /static/proteins/P38936.png
 persona_politics: Opportunist
 persona_sex: Female
 persona_skintone_hue: 28
-persona_skintone_lightness: 73.2
+persona_skintone_lightness: 73
 persona_skintone_saturation: 20
 protein_type: CDK inhibitor
-rvis_percentile: 73.19438588
+rvis_percentile: 73
 status: draft
 symbol: CDKN1A
 tags:
 - protein
+tissue_tau: 20
 title: p21^CIP1 (CDKN1A)
 transmembrane: false
 uniprot_id: P38936

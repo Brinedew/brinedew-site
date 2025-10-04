@@ -21,11 +21,22 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
   // Filter to only show pairs where both values exist in frontmatter
   const visibleMappings = mappings.filter(m => {
     const molecularValue = fm?.[m.source]
-    const personaKey = `persona_${m.target.toLowerCase().replace(/\s+/g, '_')}`
+    // Handle field name normalization for persona fields
+    const targetNormalized = m.target.toLowerCase().replace(/\s+/g, '_').replace(/_+$/, '')
+    const personaKey = `persona_${targetNormalized}`
     const personaValue = fm?.[personaKey]
     
-    return molecularValue !== undefined && molecularValue !== null &&
-           personaValue !== undefined && personaValue !== null
+    // Filter out null, undefined, empty strings, and "nan"
+    const hasMolecular = molecularValue !== undefined && 
+                         molecularValue !== null && 
+                         molecularValue !== '' && 
+                         String(molecularValue).toLowerCase() !== 'nan'
+    const hasPersona = personaValue !== undefined && 
+                       personaValue !== null && 
+                       personaValue !== '' && 
+                       String(personaValue).toLowerCase() !== 'nan'
+    
+    return hasMolecular && hasPersona
   })
 
   // Get persona image
@@ -42,11 +53,17 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
       'rvis_percentile': 'RVIS %ile',
       'alignment': 'Classification',
       'first_letter': 'First Letter',
+      'Has transmembrane domains': 'Transmembrane',
+      'membrane_depth': 'Membrane Depth',
+      'tissue_tau': 'Tissue Specificity',
       'height': 'Height (cm)',
       'Sex': 'Gender',
       'Politics': 'Politics',
       'Skintone Hue ': 'Skin Hue',
+      'Skintone Saturation': 'Skin Saturation',
       'Skintone Lightness': 'Skin Lightness',
+      'Aesthetics': 'Aesthetics',
+      'background_setting': 'Setting',
       'Age': 'Age'
     }
     return labelMap[fieldName] || fieldName
@@ -83,7 +100,8 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
           </div>
           
           {visibleMappings.map(m => {
-            const personaKey = `persona_${m.target.toLowerCase().replace(/\s+/g, '_')}`
+            const targetNormalized = m.target.toLowerCase().replace(/\s+/g, '_').replace(/_+$/, '')
+            const personaKey = `persona_${targetNormalized}`
             return (
               <div class="mapping-row">
                 <div class="mapping-molecular">

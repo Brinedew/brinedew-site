@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - SHH
 - Sonic hedgehog
@@ -20,27 +21,30 @@ locations: cell surface; collagen-containing extracellular matrix; cytosol; endo
   reticulum; endoplasmic reticulum lumen; endoplasmic reticulum membrane; extracellular
   region; extracellular space; Golgi apparatus; Golgi membrane; membrane raft; plasma
   membrane
-mass: 50.0
+mass: 50
+membrane_depth: 0
 pathways:
 - Hedgehog signaling
 - development
-percent_disordered: 62.1
+percent_disordered: 62
 persona_aesthetics: Wuxia; Junglecore
-persona_age: 62.1
+persona_age: 62
+persona_background_setting: null
 persona_height: 50
 persona_hexcode: '#1a395c'
 persona_image: /static/proteins/Q15465.png
 persona_politics: Maintenance
 persona_sex: Female
 persona_skintone_hue: 249
-persona_skintone_lightness: 23.4
+persona_skintone_lightness: 23
 persona_skintone_saturation: 79
 protein_type: secreted morphogen
-rvis_percentile: 23.42027589
+rvis_percentile: 23
 symbol: SHH
 tags:
 - protein
 - content/wiki
+tissue_tau: 79
 title: Sonic hedgehog (SHH)
 transmembrane: false
 uniprot_id: Q15465

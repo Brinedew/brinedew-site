@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - Forkhead box O3
 alignment: tumor_suppressor
@@ -17,28 +18,31 @@ length (aa): 673
 locations: chromatin; cytoplasm; cytosol; mitochondrial matrix; mitochondrial outer
   membrane; nucleoplasm; nucleus; protein-containing complex; RNA polymerase II transcription
   repressor complex
-mass: 71.0
+mass: 71
+membrane_depth: 3
 pathways:
 - stress response
 - cell cycle arrest
-percent_disordered: 88.7
+percent_disordered: 89
 persona_aesthetics: Dark Academia
-persona_age: 88.7
+persona_age: 89
+persona_background_setting: null
 persona_height: 71
 persona_hexcode: '#736c5c'
 persona_image: /static/proteins/O43524.png
 persona_politics: pro-Control
 persona_sex: Female
 persona_skintone_hue: 69
-persona_skintone_lightness: 45.9
+persona_skintone_lightness: 46
 persona_skintone_saturation: 27
 protein_type: transcription factor
-rvis_percentile: 45.94903921
+rvis_percentile: 46
 species: Homo sapiens (Human)
 symbol: FOXO3
 tags:
 - protein
 - content/wiki
+tissue_tau: 27
 title: FOXO3 (FOXO3)
 transmembrane: false
 uniprot_id: O43524

@@ -1,4 +1,5 @@
 ---
+Has transmembrane domains: 'No'
 aliases:
 - mTOR
 - mechanistic target of rapamycin
@@ -23,28 +24,31 @@ locations: cytoplasm; cytosol; dendrite; endomembrane system; endoplasmic reticu
   mitochondrial outer membrane; nuclear envelope; nucleoplasm; nucleus; phagocytic
   vesicle; plasma membrane; PML body; serine/threonine protein kinase complex; TORC1
   complex; TORC2 complex
-mass: 289.0
+mass: 289
+membrane_depth: 2
 pathways:
 - PI3K/AKT/mTOR
 - autophagy
-percent_disordered: 19.3
+percent_disordered: 19
 persona_aesthetics: Athlete; Cargopunk
-persona_age: 19.3
+persona_age: 19
+persona_background_setting: null
 persona_height: 289
 persona_hexcode: '#000000'
 persona_image: /static/proteins/P42345.png
 persona_politics: pro-Growth
 persona_sex: Female
 persona_skintone_hue: 166
-persona_skintone_lightness: 0.1
+persona_skintone_lightness: 0
 persona_skintone_saturation: 34
 protein_type: serine/threonine kinase
-rvis_percentile: 0.090356003
+rvis_percentile: 0
 species: Homo sapiens (Human)
 symbol: MTOR
 tags:
 - protein
 - content/wiki
+tissue_tau: 34
 title: MTOR (MTOR)
 transmembrane: false
 uniprot_id: P42345
