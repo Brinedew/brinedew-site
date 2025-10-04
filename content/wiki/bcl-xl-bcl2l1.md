@@ -1,29 +1,53 @@
 ---
-title: BCL‑XL (BCL2L1)
-tags:
-  - protein
-date: 2025-08-21
-draft: true
 aliases:
-  - BCL2L1
-symbol: BCL2L1
-mass: 26.0
-length (aa): 233
-protein_type: globular
-transmembrane: true
+- BCL2L1
+alignment: oncogene
+date: 2025-08-21
+domain_count: 5
 domains:
-  - BH1
-  - BH2
-  - BH3
-  - BH4
-  - transmembrane domain
+- BH1
+- BH2
+- BH3
+- BH4
+- transmembrane domain
+domains_top3: Disordered; BH4; BH3
+draft: true
+first_letter: B
+full_name: Bcl-2-like protein 1
+gene_symbol: BCL2L1
+image_link: null
+kegg_families: Protein phosphatases and associated proteins; Chromosome and associated
+  proteins; Transporters
+length (aa): 233
+locations: Bcl-2 family protein complex; centrosome; cytoplasm; cytosol; endoplasmic
+  reticulum; mitochondrial inner membrane; mitochondrial matrix; mitochondrial outer
+  membrane; mitochondrion; nuclear membrane; synaptic vesicle membrane
+mass: 26.0
 pathways:
-  - apoptosis
-  - mitochondrial membrane permeability
-  - caspase inhibition
+- apoptosis
+- mitochondrial membrane permeability
+- caspase inhibition
+percent_disordered: 42.1
+persona_aesthetics: Minimalism; Constructivism
+persona_age: 42.1
+persona_height: 26
+persona_hexcode: '#44302f'
+persona_image: /static/proteins/Q07817.png
+persona_politics: pro-Growth
+persona_sex: Male
+persona_skintone_hue: 14
+persona_skintone_lightness: 22.0
+persona_skintone_saturation: 17
+protein_type: globular
+rvis_percentile: 21.95650864
+symbol: BCL2L1
+tags:
+- protein
+title: BCL‑XL (BCL2L1)
+transmembrane: true
 uniprot_id: Q07817
-image_link: 
 ---
+
 # BCL‑XL (BCL2L1)
 
 **What it is.** Anti‑apoptotic relative of BCL‑2.

@@ -1,28 +1,50 @@
 ---
-title: BAK (BAK1)
-tags:
-  - protein
-date: 2025-08-21
-draft: true
 aliases:
-  - BAK1
-symbol: BAK1
-mass: 23.4
-length (aa): 211
-protein_type: globular
-transmembrane: true
+- BAK1
+alignment: unknown
+date: 2025-08-21
+domain_count: 4
 domains:
-  - BH1
-  - BH2
-  - BH3
-  - transmembrane domain
+- BH1
+- BH2
+- BH3
+- transmembrane domain
+domains_top3: Disordered; BH3; BH1
+draft: true
+first_letter: B
+full_name: Bcl-2 homologous antagonist/killer
+gene_symbol: BAK1
+image_link: null
+kegg_families: Mitochondrial biogenesis; Transporters
+length (aa): 211
+locations: BAK complex; Bcl-2 family protein complex; cytosol; endoplasmic reticulum;
+  mitochondrial outer membrane; mitochondrion; pore complex
+mass: 23.0
 pathways:
-  - apoptosis
-  - mitochondrial permeabilization
-  - caspase activation
+- apoptosis
+- mitochondrial permeabilization
+- caspase activation
+percent_disordered: 27.0
+persona_aesthetics: Atompunk
+persona_age: 27.0
+persona_height: 23
+persona_hexcode: '#c79492'
+persona_image: /static/proteins/Q16611.png
+persona_politics: Maintenance
+persona_sex: Male
+persona_skintone_hue: 14
+persona_skintone_lightness: 65.9
+persona_skintone_saturation: 32
+protein_type: globular
+rvis_percentile: 65.85145473
+symbol: BAK1
+tags:
+- protein
+title: BAK (BAK1)
+transmembrane: true
 uniprot_id: Q16611
-image_link: 
 ---
+
 # BAK (BAK1)
 
 **What it is.** Pro-apoptotic partner of BAX; forms pores in mitochondria to trigger cell suicide.

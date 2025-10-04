@@ -1,24 +1,45 @@
 ---
-title: IL-8 (CXCL8)
-tags:
-- protein
-date: 2025-08-21
-status: draft
 aliases:
 - CXCL8
-draft: true
-symbol: CXCL8
-mass: 11.1
-length (aa): 99
-protein_type: chemokine
-transmembrane: false
+alignment: unknown
+date: 2025-08-21
+domain_count: 0
 domains: []
+domains_top3: nan
+draft: true
+first_letter: C
+full_name: Interleukin-8
+gene_symbol: CXCL8
+image_link: null
+kegg_families: Cytokines and neuropeptides; Glycosaminoglycan binding proteins
+length (aa): 99
+locations: extracellular region; extracellular space
+mass: 11.0
 pathways:
-  - chemotaxis
-  - angiogenesis
+- chemotaxis
+- angiogenesis
+percent_disordered: 46.5
+persona_aesthetics: Synthwave; Junglecore
+persona_age: 46.5
+persona_height: 11
+persona_hexcode: '#b96a46'
+persona_image: /static/proteins/P10145.png
+persona_politics: Maintenance
+persona_sex: Female
+persona_skintone_hue: 28
+persona_skintone_lightness: 53.0
+persona_skintone_saturation: 68
+protein_type: chemokine
+rvis_percentile: 53.01487862
+status: draft
+symbol: CXCL8
+tags:
+- protein
+title: IL-8 (CXCL8)
+transmembrane: false
 uniprot_id: P10145
-image_link:
 ---
+
 # IL-8 (CXCL8)
 
 **What it is.** Chemokine that recruits neutrophils and remodels microenvironments.

@@ -1,27 +1,53 @@
 ---
-title: Fibrinogen alpha chain (FGA)
-tags:
-  - protein
-  - content/wiki
-date: 2025-08-21
-draft: true
 aliases:
-  - FGA
-  - Fibrinogen alpha
-symbol: FGA
-mass: 95.0
-length (aa): 865
-protein_type: blood clotting protein
-transmembrane: false
+- FGA
+- Fibrinogen alpha
+alignment: unknown
+date: 2025-08-21
+domain_count: 4
 domains:
-  - coiled-coil region
-  - fibrinopeptide A
+- coiled-coil region
+- fibrinopeptide A
+domains_top3: Fibrinogen C-terminal; Alpha-chain polymerization, binding distal domain
+  of another fibrin gamma chain; Disordered
+draft: true
+first_letter: F
+full_name: Fibrinogen alpha chain
+gene_symbol: FGA
+image_link: null
+kegg_families: Exosome; Glycosaminoglycan binding proteins
+length (aa): 866
+locations: blood microparticle; cell surface; collagen-containing extracellular matrix;
+  endoplasmic reticulum; endoplasmic reticulum lumen; external side of plasma membrane;
+  extracellular exosome; extracellular region; extracellular space; extracellular
+  vesicle; fibrinogen complex; plasma membrane; platelet alpha granule; platelet alpha
+  granule lumen
+mass: 95.0
 pathways:
-  - coagulation
-  - wound healing
+- coagulation
+- wound healing
+percent_disordered: 51.6
+persona_aesthetics: Rocketpunk; Junglecore
+persona_age: 51.6
+persona_height: 95
+persona_hexcode: '#271f04'
+persona_image: /static/proteins/P02671.png
+persona_politics: Maintenance
+persona_sex: Female
+persona_skintone_hue: 69
+persona_skintone_lightness: 12.2
+persona_skintone_saturation: 91
+protein_type: blood clotting protein
+rvis_percentile: 12.22817903
+symbol: FGA
+tags:
+- protein
+- content/wiki
+title: Fibrinogen alpha chain (FGA)
+transmembrane: false
 uniprot_id: P02671
-image_link:
 ---
+
 # Fibrinogen alpha chain (FGA)
 
 **What it is.** Component of fibrinogen; upon thrombin cleavage, contributes to fibrin mesh during coagulation.

@@ -1,24 +1,46 @@
 ---
-title: TAZ (WWTR1)
-tags:
-- protein
-date: 2025-08-21
-status: draft
 aliases:
 - WWTR1
-draft: true
-symbol: WWTR1
-mass: 44.1
-length (aa): 400
-protein_type: transcriptional co-activator
-transmembrane: false
+alignment: oncogene
+date: 2025-08-21
+domain_count: 4
 domains:
-  - WW domain
+- WW domain
+domains_top3: WW; Disordered; Required for interaction with PALS1
+draft: true
+first_letter: W
+full_name: WW domain-containing transcription regulator protein 1
+gene_symbol: WWTR1
+image_link: null
+kegg_families: nan
+length (aa): 400
+locations: bicellular tight junction; cytoplasm; cytosol; nuclear body; nucleoplasm;
+  nucleus; plasma membrane; transcription regulator complex
+mass: 44.0
 pathways:
-  - Hippo signaling
+- Hippo signaling
+percent_disordered: 92.5
+persona_aesthetics: nan
+persona_age: 92.5
+persona_height: 44
+persona_hexcode: '#ccb4ce'
+persona_image: /static/proteins/Q9GZV5.png
+persona_politics: pro-Growth
+persona_sex: Female
+persona_skintone_hue: 305
+persona_skintone_lightness: 76.1
+persona_skintone_saturation: 26
+protein_type: transcriptional co-activator
+rvis_percentile: 76.1098729
+status: draft
+symbol: WWTR1
+tags:
+- protein
+title: TAZ (WWTR1)
+transmembrane: false
 uniprot_id: Q9GZV5
-image_link:
 ---
+
 # TAZ (WWTR1)
 
 **What it is.** YAP’s paralog; co-activator modulated by Hippo signaling and tissue stiffness.

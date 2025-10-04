@@ -1,162 +1,246 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
+import mappingConfig from "../../data/thoteins/mapping.json"
+
+interface Mapping {
+  source: string
+  target: string
+  type: string
+}
 
 const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzComponentProps) => {
   const fm = fileData.frontmatter
   
-  // Only render if we have protein tag
   if (!fm?.tags?.includes("protein")) {
     return null
   }
 
+  // Build mappings from config
+  const mappings: Mapping[] = (mappingConfig.mappings || []) as Mapping[]
+  
+  // Filter to only show pairs where both values exist in frontmatter
+  const visibleMappings = mappings.filter(m => {
+    const molecularValue = fm?.[m.source]
+    const personaKey = `persona_${m.target.toLowerCase().replace(/\s+/g, '_')}`
+    const personaValue = fm?.[personaKey]
+    
+    return molecularValue !== undefined && molecularValue !== null &&
+           personaValue !== undefined && personaValue !== null
+  })
+
+  // Get persona image
+  const personaImage = fm?.persona_image || `/static/proteins/${fm?.uniprot_id}.png`
+  const hexcode = fm?.persona_hexcode || '#cccccc'
+  const geneSymbol = fm?.symbol || fm?.gene_symbol || fm?.title || 'Protein'
+
+  // Helper to prettify field names
+  const prettifyLabel = (fieldName: string): string => {
+    const labelMap: Record<string, string> = {
+      'mass': 'Mass (kDa)',
+      'length': 'Length (aa)',
+      'percent_disordered': 'Disorder (%)',
+      'rvis_percentile': 'RVIS %ile',
+      'alignment': 'Classification',
+      'first_letter': 'First Letter',
+      'height': 'Height (cm)',
+      'Sex': 'Gender',
+      'Politics': 'Politics',
+      'Skintone Hue ': 'Skin Hue',
+      'Skintone Lightness': 'Skin Lightness',
+      'Age': 'Age'
+    }
+    return labelMap[fieldName] || fieldName
+  }
+
   return (
     <div class={classNames(displayClass, "protein-infobox")}>
-      <div class="infobox-header">
-        <h3>{fm?.title}</h3>
-        {fm?.symbol && <div class="protein-symbol">({fm.symbol})</div>}
+      {/* Persona Image */}
+      <div class="infobox-image-container">
+        <div class="infobox-image" style={`background-color: ${hexcode}`}>
+          <img 
+            src={personaImage} 
+            alt={`${geneSymbol} persona portrait`}
+            onError={(e) => {
+              const target = e.target as HTMLImageElement
+              target.style.display = 'none'
+              const placeholder = target.nextElementSibling as HTMLElement
+              if (placeholder) placeholder.style.display = 'flex'
+            }}
+          />
+          <div class="infobox-image-placeholder" style={`background-color: ${hexcode}; display: none;`}>
+            {geneSymbol}
+          </div>
+        </div>
       </div>
-      
-      <div class="infobox-content">
-        {fm?.aliases && (
-          <div class="infobox-row">
-            <span class="label">Alternative names</span>
-            <span class="value">{Array.isArray(fm.aliases) ? fm.aliases.join(", ") : fm.aliases}</span>
+
+      {/* Mapped Properties */}
+      {visibleMappings.length > 0 && (
+        <div class="infobox-mappings">
+          <div class="mapping-header">
+            <span class="mapping-col-title">Molecular</span>
+            <span class="mapping-arrow">→</span>
+            <span class="mapping-col-title">Persona</span>
           </div>
-        )}
-        
-        {fm?.mass && (
-          <div class="infobox-row">
-            <span class="label">Mass</span>
-            <span class="value">{fm.mass} kDa</span>
-          </div>
-        )}
-        
-        {fm?.["length (aa)"] && (
-          <div class="infobox-row">
-            <span class="label">Length</span>
-            <span class="value">{fm["length (aa)"]} aa</span>
-          </div>
-        )}
-        
-        {fm?.protein_type && (
-          <div class="infobox-row">
-            <span class="label">Type</span>
-            <span class="value">{fm.protein_type}</span>
-          </div>
-        )}
-        
-        {fm?.["Domains"] && (
-          <div class="infobox-row">
-            <span class="label">Domains</span>
-            <span class="value">{fm["Domains"]}</span>
-          </div>
-        )}
-        
-        {fm?.pathways && (
-          <div class="infobox-row">
-            <span class="label">Key pathways</span>
-            <span class="value">{Array.isArray(fm.pathways) ? fm.pathways.join(", ") : fm.pathways}</span>
-          </div>
-        )}
-        
-        {fm?.uniprot_id && (
-          <div class="infobox-row">
-            <span class="label">UniProt</span>
-            <span class="value">
-              <a href={`https://www.uniprot.org/uniprotkb/${fm.uniprot_id}`} target="_blank" rel="noopener">
-                {fm.uniprot_id}
-              </a>
-            </span>
-          </div>
-        )}
-        
-        {fm?.["Image link"] && (
-          <div class="infobox-image">
-            <img src={fm["Image link"]} alt={`${fm?.title} structure`} />
-          </div>
-        )}
-      </div>
+          
+          {visibleMappings.map(m => {
+            const personaKey = `persona_${m.target.toLowerCase().replace(/\s+/g, '_')}`
+            return (
+              <div class="mapping-row">
+                <div class="mapping-molecular">
+                  <span class="mapping-label">{prettifyLabel(m.source)}</span>
+                  <span class="mapping-value">{fm[m.source]}</span>
+                </div>
+                <span class="mapping-arrow">→</span>
+                <div class="mapping-persona">
+                  <span class="mapping-label">{prettifyLabel(m.target)}</span>
+                  <span class="mapping-value">{fm[personaKey]}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* UniProt Link */}
+      {fm?.uniprot_id && (
+        <div class="infobox-footer">
+          <a href={`https://www.uniprot.org/uniprotkb/${fm.uniprot_id}`} target="_blank" rel="noopener">
+            UniProt: {fm.uniprot_id}
+          </a>
+        </div>
+      )}
     </div>
   )
 }
 
+
 ProteinInfobox.css = `
 .protein-infobox {
   float: right;
-  width: 300px;
-  margin: 0 0 1rem 1rem;
+  width: 320px;
+  margin: 0 0 1.5rem 1.5rem;
   border: 1px solid var(--border);
   background: var(--light);
-  padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
   font-size: 0.9rem;
   clear: right;
 }
 
-.infobox-header {
-  background: var(--highlight);
-  padding: 0.75rem 1rem;
-  text-align: center;
-  border-bottom: 1px solid var(--border);
-}
-
-.infobox-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: bold;
-}
-
-.protein-symbol {
-  font-style: italic;
-  color: var(--gray);
-  margin-top: 0.25rem;
-}
-
-.infobox-content {
-  padding: 0.75rem;
-}
-
-.infobox-row {
-  display: flex;
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid var(--lightgray);
-  padding-bottom: 0.5rem;
-}
-
-.infobox-row:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
-
-.infobox-row .label {
-  font-weight: bold;
-  min-width: 90px;
-  flex-shrink: 0;
-  margin-right: 0.5rem;
-}
-
-.infobox-row .value {
-  flex: 1;
-}
-
-.infobox-row a {
-  color: var(--secondary);
-  text-decoration: none;
-}
-
-.infobox-row a:hover {
-  text-decoration: underline;
+.infobox-image-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
 }
 
 .infobox-image {
-  margin-top: 1rem;
-  text-align: center;
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
 
 .infobox-image img {
-  max-width: 100%;
-  height: auto;
-  border: 1px solid var(--lightgray);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.infobox-image-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--light);
+  text-align: center;
+  padding: 1rem;
+}
+
+.infobox-mappings {
+  padding: 1rem;
+}
+
+.mapping-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.mapping-col-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--darkgray);
+  text-align: center;
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--lightgray);
+}
+
+.mapping-row:last-child {
+  border-bottom: none;
+}
+
+.mapping-molecular,
+.mapping-persona {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mapping-label {
+  font-size: 0.7rem;
+  color: var(--darkgray);
+  font-weight: 500;
+}
+
+.mapping-value {
+  font-size: 0.85rem;
+  color: var(--dark);
+  font-weight: 600;
+}
+
+.mapping-arrow {
+  color: var(--accent);
+  font-weight: bold;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.infobox-footer {
+  padding: 0.75rem 1rem;
+  background: var(--highlight);
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.infobox-footer a {
+  color: var(--secondary);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.infobox-footer a:hover {
+  text-decoration: underline;
 }
 
 /* Mobile responsive */

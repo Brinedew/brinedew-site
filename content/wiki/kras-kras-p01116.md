@@ -1,24 +1,47 @@
 ---
-title: KRAS (KRAS)
-tags:
-  - protein
-  - content/wiki
-date: 2025-08-21
-draft: true
 aliases:
-  - KRAS
-symbol: KRAS
-mass: 21.7
-length (aa): 189
-protein_type: small GTPase
-transmembrane: false
+- KRAS
+alignment: oncogene
+date: 2025-08-21
+domain_count: 2
 domains:
-  - GTPase domain
+- GTPase domain
+domains_top3: Hypervariable region; Effector region
+draft: true
+first_letter: K
+full_name: GTPase KRas
+gene_symbol: KRAS
+image_link: null
+kegg_families: Membrane trafficking; GTP-binding proteins
+length (aa): 189
+locations: cytoplasm; cytoplasmic side of plasma membrane; cytosol; endoplasmic reticulum
+  membrane; focal adhesion; Golgi membrane; membrane; mitochondrial outer membrane;
+  plasma membrane
+mass: 22.0
 pathways:
-  - MAPK signaling
+- MAPK signaling
+percent_disordered: 45.0
+persona_aesthetics: Cargopunk; Abstract Tech
+persona_age: 45.0
+persona_height: 22
+persona_hexcode: '#4d5d51'
+persona_image: /static/proteins/P01116.png
+persona_politics: pro-Growth
+persona_sex: Female
+persona_skintone_hue: 138
+persona_skintone_lightness: 37.9
+persona_skintone_saturation: 23
+protein_type: small GTPase
+rvis_percentile: 37.93747365
+symbol: KRAS
+tags:
+- protein
+- content/wiki
+title: KRAS (KRAS)
+transmembrane: false
 uniprot_id: P01116
-image_link:
 ---
+
 # KRAS (KRAS)
 
 **What it is.** Molecular switch downstream of many growth factor receptors.

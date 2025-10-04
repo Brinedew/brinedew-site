@@ -1,24 +1,47 @@
 ---
-title: YAP (YAP1)
-tags:
-- protein
-date: 2025-08-21
-status: draft
 aliases:
 - YAP1
-draft: true
-symbol: YAP1
-mass: 54.5
-length (aa): 504
-protein_type: transcriptional co-activator
-transmembrane: false
+alignment: both
+date: 2025-08-21
+domain_count: 8
 domains:
-  - WW domains
+- WW domains
+domains_top3: WW 1; WW 2; Disordered
+draft: true
+first_letter: Y
+full_name: Transcriptional coactivator YAP1
+gene_symbol: YAP1
+image_link: null
+kegg_families: nan
+length (aa): 504
+locations: bicellular tight junction; cell junction; cell-cell junction; cytoplasm;
+  cytosol; female germ cell nucleus; mitochondrion; nucleoplasm; nucleus; plasma membrane;
+  TEAD-YAP complex
+mass: 54.0
 pathways:
-  - Hippo signaling
+- Hippo signaling
+percent_disordered: 92.9
+persona_aesthetics: nan
+persona_age: 92.9
+persona_height: 54
+persona_hexcode: '#634958'
+persona_image: /static/proteins/P46937.png
+persona_politics: Opportunist
+persona_sex: Female
+persona_skintone_hue: 332
+persona_skintone_lightness: 34.3
+persona_skintone_saturation: 21
+protein_type: transcriptional co-activator
+rvis_percentile: 34.32925727
+status: draft
+symbol: YAP1
+tags:
+- protein
+title: YAP (YAP1)
+transmembrane: false
 uniprot_id: P46937
-image_link:
 ---
+
 # YAP (YAP1)
 
 **What it is.** Transcriptional co-activator controlled by the Hippo pathway and mechanical cues.

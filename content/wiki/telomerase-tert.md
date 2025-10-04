@@ -1,26 +1,50 @@
 ---
-title: Telomerase (TERT)
-tags:
-- protein
-date: 2025-08-21
-status: draft
 aliases:
 - TERT
 - hTERT
-draft: true
-symbol: TERT
-mass: 127.0
-length (aa): 1132
-protein_type: reverse transcriptase
-transmembrane: false
+alignment: unknown
+date: 2025-08-21
+domain_count: 15
 domains:
-  - RT domain
-  - TEN domain
+- RT domain
+- TEN domain
+domains_top3: Reverse transcriptase; RNA-interacting domain 1; GQ motif
+draft: true
+first_letter: T
+full_name: Telomerase reverse transcriptase
+gene_symbol: TERT
+image_link: null
+kegg_families: DNA replication proteins
+length (aa): 1132
+locations: chromosome, telomeric region; cytosol; mitochondrial nucleoid; nuclear
+  speck; nuclear telomere cap complex; nucleolus; nucleoplasm; nucleus; plasma membrane;
+  PML body; RNA-directed RNA polymerase complex; telomerase catalytic core complex;
+  telomerase holoenzyme complex; TERT-RMRP complex
+mass: 127.0
 pathways:
-  - telomere maintenance
+- telomere maintenance
+percent_disordered: 32.0
+persona_aesthetics: nan
+persona_age: 32.0
+persona_height: 127
+persona_hexcode: nan
+persona_image: /static/proteins/O14746.png
+persona_politics: Maintenance
+persona_sex: Female
+persona_skintone_hue: 263
+persona_skintone_lightness: 17.4
+persona_skintone_saturation: null
+protein_type: reverse transcriptase
+rvis_percentile: 17.36039998
+status: draft
+symbol: TERT
+tags:
+- protein
+title: Telomerase (TERT)
+transmembrane: false
 uniprot_id: O14746
-image_link:
 ---
+
 # Telomerase (TERT)
 
 **What it is.** Reverse transcriptase that extends telomeres at chromosome ends.

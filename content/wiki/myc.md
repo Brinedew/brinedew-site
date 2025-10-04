@@ -1,25 +1,48 @@
 ---
-title: MYC
-tags:
-- protein
-date: 2025-08-21
-status: draft
 aliases:
 - c-Myc
-draft: true
-symbol: MYC
-mass: 50.6
-length (aa): 454
-protein_type: transcription factor
-transmembrane: false
+alignment: oncogene
+date: 2025-08-21
+domain_count: 7
 domains:
-  - bHLH-LZ domain
+- bHLH-LZ domain
+domains_top3: bHLH; Disordered; Basic motif
+draft: true
+first_letter: M
+full_name: Myc proto-oncogene protein
+gene_symbol: MYC
+image_link: null
+kegg_families: Transcription factors; Messenger RNA biogenesis
+length (aa): 454
+locations: axon; chromatin; euchromatin; Myc-Max complex; nuclear body; nucleolus;
+  nucleoplasm; nucleus; perinuclear region of cytoplasm; protein-containing complex;
+  RNA polymerase II transcription repressor complex; spindle
+mass: 51.0
 pathways:
-  - cell growth
-  - transcriptional regulation
+- cell growth
+- transcriptional regulation
+percent_disordered: null
+persona_aesthetics: Dark Academia
+persona_age: null
+persona_height: 51
+persona_hexcode: nan
+persona_image: /static/proteins/P01106.png
+persona_politics: pro-Growth
+persona_sex: Female
+persona_skintone_hue: 166
+persona_skintone_lightness: null
+persona_skintone_saturation: 37
+protein_type: transcription factor
+rvis_percentile: null
+status: draft
+symbol: MYC
+tags:
+- protein
+title: MYC
+transmembrane: false
 uniprot_id: P01106
-image_link:
 ---
+
 # MYC
 
 **What it is.** Transcription factor that increases biosynthetic capacity and drives cell growth.

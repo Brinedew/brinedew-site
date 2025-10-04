@@ -1,26 +1,48 @@
 ---
-title: Rb (RB1)
-tags:
-- protein
-date: 2025-08-21
-status: draft
 aliases:
 - RB1
 - Retinoblastoma protein
-draft: true
-symbol: RB1
-mass: 106.2
-length (aa): 928
-protein_type: tumor suppressor
-transmembrane: false
+alignment: tumor_suppressor
+date: 2025-08-21
+domain_count: 10
 domains:
-  - pocket domain
+- pocket domain
+domains_top3: Disordered; Pocket; binds T and E1A; Domain A
+draft: true
+first_letter: R
+full_name: Retinoblastoma-associated protein
+gene_symbol: RB1
+image_link: null
+kegg_families: Protein phosphatases and associated proteins; Transcription factors
+length (aa): 928
+locations: chromatin; chromatin lock complex; cytoplasm; cytosol; nucleoplasm; nucleus;
+  PML body; Rb-E2F complex; spindle; SWI/SNF complex
+mass: 106.0
 pathways:
-  - cell cycle control
-  - RB–E2F axis
+- cell cycle control
+- RB–E2F axis
+percent_disordered: 33.5
+persona_aesthetics: Minimalism; Dark Academia
+persona_age: 33.5
+persona_height: 106
+persona_hexcode: '#252a2e'
+persona_image: /static/proteins/P06400.png
+persona_politics: pro-Control
+persona_sex: Female
+persona_skintone_hue: 235
+persona_skintone_lightness: 16.8
+persona_skintone_saturation: 20
+protein_type: tumor suppressor
+rvis_percentile: 16.78814529
+status: draft
+symbol: RB1
+tags:
+- protein
+title: Rb (RB1)
+transmembrane: false
 uniprot_id: P06400
-image_link:
 ---
+
 # Rb (RB1)
 
 **What it is.** Gatekeeper of the G1→S cell-cycle transition; binds E2F transcription factors to keep cells from copying DNA at the wrong time.

@@ -1,26 +1,51 @@
 ---
-title: NOTCH1 (NOTCH1)
-tags:
-  - protein
-  - content/wiki
-date: 2025-08-21
-draft: false
 aliases:
-  - NOTCH1
-symbol: NOTCH1
-mass: 272.5
-length (aa): 2555
-protein_type: receptor
-transmembrane: true
+- NOTCH1
+alignment: both
+date: 2025-08-21
+domain_count: 45
 domains:
-  - EGF-like repeats (extracellular)
-  - transmembrane helix
-  - RAM/ANK (intracellular)
+- EGF-like repeats (extracellular)
+- transmembrane helix
+- RAM/ANK (intracellular)
+domains_top3: EGF-like 1; EGF-like 2; EGF-like 3
+draft: false
+first_letter: N
+full_name: Neurogenic locus notch homolog protein 1
+gene_symbol: NOTCH1
+image_link: null
+kegg_families: nan
+length (aa): 2555
+locations: acrosomal vesicle; adherens junction; apical plasma membrane; cell surface;
+  cytosol; endoplasmic reticulum membrane; endosome membrane; extracellular region;
+  glutamatergic synapse; Golgi membrane; late endosome membrane; MAML1-RBP-Jkappa-
+  ICN1 complex; nucleoplasm; nucleus; plasma membrane; postsynaptic density membrane;
+  receptor complex; Schaffer collateral - CA1 synapse
+mass: 273.0
 pathways:
-  - Notch signaling
+- Notch signaling
+percent_disordered: 58.9
+persona_aesthetics: nan
+persona_age: 58.9
+persona_height: 273
+persona_hexcode: '#060b0a'
+persona_image: /static/proteins/P46531.png
+persona_politics: Opportunist
+persona_sex: Male
+persona_skintone_hue: 180
+persona_skintone_lightness: 2.7
+persona_skintone_saturation: 37
+protein_type: receptor
+rvis_percentile: 2.692608879
+symbol: NOTCH1
+tags:
+- protein
+- content/wiki
+title: NOTCH1 (NOTCH1)
+transmembrane: true
 uniprot_id: P46531
-image_link:
 ---
+
 # NOTCH1 (NOTCH1)
 
 **What it is.** Contact-dependent signaling receptor that decides cell fates and proliferation restraint.

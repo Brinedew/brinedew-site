@@ -1,25 +1,47 @@
 ---
-title: PD-L1 (CD274)
-tags:
-- protein
-date: 2025-08-21
-status: draft
 aliases:
 - CD274
-draft: true
-symbol: CD274
-mass: 33.3
-length (aa): 290
-protein_type: immune checkpoint ligand
-transmembrane: true
+alignment: unknown
+date: 2025-08-21
+domain_count: 2
 domains:
-  - Ig-like domains
-  - transmembrane helix
+- Ig-like domains
+- transmembrane helix
+domains_top3: Ig-like V-type; Ig-like C2-type
+draft: true
+first_letter: C
+full_name: Programmed cell death 1 ligand 1
+gene_symbol: CD274
+image_link: null
+kegg_families: CD molecules
+length (aa): 290
+locations: actin cytoskeleton; early endosome membrane; external side of plasma membrane;
+  extracellular exosome; nucleoplasm; plasma membrane; recycling endosome membrane
+mass: 33.0
 pathways:
-  - immune checkpoint
+- immune checkpoint
+percent_disordered: 38.6
+persona_aesthetics: Paramilitary
+persona_age: 38.6
+persona_height: 33
+persona_hexcode: '#814e3a'
+persona_image: /static/proteins/Q9NZQ7.png
+persona_politics: Maintenance
+persona_sex: Male
+persona_skintone_hue: 28
+persona_skintone_lightness: 38.6
+persona_skintone_saturation: 56
+protein_type: immune checkpoint ligand
+rvis_percentile: 38.5579182
+status: draft
+symbol: CD274
+tags:
+- protein
+title: PD-L1 (CD274)
+transmembrane: true
 uniprot_id: Q9NZQ7
-image_link:
 ---
+
 # PD-L1 (CD274)
 
 **What it is.** Immune “brake” ligand displayed on cells to dampen T‑cell attack.

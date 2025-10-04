@@ -1,26 +1,51 @@
 ---
-title: ATM
-tags:
-  - protein
-date: 2025-08-21
-draft: true
 aliases:
-  - Ataxia telangiectasia mutated
-symbol: ATM
-mass: 350.7
-length (aa): 3056
-protein_type: globular
-transmembrane: false
+- Ataxia telangiectasia mutated
+alignment: tumor_suppressor
+date: 2025-08-21
+domain_count: 8
 domains:
-  - kinase domain
-  - HEAT repeats
+- kinase domain
+- HEAT repeats
+domains_top3: FAT; PI3K/PI4K catalytic; FATC
+draft: true
+first_letter: A
+full_name: Serine-protein kinase ATM
+gene_symbol: ATM
+image_link: null
+kegg_families: Protein kinases; DNA replication proteins; Chromosome and associated
+  proteins; DNA repair and recombination proteins
+length (aa): 3056
+locations: centrosome; chromosome; cytoplasm; cytosol; DNA repair complex; extrinsic
+  component of synaptic vesicle membrane; intracellular membrane-bounded organelle;
+  nucleolus; nucleoplasm; nucleus; peroxisomal matrix; site of double-strand break;
+  spindle
+mass: 351.0
 pathways:
-  - DNA damage response
-  - p53 pathway
-  - homologous recombination
+- DNA damage response
+- p53 pathway
+- homologous recombination
+percent_disordered: 20.0
+persona_aesthetics: Athlete; Constructivism; Salvagepunk
+persona_age: 20.0
+persona_height: 351
+persona_hexcode: '#91505e'
+persona_image: /static/proteins/Q13315.png
+persona_politics: pro-Control
+persona_sex: Female
+persona_skintone_hue: 0
+persona_skintone_lightness: 42.1
+persona_skintone_saturation: 36
+protein_type: globular
+rvis_percentile: 42.0998735
+symbol: ATM
+tags:
+- protein
+title: ATM
+transmembrane: false
 uniprot_id: Q13315
-image_link: 
 ---
+
 # ATM
 
 **What it is.** DNA damage sensor kinase that responds mainly to double-strand breaks and activates p53 and repair programs.

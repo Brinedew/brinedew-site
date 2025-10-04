@@ -1,26 +1,58 @@
 ---
-title: beta-catenin (CTNNB1)
-tags:
-  - protein
-  - content/wiki
-date: 2025-08-21
-draft: false
 aliases:
-  - CTNNB1
-  - beta-catenin
-symbol: CTNNB1
-mass: 85.5
-length (aa): 781
-protein_type: globular
-transmembrane: false
+- CTNNB1
+- beta-catenin
+alignment: oncogene
+date: 2025-08-21
+domain_count: 5
 domains:
-  - Armadillo repeats
+- Armadillo repeats
+domains_top3: Interaction with VCL; Disordered; Interaction with BCL9
+draft: false
+first_letter: C
+full_name: Catenin beta-1
+gene_symbol: CTNNB1
+image_link: null
+kegg_families: nan
+length (aa): 781
+locations: adherens junction; apical part of cell; apicolateral plasma membrane; basolateral
+  plasma membrane; beta-catenin destruction complex; beta-catenin-ICAT complex; beta-catenin-TCF
+  complex; beta-catenin-TCF7L2 complex; bicellular tight junction; catenin complex;
+  cell cortex; cell junction; cell periphery; cell-cell junction; centrosome; ciliary
+  basal body; cilium; cytoplasm; cytosol; euchromatin; extracellular exosome; fascia
+  adherens; flotillin complex; focal adhesion; glutamatergic synapse; intracellular
+  membrane-bounded organelle; lamellipodium; lateral plasma membrane; membrane; microvillus
+  membrane; nucleoplasm; nucleus; perinuclear region of cytoplasm; plasma membrane;
+  postsynaptic density, intracellular component; postsynaptic membrane; presynaptic
+  active zone cytoplasmic component; presynaptic membrane; protein-containing complex;
+  protein-DNA complex; Schaffer collateral - CA1 synapse; Scrib-APC-beta-catenin complex;
+  spindle pole; synapse; transcription regulator complex; Wnt signalosome; Z disc
+mass: 85.0
 pathways:
-  - Wnt signaling
-  - cell adhesion
+- Wnt signaling
+- cell adhesion
+percent_disordered: 45.6
+persona_aesthetics: nan
+persona_age: 45.6
+persona_height: 85
+persona_hexcode: '#1b1716'
+persona_image: /static/proteins/P35222.png
+persona_politics: pro-Growth
+persona_sex: Female
+persona_skintone_hue: 28
+persona_skintone_lightness: 8.0
+persona_skintone_saturation: 10
+protein_type: globular
+rvis_percentile: 8.035660502
+symbol: CTNNB1
+tags:
+- protein
+- content/wiki
+title: beta-catenin (CTNNB1)
+transmembrane: false
 uniprot_id: P35222
-image_link:
 ---
+
 # beta-catenin (CTNNB1)
 
 **What it is.** Signal relay for Wnt; also links cadherins to the cytoskeleton.

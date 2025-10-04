@@ -1,25 +1,48 @@
 ---
-title: BRAF (BRAF)
-tags:
-  - protein
-  - content/wiki
-date: 2025-08-21
-draft: true
 aliases:
-  - BRAF
-symbol: BRAF
-mass: 84.4
-length (aa): 766
-protein_type: serine/threonine kinase
-transmembrane: false
+- BRAF
+alignment: oncogene
+date: 2025-08-21
+domain_count: 4
 domains:
-  - RAS-binding domain
-  - kinase domain
+- RAS-binding domain
+- kinase domain
+domains_top3: RBD; Protein kinase; Disordered
+draft: true
+first_letter: B
+full_name: Serine/threonine-protein kinase B-raf
+gene_symbol: BRAF
+image_link: null
+kegg_families: Protein kinases
+length (aa): 766
+locations: cell body; centriolar satellite; ciliary basal body; cilium; cytoplasm;
+  cytosol; glutamatergic synapse; intracellular membrane-bounded organelle; mitochondrion;
+  neuron projection; nucleus; plasma membrane; postsynapse; presynapse
+mass: 84.0
 pathways:
-  - MAPK signaling
+- MAPK signaling
+percent_disordered: 44.3
+persona_aesthetics: Athlete
+persona_age: 44.3
+persona_height: 84
+persona_hexcode: '#261716'
+persona_image: /static/proteins/P15056.png
+persona_politics: pro-Growth
+persona_sex: Female
+persona_skintone_hue: 14
+persona_skintone_lightness: 9.5
+persona_skintone_saturation: 22
+protein_type: serine/threonine kinase
+rvis_percentile: 9.547617613
+symbol: BRAF
+tags:
+- protein
+- content/wiki
+title: BRAF (BRAF)
+transmembrane: false
 uniprot_id: P15056
-image_link:
 ---
+
 # BRAF (BRAF)
 
 **What it is.** Kinase that relays RAS signals to MEK/ERK.

@@ -1,22 +1,29 @@
 properties:
   mass:
     displayName: Mass (kDa)
+  percent_disordered:
+    displayName: Disorder (%)
+  alignment:
+    displayName: Classification
 views:
   - type: table
-    name: Table
+    name: Protein Database
     filters:
       and:
         - file.hasTag("protein")
     order:
       - file.name
-      - length (aa)
       - mass
-      - Image link
-      - Domains
+      - length (aa)
+      - alignment
+      - percent_disordered
+      - kegg_families
+      - persona_image
     sort:
-      - property: Image link
+      - property: mass
         direction: ASC
     columnSize:
-      file.name: 258
-      note.mass: 85
-      note.Image link: 125
+      file.name: 200
+      note.mass: 80
+      note.alignment: 120
+      note.percent_disordered: 100
