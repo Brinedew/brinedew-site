@@ -36,6 +36,14 @@ FEATURES_CSV = DATA_DIR / "features.csv"
 PERSONA_CSV = DATA_DIR / "persona.csv"
 MAPPING_JSON = THOTEINS_ROOT / "data" / "mapping.json"
 
+# Check if Thoteins data exists (skip in CI if not available)
+if not FEATURES_CSV.exists():
+    print("=" * 60)
+    print("Thoteins data not found - skipping enrichment")
+    print("This is expected in CI - markdown files are enriched locally")
+    print("=" * 60)
+    sys.exit(0)
+
 # Output
 IMAGE_QUEUE_FILE = WEBSITE_ROOT / "image_generation_queue.txt"
 
