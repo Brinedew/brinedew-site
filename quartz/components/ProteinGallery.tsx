@@ -63,8 +63,9 @@ export default ((userOpts?: ProteinGalleryOptions) => {
           {proteins.map(protein => {
             // Add data attributes for sorting
             const fm = protein.frontmatter
+            // Use gene_symbol/symbol for sorting (canonical), not title (display name)
             const sortAttrs = {
-              'data-name': fm?.title ?? fm?.symbol ?? fm?.gene_symbol ?? '',
+              'data-name': fm?.gene_symbol ?? fm?.symbol ?? fm?.title ?? '',
               'data-mass': fm?.mass ?? '',
               'data-length': fm?.length ?? '',
               'data-percent-disordered': fm?.percent_disordered ?? '',
