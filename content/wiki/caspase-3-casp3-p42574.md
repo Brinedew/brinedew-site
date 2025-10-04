@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 39
 persona_aesthetics: Wuxia
 persona_age: 39
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 32
-persona_hexcode: '#a27668'
+persona_hexcode: null
 persona_image: /static/proteins/P42574.png
 persona_politics: Maintenance
 persona_sex: Female

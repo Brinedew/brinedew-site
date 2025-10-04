@@ -27,9 +27,9 @@ pathways:
 percent_disordered: 55
 persona_aesthetics: Constructivism; Atompunk
 persona_age: 55
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 82
-persona_hexcode: '#282c35'
+persona_hexcode: null
 persona_image: /static/proteins/Q96EB6.png
 persona_politics: Opportunist
 persona_sex: Female

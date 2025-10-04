@@ -29,11 +29,12 @@ PUBLIC_DIR = WEBSITE_ROOT / "public"
 STATIC_PROTEINS_DIR = PUBLIC_DIR / "static" / "proteins"
 ATTACHMENTS_DIR = CONTENT_DIR / "Attachments"
 
-# Thoteins data
-DATA_DIR = WEBSITE_ROOT / "data" / "thoteins"
+# Thoteins data - READ DIRECTLY FROM SOURCE, NOT COPIES
+THOTEINS_ROOT = Path("D:/Coding/Thoteins")
+DATA_DIR = THOTEINS_ROOT / "data" / "proteins"
 FEATURES_CSV = DATA_DIR / "features.csv"
 PERSONA_CSV = DATA_DIR / "persona.csv"
-MAPPING_JSON = DATA_DIR / "mapping.json"
+MAPPING_JSON = THOTEINS_ROOT / "data" / "mapping.json"
 
 # Output
 IMAGE_QUEUE_FILE = WEBSITE_ROOT / "image_generation_queue.txt"
@@ -167,12 +168,18 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     
     protein_data = protein_row.iloc[0]
     
+    # Helper to handle NaN strings
+    def clean_str(value):
+        """Convert value to string, handling NaN."""
+        if pd.isna(value) or str(value).lower() == 'nan':
+            return None
+        return str(value)
+    
     # Check if already enriched (compare key fields)
     needs_update = (
         post.get('mass') != (round(float(protein_data['mass'])) if pd.notna(protein_data.get('mass')) else None) or
         post.get('alignment') != clean_str(protein_data.get('alignment', '')) or
-        post.get('persona_politics') != clean_str(protein_data.get('Politics', '')) or
-        not post.get('tissue_tau')  # Force update if missing new fields
+        post.get('persona_background_setting') != clean_str(protein_data.get('background_setting', ''))
     )
     
     if not needs_update:
@@ -186,13 +193,6 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
         return
     
     print(f"  Enriching {md_file.name} ({uniprot_id})")
-    
-    # Helper to handle NaN strings
-    def clean_str(value):
-        """Convert value to string, handling NaN."""
-        if pd.isna(value) or str(value).lower() == 'nan':
-            return None
-        return str(value)
     
     # Populate molecular properties
     post['gene_symbol'] = clean_str(protein_data.get('gene_symbol', ''))

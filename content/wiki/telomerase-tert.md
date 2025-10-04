@@ -28,7 +28,7 @@ pathways:
 percent_disordered: 32
 persona_aesthetics: null
 persona_age: 32
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 127
 persona_hexcode: null
 persona_image: /static/proteins/O14746.png

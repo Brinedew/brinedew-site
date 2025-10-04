@@ -25,9 +25,9 @@ pathways:
 percent_disordered: 44
 persona_aesthetics: null
 persona_age: 44
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 17
-persona_hexcode: '#f7dbd4'
+persona_hexcode: null
 persona_image: /static/proteins/P42771.png
 persona_politics: pro-Control
 persona_sex: Female

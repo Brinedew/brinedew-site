@@ -30,9 +30,9 @@ pathways:
 percent_disordered: 26
 persona_aesthetics: Atompunk
 persona_age: 26
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 21
-persona_hexcode: '#503332'
+persona_hexcode: null
 persona_image: /static/proteins/Q07812.png
 persona_politics: Opportunist
 persona_sex: Male

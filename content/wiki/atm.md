@@ -30,9 +30,9 @@ pathways:
 percent_disordered: 20
 persona_aesthetics: Athlete; Constructivism; Salvagepunk
 persona_age: 20
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 351
-persona_hexcode: '#91505e'
+persona_hexcode: null
 persona_image: /static/proteins/Q13315.png
 persona_politics: pro-Control
 persona_sex: Female

@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 58
 persona_aesthetics: null
 persona_age: 58
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 37
-persona_hexcode: '#687c76'
+persona_hexcode: null
 persona_image: /static/proteins/Q07820.png
 persona_politics: pro-Growth
 persona_sex: Male

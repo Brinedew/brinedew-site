@@ -28,9 +28,9 @@ pathways:
 percent_disordered: 27
 persona_aesthetics: Cargopunk; Rocketpunk
 persona_age: 27
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 36
-persona_hexcode: '#3a392f'
+persona_hexcode: null
 persona_image: /static/proteins/P04406.png
 persona_politics: Maintenance
 persona_sex: Female

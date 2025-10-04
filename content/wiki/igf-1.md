@@ -28,9 +28,9 @@ pathways:
 percent_disordered: 74
 persona_aesthetics: Synthwave
 persona_age: 74
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 22
-persona_hexcode: '#7e9669'
+persona_hexcode: null
 persona_image: /static/proteins/P05019.png
 persona_politics: pro-Control
 persona_sex: Female

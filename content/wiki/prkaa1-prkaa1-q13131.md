@@ -27,9 +27,9 @@ pathways:
 percent_disordered: 42
 persona_aesthetics: Athlete; Cargopunk; Atompunk
 persona_age: 42
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 64
-persona_hexcode: '#272d2e'
+persona_hexcode: null
 persona_image: /static/proteins/Q13131.png
 persona_politics: pro-Control
 persona_sex: Female

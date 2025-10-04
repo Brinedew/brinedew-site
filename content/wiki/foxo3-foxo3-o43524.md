@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 89
 persona_aesthetics: Dark Academia
 persona_age: 89
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 71
-persona_hexcode: '#736c5c'
+persona_hexcode: null
 persona_image: /static/proteins/O43524.png
 persona_politics: pro-Control
 persona_sex: Female

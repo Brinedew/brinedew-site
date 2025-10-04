@@ -30,9 +30,9 @@ pathways:
 percent_disordered: 45
 persona_aesthetics: Minimalism
 persona_age: 45
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 26
-persona_hexcode: '#8a4845'
+persona_hexcode: null
 persona_image: /static/proteins/P10415.png
 persona_politics: pro-Growth
 persona_sex: Male

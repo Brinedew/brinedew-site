@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 35
 persona_aesthetics: Health Goth; Synthwave; Junglecore
 persona_age: 35
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 44
-persona_hexcode: '#7175a1'
+persona_hexcode: null
 persona_image: /static/proteins/P01137.png
 persona_politics: Opportunist
 persona_sex: Female

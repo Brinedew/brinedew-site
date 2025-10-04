@@ -25,9 +25,9 @@ pathways:
 percent_disordered: 93
 persona_aesthetics: null
 persona_age: 93
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 54
-persona_hexcode: '#634958'
+persona_hexcode: null
 persona_image: /static/proteins/P46937.png
 persona_politics: Opportunist
 persona_sex: Female

@@ -34,9 +34,9 @@ pathways:
 percent_disordered: 63
 persona_aesthetics: Athlete; Rocketpunk
 persona_age: 63
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 134
-persona_hexcode: '#0c0905'
+persona_hexcode: null
 persona_image: /static/proteins/P00533.png
 persona_politics: pro-Growth
 persona_sex: Male

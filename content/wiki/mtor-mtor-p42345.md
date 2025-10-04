@@ -32,9 +32,9 @@ pathways:
 percent_disordered: 19
 persona_aesthetics: Athlete; Cargopunk
 persona_age: 19
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 289
-persona_hexcode: '#000000'
+persona_hexcode: null
 persona_image: /static/proteins/P42345.png
 persona_politics: pro-Growth
 persona_sex: Female

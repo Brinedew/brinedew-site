@@ -29,9 +29,9 @@ pathways:
 percent_disordered: 62
 persona_aesthetics: Wuxia; Junglecore
 persona_age: 62
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 50
-persona_hexcode: '#1a395c'
+persona_hexcode: null
 persona_image: /static/proteins/Q15465.png
 persona_politics: Maintenance
 persona_sex: Female

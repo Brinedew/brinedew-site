@@ -27,9 +27,9 @@ pathways:
 percent_disordered: 19
 persona_aesthetics: null
 persona_age: 19
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 142
-persona_hexcode: '#34121a'
+persona_hexcode: null
 persona_image: /static/proteins/O14727.png
 persona_politics: pro-Control
 persona_sex: Female

@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 29
 persona_aesthetics: Junglecore
 persona_age: 29
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 39
-persona_hexcode: '#5a0a5d'
+persona_hexcode: null
 persona_image: /static/proteins/P56704.png
 persona_politics: Maintenance
 persona_sex: Female

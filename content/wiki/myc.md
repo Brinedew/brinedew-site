@@ -26,7 +26,7 @@ pathways:
 percent_disordered: null
 persona_aesthetics: Dark Academia
 persona_age: null
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 51
 persona_hexcode: null
 persona_image: /static/proteins/P01106.png

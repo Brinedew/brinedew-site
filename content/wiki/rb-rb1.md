@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 34
 persona_aesthetics: Minimalism; Dark Academia
 persona_age: 34
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 106
-persona_hexcode: '#252a2e'
+persona_hexcode: null
 persona_image: /static/proteins/P06400.png
 persona_politics: pro-Control
 persona_sex: Female

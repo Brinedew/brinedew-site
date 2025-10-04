@@ -25,9 +25,9 @@ pathways:
 percent_disordered: 34
 persona_aesthetics: Synthwave; Junglecore
 persona_age: 34
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 26
-persona_hexcode: '#4f63e4'
+persona_hexcode: null
 persona_image: /static/proteins/P01375.png
 persona_politics: Maintenance
 persona_sex: Male

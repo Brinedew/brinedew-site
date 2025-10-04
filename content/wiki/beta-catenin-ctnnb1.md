@@ -36,9 +36,9 @@ pathways:
 percent_disordered: 46
 persona_aesthetics: null
 persona_age: 46
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 85
-persona_hexcode: '#1b1716'
+persona_hexcode: null
 persona_image: /static/proteins/P35222.png
 persona_politics: pro-Growth
 persona_sex: Female

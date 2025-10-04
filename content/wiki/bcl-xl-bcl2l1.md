@@ -32,9 +32,9 @@ pathways:
 percent_disordered: 42
 persona_aesthetics: Minimalism; Constructivism
 persona_age: 42
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 26
-persona_hexcode: '#44302f'
+persona_hexcode: null
 persona_image: /static/proteins/Q07817.png
 persona_politics: pro-Growth
 persona_sex: Male

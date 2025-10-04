@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 100
 persona_aesthetics: Synthwave
 persona_age: 100
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 12
-persona_hexcode: '#597f26'
+persona_hexcode: null
 persona_image: /static/proteins/P01308.png
 persona_politics: Maintenance
 persona_sex: Female

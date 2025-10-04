@@ -26,9 +26,9 @@ pathways:
 percent_disordered: 100
 persona_aesthetics: null
 persona_age: 100
-persona_background_setting: null
+persona_background_setting: indoors
 persona_height: 14
-persona_hexcode: '#f7dbd4'
+persona_hexcode: null
 persona_image: /static/proteins/Q8N726.png
 persona_politics: pro-Control
 persona_sex: Female

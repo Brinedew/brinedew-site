@@ -29,9 +29,9 @@ pathways:
 percent_disordered: 59
 persona_aesthetics: null
 persona_age: 59
-persona_background_setting: null
+persona_background_setting: outer space
 persona_height: 273
-persona_hexcode: '#060b0a'
+persona_hexcode: null
 persona_image: /static/proteins/P46531.png
 persona_politics: Opportunist
 persona_sex: Male

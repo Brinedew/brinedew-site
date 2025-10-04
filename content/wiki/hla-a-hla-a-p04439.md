@@ -29,7 +29,7 @@ pathways:
 percent_disordered: 36
 persona_aesthetics: Rocketpunk; Stickerbomb
 persona_age: 36
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 41
 persona_hexcode: null
 persona_image: /static/proteins/P04439.png

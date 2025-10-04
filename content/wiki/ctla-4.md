@@ -28,9 +28,9 @@ pathways:
 percent_disordered: 41
 persona_aesthetics: Paramilitary
 persona_age: 41
-persona_background_setting: null
+persona_background_setting: outdoors
 persona_height: 25
-persona_hexcode: '#a2542b'
+persona_hexcode: null
 persona_image: /static/proteins/P16410.png
 persona_politics: Maintenance
 persona_sex: Male
