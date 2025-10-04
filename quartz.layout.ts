@@ -27,6 +27,7 @@ export const defaultContentPageLayout: PageLayout = {
     // MINIMALISM: Content meta (date, reading time) commented out for cleaner design
     // Component.ContentMeta(),
     Component.ProteinInfobox(),
+    Component.ProteinGallery(),
   ],
   left: [
     Component.MobileOnly(Component.PageTitle()),

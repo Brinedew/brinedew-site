@@ -6,7 +6,12 @@ interface ProteinGalleryOptions {
 }
 
 export default ((userOpts?: ProteinGalleryOptions) => {
-  const ProteinGallery: QuartzComponent = ({ allFiles, displayClass, cfg }: QuartzComponentProps) => {
+  const ProteinGallery: QuartzComponent = ({ allFiles, displayClass, cfg, fileData }: QuartzComponentProps) => {
+    // Only render on the gallery page
+    if (fileData.slug !== "apps/proteins/index") {
+      return null
+    }
+
     // Filter for protein pages (non-draft by default)
     const proteins = allFiles
       .filter(file => 
