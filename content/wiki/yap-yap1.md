@@ -38,6 +38,7 @@ status: draft
 symbol: YAP1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 21
 title: YAP (YAP1)
 transmembrane: false

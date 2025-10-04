@@ -39,6 +39,7 @@ status: draft
 symbol: PDCD1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 82
 title: PD-1 (PDCD1)
 transmembrane: true

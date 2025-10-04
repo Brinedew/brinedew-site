@@ -40,6 +40,7 @@ rvis_percentile: 11
 symbol: APAF1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 51
 title: APAF1
 transmembrane: false

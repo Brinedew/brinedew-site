@@ -39,6 +39,7 @@ status: draft
 symbol: MYC
 tags:
   - protein
+  - content/wiki
 tissue_tau: 37
 title: MYC
 transmembrane: false

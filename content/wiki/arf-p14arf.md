@@ -39,6 +39,7 @@ rvis_percentile: 90
 symbol: CDKN2A
 tags:
   - protein
+  - content/wiki
 tissue_tau: 71
 title: ARF (p14^ARF)
 transmembrane: false

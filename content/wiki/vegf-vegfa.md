@@ -37,6 +37,7 @@ status: draft
 symbol: VEGFA
 tags:
   - protein
+  - content/wiki
 tissue_tau: 26
 title: VEGF (VEGFA)
 transmembrane: false

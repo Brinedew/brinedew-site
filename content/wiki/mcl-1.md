@@ -40,6 +40,7 @@ status: draft
 symbol: MCL1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 25
 title: MCL-1
 transmembrane: true

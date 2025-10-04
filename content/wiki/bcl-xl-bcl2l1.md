@@ -43,6 +43,7 @@ rvis_percentile: 22
 symbol: BCL2L1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 17
 title: BCL‑XL (BCL2L1)
 transmembrane: true

@@ -40,6 +40,7 @@ status: draft
 symbol: RB1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 20
 title: Rb (RB1)
 transmembrane: false

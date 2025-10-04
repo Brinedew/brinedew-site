@@ -42,6 +42,7 @@ rvis_percentile: 66
 symbol: BAK1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 32
 title: BAK (BAK1)
 transmembrane: true

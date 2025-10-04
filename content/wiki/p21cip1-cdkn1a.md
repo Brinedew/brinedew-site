@@ -39,6 +39,7 @@ status: draft
 symbol: CDKN1A
 tags:
   - protein
+  - content/wiki
 tissue_tau: 20
 title: p21^CIP1 (CDKN1A)
 transmembrane: false

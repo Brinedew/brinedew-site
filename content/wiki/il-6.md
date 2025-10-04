@@ -37,6 +37,7 @@ status: draft
 symbol: IL6
 tags:
   - protein
+  - content/wiki
 tissue_tau: 53
 title: IL-6
 transmembrane: false

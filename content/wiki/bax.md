@@ -41,6 +41,7 @@ rvis_percentile: 25
 symbol: BAX
 tags:
   - protein
+  - content/wiki
 tissue_tau: 24
 title: BAX
 transmembrane: true

@@ -39,6 +39,7 @@ status: draft
 symbol: INS
 tags:
   - protein
+  - content/wiki
 tissue_tau: 87
 title: Insulin
 transmembrane: false

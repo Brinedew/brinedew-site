@@ -39,6 +39,7 @@ status: draft
 symbol: CD274
 tags:
   - protein
+  - content/wiki
 tissue_tau: 56
 title: PD-L1 (CD274)
 transmembrane: true

@@ -39,6 +39,7 @@ status: draft
 symbol: CDKN2A
 tags:
   - protein
+  - content/wiki
 tissue_tau: 71
 title: p16^INK4a (CDKN2A)
 transmembrane: false

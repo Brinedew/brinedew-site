@@ -40,6 +40,7 @@ rvis_percentile: 42
 symbol: ATM
 tags:
   - protein
+  - content/wiki
 tissue_tau: 36
 title: ATM
 transmembrane: false

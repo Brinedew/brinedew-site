@@ -38,6 +38,7 @@ status: draft
 symbol: WWTR1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 26
 title: TAZ (WWTR1)
 transmembrane: false

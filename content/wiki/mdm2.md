@@ -38,6 +38,7 @@ status: draft
 symbol: MDM2
 tags:
   - protein
+  - content/wiki
 tissue_tau: 25
 title: MDM2
 transmembrane: false

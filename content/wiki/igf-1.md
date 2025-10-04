@@ -40,6 +40,7 @@ status: draft
 symbol: IGF1
 tags:
   - protein
+  - content/wiki
 tissue_tau: 44
 title: IGF-1
 transmembrane: false

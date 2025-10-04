@@ -40,6 +40,7 @@ rvis_percentile: 3
 symbol: ATR
 tags:
   - protein
+  - content/wiki
 tissue_tau: 38
 title: ATR
 transmembrane: false

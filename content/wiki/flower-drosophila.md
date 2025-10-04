@@ -1,7 +1,7 @@
 ---
 title: Flower (Drosophila)
 tags:
-- protein
+  - content/wiki
 date: 2025-08-21
 status: draft
 aliases: []

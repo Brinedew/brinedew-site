@@ -38,6 +38,7 @@ status: draft
 symbol: CXCL8
 tags:
   - protein
+  - content/wiki
 tissue_tau: 68
 title: IL-8 (CXCL8)
 transmembrane: false

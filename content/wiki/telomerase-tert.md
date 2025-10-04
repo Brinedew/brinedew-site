@@ -40,6 +40,7 @@ status: draft
 symbol: TERT
 tags:
   - protein
+  - content/wiki
 tissue_tau:
 title: Telomerase (TERT)
 transmembrane: false
