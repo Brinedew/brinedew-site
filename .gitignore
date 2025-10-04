@@ -9,6 +9,16 @@ private/
 .replit
 replit.nix
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Script caches
+scripts/uniprot_cache/
+*.csv.next
+
 # Syncthing ignore file (not needed in git)
 .stignore
 
