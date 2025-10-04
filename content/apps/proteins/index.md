@@ -6,4 +6,3 @@ tags:
 - content/apps
 ---
 
-{{< ProteinGallery >}}
