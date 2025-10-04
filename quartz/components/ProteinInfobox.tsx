@@ -187,8 +187,16 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
             
             if (isHueMapping) {
               const hue = fm?.persona_skintone_hue || 0
-              const letter = molecularValue || 'X'
+              const letter = (molecularValue || 'X').toUpperCase()
               const hueColor = hsluvToHex(hue, 100, 50)
+              
+              // Convert letter to enclosed alphanumeric UTF-8 character
+              // A-Z: U+1F130 to U+1F149
+              const letterCode = letter.charCodeAt(0)
+              let enclosedChar = letter
+              if (letterCode >= 65 && letterCode <= 90) { // A-Z
+                enclosedChar = String.fromCodePoint(0x1F130 + (letterCode - 65))
+              }
               
               return (
                 <div class="mapping-row">
@@ -200,8 +208,8 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
                   <div class="mapping-persona">
                     <span class="mapping-label">{prettifyLabel(m.target)}</span>
                     <span class="mapping-value">
-                      <span class="hue-letter" style={`background-color: ${hueColor}; color: white; border-radius: 4px; padding: 2px 6px; font-weight: 700;`}>
-                        {letter}
+                      <span class="hue-letter" style={`color: ${hueColor}; font-size: 1.4rem;`}>
+                        {enclosedChar}
                       </span>
                     </span>
                   </div>
@@ -371,12 +379,7 @@ ProteinInfobox.css = `
 
 .hue-letter {
   display: inline-block;
-  min-width: 1.5em;
-  text-align: center;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  line-height: 1;
 }
 
 .mapping-arrow {

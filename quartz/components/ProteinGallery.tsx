@@ -39,6 +39,12 @@ export default ((userOpts?: ProteinGalleryOptions) => {
         file.frontmatter?.tags?.includes("protein") &&
         (userOpts?.showDrafts || !file.frontmatter?.draft)
       )
+      .sort((a, b) => {
+        // Sort by gene_symbol by default
+        const aName = a.frontmatter?.gene_symbol ?? a.frontmatter?.symbol ?? a.frontmatter?.title ?? ''
+        const bName = b.frontmatter?.gene_symbol ?? b.frontmatter?.symbol ?? b.frontmatter?.title ?? ''
+        return aName.localeCompare(bName)
+      })
 
     if (proteins.length === 0) {
       return <p>No proteins found.</p>
