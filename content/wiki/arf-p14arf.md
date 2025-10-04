@@ -1,34 +1,33 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- p14ARF
-- CDKN2A-ARF
+  - p14ARF
+  - CDKN2A-ARF
 alignment: tumor_suppressor
 date: 2025-08-21
 domain_count: 2
 domains: []
 domains_top3: Interaction with CDK5RAP3 and MDM2; Disordered
-draft: true
+draft: false
 first_letter: C
 full_name: Tumor suppressor ARF
 gene_symbol: CDKN2A
-image_link: null
-kegg_families: null
+image_link:
+kegg_families:
 length (aa): 132
-locations: cytosol; mitochondrial matrix; mitochondrion; nucleolus; nucleoplasm; nucleus;
-  protein-containing complex
+locations: cytosol; mitochondrial matrix; mitochondrion; nucleolus; nucleoplasm; nucleus; protein-containing complex
 mass: 14
 membrane_depth: 3
 pathways:
-- p53 pathway
-- senescence
-- MDM2 regulation
+  - p53 pathway
+  - senescence
+  - MDM2 regulation
 percent_disordered: 100
-persona_aesthetics: null
+persona_aesthetics:
 persona_age: 100
 persona_background_setting: indoors
 persona_height: 14
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/Q8N726.png
 persona_politics: pro-Control
 persona_sex: Female
@@ -39,7 +38,7 @@ protein_type: globular
 rvis_percentile: 90
 symbol: CDKN2A
 tags:
-- protein
+  - protein
 tissue_tau: 71
 title: ARF (p14^ARF)
 transmembrane: false

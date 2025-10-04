@@ -1,32 +1,31 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- WWTR1
+  - WWTR1
 alignment: oncogene
 date: 2025-08-21
 domain_count: 4
 domains:
-- WW domain
+  - WW domain
 domains_top3: WW; Disordered; Required for interaction with PALS1
-draft: true
+draft: false
 first_letter: W
 full_name: WW domain-containing transcription regulator protein 1
 gene_symbol: WWTR1
-image_link: null
-kegg_families: null
+image_link:
+kegg_families:
 length (aa): 400
-locations: bicellular tight junction; cytoplasm; cytosol; nuclear body; nucleoplasm;
-  nucleus; plasma membrane; transcription regulator complex
+locations: bicellular tight junction; cytoplasm; cytosol; nuclear body; nucleoplasm; nucleus; plasma membrane; transcription regulator complex
 mass: 44
 membrane_depth: 1
 pathways:
-- Hippo signaling
+  - Hippo signaling
 percent_disordered: 92
-persona_aesthetics: null
+persona_aesthetics:
 persona_age: 92
 persona_background_setting: outdoors
 persona_height: 44
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/Q9GZV5.png
 persona_politics: pro-Growth
 persona_sex: Female
@@ -38,7 +37,7 @@ rvis_percentile: 76
 status: draft
 symbol: WWTR1
 tags:
-- protein
+  - protein
 tissue_tau: 26
 title: TAZ (WWTR1)
 transmembrane: false

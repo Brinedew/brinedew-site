@@ -1,33 +1,32 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- CDKN2A
-- INK4a
+  - CDKN2A
+  - INK4a
 alignment: tumor_suppressor
 date: 2025-08-21
 domain_count: 1
 domains: []
-domains_top3: null
-draft: true
+domains_top3:
+draft: false
 first_letter: C
 full_name: Cyclin-dependent kinase inhibitor 2A
 gene_symbol: CDKN2A
-image_link: null
-kegg_families: null
+image_link:
+kegg_families:
 length (aa): 156
-locations: cytoplasm; cytosol; nucleolus; nucleus; senescence-associated heterochromatin
-  focus
+locations: cytoplasm; cytosol; nucleolus; nucleus; senescence-associated heterochromatin focus
 mass: 17
 membrane_depth: 1
 pathways:
-- RB–E2F axis
-- cell cycle arrest
+  - RB–E2F axis
+  - cell cycle arrest
 percent_disordered: 44
-persona_aesthetics: null
+persona_aesthetics:
 persona_age: 44
 persona_background_setting: outdoors
 persona_height: 17
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P42771.png
 persona_politics: pro-Control
 persona_sex: Female
@@ -39,7 +38,7 @@ rvis_percentile: 90
 status: draft
 symbol: CDKN2A
 tags:
-- protein
+  - protein
 tissue_tau: 71
 title: p16^INK4a (CDKN2A)
 transmembrane: false

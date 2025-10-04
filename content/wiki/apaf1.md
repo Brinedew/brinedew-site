@@ -1,35 +1,34 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- Apaf‑1
+  - Apaf‑1
 alignment: tumor_suppressor
 date: 2025-08-21
 domain_count: 3
 domains:
-- CARD
-- NBD
-- WD40 repeats
+  - CARD
+  - NBD
+  - WD40 repeats
 domains_top3: CARD; NB-ARC; Interpropeller linker
-draft: true
+draft: false
 first_letter: A
 full_name: Apoptotic protease-activating factor 1
 gene_symbol: APAF1
-image_link: null
-kegg_families: null
+image_link:
+kegg_families:
 length (aa): 1248
-locations: apoptosome; cytosol; extracellular exosome; extracellular region; ficolin-1-rich
-  granule lumen; nucleus; protein-containing complex; secretory granule lumen
+locations: apoptosome; cytosol; extracellular exosome; extracellular region; ficolin-1-rich granule lumen; nucleus; protein-containing complex; secretory granule lumen
 mass: 142
 membrane_depth: 0
 pathways:
-- apoptosome
-- apoptosis
+  - apoptosome
+  - apoptosis
 percent_disordered: 19
-persona_aesthetics: null
+persona_aesthetics:
 persona_age: 19
 persona_background_setting: outer space
 persona_height: 142
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/O14727.png
 persona_politics: pro-Control
 persona_sex: Female
@@ -40,7 +39,7 @@ protein_type: globular
 rvis_percentile: 11
 symbol: APAF1
 tags:
-- protein
+  - protein
 tissue_tau: 51
 title: APAF1
 transmembrane: false

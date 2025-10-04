@@ -1,38 +1,34 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- Ataxia telangiectasia mutated
+  - Ataxia telangiectasia mutated
 alignment: tumor_suppressor
 date: 2025-08-21
 domain_count: 8
 domains:
-- kinase domain
-- HEAT repeats
+  - kinase domain
+  - HEAT repeats
 domains_top3: FAT; PI3K/PI4K catalytic; FATC
-draft: true
+draft: false
 first_letter: A
 full_name: Serine-protein kinase ATM
 gene_symbol: ATM
-image_link: null
-kegg_families: Protein kinases; DNA replication proteins; Chromosome and associated
-  proteins; DNA repair and recombination proteins
+image_link:
+kegg_families: Protein kinases; DNA replication proteins; Chromosome and associated proteins; DNA repair and recombination proteins
 length (aa): 3056
-locations: centrosome; chromosome; cytoplasm; cytosol; DNA repair complex; extrinsic
-  component of synaptic vesicle membrane; intracellular membrane-bounded organelle;
-  nucleolus; nucleoplasm; nucleus; peroxisomal matrix; site of double-strand break;
-  spindle
+locations: centrosome; chromosome; cytoplasm; cytosol; DNA repair complex; extrinsic component of synaptic vesicle membrane; intracellular membrane-bounded organelle; nucleolus; nucleoplasm; nucleus; peroxisomal matrix; site of double-strand break; spindle
 mass: 351
 membrane_depth: 3
 pathways:
-- DNA damage response
-- p53 pathway
-- homologous recombination
+  - DNA damage response
+  - p53 pathway
+  - homologous recombination
 percent_disordered: 20
 persona_aesthetics: Athlete; Constructivism; Salvagepunk
 persona_age: 20
 persona_background_setting: indoors
 persona_height: 351
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/Q13315.png
 persona_politics: pro-Control
 persona_sex: Female
@@ -43,7 +39,7 @@ protein_type: globular
 rvis_percentile: 42
 symbol: ATM
 tags:
-- protein
+  - protein
 tissue_tau: 36
 title: ATM
 transmembrane: false

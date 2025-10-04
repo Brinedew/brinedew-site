@@ -1,35 +1,34 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- ATM and Rad3-related
+  - ATM and Rad3-related
 alignment: tumor_suppressor
 date: 2025-08-21
 domain_count: 7
 domains:
-- kinase domain
-- HEAT repeats
+  - kinase domain
+  - HEAT repeats
 domains_top3: FAT; PI3K/PI4K catalytic; FATC
-draft: true
+draft: false
 first_letter: A
 full_name: Serine/threonine-protein kinase ATR
 gene_symbol: ATR
-image_link: null
+image_link:
 kegg_families: Protein kinases; DNA repair and recombination proteins
 length (aa): 2644
-locations: ATR-ATRIP complex; chromosome; Golgi apparatus; nuclear envelope; nucleoplasm;
-  nucleus; PML body; site of DNA damage
+locations: ATR-ATRIP complex; chromosome; Golgi apparatus; nuclear envelope; nucleoplasm; nucleus; PML body; site of DNA damage
 mass: 301
 membrane_depth: 3
 pathways:
-- DNA damage response
-- replication stress
-- CHK1 signaling
+  - DNA damage response
+  - replication stress
+  - CHK1 signaling
 percent_disordered: 17
 persona_aesthetics: Athlete; Salvagepunk
 persona_age: 17
 persona_background_setting: indoors
 persona_height: 301
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/Q13535.png
 persona_politics: pro-Control
 persona_sex: Female
@@ -40,7 +39,7 @@ protein_type: globular
 rvis_percentile: 3
 symbol: ATR
 tags:
-- protein
+  - protein
 tissue_tau: 38
 title: ATR
 transmembrane: false

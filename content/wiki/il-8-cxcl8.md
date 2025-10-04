@@ -1,31 +1,31 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- CXCL8
+  - CXCL8
 alignment: unknown
 date: 2025-08-21
 domain_count: 0
 domains: []
-domains_top3: null
-draft: true
+domains_top3:
+draft: false
 first_letter: C
 full_name: Interleukin-8
 gene_symbol: CXCL8
-image_link: null
+image_link:
 kegg_families: Cytokines and neuropeptides; Glycosaminoglycan binding proteins
 length (aa): 99
 locations: extracellular region; extracellular space
 mass: 11
 membrane_depth: 0
 pathways:
-- chemotaxis
-- angiogenesis
+  - chemotaxis
+  - angiogenesis
 percent_disordered: 46
 persona_aesthetics: Synthwave; Junglecore
 persona_age: 46
 persona_background_setting: outer space
 persona_height: 11
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P10145.png
 persona_politics: Maintenance
 persona_sex: Female
@@ -37,7 +37,7 @@ rvis_percentile: 53
 status: draft
 symbol: CXCL8
 tags:
-- protein
+  - protein
 tissue_tau: 68
 title: IL-8 (CXCL8)
 transmembrane: false

@@ -1,34 +1,33 @@
 ---
-Has transmembrane domains: 'Yes'
+Has transmembrane domains: Yes
 aliases: []
 alignment: oncogene
 date: 2025-08-21
 domain_count: 6
 domains:
-- BH1
-- BH2
-- BH3
-- transmembrane domain
+  - BH1
+  - BH2
+  - BH3
+  - transmembrane domain
 domains_top3: Disordered; PEST-like; Disordered
-draft: true
+draft: false
 first_letter: M
 full_name: Induced myeloid leukemia cell differentiation protein Mcl-1
 gene_symbol: MCL1
-image_link: null
-kegg_families: null
+image_link:
+kegg_families:
 length (aa): 350
-locations: Bcl-2 family protein complex; cytoplasm; cytosol; membrane; mitochondrial
-  outer membrane; mitochondrion; nucleoplasm; nucleus
+locations: Bcl-2 family protein complex; cytoplasm; cytosol; membrane; mitochondrial outer membrane; mitochondrion; nucleoplasm; nucleus
 mass: 37
 membrane_depth: 3
 pathways:
-- apoptosis regulation
+  - apoptosis regulation
 percent_disordered: 58
-persona_aesthetics: null
+persona_aesthetics:
 persona_age: 58
 persona_background_setting: indoors
 persona_height: 37
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/Q07820.png
 persona_politics: pro-Growth
 persona_sex: Male
@@ -40,7 +39,7 @@ rvis_percentile: 50
 status: draft
 symbol: MCL1
 tags:
-- protein
+  - protein
 tissue_tau: 25
 title: MCL-1
 transmembrane: true

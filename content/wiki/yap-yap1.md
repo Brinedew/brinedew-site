@@ -1,33 +1,31 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- YAP1
+  - YAP1
 alignment: both
 date: 2025-08-21
 domain_count: 8
 domains:
-- WW domains
+  - WW domains
 domains_top3: WW 1; WW 2; Disordered
-draft: true
+draft: false
 first_letter: Y
 full_name: Transcriptional coactivator YAP1
 gene_symbol: YAP1
-image_link: null
-kegg_families: null
+image_link:
+kegg_families:
 length (aa): 504
-locations: bicellular tight junction; cell junction; cell-cell junction; cytoplasm;
-  cytosol; female germ cell nucleus; mitochondrion; nucleoplasm; nucleus; plasma membrane;
-  TEAD-YAP complex
+locations: bicellular tight junction; cell junction; cell-cell junction; cytoplasm; cytosol; female germ cell nucleus; mitochondrion; nucleoplasm; nucleus; plasma membrane; TEAD-YAP complex
 mass: 54
 membrane_depth: 1
 pathways:
-- Hippo signaling
+  - Hippo signaling
 percent_disordered: 93
-persona_aesthetics: null
+persona_aesthetics:
 persona_age: 93
 persona_background_setting: outdoors
 persona_height: 54
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P46937.png
 persona_politics: Opportunist
 persona_sex: Female
@@ -39,7 +37,7 @@ rvis_percentile: 34
 status: draft
 symbol: YAP1
 tags:
-- protein
+  - protein
 tissue_tau: 21
 title: YAP (YAP1)
 transmembrane: false
