@@ -166,6 +166,24 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
         return
     
     protein_data = protein_row.iloc[0]
+    
+    # Check if already enriched (compare key fields)
+    needs_update = (
+        post.get('mass') != (float(protein_data['mass']) if pd.notna(protein_data.get('mass')) else None) or
+        post.get('alignment') != str(protein_data.get('alignment', '')) or
+        post.get('persona_politics') != str(protein_data.get('Politics', ''))
+    )
+    
+    if not needs_update:
+        print(f"  Skipped {md_file.name} ({uniprot_id}) - already up-to-date")
+        # Still check for missing images
+        full_image_path = PUBLIC_DIR / f"static/proteins/{uniprot_id}.png"
+        if not full_image_path.exists():
+            prompt = generate_image_prompt(protein_data)
+            hexcode = protein_data.get('hexcode', '#cccccc')
+            image_queue.append(f"{uniprot_id} [{hexcode}]: {prompt}")
+        return
+    
     print(f"  Enriching {md_file.name} ({uniprot_id})")
     
     # Populate molecular properties
