@@ -1,5 +1,6 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
+import ProteinInfobox from "./ProteinInfobox"
 
 interface ProteinGalleryOptions {
   showDrafts?: boolean
@@ -12,11 +13,14 @@ export default ((userOpts?: ProteinGalleryOptions) => {
       return null
     }
 
+    // Get the ProteinInfobox component
+    const InfoboxComponent = ProteinInfobox()
+
     // Filter for protein pages (non-draft by default)
     const proteins = allFiles
       .filter(file => 
         file.slug?.startsWith("wiki/") && 
-        file.frontmatter?.persona_image && 
+        file.frontmatter?.tags?.includes("protein") &&
         (userOpts?.showDrafts || !file.frontmatter?.draft)
       )
       .sort((a, b) => {
@@ -31,42 +35,21 @@ export default ((userOpts?: ProteinGalleryOptions) => {
 
     return (
       <div class={classNames(displayClass, "protein-gallery")}>
-        <div class="gallery-controls">
-          <span>{proteins.length} proteins</span>
+        <div class="gallery-header">
+          <h2>{proteins.length} Protein Personas</h2>
         </div>
         <div class="protein-gallery-grid">
           {proteins.map(protein => {
-            const hexcode = protein.frontmatter?.persona_hexcode ?? "#cccccc"
-            const geneSymbol = protein.frontmatter?.title ?? protein.frontmatter?.uniprot_id
-            const age = protein.frontmatter?.persona_age
-            const name = protein.frontmatter?.persona_name
-            const imagePath = protein.frontmatter?.persona_image
-
+            // Render each protein using the actual ProteinInfobox component
             return (
-              <a href={`/${protein.slug}`} class="protein-card">
-                <div class="protein-card-image">
-                  {imagePath && (
-                    <img 
-                      src={imagePath} 
-                      alt={geneSymbol}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                        e.currentTarget.nextElementSibling.style.display = 'flex'
-                      }}
-                    />
-                  )}
-                  <div 
-                    class="protein-card-placeholder" 
-                    style={`background-color: ${hexcode}; ${imagePath ? 'display: none;' : ''}`}
-                  >
-                    {geneSymbol}
-                  </div>
-                </div>
-                <div class="protein-card-info">
-                  <strong>{geneSymbol}</strong>
-                  {name && <span class="protein-card-meta">{name}</span>}
-                  {age && <span class="protein-card-age">Age {age}</span>}
-                </div>
+              <a href={`/${protein.slug}`} class="gallery-item-link">
+                <InfoboxComponent 
+                  fileData={protein}
+                  displayClass=""
+                  cfg={cfg}
+                  allFiles={allFiles}
+                  tree={null as any}
+                />
               </a>
             )
           })}
@@ -76,5 +59,42 @@ export default ((userOpts?: ProteinGalleryOptions) => {
   }
 
   ProteinGallery.displayName = "ProteinGallery"
+  
+  ProteinGallery.css = `
+  .protein-gallery {
+    margin: 2rem 0;
+  }
+
+  .gallery-header h2 {
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+  }
+
+  .protein-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 2rem;
+  }
+
+  .gallery-item-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .gallery-item-link:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+  }
+
+  /* Override infobox styles for gallery context */
+  .gallery-item-link .protein-infobox {
+    float: none;
+    width: 100%;
+    margin: 0;
+  }
+  `
+  
   return ProteinGallery
 }) satisfies QuartzComponentConstructor
