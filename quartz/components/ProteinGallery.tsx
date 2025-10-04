@@ -6,7 +6,7 @@ interface ProteinGalleryOptions {
   showDrafts?: boolean
 }
 
-// Sort options matching the infobox attributes
+// Sort options - MOLECULAR PROPERTIES ONLY
 const SORT_OPTIONS = [
   { value: "name", label: "Name (A-Z)" },
   { value: "name-desc", label: "Name (Z-A)" },
@@ -14,12 +14,12 @@ const SORT_OPTIONS = [
   { value: "mass-desc", label: "Mass (High-Low)" },
   { value: "length", label: "Length (Short-Long)" },
   { value: "length-desc", label: "Length (Long-Short)" },
-  { value: "percent_disordered", label: "Age (Young-Old)" },
-  { value: "percent_disordered-desc", label: "Age (Old-Young)" },
-  { value: "rvis_percentile", label: "RVIS (Low-High)" },
-  { value: "rvis_percentile-desc", label: "RVIS (High-Low)" },
-  { value: "tissue_tau", label: "Tissue Specificity (Low-High)" },
-  { value: "tissue_tau-desc", label: "Tissue Specificity (High-Low)" },
+  { value: "percent_disordered", label: "Disorder % (Low-High)" },
+  { value: "percent_disordered-desc", label: "Disorder % (High-Low)" },
+  { value: "rvis_percentile", label: "RVIS Percentile (Low-High)" },
+  { value: "rvis_percentile-desc", label: "RVIS Percentile (High-Low)" },
+  { value: "tissue_tau", label: "Tissue Tau (Low-High)" },
+  { value: "tissue_tau-desc", label: "Tissue Tau (High-Low)" },
 ]
 
 export default ((userOpts?: ProteinGalleryOptions) => {
@@ -85,6 +85,65 @@ export default ((userOpts?: ProteinGalleryOptions) => {
             )
           })}
         </div>
+        
+        <script type="module" dangerouslySetInnerHTML={{__html: `
+          const sortSelect = document.getElementById('protein-sort');
+          const galleryGrid = document.querySelector('.protein-gallery-grid');
+          
+          if (sortSelect && galleryGrid) {
+            sortSelect.addEventListener('change', (e) => {
+              const sortBy = e.target.value;
+              const items = Array.from(galleryGrid.children);
+              
+              items.sort((a, b) => {
+                let aVal, bVal;
+                const [field, order] = sortBy.includes('-desc') 
+                  ? [sortBy.replace('-desc', ''), 'desc'] 
+                  : [sortBy, 'asc'];
+                
+                switch(field) {
+                  case 'name':
+                    aVal = a.getAttribute('data-name') || '';
+                    bVal = b.getAttribute('data-name') || '';
+                    return order === 'asc' 
+                      ? aVal.localeCompare(bVal)
+                      : bVal.localeCompare(aVal);
+                  
+                  case 'mass':
+                    aVal = parseFloat(a.getAttribute('data-mass')) || 0;
+                    bVal = parseFloat(b.getAttribute('data-mass')) || 0;
+                    return order === 'asc' ? aVal - bVal : bVal - aVal;
+                  
+                  case 'length':
+                    aVal = parseFloat(a.getAttribute('data-length')) || 0;
+                    bVal = parseFloat(b.getAttribute('data-length')) || 0;
+                    return order === 'asc' ? aVal - bVal : bVal - aVal;
+                  
+                  case 'percent_disordered':
+                    aVal = parseFloat(a.getAttribute('data-percent-disordered')) || 0;
+                    bVal = parseFloat(b.getAttribute('data-percent-disordered')) || 0;
+                    return order === 'asc' ? aVal - bVal : bVal - aVal;
+                  
+                  case 'rvis_percentile':
+                    aVal = parseFloat(a.getAttribute('data-rvis')) || 0;
+                    bVal = parseFloat(b.getAttribute('data-rvis')) || 0;
+                    return order === 'asc' ? aVal - bVal : bVal - aVal;
+                  
+                  case 'tissue_tau':
+                    aVal = parseFloat(a.getAttribute('data-tissue-tau')) || 0;
+                    bVal = parseFloat(b.getAttribute('data-tissue-tau')) || 0;
+                    return order === 'asc' ? aVal - bVal : bVal - aVal;
+                  
+                  default:
+                    return 0;
+                }
+              });
+              
+              // Re-append in sorted order
+              items.forEach(item => galleryGrid.appendChild(item));
+            });
+          }
+        `}} />
       </div>
     )
   }
@@ -166,65 +225,6 @@ export default ((userOpts?: ProteinGalleryOptions) => {
     .protein-gallery-grid {
       grid-template-columns: 1fr;
     }
-  }
-  `
-  
-  ProteinGallery.afterDOMLoaded = `
-  const sortSelect = document.getElementById('protein-sort');
-  const galleryGrid = document.querySelector('.protein-gallery-grid');
-  
-  if (sortSelect && galleryGrid) {
-    sortSelect.addEventListener('change', (e) => {
-      const sortBy = e.target.value;
-      const items = Array.from(galleryGrid.children);
-      
-      items.sort((a, b) => {
-        let aVal, bVal;
-        const [field, order] = sortBy.includes('-desc') 
-          ? [sortBy.replace('-desc', ''), 'desc'] 
-          : [sortBy, 'asc'];
-        
-        switch(field) {
-          case 'name':
-            aVal = a.getAttribute('data-name') || '';
-            bVal = b.getAttribute('data-name') || '';
-            return order === 'asc' 
-              ? aVal.localeCompare(bVal)
-              : bVal.localeCompare(aVal);
-          
-          case 'mass':
-            aVal = parseFloat(a.getAttribute('data-mass')) || 0;
-            bVal = parseFloat(b.getAttribute('data-mass')) || 0;
-            return order === 'asc' ? aVal - bVal : bVal - aVal;
-          
-          case 'length':
-            aVal = parseFloat(a.getAttribute('data-length')) || 0;
-            bVal = parseFloat(b.getAttribute('data-length')) || 0;
-            return order === 'asc' ? aVal - bVal : bVal - aVal;
-          
-          case 'percent_disordered':
-            aVal = parseFloat(a.getAttribute('data-percent-disordered')) || 0;
-            bVal = parseFloat(b.getAttribute('data-percent-disordered')) || 0;
-            return order === 'asc' ? aVal - bVal : bVal - aVal;
-          
-          case 'rvis_percentile':
-            aVal = parseFloat(a.getAttribute('data-rvis')) || 0;
-            bVal = parseFloat(b.getAttribute('data-rvis')) || 0;
-            return order === 'asc' ? aVal - bVal : bVal - aVal;
-          
-          case 'tissue_tau':
-            aVal = parseFloat(a.getAttribute('data-tissue-tau')) || 0;
-            bVal = parseFloat(b.getAttribute('data-tissue-tau')) || 0;
-            return order === 'asc' ? aVal - bVal : bVal - aVal;
-          
-          default:
-            return 0;
-        }
-      });
-      
-      // Re-append in sorted order
-      items.forEach(item => galleryGrid.appendChild(item));
-    });
   }
   `
   
