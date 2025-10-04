@@ -137,6 +137,11 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
         </div>
       </div>
 
+      {/* Gene Symbol Title */}
+      <div class="infobox-title">
+        <h3>{geneSymbol}</h3>
+      </div>
+
       {/* Mapped Properties */}
       {visibleMappings.length > 0 && (
         <div class="infobox-mappings">
@@ -234,6 +239,20 @@ ProteinInfobox.css = `
   color: var(--light);
   text-align: center;
   padding: 1rem;
+}
+
+.infobox-title {
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--lightgray);
+}
+
+.infobox-title h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--dark);
 }
 
 .infobox-mappings {
