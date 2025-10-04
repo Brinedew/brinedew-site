@@ -81,6 +81,8 @@ export const defaultListPageLayout: PageLayout = {
     // Component.Breadcrumbs(), 
     // Component.ArticleTitle(), 
     // Component.ContentMeta()
+    // Render the protein gallery only on /apps/proteins/index
+    Component.ProteinGallery(),
   ],
   left: [
     Component.MobileOnly(Component.PageTitle()),
