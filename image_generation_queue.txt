@@ -68,6 +68,11 @@ Subject: 40 year old male, 25 cm tall, European appearance, dark brown hair, con
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: Cytotoxic T-lymphocyte protein 4; Ig-like V-type; Homodimerization; Important for interaction with CD80 and CD86.
 
+P26358 [nan]: Editorial magazine cover portrait photo. Magazine title: "DNMT1 MONTHLY".
+Subject: 47 year old female, 183 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: DNA (cytosine-5)-methyltransferase 1; DMAP1-binding; BAH 1; BAH 2.
+
 Q01094 [nan]: Editorial magazine cover portrait photo. Magazine title: "E2F1 MONTHLY".
 Subject: 64 year old female, 47 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
@@ -133,10 +138,20 @@ Subject: 100 year old female, 12 cm tall, European appearance, dark brown hair, 
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: Insulin; nan.
 
+O60674 [nan]: Editorial magazine cover portrait photo. Magazine title: "JAK2 MONTHLY".
+Subject: 21 year old female, 131 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: Tyrosine-protein kinase JAK2; FERM; SH2; atypical; Protein kinase 1.
+
 P01116 [nan]: Editorial magazine cover portrait photo. Magazine title: "KRAS MONTHLY".
 Subject: 45 year old female, 22 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: GTPase KRas; Hypervariable region; Effector region.
+
+P02545 [nan]: Editorial magazine cover portrait photo. Magazine title: "LMNA MONTHLY".
+Subject: 52 year old female, 74 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: Prelamin-A/C; IF rod; LTD; Interaction with MLIP.
 
 Q02750 [nan]: Editorial magazine cover portrait photo. Magazine title: "MAP2K1 MONTHLY".
 Subject: 31 year old female, 43 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
@@ -178,6 +193,11 @@ Subject: 58 year old male, 273 cm tall, European appearance, dark brown hair, co
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: Neurogenic locus notch homolog protein 1; EGF-like 1; EGF-like 2; EGF-like 3.
 
+O15527 [nan]: Editorial magazine cover portrait photo. Magazine title: "OGG1 MONTHLY".
+Subject: 23 year old female, 39 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: N-glycosylase/DNA lyase; Disordered.
+
 P42771 [nan]: Editorial magazine cover portrait photo. Magazine title: "CDKN2A MONTHLY".
 Subject: 43 year old female, 17 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
@@ -212,6 +232,11 @@ Q13131 [nan]: Editorial magazine cover portrait photo. Magazine title: "PRKAA1 M
 Subject: 41 year old female, 64 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: 5'-AMP-activated protein kinase catalytic subunit alpha-1; Protein kinase; AIS; Disordered.
+
+O00391 [nan]: Editorial magazine cover portrait photo. Magazine title: "QSOX1 MONTHLY".
+Subject: 31 year old male, 83 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: Sulfhydryl oxidase 1; Thioredoxin; ERV/ALR sulfhydryl oxidase; Disordered.
 
 P06400 [nan]: Editorial magazine cover portrait photo. Magazine title: "RB1 MONTHLY".
 Subject: 33 year old female, 106 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
@@ -248,6 +273,11 @@ Subject: 33 year old male, 26 cm tall, European appearance, dark brown hair, con
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: Tumor necrosis factor; THD.
 
+Q05086 [nan]: Editorial magazine cover portrait photo. Magazine title: "UBE3A MONTHLY".
+Subject: 34 year old female, 101 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: Ubiquitin-protein ligase E3A; HECT; Disordered; E6-binding.
+
 P15692 [nan]: Editorial magazine cover portrait photo. Magazine title: "VEGFA MONTHLY".
 Subject: 68 year old female, 44 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
@@ -258,7 +288,17 @@ Subject: 29 year old female, 39 cm tall, European appearance, dark brown hair, c
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: Protein Wnt-3a; nan.
 
+P98170 [nan]: Editorial magazine cover portrait photo. Magazine title: "XIAP MONTHLY".
+Subject: 28 year old female, 57 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: E3 ubiquitin-protein ligase XIAP; Interaction with caspase-7; Required for interaction with SEPTIN4 isoform ARTS; Required for interaction with DIABLO.
+
 P46937 [nan]: Editorial magazine cover portrait photo. Magazine title: "YAP1 MONTHLY".
 Subject: 92 year old female, 54 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
 Subheads: Transcriptional coactivator YAP1; WW 1; WW 2; Disordered.
+
+P37275 [nan]: Editorial magazine cover portrait photo. Magazine title: "ZEB1 MONTHLY".
+Subject: 80 year old female, 124 cm tall, European appearance, dark brown hair, confident expression, wearing lab coat over casual wear with 1 accessories, half-length portrait, facing camera, nuclear lab interior with instrumentation.
+Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
+Subheads: Zinc finger E-box-binding homeobox 1; Disordered; Disordered; Disordered.
