@@ -1,34 +1,31 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- WNT3A
+  - WNT3A
 alignment: unknown
 date: 2025-08-21
 domain_count: 0
 domains:
-- Wnt domain
-domains_top3: null
-draft: true
+  - Wnt domain
+domains_top3:
+draft: false
 first_letter: W
 full_name: Protein Wnt-3a
 gene_symbol: WNT3A
-image_link: null
+image_link:
 kegg_families: Glycosaminoglycan binding proteins
 length (aa): 352
-locations: cell surface; early endosome membrane; endocytic vesicle membrane; endoplasmic
-  reticulum lumen; extracellular exosome; extracellular region; extracellular space;
-  glutamatergic synapse; Golgi lumen; plasma membrane; presynapse; Wnt-Frizzled-LRP5/6
-  complex
+locations: cell surface; early endosome membrane; endocytic vesicle membrane; endoplasmic reticulum lumen; extracellular exosome; extracellular region; extracellular space; glutamatergic synapse; Golgi lumen; plasma membrane; presynapse; Wnt-Frizzled-LRP5/6 complex
 mass: 39
 membrane_depth: 0
 pathways:
-- Wnt/beta-catenin signaling
+  - Wnt/beta-catenin signaling
 percent_disordered: 29
 persona_aesthetics: Junglecore
 persona_age: 29
 persona_background_setting: outer space
 persona_height: 39
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P56704.png
 persona_politics: Maintenance
 persona_sex: Female
@@ -39,8 +36,8 @@ protein_type: secreted glycoprotein
 rvis_percentile: 21
 symbol: WNT3A
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 93
 title: WNT3A (WNT3A)
 transmembrane: false

@@ -1,34 +1,32 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- Forkhead box O3
+  - Forkhead box O3
 alignment: tumor_suppressor
 date: 2025-09-02
 domain_count: 6
 domains:
-- Forkhead DNA-binding domain
+  - Forkhead DNA-binding domain
 domains_top3: Disordered; Required for mitochondrial import; Disordered
-draft: true
+draft: false
 first_letter: F
 full_name: Forkhead box protein O3
 gene_symbol: FOXO3
-image_link: null
+image_link:
 kegg_families: Transcription factors
 length (aa): 673
-locations: chromatin; cytoplasm; cytosol; mitochondrial matrix; mitochondrial outer
-  membrane; nucleoplasm; nucleus; protein-containing complex; RNA polymerase II transcription
-  repressor complex
+locations: chromatin; cytoplasm; cytosol; mitochondrial matrix; mitochondrial outer membrane; nucleoplasm; nucleus; protein-containing complex; RNA polymerase II transcription repressor complex
 mass: 71
 membrane_depth: 3
 pathways:
-- stress response
-- cell cycle arrest
+  - stress response
+  - cell cycle arrest
 percent_disordered: 89
 persona_aesthetics: Dark Academia
 persona_age: 89
 persona_background_setting: indoors
 persona_height: 71
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/O43524.png
 persona_politics: pro-Control
 persona_sex: Female
@@ -40,8 +38,8 @@ rvis_percentile: 46
 species: Homo sapiens (Human)
 symbol: FOXO3
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 27
 title: FOXO3 (FOXO3)
 transmembrane: false

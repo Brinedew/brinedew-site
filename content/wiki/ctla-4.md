@@ -1,36 +1,33 @@
 ---
-Has transmembrane domains: 'Yes'
+Has transmembrane domains: Yes
 aliases:
-- CTLA4
-- CD152
+  - CTLA4
+  - CD152
 alignment: unknown
 date: 2025-08-21
 domain_count: 4
 domains:
-- Ig-like domain
-domains_top3: Ig-like V-type; Homodimerization; Important for interaction with CD80
-  and CD86
-draft: true
+  - Ig-like domain
+domains_top3: Ig-like V-type; Homodimerization; Important for interaction with CD80 and CD86
+draft: false
 first_letter: C
 full_name: Cytotoxic T-lymphocyte protein 4
 gene_symbol: CTLA4
-image_link: null
+image_link:
 kegg_families: CD molecules
 length (aa): 223
-locations: clathrin-coated endocytic vesicle; external side of plasma membrane; Golgi
-  apparatus; perinuclear region of cytoplasm; plasma membrane; protein complex involved
-  in cell adhesion
+locations: clathrin-coated endocytic vesicle; external side of plasma membrane; Golgi apparatus; perinuclear region of cytoplasm; plasma membrane; protein complex involved in cell adhesion
 mass: 25
 membrane_depth: 1
 pathways:
-- T-cell activation
-- immune checkpoint
+  - T-cell activation
+  - immune checkpoint
 percent_disordered: 41
 persona_aesthetics: Paramilitary
 persona_age: 41
 persona_background_setting: outdoors
 persona_height: 25
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P16410.png
 persona_politics: Maintenance
 persona_sex: Male
@@ -41,8 +38,8 @@ protein_type: immune checkpoint receptor
 rvis_percentile: 45
 symbol: CTLA4
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 81
 title: CTLA-4 (CTLA4)
 transmembrane: true

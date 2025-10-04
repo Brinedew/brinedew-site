@@ -1,33 +1,31 @@
 ---
-Has transmembrane domains: 'Yes'
+Has transmembrane domains: Yes
 aliases:
-- TNF-alpha
+  - TNF-alpha
 alignment: unknown
 date: 2025-08-21
 domain_count: 1
 domains: []
 domains_top3: THD
-draft: true
+draft: false
 first_letter: T
 full_name: Tumor necrosis factor
 gene_symbol: TNF
-image_link: null
+image_link:
 kegg_families: Cytokines and neuropeptides; Glycosaminoglycan binding proteins
 length (aa): 233
-locations: cell surface; external side of plasma membrane; extracellular region; extracellular
-  space; membrane raft; neuronal cell body; phagocytic cup; plasma membrane; recycling
-  endosome
+locations: cell surface; external side of plasma membrane; extracellular region; extracellular space; membrane raft; neuronal cell body; phagocytic cup; plasma membrane; recycling endosome
 mass: 26
 membrane_depth: 0
 pathways:
-- inflammatory signaling
-- extrinsic apoptosis
+  - inflammatory signaling
+  - extrinsic apoptosis
 percent_disordered: 34
 persona_aesthetics: Synthwave; Junglecore
 persona_age: 34
 persona_background_setting: outer space
 persona_height: 26
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P01375.png
 persona_politics: Maintenance
 persona_sex: Male
@@ -38,8 +36,8 @@ protein_type: cytokine
 rvis_percentile: 47
 symbol: TNF
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 83
 title: TNF (TNF)
 transmembrane: false

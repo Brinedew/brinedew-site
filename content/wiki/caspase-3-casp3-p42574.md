@@ -1,34 +1,33 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- CASP3
-- caspase-3
+  - CASP3
+  - caspase-3
 alignment: unknown
 date: 2025-08-21
 domain_count: 0
 domains:
-- CARD-like prodomain (zymogen)
-domains_top3: null
-draft: true
+  - CARD-like prodomain (zymogen)
+domains_top3:
+draft: false
 first_letter: C
 full_name: Caspase-3
 gene_symbol: CASP3
-image_link: null
+image_link:
 kegg_families: Peptidases and inhibitors
 length (aa): 277
-locations: cytoplasm; cytosol; death-inducing signaling complex; glutamatergic synapse;
-  neuronal cell body; nucleoplasm; nucleus; postsynaptic density
+locations: cytoplasm; cytosol; death-inducing signaling complex; glutamatergic synapse; neuronal cell body; nucleoplasm; nucleus; postsynaptic density
 mass: 32
 membrane_depth: 1
 pathways:
-- apoptosis
-- caspase cascade
+  - apoptosis
+  - caspase cascade
 percent_disordered: 39
 persona_aesthetics: Wuxia
 persona_age: 39
 persona_background_setting: outdoors
 persona_height: 32
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P42574.png
 persona_politics: Maintenance
 persona_sex: Female
@@ -39,8 +38,8 @@ protein_type: cysteine protease
 rvis_percentile: 53
 symbol: CASP3
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 33
 title: Caspase-3 (CASP3)
 transmembrane: false

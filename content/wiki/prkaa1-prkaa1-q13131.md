@@ -1,35 +1,33 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- AMPK alpha-1
+  - AMPK alpha-1
 alignment: tumor_suppressor
 date: 2025-09-02
 domain_count: 3
 domains:
-- kinase domain
-- auto-inhibitory domain (AID)
+  - kinase domain
+  - auto-inhibitory domain (AID)
 domains_top3: Protein kinase; AIS; Disordered
-draft: true
+draft: false
 first_letter: P
 full_name: 5'-AMP-activated protein kinase catalytic subunit alpha-1
 gene_symbol: PRKAA1
-image_link: null
+image_link:
 kegg_families: Protein kinases; Membrane trafficking; Mitochondrial biogenesis
 length (aa): 559
-locations: apical plasma membrane; axon; chromatin; ciliary basal body; cilium; cytoplasm;
-  cytosol; dendrite; neuronal cell body; nuclear speck; nucleoplasm; nucleotide-activated
-  protein kinase complex; nucleus
+locations: apical plasma membrane; axon; chromatin; ciliary basal body; cilium; cytoplasm; cytosol; dendrite; neuronal cell body; nuclear speck; nucleoplasm; nucleotide-activated protein kinase complex; nucleus
 mass: 64
 membrane_depth: 1
 pathways:
-- AMPK signaling
-- autophagy
+  - AMPK signaling
+  - autophagy
 percent_disordered: 42
 persona_aesthetics: Athlete; Cargopunk; Atompunk
 persona_age: 42
 persona_background_setting: outdoors
 persona_height: 64
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/Q13131.png
 persona_politics: pro-Control
 persona_sex: Female
@@ -41,8 +39,8 @@ rvis_percentile: 18
 species: Homo sapiens (Human)
 symbol: PRKAA1
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 20
 title: PRKAA1 (AMPKα1)
 transmembrane: false

@@ -1,35 +1,33 @@
 ---
-Has transmembrane domains: 'Yes'
+Has transmembrane domains: Yes
 aliases:
-- Epidermal Growth Factor
-- EGF
+  - Epidermal Growth Factor
+  - EGF
 alignment: unknown
 date: 2025-08-21
 domain_count: 13
 domains:
-- EGF-like repeats
+  - EGF-like repeats
 domains_top3: EGF-like 1; EGF-like 2; calcium-binding; EGF-like 3
-draft: true
+draft: false
 first_letter: E
 full_name: Pro-epidermal growth factor
 gene_symbol: EGF
-image_link: null
+image_link:
 kegg_families: Cytokines and neuropeptides
 length (aa): 1207
-locations: clathrin-coated endocytic vesicle membrane; extracellular exosome; extracellular
-  region; extracellular space; lysosomal membrane; plasma membrane; platelet alpha
-  granule lumen
+locations: clathrin-coated endocytic vesicle membrane; extracellular exosome; extracellular region; extracellular space; lysosomal membrane; plasma membrane; platelet alpha granule lumen
 mass: 134
 membrane_depth: 0
 pathways:
-- EGFR signaling
-- wound healing
+  - EGFR signaling
+  - wound healing
 percent_disordered: 30
 persona_aesthetics: Synthwave
 persona_age: 30
 persona_background_setting: outer space
 persona_height: 134
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P01133.png
 persona_politics: Maintenance
 persona_sex: Male
@@ -40,8 +38,8 @@ protein_type: growth factor ligand
 rvis_percentile: 40
 symbol: EGF
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 81
 title: EGF (EGF)
 transmembrane: false

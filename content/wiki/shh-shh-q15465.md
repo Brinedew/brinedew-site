@@ -1,37 +1,34 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- SHH
-- Sonic hedgehog
+  - SHH
+  - Sonic hedgehog
 alignment: unknown
 date: 2025-08-21
 domain_count: 3
 domains:
-- N-terminal signaling domain (ShhN)
-- C-terminal autoprocessing domain (ShhC)
+  - N-terminal signaling domain (ShhN)
+  - C-terminal autoprocessing domain (ShhC)
 domains_top3: Disordered; Disordered; Cardin-Weintraub
-draft: true
+draft: false
 first_letter: S
 full_name: Sonic hedgehog protein
 gene_symbol: SHH
-image_link: null
+image_link:
 kegg_families: Peptidases and inhibitors; Glycosaminoglycan binding proteins
 length (aa): 462
-locations: cell surface; collagen-containing extracellular matrix; cytosol; endoplasmic
-  reticulum; endoplasmic reticulum lumen; endoplasmic reticulum membrane; extracellular
-  region; extracellular space; Golgi apparatus; Golgi membrane; membrane raft; plasma
-  membrane
+locations: cell surface; collagen-containing extracellular matrix; cytosol; endoplasmic reticulum; endoplasmic reticulum lumen; endoplasmic reticulum membrane; extracellular region; extracellular space; Golgi apparatus; Golgi membrane; membrane raft; plasma membrane
 mass: 50
 membrane_depth: 0
 pathways:
-- Hedgehog signaling
-- development
+  - Hedgehog signaling
+  - development
 percent_disordered: 62
 persona_aesthetics: Wuxia; Junglecore
 persona_age: 62
 persona_background_setting: outer space
 persona_height: 50
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/Q15465.png
 persona_politics: Maintenance
 persona_sex: Female
@@ -42,8 +39,8 @@ protein_type: secreted morphogen
 rvis_percentile: 23
 symbol: SHH
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 79
 title: Sonic hedgehog (SHH)
 transmembrane: false

@@ -1,39 +1,34 @@
 ---
-Has transmembrane domains: 'No'
+Has transmembrane domains: No
 aliases:
-- FGA
-- Fibrinogen alpha
+  - FGA
+  - Fibrinogen alpha
 alignment: unknown
 date: 2025-08-21
 domain_count: 4
 domains:
-- coiled-coil region
-- fibrinopeptide A
-domains_top3: Fibrinogen C-terminal; Alpha-chain polymerization, binding distal domain
-  of another fibrin gamma chain; Disordered
-draft: true
+  - coiled-coil region
+  - fibrinopeptide A
+domains_top3: Fibrinogen C-terminal; Alpha-chain polymerization, binding distal domain of another fibrin gamma chain; Disordered
+draft: false
 first_letter: F
 full_name: Fibrinogen alpha chain
 gene_symbol: FGA
-image_link: null
+image_link:
 kegg_families: Exosome; Glycosaminoglycan binding proteins
 length (aa): 866
-locations: blood microparticle; cell surface; collagen-containing extracellular matrix;
-  endoplasmic reticulum; endoplasmic reticulum lumen; external side of plasma membrane;
-  extracellular exosome; extracellular region; extracellular space; extracellular
-  vesicle; fibrinogen complex; plasma membrane; platelet alpha granule; platelet alpha
-  granule lumen
+locations: blood microparticle; cell surface; collagen-containing extracellular matrix; endoplasmic reticulum; endoplasmic reticulum lumen; external side of plasma membrane; extracellular exosome; extracellular region; extracellular space; extracellular vesicle; fibrinogen complex; plasma membrane; platelet alpha granule; platelet alpha granule lumen
 mass: 95
 membrane_depth: 0
 pathways:
-- coagulation
-- wound healing
+  - coagulation
+  - wound healing
 percent_disordered: 52
 persona_aesthetics: Rocketpunk; Junglecore
 persona_age: 52
 persona_background_setting: outer space
 persona_height: 95
-persona_hexcode: null
+persona_hexcode:
 persona_image: /static/proteins/P02671.png
 persona_politics: Maintenance
 persona_sex: Female
@@ -44,8 +39,8 @@ protein_type: blood clotting protein
 rvis_percentile: 12
 symbol: FGA
 tags:
-- protein
-- content/wiki
+  - protein
+  - content/wiki
 tissue_tau: 91
 title: Fibrinogen alpha chain (FGA)
 transmembrane: false
