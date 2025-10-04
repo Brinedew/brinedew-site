@@ -1,6 +1,6 @@
-import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
-import { classNames } from "../util/lang"
-import { hsluvToHex } from "hsluv"
+import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types" 
+import { classNames } from "../util/lang" 
+import { Hsluv } from "hsluv" 
 
 interface Mapping {
   source: string
@@ -54,35 +54,26 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
   // Get persona image
   const personaImage = fm?.persona_image || `/static/proteins/${fm?.uniprot_id}.png`
   
-  // Compute hexcode from HSL if not provided
-  const hslToHex = (h: number, s: number, l: number): string => {
-    l /= 100
-    const a = s * Math.min(l, 1 - l) / 100
-    const f = (n: number) => {
-      const k = (n + h / 30) % 12
-      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
-      return Math.round(255 * color).toString(16).padStart(2, '0')
-    }
-    return `#${f(0)}${f(8)}${f(4)}`
-  }
+  // HSLuv conversion (no RGB/HSL fallback) 
+  const toHexHsluv = (h: number, s: number, l: number): string => { 
+    const hue = ((h % 360) + 360) % 360 
+    const sat = Math.max(0, Math.min(100, s)) 
+    const lum = Math.max(0, Math.min(100, l)) 
+    const conv = new Hsluv() 
+    conv.hsluv_h = hue 
+    conv.hsluv_s = sat 
+    conv.hsluv_l = lum 
+    conv.hsluvToHex() 
+    return conv.hex 
+  } 
   
-  // HSLuv to RGB conversion
-  const hsluvToHex = (h: number, s: number, l: number): string => {
-    // Simplified HSLuv conversion - for proper implementation, use hsluv library
-    // For now, using an approximation via HSL with adjustments
-    const hue = h % 360
-    const sat = Math.max(0, Math.min(100, s))
-    const lum = Math.max(0, Math.min(100, l))
-    return hslToHex(hue, sat, lum)
-  }
-  
-  let hexcode = fm?.persona_hexcode
-  if (!hexcode || hexcode === 'null') {
-    const hue = fm?.persona_skintone_hue || 0
-    const sat = fm?.persona_skintone_saturation || 50
-    const light = fm?.persona_skintone_lightness || 50
-    hexcode = hslToHex(hue, sat, light)
-  }
+  let hexcode = fm?.persona_hexcode 
+  if (!hexcode || hexcode === 'null') { 
+    const hue = fm?.persona_skintone_hue ?? 0 
+    const sat = fm?.persona_skintone_saturation ?? 50 
+    const light = fm?.persona_skintone_lightness ?? 50 
+    hexcode = toHexHsluv(hue, sat, light) 
+  } 
   
   const geneSymbol = fm?.symbol || fm?.gene_symbol || fm?.title || 'Protein'
   
@@ -130,15 +121,15 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
     return `${value}${unit}`
   }
   
-  // Special formatter for hue - returns enclosed alphanumeric with color
-  const formatHue = (hue: number, letter: string): { display: string, color: string } => {
-    // Convert HSLuv hue to RGB with 50% lightness, 100% saturation
-    const color = hsluvToHex(hue, 100, 50)
-    return {
-      display: letter,
-      color: color
-    }
-  }
+  // Special formatter for hue - returns enclosed alphanumeric with HSLuv color 
+  const formatHue = (hue: number, letter: string): { display: string, color: string } => { 
+    // Use HSLuv with fixed S/L for legibility parity across hues 
+    const color = toHexHsluv(hue, 100, 50) 
+    return { 
+      display: letter, 
+      color: color 
+    } 
+  } 
 
   return (
     <div class={classNames(displayClass, "protein-infobox")}>
@@ -186,9 +177,9 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
             let personaDisplay = formatValue(m.target, personaValue)
             
             if (isHueMapping) {
-              const hue = fm?.persona_skintone_hue || 0
-              const letter = (molecularValue || 'X').toUpperCase()
-              const hueColor = hsluvToHex(hue, 100, 50)
+              const hue = fm?.persona_skintone_hue || 0 
+              const letter = (molecularValue || 'X').toUpperCase() 
+              const hueColor = toHexHsluv(hue, 100, 50) 
               
               // Convert letter to enclosed alphanumeric UTF-8 character
               // A-Z: U+1F170 to U+1F189
