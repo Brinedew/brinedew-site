@@ -42,15 +42,13 @@ export default ((userOpts?: ProteinGalleryOptions) => {
           {proteins.map(protein => {
             // Render each protein using the actual ProteinInfobox component
             return (
-              <a href={`/${protein.slug}`} class="gallery-item-link">
-                <InfoboxComponent 
-                  fileData={protein}
-                  displayClass="in-gallery"
-                  cfg={cfg}
-                  allFiles={allFiles}
-                  tree={null as any}
-                />
-              </a>
+              <InfoboxComponent 
+                fileData={protein}
+                displayClass="in-gallery"
+                cfg={cfg}
+                allFiles={allFiles}
+                tree={null as any}
+              />
             )
           })}
         </div>
@@ -81,6 +79,14 @@ export default ((userOpts?: ProteinGalleryOptions) => {
     color: inherit;
     display: block;
     transition: transform 0.2s, box-shadow 0.2s;
+    /* Ensure link matches infobox size exactly */
+    width: 100%;
+    height: 100%;
+  }
+  
+  .gallery-item-link > .protein-infobox {
+    /* Remove any margins that might cause size mismatch */
+    margin: 0 !important;
   }
 
   .gallery-item-link:hover {
