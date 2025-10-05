@@ -26,7 +26,8 @@ WEBSITE_ROOT = SCRIPT_DIR.parent
 CONTENT_DIR = WEBSITE_ROOT / "content"
 WIKI_DIR = CONTENT_DIR / "wiki"
 PUBLIC_DIR = WEBSITE_ROOT / "public"
-STATIC_PROTEINS_DIR = PUBLIC_DIR / "static" / "proteins"
+# Write images to Quartz static input so CI/Pages include them in the build output
+STATIC_PROTEINS_DIR = WEBSITE_ROOT / "static" / "proteins"
 ATTACHMENTS_DIR = CONTENT_DIR / "Attachments"
 
 # Thoteins data - now in tools/thoteins/ within the same repo
@@ -192,8 +193,8 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     
     if not needs_update:
         print(f"  Skipped {md_file.name} ({uniprot_id}) - already up-to-date")
-        # Still check for missing images
-        full_image_path = PUBLIC_DIR / f"static/proteins/{uniprot_id}.png"
+        # Still check for missing images (check static input, not build output)
+        full_image_path = STATIC_PROTEINS_DIR / f"{uniprot_id}.png"
         if not full_image_path.exists():
             prompt = generate_image_prompt(protein_data)
             hexcode = protein_data.get('hexcode', '#cccccc')
@@ -258,8 +259,8 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
         # Use standard path
         post['persona_image'] = image_path
     
-    # Check if image needs generation
-    full_image_path = PUBLIC_DIR / image_path.lstrip('/')
+    # Check if image needs generation (look in static input, which Quartz copies into public)
+    full_image_path = STATIC_PROTEINS_DIR / f"{uniprot_id}.png"
     if not full_image_path.exists():
         prompt = generate_image_prompt(protein_data)
         hexcode = protein_data.get('hexcode', '#cccccc')

@@ -7,10 +7,9 @@ const CSV_PATHS = {
   mapping: '../../data/mapping.json'
 };
 
-// Serve images from the website's public static folder so Prompter and site match
-// This path is resolved relative to index.html at apps/protein-portrait-prompter/
-// ../../../../public/static/proteins -> Website/public/static/proteins
-const IMAGE_BASE_PATH = '../../../../public/static/proteins';
+// Serve images from the website's static path (root-relative) so it also works on GitHub Pages
+// Deployed site loads from /static/proteins; local file:// may need a dev server
+const IMAGE_BASE_PATH = '/static/proteins';
 
 /**
  * Parse CSV text into array of objects
