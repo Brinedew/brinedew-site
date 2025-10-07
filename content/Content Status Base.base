@@ -24,3 +24,31 @@ views:
     sort:
       - property: file.mtime
         direction: DESC
+  - type: cards
+    name: Needs Review
+    filters:
+      and:
+        - status == "in_review"
+    order:
+      - title
+      - file.mtime
+    sort:
+      - property: file.mtime
+        direction: DESC
+    imageFit: ""
+    cardSize: 190
+    imageAspectRatio: 1
+  - type: cards
+    name: Scheduled
+    filters:
+      and:
+        - status == "scheduled"
+    order:
+      - publish_date
+      - title
+    sort:
+      - property: publish_date
+        direction: ASC
+    imageFit: ""
+    cardSize: 190
+    imageAspectRatio: 1
