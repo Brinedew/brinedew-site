@@ -1,0 +1,1761 @@
+[
+  {
+    "uniprot": "O00391",
+    "hgnc": "QSOX1",
+    "synonyms": [
+      "hQSOX",
+      "QSOX1"
+    ],
+    "full_name": "Sulfhydryl oxidase 1",
+    "length": 747,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "Thioredoxin",
+      "ERV/ALR sulfhydryl oxidase"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.19
+    },
+    "subcell": [
+      "endoplasmic reticulum lumen",
+      "extracellular exosome",
+      "extracellular region"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/O00391",
+      "wiki": "/wiki/qsox1-hqsox-o00391"
+    }
+  },
+  {
+    "uniprot": "O14727",
+    "hgnc": "APAF1",
+    "synonyms": [
+      "APAF1",
+      "APAF-1"
+    ],
+    "full_name": "Apoptotic protease-activating factor 1",
+    "length": 1248,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "CARD",
+      "NB-ARC",
+      "Interpropeller linker"
+    ],
+    "go_slim": [
+      "apoptosis"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.51
+    },
+    "subcell": [
+      "apoptosome",
+      "cytosol",
+      "extracellular exosome"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/O14727",
+      "wiki": "/wiki/apaf1-apaf-1-o14727"
+    }
+  },
+  {
+    "uniprot": "O14746",
+    "hgnc": "TERT",
+    "synonyms": [
+      "TP2",
+      "TERT"
+    ],
+    "full_name": "Telomerase reverse transcriptase",
+    "length": 1132,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Reverse transcriptase",
+      "RNA-interacting domain 1",
+      "GQ motif"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "unknown",
+      "score": null
+    },
+    "subcell": [
+      "chromosome, telomeric region",
+      "cytosol",
+      "mitochondrial nucleoid"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/O14746",
+      "wiki": "/wiki/tert-tp2-o14746"
+    }
+  },
+  {
+    "uniprot": "O15169",
+    "hgnc": "AXIN1",
+    "synonyms": [
+      "hAxin",
+      "AXIN1"
+    ],
+    "full_name": "Axin-1",
+    "length": 862,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "RGS",
+      "DIX"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "wnt signaling pathway"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.23
+    },
+    "subcell": [
+      "beta-catenin destruction complex",
+      "cell cortex",
+      "cell periphery"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/O15169",
+      "wiki": "/wiki/axin1-haxin-o15169"
+    }
+  },
+  {
+    "uniprot": "O43524",
+    "hgnc": "FOXO3",
+    "synonyms": [
+      "FOXO3"
+    ],
+    "full_name": "Forkhead box protein O3",
+    "length": 673,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Required for mitochondrial import"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.27
+    },
+    "subcell": [
+      "chromatin",
+      "cytoplasm",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/O43524",
+      "wiki": "/wiki/foxo3-foxo3-o43524"
+    }
+  },
+  {
+    "uniprot": "O60674",
+    "hgnc": "JAK2",
+    "synonyms": [
+      "JAK-2",
+      "JAK2"
+    ],
+    "full_name": "Tyrosine-protein kinase JAK2",
+    "length": 1132,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "FERM",
+      "SH2",
+      "atypical",
+      "Protein kinase 1"
+    ],
+    "go_slim": [
+      "adaptive immunity",
+      "immunity",
+      "innate immunity"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.31
+    },
+    "subcell": [
+      "caveola",
+      "cytoplasm",
+      "cytoplasmic side of plasma membrane"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/O60674",
+      "wiki": "/wiki/jak2-jak-2-o60674"
+    }
+  },
+  {
+    "uniprot": "P00533",
+    "hgnc": "EGFR",
+    "synonyms": [
+      "EGFR"
+    ],
+    "full_name": "Epidermal growth factor receptor",
+    "length": 1210,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "Protein kinase",
+      "Important for dimerization, phosphorylation and activation"
+    ],
+    "go_slim": [
+      "host-virus interaction"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.39
+    },
+    "subcell": [
+      "basal plasma membrane",
+      "basolateral plasma membrane",
+      "cell junction"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P00533",
+      "wiki": "/wiki/egfr-egfr-p00533"
+    }
+  },
+  {
+    "uniprot": "P01106",
+    "hgnc": "MYC",
+    "synonyms": [
+      "MYC",
+      "bHLHe39"
+    ],
+    "full_name": "Myc proto-oncogene protein",
+    "length": 454,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "bHLH",
+      "Basic motif"
+    ],
+    "go_slim": [
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.37
+    },
+    "subcell": [
+      "axon",
+      "chromatin",
+      "euchromatin"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P01106",
+      "wiki": "/wiki/myc-bhlhe39-p01106"
+    }
+  },
+  {
+    "uniprot": "P01116",
+    "hgnc": "KRAS",
+    "synonyms": [
+      "KRAS"
+    ],
+    "full_name": "GTPase KRas",
+    "length": 189,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Hypervariable region",
+      "Effector region"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.23
+    },
+    "subcell": [
+      "cytoplasm",
+      "cytoplasmic side of plasma membrane",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P01116",
+      "wiki": "/wiki/kras-kras-p01116"
+    }
+  },
+  {
+    "uniprot": "P01133",
+    "hgnc": "EGF",
+    "synonyms": [
+      "EGF"
+    ],
+    "full_name": "Pro-epidermal growth factor",
+    "length": 1207,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "EGF-like 1",
+      "EGF-like 2",
+      "calcium-binding",
+      "EGF-like 3"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.81
+    },
+    "subcell": [
+      "clathrin-coated endocytic vesicle membrane",
+      "extracellular exosome",
+      "extracellular region"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P01133",
+      "wiki": "/wiki/egf-egf-p01133"
+    }
+  },
+  {
+    "uniprot": "P01137",
+    "hgnc": "TGFB1",
+    "synonyms": [
+      "TGFB1"
+    ],
+    "full_name": "Transforming growth factor beta-1 proprotein",
+    "length": 390,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "Straightjacket domain",
+      "Arm domain",
+      "Bowtie tail"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.3
+    },
+    "subcell": [
+      "axon",
+      "blood microparticle",
+      "cell surface"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P01137",
+      "wiki": "/wiki/tgfb1-tgfb1-p01137"
+    }
+  },
+  {
+    "uniprot": "P01375",
+    "hgnc": "TNF",
+    "synonyms": [
+      "TNF-a",
+      "TNF"
+    ],
+    "full_name": "Tumor necrosis factor",
+    "length": 233,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "THD"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.83
+    },
+    "subcell": [
+      "cell surface",
+      "external side of plasma membrane",
+      "extracellular region"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P01375",
+      "wiki": "/wiki/tnf-tnf-a-p01375"
+    }
+  },
+  {
+    "uniprot": "P02545",
+    "hgnc": "LMNA",
+    "synonyms": [
+      "LMNA"
+    ],
+    "full_name": "Prelamin-A/C",
+    "length": 664,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "IF rod",
+      "LTD",
+      "Interaction with MLIP"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.22
+    },
+    "subcell": [
+      "cytosol",
+      "intermediate filament",
+      "lamin filament"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P02545",
+      "wiki": "/wiki/lmna-lmna-p02545"
+    }
+  },
+  {
+    "uniprot": "P02671",
+    "hgnc": "FGA",
+    "synonyms": [
+      "FGA"
+    ],
+    "full_name": "Fibrinogen alpha chain",
+    "length": 866,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "Fibrinogen C-terminal",
+      "Alpha-chain polymerization, binding distal domain of another fibrin gamma chain"
+    ],
+    "go_slim": [
+      "adaptive immunity",
+      "blood coagulation",
+      "hemostasis",
+      "immunity",
+      "innate immunity"
+    ],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.91
+    },
+    "subcell": [
+      "blood microparticle",
+      "cell surface",
+      "collagen-containing extracellular matrix"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P02671",
+      "wiki": "/wiki/fga-fga-p02671"
+    }
+  },
+  {
+    "uniprot": "P04406",
+    "hgnc": "GAPDH",
+    "synonyms": [
+      "GAPDH"
+    ],
+    "full_name": "Glyceraldehyde-3-phosphate dehydrogenase",
+    "length": 335,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "Interaction with WARS1",
+      "[IL]-x-C-x-x-[DE] motif"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "glycolysis",
+      "immunity",
+      "innate immunity",
+      "translation regulation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.27
+    },
+    "subcell": [
+      "cytoplasm",
+      "cytosol",
+      "extracellular exosome"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P04406",
+      "wiki": "/wiki/gapdh-gapdh-p04406"
+    }
+  },
+  {
+    "uniprot": "P04439",
+    "hgnc": "HLA-A",
+    "synonyms": [
+      "HLA-A"
+    ],
+    "full_name": "HLA class I histocompatibility antigen, A alpha chain",
+    "length": 365,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "Ig-like C1-type",
+      "VL9 epitope",
+      "Alpha-1"
+    ],
+    "go_slim": [
+      "adaptive immunity",
+      "host-virus interaction",
+      "immunity",
+      "innate immunity"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.28
+    },
+    "subcell": [
+      "cell surface",
+      "early endosome membrane",
+      "endoplasmic reticulum"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P04439",
+      "wiki": "/wiki/hla-a-hla-a-p04439"
+    }
+  },
+  {
+    "uniprot": "P04637",
+    "hgnc": "TP53",
+    "synonyms": [
+      "TP53"
+    ],
+    "full_name": "Cellular tumor antigen p53",
+    "length": 393,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Interaction with CCAR2",
+      "Interaction with HRMT1L2",
+      "Transcription activation (acidic)"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "biological rhythms",
+      "cell cycle",
+      "host-virus interaction",
+      "necrosis"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.26
+    },
+    "subcell": [
+      "centrosome",
+      "chromatin",
+      "cytoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P04637",
+      "wiki": "/wiki/tp53-tp53-p04637"
+    }
+  },
+  {
+    "uniprot": "P05019",
+    "hgnc": "IGF1",
+    "synonyms": [
+      "IGF1",
+      "IGF-I"
+    ],
+    "full_name": "Insulin-like growth factor 1",
+    "length": 195,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "B",
+      "C",
+      "A"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.44
+    },
+    "subcell": [
+      "alphav-beta3 integrin-IGF-1-IGF1R complex",
+      "exocytic vesicle",
+      "extracellular region"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P05019",
+      "wiki": "/wiki/igf1-igf-i-p05019"
+    }
+  },
+  {
+    "uniprot": "P06400",
+    "hgnc": "RB1",
+    "synonyms": [
+      "Rb",
+      "RB1"
+    ],
+    "full_name": "Retinoblastoma-associated protein",
+    "length": 928,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Pocket",
+      "binds T and E1A",
+      "Domain A"
+    ],
+    "go_slim": [
+      "cell cycle",
+      "host-virus interaction",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.2
+    },
+    "subcell": [
+      "chromatin",
+      "chromatin lock complex",
+      "cytoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P06400",
+      "wiki": "/wiki/rb1-rb-p06400"
+    }
+  },
+  {
+    "uniprot": "P10415",
+    "hgnc": "BCL2",
+    "synonyms": [
+      "BCL2"
+    ],
+    "full_name": "Apoptosis regulator Bcl-2",
+    "length": 239,
+    "tmh": true,
+    "secreted": false,
+    "domains": [
+      "Required for interaction with SEPTIN4 isoform ARTS. Required XIAP-mediated ubiquitination and apoptosis",
+      "BH4"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "autophagy"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.4
+    },
+    "subcell": [
+      "BAD-BCL-2 complex",
+      "cytoplasm",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P10415",
+      "wiki": "/wiki/bcl2-bcl2-p10415"
+    }
+  },
+  {
+    "uniprot": "P14780",
+    "hgnc": "MMP9",
+    "synonyms": [
+      "MMP-9",
+      "MMP9"
+    ],
+    "full_name": "Matrix metalloproteinase-9",
+    "length": 707,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "Fibronectin type-II 1",
+      "Fibronectin type-II 2",
+      "Fibronectin type-II 3"
+    ],
+    "go_slim": [
+      "collagen degradation"
+    ],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.78
+    },
+    "subcell": [
+      "collagen-containing extracellular matrix",
+      "extracellular exosome",
+      "extracellular region"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P14780",
+      "wiki": "/wiki/mmp9-mmp-9-p14780"
+    }
+  },
+  {
+    "uniprot": "P15056",
+    "hgnc": "BRAF",
+    "synonyms": [
+      "BRAF"
+    ],
+    "full_name": "Serine/threonine-protein kinase B-raf",
+    "length": 766,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "RBD",
+      "Protein kinase"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.22
+    },
+    "subcell": [
+      "cell body",
+      "centriolar satellite",
+      "ciliary basal body"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P15056",
+      "wiki": "/wiki/braf-braf-p15056"
+    }
+  },
+  {
+    "uniprot": "P16410",
+    "hgnc": "CTLA4",
+    "synonyms": [
+      "CTLA-4",
+      "CTLA4"
+    ],
+    "full_name": "Cytotoxic T-lymphocyte protein 4",
+    "length": 223,
+    "tmh": true,
+    "secreted": false,
+    "domains": [
+      "Ig-like V-type",
+      "Homodimerization",
+      "Important for interaction with CD80 and CD86"
+    ],
+    "go_slim": [
+      "adaptive immunity",
+      "immunity"
+    ],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.81
+    },
+    "subcell": [
+      "clathrin-coated endocytic vesicle",
+      "external side of plasma membrane",
+      "Golgi apparatus"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P16410",
+      "wiki": "/wiki/ctla4-ctla-4-p16410"
+    }
+  },
+  {
+    "uniprot": "P25445",
+    "hgnc": "FAS",
+    "synonyms": [
+      "FAS"
+    ],
+    "full_name": "Tumor necrosis factor receptor superfamily member 6",
+    "length": 335,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "Death",
+      "Interaction with HIPK3",
+      "Interaction with CALM"
+    ],
+    "go_slim": [
+      "apoptosis"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.39
+    },
+    "subcell": [
+      "CD95 death-inducing signaling complex",
+      "cell surface",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P25445",
+      "wiki": "/wiki/fas-fas-p25445"
+    }
+  },
+  {
+    "uniprot": "P26358",
+    "hgnc": "DNMT1",
+    "synonyms": [
+      "DNMT1",
+      "Dnmt1"
+    ],
+    "full_name": "DNA (cytosine-5)-methyltransferase 1",
+    "length": 1616,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "DMAP1-binding",
+      "BAH 1",
+      "BAH 2"
+    ],
+    "go_slim": [
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.4
+    },
+    "subcell": [
+      "female germ cell nucleus",
+      "mitochondrion",
+      "nucleoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P26358",
+      "wiki": "/wiki/dnmt1-dnmt1-p26358"
+    }
+  },
+  {
+    "uniprot": "P31749",
+    "hgnc": "AKT1",
+    "synonyms": [
+      "AKT1",
+      "PKB"
+    ],
+    "full_name": "RAC-alpha serine/threonine-protein kinase",
+    "length": 480,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "PH",
+      "Protein kinase",
+      "AGC-kinase C-terminal"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "carbohydrate metabolism",
+      "glucose metabolism",
+      "glycogen biosynthesis",
+      "glycogen metabolism"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.14
+    },
+    "subcell": [
+      "cell cortex",
+      "cell-cell junction",
+      "ciliary basal body"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P31749",
+      "wiki": "/wiki/akt1-pkb-p31749"
+    }
+  },
+  {
+    "uniprot": "P31751",
+    "hgnc": "AKT2",
+    "synonyms": [
+      "AKT2",
+      "PKB beta"
+    ],
+    "full_name": "RAC-beta serine/threonine-protein kinase",
+    "length": 481,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "PH",
+      "Protein kinase",
+      "AGC-kinase C-terminal"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "carbohydrate metabolism",
+      "glucose metabolism",
+      "glycogen biosynthesis",
+      "glycogen metabolism"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.2
+    },
+    "subcell": [
+      "cell cortex",
+      "cytoplasm",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P31751",
+      "wiki": "/wiki/akt2-pkb beta-p31751"
+    }
+  },
+  {
+    "uniprot": "P35222",
+    "hgnc": "CTNNB1",
+    "synonyms": [
+      "CTNNB1"
+    ],
+    "full_name": "Catenin beta-1",
+    "length": 781,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "Interaction with VCL",
+      "Interaction with BCL9"
+    ],
+    "go_slim": [
+      "cell adhesion",
+      "host-virus interaction",
+      "neurogenesis",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.1
+    },
+    "subcell": [
+      "adherens junction",
+      "apical part of cell",
+      "apicolateral plasma membrane"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P35222",
+      "wiki": "/wiki/ctnnb1-ctnnb1-p35222"
+    }
+  },
+  {
+    "uniprot": "P38936",
+    "hgnc": "CDKN1A",
+    "synonyms": [
+      "MDA-6",
+      "CDKN1A"
+    ],
+    "full_name": "Cyclin-dependent kinase inhibitor 1",
+    "length": 164,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Required for binding cyclins",
+      "Required for binding CDKs"
+    ],
+    "go_slim": [
+      "cell cycle"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.2
+    },
+    "subcell": [
+      "cyclin-dependent protein kinase holoenzyme complex",
+      "cytoplasm",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P38936",
+      "wiki": "/wiki/cdkn1a-mda-6-p38936"
+    }
+  },
+  {
+    "uniprot": "P42336",
+    "hgnc": "PIK3CA",
+    "synonyms": [
+      "PIK3CA",
+      "PI3-kinase subunit alpha"
+    ],
+    "full_name": "Phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit alpha isoform",
+    "length": 1068,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "PI3K-ABD",
+      "PI3K-RBD",
+      "C2 PI3K-type"
+    ],
+    "go_slim": [
+      "angiogenesis",
+      "lipid metabolism",
+      "phagocytosis"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.23
+    },
+    "subcell": [
+      "cytoplasm",
+      "cytosol",
+      "intercalated disc"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P42336",
+      "wiki": "/wiki/pik3ca-pi3-kinase subunit alpha-p42336"
+    }
+  },
+  {
+    "uniprot": "P42345",
+    "hgnc": "MTOR",
+    "synonyms": [
+      "mTOR",
+      "MTOR"
+    ],
+    "full_name": "Serine/threonine-protein kinase mTOR",
+    "length": 2549,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "FAT",
+      "PI3K/PI4K catalytic",
+      "FATC"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.34
+    },
+    "subcell": [
+      "cytoplasm",
+      "cytosol",
+      "dendrite"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P42345",
+      "wiki": "/wiki/mtor-mtor-p42345"
+    }
+  },
+  {
+    "uniprot": "P46531",
+    "hgnc": "NOTCH1",
+    "synonyms": [
+      "NOTCH1",
+      "Notch 1"
+    ],
+    "full_name": "Neurogenic locus notch homolog protein 1",
+    "length": 2555,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "EGF-like 1",
+      "EGF-like 2",
+      "EGF-like 3"
+    ],
+    "go_slim": [
+      "angiogenesis",
+      "differentiation",
+      "notch signaling pathway",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.37
+    },
+    "subcell": [
+      "acrosomal vesicle",
+      "adherens junction",
+      "apical plasma membrane"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P46531",
+      "wiki": "/wiki/notch1-notch 1-p46531"
+    }
+  },
+  {
+    "uniprot": "P46937",
+    "hgnc": "YAP1",
+    "synonyms": [
+      "Yes-associated protein 1",
+      "YAP1"
+    ],
+    "full_name": "Transcriptional coactivator YAP1",
+    "length": 504,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "WW 1",
+      "WW 2"
+    ],
+    "go_slim": [
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.21
+    },
+    "subcell": [
+      "bicellular tight junction",
+      "cell junction",
+      "cell-cell junction"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P46937",
+      "wiki": "/wiki/yap1-yes-associated protein 1-p46937"
+    }
+  },
+  {
+    "uniprot": "P98170",
+    "hgnc": "XIAP",
+    "synonyms": [
+      "ILP",
+      "XIAP"
+    ],
+    "full_name": "E3 ubiquitin-protein ligase XIAP",
+    "length": 497,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Interaction with caspase-7",
+      "Required for interaction with SEPTIN4 isoform ARTS",
+      "Required for interaction with DIABLO"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "ubl conjugation pathway",
+      "wnt signaling pathway"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.28
+    },
+    "subcell": [
+      "cytoplasm",
+      "cytosol",
+      "nucleoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/P98170",
+      "wiki": "/wiki/xiap-ilp-p98170"
+    }
+  },
+  {
+    "uniprot": "Q00987",
+    "hgnc": "MDM2",
+    "synonyms": [
+      "Hdm2",
+      "MDM2"
+    ],
+    "full_name": "E3 ubiquitin-protein ligase Mdm2",
+    "length": 491,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "SWIB/MDM2",
+      "Necessary for interaction with USP2",
+      "Sufficient to promote the mitochondrial pathway of apoptosis"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "host-virus interaction",
+      "ubl conjugation pathway"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.25
+    },
+    "subcell": [
+      "centriolar satellite",
+      "cytoplasm",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q00987",
+      "wiki": "/wiki/mdm2-hdm2-q00987"
+    }
+  },
+  {
+    "uniprot": "Q01094",
+    "hgnc": "E2F1",
+    "synonyms": [
+      "E2F-1",
+      "E2F1"
+    ],
+    "full_name": "Transcription factor E2F1",
+    "length": 437,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Cyclin A:CDK2 binding",
+      "Interaction with BIRC2/c-IAP1"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "cell cycle",
+      "host-virus interaction",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.68
+    },
+    "subcell": [
+      "centrosome",
+      "chromatin",
+      "cytoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q01094",
+      "wiki": "/wiki/e2f1-e2f-1-q01094"
+    }
+  },
+  {
+    "uniprot": "Q02750",
+    "hgnc": "MAP2K1",
+    "synonyms": [
+      "MAP kinase kinase 1",
+      "MAP2K1"
+    ],
+    "full_name": "Dual specificity mitogen-activated protein kinase kinase 1",
+    "length": 393,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Protein kinase",
+      "RAF1-binding"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.26
+    },
+    "subcell": [
+      "axon",
+      "cell cortex",
+      "centrosome"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q02750",
+      "wiki": "/wiki/map2k1-map kinase kinase 1-q02750"
+    }
+  },
+  {
+    "uniprot": "Q05086",
+    "hgnc": "UBE3A",
+    "synonyms": [
+      "UBE3A"
+    ],
+    "full_name": "Ubiquitin-protein ligase E3A",
+    "length": 875,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "HECT",
+      "E6-binding"
+    ],
+    "go_slim": [
+      "biological rhythms",
+      "host-virus interaction",
+      "ubl conjugation pathway"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.26
+    },
+    "subcell": [
+      "cytosol",
+      "glutamatergic synapse",
+      "nucleus"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q05086",
+      "wiki": "/wiki/ube3a-ube3a-q05086"
+    }
+  },
+  {
+    "uniprot": "Q07812",
+    "hgnc": "BAX",
+    "synonyms": [
+      "BAX",
+      "Bcl2-L-4"
+    ],
+    "full_name": "Apoptosis regulator BAX",
+    "length": 192,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "BH3",
+      "BH1",
+      "BH2"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "host-virus interaction"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.24
+    },
+    "subcell": [
+      "BAK complex",
+      "BAX complex",
+      "Bcl-2 family protein complex"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q07812",
+      "wiki": "/wiki/bax-bcl2-l-4-q07812"
+    }
+  },
+  {
+    "uniprot": "Q07817",
+    "hgnc": "BCL2L1",
+    "synonyms": [
+      "BCL2L1",
+      "Bcl2-L-1"
+    ],
+    "full_name": "Bcl-2-like protein 1",
+    "length": 233,
+    "tmh": true,
+    "secreted": false,
+    "domains": [
+      "BH4",
+      "BH3"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "endocytosis"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.17
+    },
+    "subcell": [
+      "Bcl-2 family protein complex",
+      "centrosome",
+      "cytoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q07817",
+      "wiki": "/wiki/bcl2l1-bcl2-l-1-q07817"
+    }
+  },
+  {
+    "uniprot": "Q07820",
+    "hgnc": "MCL1",
+    "synonyms": [
+      "Bcl2-L-3",
+      "MCL1"
+    ],
+    "full_name": "Induced myeloid leukemia cell differentiation protein Mcl-1",
+    "length": 350,
+    "tmh": true,
+    "secreted": false,
+    "domains": [
+      "PEST-like"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "differentiation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.25
+    },
+    "subcell": [
+      "Bcl-2 family protein complex",
+      "cytoplasm",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q07820",
+      "wiki": "/wiki/mcl1-bcl2-l-3-q07820"
+    }
+  },
+  {
+    "uniprot": "Q13131",
+    "hgnc": "PRKAA1",
+    "synonyms": [
+      "AMPK subunit alpha-1",
+      "PRKAA1"
+    ],
+    "full_name": "5'-AMP-activated protein kinase catalytic subunit alpha-1",
+    "length": 559,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Protein kinase",
+      "AIS"
+    ],
+    "go_slim": [
+      "autophagy",
+      "biological rhythms",
+      "cholesterol biosynthesis",
+      "cholesterol metabolism",
+      "fatty acid biosynthesis"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.2
+    },
+    "subcell": [
+      "apical plasma membrane",
+      "axon",
+      "chromatin"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q13131",
+      "wiki": "/wiki/prkaa1-ampk subunit alpha-1-q13131"
+    }
+  },
+  {
+    "uniprot": "Q13315",
+    "hgnc": "ATM",
+    "synonyms": [
+      "A-T mutated",
+      "ATM"
+    ],
+    "full_name": "Serine-protein kinase ATM",
+    "length": 3056,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "FAT",
+      "PI3K/PI4K catalytic",
+      "FATC"
+    ],
+    "go_slim": [
+      "cell cycle",
+      "dna damage"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.36
+    },
+    "subcell": [
+      "centrosome",
+      "chromosome",
+      "cytoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q13315",
+      "wiki": "/wiki/atm-a-t mutated-q13315"
+    }
+  },
+  {
+    "uniprot": "Q13535",
+    "hgnc": "ATR",
+    "synonyms": [
+      "ATR"
+    ],
+    "full_name": "Serine/threonine-protein kinase ATR",
+    "length": 2644,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "FAT",
+      "PI3K/PI4K catalytic",
+      "FATC"
+    ],
+    "go_slim": [
+      "dna damage",
+      "dna repair"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.38
+    },
+    "subcell": [
+      "ATR-ATRIP complex",
+      "chromosome",
+      "Golgi apparatus"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q13535",
+      "wiki": "/wiki/atr-atr-q13535"
+    }
+  },
+  {
+    "uniprot": "Q15116",
+    "hgnc": "PDCD1",
+    "synonyms": [
+      "Protein PD-1",
+      "PDCD1"
+    ],
+    "full_name": "Programmed cell death protein 1",
+    "length": 288,
+    "tmh": true,
+    "secreted": false,
+    "domains": [
+      "Ig-like V-type",
+      "Nivolumab binding",
+      "Interaction with CD274/PDCD1L1"
+    ],
+    "go_slim": [
+      "adaptive immunity",
+      "apoptosis",
+      "immunity"
+    ],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.82
+    },
+    "subcell": [
+      "external side of plasma membrane",
+      "plasma membrane"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q15116",
+      "wiki": "/wiki/pdcd1-protein pd-1-q15116"
+    }
+  },
+  {
+    "uniprot": "Q15465",
+    "hgnc": "SHH",
+    "synonyms": [
+      "SHH"
+    ],
+    "full_name": "Sonic hedgehog protein",
+    "length": 462,
+    "tmh": false,
+    "secreted": true,
+    "domains": [
+      "Cardin-Weintraub"
+    ],
+    "go_slim": [],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.79
+    },
+    "subcell": [
+      "cell surface",
+      "collagen-containing extracellular matrix",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q15465",
+      "wiki": "/wiki/shh-shh-q15465"
+    }
+  },
+  {
+    "uniprot": "Q16236",
+    "hgnc": "NFE2L2",
+    "synonyms": [
+      "NFE2L2",
+      "NF-E2-related factor 2"
+    ],
+    "full_name": "Nuclear factor erythroid 2-related factor 2",
+    "length": 605,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "bZIP",
+      "Basic motif"
+    ],
+    "go_slim": [
+      "host-virus interaction",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.2
+    },
+    "subcell": [
+      "centrosome",
+      "chromatin",
+      "ciliary basal body"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q16236",
+      "wiki": "/wiki/nfe2l2-nf-e2-related factor 2-q16236"
+    }
+  },
+  {
+    "uniprot": "Q16611",
+    "hgnc": "BAK1",
+    "synonyms": [
+      "Bcl2-L-7",
+      "BAK1"
+    ],
+    "full_name": "Bcl-2 homologous antagonist/killer",
+    "length": 211,
+    "tmh": true,
+    "secreted": false,
+    "domains": [
+      "BH3",
+      "BH1"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "host-virus interaction"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.32
+    },
+    "subcell": [
+      "BAK complex",
+      "Bcl-2 family protein complex",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q16611",
+      "wiki": "/wiki/bak1-bcl2-l-7-q16611"
+    }
+  },
+  {
+    "uniprot": "Q8N726",
+    "hgnc": "CDKN2A",
+    "synonyms": [
+      "ARF",
+      "CDKN2A"
+    ],
+    "full_name": "Tumor suppressor ARF",
+    "length": 132,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Interaction with CDK5RAP3 and MDM2"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "cell cycle",
+      "rrna processing",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "highly specific",
+      "score": 0.71
+    },
+    "subcell": [
+      "cytosol",
+      "mitochondrial matrix",
+      "mitochondrion"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q8N726",
+      "wiki": "/wiki/cdkn2a-arf-q8n726"
+    }
+  },
+  {
+    "uniprot": "Q96EB6",
+    "hgnc": "SIRT1",
+    "synonyms": [
+      "hSIRT1",
+      "SIRT1"
+    ],
+    "full_name": "NAD-dependent protein deacetylase sirtuin-1",
+    "length": 747,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "Deacetylase sirtuin-type",
+      "Interaction with H1-4"
+    ],
+    "go_slim": [
+      "apoptosis",
+      "biological rhythms",
+      "differentiation",
+      "host-virus interaction",
+      "myogenesis"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.23
+    },
+    "subcell": [
+      "chromatin",
+      "chromatin silencing complex",
+      "cytoplasm"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q96EB6",
+      "wiki": "/wiki/sirt1-hsirt1-q96eb6"
+    }
+  },
+  {
+    "uniprot": "Q9GZV5",
+    "hgnc": "WWTR1",
+    "synonyms": [
+      "WWTR1"
+    ],
+    "full_name": "WW domain-containing transcription regulator protein 1",
+    "length": 400,
+    "tmh": false,
+    "secreted": false,
+    "domains": [
+      "WW",
+      "Required for interaction with PALS1"
+    ],
+    "go_slim": [
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "ubiquitous",
+      "score": 0.26
+    },
+    "subcell": [
+      "bicellular tight junction",
+      "cytoplasm",
+      "cytosol"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q9GZV5",
+      "wiki": "/wiki/wwtr1-wwtr1-q9gzv5"
+    }
+  },
+  {
+    "uniprot": "Q9NZQ7",
+    "hgnc": "CD274",
+    "synonyms": [
+      "PD-L1",
+      "CD274"
+    ],
+    "full_name": "Programmed cell death 1 ligand 1",
+    "length": 290,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "Ig-like V-type",
+      "Ig-like C2-type"
+    ],
+    "go_slim": [
+      "adaptive immunity",
+      "immunity"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.56
+    },
+    "subcell": [
+      "actin cytoskeleton",
+      "early endosome membrane",
+      "external side of plasma membrane"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q9NZQ7",
+      "wiki": "/wiki/cd274-pd-l1-q9nzq7"
+    }
+  },
+  {
+    "uniprot": "Q9UM47",
+    "hgnc": "NOTCH3",
+    "synonyms": [
+      "NOTCH3",
+      "Notch 3"
+    ],
+    "full_name": "Neurogenic locus notch homolog protein 3",
+    "length": 2321,
+    "tmh": true,
+    "secreted": true,
+    "domains": [
+      "EGF-like 1",
+      "EGF-like 2",
+      "EGF-like 3"
+    ],
+    "go_slim": [
+      "differentiation",
+      "notch signaling pathway",
+      "transcription",
+      "transcription regulation"
+    ],
+    "tissue": {
+      "label": "moderate",
+      "score": 0.34
+    },
+    "subcell": [
+      "cell surface",
+      "cytosol",
+      "endoplasmic reticulum membrane"
+    ],
+    "links": {
+      "uniprot": "https://www.uniprot.org/uniprotkb/Q9UM47",
+      "wiki": "/wiki/notch3-notch 3-q9um47"
+    }
+  }
+]

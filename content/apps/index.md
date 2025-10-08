@@ -8,6 +8,14 @@ draft: false
 
 Web applications and tools built by Brinedew.
 
+## [Proteindle](/apps/proteindle/)
+
+Daily protein guessing game. Infer today's target from function, domains, and tissue specificity.
+
+- **Data:** UniProt, GO-Slim terms, InterPro domains
+- **Gameplay:** 6 guesses, progressive hints, Tradle-style feedback
+- **Status:** Fully static, new puzzle daily
+
 ## [Protein Gallery](/apps/proteins/)
 
 Browse all protein personas with sortable gallery view and colored placeholders.

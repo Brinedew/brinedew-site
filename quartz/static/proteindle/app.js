@@ -1,0 +1,610 @@
+/**
+ * Proteindle - Daily Protein Guessing Game
+ * 
+ * Static implementation with:
+ * - Date-based daily selection
+ * - Autocomplete for protein guessing
+ * - Progressive hint unlocking
+ * - Similarity scoring (GO, domains, length, flags)
+ * - Share functionality
+ */
+
+(function() {
+  'use strict';
+  
+  // Constants
+  const DATA_URL = '/static/proteindle/data.json';
+  const INDEX_URL = '/static/proteindle/index.json';
+  const MAX_GUESSES = 6;
+  const STORAGE_KEY = 'proteindle_state';
+  
+  // State
+  let proteins = [];
+  let indexData = null;
+  let targetProtein = null;
+  let gameState = {
+    date: null,
+    guesses: [],
+    won: false,
+    hintsUnlocked: 1 // Start with 1 hint visible
+  };
+  
+  // DOM elements (will be populated on init)
+  let rootEl;
+  
+  /**
+   * SHA-256 implementation for deterministic daily selection
+   */
+  async function sha256(message) {
+    const msgBuffer = new TextEncoder().encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  
+  /**
+   * Pick today's protein deterministically
+   */
+  async function pickTodaysProtein(eligibleIds, salt) {
+    // Use local date YYYY-MM-DD
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Check for debug override
+    const urlParams = new URLSearchParams(window.location.search);
+    const answerOverride = urlParams.get('answer');
+    if (answerOverride && eligibleIds.includes(answerOverride)) {
+      return answerOverride;
+    }
+    
+    // Hash date + salt
+    const message = today + '|' + salt;
+    const hash = await sha256(message);
+    
+    // Convert first 16 hex chars to int, mod by array length
+    const hashInt = parseInt(hash.slice(0, 16), 16);
+    const index = hashInt % eligibleIds.length;
+    
+    return eligibleIds[index];
+  }
+ reset state
+      gameState = {
+        date: today,
+        guesses: [],
+        won: false,
+        hintsUnlocked: 1
+      };
+      saveState();
+    }
+    
+    // Pick today's target
+    const targetId = await pickTodaysProtein(indexData.eligible_ids, indexData.salt_hash);
+    targetProtein = proteins.find(p => p.uniprot === targetId);
+    
+    if (!targetProtein) {
+      throw new Error('Target protein not found!');
+    }
+  }
+  
+  /**
+   * Local storage helpers
+   */
+  function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+  }
+  
+  function loadState() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  }
+  
+  /**
+   * Scoring functions
+   */
+  function jaccardIndex(set1, set2) {
+    const intersection = set1.filter(x => set2.includes(x));
+    const union = [...new Set([...set1, ...set2])];
+    return union.length === 0 ? 0 : intersection.length / union.length;
+  }
+  
+  function scoreGuess(guess, target) {
+    // GO similarity (Jaccard)
+    const goJaccard = jaccardIndex(guess.go_slim, target.go_slim);
+    
+    // Domain overlap
+    const domainIntersection = guess.domains.filter(d => target.domains.includes(d));
+    const domainOverlap = domainIntersection.length;
+    
+    // Length bin match
+    const binLength = (len) => {
+      if (len < 400) return 0;
+      if (len < 800) return 1;
+      if (len < 1600) return 2;
+      return 3;
+    };
+    const lengthBinMatch = binLength(guess.length) === binLength(target.length);
+    
+    // Binary flags
+    const tmMatch = guess.tmh === target.tmh;
+    const secretedMatch = guess.secreted === target.secreted;
+    
+    // Tissue specificity match
+    const tissueMatch = guess.tissue.label === target.tissue.label;
+    
+    return {
+      goJaccard,
+      domainOverlap,
+      domainMatches: domainIntersection,
+      lengthBinMatch,
+      tmMatch,
+      secretedMatch,
+      tissueMatch
+    };
+  }
+  
+  /**
+   * Render functions
+   */
+  function renderClueCard() {
+    const maxHints = Math.min(gameState.hintsUnlocked, 5);
+    
+    return `
+      <div class="pg-clue-card">
+        ${maxHints >= 1 ? `
+          <div class="pg-clue-section">
+            <div class="pg-clue-label">Function</div>
+            <div class="pg-chips">
+              ${targetProtein.go_slim.slice(0, maxHints >= 3 ? 5 : 2).map(term => 
+                `<span class="pg-chip">${term}</span>`
+              ).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        ${maxHints >= 2 ? `
+          <div class="pg-clue-section">
+            <div class="pg-clue-label">Tissue Specificity</div>
+            <div class="pg-chip">${targetProtein.tissue.label}</div>
+          </div>
+        ` : ''}
+        
+        ${maxHints >= 3 ? `
+          <div class="pg-clue-section">
+            <div class="pg-clue-label">Domains</div>
+            <div class="pg-chips">
+              ${targetProtein.domains.slice(0, 2).map(domain => 
+                `<span class="pg-chip">${domain}</span>`
+              ).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        ${maxHints >= 4 ? `
+          <div class="pg-clue-section">
+            <div class="pg-clue-label">Properties</div>
+            <div class="pg-flags">
+              <div class="pg-flag">
+                <span class="pg-flag-icon">${targetProtein.tmh ? '🧬' : '🔵'}</span>
+                <span>${targetProtein.tmh ? 'Transmembrane' : 'Soluble'}</span>
+              </div>
+              <div class="pg-flag">
+                <span class="pg-flag-icon">${targetProtein.secreted ? '📤' : '📦'}</span>
+                <span>${targetProtein.secreted ? 'Secreted' : 'Intracellular'}</span>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+        
+        ${maxHints >= 5 ? `
+          <div class="pg-clue-section">
+            <div class="pg-clue-label">Length</div>
+            <div>${targetProtein.length} amino acids</div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+  
+  function renderFeedbackPanel(guess, score) {
+    return `
+      <div class="pg-feedback">
+        <div class="pg-feedback-header">
+          <span class="pg-feedback-protein">${guess.hgnc}</span>
+          <span>${guess.length} aa</span>
+        </div>
+        
+        <div class="pg-feedback-row">
+          <span class="pg-feedback-label">GO Similarity</span>
+          <div class="pg-bar">
+            <div class="pg-bar-fill" style="width: ${score.goJaccard * 100}%"></div>
+          </div>
+          <span class="pg-feedback-value">${Math.round(score.goJaccard * 100)}%</span>
+        </div>
+        
+        <div class="pg-feedback-row">
+          <span class="pg-feedback-label">Domains</span>
+          <div class="pg-chips">
+            ${guess.domains.map(d => `
+              <span class="pg-chip ${score.domainMatches.includes(d) ? 'matched' : 'unmatched'}">${d}</span>
+            `).join('')}
+          </div>
+        </div>
+        
+        <div class="pg-feedback-row">
+          <span class="pg-feedback-label">Length Bin</span>
+          <span class="pg-feedback-value">${score.lengthBinMatch ? '✓' : '✗'}</span>
+        </div>
+        
+        <div class="pg-feedback-row">
+          <span class="pg-feedback-label">Transmembrane</span>
+          <span class="pg-feedback-value">${score.tmMatch ? '✓' : '✗'}</span>
+        </div>
+        
+        <div class="pg-feedback-row">
+          <span class="pg-feedback-label">Secreted</span>
+          <span class="pg-feedback-value">${score.secretedMatch ? '✓' : '✗'}</span>
+        </div>
+        
+        <div class="pg-feedback-row">
+          <span class="pg-feedback-label">Tissue</span>
+          <span class="pg-feedback-value">${score.tissueMatch ? '✓' : '✗'}</span>
+        </div>
+      </div>
+    `;
+  }
+  
+  function renderResult() {
+    const title = gameState.won ? 'You Win!' : 'Game Over';
+    const className = gameState.won ? '' : 'failed';
+    
+    return `
+      <div class="pg-result ${className}">
+        <div class="pg-result-title">${title}</div>
+        <div class="pg-result-protein">
+          ${targetProtein.hgnc} (${targetProtein.full_name})
+        </div>
+        <div>Guesses: ${gameState.guesses.length}/${MAX_GUESSES}</div>
+        <div class="pg-result-links">
+          <a href="${targetProtein.links.wiki}" class="pg-link-btn">View Protein Page</a>
+          <a href="${targetProtein.links.uniprot}" target="_blank" class="pg-link-btn">UniProt</a>
+        </div>
+      </div>
+    `;
+  }
+  
+  function renderStats() {
+    // Load stats from localStorage
+    const stats = loadStats();
+    
+    return `
+      <div class="pg-stats">
+        <div class="pg-stat">
+          <div class="pg-stat-value">${stats.played}</div>
+          <div class="pg-stat-label">Played</div>
+        </div>
+        <div class="pg-stat">
+          <div class="pg-stat-value">${Math.round(stats.winRate * 100)}%</div>
+          <div class="pg-stat-label">Win Rate</div>
+        </div>
+        <div class="pg-stat">
+          <div class="pg-stat-value">${stats.currentStreak}</div>
+          <div class="pg-stat-label">Streak</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  function loadStats() {
+    const saved = localStorage.getItem('proteindle_stats');
+    return saved ? JSON.parse(saved) : {
+      played: 0,
+      won: 0,
+      winRate: 0,
+      currentStreak: 0,
+      maxStreak: 0
+    };
+  }
+  
+  function updateStats(won) {
+    const stats = loadStats();
+    stats.played++;
+    if (won) {
+      stats.won++;
+      stats.currentStreak++;
+      stats.maxStreak = Math.max(stats.maxStreak, stats.currentStreak);
+    } else {
+      stats.currentStreak = 0;
+    }
+    stats.winRate = stats.played > 0 ? stats.won / stats.played : 0;
+    localStorage.setItem('proteindle_stats', JSON.stringify(stats));
+  }
+  
+  /**
+   * Autocomplete
+   */
+  function setupAutocomplete(inputEl, suggestionsEl) {
+    let selectedIndex = -1;
+    
+    inputEl.addEventListener('input', (e) => {
+      const query = e.target.value.trim().toLowerCase();
+      
+      if (query.length < 1) {
+        suggestionsEl.innerHTML = '';
+        suggestionsEl.style.display = 'none';
+        return;
+      }
+      
+      // Find matches
+      const matches = proteins.filter(p => {
+        return p.hgnc.toLowerCase().includes(query) ||
+               p.synonyms.some(s => s.toLowerCase().includes(query)) ||
+               p.full_name.toLowerCase().includes(query);
+      }).slice(0, 8); // limit to 8 suggestions
+      
+      if (matches.length === 0) {
+        suggestionsEl.innerHTML = '<div class="pg-suggestion">No matches found</div>';
+        suggestionsEl.style.display = 'block';
+        return;
+      }
+      
+      suggestionsEl.innerHTML = matches.map((p, idx) => `
+        <div class="pg-suggestion" data-uniprot="${p.uniprot}" data-index="${idx}">
+          <strong>${p.hgnc}</strong> — ${p.full_name}
+        </div>
+      `).join('');
+      suggestionsEl.style.display = 'block';
+      selectedIndex = -1;
+      
+      // Click handler
+      suggestionsEl.querySelectorAll('.pg-suggestion').forEach(el => {
+        el.addEventListener('click', () => {
+          const uniprot = el.dataset.uniprot;
+          selectProtein(uniprot);
+        });
+      });
+    });
+    
+    inputEl.addEventListener('keydown', (e) => {
+      const suggestions = suggestionsEl.querySelectorAll('.pg-suggestion');
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
+        updateSelectedSuggestion(suggestions);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, -1);
+        updateSelectedSuggestion(suggestions);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+          const uniprot = suggestions[selectedIndex].dataset.uniprot;
+          selectProtein(uniprot);
+        }
+      } else if (e.key === 'Escape') {
+        suggestionsEl.innerHTML = '';
+        suggestionsEl.style.display = 'none';
+        selectedIndex = -1;
+      }
+    });
+    
+    function updateSelectedSuggestion(suggestions) {
+      suggestions.forEach((el, idx) => {
+        el.classList.toggle('selected', idx === selectedIndex);
+      });
+    }
+  }
+  
+  function selectProtein(uniprot) {
+    const protein = proteins.find(p => p.uniprot === uniprot);
+    if (!protein) return;
+    
+    // Clear input and suggestions
+    const inputEl = document.getElementById('pg-input');
+    const suggestionsEl = document.getElementById('pg-suggestions');
+    inputEl.value = protein.hgnc;
+    suggestionsEl.innerHTML = '';
+    suggestionsEl.style.display = 'none';
+    
+    // Enable submit button
+    document.getElementById('pg-submit').disabled = false;
+    document.getElementById('pg-submit').dataset.uniprot = uniprot;
+  }
+  
+  /**
+   * Handle guess submission
+   */
+  function submitGuess() {
+    const submitBtn = document.getElementById('pg-submit');
+    const uniprot = submitBtn.dataset.uniprot;
+    
+    if (!uniprot) return;
+    
+    const guessProtein = proteins.find(p => p.uniprot === uniprot);
+    if (!guessProtein) return;
+    
+    // Check if already guessed
+    if (gameState.guesses.some(g => g.uniprot === uniprot)) {
+      alert('You already guessed this protein!');
+      return;
+    }
+    
+    // Score the guess
+    const score = scoreGuess(guessProtein, targetProtein);
+    
+    // Check if correct
+    const isCorrect = guessProtein.uniprot === targetProtein.uniprot;
+    
+    // Add to guesses
+    gameState.guesses.push({
+      protein: guessProtein,
+      score: score,
+      correct: isCorrect
+    });
+    
+    // Unlock next hint
+    if (!isCorrect) {
+      gameState.hintsUnlocked = Math.min(gameState.hintsUnlocked + 1, 5);
+    }
+    
+    // Check win/loss
+    if (isCorrect) {
+      gameState.won = true;
+      updateStats(true);
+    } else if (gameState.guesses.length >= MAX_GUESSES) {
+      updateStats(false);
+    }
+    
+    // Save state
+    saveState();
+    
+    // Re-render
+    render();
+  }
+  
+  /**
+   * Share functionality
+   */
+  function generateShareText() {
+    const emoji = gameState.won ? '🧬' : '💀';
+    const guessCount = gameState.guesses.length;
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Build emoji grid
+    const grid = gameState.guesses.map(g => {
+      const correctness = g.correct ? '🟩' : (g.score.goJaccard > 0.3 ? '🟨' : '⬜');
+      return correctness;
+    }).join('');
+    
+    return `Proteindle ${today}
+${emoji} ${guessCount}/${MAX_GUESSES}
+
+${grid}
+
+https://brinedew.bio/apps/proteindle/`;
+  }
+  
+  function shareResult() {
+    const shareText = generateShareText();
+    
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareText).then(() => {
+        const feedbackEl = document.getElementById('pg-share-feedback');
+        feedbackEl.textContent = 'Copied to clipboard!';
+        setTimeout(() => {
+          feedbackEl.textContent = '';
+        }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        alert('Failed to copy to clipboard');
+      });
+    } else {
+      // Fallback
+      alert(shareText);
+    }
+  }
+  
+  /**
+   * Main render function
+   */
+  function render() {
+    const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
+    
+    rootEl.innerHTML = `
+      ${renderStats()}
+      
+      <h2>Today's Protein</h2>
+      ${renderClueCard()}
+      
+      ${!gameOver ? `
+        <div class="pg-input-section">
+          <div class="pg-autocomplete-wrapper">
+            <input 
+              type="text" 
+              id="pg-input" 
+              class="pg-input" 
+              placeholder="Type protein name (e.g., TP53, EGFR)..."
+              autocomplete="off"
+            />
+            <div id="pg-suggestions" class="pg-suggestions"></div>
+          </div>
+          <button id="pg-submit" class="pg-submit-btn" disabled>Submit Guess</button>
+        </div>
+      ` : ''}
+      
+      <div id="pg-guesses">
+        ${gameState.guesses.map(g => renderFeedbackPanel(g.protein, g.score)).reverse().join('')}
+      </div>
+      
+      ${gameOver ? renderResult() : ''}
+      
+      ${gameOver ? `
+        <div class="pg-share-section">
+          <button id="pg-share-btn" class="pg-share-btn">Share Result</button>
+          <div id="pg-share-feedback" class="pg-share-feedback"></div>
+        </div>
+      ` : `
+        <div style="text-align: center; margin-top: 1rem; color: var(--gray);">
+          ${gameState.guesses.length}/${MAX_GUESSES} guesses
+        </div>
+      `}
+    `;
+    
+    // Setup event listeners
+    if (!gameOver) {
+      const inputEl = document.getElementById('pg-input');
+      const suggestionsEl = document.getElementById('pg-suggestions');
+      const submitBtn = document.getElementById('pg-submit');
+      
+      setupAutocomplete(inputEl, suggestionsEl);
+      
+      submitBtn.addEventListener('click', submitGuess);
+      
+      // Clear button state on input change
+      inputEl.addEventListener('input', () => {
+        submitBtn.disabled = true;
+        delete submitBtn.dataset.uniprot;
+      });
+    } else {
+      const shareBtn = document.getElementById('pg-share-btn');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', shareResult);
+      }
+    }
+  }
+  
+  /**
+   * Initialize app
+   */
+  async function init() {
+    rootEl = document.getElementById('proteindle-root');
+    
+    if (!rootEl) {
+      console.error('Proteindle root element not found!');
+      return;
+    }
+    
+    // Show loading
+    rootEl.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading Proteindle...</div>';
+    
+    // Load data
+    const success = await loadData();
+    if (!success) {
+      rootEl.innerHTML = '<div style="text-align: center; padding: 2rem; color: red;">Failed to load game data. Please refresh.</div>';
+      return;
+    }
+    
+    // Initialize game
+    await initGame();
+    
+    // Render
+    render();
+  }
+  
+  // Start when DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  
+})();

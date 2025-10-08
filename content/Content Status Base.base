@@ -1,4 +1,36 @@
+formulas:
+  stage_label: if(draft == true, "draft", if(status == "in_review", "in review", if(status == "scheduled", "scheduled", if(draft == false, "published", "unknown"))))
+  stage_sort: if(formula.stage_label == "draft", 1, if(formula.stage_label == "in review", 2, if(formula.stage_label == "scheduled", 3, if(formula.stage_label == "published", 4, 5))))
+  updated_relative: file.mtime.relative()
+properties:
+  title:
+    displayName: Note
+  formula.stage_label:
+    displayName: Stage
+  formula.updated_relative:
+    displayName: Updated
+  status:
+    displayName: Status
 views:
+  - type: table
+    name: Pipeline
+    filters:
+      or:
+        - draft == true
+        - status == "in_review"
+        - status == "scheduled"
+    order:
+      - formula.stage_label
+      - title
+      - formula.updated_relative
+      - status
+    sort:
+      - property: formula.stage_sort
+        direction: ASC
+      - property: file.mtime
+        direction: DESC
+    columnSize:
+      note.title: 163
   - type: cards
     name: Unpublished
     filters:
