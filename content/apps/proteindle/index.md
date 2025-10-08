@@ -1,6 +1,7 @@
 ---
 title: "Proteindle"
 description: "Daily protein guessing game"
+date: 2025-10-08
 draft: false
 tags:
 - content/apps
