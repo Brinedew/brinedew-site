@@ -7,13 +7,20 @@ tags:
 - content/apps
 ---
 
-# Proteindle
-
-Infer today's human protein from function, domains, and tissue expression. A daily molecular puzzle inspired by Tradle.
-
 <div id="proteindle-root"></div>
-<script src="/static/proteindle/app.js"></script>
-<link rel="stylesheet" href="/static/proteindle/styles.css">
+
+<script type="module">
+  // Load CSS
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/static/proteindle/styles.css';
+  document.head.appendChild(link);
+  
+  // Load and execute JS
+  const script = document.createElement('script');
+  script.src = '/static/proteindle/app.js';
+  document.body.appendChild(script);
+</script>
 
 ---
 
