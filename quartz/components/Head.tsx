@@ -118,8 +118,13 @@ export default (() => {
         
         {/* Conditional app assets - only load on relevant pages */}
         {(() => {
-          const slug = fileData.slug?.join("/") || "";
-          const rootPrefix = pathToRoot(fileData.slug!);
+          // Guard against non-array slugs (e.g., 404 page)
+          if (!Array.isArray(fileData.slug)) {
+            return null;
+          }
+          
+          const slug = fileData.slug.join("/");
+          const rootPrefix = pathToRoot(fileData.slug);
           
           // Scriptotic app
           if (slug === "apps/scriptotic/index" || slug === "apps/scriptotic") {
