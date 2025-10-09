@@ -116,37 +116,29 @@ export default (() => {
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
         <link href="/static/custom.css?v=bio3" rel="stylesheet" type="text/css" />
         
-        {/* Conditional app assets - only load on relevant pages */}
-        {(() => {
-          // Guard against non-array slugs (e.g., 404 page)
-          if (!Array.isArray(fileData.slug)) {
-            return null;
-          }
-          
+        {/* Conditional app assets - computed outside JSX for SSR reliability */}
+        {Array.isArray(fileData.slug) && (() => {
           const slug = fileData.slug.join("/");
-          const rootPrefix = pathToRoot(fileData.slug);
+          const root = pathToRoot(fileData.slug);
+          const isScriptotic = slug === "apps/scriptotic/index" || slug === "apps/scriptotic";
+          const isProteindle = slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle";
           
-          // Scriptotic app
-          if (slug === "apps/scriptotic/index" || slug === "apps/scriptotic") {
-            return (
-              <>
-                <link rel="stylesheet" href={`${rootPrefix}static/apps/scriptotic/app.css?v=1`} />
-                <script defer src={`${rootPrefix}static/apps/scriptotic/app.js?v=1`}></script>
-              </>
-            );
-          }
-          
-          // Proteindle app
-          if (slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle") {
-            return (
-              <>
-                <link rel="stylesheet" href={`${rootPrefix}static/proteindle/styles.css?v=1`} />
-                <script defer src={`${rootPrefix}static/proteindle/app.js?v=1`}></script>
-              </>
-            );
-          }
-          
-          return null;
+          return (
+            <>
+              {isScriptotic && (
+                <>
+                  <link rel="stylesheet" href={`${root}static/apps/scriptotic/app.css?v=1`} />
+                  <script defer src={`${root}static/apps/scriptotic/app.js?v=1`}></script>
+                </>
+              )}
+              {isProteindle && (
+                <>
+                  <link rel="stylesheet" href={`${root}static/proteindle/styles.css?v=1`} />
+                  <script defer src={`${root}static/proteindle/app.js?v=1`}></script>
+                </>
+              )}
+            </>
+          );
         })()}
         
         {/* Performance optimizations */}
