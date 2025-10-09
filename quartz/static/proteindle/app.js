@@ -12,9 +12,36 @@
 (function() {
   'use strict';
   
+  /**
+   * Resolve the static base URL for fetching data files
+   * Works with subpath deploys and relative paths
+   */
+  function resolveStaticBase() {
+    // 1) From data attribute on root div (preferred)
+    const el = document.getElementById('proteindle-root');
+    if (el && el.dataset && el.dataset.static) {
+      let u = el.dataset.static;
+      if (!u.endsWith('/')) u += '/';
+      return u;
+    }
+    
+    // 2) From script tag URL (robust if served from /static/proteindle/app.js)
+    const s = document.currentScript && document.currentScript.src;
+    if (s) {
+      const url = new URL(s);
+      // Strip 'app.js' (and query) → leave directory
+      return url.href.replace(/app\.js(\?.*)?$/, '');
+    }
+    
+    // 3) Fallback (domain-root; works if site is at '/')
+    return '/static/proteindle/';
+  }
+  
+  const STATIC_BASE = resolveStaticBase();
+  
   // Constants
-  const DATA_URL = '/static/proteindle/data.json';
-  const INDEX_URL = '/static/proteindle/index.json';
+  const DATA_URL = `${STATIC_BASE}data.json`;
+  const INDEX_URL = `${STATIC_BASE}index.json`;
   const MAX_GUESSES = 6;
   const STORAGE_KEY = 'proteindle_state';
   
@@ -600,11 +627,20 @@ https://brinedew.bio/apps/proteindle/`;
     render();
   }
   
-  // Start when DOM ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
+  // Start when DOM ready (but only if root element exists)
+  function boot() {
+    // Guard: do nothing if root doesn't exist (helps when loaded on wrong pages)
+    if (!document.getElementById('proteindle-root')) {
+      console.info('Proteindle: root element not found, skipping initialization');
+      return;
+    }
     init();
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
   }
   
 })();

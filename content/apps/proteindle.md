@@ -7,20 +7,7 @@ tags:
 - content/apps
 ---
 
-<div id="proteindle-root"></div>
-
-<script type="module">
-  // Load CSS
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/static/proteindle/styles.css';
-  document.head.appendChild(link);
-  
-  // Load and execute JS
-  const script = document.createElement('script');
-  script.src = '/static/proteindle/app.js';
-  document.body.appendChild(script);
-</script>
+<div id="proteindle-root" data-static="../static/proteindle"></div>
 
 ---
 

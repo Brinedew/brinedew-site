@@ -116,9 +116,33 @@ export default (() => {
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
         <link href="/static/custom.css?v=bio3" rel="stylesheet" type="text/css" />
         
-        {/* Scriptotic app assets */}
-        <link rel="stylesheet" href="/static/apps/scriptotic/app.css?v=1" />
-        <script defer src="/static/apps/scriptotic/app.js?v=1"></script>
+        {/* Conditional app assets - only load on relevant pages */}
+        {(() => {
+          const slug = fileData.slug?.join("/") || "";
+          const rootPrefix = pathToRoot(fileData.slug!);
+          
+          // Scriptotic app
+          if (slug === "apps/scriptotic/index" || slug === "apps/scriptotic") {
+            return (
+              <>
+                <link rel="stylesheet" href={`${rootPrefix}static/apps/scriptotic/app.css?v=1`} />
+                <script defer src={`${rootPrefix}static/apps/scriptotic/app.js?v=1`}></script>
+              </>
+            );
+          }
+          
+          // Proteindle app
+          if (slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle") {
+            return (
+              <>
+                <link rel="stylesheet" href={`${rootPrefix}static/proteindle/styles.css?v=1`} />
+                <script defer src={`${rootPrefix}static/proteindle/app.js?v=1`}></script>
+              </>
+            );
+          }
+          
+          return null;
+        })()}
         
         {/* Performance optimizations */}
         <link rel="modulepreload" href="/static/search.js" />
