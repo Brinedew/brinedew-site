@@ -121,7 +121,10 @@ export default (() => {
           const slug = fileData.slug.join("/");
           const root = pathToRoot(fileData.slug);
           const isScriptotic = slug === "apps/scriptotic/index" || slug === "apps/scriptotic";
-          const isGenedle = slug === "apps/genedle" || fileData.frontmatter?.title === "Genedle";
+          const isGenedle =
+            slug === "apps/genedle/index" ||
+            slug === "apps/genedle" ||
+            fileData.frontmatter?.title === "Genedle";
           
           return (
             <>
