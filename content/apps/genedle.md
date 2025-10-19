@@ -5,6 +5,9 @@ date: 2025-10-08
 draft: false
 tags:
 - content/apps
+aliases:
+- /apps/genedle/index
+- /apps/genedle/index.html
 ---
 
 <div id="genedle-root" data-static="../static/genedle"></div>

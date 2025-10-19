@@ -22,6 +22,7 @@ import { BuildCtx } from "../../util/ctx"
 import { StaticResources } from "../../util/resources"
 interface FolderPageOptions extends FullPageLayout {
   sort?: (f1: QuartzPluginData, f2: QuartzPluginData) => number
+  excludeFolders?: SimpleSlug[]
 }
 
 async function* processFolderInfo(
@@ -100,7 +101,14 @@ function _getFolders(slug: FullSlug): SimpleSlug[] {
   return parentFolderNames
 }
 
+const normalizeFolderSlug = (slug: string): SimpleSlug =>
+  stripSlashes(slug.replace(/\\/g, "/")) as SimpleSlug
+
 export const FolderPage: QuartzEmitterPlugin<Partial<FolderPageOptions>> = (userOpts) => {
+  const excludedFolders = new Set<SimpleSlug>(
+    (userOpts?.excludeFolders ?? []).map((folder) => normalizeFolderSlug(folder)),
+  )
+
   const opts: FullPageLayout = {
     ...sharedPageComponents,
     ...defaultListPageLayout,
@@ -136,7 +144,10 @@ export const FolderPage: QuartzEmitterPlugin<Partial<FolderPageOptions>> = (user
         allFiles.flatMap((data) => {
           return data.slug
             ? _getFolders(data.slug).filter(
-                (folderName) => folderName !== "." && folderName !== "tags",
+                (folderName) =>
+                  folderName !== "." &&
+                  folderName !== "tags" &&
+                  !excludedFolders.has(normalizeFolderSlug(folderName)),
               )
             : []
         }),
@@ -155,7 +166,10 @@ export const FolderPage: QuartzEmitterPlugin<Partial<FolderPageOptions>> = (user
         if (!changeEvent.file) continue
         const slug = changeEvent.file.data.slug!
         const folders = _getFolders(slug).filter(
-          (folderName) => folderName !== "." && folderName !== "tags",
+          (folderName) =>
+            folderName !== "." &&
+            folderName !== "tags" &&
+            !excludedFolders.has(normalizeFolderSlug(folderName)),
         )
         folders.forEach((folder) => affectedFolders.add(folder))
       }

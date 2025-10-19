@@ -117,31 +117,55 @@ export default (() => {
         <link href="/static/custom.css?v=bio3" rel="stylesheet" type="text/css" />
         
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
-        {Array.isArray(fileData.slug) && (() => {
-          const slug = fileData.slug.join("/");
-          const root = pathToRoot(fileData.slug);
-          const isScriptotic = slug === "apps/scriptotic/index" || slug === "apps/scriptotic";
+        {(() => {
+          const slugValue =
+            typeof fileData.slug === "string"
+              ? fileData.slug
+              : Array.isArray(fileData.slug)
+                ? fileData.slug.join("/")
+                : undefined;
+
+          if (!slugValue) {
+            return null;
+          }
+
+          const normalizedSlug = slugValue.replace(/\/index(?:\.html)?$/, "");
+          const root = pathToRoot(slugValue as FullSlug);
+          const isScriptotic =
+            normalizedSlug === "apps/scriptotic" ||
+            fileData.frontmatter?.title === "Scriptotic — YouTube Transcript Generator";
           const isGenedle =
-            slug === "apps/genedle/index" ||
-            slug === "apps/genedle" ||
-            fileData.frontmatter?.title === "Genedle";
-          
+            normalizedSlug === "apps/genedle" || fileData.frontmatter?.title === "Genedle";
+
+          if (!isScriptotic && !isGenedle) {
+            return null;
+          }
+
           return (
             <>
               {isScriptotic && (
                 <>
-                  <link rel="stylesheet" href={`${root}static/apps/scriptotic/app.css?v=1`} />
-                  <script defer src={`${root}static/apps/scriptotic/app.js?v=1`}></script>
+                  <link
+                    rel="stylesheet"
+                    href={joinSegments(root, "static", "apps/scriptotic/app.css?v=1")}
+                  />
+                  <script
+                    defer
+                    src={joinSegments(root, "static", "apps/scriptotic/app.js?v=1")}
+                  ></script>
                 </>
               )}
               {isGenedle && (
                 <>
-                  <link rel="stylesheet" href={`${root}static/genedle/styles.css?v=1`} />
-                  <script defer src={`${root}static/genedle/app.js?v=1`}></script>
+                  <link
+                    rel="stylesheet"
+                    href={joinSegments(root, "static", "genedle/styles.css?v=1")}
+                  />
+                  <script defer src={joinSegments(root, "static", "genedle/app.js?v=1")}></script>
                 </>
               )}
             </>
-          );
+          )
         })()}
         
         {/* Performance optimizations */}
