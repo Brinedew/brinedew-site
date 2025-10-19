@@ -58,6 +58,144 @@
   
   // DOM elements (will be populated on init)
   let rootEl;
+  const proteinsById = new Map();
+  
+  function normalizeProtein(protein) {
+    const safeArray = (value) => (Array.isArray(value) ? value : []);
+    return {
+      ...protein,
+      domains: safeArray(protein.domains),
+      go_slim: safeArray(protein.go_slim),
+      synonyms: safeArray(protein.synonyms),
+      subcell: safeArray(protein.subcell),
+      tissue: protein && protein.tissue ? protein.tissue : { label: "unknown", score: null },
+      links: protein && protein.links ? protein.links : {}
+    };
+  }
+  
+  function indexProteins(list) {
+    proteinsById.clear();
+    list.forEach((protein) => {
+      if (protein && protein.uniprot) {
+        proteinsById.set(protein.uniprot, protein);
+      }
+    });
+  }
+  
+  function getProteinById(id) {
+    if (!id) {
+      return null;
+    }
+    return proteinsById.get(id) || null;
+  }
+  
+  async function loadData() {
+    try {
+      const [proteinsResp, indexResp] = await Promise.all([
+        fetch(DATA_URL, { cache: "no-store" }),
+        fetch(INDEX_URL, { cache: "no-store" })
+      ]);
+      
+      if (!proteinsResp.ok) {
+        throw new Error(`data.json request failed with status ${proteinsResp.status}`);
+      }
+      if (!indexResp.ok) {
+        throw new Error(`index.json request failed with status ${indexResp.status}`);
+      }
+      
+      const [proteinsJson, indexJson] = await Promise.all([
+        proteinsResp.json(),
+        indexResp.json()
+      ]);
+      
+      if (!Array.isArray(proteinsJson)) {
+        throw new Error("data.json payload must be an array");
+      }
+      
+      proteins = proteinsJson.map(normalizeProtein);
+      indexData = indexJson || null;
+      
+      if (!indexData || !Array.isArray(indexData.eligible_ids) || indexData.eligible_ids.length === 0) {
+        throw new Error("index.json payload missing eligible_ids");
+      }
+      
+      indexProteins(proteins);
+      return true;
+    } catch (err) {
+      console.error("Genedle: failed to load static data", err);
+      return false;
+    }
+  }
+  
+  async function initGame() {
+    if (!Array.isArray(proteins) || proteins.length === 0 || !indexData) {
+      throw new Error("Genedle data has not been loaded yet");
+    }
+    
+    const today = new Date().toISOString().slice(0, 10);
+    const saved = loadState();
+    
+    if (saved && saved.date === today) {
+      gameState = {
+        date: today,
+        guesses: Array.isArray(saved.guesses) ? saved.guesses : [],
+        won: Boolean(saved.won),
+        hintsUnlocked: Math.max(1, Math.min(5, saved.hintsUnlocked || 1)),
+        targetId: saved.targetId || null
+      };
+    } else {
+      gameState = {
+        date: today,
+        guesses: [],
+        won: false,
+        hintsUnlocked: 1,
+        targetId: null
+      };
+    }
+    
+    const targetId = await pickTodaysProtein(indexData.eligible_ids, indexData.salt_hash);
+    const target = getProteinById(targetId);
+    
+    if (!target) {
+      throw new Error(`Target protein ${targetId} not found in dataset`);
+    }
+    
+    targetProtein = target;
+    gameState.targetId = targetId;
+    
+    gameState.guesses = gameState.guesses
+      .map((entry) => {
+        const guessId =
+          (entry && entry.protein && entry.protein.uniprot) ||
+          entry.uniprot ||
+          null;
+        const protein = getProteinById(guessId);
+        if (!protein) {
+          return null;
+        }
+        const score = entry && entry.score ? entry.score : scoreGuess(protein, targetProtein);
+        const correct =
+          typeof entry.correct === "boolean"
+            ? entry.correct
+            : protein.uniprot === targetProtein.uniprot;
+        
+        return {
+          protein,
+          score,
+          correct,
+          uniprot: protein.uniprot
+        };
+      })
+      .filter(Boolean);
+    
+    if (saved && saved.date === today && saved.targetId && saved.targetId !== targetId) {
+      gameState.guesses = [];
+      gameState.won = false;
+      gameState.hintsUnlocked = 1;
+    }
+    
+    saveState();
+  }
   
   /**
    * SHA-256 implementation for deterministic daily selection
@@ -465,7 +603,8 @@
     gameState.guesses.push({
       protein: guessProtein,
       score: score,
-      correct: isCorrect
+      correct: isCorrect,
+      uniprot: guessProtein.uniprot
     });
     
     // Unlock next hint
@@ -482,6 +621,7 @@
     }
     
     // Save state
+    gameState.targetId = targetProtein.uniprot;
     saveState();
     
     // Re-render
@@ -621,7 +761,13 @@ https://brinedew.bio/apps/genedle/`;
     }
     
     // Initialize game
-    await initGame();
+    try {
+      await initGame();
+    } catch (err) {
+      console.error('Genedle: failed to initialise game state', err);
+      rootEl.innerHTML = '<div style="text-align: center; padding: 2rem; color: red;">Failed to initialise game. Please refresh.</div>';
+      return;
+    }
     
     // Render
     render();
