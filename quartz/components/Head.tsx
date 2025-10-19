@@ -121,7 +121,7 @@ export default (() => {
           const slug = fileData.slug.join("/");
           const root = pathToRoot(fileData.slug);
           const isScriptotic = slug === "apps/scriptotic/index" || slug === "apps/scriptotic";
-          const isProteindle = slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle";
+          const isGenedle = slug === "apps/genedle" || fileData.frontmatter?.title === "Genedle";
           
           return (
             <>
@@ -131,10 +131,10 @@ export default (() => {
                   <script defer src={`${root}static/apps/scriptotic/app.js?v=1`}></script>
                 </>
               )}
-              {isProteindle && (
+              {isGenedle && (
                 <>
-                  <link rel="stylesheet" href={`${root}static/proteindle/styles.css?v=1`} />
-                  <script defer src={`${root}static/proteindle/app.js?v=1`}></script>
+                  <link rel="stylesheet" href={`${root}static/genedle/styles.css?v=1`} />
+                  <script defer src={`${root}static/genedle/app.js?v=1`}></script>
                 </>
               )}
             </>
@@ -160,3 +160,5 @@ export default (() => {
 
   return Head
 }) satisfies QuartzComponentConstructor
+
+

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build Proteindle data.json from existing Thoteins CSVs.
+Build Genedle data.json from existing Thoteins CSVs.
 
 Reads features.csv + persona.csv, generates a static dataset with:
 - GO-Slim-like function terms (derived from biological_process + keywords)
@@ -10,8 +10,8 @@ Reads features.csv + persona.csv, generates a static dataset with:
 - Links to wiki pages
 
 Outputs:
-- static/proteindle/data.json (protein objects array)
-- static/proteindle/index.json (eligible IDs + salt)
+- static/genedle/data.json (protein objects array)
+- static/genedle/index.json (eligible IDs + salt)
 """
 
 import csv
@@ -24,7 +24,7 @@ from datetime import datetime
 BASE_DIR = Path(__file__).parent.parent
 FEATURES_CSV = BASE_DIR / "tools/thoteins/data/proteins/features.csv"
 PERSONA_CSV = BASE_DIR / "tools/thoteins/data/proteins/persona.csv"
-OUTPUT_DIR = BASE_DIR / "quartz/static/proteindle"
+OUTPUT_DIR = BASE_DIR / "quartz/static/genedle"
 DATA_JSON = OUTPUT_DIR / "data.json"
 INDEX_JSON = OUTPUT_DIR / "index.json"
 
@@ -198,7 +198,7 @@ def build_protein_object(uniprot_id, feat, pers):
     }
 
 def main():
-    print("Building Proteindle data...")
+    print("Building Genedle data...")
     
     # Load CSVs
     print(f"Loading {FEATURES_CSV}")
@@ -240,7 +240,7 @@ def main():
     dataset_hash = hashlib.sha256(
         json.dumps(eligible_ids, sort_keys=True).encode()
     ).hexdigest()[:8]
-    salt_hash = f"proteindle-v1-{dataset_hash}"
+    salt_hash = f"genedle-v1-{dataset_hash}"
     
     # Write data.json
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -263,3 +263,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

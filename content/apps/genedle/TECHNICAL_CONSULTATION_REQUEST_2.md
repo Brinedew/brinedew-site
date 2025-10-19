@@ -1,20 +1,20 @@
-# Technical Consultation Request #2: Proteindle Script Loading Issue
+# Technical Consultation Request #2: Genedle Script Loading Issue
 
 **Date:** October 9, 2025  
 **Site:** brinedew.bio (Quartz 4.5.1 static site generator)  
-**Issue:** Proteindle app not loading - scripts/styles not injected into HTML during build
+**Issue:** Genedle app not loading - scripts/styles not injected into HTML during build
 
 ---
 
 ## Executive Summary
 
-The Proteindle app exists and is fully functional (app.js, styles.css, data.json all built and working), but the page displays only attribution text. Root cause: the conditional logic in Head.tsx that should inject `<script>` and `<link>` tags for the Proteindle app is not executing during the Quartz build process, despite matching slug conditions.
+The Genedle app exists and is fully functional (app.js, styles.css, data.json all built and working), but the page displays only attribution text. Root cause: the conditional logic in Head.tsx that should inject `<script>` and `<link>` tags for the Genedle app is not executing during the Quartz build process, despite matching slug conditions.
 
 ---
 
 ## Project Context
 
-### What is Proteindle?
+### What is Genedle?
 A daily protein guessing game (like Wordle/Tradle) where users identify a target protein from progressive hints about function, domains, and tissue specificity. Built per PRD.txt specifications as a static app.
 
 ### Site Architecture
@@ -37,7 +37,7 @@ Another app (Scriptotic) successfully loads using the identical pattern:
 ## Implementation History
 
 ### What Was Built Successfully
-1. **App Code** (`/quartz/static/proteindle/app.js` - 647 lines)
+1. **App Code** (`/quartz/static/genedle/app.js` - 647 lines)
    - Date-based daily protein selection
    - Autocomplete search over proteins
    - Progressive hint system
@@ -45,24 +45,24 @@ Another app (Scriptotic) successfully loads using the identical pattern:
    - Share functionality
    - Local storage for streaks
 
-2. **Game Data** (`/quartz/static/proteindle/data.json`)
+2. **Game Data** (`/quartz/static/genedle/data.json`)
    - 100 proteins with full metadata
    - GO-Slim terms, InterPro domains, tissue expression
    - UniProt links, HGNC symbols
 
-3. **Index System** (`/quartz/static/proteindle/index.json`)
+3. **Index System** (`/quartz/static/genedle/index.json`)
    - Daily selection algorithm
    - Salt-based deterministic picking
 
-4. **Styling** (`/quartz/static/proteindle/styles.css`)
+4. **Styling** (`/quartz/static/genedle/styles.css`)
    - Chip-based UI for hints
    - Progress bars for similarity
    - Mobile-responsive layout
 
-5. **Content Page** (`/content/apps/proteindle.md`)
+5. **Content Page** (`/content/apps/genedle.md`)
    ```markdown
    ---
-   title: "Proteindle"
+   title: "Genedle"
    description: "Daily protein guessing game"
    date: 2025-10-08
    draft: false
@@ -70,7 +70,7 @@ Another app (Scriptotic) successfully loads using the identical pattern:
    - content/apps
    ---
    
-   <div id="proteindle-root" data-static="../static/proteindle"></div>
+   <div id="genedle-root" data-static="../static/genedle"></div>
    
    ---
    
@@ -102,12 +102,12 @@ Another app (Scriptotic) successfully loads using the identical pattern:
     );
   }
   
-  // Proteindle app (THIS DOES NOT WORK)
-  if (slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle") {
+  // Genedle app (THIS DOES NOT WORK)
+  if (slug === "apps/genedle" || fileData.frontmatter?.title === "Genedle") {
     return (
       <>
-        <link rel="stylesheet" href={`${rootPrefix}static/proteindle/styles.css?v=1`} />
-        <script defer src={`${rootPrefix}static/proteindle/app.js?v=1`}></script>
+        <link rel="stylesheet" href={`${rootPrefix}static/genedle/styles.css?v=1`} />
+        <script defer src={`${rootPrefix}static/genedle/app.js?v=1`}></script>
       </>
     );
   }
@@ -121,19 +121,19 @@ Another app (Scriptotic) successfully loads using the identical pattern:
 ## Current Problem Details
 
 ### Observed Symptoms
-1. **Page loads correctly:** `/apps/proteindle.html` exists and is accessible
-2. **Body has correct slug:** `<body data-slug="apps/proteindle">`
-3. **Root div present:** `<div id="proteindle-root" data-static="../static/proteindle"></div>` renders
+1. **Page loads correctly:** `/apps/genedle.html` exists and is accessible
+2. **Body has correct slug:** `<body data-slug="apps/genedle">`
+3. **Root div present:** `<div id="genedle-root" data-static="../static/genedle"></div>` renders
 4. **Attribution text visible:** The markdown content displays fine
-5. **Scripts missing:** NO `<script>` or `<link>` tags for Proteindle in `<head>`
-6. **Console shows:** "Proteindle: root element not found, skipping initialization" (from app.js guard)
+5. **Scripts missing:** NO `<script>` or `<link>` tags for Genedle in `<head>`
+6. **Console shows:** "Genedle: root element not found, skipping initialization" (from app.js guard)
 
 ### What the Built HTML Shows
 
 **Expected in `<head>`:**
 ```html
-<link rel="stylesheet" href="../static/proteindle/styles.css?v=1" />
-<script defer src="../static/proteindle/app.js?v=1"></script>
+<link rel="stylesheet" href="../static/genedle/styles.css?v=1" />
+<script defer src="../static/genedle/app.js?v=1"></script>
 ```
 
 **Actually in `<head>`:**
@@ -142,11 +142,11 @@ Another app (Scriptotic) successfully loads using the identical pattern:
 ```
 
 ### Verification Steps Taken
-1. ✅ Confirmed `fileData.slug` is array `["apps", "proteindle"]`
-2. ✅ Confirmed `fileData.slug.join("/")` produces `"apps/proteindle"`
-3. ✅ Confirmed `fileData.frontmatter.title` is `"Proteindle"`
+1. ✅ Confirmed `fileData.slug` is array `["apps", "genedle"]`
+2. ✅ Confirmed `fileData.slug.join("/")` produces `"apps/genedle"`
+3. ✅ Confirmed `fileData.frontmatter.title` is `"Genedle"`
 4. ✅ Rebuilt site with `npx quartz build` - no errors
-5. ✅ Checked built files exist in `/public/static/proteindle/`
+5. ✅ Checked built files exist in `/public/static/genedle/`
 6. ✅ Verified Scriptotic uses identical pattern and WORKS
 7. ✅ Checked console - no build-time errors or warnings
 
@@ -157,10 +157,10 @@ Another app (Scriptotic) successfully loads using the identical pattern:
 ### How Quartz Processes Pages
 
 1. **Content Processing:**
-   - Reads `/content/apps/proteindle.md`
+   - Reads `/content/apps/genedle.md`
    - Parses frontmatter (title, tags, etc.)
    - Converts markdown to HTML
-   - Sets `fileData.slug = ["apps", "proteindle"]`
+   - Sets `fileData.slug = ["apps", "genedle"]`
 
 2. **Component Rendering:**
    - Calls `Head` component with `fileData`
@@ -169,9 +169,9 @@ Another app (Scriptotic) successfully loads using the identical pattern:
 
 3. **HTML Generation:**
    - Combines all component outputs
-   - Writes final HTML to `/public/apps/proteindle.html`
+   - Writes final HTML to `/public/apps/genedle.html`
 
-### Why Scriptotic Works But Proteindle Doesn't
+### Why Scriptotic Works But Genedle Doesn't
 
 **Scriptotic:**
 - Content file: `/content/apps/scriptotic/index.md`
@@ -179,10 +179,10 @@ Another app (Scriptotic) successfully loads using the identical pattern:
 - Condition: `slug === "apps/scriptotic/index" || slug === "apps/scriptotic"`
 - Result: ✅ MATCH → scripts injected
 
-**Proteindle:**
-- Content file: `/content/apps/proteindle.md`  
-- Slug: `["apps", "proteindle"]`
-- Condition: `slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle"`
+**Genedle:**
+- Content file: `/content/apps/genedle.md`  
+- Slug: `["apps", "genedle"]`
+- Condition: `slug === "apps/genedle" || fileData.frontmatter?.title === "Genedle"`
 - Result: ❌ NO MATCH (somehow?) → scripts NOT injected
 
 ### Hypothesis Candidates
@@ -218,21 +218,21 @@ D:\Coding\Website\
 │   ├── components/
 │   │   └── Head.tsx                    # ISSUE IS HERE (lines 120-151)
 │   └── static/
-│       └── proteindle/
+│       └── genedle/
 │           ├── app.js                  # ✅ EXISTS AND WORKS
 │           ├── styles.css              # ✅ EXISTS
 │           ├── data.json               # ✅ EXISTS
 │           └── index.json              # ✅ EXISTS
 ├── content/
 │   └── apps/
-│       ├── proteindle.md               # ✅ CORRECT FRONTMATTER
+│       ├── genedle.md               # ✅ CORRECT FRONTMATTER
 │       └── scriptotic/
 │           └── index.md                # ✅ WORKS AS REFERENCE
 └── public/
     ├── apps/
-    │   └── proteindle.html             # ❌ MISSING SCRIPTS IN <head>
+    │   └── genedle.html             # ❌ MISSING SCRIPTS IN <head>
     └── static/
-        └── proteindle/
+        └── genedle/
             ├── app.js                  # ✅ COPIED CORRECTLY
             ├── styles.css              # ✅ COPIED CORRECTLY
             ├── data.json               # ✅ COPIED CORRECTLY
@@ -244,11 +244,11 @@ D:\Coding\Website\
 **Head.tsx IIFE (NOT WORKING):**
 ```tsx
 // Line ~138 in Head.tsx
-if (slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle") {
+if (slug === "apps/genedle" || fileData.frontmatter?.title === "Genedle") {
   return (
     <>
-      <link rel="stylesheet" href={`${rootPrefix}static/proteindle/styles.css?v=1`} />
-      <script defer src={`${rootPrefix}static/proteindle/app.js?v=1`}></script>
+      <link rel="stylesheet" href={`${rootPrefix}static/genedle/styles.css?v=1`} />
+      <script defer src={`${rootPrefix}static/genedle/app.js?v=1`}></script>
     </>
   );
 }
@@ -258,9 +258,9 @@ if (slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle") 
 ```javascript
 // Line ~631 in app.js
 function boot() {
-  const el = document.getElementById('proteindle-root');
+  const el = document.getElementById('genedle-root');
   if (!el) {
-    console.info('Proteindle: root element not found, skipping initialization');
+    console.info('Genedle: root element not found, skipping initialization');
     return;
   }
   init();
@@ -278,10 +278,10 @@ if (document.readyState === 'loading') {
 ## What Works (Verification)
 
 ### Manual Script Injection Test
-If I manually add these lines to `/public/apps/proteindle.html`:
+If I manually add these lines to `/public/apps/genedle.html`:
 ```html
-<link rel="stylesheet" href="../static/proteindle/styles.css" />
-<script defer src="../static/proteindle/app.js"></script>
+<link rel="stylesheet" href="../static/genedle/styles.css" />
+<script defer src="../static/genedle/app.js"></script>
 ```
 
 **Result:** ✅ App loads perfectly, all functionality works:
@@ -298,7 +298,7 @@ This confirms the app code itself is 100% functional.
 
 ## Questions for Consultant
 
-1. **Why doesn't the IIFE in Head.tsx execute for Proteindle when Scriptotic works?**
+1. **Why doesn't the IIFE in Head.tsx execute for Genedle when Scriptotic works?**
    - Is there something about the slug comparison that's failing?
    - Does Quartz handle IIFEs differently in certain contexts?
 
@@ -373,12 +373,12 @@ This confirms the app code itself is 100% functional.
     );
   }
   
-  // Proteindle app
-  if (slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle") {
+  // Genedle app
+  if (slug === "apps/genedle" || fileData.frontmatter?.title === "Genedle") {
     return (
       <>
-        <link rel="stylesheet" href={`${rootPrefix}static/proteindle/styles.css?v=1`} />
-        <script defer src={`${rootPrefix}static/proteindle/app.js?v=1`}></script>
+        <link rel="stylesheet" href={`${rootPrefix}static/genedle/styles.css?v=1`} />
+        <script defer src={`${rootPrefix}static/genedle/app.js?v=1`}></script>
       </>
     );
   }
@@ -387,10 +387,10 @@ This confirms the app code itself is 100% functional.
 })()}
 ```
 
-**Expected behavior:** When processing `/content/apps/proteindle.md`, the IIFE should:
+**Expected behavior:** When processing `/content/apps/genedle.md`, the IIFE should:
 1. Check `fileData.slug` is array ✅
-2. Join to `"apps/proteindle"` ✅
-3. Match first condition (`slug === "apps/proteindle"`) ✅
+2. Join to `"apps/genedle"` ✅
+3. Match first condition (`slug === "apps/genedle"`) ✅
 4. Return JSX with link and script tags ❌ (NOT HAPPENING)
 
 **Actual behavior:** The IIFE appears to return `null` or not execute, resulting in no scripts in the final HTML.
@@ -400,3 +400,5 @@ This confirms the app code itself is 100% functional.
 ## Contact
 
 For follow-up questions or additional code samples, please reach out.
+
+

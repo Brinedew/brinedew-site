@@ -1,4 +1,4 @@
-Alright, I checked what Quartz itself says and how other Quartz sites wire page-specific JS/CSS. Short version: your **Proteindle tags aren’t rendering because you’re fighting Quartz’s resource pipeline**. Use Quartz’s `externalResources` path (or a tiny front-matter flag + conditional) and compute URLs with `pathToRoot`. Your current IIFE-in-Head approach is fragile; sometimes it won’t execute the way you expect during SSR. 
+Alright, I checked what Quartz itself says and how other Quartz sites wire page-specific JS/CSS. Short version: your **Genedle tags aren’t rendering because you’re fighting Quartz’s resource pipeline**. Use Quartz’s `externalResources` path (or a tiny front-matter flag + conditional) and compute URLs with `pathToRoot`. Your current IIFE-in-Head approach is fragile; sometimes it won’t execute the way you expect during SSR. 
 
 Below is a dead-simple fix (works today), plus the “clean” pattern Quartz expects.
 
@@ -16,7 +16,7 @@ Below is a dead-simple fix (works today), plus the “clean” pattern Quartz ex
 
 # Fix that’s least invasive (works with your current structure)
 
-**Goal:** only load Proteindle assets on `/apps/proteindle`, with correct relative paths, and stop relying on an IIFE.
+**Goal:** only load Genedle assets on `/apps/genedle`, with correct relative paths, and stop relying on an IIFE.
 
 ### 1) Rewrite the conditional in `quartz/components/Head.tsx`
 
@@ -30,16 +30,16 @@ export default (() => {
   function Head({ fileData }: QuartzComponentProps) {
     const slug = Array.isArray(fileData.slug) ? fileData.slug.join("/") : ""
     const root = pathToRoot(fileData.slug)
-    const isProteindle = slug === "apps/proteindle" || fileData.frontmatter?.title === "Proteindle"
+    const isGenedle = slug === "apps/genedle" || fileData.frontmatter?.title === "Genedle"
 
     return (
       <>
         {/* ...existing head stuff... */}
 
-        {isProteindle && (
+        {isGenedle && (
           <>
-            <link rel="stylesheet" href={`${root}static/proteindle/styles.css?v=1`} />
-            <script defer src={`${root}static/proteindle/app.js?v=1`}></script>
+            <link rel="stylesheet" href={`${root}static/genedle/styles.css?v=1`} />
+            <script defer src={`${root}static/genedle/app.js?v=1`}></script>
           </>
         )}
       </>
@@ -52,23 +52,23 @@ export default (() => {
 Why this helps:
 
 * No IIFE; Preact SSR just emits the nodes.
-* Uses `pathToRoot` so the built HTML for `/apps/proteindle.html` gets `../static/...` (correct). ([quartz.jzhao.xyz][1])
+* Uses `pathToRoot` so the built HTML for `/apps/genedle.html` gets `../static/...` (correct). ([quartz.jzhao.xyz][1])
 
 ### 2) Make the JSON fetch resilient (your app code)
 
 Avoid a hard-coded `/static/...` so preview subpaths and CDN rewrites don’t break.
 
 ```js
-// content/static/proteindle/app.js
+// content/static/genedle/app.js
 function resolveStaticBase() {
-  const root = document.getElementById('proteindle-root')
+  const root = document.getElementById('genedle-root')
   if (root?.dataset?.static) {
     let u = root.dataset.static
     return u.endsWith('/') ? u : `${u}/`
   }
   const s = document.currentScript?.src
   if (s) return s.replace(/app\.js(\?.*)?$/, '')
-  return '/static/proteindle/' // last-resort fallback
+  return '/static/genedle/' // last-resort fallback
 }
 
 const STATIC_BASE = resolveStaticBase()
@@ -83,8 +83,8 @@ async function loadProteins() {
 ### 3) Keep the root hint in your page
 
 ```md
-<!-- content/apps/proteindle.md -->
-<div id="proteindle-root" data-static="../static/proteindle"></div>
+<!-- content/apps/genedle.md -->
+<div id="genedle-root" data-static="../static/genedle"></div>
 ```
 
 ### 4) Clean rebuild
@@ -100,19 +100,19 @@ Quartz’s `Head` is part of a pipeline that collects & emits resources. In prac
 
 If you want to stop touching `Head.tsx` for every app, use a **front-matter contract** plus a tiny helper in `Head.tsx` to read `externalResources` the way Quartz expects. (This mirrors what the emitter/Head helpers are designed for. ([Guardian Project][6]))
 
-**Page front-matter (proteindle.md):**
+**Page front-matter (genedle.md):**
 
 ```yaml
 ---
-title: "Proteindle"
+title: "Genedle"
 assets:
   css:
-    - static/proteindle/styles.css?v=1
+    - static/genedle/styles.css?v=1
   js:
-    - src: static/proteindle/app.js?v=1
+    - src: static/genedle/app.js?v=1
       loadTime: afterDOMReady
 ---
-<div id="proteindle-root" data-static="../static/proteindle"></div>
+<div id="genedle-root" data-static="../static/genedle"></div>
 ```
 
 **Head.tsx (generic loader):**
@@ -146,32 +146,32 @@ Two quick probes:
    Add a temp tag to Head:
 
 ```tsx
-{isProteindle && <meta name="pg-debug" content={slug} />}
+{isGenedle && <meta name="pg-debug" content={slug} />}
 ```
 
-View-source should show it on `/apps/proteindle`. If not, your `Head.tsx` build isn’t actually getting picked up—nuke caches and ensure you’re editing the right copy of Quartz.
+View-source should show it on `/apps/genedle`. If not, your `Head.tsx` build isn’t actually getting picked up—nuke caches and ensure you’re editing the right copy of Quartz.
 
 2. **Verify computed URLs**
-   In `/apps/proteindle.html`, links should look like:
+   In `/apps/genedle.html`, links should look like:
 
 ```html
-<link rel="stylesheet" href="../static/proteindle/styles.css?v=1">
-<script defer src="../static/proteindle/app.js?v=1"></script>
+<link rel="stylesheet" href="../static/genedle/styles.css?v=1">
+<script defer src="../static/genedle/app.js?v=1"></script>
 ```
 
 If they start with `/static/…`, you’re not using `pathToRoot`. (Quartz’s path docs explain why root-relative breaks subpath/preview builds. ([quartz.jzhao.xyz][1]))
 
 ---
 
-# Why Scriptotic “just works” but Proteindle didn’t
+# Why Scriptotic “just works” but Genedle didn’t
 
-Scriptotic’s assets were globally injected and didn’t rely on a JSON fetch path, so it dodged both the **SSR conditional** and **relative-URL** footguns. Proteindle had both (conditional add + `/static/...` fetch), so it looked blank even though your app code is fine. 
+Scriptotic’s assets were globally injected and didn’t rely on a JSON fetch path, so it dodged both the **SSR conditional** and **relative-URL** footguns. Genedle had both (conditional add + `/static/...` fetch), so it looked blank even though your app code is fine. 
 
 ---
 
 ## Recommended pattern (so you don’t re-debug this)
 
-* Put each app under `content/static/apps/<name>/…` (or your current `static/proteindle/…`)
+* Put each app under `content/static/apps/<name>/…` (or your current `static/genedle/…`)
 * Make a page folder: `content/apps/<name>/index.md`
 * Use `pathToRoot(slug)` for all URLs Quartz emits. ([quartz.jzhao.xyz][1])
 * Either:
@@ -189,3 +189,5 @@ If you want, I can hand you a minimal patch set (Head.tsx + app.js diff) that ma
 [4]: https://github.com/jackyzha0/quartz/issues/1668 "How to import an external script? · Issue #1668 · jackyzha0/quartz · GitHub"
 [5]: https://brinedew.bio/wiki/tumor-suppressor-theory-of-aging?utm_source=chatgpt.com "Tumor Suppressor Theory of Aging - Brinedew"
 [6]: https://guardianproject.dev/irl/notes/src/commit/8d6029b7b844044d06fe17de89db6881954a8fec/quartz/components/renderPage.tsx?utm_source=chatgpt.com "notes/quartz/components/renderPage.tsx at ... - Guardian Project"
+
+

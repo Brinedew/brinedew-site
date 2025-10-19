@@ -1,5 +1,5 @@
 /**
- * Proteindle - Daily Protein Guessing Game
+ * Genedle - Daily Protein Guessing Game
  * 
  * Static implementation with:
  * - Date-based daily selection
@@ -18,14 +18,14 @@
    */
   function resolveStaticBase() {
     // 1) From data attribute on root div (preferred)
-    const el = document.getElementById('proteindle-root');
+    const el = document.getElementById('genedle-root');
     if (el && el.dataset && el.dataset.static) {
       let u = el.dataset.static;
       if (!u.endsWith('/')) u += '/';
       return u;
     }
     
-    // 2) From script tag URL (robust if served from /static/proteindle/app.js)
+    // 2) From script tag URL (robust if served from /static/genedle/app.js)
     const s = document.currentScript && document.currentScript.src;
     if (s) {
       const url = new URL(s);
@@ -34,7 +34,7 @@
     }
     
     // 3) Fallback (domain-root; works if site is at '/')
-    return '/static/proteindle/';
+    return '/static/genedle/';
   }
   
   const STATIC_BASE = resolveStaticBase();
@@ -43,7 +43,7 @@
   const DATA_URL = `${STATIC_BASE}data.json`;
   const INDEX_URL = `${STATIC_BASE}index.json`;
   const MAX_GUESSES = 6;
-  const STORAGE_KEY = 'proteindle_state';
+  const STORAGE_KEY = 'genedle_state';
   
   // State
   let proteins = [];
@@ -321,7 +321,7 @@
   }
   
   function loadStats() {
-    const saved = localStorage.getItem('proteindle_stats');
+    const saved = localStorage.getItem('genedle_stats');
     return saved ? JSON.parse(saved) : {
       played: 0,
       won: 0,
@@ -342,7 +342,7 @@
       stats.currentStreak = 0;
     }
     stats.winRate = stats.played > 0 ? stats.won / stats.played : 0;
-    localStorage.setItem('proteindle_stats', JSON.stringify(stats));
+    localStorage.setItem('genedle_stats', JSON.stringify(stats));
   }
   
   /**
@@ -502,12 +502,12 @@
       return correctness;
     }).join('');
     
-    return `Proteindle ${today}
+    return `Genedle ${today}
 ${emoji} ${guessCount}/${MAX_GUESSES}
 
 ${grid}
 
-https://brinedew.bio/apps/proteindle/`;
+https://brinedew.bio/apps/genedle/`;
   }
   
   function shareResult() {
@@ -603,15 +603,15 @@ https://brinedew.bio/apps/proteindle/`;
    * Initialize app
    */
   async function init() {
-    rootEl = document.getElementById('proteindle-root');
+    rootEl = document.getElementById('genedle-root');
     
     if (!rootEl) {
-      console.error('Proteindle root element not found!');
+      console.error('Genedle root element not found!');
       return;
     }
     
     // Show loading
-    rootEl.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading Proteindle...</div>';
+    rootEl.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading Genedle...</div>';
     
     // Load data
     const success = await loadData();
@@ -630,8 +630,8 @@ https://brinedew.bio/apps/proteindle/`;
   // Start when DOM ready (but only if root element exists)
   function boot() {
     // Guard: do nothing if root doesn't exist (helps when loaded on wrong pages)
-    if (!document.getElementById('proteindle-root')) {
-      console.info('Proteindle: root element not found, skipping initialization');
+    if (!document.getElementById('genedle-root')) {
+      console.info('Genedle: root element not found, skipping initialization');
       return;
     }
     init();
@@ -644,3 +644,5 @@ https://brinedew.bio/apps/proteindle/`;
   }
   
 })();
+
+
