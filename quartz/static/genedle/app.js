@@ -11,6 +11,51 @@
 
 (function() {
   'use strict';
+
+  const GENEDLE_STATUS_ATTR = 'data-genedle-status';
+  const GENEDLE_ROOT_ID = 'genedle-root';
+
+  function setStatus(status) {
+    try {
+      window.__genedleStatus = status;
+      console.info(`[Genedle] ${status}`);
+      if (document && document.body) {
+        document.body.setAttribute(GENEDLE_STATUS_ATTR, status);
+      }
+    } catch {
+      // ignore status update failures
+    }
+  }
+
+  function reportError(status, detail) {
+    setStatus(status);
+    try {
+      const root = document.getElementById(GENEDLE_ROOT_ID);
+      if (root) {
+        const extra = detail ? `\n${detail}` : '';
+        root.innerHTML =
+          `<pre class="pg-debug" style="white-space:pre-wrap;border:1px solid #d33;background:#2b0d0d;color:#ffecec;padding:1rem;border-radius:8px;">` +
+          `Genedle encountered a problem:\n${status}${extra}</pre>`;
+      }
+    } catch {
+      // ignore DOM write failures
+    }
+  }
+
+  setStatus('script-loaded');
+
+  window.addEventListener('error', (event) => {
+    const message = event?.message ?? 'Unknown runtime error';
+    reportError('runtime-error', message);
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event?.reason;
+    const message =
+      (reason && reason.message) ||
+      (typeof reason === 'string' ? reason : JSON.stringify(reason ?? null));
+    reportError('unhandled-rejection', message);
+  });
   
   /**
    * Resolve the static base URL for fetching data files
@@ -123,6 +168,8 @@
       return true;
     } catch (err) {
       console.error("Genedle: failed to load static data", err);
+      const detail = err?.stack || err?.message || String(err);
+      reportError('load-data-failed', detail);
       return false;
     }
   }
@@ -743,20 +790,23 @@ https://brinedew.bio/apps/genedle/`;
    * Initialize app
    */
   async function init() {
+    setStatus('init-start');
     rootEl = document.getElementById('genedle-root');
     
     if (!rootEl) {
       console.error('Genedle root element not found!');
+      reportError('root-element-missing', '');
       return;
     }
     
     // Show loading
     rootEl.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading Genedle...</div>';
+    setStatus('loading-data');
     
     // Load data
     const success = await loadData();
     if (!success) {
-      rootEl.innerHTML = '<div style="text-align: center; padding: 2rem; color: red;">Failed to load game data. Please refresh.</div>';
+      reportError('load-data-returned-false', '');
       return;
     }
     
@@ -765,12 +815,14 @@ https://brinedew.bio/apps/genedle/`;
       await initGame();
     } catch (err) {
       console.error('Genedle: failed to initialise game state', err);
-      rootEl.innerHTML = '<div style="text-align: center; padding: 2rem; color: red;">Failed to initialise game. Please refresh.</div>';
+      const detail = err?.stack || err?.message || String(err);
+      reportError('init-game-failed', detail);
       return;
     }
     
     // Render
     render();
+    setStatus('rendered');
   }
   
   // Start when DOM ready (but only if root element exists)
@@ -778,8 +830,10 @@ https://brinedew.bio/apps/genedle/`;
     // Guard: do nothing if root doesn't exist (helps when loaded on wrong pages)
     if (!document.getElementById('genedle-root')) {
       console.info('Genedle: root element not found, skipping initialization');
+      reportError('root-element-missing', '');
       return;
     }
+    setStatus('booting');
     init();
   }
   
