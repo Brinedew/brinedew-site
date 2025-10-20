@@ -44,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4 
         with: 
           name: image-generation-queue 
-          path: image_generation_queue.txt 
+          path: Website/image_generation_queue.txt 
           if-no-files-found: ignore 
 
       - name: Setup Node.js (22.x) with npm cache
@@ -87,7 +87,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: public
+          path: Website/public
 
   deploy:
     runs-on: ubuntu-latest
