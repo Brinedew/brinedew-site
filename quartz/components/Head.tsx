@@ -85,6 +85,7 @@ export default (() => {
         <link rel="icon" href={iconPath} />
         <meta name="description" content={description} />
         <meta name="generator" content="Quartz" />
+        <meta name="genedle-build" content="head-tsx-patched" />
 
         {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
         <script
@@ -159,9 +160,9 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", "genedle/styles.css?v=1")}
+                    href={joinSegments(root, "static", "genedle/styles.css?v=2")}
                   />
-                  <script defer src={joinSegments(root, "static", "genedle/app.js?v=1")}></script>
+                  <script defer src={joinSegments(root, "static", "genedle/app.js?v=2")}></script>
                 </>
               )}
             </>

@@ -5,6 +5,10 @@ on:
     branches: ["v2-quartz-migration", "main"]
   workflow_dispatch:
 
+defaults:
+  run:
+    working-directory: Website
+
 permissions:
   contents: read
   pages: write
@@ -60,7 +64,14 @@ jobs:
         run: npm ci
 
       - name: Build Quartz site
-        run: npx quartz build
+        run: node quartz/bootstrap-cli.mjs build -d content
+
+      - name: Verify Genedle assets bundled
+        run: |
+          ls -lah public/static/genedle
+          grep -n "loadData" public/static/genedle/app.js
+          test -s public/static/genedle/data.json
+          test -s public/static/genedle/index.json
 
       - name: Ensure CNAME file exists
         run: |
