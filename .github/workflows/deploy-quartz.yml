@@ -5,10 +5,6 @@ on:
     branches: ["v2-quartz-migration", "main"]
   workflow_dispatch:
 
-defaults:
-  run:
-    working-directory: Website
-
 permissions:
   contents: read
   pages: write
@@ -44,7 +40,7 @@ jobs:
         uses: actions/upload-artifact@v4 
         with: 
           name: image-generation-queue 
-          path: Website/image_generation_queue.txt 
+          path: image_generation_queue.txt 
           if-no-files-found: ignore 
 
       - name: Setup Node.js (22.x) with npm cache
@@ -87,7 +83,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: Website/public
+          path: public
 
   deploy:
     runs-on: ubuntu-latest
