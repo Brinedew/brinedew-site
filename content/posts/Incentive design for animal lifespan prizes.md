@@ -11,16 +11,20 @@ draft: true
 1. Animal lifespans have stagnated
 2. MPrize design and its problems
 	1. Not sustainable for labs to engage with
-	2. Long winter periods of inactivity
+	2. Long winter periods of inactivity leave no records
 3. Better design proposal
 	1. Payout each year, even if no new records
+		1. Predictability helps sustain research in "longevity winter" periods
+		2. Independent of magnitude of record: makes it more predictable for financing labs
+		3. Paying more for bigger records
 	2. Payout proportions
 		1. Prize only to top 1: too unpredictable to labs
 		2. Payout to everyone: too diluted to be financially sustainable
-		3. Big prize to top1 and an equal payout to 2-10: financially sustainable for an ecosystem of a few dozen longevity labs
+		3. Big prize to top1 and an equal payout to 2-5: financially sustainable for an ecosystem of a dozen longevity labs
 	3. Prediction market interfacing
 4. Loopholes
 	1. Big n cohorts
+		1. Not a loophole - big n is
 	2. Backdating
 	3. Group-splitting
 	4. Ownership exchange
