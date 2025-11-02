@@ -39,9 +39,9 @@ Let’s unpack how each prize can be gamed. Remember, the metric me and you actu
 
 As an example of the field that didn't learn this lesson until too late, look at immune modulation of sepsis. 
 
-The [2023 review ](https://www.nature.com/articles/s41420-023-01766-7)of sepsis immune regulators states: "To date, no drugs have been approved for treating sepsis, and most clinical trials of potential therapies have failed to reduce mortality." A concerningly named World Sepsis Day (organized by worryingly named Global Sepsis Alliance) confirms: 
+The [2023 review ](https://www.nature.com/articles/s41420-023-01766-7)of sepsis immune regulators states: "To date, no drugs have been approved for treating sepsis, and most clinical trials of potential therapies have failed to reduce mortality." A concerningly named Global Sepsis Alliance confirms: 
 
-![[image-9.png|Last Sepsis, I gave you my heart]]
+![[image-9.png|It's beginning to look a lot like sepsis // Everywhere you go // Take a look at this clotted vein, it's glistening once again // With oozing rot and abscess spots that grow]]
 
 30+ years of “we identified a cytokine / coagulation factor / innate immune pathway; now we will fix sepsis.” This culminated in the public withdrawal of Eli Lilly's Xigris in 2011 because PROWESS-SHOCK trial did not show survival benefit.
 
