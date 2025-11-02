@@ -24,10 +24,13 @@ draft: true
 	3. Prediction market interfacing
 4. Loopholes
 	1. Big n cohorts
-		1. Not a loophole - big n is
+		1. Not a loophole - big n is good for research, and we're consciously incentivizing it. Prize is limited at one per PI,  
 	2. Backdating
 	3. Group-splitting
 	4. Ownership exchange
+		1. We need to permit changing the PI on a mouse for cases like PI retirement, project abandonment, or even mouse facility closure
+		2. At the same time, we need to restrict one PI giving his #2 and #3 longest mouse to his buddies from the same institute so that they all can get prizes
+		3. Solution: all-or-nothing ownership exchange, a PI can only de-register all his mice at once, not piecewise
 	5. Year-boundary effects
 	6. Death non-reporting
 	7. Identity fraud
