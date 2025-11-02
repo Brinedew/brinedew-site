@@ -9,9 +9,9 @@ draft: true
 
 
 ## 1. The Problem: Animal Lifespan Has Stagnated 
-* Brief overview of the stagnation in rodent lifespan extension. 
+* Brief overview of the stagnation in animal lifespan extension. 
 * The critical need for breakthrough-level research. 
-* Existing incentives (e.g., MPrize) have failed to create a sustainable research ecosystem.
+* Existing incentives (e.g., MPrize) have failed to create a sustainable animal research ecosystem.
 
 ## 2. The Flaw in "Record-breaker-Take-All" Prize Design 
 * **The MPrize Model:** Primarily a "all-time-champion-Take-All" contest for the single longest-lived mouse of all time. 
@@ -32,6 +32,37 @@ draft: true
 
 
 So the whole crop drifted from “one hard number: age of oldest mouse” to “bundle of clinical function scores in old humans.”
+
+### Skeptic's take on "healthspan" prizes
+
+Let’s unpack how each prize can be gamed. Remember, the metric me and you actually care about is decreasing the mortality risk (that is, dying later). Any metric that doesn't obviously measure death events is merely a proxy that deserves scrutiny.
+
+As an example of the field that didn't learn this lesson until too late, look at immune modulation of sepsis. 
+
+The [2023 review ](https://www.nature.com/articles/s41420-023-01766-7)of sepsis immune regulators states: "To date, no drugs have been approved for treating sepsis, and most clinical trials of potential therapies have failed to reduce mortality." A concerningly named World Sepsis Day (organized by worryingly named Global Sepsis Alliance) confirms: 
+
+![[image-9.png]]
+
+30+ years of “we identified a cytokine / coagulation factor / innate immune pathway; now we will fix sepsis.” This culminated in the public withdrawal of Eli Lilly's Xigris in 2011 because PROWESS-SHOCK trial did not show survival benefit.
+
+For aging research to not end up where sepsis research is now, we need to ask: why could a "biomarker" proxy fail to correlate with mortality?
+
+- Not all functional impairment is detrimental to survival.
+- Adds "researcher degrees of freedom"
+- Recall the controversies of entire fields like amyloid program, or candidate-gene studies like 5-HTTLPR. We're now in candidate-biomarker era.
+- 
+#### XPRIZE Healthspan
+
+- **Composite endpoint**: muscle + immune + cognitive. Any composite can be optimized by pushing the easiest subscore. Sarcopenia endpoints are especially tractable (training, myostatin-ish drugs, even good PT). Cognition and immune are noisier. So teams will bias toward the limb that gives the most reliable delta in 12 months, not toward systemic aging reversal. That’s textbook metric gaming. Prize page basically invites it. [XPRIZE+1](https://www.xprize.org/news/xprize-healthspan-innovation-landscape-2025-outlook?utm_source=chatgpt.com)
+    
+- **Short horizon**: semifinal trials Aug 2025–Mar 2026. Aging is slow; 7–8 months is behavior + inflammation + water weight. You can move that without touching survival odds at 85. [Renascience](https://www.renascience.co.jp/wp-content/uploads/2025/05/Announcement-of-winning-the-TOP40-semi-finalists-and-receiving-the-prize-money-in-the-global-longevity-competition-XPRIZE-Healthspan.pdf?utm_source=chatgpt.com)
+    
+- **Participant selection**: choose unusually healthy 60-year-olds who have room to improve on strength tests but already low mortality risk; you get big functional gains with no way to tell if you bought extra years or just reversed disuse. That’s classic selection-gaming.
+    
+- **Stacked interventions**: nothing stops a team from doing drug + supervised exercise + protein + sleep coaching; almost any coached multimodal regimen will improve the panel. That proves you can organize adherence, not that you slowed Gompertz slope.
+    
+
+So: metric surface is wide, easy to optimize locally, and not tied to actuarial endpoints. Mprize, for all its problems, was “what age did the animal die?” which you cannot cosmetically inflate.
 
 4. Building a better prize  
 	1. Payout each year, even if no new records
