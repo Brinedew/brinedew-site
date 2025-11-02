@@ -30,9 +30,12 @@ draft: true
 		3. Big prize to top1 and an equal payout to 2-5: financially sustainable for an ecosystem of a dozen longevity labs
 	3. Pay for deaths, or for live mice?
 		1. If paying for longest-lived mouse _that dies in that calendar year_.
-			1. Advantages: incentivizes 
+			1. Advantages: closes the "claim dead animal is still alive to win prize" cheat
 	4. What if someone breaks all-time record
 		1. Separate funder financing into "predictable and sustainable ecosystem" cash flow, with any extra leftover going into "holy shit someone actually did it" bucket. If no one breaks all-time records, don't open the bucket.
+	5. What counts as "death"? How do organizers confirm if animal is dead or alive?
+		1. Cardiorespiratory death? Can't handle the therapies of "head transplant" type.
+		2. Brain death?
 2. Loopholes
 	1. Big n cohorts
 		1. Not a loophole - big n is good for research, and we're consciously incentivizing it. Prize is limited at one per PI,  
