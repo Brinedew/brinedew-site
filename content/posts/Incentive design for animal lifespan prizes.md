@@ -6,3 +6,6 @@ date: 2025-11-02
 draft: true
 ---
 # Incentive design for animal lifespan prizes
+
+
+1. 
