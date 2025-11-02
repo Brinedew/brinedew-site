@@ -51,10 +51,13 @@ draft: true
 	7. Identity fraud
 	8. Sabotage
 	9. Endpoint flaunting
+		1. Researchers are incentivized to report mice as "alive" even as they are past IACUC endpoints for humane euthanasia (large tumors, weight loss, seizures)
+		2. One way forward is to standardize endpoints, and require some form of verification that the winner isn't past the endpoints.
+		3. Another way forward is to take advantage of the IACUC notice: "Studies that require death or moribundity as an endpoint must be classified as a pain and distress category E."
 	10. Corruption
 3. Bioethics
-	1. Branding: longevity research is off-putting to many biologists because of its association with amateur biohackers, snake oil remedies, blood-transfusing billionaires, and keeping terminal elderly on gnarly life support. 
+	1. Branding: longevity research is off-putting to many research biologists because of its association with amateur biohackers, snake oil remedies, blood-transfusing billionaires, and keeping terminal elderly on gnarly life support. 
 		1. Get away from "who can frankenstein a piece of flesh to wiggle longer" branding and towards "who is the most caring to their animals". Call it "Animal care prize"?
 		2. Having female-skewed branding might help avoid political polarization. More women in wet lab biology than in STEM in general, but lifespan extension is seen as [more male-skewed](https://fortune.com/well/2025/02/06/more-men-than-women-believe-they-will-see-life-span-increase-survey) than most wet lab biology topics, which has been seen to[ cause friction](https://www.nad.com/news/female-longevity-scientist-points-out-gender-imbalance-in-aging-field). 
-	2. Some countries might have standards of animal research ethics that are more lax than others, 
-		1. 
+	2. Some countries might have standards of animal research ethics that are more lax than others
+		1. Does it advantage labs located in countries with more lax bioethics codes? Yes, this is intended as an incentive to researchers to set up labs in more aging-research-friendly countries, and incentive for overly strict countries to carve out regulatory exceptions for aging research
