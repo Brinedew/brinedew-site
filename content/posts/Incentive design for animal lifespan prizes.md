@@ -14,7 +14,7 @@ draft: true
 * Existing incentives (e.g., MPrize) have failed to create a sustainable research ecosystem.
 
 ## 2. The Flaw in "Record-breaker-Take-All" Prize Design 
-* **The MPrize Model:** Primarily a "Winner-Take-All" (WTA) contest for the single longest-lived mouse. 
+* **The MPrize Model:** Primarily a "all-time-champion-Take-All" contest for the single longest-lived mouse of all time. 
 * **Problem 1: Financial Unpredictability.** Labs cannot build a sustainable financial model around a low-probability, high-variance payout. This deters serious, long-term participation. 
 * **Problem 2: "Longevity Winters."** The design creates long periods of inactivity and silence. If no record is broken for years, the prize generates no news, no milestones, and no funding for the participating labs.
 
@@ -29,7 +29,8 @@ draft: true
 		2. Payout to everyone: too diluted to be financially sustainable
 		3. Big prize to top1 and an equal payout to 2-5: financially sustainable for an ecosystem of a dozen longevity labs
 	3. Pay for deaths, or for live mice?
-		1. If paying for longest-lived mouse _that dies in that calendar year_.
+		1. If paying for 
+		2. If paying for longest-lived mouse _that dies in that calendar year_.
 			1. Advantages: closes the "claim dead animal is still alive to win prize" cheat
 	4. What if someone breaks all-time record
 		1. Separate funder financing into "predictable and sustainable ecosystem" cash flow, with any extra leftover going into "holy shit someone actually did it" bucket. If no one breaks all-time records, don't open the bucket.
@@ -51,3 +52,9 @@ draft: true
 	8. Sabotage
 	9. Endpoint flaunting
 	10. Corruption
+3. Bioethics
+	1. Branding: longevity research is off-putting to many biologists because of its association with amateur biohackers, snake oil remedies, blood-transfusing billionaires, and keeping terminal elderly on gnarly life support. 
+		1. Get away from "who can frankenstein a piece of flesh to wiggle longer" branding and towards "who is the most caring to their animals". Call it "Animal care prize"?
+		2. Having female-skewed branding might help avoid political polarization. More women in wet lab biology than in STEM in general, but lifespan extension is seen as [more male-skewed](https://fortune.com/well/2025/02/06/more-men-than-women-believe-they-will-see-life-span-increase-survey) than most wet lab biology topics, which has been seen to[ cause friction](https://www.nad.com/news/female-longevity-scientist-points-out-gender-imbalance-in-aging-field). 
+	2. Some countries might have standards of animal research ethics that are more lax than others, 
+		1. 
