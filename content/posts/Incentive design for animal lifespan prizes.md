@@ -13,7 +13,7 @@ draft: true
 * The critical need for breakthrough-level research. 
 * Existing incentives (e.g., MPrize) have failed to create a sustainable research ecosystem.
 
-## 2. The Flaw in "Winner-Take-All" Prize Design 
+## 2. The Flaw in "Record-breaker-Take-All" Prize Design 
 * **The MPrize Model:** Primarily a "Winner-Take-All" (WTA) contest for the single longest-lived mouse. 
 * **Problem 1: Financial Unpredictability.** Labs cannot build a sustainable financial model around a low-probability, high-variance payout. This deters serious, long-term participation. 
 * **Problem 2: "Longevity Winters."** The design creates long periods of inactivity and silence. If no record is broken for years, the prize generates no news, no milestones, and no funding for the participating labs.
