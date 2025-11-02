@@ -1,45 +1,37 @@
 ---
-title: Website
+owner: null
 project: Website
-owner: 
-status: active
-priority: medium
-milestone: 
-due: 
-risk_level: medium
-next_action: 
-tags: [project]
+tags:
+- project
+tasks:
+- name: Fix homepage layout
+  priority: high
+  status: active
+- name: Add contact form validation
+  priority: medium
+  status: icebox
+- name: Deploy to production
+  priority: high
+  status: blocked
+- name: Update footer copyright year
+  priority: low
+  status: done
+title: Website
 ---
 
-Status: `INPUT[inlineSelect(option(active), option(blocked), option(on-hold), option(done)):status]`
-
-Priority: `INPUT[inlineSelect(option(high), option(medium), option(low)):priority]`
-
-Owner: `INPUT[text:owner]`
-
-Due: `INPUT[text:due]`
-
-Next action:
-```meta-bind
-INPUT[textArea(class(meta-bind-full-width)):next_action]
-```
-
 # Intent
-One sentence on what this project delivers.
+Personal website showcasing projects and technical writing.
 
 # Current Status
-- Brief summary of where things are today.
-
-# Next 3
-- [ ] Task 1
-- [ ] Task 2
-- [ ] Task 3
+- Homepage needs layout fixes
+- Contact form pending validation
+- Production deployment blocked on DNS config
 
 # Milestones
-- 2025-..-..: Milestone name
+- 2025-11-01: Initial launch
 
 # Risks
-- Risk: impact — mitigation
+- DNS configuration delay - high impact - contact hosting provider
 
 # Decisions
 - See: [[Decision Log.md]]
