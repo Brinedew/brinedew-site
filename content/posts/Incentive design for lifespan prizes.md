@@ -7,107 +7,67 @@ draft: true
 ---
 # The only benchmark that matters
 
+## 1. The Problem: Animal Lifespan Has Stagnated
 
-## 1. The Problem: Animal Lifespan Has Stagnated 
-* Brief overview of the stagnation in animal lifespan extension. 
-* The critical need for breakthrough-level research. 
-* Existing incentives (e.g., MPrize) have failed to create a sustainable animal research ecosystem.
+### The Record That Won't Break
 
-## 2. The Flaw in "Record-breaker-Take-All" Prize Design 
-* **The MPrize Model:** Primarily a "all-time-champion-Take-All" contest for the single longest-lived mouse of all time. 
-* **Problem 1: Financial Unpredictability.** Labs cannot build a sustainable financial model around a low-probability, high-variance payout. This deters serious, long-term participation. 
-* **Problem 2: "Longevity Winters."** The design creates long periods of inactivity and silence. If no record is broken for years, the prize generates no news, no milestones, and no funding for the participating labs.
+The longest-lived laboratory mouse died at 1,819 days old in 2005. That's almost 20 years ago.
 
-## 3. Are the new longevity prizes any better?
+For context: in those same 20 years, we've seen CRISPR go from discovery to clinical trials, AlphaFold solve protein folding, and COVID vaccines developed in under a year. Meanwhile, the mouse longevity record—the single most direct measure of whether we can actually slow aging—hasn't budged.
 
-### What the longevity prizes actually are, as of 2025
+This isn't for lack of candidates. Hundreds of interventions claim to "extend lifespan" in papers every year. Rapamycin, metformin, senolytics, NAD+ boosters, dietary restriction mimetics—the list grows monthly. Yet none have produced a mouse that lives substantially longer than the ones Andrzej Bartke's lab bred two decades ago using simple genetic modifications (GH receptor knockout).
 
-- **XPRIZE Healthspan**: $101M, 7 years, wants therapies that make 50–80-year-olds function like they are 10–20 years younger in muscle, immunity, and cognition. “Restore … by a minimum of 10 years—with a goal of 20 years.” [XPRIZE](https://www.xprize.org/news/xprize-healthspan-innovation-landscape-2025-outlook?utm_source=chatgpt.com)
+### Why We Should Care About a Mouse Record
 
-- **Hevolution ecosystem**: not a single prize but a firehose (they talk about up to $1B/year) for “extending healthy lifespan” and they run calls, challenges, and investigator awards that all point at healthspan, not max lifespan. [Hevolution Foundation+1](https://hevolution.com/funding-opportunities?utm_source=chatgpt.com)
+**The translational research argument is backwards.** When people say "who cares about mice, we want human therapies," they're implicitly assuming we already know how to extend lifespan and just need to scale up. But we don't know how. We have hundreds of interventions that produce small statistical effects in heterogeneous populations, and almost no mechanistic understanding of which effects matter.
 
-- **Foresight / VitaDAO Longevity Prize**: small ~$20–180k hypothesis and tool prizes, designed to surface ideas and datasets, not to prove you made a mammal live 40% longer. [longevityprize.com+2vitadao.com+2](https://www.longevityprize.com/?utm_source=chatgpt.com)
+Consider the actual translation pathway: a human longevity trial requires 20-40 years and costs hundreds of millions of dollars. A mouse trial requires 3-4 years and costs perhaps $500K. The mouse isn't a detour—it's the only iteration loop fast enough to learn from. If you can't reliably produce a 2,000+ day mouse (10% beyond current records), you have no business claiming you understand aging well enough to run a human trial.
 
-- **Methuselah in 2025**: mostly organ/biofabrication (New Organ Liver Prize etc.), i.e. adjacency to longevity, not “beat Bartke’s mouse.” [Methuselah Foundation+1](https://www.mfoundation.org/what-we-do?utm_source=chatgpt.com)
+**Maximum lifespan is uniquely hard to game.** This matters because almost every other biomarker in aging research has turned out to be gameable:
 
+- **Grip strength:** Responds to exercise training independent of aging interventions. Caloric restriction improves grip strength in mice but doesn't extend maximum lifespan proportionally.
+- **Epigenetic clocks:** Can be manipulated by changing cell type composition (add more naive T cells, clock looks younger) without affecting actual mortality risk. The Horvath clock in particular drifts substantially based on tissue sampling protocols.
+- **Inflammatory markers:** Statins reduce CRP and other inflammatory markers, correlating with modest cardiovascular benefits, but meta-analyses show minimal effect on all-cause mortality or maximum lifespan in model organisms.
+- **Median lifespan:** Can be extended by reducing early-life mortality (better pathogen control, tumor prevention) without touching the aging process itself. The ITP studies show many interventions that boost median lifespan 10-15% but do nothing to maximum lifespan.
 
-So the whole crop drifted from “one hard number: age of oldest mouse” to “bundle of clinical function scores in old humans.”
+Maximum lifespan—defined as the age at which the last 10% of a cohort dies—cuts through this. You can't make a mouse live to 2,000 days by improving its diet slightly or reducing tumor burden. You need an intervention that fundamentally alters the rate of accumulating damage. Either the animal dies or it doesn't. Every day past 1,819 is a day that literally no mouse has survived before in recorded history.
 
-### Skeptic's take on "healthspan" prizes
+**The integration test argument.** Aging isn't one thing breaking—it's everything breaking in a coordinated fashion. Cardiovascular decline, immune senescence, proteostatic collapse, epigenetic drift, mitochondrial dysfunction, stem cell exhaustion: these aren't independent failure modes you can address piecemeal. They're coupled in ways we barely understand.
 
-Let’s unpack how each prize can be gamed. Remember, the metric me and you actually care about is decreasing the mortality risk (that is, dying later). Any metric that doesn't obviously measure death events is merely a proxy that deserves scrutiny.
+Maximum lifespan is therefore the ultimate integration test. It's the only metric that forces your intervention to work across all organ systems, all failure modes, all sources of mortality simultaneously. A mouse that lives to 2,000 days isn't just healthier in one dimension—it has successfully delayed the entire cascade of aging-related decline.
 
-As an example of the field that didn't learn this lesson until too late, look at immune modulation of sepsis. 
+Compare this to working on Alzheimer's or cancer in isolation. Even if you completely "solved" Alzheimer's—say, a drug that prevents all amyloid plaque formation—you'd add maybe 3-4 years to human lifespan on average, because people would just die of something else slightly later. The survivor would still age at the same rate; you've just removed one failure mode from the stack.
 
-The [2023 review ](https://www.nature.com/articles/s41420-023-01766-7)of sepsis immune regulators states: "To date, no drugs have been approved for treating sepsis, and most clinical trials of potential therapies have failed to reduce mortality." A concerningly named Global Sepsis Alliance confirms: 
+Whereas if you extend maximum mouse lifespan by 20%, you've demonstrated something that works across *all* aging failure modes simultaneously. That's the kind of intervention that might actually matter for human healthspan.
 
-![[image-9.png|The excitement is infectious]]
+**Why the record not breaking is damning evidence.** If aging interventions were improving steadily—if we were on a genuine scientific trajectory—we'd expect to see the maximum lifespan record broken every few years as techniques improved. Instead we see a 20-year plateau.
 
-30+ years of “we identified a cytokine / coagulation factor / innate immune pathway; now we will fix sepsis.” This culminated in the public withdrawal of Eli Lilly's Xigris in 2011 because PROWESS-SHOCK trial did not show survival benefit.
+This isn't because researchers aren't trying. The NIA Interventions Testing Program (ITP) has tested 60+ compounds since 2004 across three independent sites using thousands of genetically diverse mice. They've found exactly four interventions that reliably extend maximum lifespan: rapamycin (+10-15% in females), acarbose (+5-10%), canagliflozin (~5%), and 17α-estradiol (+10% in males only). None of these beat the 1,819-day record set by GH receptor knockout mice, which achieve their longevity through a genetic intervention, not a drug you can take.
 
-For aging research to not end up where sepsis research is now, we need to ask: why could a "biomarker" proxy fail to correlate with mortality?
+Put another way: two decades of systematic screening through the most promising compounds in aging research have failed to beat a single gene knockout from 2005. That should update us significantly toward "we don't understand aging as well as we think we do."
 
-- Not all functional impairment is detrimental to survival.
-- Adds "researcher degrees of freedom"
-- Recall the controversies of entire fields like amyloid program, or candidate-gene studies like 5-HTTLPR. We're now in candidate-biomarker era.
-- 
-#### XPRIZE Healthspan
+**The argument from first principles.** Evolution optimized organisms for reproduction, not longevity. Once reproductive fitness drops off, there's no selection pressure to maintain somatic integrity. This suggests aging is mechanistically downstream of developmental programs that are antagonistically pleiotropic: they help early in life, hurt later.
 
-- **Composite endpoint**: muscle + immune + cognitive. Any composite can be optimized by pushing the easiest subscore. Sarcopenia endpoints are especially tractable (training, myostatin-ish drugs, even good PT). Cognition and immune are noisier. So teams will bias toward the limb that gives the most reliable delta in 12 months, not toward systemic aging reversal. That’s textbook metric gaming. Prize page basically invites it. [XPRIZE+1](https://www.xprize.org/news/xprize-healthspan-innovation-landscape-2025-outlook?utm_source=chatgpt.com)
-    
-- **Short horizon**: semifinal trials Aug 2025–Mar 2026. Aging is slow; 7–8 months is behavior + inflammation + water weight. You can move that without touching survival odds at 85. [Renascience](https://www.renascience.co.jp/wp-content/uploads/2025/05/Announcement-of-winning-the-TOP40-semi-finalists-and-receiving-the-prize-money-in-the-global-longevity-competition-XPRIZE-Healthspan.pdf?utm_source=chatgpt.com)
-    
-- **Participant selection**: choose unusually healthy 60-year-olds who have room to improve on strength tests but already low mortality risk; you get big functional gains with no way to tell if you bought extra years or just reversed disuse. That’s classic selection-gaming.
-    
-- **Stacked interventions**: nothing stops a team from doing drug + supervised exercise + protein + sleep coaching; almost any coached multimodal regimen will improve the panel. That proves you can organize adherence, not that you slowed Gompertz slope.
-    
+If this model is correct—and most evolutionary theories of aging assume it is—then slowing aging requires re-engineering developmental programs that evolution spent 500 million years optimizing. That's a hard problem. You wouldn't expect it to yield to the first few drugs tried.
 
-So: metric surface is wide, easy to optimize locally, and not tied to actuarial endpoints. Mprize, for all its problems, was “what age did the animal die?” which you cannot cosmetically inflate.
+The fact that we *have* found some interventions that work (rapamycin, genetic modifications to IGF/GH signaling) is evidence that aging is mechanistically tractable. But the fact that none of these interventions have beaten the 2005 record suggests we're still missing something fundamental. We've found local optima, not the global solution.
 
-4. Building a better prize  
-	1. Payout each year, even if no new records
-		1. Predictability helps sustain research in "longevity winter" periods
-		2. Independent of magnitude of record: makes it more predictable for financing labs
-		3. Paying more for bigger records
-	2. Payout proportions
-		1. Prize only to top 1: too unpredictable to labs
-		2. Payout to everyone: too diluted to be financially sustainable
-		3. Big prize to top1 and an equal payout to 2-5: financially sustainable for an ecosystem of a dozen longevity labs
-	3. Pay for deaths, or for live mice?
-		1. If paying for 
-		2. If paying for longest-lived mouse _that dies in that calendar year_.
-			1. Advantages: closes the "claim dead animal is still alive to win prize" cheat
-			2. 
-	4. What if someone breaks all-time record
-		1. Separate funder financing into "predictable and sustainable ecosystem" cash flow, with any extra leftover going into "holy shit someone actually did it" bucket. If no one breaks all-time records, don't open the bucket.
-	5. What counts as "death"? How do organizers confirm if animal is dead or alive?
-		1. Cardiorespiratory death? Can't handle the therapies of "head transplant" type.
-		2. Brain death?
-5. Loopholes
-	1. Big n cohorts
-		1. Not a loophole - big n is good for research, and we're consciously incentivizing it. Prize is limited at one per PI,  
-	2. Backdating
-	3. Group-splitting
-	4. Ownership exchange
-		1. We need to permit changing the PI on a mouse for cases like PI retirement, project abandonment, or even mouse facility closure
-		2. At the same time, we need to restrict one PI giving his #2 and #3 longest mouse to his buddies from the same institute so that they all can get prizes
-		3. Solution: all-or-nothing ownership exchange, a PI can only de-register all his mice at once, not piecewise
-	5. Year-boundary effects
-	6. Death non-reporting
-	7. Identity fraud
-		1. Is it actually a mus musculus mouse?
-		2. Is the birth date after what's claimed?
-		3. Is the death date before what's claimed?
-		4. Was it substituted by another individual?
-	8. Sabotage
-	9. Endpoint flaunting
-		1. Researchers are incentivized to report mice as "alive" even as they are past IACUC endpoints for humane euthanasia (large tumors, weight loss, seizures)
-		2. One way forward is to standardize endpoints, and require some form of verification that the winner isn't past the endpoints.
-		3. Another way forward is to take advantage of the IACUC notice: "Studies that require death or moribundity as an endpoint must be classified as a pain and distress category E."
-	10. Corruption
-6. Bioethics
-	1. Branding: longevity research is off-putting to many research biologists because of its association with amateur biohackers, snake oil remedies, blood-transfusing billionaires, and keeping terminal elderly on gnarly life support. 
-		1. Get away from "who can frankenstein a piece of flesh to wiggle longer" branding and towards "who is the most caring to their animals". Call it "Animal care prize"?
-		2. Having female-skewed branding might help avoid political polarization. More women in wet lab biology than in STEM in general, but lifespan extension is seen as [more male-skewed](https://fortune.com/well/2025/02/06/more-men-than-women-believe-they-will-see-life-span-increase-survey) than most wet lab biology topics, which has been seen to[ cause friction](https://www.nad.com/news/female-longevity-scientist-points-out-gender-imbalance-in-aging-field). 
-	2. Some countries might have standards of animal research ethics that are more lax than others
-		1. Does it advantage labs located in countries with more lax bioethics codes? Yes, this is intended as an incentive to researchers to set up labs in more aging-research-friendly countries, and incentive for overly strict countries to carve out regulatory exceptions for aging research
+**Why mice, specifically?** 
+
+Mice are short-lived enough that you can run complete lifespan studies in 3-4 years. They're mammalian, so basic physiology (cardiovascular system, immune system, proteostasis) is highly conserved with humans. They're genetically tractable (CRISPR works well), phenotypically well-characterized, and you can control environmental variables precisely.
+
+The alternative models are worse for different reasons:
+- **C. elegans** (~3 week lifespan): Too distant evolutionarily; most aging mechanisms don't translate. Hundreds of genes that extend worm lifespan do nothing in mammals.
+- **Drosophila** (~60 day lifespan): Same problem as worms, plus no adaptive immune system.
+- **Killifish** (~6 month lifespan): Promising but expensive, hard to house, and genetic tools lag decades behind mice.
+- **Rats** (~3 year lifespan): Slightly better human analogs but too slow for iteration; doubles experiment time and cost for marginal mechanistic gain.
+- **Non-human primates** (~30 year lifespan): Takes longer than most researcher careers and costs millions per study. You can't learn fast enough.
+
+Mice sit in the sweet spot: short enough to iterate, complex enough to matter.
+
+**The counterfactual that didn't happen.** Imagine if the maximum mouse lifespan record *had* been steadily breaking. Say we'd gone from 1,819 days in 2005 to 1,950 in 2010, 2,100 in 2015, 2,300 in 2020, and 2,500+ today. That trajectory would tell us something profound: we'd identified interventions that stack, we'd know which mechanisms matter most, and we'd be justified in running human trials.
+
+Instead we have a flat line. Twenty years, thousands of papers, billions in funding, zero progress on the hardest metric. That's not just disappointing—it's diagnostic. It tells us the field has been optimizing for the wrong things (publishable median lifespan effects, fashionable biomarkers) instead of the thing that actually matters (can you keep a mammal alive longer than anyone has before?).
+
+Breaking the record wouldn't just be symbolically important. It would be mechanistic proof that we'd learned something real about aging. Until that happens, we're mostly just guessing.
+
