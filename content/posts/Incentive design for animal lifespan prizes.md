@@ -5,7 +5,7 @@ tags:
 date: 2025-11-02
 draft: true
 ---
-# Why MPrize failed
+# The only benchmark that matters
 
 
 ## 1. The Problem: Animal Lifespan Has Stagnated 
@@ -19,7 +19,7 @@ draft: true
 * **Problem 2: "Longevity Winters."** The design creates long periods of inactivity and silence. If no record is broken for years, the prize generates no news, no milestones, and no funding for the participating labs.
 
 
-1. Better design proposal
+1. Building a better prize  
 	1. Payout each year, even if no new records
 		1. Predictability helps sustain research in "longevity winter" periods
 		2. Independent of magnitude of record: makes it more predictable for financing labs
@@ -28,7 +28,11 @@ draft: true
 		1. Prize only to top 1: too unpredictable to labs
 		2. Payout to everyone: too diluted to be financially sustainable
 		3. Big prize to top1 and an equal payout to 2-5: financially sustainable for an ecosystem of a dozen longevity labs
-	3. Prediction market interfacing
+	3. Pay for deaths, or for live mice?
+		1. If paying for longest-lived mouse _that dies in that calendar year_.
+			1. Advantages: incentivizes 
+	4. What if someone breaks all-time record
+		1. Separate funder financing into "predictable and sustainable ecosystem" cash flow, with any extra leftover going into "holy shit someone actually did it" bucket. If no one breaks all-time records, don't open the bucket.
 2. Loopholes
 	1. Big n cohorts
 		1. Not a loophole - big n is good for research, and we're consciously incentivizing it. Prize is limited at one per PI,  
