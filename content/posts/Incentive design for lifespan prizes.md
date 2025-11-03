@@ -108,24 +108,7 @@ The rest of this post proposes exactly that design. But first, we need to unders
 
 So the whole crop drifted from “one hard number: age of oldest mouse” to “bundle of clinical function scores in old humans.”
 
-### Skeptic's take on "healthspan" prizes
 
-Let’s unpack how each prize can be gamed. Remember, the metric me and you actually care about is decreasing the mortality risk (that is, dying later). Any metric that doesn't obviously measure death events is merely a proxy that deserves scrutiny.
-
-As an example of the field that didn't learn this lesson until too late, look at immune modulation of sepsis. 
-
-The [2023 review ](https://www.nature.com/articles/s41420-023-01766-7)of sepsis immune regulators states: "To date, no drugs have been approved for treating sepsis, and most clinical trials of potential therapies have failed to reduce mortality." A concerningly named Global Sepsis Alliance confirms: 
-
-![[image-9.png|The excitement is infectious]]
-
-30+ years of “we identified a cytokine / coagulation factor / innate immune pathway; now we will fix sepsis.” This culminated in the public withdrawal of Eli Lilly's Xigris in 2011 because PROWESS-SHOCK trial did not show survival benefit.
-
-For aging research to not end up where sepsis research is now, we need to ask: why could a "biomarker" proxy fail to correlate with mortality?
-
-- Not all functional impairment is detrimental to survival.
-- Adds "researcher degrees of freedom"
-- Recall the controversies of entire fields like amyloid program, or candidate-gene studies like 5-HTTLPR. We're now in candidate-biomarker era.
-- 
 #### XPRIZE Healthspan
 
 - **Composite endpoint**: muscle + immune + cognitive. Any composite can be optimized by pushing the easiest subscore. Sarcopenia endpoints are especially tractable (training, myostatin-ish drugs, even good PT). Cognition and immune are noisier. So teams will bias toward the limb that gives the most reliable delta in 12 months, not toward systemic aging reversal. That’s textbook metric gaming. Prize page basically invites it. [XPRIZE+1](https://www.xprize.org/news/xprize-healthspan-innovation-landscape-2025-outlook?utm_source=chatgpt.com)
@@ -139,7 +122,30 @@ For aging research to not end up where sepsis research is now, we need to ask: w
 
 So: metric surface is wide, easy to optimize locally, and not tied to actuarial endpoints. Mprize, for all its problems, was “what age did the animal die?” which you cannot cosmetically inflate.
 
+### Skeptic's take on "healthspan" prizes
 
+Let’s unpack how each prize can be gamed. Remember, the metric me and you actually care about is decreasing the mortality risk (that is, dying later). Any metric that doesn't obviously measure death events is merely a proxy that deserves scrutiny.
+
+As an example of the field that didn't learn this lesson until too late, look at immune modulation of sepsis. 
+
+The [2023 review ](https://www.nature.com/articles/s41420-023-01766-7)of sepsis immune regulators states: "To date, no drugs have been approved for treating sepsis, and most clinical trials of potential therapies have failed to reduce mortality." A concerningly named Global Sepsis Alliance confirms: 
+
+![[image-9.png|The excitement is infectious]]
+
+30+ years of “we identified a cytokine / coagulation factor / innate immune pathway; now we will fix sepsis.” This culminated in the public withdrawal of Eli Lilly's Xigris in 2011 because PROWESS-SHOCK trial did not show survival benefit.
+
+Is aging in the same "premature translation to healthcare" basket? Some gerontologists believe so. A paper titled "[Inflated expectations](https://www.embopress.org/doi/full/10.1038/s44319-024-00226-2)" argues:
+
+> One evening in 1997, in a pub in Cambridge, UK, David Klenerman and Shankar Balasubramanian worked out the basic principles of high-throughput Illumina DNA sequencing, based on flow-cell chemistry. The realization of this revolutionary technology required a subsequent large-scale, 10-year-long translational research effort to develop the first next-generation sequencers. To have made such a translational push to develop high-throughput sequencing in 1987 would presumably have been premature; but with hindsight one can safely say that in 1997 the time was ripe for it. One may say the same of the launch of the US$10M XPRIZE in 1996 to whoever could develop the first commercially viable, reusable vehicle to carry passengers into space. This challenge, though difficult, was theoretically feasible thanks to the existing knowledge of physics and engineering—and the prize was won in 2004 by the developers of the SpaceShipOne spaceplane.
+> 
+> What, then, is the equivalent of that 1997 breakthrough in flow-cell chemistry that has ignited the imagination of the backers of the XPRIZE Healthspan, Calico, and Altos Labs? There seemed no clear answer to it at the Riyadh meeting. If so, this suggests that **the recent rush to translation is premature**. In turn, this begs the question: how is it that so many researchers and investors believe that the time is ripe for this big translational push?
+
+For aging research to not end up where sepsis research is now, we need to ask: why could a "biomarker" proxy fail to correlate with mortality?
+
+- Not all functional impairment is detrimental to survival.
+- Adds "researcher degrees of freedom"
+- Recall the controversies of entire fields like amyloid program, or candidate-gene studies like 5-HTTLPR. We're now in candidate-biomarker era.
+- 
 
 
 ## 4. Building a Better Prize: Sustainable Ecosystems Over Moonshots
