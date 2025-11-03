@@ -134,7 +134,7 @@ The [2023 review ](https://www.nature.com/articles/s41420-023-01766-7)of sepsis 
 
 30+ years of “we identified a cytokine / coagulation factor / innate immune pathway; now we will fix sepsis.” This culminated in the public withdrawal of Eli Lilly's Xigris in 2011 because PROWESS-SHOCK trial did not show survival benefit.
 
-Is aging in the same "premature translation to healthcare" basket? Some gerontologists believe so. A paper titled "[Inflated expectations](https://www.embopress.org/doi/full/10.1038/s44319-024-00226-2)" argues:
+Is aging research currently in the same "premature translation to healthcare" position? Some gerontologists believe so. A paper titled "[Inflated expectations](https://www.embopress.org/doi/full/10.1038/s44319-024-00226-2)" observes:
 
 > One evening in 1997, in a pub in Cambridge, UK, David Klenerman and Shankar Balasubramanian worked out the basic principles of high-throughput Illumina DNA sequencing, based on flow-cell chemistry. The realization of this revolutionary technology required a subsequent large-scale, 10-year-long translational research effort to develop the first next-generation sequencers. To have made such a translational push to develop high-throughput sequencing in 1987 would presumably have been premature; but with hindsight one can safely say that in 1997 the time was ripe for it. One may say the same of the launch of the US$10M XPRIZE in 1996 to whoever could develop the first commercially viable, reusable vehicle to carry passengers into space. This challenge, though difficult, was theoretically feasible thanks to the existing knowledge of physics and engineering—and the prize was won in 2004 by the developers of the SpaceShipOne spaceplane.
 > 
