@@ -1,6 +1,7 @@
 {
 	"nodes":[
-		{"id":"bd015a7bff5bb22c","type":"group","ratio":1.7777777777777777,"x":-160,"y":-220,"width":1200,"height":675,"label":"Start Slide"},
+		{"id":"bd015a7bff5bb22c","type":"group","ratio":1.7777777777777777,"x":-220,"y":-240,"width":1200,"height":675,"label":"Slide test 1","background":"Attachments/image-8.png"},
+		{"id":"80e0cf26a8e9d842","type":"file","file":"Attachments/image-9.png","x":-160,"y":-380,"width":398,"height":86},
 		{
 			"id":"c9cbac4e9c625abd",
 			"type":"text",
@@ -9,8 +10,8 @@
 				"shape":null,
 				"border":null
 			},
-			"x":-580,
-			"y":-20,
+			"x":-840,
+			"y":20,
 			"width":260,
 			"height":60
 		},
@@ -22,13 +23,23 @@
 				"shape":null,
 				"border":null
 			},
-			"x":-580,
-			"y":60,
+			"x":-840,
+			"y":200,
 			"width":260,
 			"height":60
 		}
 	],
-	"edges":[],
+	"edges":[
+		{
+			"id":"d259f7505c9d8e06",
+			"styleAttributes":{},
+			"toFloating":false,
+			"fromNode":"c9cbac4e9c625abd",
+			"fromSide":"bottom",
+			"toNode":"3fa93f8f3e32b147",
+			"toSide":"top"
+		}
+	],
 	"metadata":{
 		"version":"1.0-1.0",
 		"frontmatter":{},
