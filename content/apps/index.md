@@ -8,7 +8,7 @@ draft: false
 
 Web applications and tools built by Brinedew.
 
-## [Genedle](/apps/genedle/)
+## [Geneguessr](/apps/geneguessr/)
 
 Daily protein guessing game. Infer today's target from function, domains, and tissue specificity.
 
@@ -36,5 +36,7 @@ Convert YouTube videos to text transcripts using advanced AI transcription.
 ---
 
 *These apps combine static frontends (always available) with dynamic backends (available when hardware is online).*
+
+
 
 

@@ -62,12 +62,12 @@ jobs:
       - name: Build Quartz site
         run: node quartz/bootstrap-cli.mjs build -d content
 
-      - name: Verify Genedle assets bundled
+      - name: Verify Geneguessr assets bundled
         run: |
-          ls -lah public/static/genedle
-          grep -n "loadData" public/static/genedle/app.js
-          test -s public/static/genedle/data.json
-          test -s public/static/genedle/index.json
+          ls -lah public/static/geneguessr
+          grep -n "loadData" public/static/geneguessr/app.js
+          test -s public/static/geneguessr/data.json
+          test -s public/static/geneguessr/index.json
 
       - name: Ensure CNAME file exists
         run: |
@@ -95,3 +95,5 @@ jobs:
       - id: deployment
         name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
+
+

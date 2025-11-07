@@ -94,7 +94,7 @@ const config: QuartzConfig = {
       Plugin.ComponentResources(),
       Plugin.ContentPage(),
       Plugin.FolderPage({
-        excludeFolders: ["apps/genedle"],
+        excludeFolders: ["apps/geneguessr"],
       }),
       Plugin.TagPage(),
       Plugin.ContentIndex({
@@ -109,3 +109,4 @@ const config: QuartzConfig = {
 }
 
 export default config
+

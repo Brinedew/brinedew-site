@@ -89,7 +89,7 @@ export default (() => {
         <link rel="icon" href={iconPath} />
         <meta name="description" content={description} />
         <meta name="generator" content="Quartz" />
-        <meta name="genedle-build" content="head-tsx-patched" />
+        <meta name="geneguessr-build" content="head-tsx-patched" />
 
         {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
         <script
@@ -139,10 +139,10 @@ export default (() => {
           const isScriptotic =
             normalizedSlug === "apps/scriptotic" ||
             fileData.frontmatter?.title === "Scriptotic — YouTube Transcript Generator";
-          const isGenedle =
-            normalizedSlug === "apps/genedle" || fileData.frontmatter?.title === "Genedle";
+          const isGeneguessr =
+            normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr";
 
-          if (!isScriptotic && !isGenedle) {
+          if (!isScriptotic && !isGeneguessr) {
             return null;
           }
 
@@ -160,13 +160,13 @@ export default (() => {
                   ></script>
                 </>
               )}
-              {isGenedle && (
+              {isGeneguessr && (
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", `genedle/styles.css?v=${CACHE_BUST}`)}
+                    href={joinSegments(root, "static", `geneguessr/styles.css?v=${CACHE_BUST}`)}
                   />
-                  <script defer src={joinSegments(root, "static", `genedle/app.js?v=${CACHE_BUST}`)}></script>
+                  <script defer src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}></script>
                 </>
               )}
             </>
@@ -192,5 +192,7 @@ export default (() => {
 
   return Head
 }) satisfies QuartzComponentConstructor
+
+
 
 
