@@ -266,7 +266,7 @@
       viewer.render(container, {
         ...options,
         loadControls: true,
-        hideCanvasControls: false,
+        hideCanvasControls: [],
       });
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
