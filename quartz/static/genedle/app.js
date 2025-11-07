@@ -278,25 +278,7 @@
     
     return eligibleIds[index];
   }
- reset state
-      gameState = {
-        date: today,
-        guesses: [],
-        won: false,
-        hintsUnlocked: 1
-      };
-      saveState();
-    }
-    
-    // Pick today's target
-    const targetId = await pickTodaysProtein(indexData.eligible_ids, indexData.salt_hash);
-    targetProtein = proteins.find(p => p.uniprot === targetId);
-    
-    if (!targetProtein) {
-      throw new Error('Target protein not found!');
-    }
-  }
-  
+
   /**
    * Local storage helpers
    */
