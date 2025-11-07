@@ -284,17 +284,38 @@
 
 .pg-link-btn {
   padding: 0.5rem 1rem;
-  background: var(--dark);
+  background: rgba(0, 0, 0, 0.3);
   color: white;
   text-decoration: none;
   border-radius: 4px;
   font-weight: 600;
   font-size: 0.95rem;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
 }
 
 .pg-link-btn:hover {
-  opacity: 0.85;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Dark mode: lighter overlay for failed card */
+@media (prefers-color-scheme: dark) {
+  .pg-result.failed .pg-link-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--dark);
+  }
+  
+  .pg-result.failed .pg-link-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+:root[data-theme="dark"] .pg-result.failed .pg-link-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--dark);
+}
+
+:root[data-theme="dark"] .pg-result.failed .pg-link-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Share */
