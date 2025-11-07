@@ -484,7 +484,6 @@
   const MOLSTAR_CSS_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css";
   const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net";
   const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
-  const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
   const MAX_GUESSES = 6;
   const STORAGE_KEY = 'geneguessr_state';
   
