@@ -21,11 +21,13 @@ draft: true
 6. Loyalty over competence
 7. The nail that sticks out gets hammered down
 8. Specialize by forgetting
-9. Suicide under stress
-10. Empty husks can't betray you
+9. Make them monitor each other
+	1. You can't be everywhere at once, so borrow the concept of dictatorless dystopia.
+10. Suicide under stress
+11. Empty husks can't betray you
 	1. Red blood cells, keratinocytes are more trustworthy en masse since they can't clone themselves
-11. Trust can only go down with time
-12. Aging extends lifespan
+12. Trust can only go down with time
+13. Aging extends lifespan
 
 -------
 "**a hen is only an egg’s way of making another egg**.” — Samuel Butler, _Life and Habit_, ch. VIII (1877).
