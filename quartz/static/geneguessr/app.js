@@ -415,6 +415,8 @@
         // Data/behavior
         loadMaps: true,
         selectInteraction: false,
+        // Disable streaming to prevent hangs
+        lowPrecisionCoords: false,
       });
 
       // Apply aggressive settings after render completes
