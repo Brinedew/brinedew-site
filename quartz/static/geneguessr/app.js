@@ -413,7 +413,7 @@
         visualStyle: 'cartoon',
         lighting: 'matte',
         // Data/behavior
-        loadMaps: true,
+        loadMaps: false,  // Disable electron density maps - they cause streaming hang
         selectInteraction: false,
         // Disable streaming to prevent hangs
         lowPrecisionCoords: false,
