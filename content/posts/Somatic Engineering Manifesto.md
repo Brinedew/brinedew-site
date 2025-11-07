@@ -23,7 +23,9 @@ draft: true
 8. Specialize by forgetting
 9. Suicide under stress
 10. Empty husks can't betray you
-11. Aging extends lifespan
+	1. Red blood cells, keratinocytes are more trustworthy en masse since they can't clone themselves
+11. Trust can only go down with time
+12. Aging extends lifespan
 
 -------
 "**a hen is only an egg’s way of making another egg**.” — Samuel Butler, _Life and Habit_, ch. VIII (1877).
