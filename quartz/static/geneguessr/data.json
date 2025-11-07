@@ -27,6 +27,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P31749",
       "wiki": "/wiki/akt1-p31749"
     },
+    "structure": {
+      "structure_id": "1UNQ",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "1UNQ",
+        "method": "X-ray",
+        "resolution": 0.98,
+        "resolution_raw": "0.98 A",
+        "chains": "A=1-123",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/1UNQ"
+      },
+      "alphafold": {
+        "id": "AF-P31749-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P31749-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P31749-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P31749-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P31749"
+      }
+    },
+    "structure_id": "1UNQ",
+    "alphafold_id": "AF-P31749-F1",
     "go_terms": {
       "bp": [
         "GO:0001649",
@@ -201,6 +222,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P31751",
       "wiki": "/wiki/akt2-akt2-p31751"
     },
+    "structure": {
+      "structure_id": "1O6L",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "1O6L",
+        "method": "X-ray",
+        "resolution": 1.6,
+        "resolution_raw": "1.60 A",
+        "chains": "A=146-467",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/1O6L"
+      },
+      "alphafold": {
+        "id": "AF-P31751-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P31751-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P31751-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P31751-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P31751"
+      }
+    },
+    "structure_id": "1O6L",
+    "alphafold_id": "AF-P31751-F1",
     "go_terms": {
       "bp": [
         "GO:0007165",
@@ -277,6 +319,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/O14727",
       "wiki": "/wiki/apaf1"
     },
+    "structure": {
+      "structure_id": "1CY5",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "1CY5",
+        "method": "X-ray",
+        "resolution": 1.3,
+        "resolution_raw": "1.30 A",
+        "chains": "A=1-97",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/1CY5"
+      },
+      "alphafold": {
+        "id": "AF-O14727-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-O14727-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O14727-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O14727-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/O14727"
+      }
+    },
+    "structure_id": "1CY5",
+    "alphafold_id": "AF-O14727-F1",
     "go_terms": {
       "bp": [
         "GO:0006915",
@@ -338,6 +401,20 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q8N726",
       "wiki": "/wiki/arf-p14arf"
     },
+    "structure": {
+      "structure_id": "AF-Q8N726-F1",
+      "primary_source": "alphafold",
+      "pdb": null,
+      "alphafold": {
+        "id": "AF-Q8N726-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q8N726-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q8N726-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q8N726-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q8N726"
+      }
+    },
+    "structure_id": "AF-Q8N726-F1",
+    "alphafold_id": "AF-Q8N726-F1",
     "go_terms": {
       "bp": [
         "GO:0000209",
@@ -431,6 +508,21 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q13315",
       "wiki": "/wiki/atm"
     },
+    "structure": {
+      "structure_id": "6HKA",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6HKA",
+        "method": "NMR",
+        "resolution": null,
+        "resolution_raw": "-",
+        "chains": "A=3024-3056",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6HKA"
+      },
+      "alphafold": null
+    },
+    "structure_id": "6HKA",
+    "alphafold_id": null,
     "go_terms": {
       "bp": [
         "GO:0000077",
@@ -543,6 +635,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q13535",
       "wiki": "/wiki/atr"
     },
+    "structure": {
+      "structure_id": "5YZ0",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5YZ0",
+        "method": "EM",
+        "resolution": 4.7,
+        "resolution_raw": "4.70 A",
+        "chains": "A/B=1-2644",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5YZ0"
+      },
+      "alphafold": {
+        "id": "AF-Q13535-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q13535-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q13535-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q13535-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q13535"
+      }
+    },
+    "structure_id": "5YZ0",
+    "alphafold_id": "AF-Q13535-F1",
     "go_terms": {
       "bp": [
         "GO:0000077",
@@ -627,6 +740,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q16611",
       "wiki": "/wiki/bak-bak1"
     },
+    "structure": {
+      "structure_id": "5VX1",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5VX1",
+        "method": "X-ray",
+        "resolution": 1.22,
+        "resolution_raw": "1.22 A",
+        "chains": "A/B=23-186",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5VX1"
+      },
+      "alphafold": {
+        "id": "AF-Q16611-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q16611-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q16611-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q16611-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q16611"
+      }
+    },
+    "structure_id": "5VX1",
+    "alphafold_id": "AF-Q16611-F1",
     "go_terms": {
       "bp": [
         "GO:0001836",
@@ -706,6 +840,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q07812",
       "wiki": "/wiki/bax"
     },
+    "structure": {
+      "structure_id": "4ZIE",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "4ZIE",
+        "method": "X-ray",
+        "resolution": 1.8,
+        "resolution_raw": "1.80 A",
+        "chains": "A=1-166",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/4ZIE"
+      },
+      "alphafold": {
+        "id": "AF-Q07812-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q07812-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q07812-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q07812-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q07812"
+      }
+    },
+    "structure_id": "4ZIE",
+    "alphafold_id": "AF-Q07812-F1",
     "go_terms": {
       "bp": [
         "GO:0001783",
@@ -806,6 +961,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P10415",
       "wiki": "/wiki/bcl-2"
     },
+    "structure": {
+      "structure_id": "8HTS",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "8HTS",
+        "method": "X-ray",
+        "resolution": 1.25,
+        "resolution_raw": "1.25 A",
+        "chains": "A=1-207",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/8HTS"
+      },
+      "alphafold": {
+        "id": "AF-P10415-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P10415-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P10415-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P10415-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P10415"
+      }
+    },
+    "structure_id": "8HTS",
+    "alphafold_id": "AF-P10415-F1",
     "go_terms": {
       "bp": [
         "GO:0000209",
@@ -914,6 +1090,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q07817",
       "wiki": "/wiki/bcl-xl-bcl2l1"
     },
+    "structure": {
+      "structure_id": "7JGW",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "7JGW",
+        "method": "X-ray",
+        "resolution": 1.3,
+        "resolution_raw": "1.30 A",
+        "chains": "A=1-209",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/7JGW"
+      },
+      "alphafold": {
+        "id": "AF-Q07817-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q07817-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q07817-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q07817-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q07817"
+      }
+    },
+    "structure_id": "7JGW",
+    "alphafold_id": "AF-Q07817-F1",
     "go_terms": {
       "bp": [
         "GO:0001836",
@@ -990,6 +1187,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P35222",
       "wiki": "/wiki/beta-catenin-ctnnb1"
     },
+    "structure": {
+      "structure_id": "3FQN",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "3FQN",
+        "method": "X-ray",
+        "resolution": 1.65,
+        "resolution_raw": "1.65 A",
+        "chains": "C=30-39",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/3FQN"
+      },
+      "alphafold": {
+        "id": "AF-P35222-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P35222-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P35222-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P35222-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P35222"
+      }
+    },
+    "structure_id": "3FQN",
+    "alphafold_id": "AF-P35222-F1",
     "go_terms": {
       "bp": [
         "GO:0000209",
@@ -1139,6 +1357,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P15056",
       "wiki": "/wiki/braf-braf-p15056"
     },
+    "structure": {
+      "structure_id": "8C7X",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "8C7X",
+        "method": "X-ray",
+        "resolution": 1.65,
+        "resolution_raw": "1.65 A",
+        "chains": "A/B=444-721",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/8C7X"
+      },
+      "alphafold": {
+        "id": "AF-P15056-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P15056"
+      }
+    },
+    "structure_id": "8C7X",
+    "alphafold_id": "AF-P15056-F1",
     "go_terms": {
       "bp": [
         "GO:0000165",
@@ -1210,6 +1449,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P42574",
       "wiki": "/wiki/caspase-3-casp3-p42574"
     },
+    "structure": {
+      "structure_id": "2DKO",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "2DKO",
+        "method": "X-ray",
+        "resolution": 1.06,
+        "resolution_raw": "1.06 A",
+        "chains": "A=29-174, B=175-277",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/2DKO"
+      },
+      "alphafold": {
+        "id": "AF-P42574-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P42574-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P42574-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P42574-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P42574"
+      }
+    },
+    "structure_id": "2DKO",
+    "alphafold_id": "AF-P42574-F1",
     "go_terms": {
       "bp": [
         "GO:0001818",
@@ -1285,6 +1545,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P16410",
       "wiki": "/wiki/ctla-4"
     },
+    "structure": {
+      "structure_id": "7CIO",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "7CIO",
+        "method": "X-ray",
+        "resolution": 1.1,
+        "resolution_raw": "1.10 A",
+        "chains": "B=199-206",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/7CIO"
+      },
+      "alphafold": {
+        "id": "AF-P16410-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P16410-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P16410-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P16410-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P16410"
+      }
+    },
+    "structure_id": "7CIO",
+    "alphafold_id": "AF-P16410-F1",
     "go_terms": {
       "bp": [
         "GO:0006955",
@@ -1342,6 +1623,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P26358",
       "wiki": "/wiki/dnmt1-p26358"
     },
+    "structure": {
+      "structure_id": "6X9J",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6X9J",
+        "method": "X-ray",
+        "resolution": 1.79,
+        "resolution_raw": "1.79 A",
+        "chains": "A=729-1600",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6X9J"
+      },
+      "alphafold": {
+        "id": "AF-P26358-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P26358-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P26358-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P26358-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P26358"
+      }
+    },
+    "structure_id": "6X9J",
+    "alphafold_id": "AF-P26358-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -1402,6 +1704,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q01094",
       "wiki": "/wiki/e2f1-e2f1-q01094"
     },
+    "structure": {
+      "structure_id": "6G0P",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6G0P",
+        "method": "X-ray",
+        "resolution": 1.3,
+        "resolution_raw": "1.30 A",
+        "chains": "B=114-129",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6G0P"
+      },
+      "alphafold": {
+        "id": "AF-Q01094-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q01094-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q01094-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q01094-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q01094"
+      }
+    },
+    "structure_id": "6G0P",
+    "alphafold_id": "AF-Q01094-F1",
     "go_terms": {
       "bp": [
         "GO:0000077",
@@ -1480,6 +1803,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P01133",
       "wiki": "/wiki/egf-egf-p01133"
     },
+    "structure": {
+      "structure_id": "1NQL",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "1NQL",
+        "method": "X-ray",
+        "resolution": 2.8,
+        "resolution_raw": "2.80 A",
+        "chains": "B=971-1023",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/1NQL"
+      },
+      "alphafold": {
+        "id": "AF-P01133-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P01133-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01133-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01133-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01133"
+      }
+    },
+    "structure_id": "1NQL",
+    "alphafold_id": "AF-P01133-F1",
     "go_terms": {
       "bp": [
         "GO:0001525",
@@ -1564,6 +1908,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P00533",
       "wiki": "/wiki/egfr-erbb1-p00533"
     },
+    "structure": {
+      "structure_id": "8A27",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "8A27",
+        "method": "X-ray",
+        "resolution": 1.07,
+        "resolution_raw": "1.07 A",
+        "chains": "A=700-1022",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/8A27"
+      },
+      "alphafold": {
+        "id": "AF-P00533-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P00533"
+      }
+    },
+    "structure_id": "8A27",
+    "alphafold_id": "AF-P00533-F1",
     "go_terms": {
       "bp": [
         "GO:0001503",
@@ -1690,6 +2055,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P25445",
       "wiki": "/wiki/fas-cd95-p25445"
     },
+    "structure": {
+      "structure_id": "3TJE",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "3TJE",
+        "method": "X-ray",
+        "resolution": 1.93,
+        "resolution_raw": "1.93 A",
+        "chains": "F=17-172",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/3TJE"
+      },
+      "alphafold": {
+        "id": "AF-P25445-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P25445-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P25445-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P25445-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P25445"
+      }
+    },
+    "structure_id": "3TJE",
+    "alphafold_id": "AF-P25445-F1",
     "go_terms": {
       "bp": [
         "GO:0006915",
@@ -1767,6 +2153,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P02671",
       "wiki": "/wiki/fga-fibrinogen-alpha-p02671"
     },
+    "structure": {
+      "structure_id": "5CFA",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5CFA",
+        "method": "X-ray",
+        "resolution": 1.45,
+        "resolution_raw": "1.45 A",
+        "chains": "C/D=580-594",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5CFA"
+      },
+      "alphafold": {
+        "id": "AF-P02671-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P02671-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P02671-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P02671-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P02671"
+      }
+    },
+    "structure_id": "5CFA",
+    "alphafold_id": "AF-P02671-F1",
     "go_terms": {
       "bp": [
         "GO:0007160",
@@ -1846,6 +2253,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/O43524",
       "wiki": "/wiki/foxo3-foxo3-o43524"
     },
+    "structure": {
+      "structure_id": "7V9B",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "7V9B",
+        "method": "X-ray",
+        "resolution": 1.85,
+        "resolution_raw": "1.85 A",
+        "chains": "B=248-258",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/7V9B"
+      },
+      "alphafold": {
+        "id": "AF-O43524-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-O43524-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O43524-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O43524-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/O43524"
+      }
+    },
+    "structure_id": "7V9B",
+    "alphafold_id": "AF-O43524-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -1930,6 +2358,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P04406",
       "wiki": "/wiki/gapdh-p04406"
     },
+    "structure": {
+      "structure_id": "6YND",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6YND",
+        "method": "X-ray",
+        "resolution": 1.52,
+        "resolution_raw": "1.52 A",
+        "chains": "A/B/C/D/E/F/G/H=1-335",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6YND"
+      },
+      "alphafold": {
+        "id": "AF-P04406-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P04406-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P04406-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P04406-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P04406"
+      }
+    },
+    "structure_id": "6YND",
+    "alphafold_id": "AF-P04406-F1",
     "go_terms": {
       "bp": [
         "GO:0000226",
@@ -2009,6 +2458,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P04439",
       "wiki": "/wiki/hla-a-hla-a-p04439"
     },
+    "structure": {
+      "structure_id": "3MRE",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "3MRE",
+        "method": "X-ray",
+        "resolution": 1.1,
+        "resolution_raw": "1.10 A",
+        "chains": "A=25-300",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/3MRE"
+      },
+      "alphafold": {
+        "id": "AF-P04439-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P04439-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P04439-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P04439-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P04439"
+      }
+    },
+    "structure_id": "3MRE",
+    "alphafold_id": "AF-P04439-F1",
     "go_terms": {
       "bp": [
         "GO:0001913",
@@ -2103,6 +2573,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P05019",
       "wiki": "/wiki/igf-1"
     },
+    "structure": {
+      "structure_id": "1TGR",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "1TGR",
+        "method": "X-ray",
+        "resolution": 1.42,
+        "resolution_raw": "1.42 A",
+        "chains": "A/B=49-77, A/B=90-110",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/1TGR"
+      },
+      "alphafold": {
+        "id": "AF-P05019-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P05019-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P05019-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P05019-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P05019"
+      }
+    },
+    "structure_id": "1TGR",
+    "alphafold_id": "AF-P05019-F1",
     "go_terms": {
       "bp": [
         "GO:0001501",
@@ -2225,6 +2716,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P01308",
       "wiki": "/wiki/insulin"
     },
+    "structure": {
+      "structure_id": "3W7Y",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "3W7Y",
+        "method": "X-ray",
+        "resolution": 0.92,
+        "resolution_raw": "0.92 A",
+        "chains": "A/C=90-110, B/D=25-54",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/3W7Y"
+      },
+      "alphafold": {
+        "id": "AF-P01308-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P01308-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01308-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01308-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01308"
+      }
+    },
+    "structure_id": "3W7Y",
+    "alphafold_id": "AF-P01308-F1",
     "go_terms": {
       "bp": [
         "GO:0001819",
@@ -2340,6 +2852,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/O60674",
       "wiki": "/wiki/jak2-o60674"
     },
+    "structure": {
+      "structure_id": "8BXH",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "8BXH",
+        "method": "X-ray",
+        "resolution": 1.3,
+        "resolution_raw": "1.30 A",
+        "chains": "A=840-1132",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/8BXH"
+      },
+      "alphafold": {
+        "id": "AF-O60674-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-O60674-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O60674-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O60674-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/O60674"
+      }
+    },
+    "structure_id": "8BXH",
+    "alphafold_id": "AF-O60674-F1",
     "go_terms": {
       "bp": [
         "GO:0001774",
@@ -2473,6 +3006,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P01116",
       "wiki": "/wiki/kras-kras-p01116"
     },
+    "structure": {
+      "structure_id": "6P0Z",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6P0Z",
+        "method": "X-ray",
+        "resolution": 1.01,
+        "resolution_raw": "1.01 A",
+        "chains": "A/B=2-169",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6P0Z"
+      },
+      "alphafold": {
+        "id": "AF-P01116-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P01116-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01116-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01116-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01116"
+      }
+    },
+    "structure_id": "6P0Z",
+    "alphafold_id": "AF-P01116-F1",
     "go_terms": {
       "bp": [
         "GO:0000165",
@@ -2532,6 +3086,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P02545",
       "wiki": "/wiki/lmna-p02545"
     },
+    "structure": {
+      "structure_id": "7WZZ",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "7WZZ",
+        "method": "X-ray",
+        "resolution": 1.3,
+        "resolution_raw": "1.30 A",
+        "chains": "C=490-498",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/7WZZ"
+      },
+      "alphafold": {
+        "id": "AF-P02545-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P02545-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P02545-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P02545-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P02545"
+      }
+    },
+    "structure_id": "7WZZ",
+    "alphafold_id": "AF-P02545-F1",
     "go_terms": {
       "bp": [
         "GO:0006998",
@@ -2609,6 +3184,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q02750",
       "wiki": "/wiki/map2k1-map2k1-q02750"
     },
+    "structure": {
+      "structure_id": "7B7R",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "7B7R",
+        "method": "X-ray",
+        "resolution": 1.7,
+        "resolution_raw": "1.70 A",
+        "chains": "A/B=37-263, A/B=308-383",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/7B7R"
+      },
+      "alphafold": {
+        "id": "AF-Q02750-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q02750-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q02750-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q02750-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q02750"
+      }
+    },
+    "structure_id": "7B7R",
+    "alphafold_id": "AF-Q02750-F1",
     "go_terms": {
       "bp": [
         "GO:0000165",
@@ -2689,6 +3285,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q07820",
       "wiki": "/wiki/mcl-1"
     },
+    "structure": {
+      "structure_id": "8VJP",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "8VJP",
+        "method": "X-ray",
+        "resolution": 1.13,
+        "resolution_raw": "1.13 A",
+        "chains": "A=172-323",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/8VJP"
+      },
+      "alphafold": {
+        "id": "AF-Q07820-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q07820-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q07820-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q07820-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q07820"
+      }
+    },
+    "structure_id": "8VJP",
+    "alphafold_id": "AF-Q07820-F1",
     "go_terms": {
       "bp": [
         "GO:0001709",
@@ -2760,6 +3377,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q00987",
       "wiki": "/wiki/mdm2"
     },
+    "structure": {
+      "structure_id": "6Q9L",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6Q9L",
+        "method": "X-ray",
+        "resolution": 1.13,
+        "resolution_raw": "1.13 A",
+        "chains": "A/B=17-111",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6Q9L"
+      },
+      "alphafold": {
+        "id": "AF-Q00987-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q00987-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q00987-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q00987-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q00987"
+      }
+    },
+    "structure_id": "6Q9L",
+    "alphafold_id": "AF-Q00987-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -2860,6 +3498,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P14780",
       "wiki": "/wiki/mmp9-mmp9-p14780"
     },
+    "structure": {
+      "structure_id": "6ESM",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6ESM",
+        "method": "X-ray",
+        "resolution": 1.1,
+        "resolution_raw": "1.10 A",
+        "chains": "A=110-227",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6ESM"
+      },
+      "alphafold": {
+        "id": "AF-P14780-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P14780-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P14780-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P14780-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P14780"
+      }
+    },
+    "structure_id": "6ESM",
+    "alphafold_id": "AF-P14780-F1",
     "go_terms": {
       "bp": [
         "GO:0001934",
@@ -2942,6 +3601,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P42345",
       "wiki": "/wiki/mtor-mtor-p42345"
     },
+    "structure": {
+      "structure_id": "4DRI",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "4DRI",
+        "method": "X-ray",
+        "resolution": 1.45,
+        "resolution_raw": "1.45 A",
+        "chains": "B=2025-2114",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/4DRI"
+      },
+      "alphafold": {
+        "id": "AF-P42345-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P42345-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P42345-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P42345-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P42345"
+      }
+    },
+    "structure_id": "4DRI",
+    "alphafold_id": "AF-P42345-F1",
     "go_terms": {
       "bp": [
         "GO:0001558",
@@ -3066,6 +3746,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P01106",
       "wiki": "/wiki/myc"
     },
+    "structure": {
+      "structure_id": "6G6K",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6G6K",
+        "method": "X-ray",
+        "resolution": 1.35,
+        "resolution_raw": "1.35 A",
+        "chains": "A/C=366-452",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6G6K"
+      },
+      "alphafold": {
+        "id": "AF-P01106-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P01106-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01106-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01106-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01106"
+      }
+    },
+    "structure_id": "6G6K",
+    "alphafold_id": "AF-P01106-F1",
     "go_terms": {
       "bp": [
         "GO:0000082",
@@ -3172,6 +3873,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q16236",
       "wiki": "/wiki/nfe2l2-nfe2l2-q16236"
     },
+    "structure": {
+      "structure_id": "2FLU",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "2FLU",
+        "method": "X-ray",
+        "resolution": 1.5,
+        "resolution_raw": "1.50 A",
+        "chains": "P=69-84",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/2FLU"
+      },
+      "alphafold": {
+        "id": "AF-Q16236-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q16236-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q16236-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q16236-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q16236"
+      }
+    },
+    "structure_id": "2FLU",
+    "alphafold_id": "AF-Q16236-F1",
     "go_terms": {
       "bp": [
         "GO:0006357",
@@ -3266,6 +3988,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P46531",
       "wiki": "/wiki/notch1-notch1-p46531"
     },
+    "structure": {
+      "structure_id": "5L0R",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5L0R",
+        "method": "X-ray",
+        "resolution": 1.5,
+        "resolution_raw": "1.50 A",
+        "chains": "B=452-491",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5L0R"
+      },
+      "alphafold": {
+        "id": "AF-P46531-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P46531-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P46531-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P46531-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P46531"
+      }
+    },
+    "structure_id": "5L0R",
+    "alphafold_id": "AF-P46531-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -3421,6 +4164,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P38936",
       "wiki": "/wiki/p21cip1-cdkn1a"
     },
+    "structure": {
+      "structure_id": "5E0U",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5E0U",
+        "method": "X-ray",
+        "resolution": 1.93,
+        "resolution_raw": "1.93 A",
+        "chains": "D/E/F=139-160",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5E0U"
+      },
+      "alphafold": {
+        "id": "AF-P38936-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P38936"
+      }
+    },
+    "structure_id": "5E0U",
+    "alphafold_id": "AF-P38936-F1",
     "go_terms": {
       "bp": [
         "GO:0000082",
@@ -3518,6 +4282,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P04637",
       "wiki": "/wiki/p53-tp53"
     },
+    "structure": {
+      "structure_id": "9C5S",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "9C5S",
+        "method": "X-ray",
+        "resolution": 1.01,
+        "resolution_raw": "1.01 A",
+        "chains": "A/B/C/D=17-30",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/9C5S"
+      },
+      "alphafold": {
+        "id": "AF-P04637-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P04637"
+      }
+    },
+    "structure_id": "9C5S",
+    "alphafold_id": "AF-P04637-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -3671,6 +4456,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q15116",
       "wiki": "/wiki/pd-1-pdcd1"
     },
+    "structure": {
+      "structure_id": "6UMU",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6UMU",
+        "method": "X-ray",
+        "resolution": 1.18,
+        "resolution_raw": "1.18 A",
+        "chains": "A=33-150",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6UMU"
+      },
+      "alphafold": {
+        "id": "AF-Q15116-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q15116-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q15116-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q15116-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q15116"
+      }
+    },
+    "structure_id": "6UMU",
+    "alphafold_id": "AF-Q15116-F1",
     "go_terms": {
       "bp": [
         "GO:0002841",
@@ -3726,6 +4532,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q9NZQ7",
       "wiki": "/wiki/pd-l1-cd274"
     },
+    "structure": {
+      "structure_id": "5O45",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5O45",
+        "method": "X-ray",
+        "resolution": 0.99,
+        "resolution_raw": "0.99 A",
+        "chains": "A=17-134",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5O45"
+      },
+      "alphafold": {
+        "id": "AF-Q9NZQ7-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q9NZQ7-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q9NZQ7-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q9NZQ7-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q9NZQ7"
+      }
+    },
+    "structure_id": "5O45",
+    "alphafold_id": "AF-Q9NZQ7-F1",
     "go_terms": {
       "bp": [
         "GO:0002841",
@@ -3798,6 +4625,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P42336",
       "wiki": "/wiki/pik3ca-pik3ca-p42336"
     },
+    "structure": {
+      "structure_id": "9ASF",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "9ASF",
+        "method": "X-ray",
+        "resolution": 1.77,
+        "resolution_raw": "1.77 A",
+        "chains": "C=1046-1054",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/9ASF"
+      },
+      "alphafold": {
+        "id": "AF-P42336-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P42336-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P42336-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P42336-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P42336"
+      }
+    },
+    "structure_id": "9ASF",
+    "alphafold_id": "AF-P42336-F1",
     "go_terms": {
       "bp": [
         "GO:0001944",
@@ -3883,6 +4731,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q13131",
       "wiki": "/wiki/prkaa1-prkaa1-q13131"
     },
+    "structure": {
+      "structure_id": "6C9H",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6C9H",
+        "method": "X-ray",
+        "resolution": 2.65,
+        "resolution_raw": "2.65 A",
+        "chains": "A=22-559",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6C9H"
+      },
+      "alphafold": {
+        "id": "AF-Q13131-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q13131-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q13131-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q13131-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q13131"
+      }
+    },
+    "structure_id": "6C9H",
+    "alphafold_id": "AF-Q13131-F1",
     "go_terms": {
       "bp": [
         "GO:0001666",
@@ -3983,6 +4852,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/O00391",
       "wiki": "/wiki/qsox1-o00391"
     },
+    "structure": {
+      "structure_id": "3LLK",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "3LLK",
+        "method": "X-ray",
+        "resolution": 2.0,
+        "resolution_raw": "2.00 A",
+        "chains": "A/B/C=286-546",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/3LLK"
+      },
+      "alphafold": {
+        "id": "AF-O00391-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-O00391-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O00391-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O00391-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/O00391"
+      }
+    },
+    "structure_id": "3LLK",
+    "alphafold_id": "AF-O00391-F1",
     "go_terms": {
       "bp": [
         "GO:0006457",
@@ -4042,6 +4932,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P06400",
       "wiki": "/wiki/rb-rb1"
     },
+    "structure": {
+      "structure_id": "2R7G",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "2R7G",
+        "method": "X-ray",
+        "resolution": 1.67,
+        "resolution_raw": "1.67 A",
+        "chains": "A/C=380-787",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/2R7G"
+      },
+      "alphafold": {
+        "id": "AF-P06400-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P06400-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P06400-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P06400-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P06400"
+      }
+    },
+    "structure_id": "2R7G",
+    "alphafold_id": "AF-P06400-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -4138,6 +5049,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q15465",
       "wiki": "/wiki/shh-shh-q15465"
     },
+    "structure": {
+      "structure_id": "6PJV",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6PJV",
+        "method": "X-ray",
+        "resolution": 1.43,
+        "resolution_raw": "1.43 A",
+        "chains": "A=29-197",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6PJV"
+      },
+      "alphafold": {
+        "id": "AF-Q15465-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q15465-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q15465-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q15465-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q15465"
+      }
+    },
+    "structure_id": "6PJV",
+    "alphafold_id": "AF-Q15465-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -4274,6 +5206,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q96EB6",
       "wiki": "/wiki/sirt1-sirt1-q96eb6"
     },
+    "structure": {
+      "structure_id": "8ANB",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "8ANB",
+        "method": "X-ray",
+        "resolution": 1.64,
+        "resolution_raw": "1.64 A",
+        "chains": "P=665-675",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/8ANB"
+      },
+      "alphafold": {
+        "id": "AF-Q96EB6-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q96EB6-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q96EB6-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q96EB6-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q96EB6"
+      }
+    },
+    "structure_id": "8ANB",
+    "alphafold_id": "AF-Q96EB6-F1",
     "go_terms": {
       "bp": [
         "GO:0000012",
@@ -4462,6 +5415,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q9GZV5",
       "wiki": "/wiki/taz-wwtr1"
     },
+    "structure": {
+      "structure_id": "6RHC",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6RHC",
+        "method": "X-ray",
+        "resolution": 1.2,
+        "resolution_raw": "1.20 A",
+        "chains": "P=86-98",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6RHC"
+      },
+      "alphafold": {
+        "id": "AF-Q9GZV5-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q9GZV5-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q9GZV5-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q9GZV5-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q9GZV5"
+      }
+    },
+    "structure_id": "6RHC",
+    "alphafold_id": "AF-Q9GZV5-F1",
     "go_terms": {
       "bp": [
         "GO:0006355",
@@ -4527,6 +5501,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/O14746",
       "wiki": "/wiki/telomerase-tert"
     },
+    "structure": {
+      "structure_id": "5MEO",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5MEO",
+        "method": "X-ray",
+        "resolution": 1.77,
+        "resolution_raw": "1.77 A",
+        "chains": "C=540-548",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5MEO"
+      },
+      "alphafold": {
+        "id": "AF-O14746-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-O14746-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O14746-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O14746-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/O14746"
+      }
+    },
+    "structure_id": "5MEO",
+    "alphafold_id": "AF-O14746-F1",
     "go_terms": {
       "bp": [
         "GO:0000722",
@@ -4620,6 +5615,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P01137",
       "wiki": "/wiki/tgfb1-tgfb1-p01137"
     },
+    "structure": {
+      "structure_id": "8UDZ",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "8UDZ",
+        "method": "X-ray",
+        "resolution": 2.21,
+        "resolution_raw": "2.21 A",
+        "chains": "A/B=30-390",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/8UDZ"
+      },
+      "alphafold": {
+        "id": "AF-P01137-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P01137-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01137-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01137-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01137"
+      }
+    },
+    "structure_id": "8UDZ",
+    "alphafold_id": "AF-P01137-F1",
     "go_terms": {
       "bp": [
         "GO:0001570",
@@ -4786,6 +5802,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P01375",
       "wiki": "/wiki/tnf-tnf-p01375"
     },
+    "structure": {
+      "structure_id": "5UUI",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "5UUI",
+        "method": "X-ray",
+        "resolution": 1.4,
+        "resolution_raw": "1.40 A",
+        "chains": "A=77-233",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/5UUI"
+      },
+      "alphafold": {
+        "id": "AF-P01375-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P01375-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01375-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01375-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01375"
+      }
+    },
+    "structure_id": "5UUI",
+    "alphafold_id": "AF-P01375-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
@@ -4948,6 +5985,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/Q05086",
       "wiki": "/wiki/ube3a-q05086"
     },
+    "structure": {
+      "structure_id": "6TGK",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6TGK",
+        "method": "X-ray",
+        "resolution": 1.3,
+        "resolution_raw": "1.30 A",
+        "chains": "C=765-869",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6TGK"
+      },
+      "alphafold": {
+        "id": "AF-Q05086-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-Q05086-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q05086-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q05086-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q05086"
+      }
+    },
+    "structure_id": "6TGK",
+    "alphafold_id": "AF-Q05086-F1",
     "go_terms": {
       "bp": [
         "GO:0000209",
@@ -5008,6 +6066,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P56704",
       "wiki": "/wiki/wnt3a-wnt3a-p56704"
     },
+    "structure": {
+      "structure_id": "7DRT",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "7DRT",
+        "method": "EM",
+        "resolution": 2.2,
+        "resolution_raw": "2.20 A",
+        "chains": "A=1-352",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/7DRT"
+      },
+      "alphafold": {
+        "id": "AF-P56704-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P56704-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P56704-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P56704-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P56704"
+      }
+    },
+    "structure_id": "7DRT",
+    "alphafold_id": "AF-P56704-F1",
     "go_terms": {
       "bp": [
         "GO:0002092",
@@ -5094,6 +6173,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P98170",
       "wiki": "/wiki/xiap-p98170"
     },
+    "structure": {
+      "structure_id": "4J44",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "4J44",
+        "method": "X-ray",
+        "resolution": 1.3,
+        "resolution_raw": "1.30 A",
+        "chains": "A/C=152-236",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/4J44"
+      },
+      "alphafold": {
+        "id": "AF-P98170-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P98170-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P98170-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P98170-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P98170"
+      }
+    },
+    "structure_id": "4J44",
+    "alphafold_id": "AF-P98170-F1",
     "go_terms": {
       "bp": [
         "GO:0006974",
@@ -5168,6 +6268,27 @@
       "uniprot": "https://www.uniprot.org/uniprotkb/P46937",
       "wiki": "/wiki/yap-yap1"
     },
+    "structure": {
+      "structure_id": "6G6X",
+      "primary_source": "pdb",
+      "pdb": {
+        "id": "6G6X",
+        "method": "X-ray",
+        "resolution": 1.13,
+        "resolution_raw": "1.13 A",
+        "chains": "P=124-133",
+        "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6G6X"
+      },
+      "alphafold": {
+        "id": "AF-P46937-F1",
+        "model_url": "https://alphafold.ebi.ac.uk/files/AF-P46937-F1-model_v4.cif",
+        "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P46937-F1-predicted_aligned_error_v4.json",
+        "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P46937-F1-thumbnail.png",
+        "viewer_url": "https://alphafold.ebi.ac.uk/entry/P46937"
+      }
+    },
+    "structure_id": "6G6X",
+    "alphafold_id": "AF-P46937-F1",
     "go_terms": {
       "bp": [
         "GO:0000122",
