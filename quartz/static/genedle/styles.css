@@ -297,8 +297,28 @@
   background: rgba(255, 255, 255, 0.9);
 }
 
-/* Dark mode and failed card: use solid contrasting buttons */
+/* Failed card in light mode: cream bg with dark text on medium brown card */
+.pg-result.failed .pg-link-btn {
+  background: var(--light);
+  color: var(--dark);
+}
+
+.pg-result.failed .pg-link-btn:hover {
+  background: var(--ui-bg);
+}
+
+/* Dark mode win card: white bg with dark text on light teal card */
 @media (prefers-color-scheme: dark) {
+  .pg-result:not(.failed) .pg-link-btn {
+    background: white;
+    color: var(--dark);
+  }
+  
+  .pg-result:not(.failed) .pg-link-btn:hover {
+    background: rgba(255, 255, 255, 0.9);
+  }
+  
+  /* Failed card in dark mode: cream bg with dark text on light brown card */
   .pg-result.failed .pg-link-btn {
     background: var(--light);
     color: var(--dark);
@@ -307,6 +327,15 @@
   .pg-result.failed .pg-link-btn:hover {
     background: var(--ui-bg);
   }
+}
+
+:root[data-theme="dark"] .pg-result:not(.failed) .pg-link-btn {
+  background: white;
+  color: var(--dark);
+}
+
+:root[data-theme="dark"] .pg-result:not(.failed) .pg-link-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
 }
 
 :root[data-theme="dark"] .pg-result.failed .pg-link-btn {
