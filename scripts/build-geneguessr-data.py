@@ -58,6 +58,7 @@ SIMILARITY_METRIC = "lin"
 SIMILARITY_AGGREGATION = "bma"
 GO_HINT_LIMIT = 5
 DROP_EVIDENCE_CODES = {"IEA"}  # Drop purely electronic GO annotations
+UNIPROT_CACHE: Dict[str, Optional[Dict[str, object]]] = {}
 
 # Mapping helpers
 ASPECT_FROM_PREFIX = {"P": "bp", "F": "mf", "C": "cc"}
@@ -232,16 +233,28 @@ def parse_domains(raw: str | None) -> List[str]:
     return domains
 
 
-def gather_go_annotations(uniprot_id: str, ontology: Dict[str, GOTerm]) -> Dict[str, Set[str]]:
-    """Pull GO term IDs per aspect from the cached UniProt JSON blobs."""
-    result: Dict[str, Set[str]] = {"bp": set(), "mf": set(), "cc": set()}
+def load_uniprot_entry(uniprot_id: str) -> Optional[Dict[str, object]]:
+    """Load UniProt JSON once per protein."""
+    if uniprot_id in UNIPROT_CACHE:
+        return UNIPROT_CACHE[uniprot_id]
     json_path = UNIPROT_JSON_DIR / f"{uniprot_id}.json"
     if not json_path.exists():
         print(f"[warn] Missing UniProt JSON for {uniprot_id} at {json_path}")
+        UNIPROT_CACHE[uniprot_id] = None
+        return None
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    UNIPROT_CACHE[uniprot_id] = data
+    return data
+
+
+def gather_go_annotations(uniprot_id: str, ontology: Dict[str, GOTerm]) -> Dict[str, Set[str]]:
+    """Pull GO term IDs per aspect from the cached UniProt JSON blobs."""
+    result: Dict[str, Set[str]] = {"bp": set(), "mf": set(), "cc": set()}
+    entry = load_uniprot_entry(uniprot_id)
+    if not entry:
         return result
 
-    data = json.loads(json_path.read_text(encoding="utf-8"))
-    for ref in data.get("uniProtKBCrossReferences", []):
+    for ref in entry.get("uniProtKBCrossReferences", []):
         if ref.get("database") != "GO":
             continue
         go_id = ref.get("id")
@@ -263,6 +276,105 @@ def gather_go_annotations(uniprot_id: str, ontology: Dict[str, GOTerm]) -> Dict[
             continue
         result[aspect].add(go_id)
     return result
+
+
+def parse_resolution(raw: Optional[str]) -> Optional[float]:
+    if not raw:
+        return None
+    cleaned = raw.replace("Å", "").replace("A", "").strip()
+    if cleaned in {"", "-", "NA"}:
+        return None
+    try:
+        token = cleaned.split()[0]
+        return float(token)
+    except Exception:
+        return None
+
+
+def select_best_pdb_entry(pdb_refs: List[Dict[str, object]]) -> Optional[Dict[str, object]]:
+    if not pdb_refs:
+        return None
+
+    method_priority = {
+        "x-ray": 0,
+        "x-ray diffraction": 0,
+        "electron microscopy": 1,
+        "cryo-em": 1,
+        "electron cryo-microscopy": 1,
+        "nmr": 2,
+    }
+
+    def ref_props(ref: Dict[str, object]) -> Dict[str, str]:
+        return {p["key"]: p["value"] for p in ref.get("properties", []) if isinstance(p, dict)}
+
+    def sort_key(ref: Dict[str, object]):
+        props = ref_props(ref)
+        method = props.get("Method", "") or ""
+        method_key = method_priority.get(method.lower(), 3)
+        resolution = parse_resolution(props.get("Resolution"))
+        resolution_key = resolution if resolution is not None else float("inf")
+        return (method_key, resolution_key, ref.get("id"))
+
+    best = min(pdb_refs, key=sort_key)
+    props = ref_props(best)
+    resolution = parse_resolution(props.get("Resolution"))
+
+    return {
+        "id": best.get("id"),
+        "method": props.get("Method"),
+        "resolution": resolution,
+        "resolution_raw": props.get("Resolution"),
+        "chains": props.get("Chains"),
+        "url": f"https://www.ebi.ac.uk/pdbe/entry/pdb/{best.get('id')}" if best.get("id") else None,
+    }
+
+
+def build_alphafold_info(uniprot_id: str, alphafold_ref: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
+    if not alphafold_ref:
+        return None
+    model_id = f"AF-{uniprot_id}-F1"
+    base_url = "https://alphafold.ebi.ac.uk/files"
+    return {
+        "id": model_id,
+        "model_url": f"{base_url}/{model_id}-model_v4.cif",
+        "pae_url": f"{base_url}/{model_id}-predicted_aligned_error_v4.json",
+        "thumbnail_url": f"{base_url}/{model_id}-thumbnail.png",
+        "viewer_url": f"https://alphafold.ebi.ac.uk/entry/{uniprot_id}",
+    }
+
+
+def extract_structure_info(uniprot_id: str) -> Dict[str, Optional[object]]:
+    entry = load_uniprot_entry(uniprot_id)
+    if not entry:
+        return {
+            "structure_id": None,
+            "primary_source": None,
+            "pdb": None,
+            "alphafold": None,
+        }
+
+    cross_refs = entry.get("uniProtKBCrossReferences", [])
+    pdb_refs = [ref for ref in cross_refs if ref.get("database") == "PDB"]
+    alphafold_ref = next((ref for ref in cross_refs if ref.get("database") == "AlphaFoldDB"), None)
+
+    pdb_info = select_best_pdb_entry(pdb_refs)
+    alphafold_info = build_alphafold_info(uniprot_id, alphafold_ref)
+
+    primary_source = None
+    structure_id = None
+    if pdb_info and pdb_info.get("id"):
+        primary_source = "pdb"
+        structure_id = pdb_info["id"]
+    elif alphafold_info and alphafold_info.get("id"):
+        primary_source = "alphafold"
+        structure_id = alphafold_info["id"]
+
+    return {
+        "structure_id": structure_id,
+        "primary_source": primary_source,
+        "pdb": pdb_info,
+        "alphafold": alphafold_info,
+    }
 
 
 def build_synonyms(page: frontmatter.Post, feature_row: Dict[str, str]) -> List[str]:
@@ -470,6 +582,8 @@ def build_protein_record(
         "wiki": slug_for_page(md_path),
     }
 
+    structure_info = extract_structure_info(uniprot_id)
+
     return {
         "uniprot": uniprot_id,
         "hgnc": gene_symbol,
@@ -482,6 +596,9 @@ def build_protein_record(
         "tissue": tissue,
         "subcell": subcell,
         "links": links,
+        "structure": structure_info,
+        "structure_id": structure_info.get("structure_id"),
+        "alphafold_id": (structure_info.get("alphafold") or {}).get("id"),
         "go_terms": {
             "bp": sorted(go_annotations["bp"]),
             "mf": sorted(go_annotations["mf"]),
