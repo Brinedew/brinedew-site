@@ -26,6 +26,9 @@ export default (() => {
     const path = url.pathname as FullSlug
     const baseDir = fileData.slug === "404" ? path : pathToRoot(fileData.slug!)
     const iconPath = joinSegments(baseDir, "static/icon.png")
+    
+    // Auto cache-busting timestamp (updates on each build)
+    const cacheBust = Date.now()
 
     // Url of current page
     const socialUrl =
@@ -148,11 +151,11 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", "apps/scriptotic/app.css?v=1")}
+                    href={joinSegments(root, "static", `apps/scriptotic/app.css?v=${cacheBust}`)}
                   />
                   <script
                     defer
-                    src={joinSegments(root, "static", "apps/scriptotic/app.js?v=1")}
+                    src={joinSegments(root, "static", `apps/scriptotic/app.js?v=${cacheBust}`)}
                   ></script>
                 </>
               )}
@@ -160,9 +163,9 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", "genedle/styles.css?v=4")}
+                    href={joinSegments(root, "static", `genedle/styles.css?v=${cacheBust}`)}
                   />
-                  <script defer src={joinSegments(root, "static", "genedle/app.js?v=4")}></script>
+                  <script defer src={joinSegments(root, "static", `genedle/app.js?v=${cacheBust}`)}></script>
                 </>
               )}
             </>
