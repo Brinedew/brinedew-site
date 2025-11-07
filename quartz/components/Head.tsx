@@ -5,6 +5,10 @@ import { googleFontHref, googleFontSubsetHref } from "../util/theme"
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { unescapeHTML } from "../util/escape"
 import { CustomOgImagesEmitterName } from "../plugins/emitters/ogImage"
+
+// Build-time cache buster - set once when module loads
+const CACHE_BUST = Date.now()
+
 export default (() => {
   const Head: QuartzComponent = ({
     cfg,
@@ -26,9 +30,6 @@ export default (() => {
     const path = url.pathname as FullSlug
     const baseDir = fileData.slug === "404" ? path : pathToRoot(fileData.slug!)
     const iconPath = joinSegments(baseDir, "static/icon.png")
-    
-    // Auto cache-busting timestamp (updates on each build)
-    const cacheBust = Date.now()
 
     // Url of current page
     const socialUrl =
@@ -151,11 +152,11 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", `apps/scriptotic/app.css?v=${cacheBust}`)}
+                    href={joinSegments(root, "static", `apps/scriptotic/app.css?v=${CACHE_BUST}`)}
                   />
                   <script
                     defer
-                    src={joinSegments(root, "static", `apps/scriptotic/app.js?v=${cacheBust}`)}
+                    src={joinSegments(root, "static", `apps/scriptotic/app.js?v=${CACHE_BUST}`)}
                   ></script>
                 </>
               )}
@@ -163,9 +164,9 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", `genedle/styles.css?v=${cacheBust}`)}
+                    href={joinSegments(root, "static", `genedle/styles.css?v=${CACHE_BUST}`)}
                   />
-                  <script defer src={joinSegments(root, "static", `genedle/app.js?v=${cacheBust}`)}></script>
+                  <script defer src={joinSegments(root, "static", `genedle/app.js?v=${CACHE_BUST}`)}></script>
                 </>
               )}
             </>
