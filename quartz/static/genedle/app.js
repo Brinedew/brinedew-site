@@ -377,11 +377,11 @@
             <div class="pg-clue-label">Properties</div>
             <div class="pg-flags">
               <div class="pg-flag">
-                <span class="pg-flag-icon">${targetProtein.tmh ? '🧬' : '🔵'}</span>
+                <span class="pg-flag-icon">${targetProtein.tmh ? 'TM' : 'SOL'}</span>
                 <span>${targetProtein.tmh ? 'Transmembrane' : 'Soluble'}</span>
               </div>
               <div class="pg-flag">
-                <span class="pg-flag-icon">${targetProtein.secreted ? '📤' : '📦'}</span>
+                <span class="pg-flag-icon">${targetProtein.secreted ? 'SEC' : 'INT'}</span>
                 <span>${targetProtein.secreted ? 'Secreted' : 'Intracellular'}</span>
               </div>
             </div>
@@ -425,22 +425,22 @@
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Length Bin</span>
-          <span class="pg-feedback-value">${score.lengthBinMatch ? '✓' : '✗'}</span>
+          <span class="pg-feedback-value">${score.lengthBinMatch ? 'Match' : 'No Match'}</span>
         </div>
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Transmembrane</span>
-          <span class="pg-feedback-value">${score.tmMatch ? '✓' : '✗'}</span>
+          <span class="pg-feedback-value">${score.tmMatch ? 'Match' : 'No Match'}</span>
         </div>
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Secreted</span>
-          <span class="pg-feedback-value">${score.secretedMatch ? '✓' : '✗'}</span>
+          <span class="pg-feedback-value">${score.secretedMatch ? 'Match' : 'No Match'}</span>
         </div>
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Tissue</span>
-          <span class="pg-feedback-value">${score.tissueMatch ? '✓' : '✗'}</span>
+          <span class="pg-feedback-value">${score.tissueMatch ? 'Match' : 'No Match'}</span>
         </div>
       </div>
     `;
@@ -661,7 +661,7 @@
    * Share functionality
    */
   function generateShareText() {
-    const emoji = gameState.won ? '🧬' : '💀';
+    const emoji = gameState.won ? 'You Win!' : 'Game Over';
     const guessCount = gameState.guesses.length;
     const today = new Date().toISOString().slice(0, 10);
     

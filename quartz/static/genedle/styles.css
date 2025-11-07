@@ -11,7 +11,7 @@
   background: var(--lightgray);
   border: 1px solid var(--gray);
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
 }
 
@@ -48,9 +48,22 @@
 }
 
 .pg-chip.matched {
-  background: #2ea043;
+  background: oklch(50% 0.08 185);
   color: white;
-  border-color: #2ea043;
+  border-color: oklch(50% 0.08 185);
+}
+
+/* Dark mode override for matched chips */
+@media (prefers-color-scheme: dark) {
+  .pg-chip.matched {
+    background: oklch(68% 0.08 185);
+    border-color: oklch(68% 0.08 185);
+  }
+}
+
+:root[data-theme="dark"] .pg-chip.matched {
+  background: oklch(68% 0.08 185);
+  border-color: oklch(68% 0.08 185);
 }
 
 .pg-chip.unmatched {
@@ -213,7 +226,7 @@
 
 /* Result */
 .pg-result {
-  background: #2ea043;
+  background: oklch(50% 0.08 185);
   color: white;
   padding: 1.5rem;
   border-radius: 8px;
@@ -222,7 +235,18 @@
 }
 
 .pg-result.failed {
-  background: #e74c3c;
+  background: var(--darkgray);
+}
+
+/* Dark mode overrides for results */
+@media (prefers-color-scheme: dark) {
+  .pg-result {
+    background: oklch(68% 0.08 185);
+  }
+}
+
+:root[data-theme="dark"] .pg-result {
+  background: oklch(68% 0.08 185);
 }
 
 .pg-result-title {
