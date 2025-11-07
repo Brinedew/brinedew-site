@@ -92,6 +92,16 @@
   font-weight: 600;
 }
 
+.pg-structure-viewer,
+.pg-structure-viewer canvas {
+  background-color: rgb(248, 241, 231);
+}
+
+:root[data-theme="dark"] .pg-structure-viewer,
+:root[data-theme="dark"] .pg-structure-viewer canvas {
+  background-color: rgb(17, 12, 10);
+}
+
 .pg-structure-viewer canvas {
   border-radius: 8px;
 }
@@ -101,6 +111,16 @@
 .pg-structure-viewer .msp-viewport-controls button[title*="Reset"],
 .pg-structure-viewer .msp-viewport-controls button[title*="Screenshot"],
 .pg-structure-viewer .msp-viewport-controls button[title*="State"] {
+  display: none !important;
+}
+
+.pg-structure-viewer .msp-viewport-info,
+.pg-structure-viewer .msp-hover-hint,
+.pg-structure-viewer .msp-controls-wrapper,
+.pg-structure-viewer .msp-top-left-controls,
+.pg-structure-viewer .msp-top-center-controls,
+.pg-structure-viewer .msp-bottom-left-controls,
+.pg-structure-viewer .msp-bottom-center-controls {
   display: none !important;
 }
 
@@ -526,6 +546,5 @@
     flex-wrap: wrap;
   }
 }
-
 
 

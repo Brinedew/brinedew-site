@@ -233,6 +233,14 @@
            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   }
 
+  function toCanvasColor(rgb) {
+    return {
+      r: Math.min(1, Math.max(0, rgb.r / 255)),
+      g: Math.min(1, Math.max(0, rgb.g / 255)),
+      b: Math.min(1, Math.max(0, rgb.b / 255)),
+    };
+  }
+
   function applyAggressiveViewerSettings(viewer) {
     // Aggressive approach: access internal Molstar plugin API
     // This uses undocumented internal APIs that may break in future versions
@@ -243,28 +251,116 @@
       }
 
       const bgColor = isDarkMode() 
-        ? { r: 17, g: 12, b: 10 }      // Dark mode: rgb(17, 12, 10)
-        : { r: 248, g: 241, b: 231 };  // Light mode: rgb(248, 241, 231)
+        ? { r: 17, g: 12, b: 10 }
+        : { r: 248, g: 241, b: 231 };
 
       // Apply canvas3d settings
       viewer.plugin.canvas3d.setProps({
-        renderer: {
-          backgroundColor: bgColor,
-        },
         camera: {
+          mode: 'orthographic',
           helper: {
-            axes: { name: 'off' }  // Hide XYZ axes legend
+            axes: { name: 'off' }
           }
         },
-        // Hide remaining canvas controls via internal settings
+        cameraFog: {
+          name: 'on',
+          params: { intensity: 0.75 }
+        },
+        postprocessing: {
+          occlusion: {
+            name: 'on',
+            params: {
+              samples: 64,
+              radius: 6,
+              bias: 0.8,
+              blurKernelSize: 15,
+              resolutionScale: 1
+            }
+          },
+          outline: {
+            name: 'on',
+            params: {
+              scale: 1,
+              threshold: 0.33,
+              color: toCanvasColor({ r: 60, g: 45, b: 35 })
+            }
+          },
+          antialiasing: {
+            name: 'fxaa',
+            params: {
+              edgeThresholdMin: 0.125,
+              edgeThresholdMax: 0.25,
+              iterations: 4,
+              subpixelQuality: 0.75
+            }
+          }
+        },
+        renderer: {
+          backgroundColor: toCanvasColor(bgColor),
+          ambientColor: toCanvasColor(bgColor),
+          ambientIntensity: 0.35,
+          interiorDarkening: 0,
+          light: [
+            {
+              inclination: 170,
+              azimuth: 45,
+              color: toCanvasColor({ r: 255, g: 255, b: 255 }),
+              intensity: 1.1,
+            },
+            {
+              inclination: 25,
+              azimuth: 200,
+              color: toCanvasColor({ r: 255, g: 236, b: 210 }),
+              intensity: 0.6,
+            }
+          ],
+        },
         marking: {
-          enabled: false  // Disable selection marking
+          enabled: false,
+          edgeScale: 0,
+          ghostEdgeStrength: 0,
+          innerEdgeFactor: 0
         }
       });
+
+      suppressViewerInteractivity(viewer);
 
       console.info('Geneguessr: applied aggressive viewer settings');
     } catch (err) {
       console.warn('Geneguessr: failed to apply aggressive viewer settings', err);
+    }
+  }
+
+  function suppressViewerInteractivity(viewer) {
+    try {
+      viewer.plugin?.managers?.interactivity?.setProps?.({ granularity: 'structure' });
+      viewer.plugin?.managers?.interactivity?.lociHighlights?.setProps?.({ granularity: 'structure' });
+      viewer.plugin?.managers?.interactivity?.lociSelects?.setProps?.({ granularity: 'structure' });
+    } catch (err) {
+      console.warn('Geneguessr: unable to set interactivity props', err);
+    }
+
+    if (!viewer.plugin?.behaviors?.interaction) {
+      return;
+    }
+
+    if (!interactivityGuards) {
+      const hoverSub = viewer.plugin.behaviors.interaction.hover.subscribe(() => {
+        try {
+          viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true);
+        } catch {
+          // ignore
+        }
+      });
+      const clickSub = viewer.plugin.behaviors.interaction.click.subscribe(() => {
+        try {
+          viewer.plugin?.managers?.interactivity?.lociSelects?.deselectAll?.();
+          viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true);
+        } catch {
+          // ignore
+        }
+      });
+      interactivityGuards = { hoverSub, clickSub };
     }
   }
 
@@ -311,7 +407,7 @@
         ...options,
         // UI lockdown (conservative approach)
         hideControls: true,
-        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot'],
+        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
         pdbeLink: false,
         // Appearance
         visualStyle: 'cartoon',
@@ -388,6 +484,7 @@
   const MOLSTAR_CSS_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css";
   const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net";
   const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
+  const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
   const MAX_GUESSES = 6;
   const STORAGE_KEY = 'geneguessr_state';
   
@@ -400,6 +497,7 @@
   let molstarCssLoaded = false;
   let molstarPreconnectAdded = false;
   let structureViewerLoaded = false;
+  let interactivityGuards = null;
   let gameState = {
     date: null,
     guesses: [],
