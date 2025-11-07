@@ -235,7 +235,8 @@
 }
 
 .pg-result.failed {
-  background: var(--darkgray);
+  background: var(--gray);
+  color: var(--darkgray);
 }
 
 /* Dark mode overrides for results */
@@ -243,10 +244,20 @@
   .pg-result {
     background: oklch(68% 0.08 185);
   }
+  
+  .pg-result.failed {
+    background: var(--darkgray);
+    color: var(--lightgray);
+  }
 }
 
 :root[data-theme="dark"] .pg-result {
   background: oklch(68% 0.08 185);
+}
+
+:root[data-theme="dark"] .pg-result.failed {
+  background: var(--darkgray);
+  color: var(--lightgray);
 }
 
 .pg-result-title {

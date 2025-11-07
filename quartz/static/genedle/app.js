@@ -377,11 +377,9 @@
             <div class="pg-clue-label">Properties</div>
             <div class="pg-flags">
               <div class="pg-flag">
-                <span class="pg-flag-icon">${targetProtein.tmh ? 'TM' : 'SOL'}</span>
                 <span>${targetProtein.tmh ? 'Transmembrane' : 'Soluble'}</span>
               </div>
               <div class="pg-flag">
-                <span class="pg-flag-icon">${targetProtein.secreted ? 'SEC' : 'INT'}</span>
                 <span>${targetProtein.secreted ? 'Secreted' : 'Intracellular'}</span>
               </div>
             </div>
@@ -425,22 +423,22 @@
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Length Bin</span>
-          <span class="pg-feedback-value">${score.lengthBinMatch ? 'Match' : 'No Match'}</span>
+          <span class="pg-feedback-value">${score.lengthBinMatch ? 'Yes' : 'No'}</span>
         </div>
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Transmembrane</span>
-          <span class="pg-feedback-value">${score.tmMatch ? 'Match' : 'No Match'}</span>
+          <span class="pg-feedback-value">${score.tmMatch ? 'Yes' : 'No'}</span>
         </div>
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Secreted</span>
-          <span class="pg-feedback-value">${score.secretedMatch ? 'Match' : 'No Match'}</span>
+          <span class="pg-feedback-value">${score.secretedMatch ? 'Yes' : 'No'}</span>
         </div>
         
         <div class="pg-feedback-row">
           <span class="pg-feedback-label">Tissue</span>
-          <span class="pg-feedback-value">${score.tissueMatch ? 'Match' : 'No Match'}</span>
+          <span class="pg-feedback-value">${score.tissueMatch ? 'Yes' : 'No'}</span>
         </div>
       </div>
     `;
