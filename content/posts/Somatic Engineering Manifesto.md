@@ -10,7 +10,7 @@ draft: true
 
 1. Defection is an existential risk
 	1. A single replicator can bring down the entire system just by cloning itself
-2. Leave your friends behind
+2. Abandon your friends
 	1. Single-cell bottlenecks enforce uniformity and trust - at least initially
 3. Burn the boats
 	1. When a fish dies, its cells could float outwards into the sea and survive. They don't. They choose to die with the fish.
