@@ -284,8 +284,8 @@
 
 .pg-link-btn {
   padding: 0.5rem 1rem;
-  background: rgba(0, 0, 0, 0.3);
-  color: white;
+  background: white;
+  color: oklch(50% 0.08 185);
   text-decoration: none;
   border-radius: 4px;
   font-weight: 600;
@@ -294,28 +294,28 @@
 }
 
 .pg-link-btn:hover {
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.9);
 }
 
-/* Dark mode: lighter overlay for failed card */
+/* Dark mode and failed card: use solid contrasting buttons */
 @media (prefers-color-scheme: dark) {
   .pg-result.failed .pg-link-btn {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--light);
     color: var(--dark);
   }
   
   .pg-result.failed .pg-link-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--ui-bg);
   }
 }
 
 :root[data-theme="dark"] .pg-result.failed .pg-link-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--light);
   color: var(--dark);
 }
 
 :root[data-theme="dark"] .pg-result.failed .pg-link-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--ui-bg);
 }
 
 /* Share */
