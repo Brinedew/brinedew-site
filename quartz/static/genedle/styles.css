@@ -8,8 +8,8 @@
 
 /* Clue Card */
 .pg-clue-card {
-  background: var(--lightgray);
-  border: 1px solid var(--gray);
+  background: var(--light);
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
@@ -26,7 +26,7 @@
 .pg-clue-label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--gray);
+  color: var(--secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.5rem;
@@ -82,6 +82,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.9rem;
+  color: var(--dark);
 }
 
 .pg-flag-icon {
@@ -100,7 +101,7 @@
 .pg-input {
   width: 100%;
   padding: 0.75rem;
-  border: 2px solid var(--gray);
+  border: 2px solid var(--ui-border);
   border-radius: 6px;
   font-size: 1rem;
   background: var(--light);
@@ -110,7 +111,7 @@
 
 .pg-input:focus {
   outline: none;
-  border-color: var(--secondary);
+  border-color: var(--accent);
 }
 
 .pg-input:disabled {
@@ -124,7 +125,7 @@
   left: 0;
   right: 0;
   background: var(--light);
-  border: 1px solid var(--gray);
+  border: 1px solid var(--ui-border);
   border-top: none;
   border-radius: 0 0 6px 6px;
   max-height: 200px;
@@ -136,12 +137,13 @@
 .pg-suggestion {
   padding: 0.75rem;
   cursor: pointer;
-  border-bottom: 1px solid var(--lightgray);
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--dark);
 }
 
 .pg-suggestion:hover,
 .pg-suggestion.selected {
-  background: var(--lightgray);
+  background: var(--ui-bg);
 }
 
 .pg-suggestion:last-child {
@@ -172,8 +174,8 @@
 
 /* Feedback Panel */
 .pg-feedback {
-  background: var(--lightgray);
-  border: 1px solid var(--gray);
+  background: var(--light);
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -185,12 +187,13 @@
   align-items: center;
   margin-bottom: 0.75rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--gray);
+  border-bottom: 1px solid var(--ui-border);
 }
 
 .pg-feedback-protein {
   font-weight: 700;
   font-size: 1.1rem;
+  color: var(--dark);
 }
 
 .pg-feedback-row {
@@ -202,11 +205,12 @@
 
 .pg-feedback-label {
   font-size: 0.9rem;
-  color: var(--gray);
+  color: var(--secondary);
 }
 
 .pg-feedback-value {
   font-weight: 600;
+  color: var(--dark);
 }
 
 .pg-bar {
@@ -280,16 +284,17 @@
 
 .pg-link-btn {
   padding: 0.5rem 1rem;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--dark);
   color: white;
   text-decoration: none;
   border-radius: 4px;
   font-weight: 600;
-  transition: background 0.2s;
+  font-size: 0.95rem;
+  transition: opacity 0.2s;
 }
 
 .pg-link-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  opacity: 0.85;
 }
 
 /* Share */
@@ -317,7 +322,7 @@
 .pg-share-feedback {
   margin-top: 0.5rem;
   font-size: 0.9rem;
-  color: var(--gray);
+  color: var(--secondary);
 }
 
 /* Stats */
@@ -325,7 +330,8 @@
   display: flex;
   justify-content: space-around;
   padding: 1rem;
-  background: var(--lightgray);
+  background: var(--light);
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
   margin-bottom: 1rem;
 }
@@ -342,7 +348,7 @@
 
 .pg-stat-label {
   font-size: 0.85rem;
-  color: var(--gray);
+  color: var(--secondary);
   text-transform: uppercase;
 }
 
