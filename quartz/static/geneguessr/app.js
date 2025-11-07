@@ -134,37 +134,69 @@
     }
   }
 
-  function ensureMolstarAssets() {
-    if (!molstarCssLoaded) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = MOLSTAR_CSS_URL;
-      link.onload = () => {
-        molstarCssLoaded = true;
-      };
-      link.onerror = () => {
-        console.warn('Geneguessr: failed to load Mol* CSS');
-      };
-      document.head.appendChild(link);
+  function addMolstarPreconnectOnce() {
+    if (molstarPreconnectAdded) {
+      return;
+    }
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = MOLSTAR_PRECONNECT_URL;
+    link.crossOrigin = '';
+    document.head.appendChild(link);
+    molstarPreconnectAdded = true;
+  }
+
+  function appendMolstarCssOnce() {
+    if (molstarCssLoaded) {
+      return;
+    }
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = MOLSTAR_CSS_URL;
+    link.onload = () => {
       molstarCssLoaded = true;
-    }
-    if (window.PDBeMolstarPlugin) {
-      return Promise.resolve();
-    }
-    if (molstarLoaderPromise) {
-      return molstarLoaderPromise;
-    }
-    molstarLoaderPromise = new Promise((resolve, reject) => {
+    };
+    link.onerror = () => {
+      console.warn('Geneguessr: failed to load Mol* CSS from jsDelivr');
+    };
+    document.head.appendChild(link);
+    molstarCssLoaded = true;
+  }
+
+  function loadScriptOnce(src) {
+    return new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = MOLSTAR_SCRIPT_URL;
+      script.src = src;
       script.async = true;
       script.onload = () => resolve();
-      script.onerror = (err) => {
-        molstarLoaderPromise = null;
-        reject(err || new Error('Failed to load PDBe Mol*'));
-      };
+      script.onerror = (err) => reject(err || new Error(`Failed to load script ${src}`));
       document.head.appendChild(script);
     });
+  }
+
+  async function ensureMolstarAssets() {
+    addMolstarPreconnectOnce();
+    appendMolstarCssOnce();
+    
+    if (window.PDBeMolstarPlugin) {
+      return;
+    }
+    if (!molstarLoaderPromise) {
+      molstarLoaderPromise = (async () => {
+        try {
+          await loadScriptOnce(MOLSTAR_SCRIPT_URL);
+        } catch (primaryErr) {
+          console.warn('Geneguessr: primary Mol* CDN load failed, trying fallback version', primaryErr);
+          await loadScriptOnce(MOLSTAR_FALLBACK_SCRIPT_URL);
+        }
+        if (!window.PDBeMolstarPlugin) {
+          throw new Error('PDBeMolstarPlugin unavailable after loading scripts');
+        }
+      })().catch((err) => {
+        molstarLoaderPromise = null;
+        throw err;
+      });
+    }
     return molstarLoaderPromise;
   }
 
@@ -288,8 +320,10 @@
   const DATA_URL = `${STATIC_BASE}data.json`;
   const INDEX_URL = `${STATIC_BASE}index.json`;
   const SIMILARITY_URL = `${STATIC_BASE}similarity.json`;
-  const MOLSTAR_SCRIPT_URL = "https://www.ebi.ac.uk/pdbe/pdbe-kb/static/bundle/pdbe-molstar/pdbe-molstar.js";
-  const MOLSTAR_CSS_URL = "https://www.ebi.ac.uk/pdbe/pdbe-kb/static/bundle/pdbe-molstar/pdbe-molstar.css";
+  const MOLSTAR_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js";
+  const MOLSTAR_FALLBACK_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js";
+  const MOLSTAR_CSS_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css";
+  const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net";
   const MAX_GUESSES = 6;
   const STORAGE_KEY = 'geneguessr_state';
   
@@ -300,6 +334,7 @@
   let similarityMatrix = null;
   let molstarLoaderPromise = null;
   let molstarCssLoaded = false;
+  let molstarPreconnectAdded = false;
   let structureViewerLoaded = false;
   let gameState = {
     date: null,
