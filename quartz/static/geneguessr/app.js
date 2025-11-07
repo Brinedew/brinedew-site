@@ -56,6 +56,206 @@
       (typeof reason === 'string' ? reason : JSON.stringify(reason ?? null));
     reportError('unhandled-rejection', message);
   });
+
+  function hasStructureData(protein) {
+    if (!protein) {
+      return false;
+    }
+    if (protein.structure_id) {
+      return true;
+    }
+    const structure = protein.structure;
+    return Boolean(structure && (structure.primary_source || (structure.alphafold && structure.alphafold.model_url)));
+  }
+
+  function getStructureMetaLabel(structure) {
+    if (!structure) {
+      return '';
+    }
+    if (structure.primary_source === 'pdb' && structure.structure_id) {
+      const resolution = structure.pdb && typeof structure.pdb.resolution === 'number'
+        ? `${structure.pdb.resolution.toFixed(2)} Å`
+        : (structure.pdb && structure.pdb.resolution_raw) || '';
+      return resolution ? `PDB ${structure.structure_id} · ${resolution}` : `PDB ${structure.structure_id}`;
+    }
+    if (structure.primary_source === 'alphafold' && structure.alphafold && structure.alphafold.id) {
+      return `AlphaFold ${structure.alphafold.id}`;
+    }
+    return '';
+  }
+
+  function renderStructureHint() {
+    if (!targetProtein || !hasStructureData(targetProtein)) {
+      return '';
+    }
+    const structure = targetProtein.structure || {};
+    const meta = getStructureMetaLabel(structure);
+    const subtitle = meta ? `<div class="pg-structure-meta">${meta}</div>` : '';
+    const guidance = structure.primary_source === 'alphafold'
+      ? 'Predicted structure provided by AlphaFold DB.'
+      : 'Experimental structure from the Protein Data Bank.';
+    
+    const btnLabel = structureViewerLoaded ? '3D Loaded' : 'View 3D';
+    const btnDisabledAttr = structureViewerLoaded ? 'disabled' : '';
+    return `
+      <div class="pg-structure-card">
+        <div class="pg-structure-header">
+          <div>
+            <div class="pg-structure-title">3D Structure</div>
+            ${subtitle}
+          </div>
+          <button id="pg-view-3d-btn" class="pg-view-3d-btn" type="button" ${btnDisabledAttr}>${btnLabel}</button>
+        </div>
+        <div class="pg-structure-viewer" id="pg-structure-viewer" role="region" aria-label="3D structure viewer">
+          <div class="pg-structure-placeholder" id="pg-structure-placeholder">
+            <p>${guidance}</p>
+            <p class="pg-structure-tip">Viewer loads on demand via PDBe Mol★.</p>
+          </div>
+          <div class="pg-structure-loading" id="pg-structure-loading" hidden>Loading viewer…</div>
+          <div class="pg-structure-error" id="pg-structure-error" hidden></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function setupStructureInteractions() {
+    const btn = document.getElementById('pg-view-3d-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        loadStructureViewer().catch((err) => {
+          console.error('Geneguessr: failed to load structure viewer', err);
+        });
+      });
+      if (structureViewerLoaded && hasStructureData(targetProtein)) {
+        loadStructureViewer().catch((err) => {
+          console.error('Geneguessr: failed to restore structure viewer', err);
+        });
+      }
+    }
+  }
+
+  function ensureMolstarAssets() {
+    if (!molstarCssLoaded) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = MOLSTAR_CSS_URL;
+      link.onload = () => {
+        molstarCssLoaded = true;
+      };
+      link.onerror = () => {
+        console.warn('Geneguessr: failed to load Mol* CSS');
+      };
+      document.head.appendChild(link);
+      molstarCssLoaded = true;
+    }
+    if (window.PDBeMolstarPlugin) {
+      return Promise.resolve();
+    }
+    if (molstarLoaderPromise) {
+      return molstarLoaderPromise;
+    }
+    molstarLoaderPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = MOLSTAR_SCRIPT_URL;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = (err) => {
+        molstarLoaderPromise = null;
+        reject(err || new Error('Failed to load PDBe Mol*'));
+      };
+      document.head.appendChild(script);
+    });
+    return molstarLoaderPromise;
+  }
+
+  function getStructureViewerOptions(structure) {
+    if (!structure) {
+      return null;
+    }
+    if (structure.primary_source === 'pdb' && structure.structure_id) {
+      return {
+        moleculeId: structure.structure_id,
+        assemblyId: '1',
+        hideControls: false,
+      };
+    }
+    if (structure.primary_source === 'alphafold' && structure.alphafold && structure.alphafold.model_url) {
+      return {
+        customData: {
+          url: structure.alphafold.model_url,
+          format: 'cif'
+        },
+        alphafoldView: true,
+        hideControls: false,
+      };
+    }
+    return null;
+  }
+
+  async function loadStructureViewer() {
+    if (!targetProtein || !hasStructureData(targetProtein)) {
+      return;
+    }
+    const container = document.getElementById('pg-structure-viewer');
+    const placeholder = document.getElementById('pg-structure-placeholder');
+    const loadingEl = document.getElementById('pg-structure-loading');
+    const errorEl = document.getElementById('pg-structure-error');
+    const button = document.getElementById('pg-view-3d-btn');
+    
+    if (!container) {
+      return;
+    }
+    
+    const structure = targetProtein.structure || {};
+    const options = getStructureViewerOptions(structure);
+    if (!options) {
+      if (errorEl) {
+        errorEl.textContent = 'No 3D structure available for this protein.';
+        errorEl.hidden = false;
+      }
+      return;
+    }
+    
+    if (loadingEl) loadingEl.hidden = false;
+    if (placeholder) placeholder.hidden = true;
+    if (errorEl) errorEl.hidden = true;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Loading…';
+    }
+    
+    try {
+      await ensureMolstarAssets();
+      if (!window.PDBeMolstarPlugin) {
+        throw new Error('PDBeMolstarPlugin missing after script load');
+      }
+      container.innerHTML = '';
+      const viewer = new window.PDBeMolstarPlugin();
+      viewer.render(container, {
+        ...options,
+        loadControls: true,
+        hideCanvasControls: false,
+      });
+      container.dataset.viewerLoaded = 'true';
+      structureViewerLoaded = true;
+      if (button) {
+        button.textContent = '3D Loaded';
+      }
+    } catch (err) {
+      console.error('Geneguessr: Mol* render failed', err);
+      if (errorEl) {
+        errorEl.textContent = 'Could not load 3D viewer. Please try again.';
+        errorEl.hidden = false;
+      }
+      if (placeholder) placeholder.hidden = false;
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'View 3D';
+      }
+    } finally {
+      if (loadingEl) loadingEl.hidden = true;
+    }
+  }
   
   /**
    * Resolve the static base URL for fetching data files
@@ -88,6 +288,8 @@
   const DATA_URL = `${STATIC_BASE}data.json`;
   const INDEX_URL = `${STATIC_BASE}index.json`;
   const SIMILARITY_URL = `${STATIC_BASE}similarity.json`;
+  const MOLSTAR_SCRIPT_URL = "https://www.ebi.ac.uk/pdbe/pdbe-kb/static/bundle/pdbe-molstar/pdbe-molstar.js";
+  const MOLSTAR_CSS_URL = "https://www.ebi.ac.uk/pdbe/pdbe-kb/static/bundle/pdbe-molstar/pdbe-molstar.css";
   const MAX_GUESSES = 6;
   const STORAGE_KEY = 'geneguessr_state';
   
@@ -96,6 +298,9 @@
   let indexData = null;
   let targetProtein = null;
   let similarityMatrix = null;
+  let molstarLoaderPromise = null;
+  let molstarCssLoaded = false;
+  let structureViewerLoaded = false;
   let gameState = {
     date: null,
     guesses: [],
@@ -124,6 +329,9 @@
       domains: safeArray(protein.domains),
       go_slim: safeArray(protein.go_slim),
       go_terms: normalizeGoTerms(protein.go_terms),
+      structure: protein && protein.structure ? protein.structure : null,
+      structure_id: protein && protein.structure_id ? protein.structure_id : null,
+      alphafold_id: protein && protein.alphafold_id ? protein.alphafold_id : null,
       synonyms: safeArray(protein.synonyms),
       subcell: safeArray(protein.subcell),
       tissue: protein && protein.tissue ? protein.tissue : { label: "unknown", score: null },
@@ -231,6 +439,7 @@
     
     targetProtein = target;
     gameState.targetId = targetId;
+    structureViewerLoaded = false;
     
     gameState.guesses = gameState.guesses
       .map((entry) => {
@@ -418,6 +627,7 @@
     const maxHints = Math.min(gameState.hintsUnlocked, 5);
     
     return `
+      ${renderStructureHint()}
       <div class="pg-clue-card">
         ${maxHints >= 1 ? `
           <div class="pg-clue-section">
@@ -850,6 +1060,8 @@ https://brinedew.bio/apps/geneguessr/`;
         shareBtn.addEventListener('click', shareResult);
       }
     }
+    
+    setupStructureInteractions();
   }
   
   /**
@@ -910,6 +1122,3 @@ https://brinedew.bio/apps/geneguessr/`;
   }
   
 })();
-
-
-

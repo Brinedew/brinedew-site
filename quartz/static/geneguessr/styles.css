@@ -6,6 +6,102 @@
   padding: 0 1rem;
 }
 
+.pg-structure-card {
+  background: var(--light);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+}
+
+.pg-structure-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.pg-structure-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--dark);
+}
+
+.pg-structure-meta {
+  font-size: 0.85rem;
+  color: var(--secondary);
+}
+
+.pg-view-3d-btn {
+  padding: 0.4rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.pg-view-3d-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pg-structure-viewer {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+  overflow: hidden;
+}
+
+.pg-structure-placeholder,
+.pg-structure-loading,
+.pg-structure-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  color: var(--secondary);
+  gap: 0.5rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(245,245,245,0.9));
+}
+
+:root[data-theme="dark"] .pg-structure-placeholder,
+:root[data-theme="dark"] .pg-structure-loading,
+:root[data-theme="dark"] .pg-structure-error {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.pg-structure-tip {
+  font-size: 0.8rem;
+  color: var(--gray);
+}
+
+.pg-structure-error {
+  color: #b00020;
+  font-weight: 600;
+}
+
+.pg-structure-viewer canvas {
+  border-radius: 8px;
+}
+
+@media (max-width: 600px) {
+  .pg-structure-viewer {
+    height: 260px;
+  }
+}
+
 /* Clue Card */
 .pg-clue-card {
   background: var(--light);
