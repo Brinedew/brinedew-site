@@ -160,9 +160,9 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", "genedle/styles.css?v=3")}
+                    href={joinSegments(root, "static", "genedle/styles.css?v=4")}
                   />
-                  <script defer src={joinSegments(root, "static", "genedle/app.js?v=3")}></script>
+                  <script defer src={joinSegments(root, "static", "genedle/app.js?v=4")}></script>
                 </>
               )}
             </>
