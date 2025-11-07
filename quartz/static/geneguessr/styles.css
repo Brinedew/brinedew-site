@@ -96,6 +96,14 @@
   border-radius: 8px;
 }
 
+/* Hide remaining Molstar UI controls that can't be hidden via API */
+.pg-structure-viewer .msp-viewport-controls button[title="Reset Camera"],
+.pg-structure-viewer .msp-viewport-controls button[title*="Reset"],
+.pg-structure-viewer .msp-viewport-controls button[title*="Screenshot"],
+.pg-structure-viewer .msp-viewport-controls button[title*="State"] {
+  display: none !important;
+}
+
 @media (max-width: 600px) {
   .pg-structure-viewer {
     height: 260px;

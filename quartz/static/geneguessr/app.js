@@ -233,6 +233,41 @@
            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   }
 
+  function applyAggressiveViewerSettings(viewer) {
+    // Aggressive approach: access internal Molstar plugin API
+    // This uses undocumented internal APIs that may break in future versions
+    try {
+      if (!viewer.plugin?.canvas3d) {
+        console.warn('Geneguessr: viewer.plugin.canvas3d not available for aggressive settings');
+        return;
+      }
+
+      const bgColor = isDarkMode() 
+        ? { r: 17, g: 12, b: 10 }      // Dark mode: rgb(17, 12, 10)
+        : { r: 248, g: 241, b: 231 };  // Light mode: rgb(248, 241, 231)
+
+      // Apply canvas3d settings
+      viewer.plugin.canvas3d.setProps({
+        renderer: {
+          backgroundColor: bgColor,
+        },
+        camera: {
+          helper: {
+            axes: { name: 'off' }  // Hide XYZ axes legend
+          }
+        },
+        // Hide remaining canvas controls via internal settings
+        marking: {
+          enabled: false  // Disable selection marking
+        }
+      });
+
+      console.info('Geneguessr: applied aggressive viewer settings');
+    } catch (err) {
+      console.warn('Geneguessr: failed to apply aggressive viewer settings', err);
+    }
+  }
+
   async function loadStructureViewer() {
     if (!targetProtein || !hasStructureData(targetProtein)) {
       return;
@@ -276,16 +311,26 @@
         ...options,
         // UI lockdown (conservative approach)
         hideControls: true,
-        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory'],
+        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot'],
         pdbeLink: false,
         // Appearance
-        bgColor: isDarkMode() ? 'rgb(17, 12, 10)' : 'rgb(248, 241, 231)',
         visualStyle: 'cartoon',
         lighting: 'matte',
         // Data/behavior
         loadMaps: true,
         selectInteraction: false,
       });
+
+      // Apply aggressive settings after render completes
+      if (viewer.events?.loadComplete) {
+        viewer.events.loadComplete.subscribe(() => {
+          applyAggressiveViewerSettings(viewer);
+        });
+      } else {
+        // Fallback: apply immediately
+        setTimeout(() => applyAggressiveViewerSettings(viewer), 500);
+      }
+
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
       if (button) {
