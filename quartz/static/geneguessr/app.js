@@ -420,6 +420,8 @@
       });
 
       // Apply aggressive settings after render completes
+      // TEMPORARILY DISABLED for testing - see B-60
+      /*
       if (viewer.events?.loadComplete) {
         viewer.events.loadComplete.subscribe(() => {
           applyAggressiveViewerSettings(viewer);
@@ -428,6 +430,7 @@
         // Fallback: apply immediately
         setTimeout(() => applyAggressiveViewerSettings(viewer), 500);
       }
+      */
 
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
