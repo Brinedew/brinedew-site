@@ -227,6 +227,12 @@
     return null;
   }
 
+  function isDarkMode() {
+    return document.documentElement.classList.contains('dark') || 
+           document.body.classList.contains('dark') ||
+           (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+
   async function loadStructureViewer() {
     if (!targetProtein || !hasStructureData(targetProtein)) {
       return;
@@ -268,9 +274,17 @@
       const viewer = new window.PDBeMolstarPlugin();
       viewer.render(container, {
         ...options,
-        loadControls: true,
-        hideControls: [],
-        hideCanvasControls: [],
+        // UI lockdown (conservative approach)
+        hideControls: true,
+        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory'],
+        pdbeLink: false,
+        // Appearance
+        bgColor: isDarkMode() ? 'rgb(17, 12, 10)' : 'rgb(248, 241, 231)',
+        visualStyle: 'cartoon',
+        lighting: 'matte',
+        // Data/behavior
+        loadMaps: true,
+        selectInteraction: false,
       });
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
