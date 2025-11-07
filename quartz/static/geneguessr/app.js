@@ -208,17 +208,20 @@
       return {
         moleculeId: structure.structure_id,
         assemblyId: '1',
-        hideControls: false,
+        customData: {
+          url: `${RCSB_PDB_DOWNLOAD_URL}${structure.structure_id}.cif`,
+          format: 'cif'
+        }
       };
     }
     if (structure.primary_source === 'alphafold' && structure.alphafold && structure.alphafold.model_url) {
       return {
+        moleculeId: structure.alphafold.id || structure.structure_id || targetProtein?.uniprot,
         customData: {
           url: structure.alphafold.model_url,
           format: 'cif'
         },
-        alphafoldView: true,
-        hideControls: false,
+        alphafoldView: true
       };
     }
     return null;
@@ -266,6 +269,7 @@
       viewer.render(container, {
         ...options,
         loadControls: true,
+        hideControls: [],
         hideCanvasControls: [],
       });
       container.dataset.viewerLoaded = 'true';
