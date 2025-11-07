@@ -266,6 +266,9 @@
         });
       }
 
+      // Suppress hover tooltips and click selections
+      suppressViewerInteractivity(viewer);
+
       console.info('Geneguessr: applied minimal viewer settings');
     } catch (err) {
       console.warn('Geneguessr: failed to apply minimal viewer settings', err);
