@@ -241,93 +241,34 @@
     };
   }
 
-  function applyAggressiveViewerSettings(viewer) {
-    // Aggressive approach: access internal Molstar plugin API
-    // This uses undocumented internal APIs that may break in future versions
+  function applyMinimalViewerSettings(viewer) {
+    // Minimal approach: only hide UI elements that work without breaking rendering
     try {
       if (!viewer.plugin?.canvas3d) {
-        console.warn('Geneguessr: viewer.plugin.canvas3d not available for aggressive settings');
+        console.warn('Geneguessr: viewer.plugin.canvas3d not available for minimal settings');
         return;
       }
 
-      const bgColor = isDarkMode() 
-        ? { r: 17, g: 12, b: 10 }
-        : { r: 248, g: 241, b: 231 };
-
-      // Apply canvas3d settings
+      // ONLY set camera helper to hide axis - this is safe and doesn't break rendering
       viewer.plugin.canvas3d.setProps({
         camera: {
-          mode: 'orthographic',
           helper: {
             axes: { name: 'off' }
           }
-        },
-        cameraFog: {
-          name: 'on',
-          params: { intensity: 0.75 }
-        },
-        postprocessing: {
-          occlusion: {
-            name: 'on',
-            params: {
-              samples: 64,
-              radius: 6,
-              bias: 0.8,
-              blurKernelSize: 15,
-              resolutionScale: 1
-            }
-          },
-          outline: {
-            name: 'on',
-            params: {
-              scale: 1,
-              threshold: 0.33,
-              color: toCanvasColor({ r: 60, g: 45, b: 35 })
-            }
-          },
-          antialiasing: {
-            name: 'fxaa',
-            params: {
-              edgeThresholdMin: 0.125,
-              edgeThresholdMax: 0.25,
-              iterations: 4,
-              subpixelQuality: 0.75
-            }
-          }
-        },
-        renderer: {
-          backgroundColor: toCanvasColor(bgColor),
-          ambientColor: toCanvasColor(bgColor),
-          ambientIntensity: 0.35,
-          interiorDarkening: 0,
-          light: [
-            {
-              inclination: 170,
-              azimuth: 45,
-              color: toCanvasColor({ r: 255, g: 255, b: 255 }),
-              intensity: 1.1,
-            },
-            {
-              inclination: 25,
-              azimuth: 200,
-              color: toCanvasColor({ r: 255, g: 236, b: 210 }),
-              intensity: 0.6,
-            }
-          ],
-        },
-        marking: {
-          enabled: false,
-          edgeScale: 0,
-          ghostEdgeStrength: 0,
-          innerEdgeFactor: 0
         }
       });
 
-      suppressViewerInteractivity(viewer);
+      // Hide the loci labels (text overlay showing protein/residue info)
+      if (viewer.plugin?.layout?.setProps) {
+        viewer.plugin.layout.setProps({
+          isExpanded: false,
+          showControls: false
+        });
+      }
 
-      console.info('Geneguessr: applied aggressive viewer settings');
+      console.info('Geneguessr: applied minimal viewer settings');
     } catch (err) {
-      console.warn('Geneguessr: failed to apply aggressive viewer settings', err);
+      console.warn('Geneguessr: failed to apply minimal viewer settings', err);
     }
   }
 
@@ -419,18 +360,15 @@
         lowPrecisionCoords: false,
       });
 
-      // Apply aggressive settings after render completes
-      // TEMPORARILY DISABLED for testing - see B-60
-      /*
+      // Apply minimal settings after render completes
       if (viewer.events?.loadComplete) {
         viewer.events.loadComplete.subscribe(() => {
-          applyAggressiveViewerSettings(viewer);
+          applyMinimalViewerSettings(viewer);
         });
       } else {
         // Fallback: apply immediately
-        setTimeout(() => applyAggressiveViewerSettings(viewer), 500);
+        setTimeout(() => applyMinimalViewerSettings(viewer), 500);
       }
-      */
 
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
