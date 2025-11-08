@@ -1642,10 +1642,10 @@ https://brinedew.bio/apps/geneguessr/`;
    * Inject stats/credits into sidebar
    */
   function injectSidebarStats() {
-    // Find Quartz left sidebar
-    const sidebar = document.querySelector('.left.sidebar');
+    // Find Quartz right sidebar (where tags are)
+    const sidebar = document.querySelector('.right.sidebar');
     if (!sidebar) {
-      console.warn('Geneguessr: left sidebar not found, skipping stats injection');
+      console.warn('Geneguessr: right sidebar not found, skipping stats injection');
       return;
     }
     
@@ -1671,7 +1671,13 @@ https://brinedew.bio/apps/geneguessr/`;
       </div>
     `;
     
-    sidebar.appendChild(sidebarStats);
+    // Insert before tags section
+    const tagsSection = sidebar.querySelector('.page-tags-section');
+    if (tagsSection) {
+      sidebar.insertBefore(sidebarStats, tagsSection);
+    } else {
+      sidebar.appendChild(sidebarStats);
+    }
   }
   
   function updateSidebarStats() {
