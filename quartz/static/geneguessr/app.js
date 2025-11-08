@@ -267,6 +267,30 @@
     }
   }
 
+  // Debug flags for viewer stylization (can be disabled via URL params)
+  const DEBUG_STYLIZATION = {
+    hideAxes: true,
+    orthographic: true,
+    backgroundColor: true,
+    lighting: true,
+    occlusion: true,
+    antialiasing: true,
+    fog: true,
+    outline: true,
+    disableMarking: true
+  };
+
+  // Parse URL params for debug flags (e.g., ?debug_viewer&no_occlusion&no_outline)
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('debug_viewer')) {
+    Object.keys(DEBUG_STYLIZATION).forEach(key => {
+      if (urlParams.has(`no_${key}`)) {
+        DEBUG_STYLIZATION[key] = false;
+        console.info(`[GeneGuessr] Debug: Disabled ${key}`);
+      }
+    });
+  }
+
   async function applyViewerStylizationProfile(viewer) {
     const bgColor = isDarkMode()
       ? { r: 17, g: 12, b: 10 }
@@ -278,9 +302,9 @@
 
     // Define stylization steps to apply sequentially with delays
     const steps = [
-      { fn: () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'), delay: 100 },
-      { fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
-      { fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'hideAxes', enabled: DEBUG_STYLIZATION.hideAxes, fn: () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'), delay: 100 },
+      { name: 'orthographic', enabled: DEBUG_STYLIZATION.orthographic, fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
+      { name: 'backgroundColor', enabled: DEBUG_STYLIZATION.backgroundColor, fn: () => safeApplyCanvasProps(viewer, {
         renderer: {
           backgroundColor: toCanvasColor(bgColor),
           ambientColor: toCanvasColor(bgColor),
@@ -288,7 +312,7 @@
           interiorDarkening: 0,
         }
       }, 'background & ambient colors'), delay: 150 },
-      { fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'lighting', enabled: DEBUG_STYLIZATION.lighting, fn: () => safeApplyCanvasProps(viewer, {
         renderer: {
           light: [
             {
@@ -306,7 +330,7 @@
           ],
         },
       }, 'custom lighting'), delay: 200 },
-      { fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'occlusion', enabled: DEBUG_STYLIZATION.occlusion, fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           occlusion: {
             name: 'on',
@@ -320,7 +344,7 @@
           }
         }
       }, 'ambient occlusion'), delay: 200 },
-      { fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'antialiasing', enabled: DEBUG_STYLIZATION.antialiasing, fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           antialiasing: {
             name: 'fxaa',
@@ -333,13 +357,13 @@
           }
         }
       }, 'antialiasing'), delay: 150 },
-      { fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'fog', enabled: DEBUG_STYLIZATION.fog, fn: () => safeApplyCanvasProps(viewer, {
         cameraFog: {
           name: 'on',
           params: { intensity: 0.5 }
         }
       }, 'camera fog'), delay: 150 },
-      { fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           outline: {
             name: 'on',
@@ -351,7 +375,7 @@
           }
         }
       }, 'outline'), delay: 150 },
-      { fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'disableMarking', enabled: DEBUG_STYLIZATION.disableMarking, fn: () => safeApplyCanvasProps(viewer, {
         marking: {
           enabled: false,
           edgeScale: 0,
@@ -363,6 +387,10 @@
 
     // Apply steps sequentially with delays to avoid overwhelming the renderer
     for (const step of steps) {
+      if (!step.enabled) {
+        console.info(`[GeneGuessr] Skipping ${step.name} (debug disabled)`);
+        continue;
+      }
       await new Promise(resolve => setTimeout(resolve, step.delay));
       step.fn();
     }
