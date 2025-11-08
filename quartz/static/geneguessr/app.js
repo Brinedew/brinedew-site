@@ -244,6 +244,33 @@
     return (r << 16) | (g << 8) | b;
   }
 
+  function parseColorString(value, fallback) {
+    if (!value) return fallback;
+    const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    if (!match) return fallback;
+    return {
+      r: parseInt(match[1], 10),
+      g: parseInt(match[2], 10),
+      b: parseInt(match[3], 10),
+    };
+  }
+
+  function getViewerBackgroundColor(container) {
+    const defaultLight = { r: 248, g: 241, b: 231 };
+    const defaultDark = { r: 17, g: 12, b: 10 };
+    if (!container) {
+      return isDarkMode() ? defaultDark : defaultLight;
+    }
+    try {
+      const style = window.getComputedStyle(container);
+      const parsed = parseColorString(style.backgroundColor, null);
+      if (parsed) return parsed;
+    } catch {
+      // ignore and fall through
+    }
+    return isDarkMode() ? defaultDark : defaultLight;
+  }
+
   function safeApplyCanvasProps(viewer, props, label) {
     if (!viewer?.plugin?.canvas3d) {
       console.warn(`[GeneGuessr] canvas3d unavailable; cannot apply ${label}`);
@@ -259,6 +286,9 @@
     }
   }
 
+  let activeViewerInstance = null;
+  let themeSyncInitialized = false;
+
   function hideMolstarPanels(viewer) {
     try {
       viewer.plugin?.layout?.setProps?.({
@@ -273,14 +303,14 @@
   // Debug flags for viewer stylization (can be disabled via URL params)
   const DEBUG_STYLIZATION = {
     hideAxes: true,
-    orthographic: true,
+    orthographic: false,
     backgroundColor: true,
     lighting: false,
     occlusion: false,
     antialiasing: true,
     fog: true,
     outline: true,
-    disableMarking: true
+    disableMarking: true,
   };
 
   // Parse URL params for debug flags (e.g., ?debug_viewer&no_occlusion&no_outline)
@@ -298,27 +328,57 @@
     });
   }
 
-  async function applyViewerStylizationProfile(viewer) {
-    const bgColor = isDarkMode()
-      ? { r: 17, g: 12, b: 10 }
-      : { r: 248, g: 241, b: 231 };
+  function applyViewerThemeColors(viewer, container) {
+    const bgColor = getViewerBackgroundColor(container);
+    safeApplyCanvasProps(viewer, {
+      renderer: {
+        backgroundColor: toMolstarColor(bgColor),
+        ambientColor: toMolstarColor(bgColor),
+        ambientIntensity: 0.55,
+        interiorDarkening: 0,
+      }
+    }, 'theme background & ambient colors');
+  }
+
+  function ensureThemeSync() {
+    if (themeSyncInitialized) return;
+    const handleThemeChange = () => {
+      if (!activeViewerInstance) return;
+      const container = document.getElementById('pg-structure-viewer');
+      applyViewerThemeColors(activeViewerInstance, container);
+    };
+
+    const observer = new MutationObserver(handleThemeChange);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+
+    try {
+      const media = window.matchMedia('(prefers-color-scheme: dark)');
+      if (media && media.addEventListener) {
+        media.addEventListener('change', handleThemeChange);
+      } else if (media && media.addListener) {
+        media.addListener(handleThemeChange);
+      }
+    } catch {
+      // ignore
+    }
+
+    themeSyncInitialized = true;
+  }
+
+  async function applyViewerStylizationProfile(viewer, container) {
+    ensureThemeSync();
+    activeViewerInstance = viewer;
 
     // Apply UI hiding and interactivity suppression immediately (these are safe)
     hideMolstarPanels(viewer);
     suppressViewerInteractivity(viewer);
+    applyViewerThemeColors(viewer, container);
 
     // Define stylization steps to apply sequentially with delays
     const steps = [
       { name: 'hideAxes', enabled: DEBUG_STYLIZATION.hideAxes, fn: () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'), delay: 100 },
       { name: 'orthographic', enabled: DEBUG_STYLIZATION.orthographic, fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
-      { name: 'backgroundColor', enabled: DEBUG_STYLIZATION.backgroundColor, fn: () => safeApplyCanvasProps(viewer, {
-        renderer: {
-          backgroundColor: toMolstarColor(bgColor),
-          ambientColor: toMolstarColor(bgColor),
-          ambientIntensity: 0.55,
-          interiorDarkening: 0,
-        }
-      }, 'background & ambient colors'), delay: 150 },
+      { name: 'backgroundColor', enabled: DEBUG_STYLIZATION.backgroundColor, fn: () => applyViewerThemeColors(viewer, container), delay: 150 },
       { name: 'lighting', enabled: DEBUG_STYLIZATION.lighting, fn: () => safeApplyCanvasProps(viewer, {
         renderer: {
           light: [
@@ -375,9 +435,9 @@
           outline: {
             name: 'on',
             params: {
-              scale: 1,
-              threshold: 0.4,
-              color: toMolstarColor({ r: 70, g: 55, b: 45 })
+              scale: 0.5,
+              threshold: 0.35,
+              color: toMolstarColor({ r: 90, g: 70, b: 55 })
             }
           }
         }
@@ -496,11 +556,11 @@
       // Apply incremental stylization after render completes
       if (viewer.events?.loadComplete) {
         viewer.events.loadComplete.subscribe(() => {
-          applyViewerStylizationProfile(viewer);
+          applyViewerStylizationProfile(viewer, container);
         });
       } else {
         // Fallback: apply shortly after render
-        setTimeout(() => applyViewerStylizationProfile(viewer), 500);
+        setTimeout(() => applyViewerStylizationProfile(viewer, container), 500);
       }
 
       container.dataset.viewerLoaded = 'true';
