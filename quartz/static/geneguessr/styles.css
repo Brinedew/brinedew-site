@@ -270,6 +270,17 @@
   background: var(--ui-bg);
 }
 
+.pg-suggestion-title {
+  font-weight: 600;
+  color: var(--dark);
+}
+
+.pg-suggestion-sub {
+  font-size: 0.85rem;
+  color: var(--secondary);
+  margin-top: 0.15rem;
+}
+
 .pg-suggestion:last-child {
   border-bottom: none;
 }
@@ -546,5 +557,4 @@
     flex-wrap: wrap;
   }
 }
-
 

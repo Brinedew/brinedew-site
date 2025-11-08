@@ -948,6 +948,74 @@
   /**
    * Autocomplete
    */
+  const SEARCH_MAX_RESULTS = 8;
+
+  function normalizeText(value) {
+    return (value || '').toLowerCase();
+  }
+
+  function getSearchScore(protein, query) {
+    if (!query) return Number.POSITIVE_INFINITY;
+    const normalizedQuery = query.toLowerCase();
+    const hgnc = normalizeText(protein.hgnc);
+
+    if (hgnc === normalizedQuery) return 0;
+    if (hgnc.startsWith(normalizedQuery)) return 1;
+
+    const primarySynonyms = (protein.synonyms || []).map(normalizeText);
+    if (primarySynonyms.some(s => s === normalizedQuery)) return 2;
+    if (primarySynonyms.some(s => s.startsWith(normalizedQuery))) return 3;
+
+    const fullName = normalizeText(protein.full_name);
+    if (fullName.startsWith(normalizedQuery)) return 4;
+    if (fullName.includes(normalizedQuery)) return 5;
+
+    const subSynonym = primarySynonyms.find(s => s.includes(normalizedQuery));
+    if (subSynonym) return 6;
+
+    return Number.POSITIVE_INFINITY;
+  }
+
+  function searchProteins(query) {
+    const cleanedQuery = query.trim().toLowerCase();
+    if (!cleanedQuery) {
+      return [];
+    }
+    const guessedSet = new Set(gameState.guesses.map(g => g.uniprot));
+
+    return proteins
+      .filter((p) => !guessedSet.has(p.uniprot))
+      .map((protein) => ({
+        protein,
+        score: getSearchScore(protein, cleanedQuery),
+      }))
+      .filter((entry) => entry.score !== Number.POSITIVE_INFINITY)
+      .sort((a, b) => {
+        if (a.score !== b.score) return a.score - b.score;
+        return a.protein.hgnc.localeCompare(b.protein.hgnc);
+      })
+      .slice(0, SEARCH_MAX_RESULTS)
+      .map((entry) => entry.protein);
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatSuggestionSubtitle(protein) {
+    const parts = [protein.hgnc];
+    const firstSynonym = (protein.synonyms || []).find(s => !!s && s !== protein.hgnc);
+    if (firstSynonym) {
+      parts.push(firstSynonym);
+    }
+    return parts.filter(Boolean).join(' • ');
+  }
+
   function setupAutocomplete(inputEl, suggestionsEl) {
     let selectedIndex = -1;
     
@@ -961,11 +1029,7 @@
       }
       
       // Find matches
-      const matches = proteins.filter(p => {
-        return p.hgnc.toLowerCase().includes(query) ||
-               p.synonyms.some(s => s.toLowerCase().includes(query)) ||
-               p.full_name.toLowerCase().includes(query);
-      }).slice(0, 8); // limit to 8 suggestions
+      const matches = searchProteins(query);
       
       if (matches.length === 0) {
         suggestionsEl.innerHTML = '<div class="pg-suggestion">No matches found</div>';
@@ -974,8 +1038,9 @@
       }
       
       suggestionsEl.innerHTML = matches.map((p, idx) => `
-        <div class="pg-suggestion" data-uniprot="${p.uniprot}" data-index="${idx}">
-          <strong>${p.hgnc}</strong> — ${p.full_name}
+        <div class="pg-suggestion" data-uniprot="${p.uniprot}" data-index="${idx}" title="${escapeHtml(p.full_name)}">
+          <div class="pg-suggestion-title">${escapeHtml(p.full_name || p.hgnc)}</div>
+          <div class="pg-suggestion-sub">${escapeHtml(formatSuggestionSubtitle(p))}</div>
         </div>
       `).join('');
       suggestionsEl.style.display = 'block';
