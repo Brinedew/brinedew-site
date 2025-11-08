@@ -1642,9 +1642,12 @@ https://brinedew.bio/apps/geneguessr/`;
    * Inject stats/credits into sidebar
    */
   function injectSidebarStats() {
-    // Find Quartz explorer/toc sidebar
-    const explorer = document.querySelector('.explorer');
-    if (!explorer) return;
+    // Find Quartz left sidebar
+    const sidebar = document.querySelector('.left.sidebar');
+    if (!sidebar) {
+      console.warn('Geneguessr: left sidebar not found, skipping stats injection');
+      return;
+    }
     
     const sidebarStats = document.createElement('div');
     sidebarStats.id = 'pg-sidebar-stats';
@@ -1668,7 +1671,7 @@ https://brinedew.bio/apps/geneguessr/`;
       </div>
     `;
     
-    explorer.appendChild(sidebarStats);
+    sidebar.appendChild(sidebarStats);
   }
   
   function updateSidebarStats() {
