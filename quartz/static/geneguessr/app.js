@@ -258,8 +258,8 @@
   function getViewerThemeColors(container) {
     const defaultLightBg = { r: 248, g: 241, b: 231 };
     const defaultDarkBg = { r: 17, g: 12, b: 10 };
-    const defaultLightOutline = defaultDarkBg;
-    const defaultDarkOutline = defaultLightBg;
+    const defaultLightOutline = defaultLightBg;
+    const defaultDarkOutline = defaultDarkBg;
     if (!container) {
       return {
         background: isDarkMode() ? defaultDarkBg : defaultLightBg,
@@ -355,6 +355,18 @@
         interiorDarkening: 0,
       }
     }, 'theme background & ambient colors');
+    safeApplyCanvasProps(viewer, {
+      postprocessing: {
+        outline: {
+          name: 'on',
+          params: {
+            scale: 0.5,
+            threshold: 0.35,
+            color: toMolstarColor(theme.background),
+          },
+        },
+      },
+    }, 'theme outline color');
   }
 
   function ensureThemeSync() {
@@ -447,21 +459,18 @@
           params: { intensity: 0.5 }
         }
       }, 'camera fog'), delay: 150 },
-      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => {
-        const theme = getViewerThemeColors(container);
-        return safeApplyCanvasProps(viewer, {
+      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           outline: {
             name: 'on',
             params: {
               scale: 0.5,
               threshold: 0.35,
-              color: toMolstarColor(theme.outline)
+              color: toMolstarColor(getViewerThemeColors(container).background)
             }
           }
         }
-      }, 'outline');
-      }, delay: 150 },
+      }, 'outline'), delay: 150 },
       { name: 'disableMarking', enabled: DEBUG_STYLIZATION.disableMarking, fn: () => safeApplyCanvasProps(viewer, {
         marking: {
           enabled: false,
@@ -565,7 +574,7 @@
         pdbeLink: false,
         // Appearance
         visualStyle: 'cartoon',
-        lighting: 'metallic',
+        lighting: 'glossy',
         // Data/behavior
         loadMaps: false,  // Disable electron density maps - they cause streaming hang
         selectInteraction: false,
