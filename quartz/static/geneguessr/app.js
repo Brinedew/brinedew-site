@@ -298,6 +298,76 @@
     };
   }
 
+  function creditsApi() {
+    return window.GeneGuessrCredits || null;
+  }
+
+  function initCreditsForRound(roundId) {
+    const api = creditsApi();
+    if (!api || !roundId) return;
+    try {
+      api.initRound(roundId);
+    } catch (err) {
+      console.warn('Geneguessr: failed to init credits', err);
+    }
+  }
+
+  function getCreditsBalance() {
+    const api = creditsApi();
+    try {
+      return api?.getCredits?.() ?? DEFAULT_HINT_COST;
+    } catch {
+      return DEFAULT_HINT_COST;
+    }
+  }
+
+  function isHintRevealed(hintId) {
+    if (!hintId) return true;
+    const api = creditsApi();
+    if (!api || !currentRoundId) return true;
+    try {
+      return api.isHintRevealed(currentRoundId, hintId);
+    } catch {
+      return true;
+    }
+  }
+
+  function attemptReveal(hintId, cost = DEFAULT_HINT_COST) {
+    const api = creditsApi();
+    if (!api || !currentRoundId) {
+      return true;
+    }
+    try {
+      const result = api.revealHint(currentRoundId, hintId, cost);
+      if (result && result.success) {
+        return true;
+      }
+      flashCreditsWarning();
+      return false;
+    } catch (err) {
+      console.warn('Geneguessr: failed to reveal hint', err);
+      flashCreditsWarning();
+      return false;
+    }
+  }
+
+  function awardCredits(amount = CREDIT_REWARD_ON_INCORRECT) {
+    const api = creditsApi();
+    if (!api || !amount) return;
+    try {
+      api.earnCredits(amount);
+    } catch (err) {
+      console.warn('Geneguessr: unable to earn credits', err);
+    }
+  }
+
+  function flashCreditsWarning() {
+    const meter = document.querySelector('.pg-credits');
+    if (!meter) return;
+    meter.classList.add('pg-credits--warn');
+    setTimeout(() => meter.classList.remove('pg-credits--warn'), 600);
+  }
+
   function safeApplyCanvasProps(viewer, props, label) {
     if (!viewer?.plugin?.canvas3d) {
       console.warn(`[GeneGuessr] canvas3d unavailable; cannot apply ${label}`);
@@ -661,6 +731,8 @@
   const MOLSTAR_CSS_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css";
   const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net";
   const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
+  const DEFAULT_HINT_COST = 1;
+  const CREDIT_REWARD_ON_INCORRECT = 1;
   const MAX_GUESSES = 6;
   const STORAGE_KEY = 'geneguessr_state';
   
@@ -674,6 +746,7 @@
   let molstarPreconnectAdded = false;
   let structureViewerLoaded = false;
   let interactivityGuards = null;
+  let currentRoundId = null;
   let gameState = {
     date: null,
     guesses: [],
@@ -812,6 +885,8 @@
     
     targetProtein = target;
     gameState.targetId = targetId;
+    currentRoundId = gameState.date;
+    initCreditsForRound(currentRoundId);
     structureViewerLoaded = false;
     
     gameState.guesses = gameState.guesses
@@ -997,64 +1072,84 @@
    * Render functions
    */
   function renderClueCard() {
-    const maxHints = Math.min(gameState.hintsUnlocked, 5);
-    
+    const sections = buildClueSections();
     return `
       ${renderStructureHint()}
       <div class="pg-clue-card">
-        ${maxHints >= 1 ? `
-          <div class="pg-clue-section">
-            <div class="pg-clue-label">Function</div>
-            <div class="pg-chips">
-              ${targetProtein.go_slim.slice(0, maxHints >= 3 ? 5 : 2).map(term => 
-                `<span class="pg-chip">${term}</span>`
-              ).join('')}
-            </div>
-          </div>
-        ` : ''}
-        
-        ${maxHints >= 2 ? `
-          <div class="pg-clue-section">
-            <div class="pg-clue-label">Tissue Specificity</div>
-            <div class="pg-chip">${targetProtein.tissue.label}</div>
-          </div>
-        ` : ''}
-        
-        ${maxHints >= 3 ? `
-          <div class="pg-clue-section">
-            <div class="pg-clue-label">Domains</div>
-            <div class="pg-chips">
-              ${targetProtein.domains.slice(0, 2).map(domain => 
-                `<span class="pg-chip">${domain}</span>`
-              ).join('')}
-            </div>
-          </div>
-        ` : ''}
-        
-        ${maxHints >= 4 ? `
-          <div class="pg-clue-section">
-            <div class="pg-clue-label">Properties</div>
-            <div class="pg-flags">
-              <div class="pg-flag">
-                <span>${targetProtein.tmh ? 'Transmembrane' : 'Soluble'}</span>
-              </div>
-              <div class="pg-flag">
-                <span>${targetProtein.secreted ? 'Secreted' : 'Intracellular'}</span>
-              </div>
-            </div>
-          </div>
-        ` : ''}
-        
-        ${maxHints >= 5 ? `
-          <div class="pg-clue-section">
-            <div class="pg-clue-label">Length</div>
-            <div>${targetProtein.length} amino acids</div>
-          </div>
-        ` : ''}
+        ${sections.map(renderSpoilerSection).join('')}
       </div>
     `;
   }
-  
+
+  function buildClueSections() {
+    const goTerms = targetProtein.go_slim.slice(0, 5);
+    const domains = targetProtein.domains.slice(0, 3);
+    return [
+      {
+        id: 'hint-function',
+        label: 'Function',
+        content: goTerms.length
+          ? `<div class="pg-chips">${goTerms.map(term => `<span class="pg-chip">${term}</span>`).join('')}</div>`
+          : `<div class="pg-chip">Not available</div>`,
+      },
+      {
+        id: 'hint-tissue',
+        label: 'Tissue Specificity',
+        content: `<div class="pg-chip">${targetProtein.tissue.label}</div>`,
+      },
+      {
+        id: 'hint-domains',
+        label: 'Domains',
+        content: domains.length
+          ? `<div class="pg-chips">${domains.map(domain => `<span class="pg-chip">${domain}</span>`).join('')}</div>`
+          : `<div class="pg-chip">No structured domains</div>`,
+      },
+      {
+        id: 'hint-properties',
+        label: 'Properties',
+        content: `
+          <div class="pg-flags">
+            <div class="pg-flag">
+              <span>${targetProtein.tmh ? 'Transmembrane' : 'Soluble'}</span>
+            </div>
+            <div class="pg-flag">
+              <span>${targetProtein.secreted ? 'Secreted' : 'Intracellular'}</span>
+            </div>
+          </div>
+          <div class="pg-subtext">Tissue: ${targetProtein.tissue.label}</div>
+        `,
+      },
+      {
+        id: 'hint-length',
+        label: 'Length',
+        content: `<div>${targetProtein.length} amino acids</div>`,
+      },
+    ];
+  }
+
+  function renderSpoilerSection(section) {
+    const revealed = isHintRevealed(section.id);
+    const overlay = revealed
+      ? ''
+      : `
+        <div class="pg-spoiler-overlay" aria-hidden="true">
+          <p class="pg-spoiler-text">Spend ${DEFAULT_HINT_COST} credit to reveal this hint.</p>
+          <button type="button" class="pg-spoiler-btn" data-hint-id="${section.id}">
+            Reveal hint
+          </button>
+        </div>
+      `;
+    return `
+      <div class="pg-clue-section">
+        <div class="pg-clue-label">${section.label}</div>
+        <div class="pg-spoiler ${revealed ? 'pg-spoiler--open' : ''}" data-hint-id="${section.id}">
+          <div class="pg-spoiler-content">${section.content}</div>
+          ${overlay}
+        </div>
+      </div>
+    `;
+  }
+
   function renderFeedbackPanel(guess, score) {
     const goLabel = formatGoSimilarityLabel();
     const goPercent = typeof score.goPercent === 'number' ? score.goPercent : null;
@@ -1147,6 +1242,16 @@
           <div class="pg-stat-value">${stats.currentStreak}</div>
           <div class="pg-stat-label">Streak</div>
         </div>
+      </div>
+    `;
+  }
+
+  function renderCreditsMeter() {
+    const credits = getCreditsBalance();
+    return `
+      <div class="pg-credits" aria-live="polite">
+        <span class="pg-credits-label">Credits</span>
+        <span class="pg-credits-value">${credits}</span>
       </div>
     `;
   }
@@ -1332,6 +1437,19 @@
     document.getElementById('pg-submit').disabled = false;
     document.getElementById('pg-submit').dataset.uniprot = uniprot;
   }
+
+  function setupSpoilerHandlers() {
+    document.querySelectorAll('.pg-spoiler-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const hintId = btn.dataset.hintId;
+        if (!hintId) return;
+        const success = attemptReveal(hintId, DEFAULT_HINT_COST);
+        if (success) {
+          render();
+        }
+      });
+    });
+  }
   
   /**
    * Handle guess submission
@@ -1368,6 +1486,7 @@
     // Unlock next hint
     if (!isCorrect) {
       gameState.hintsUnlocked = Math.min(gameState.hintsUnlocked + 1, 5);
+      awardCredits(CREDIT_REWARD_ON_INCORRECT);
     }
     
     // Check win/loss
@@ -1438,8 +1557,9 @@ https://brinedew.bio/apps/geneguessr/`;
     try {
       const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
       
-      rootEl.innerHTML = `
-        ${renderStats()}
+    rootEl.innerHTML = `
+      ${renderCreditsMeter()}
+      ${renderStats()}
         
         <h2>Today's Protein</h2>
         ${renderClueCard()}
@@ -1497,12 +1617,13 @@ https://brinedew.bio/apps/geneguessr/`;
         }
       } else {
         const shareBtn = document.getElementById('pg-share-btn');
-        if (shareBtn) {
-          shareBtn.addEventListener('click', shareResult);
-        }
+      if (shareBtn) {
+        shareBtn.addEventListener('click', shareResult);
       }
-      
-      setupStructureInteractions();
+    }
+    
+    setupSpoilerHandlers();
+    setupStructureInteractions();
     } catch (err) {
       console.error('Geneguessr: render() failed', err);
       reportError('render-failed', err?.stack || err?.message || String(err));
