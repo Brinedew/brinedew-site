@@ -234,13 +234,23 @@
   }
 
   function toMolstarColor(rgb) {
-    const clamp = (value) => {
-      if (typeof value !== 'number' || Number.isNaN(value)) return 0;
-      return Math.max(0, Math.min(255, Math.round(value)));
+    const sanitize = (value) => {
+      if (!rgb || typeof value === 'undefined') {
+        return 0;
+      }
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : 0;
     };
-    const r = clamp(rgb.r);
-    const g = clamp(rgb.g);
-    const b = clamp(rgb.b);
+    const convert = (value) => {
+      const rounded = Math.round(sanitize(value));
+      if (!COLOR_CLAMPING_ENABLED) {
+        return rounded;
+      }
+      return Math.max(0, Math.min(255, rounded));
+    };
+    const r = convert(rgb?.r);
+    const g = convert(rgb?.g);
+    const b = convert(rgb?.b);
     return (r << 16) | (g << 8) | b;
   }
 
@@ -332,6 +342,8 @@
 
   // Parse URL params for debug flags (e.g., ?debug_viewer&no_occlusion&no_outline)
   const urlParams = new URLSearchParams(window.location.search);
+  const COLOR_CLAMPING_ENABLED = !urlParams.has('no_color_clamp');
+
   if (urlParams.has('debug_viewer')) {
     Object.keys(DEBUG_STYLIZATION).forEach(key => {
       if (urlParams.has(`no_${key}`)) {
