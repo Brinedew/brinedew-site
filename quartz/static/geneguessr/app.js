@@ -241,38 +241,124 @@
     };
   }
 
-  function applyMinimalViewerSettings(viewer) {
-    // Minimal approach: only hide UI elements that work without breaking rendering
+  function safeApplyCanvasProps(viewer, props, label) {
+    if (!viewer?.plugin?.canvas3d) {
+      console.warn(`[GeneGuessr] canvas3d unavailable; cannot apply ${label}`);
+      return false;
+    }
     try {
-      if (!viewer.plugin?.canvas3d) {
-        console.warn('Geneguessr: viewer.plugin.canvas3d not available for minimal settings');
-        return;
-      }
+      viewer.plugin.canvas3d.setProps(props);
+      console.info(`[GeneGuessr] Applied viewer setting: ${label}`);
+      return true;
+    } catch (err) {
+      console.warn(`[GeneGuessr] Failed to apply ${label}`, err);
+      return false;
+    }
+  }
 
-      // ONLY set camera helper to hide axis - this is safe and doesn't break rendering
-      viewer.plugin.canvas3d.setProps({
-        camera: {
-          helper: {
-            axes: { name: 'off' }
+  function hideMolstarPanels(viewer) {
+    try {
+      viewer.plugin?.layout?.setProps?.({
+        isExpanded: false,
+        showControls: false,
+      });
+    } catch (err) {
+      console.warn('Geneguessr: unable to hide Mol* layout controls', err);
+    }
+  }
+
+  function applyViewerStylizationProfile(viewer) {
+    const bgColor = isDarkMode()
+      ? { r: 17, g: 12, b: 10 }
+      : { r: 248, g: 241, b: 231 };
+
+    const steps = [
+      () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'),
+      () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'),
+      () => safeApplyCanvasProps(viewer, {
+        renderer: {
+          backgroundColor: toCanvasColor(bgColor),
+          ambientColor: toCanvasColor(bgColor),
+          ambientIntensity: 0.35,
+          interiorDarkening: 0,
+        }
+      }, 'background & ambient colors'),
+      () => safeApplyCanvasProps(viewer, {
+        renderer: {
+          light: [
+            {
+              inclination: 170,
+              azimuth: 45,
+              color: toCanvasColor({ r: 255, g: 255, b: 255 }),
+              intensity: 1.1,
+            },
+            {
+              inclination: 25,
+              azimuth: 200,
+              color: toCanvasColor({ r: 255, g: 236, b: 210 }),
+              intensity: 0.6,
+            }
+          ],
+        },
+      }, 'custom lighting'),
+      () => safeApplyCanvasProps(viewer, {
+        postprocessing: {
+          occlusion: {
+            name: 'on',
+            params: {
+              samples: 32,
+              radius: 4,
+              bias: 0.8,
+              blurKernelSize: 7,
+              resolutionScale: 1
+            }
           }
         }
-      });
+      }, 'ambient occlusion'),
+      () => safeApplyCanvasProps(viewer, {
+        postprocessing: {
+          antialiasing: {
+            name: 'fxaa',
+            params: {
+              edgeThresholdMin: 0.125,
+              edgeThresholdMax: 0.25,
+              iterations: 2,
+              subpixelQuality: 0.75
+            }
+          }
+        }
+      }, 'antialiasing'),
+      () => safeApplyCanvasProps(viewer, {
+        cameraFog: {
+          name: 'on',
+          params: { intensity: 0.5 }
+        }
+      }, 'camera fog'),
+      () => safeApplyCanvasProps(viewer, {
+        postprocessing: {
+          outline: {
+            name: 'on',
+            params: {
+              scale: 1,
+              threshold: 0.4,
+              color: toCanvasColor({ r: 70, g: 55, b: 45 })
+            }
+          }
+        }
+      }, 'outline'),
+      () => safeApplyCanvasProps(viewer, {
+        marking: {
+          enabled: false,
+          edgeScale: 0,
+          ghostEdgeStrength: 0,
+          innerEdgeFactor: 0,
+        }
+      }, 'marking disable'),
+    ];
 
-      // Hide the loci labels (text overlay showing protein/residue info)
-      if (viewer.plugin?.layout?.setProps) {
-        viewer.plugin.layout.setProps({
-          isExpanded: false,
-          showControls: false
-        });
-      }
-
-      // Suppress hover tooltips and click selections
-      suppressViewerInteractivity(viewer);
-
-      console.info('Geneguessr: applied minimal viewer settings');
-    } catch (err) {
-      console.warn('Geneguessr: failed to apply minimal viewer settings', err);
-    }
+    steps.forEach((runner) => runner());
+    hideMolstarPanels(viewer);
+    suppressViewerInteractivity(viewer);
   }
 
   function suppressViewerInteractivity(viewer) {
@@ -363,14 +449,14 @@
         lowPrecisionCoords: false,
       });
 
-      // Apply minimal settings after render completes
+      // Apply incremental stylization after render completes
       if (viewer.events?.loadComplete) {
         viewer.events.loadComplete.subscribe(() => {
-          applyMinimalViewerSettings(viewer);
+          applyViewerStylizationProfile(viewer);
         });
       } else {
-        // Fallback: apply immediately
-        setTimeout(() => applyMinimalViewerSettings(viewer), 500);
+        // Fallback: apply shortly after render
+        setTimeout(() => applyViewerStylizationProfile(viewer), 500);
       }
 
       container.dataset.viewerLoaded = 'true';
