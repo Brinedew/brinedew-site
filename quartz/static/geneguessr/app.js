@@ -233,12 +233,15 @@
            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   }
 
-  function toCanvasColor(rgb) {
-    return {
-      r: Math.min(1, Math.max(0, rgb.r / 255)),
-      g: Math.min(1, Math.max(0, rgb.g / 255)),
-      b: Math.min(1, Math.max(0, rgb.b / 255)),
+  function toMolstarColor(rgb) {
+    const clamp = (value) => {
+      if (typeof value !== 'number' || Number.isNaN(value)) return 0;
+      return Math.max(0, Math.min(255, Math.round(value)));
     };
+    const r = clamp(rgb.r);
+    const g = clamp(rgb.g);
+    const b = clamp(rgb.b);
+    return (r << 16) | (g << 8) | b;
   }
 
   function safeApplyCanvasProps(viewer, props, label) {
@@ -272,8 +275,8 @@
     hideAxes: true,
     orthographic: true,
     backgroundColor: true,
-    lighting: true,
-    occlusion: true,
+    lighting: false,
+    occlusion: false,
     antialiasing: true,
     fog: true,
     outline: true,
@@ -286,7 +289,11 @@
     Object.keys(DEBUG_STYLIZATION).forEach(key => {
       if (urlParams.has(`no_${key}`)) {
         DEBUG_STYLIZATION[key] = false;
-        console.info(`[GeneGuessr] Debug: Disabled ${key}`);
+        console.info(`[GeneGuessr] Debug: disabled ${key}`);
+      }
+      if (urlParams.has(`with_${key}`)) {
+        DEBUG_STYLIZATION[key] = true;
+        console.info(`[GeneGuessr] Debug: enabled ${key}`);
       }
     });
   }
@@ -306,9 +313,9 @@
       { name: 'orthographic', enabled: DEBUG_STYLIZATION.orthographic, fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
       { name: 'backgroundColor', enabled: DEBUG_STYLIZATION.backgroundColor, fn: () => safeApplyCanvasProps(viewer, {
         renderer: {
-          backgroundColor: toCanvasColor(bgColor),
-          ambientColor: toCanvasColor(bgColor),
-          ambientIntensity: 0.35,
+          backgroundColor: toMolstarColor(bgColor),
+          ambientColor: toMolstarColor(bgColor),
+          ambientIntensity: 0.55,
           interiorDarkening: 0,
         }
       }, 'background & ambient colors'), delay: 150 },
@@ -318,13 +325,13 @@
             {
               inclination: 170,
               azimuth: 45,
-              color: toCanvasColor({ r: 255, g: 255, b: 255 }),
+              color: toMolstarColor({ r: 255, g: 255, b: 255 }),
               intensity: 1.1,
             },
             {
               inclination: 25,
               azimuth: 200,
-              color: toCanvasColor({ r: 255, g: 236, b: 210 }),
+              color: toMolstarColor({ r: 255, g: 236, b: 210 }),
               intensity: 0.6,
             }
           ],
@@ -370,7 +377,7 @@
             params: {
               scale: 1,
               threshold: 0.4,
-              color: toCanvasColor({ r: 70, g: 55, b: 45 })
+              color: toMolstarColor({ r: 70, g: 55, b: 45 })
             }
           }
         }
