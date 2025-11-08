@@ -1064,93 +1064,96 @@
     const goTerms = targetProtein.go_slim.slice(0, 5);
     const domains = targetProtein.domains.slice(0, 3);
     
-    // Build individual sections for each GO term - plain text, no decoration
-    const goSections = goTerms.length
+    // Combine all GO terms into one line with inline redactions
+    const functionContent = goTerms.length
       ? goTerms.map((term, idx) => ({
           id: `hint-function-${idx}`,
-          label: idx === 0 ? 'Function' : '',
-          content: term,
-          redactionLength: term.length,
+          text: term,
         }))
       : [{
           id: 'hint-function-0',
-          label: 'Function',
-          content: 'Not available',
-          redactionLength: 13,
+          text: 'Not available',
         }];
     
-    // Build individual sections for each domain - plain text
-    const domainSections = domains.length
+    // Combine all domains into one line with inline redactions
+    const domainContent = domains.length
       ? domains.map((domain, idx) => ({
           id: `hint-domain-${idx}`,
-          label: idx === 0 ? 'Domains' : '',
-          content: domain,
-          redactionLength: domain.length,
+          text: domain,
         }))
       : [{
           id: 'hint-domain-0',
-          label: 'Domains',
-          content: 'No structured domains',
-          redactionLength: 21,
+          text: 'No structured domains',
         }];
     
     return [
-      ...goSections,
+      {
+        id: 'hint-function-group',
+        label: 'Function',
+        items: functionContent,
+      },
       {
         id: 'hint-tissue',
         label: 'Tissue specificity',
-        content: targetProtein.tissue.label,
-        redactionLength: targetProtein.tissue.label.length,
+        items: [{
+          id: 'hint-tissue',
+          text: targetProtein.tissue.label,
+        }],
       },
-      ...domainSections,
+      {
+        id: 'hint-domain-group',
+        label: 'Domains',
+        items: domainContent,
+      },
       {
         id: 'hint-properties',
         label: 'Properties',
-        content: `${targetProtein.tmh ? 'Transmembrane' : 'Soluble'} · ${targetProtein.secreted ? 'Secreted' : 'Intracellular'}`,
-        redactionLength: 24,
+        items: [{
+          id: 'hint-properties',
+          text: `${targetProtein.tmh ? 'Transmembrane' : 'Soluble'} · ${targetProtein.secreted ? 'Secreted' : 'Intracellular'}`,
+        }],
       },
       {
         id: 'hint-length',
         label: 'Length',
-        content: `${targetProtein.length} aa`,
-        redactionLength: 6,
+        items: [{
+          id: 'hint-length',
+          text: `${targetProtein.length} aa`,
+        }],
       },
     ];
   }
 
   function renderSpoilerSection(section) {
-    const revealed = isHintRevealed(section.id);
-    
-    // Generate redaction blocks based on content length
-    const redactionLength = section.redactionLength || 20;
-    const numBlocks = Math.max(3, Math.min(30, Math.ceil(redactionLength / 3)));
-    const redactionBar = '█'.repeat(numBlocks);
-    
     const labelHtml = section.label
-      ? `<div class="pg-clue-label">${section.label}</div>`
+      ? `<span class="pg-clue-label-inline">${section.label}:</span> `
       : '';
     
-    if (revealed) {
-      // Revealed: show plain text inline
-      return `
-        <div class="pg-clue-section">
-          ${labelHtml}
-          <div class="pg-hint-text">${section.content}</div>
-        </div>
-      `;
-    } else {
-      // Redacted: show clickable inline block
-      return `
-        <div class="pg-clue-section">
-          ${labelHtml}
-          <span class="pg-redaction" 
-                data-hint-id="${section.id}" 
-                role="button" 
-                tabindex="0"
-                aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} credit">${redactionBar}</span>
-        </div>
-      `;
-    }
+    // Render all items on one line, separated by commas
+    const itemsHtml = section.items.map((item, idx) => {
+      const revealed = isHintRevealed(item.id);
+      const separator = idx < section.items.length - 1 ? ', ' : '';
+      
+      if (revealed) {
+        return `${item.text}${separator}`;
+      } else {
+        // Generate one █ per character (approximating actual censorship)
+        // Use full text length including spaces for realistic redaction
+        const textLength = item.text.length;
+        const redactionBar = '█'.repeat(Math.max(1, textLength));
+        return `<span class="pg-redaction" 
+                      data-hint-id="${item.id}" 
+                      role="button" 
+                      tabindex="0"
+                      aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} credit">${redactionBar}</span>${separator}`;
+      }
+    }).join('');
+    
+    return `
+      <div class="pg-clue-section">
+        ${labelHtml}${itemsHtml}
+      </div>
+    `;
   }
 
   function renderFeedbackPanel(guess, score) {
