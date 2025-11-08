@@ -90,26 +90,12 @@
     }
     const structure = targetProtein.structure || {};
     const meta = getStructureMetaLabel(structure);
-    const subtitle = meta ? `<div class="pg-structure-meta">${meta}</div>` : '';
-    const guidance = structure.primary_source === 'alphafold'
-      ? 'Predicted structure provided by AlphaFold DB.'
-      : 'Experimental structure from the Protein Data Bank.';
     
-    const btnLabel = structureViewerLoaded ? '3D Loaded' : 'View 3D';
-    const btnDisabledAttr = structureViewerLoaded ? 'disabled' : '';
     return `
       <div class="pg-structure-card">
-        <div class="pg-structure-header">
-          <div>
-            <div class="pg-structure-title">3D Structure</div>
-            ${subtitle}
-          </div>
-          <button id="pg-view-3d-btn" class="pg-view-3d-btn" type="button" ${btnDisabledAttr}>${btnLabel}</button>
-        </div>
         <div class="pg-structure-viewer" id="pg-structure-viewer" role="region" aria-label="3D structure viewer">
-          <div class="pg-structure-placeholder" id="pg-structure-placeholder">
-            <p>${guidance}</p>
-            <p class="pg-structure-tip">Viewer loads on demand via PDBe Mol★.</p>
+          <div class="pg-structure-placeholder" id="pg-structure-placeholder" hidden>
+            <p class="pg-structure-tip">Loading structure…</p>
           </div>
           <div class="pg-structure-loading" id="pg-structure-loading" hidden>Loading viewer…</div>
           <div class="pg-structure-error" id="pg-structure-error" hidden></div>
@@ -119,18 +105,11 @@
   }
 
   function setupStructureInteractions() {
-    const btn = document.getElementById('pg-view-3d-btn');
-    if (btn) {
-      btn.addEventListener('click', () => {
-        loadStructureViewer().catch((err) => {
-          console.error('Geneguessr: failed to load structure viewer', err);
-        });
+    // Auto-load structure viewer if we have structure data
+    if (hasStructureData(targetProtein) && !structureViewerLoaded) {
+      loadStructureViewer().catch((err) => {
+        console.error('Geneguessr: failed to load structure viewer', err);
       });
-      if (structureViewerLoaded && hasStructureData(targetProtein)) {
-        loadStructureViewer().catch((err) => {
-          console.error('Geneguessr: failed to restore structure viewer', err);
-        });
-      }
     }
   }
 
@@ -1590,10 +1569,6 @@ https://brinedew.bio/apps/geneguessr/`;
       const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
       
     rootEl.innerHTML = `
-      ${renderCreditsMeter()}
-      ${renderStats()}
-        
-        <h2>Today's Protein</h2>
         ${renderClueCard()}
         
         ${!gameOver ? `
@@ -1656,12 +1631,63 @@ https://brinedew.bio/apps/geneguessr/`;
     
     setupSpoilerHandlers();
     setupStructureInteractions();
+    updateSidebarStats();
     } catch (err) {
       console.error('Geneguessr: render() failed', err);
       reportError('render-failed', err?.stack || err?.message || String(err));
     }
   }
   
+  /**
+   * Inject stats/credits into sidebar
+   */
+  function injectSidebarStats() {
+    // Find Quartz explorer/toc sidebar
+    const explorer = document.querySelector('.explorer');
+    if (!explorer) return;
+    
+    const sidebarStats = document.createElement('div');
+    sidebarStats.id = 'pg-sidebar-stats';
+    sidebarStats.className = 'pg-sidebar-stats';
+    
+    const credits = getCreditsBalance();
+    const stats = loadStats();
+    
+    sidebarStats.innerHTML = `
+      <div class="pg-sidebar-section">
+        <div class="pg-sidebar-label">Credits</div>
+        <div class="pg-sidebar-value pg-sidebar-credits">${credits}</div>
+      </div>
+      <div class="pg-sidebar-section">
+        <div class="pg-sidebar-label">Stats</div>
+        <div class="pg-sidebar-stats-grid">
+          <div><span class="pg-sidebar-stat-label">Played:</span> ${stats.played}</div>
+          <div><span class="pg-sidebar-stat-label">Win Rate:</span> ${Math.round(stats.winRate * 100)}%</div>
+          <div><span class="pg-sidebar-stat-label">Streak:</span> ${stats.currentStreak}</div>
+        </div>
+      </div>
+    `;
+    
+    explorer.appendChild(sidebarStats);
+  }
+  
+  function updateSidebarStats() {
+    const sidebarCredits = document.querySelector('.pg-sidebar-credits');
+    if (sidebarCredits) {
+      sidebarCredits.textContent = getCreditsBalance();
+    }
+    
+    const statsGrid = document.querySelector('.pg-sidebar-stats-grid');
+    if (statsGrid) {
+      const stats = loadStats();
+      statsGrid.innerHTML = `
+        <div><span class="pg-sidebar-stat-label">Played:</span> ${stats.played}</div>
+        <div><span class="pg-sidebar-stat-label">Win Rate:</span> ${Math.round(stats.winRate * 100)}%</div>
+        <div><span class="pg-sidebar-stat-label">Streak:</span> ${stats.currentStreak}</div>
+      `;
+    }
+  }
+
   /**
    * Initialize app
    */
@@ -1677,6 +1703,10 @@ https://brinedew.bio/apps/geneguessr/`;
     
     // Show loading
     rootEl.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading Geneguessr...</div>';
+    
+    // Inject stats into sidebar
+    injectSidebarStats();
+    
     setStatus('loading-data');
     
     // Load data
