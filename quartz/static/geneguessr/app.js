@@ -1204,71 +1204,78 @@ https://brinedew.bio/apps/geneguessr/`;
    * Main render function
    */
   function render() {
-    const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
-    
-    rootEl.innerHTML = `
-      ${renderStats()}
+    try {
+      const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
       
-      <h2>Today's Protein</h2>
-      ${renderClueCard()}
-      
-      ${!gameOver ? `
-        <div class="pg-input-section">
-          <div class="pg-autocomplete-wrapper">
-            <input 
-              type="text" 
-              id="pg-input" 
-              class="pg-input" 
-              placeholder="Type protein name (e.g., TP53, EGFR)..."
-              autocomplete="off"
-            />
-            <div id="pg-suggestions" class="pg-suggestions"></div>
+      rootEl.innerHTML = `
+        ${renderStats()}
+        
+        <h2>Today's Protein</h2>
+        ${renderClueCard()}
+        
+        ${!gameOver ? `
+          <div class="pg-input-section">
+            <div class="pg-autocomplete-wrapper">
+              <input 
+                type="text" 
+                id="pg-input" 
+                class="pg-input" 
+                placeholder="Type protein name (e.g., TP53, EGFR)..."
+                autocomplete="off"
+              />
+              <div id="pg-suggestions" class="pg-suggestions"></div>
+            </div>
+            <button id="pg-submit" class="pg-submit-btn" disabled>Submit Guess</button>
           </div>
-          <button id="pg-submit" class="pg-submit-btn" disabled>Submit Guess</button>
+        ` : ''}
+        
+        <div id="pg-guesses">
+          ${gameState.guesses.map(g => renderFeedbackPanel(g.protein, g.score)).reverse().join('')}
         </div>
-      ` : ''}
+        
+        ${gameOver ? renderResult() : ''}
+        
+        ${gameOver ? `
+          <div class="pg-share-section">
+            <button id="pg-share-btn" class="pg-share-btn">Share Result</button>
+            <div id="pg-share-feedback" class="pg-share-feedback"></div>
+          </div>
+        ` : `
+          <div style="text-align: center; margin-top: 1rem; color: var(--gray);">
+            ${gameState.guesses.length}/${MAX_GUESSES} guesses
+          </div>
+        `}
+      `;
       
-      <div id="pg-guesses">
-        ${gameState.guesses.map(g => renderFeedbackPanel(g.protein, g.score)).reverse().join('')}
-      </div>
-      
-      ${gameOver ? renderResult() : ''}
-      
-      ${gameOver ? `
-        <div class="pg-share-section">
-          <button id="pg-share-btn" class="pg-share-btn">Share Result</button>
-          <div id="pg-share-feedback" class="pg-share-feedback"></div>
-        </div>
-      ` : `
-        <div style="text-align: center; margin-top: 1rem; color: var(--gray);">
-          ${gameState.guesses.length}/${MAX_GUESSES} guesses
-        </div>
-      `}
-    `;
-    
-    // Setup event listeners
-    if (!gameOver) {
-      const inputEl = document.getElementById('pg-input');
-      const suggestionsEl = document.getElementById('pg-suggestions');
-      const submitBtn = document.getElementById('pg-submit');
-      
-      setupAutocomplete(inputEl, suggestionsEl);
-      
-      submitBtn.addEventListener('click', submitGuess);
-      
-      // Clear button state on input change
-      inputEl.addEventListener('input', () => {
-        submitBtn.disabled = true;
-        delete submitBtn.dataset.uniprot;
-      });
-    } else {
-      const shareBtn = document.getElementById('pg-share-btn');
-      if (shareBtn) {
-        shareBtn.addEventListener('click', shareResult);
+      // Setup event listeners
+      if (!gameOver) {
+        const inputEl = document.getElementById('pg-input');
+        const suggestionsEl = document.getElementById('pg-suggestions');
+        const submitBtn = document.getElementById('pg-submit');
+        
+        if (inputEl && suggestionsEl && submitBtn) {
+          setupAutocomplete(inputEl, suggestionsEl);
+          
+          submitBtn.addEventListener('click', submitGuess);
+          
+          // Clear button state on input change
+          inputEl.addEventListener('input', () => {
+            submitBtn.disabled = true;
+            delete submitBtn.dataset.uniprot;
+          });
+        }
+      } else {
+        const shareBtn = document.getElementById('pg-share-btn');
+        if (shareBtn) {
+          shareBtn.addEventListener('click', shareResult);
+        }
       }
+      
+      setupStructureInteractions();
+    } catch (err) {
+      console.error('Geneguessr: render() failed', err);
+      reportError('render-failed', err?.stack || err?.message || String(err));
     }
-    
-    setupStructureInteractions();
   }
   
   /**
