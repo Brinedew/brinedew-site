@@ -170,62 +170,34 @@
   margin-bottom: 1.5rem;
 }
 
-.pg-spoiler {
-  padding: 0.5rem 0.75rem;
-  border-radius: 4px;
-  transition: all 0.25s ease;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-}
-
-.pg-spoiler--redacted {
-  background: rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  user-select: none;
-}
-
-.pg-spoiler--redacted:hover {
-  background: rgba(0, 0, 0, 0.12);
-  border-color: var(--accent);
-}
-
-.pg-spoiler--redacted:active {
-  transform: scale(0.995);
-}
-
-:root[data-theme="dark"] .pg-spoiler--redacted {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-:root[data-theme="dark"] .pg-spoiler--redacted:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: var(--accent);
-}
-
-.pg-spoiler--revealed {
-  background: transparent;
-  border: none;
-  padding-left: 0;
-}
-
 .pg-redaction {
   font-family: 'Courier New', Consolas, Monaco, monospace;
   font-size: 0.95rem;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   color: var(--dark);
-  opacity: 0.7;
+  opacity: 0.6;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s ease;
+  display: inline;
+}
+
+.pg-redaction:hover {
+  opacity: 0.8;
 }
 
 :root[data-theme="dark"] .pg-redaction {
   color: var(--light);
-  opacity: 0.5;
+  opacity: 0.4;
+}
+
+:root[data-theme="dark"] .pg-redaction:hover {
+  opacity: 0.6;
 }
 
 .pg-clue-section {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
 }
 
 .pg-clue-section:last-child {
@@ -233,17 +205,21 @@
 }
 
 .pg-clue-label {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.3rem;
+  margin-top: 0.75rem;
 }
 
 .pg-clue-label:empty {
   display: none;
   margin: 0;
+}
+
+.pg-hint-text {
+  color: var(--dark);
+  font-size: 0.95rem;
 }
 
 .pg-chips {

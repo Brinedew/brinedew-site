@@ -1085,33 +1085,33 @@
     const goTerms = targetProtein.go_slim.slice(0, 5);
     const domains = targetProtein.domains.slice(0, 3);
     
-    // Build individual sections for each GO term
+    // Build individual sections for each GO term - plain text, no decoration
     const goSections = goTerms.length
       ? goTerms.map((term, idx) => ({
           id: `hint-function-${idx}`,
           label: idx === 0 ? 'Function' : '',
-          content: `<div class="pg-chip">${term}</div>`,
+          content: term,
           redactionLength: term.length,
         }))
       : [{
           id: 'hint-function-0',
           label: 'Function',
-          content: `<div class="pg-chip">Not available</div>`,
+          content: 'Not available',
           redactionLength: 13,
         }];
     
-    // Build individual sections for each domain
+    // Build individual sections for each domain - plain text
     const domainSections = domains.length
       ? domains.map((domain, idx) => ({
           id: `hint-domain-${idx}`,
           label: idx === 0 ? 'Domains' : '',
-          content: `<div class="pg-chip">${domain}</div>`,
+          content: domain,
           redactionLength: domain.length,
         }))
       : [{
           id: 'hint-domain-0',
           label: 'Domains',
-          content: `<div class="pg-chip">No structured domains</div>`,
+          content: 'No structured domains',
           redactionLength: 21,
         }];
     
@@ -1119,30 +1119,21 @@
       ...goSections,
       {
         id: 'hint-tissue',
-        label: 'Tissue Specificity',
-        content: `<div class="pg-chip">${targetProtein.tissue.label}</div>`,
+        label: 'Tissue specificity',
+        content: targetProtein.tissue.label,
         redactionLength: targetProtein.tissue.label.length,
       },
       ...domainSections,
       {
         id: 'hint-properties',
         label: 'Properties',
-        content: `
-          <div class="pg-flags">
-            <div class="pg-flag">
-              <span>${targetProtein.tmh ? 'Transmembrane' : 'Soluble'}</span>
-            </div>
-            <div class="pg-flag">
-              <span>${targetProtein.secreted ? 'Secreted' : 'Intracellular'}</span>
-            </div>
-          </div>
-        `,
+        content: `${targetProtein.tmh ? 'Transmembrane' : 'Soluble'} · ${targetProtein.secreted ? 'Secreted' : 'Intracellular'}`,
         redactionLength: 24,
       },
       {
         id: 'hint-length',
         label: 'Length',
-        content: `<div>${targetProtein.length} amino acids</div>`,
+        content: `${targetProtein.length} aa`,
         redactionLength: 6,
       },
     ];
@@ -1156,26 +1147,31 @@
     const numBlocks = Math.max(3, Math.min(30, Math.ceil(redactionLength / 3)));
     const redactionBar = '█'.repeat(numBlocks);
     
-    const content = revealed
-      ? section.content
-      : `<span class="pg-redaction">${redactionBar}</span>`;
-    
     const labelHtml = section.label
       ? `<div class="pg-clue-label">${section.label}</div>`
       : '';
     
-    return `
-      <div class="pg-clue-section">
-        ${labelHtml}
-        <div class="pg-spoiler ${revealed ? 'pg-spoiler--revealed' : 'pg-spoiler--redacted'}" 
-             data-hint-id="${section.id}" 
-             role="button" 
-             tabindex="0"
-             aria-label="${revealed ? 'Hint revealed' : 'Click to reveal hint for ' + DEFAULT_HINT_COST + ' credit'}">
-          ${content}
+    if (revealed) {
+      // Revealed: show plain text inline
+      return `
+        <div class="pg-clue-section">
+          ${labelHtml}
+          <div class="pg-hint-text">${section.content}</div>
         </div>
-      </div>
-    `;
+      `;
+    } else {
+      // Redacted: show clickable inline block
+      return `
+        <div class="pg-clue-section">
+          ${labelHtml}
+          <span class="pg-redaction" 
+                data-hint-id="${section.id}" 
+                role="button" 
+                tabindex="0"
+                aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} credit">${redactionBar}</span>
+        </div>
+      `;
+    }
   }
 
   function renderFeedbackPanel(guess, score) {
@@ -1467,9 +1463,9 @@
   }
 
   function setupSpoilerHandlers() {
-    document.querySelectorAll('.pg-spoiler--redacted').forEach((spoiler) => {
+    document.querySelectorAll('.pg-redaction[data-hint-id]').forEach((redaction) => {
       const handleReveal = () => {
-        const hintId = spoiler.dataset.hintId;
+        const hintId = redaction.dataset.hintId;
         if (!hintId) return;
         const success = attemptReveal(hintId, DEFAULT_HINT_COST);
         if (success) {
@@ -1477,8 +1473,8 @@
         }
       };
       
-      spoiler.addEventListener('click', handleReveal);
-      spoiler.addEventListener('keydown', (e) => {
+      redaction.addEventListener('click', handleReveal);
+      redaction.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           handleReveal();
