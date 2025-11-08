@@ -5,13 +5,25 @@ tags:
 date: 2025-11-02
 draft: true
 ---
-# The only benchmark that matters
+# The slowest benchmark in science
 
-## 1. Animal Lifespan Has Stagnated
+## 1. 
 
-### The Record That Won't Break
+It's late 2025, and the field of machine learning is running out of benchmarks to beat.
 
-The longest-lived laboratory mouse died at 1,819 days old in 2005. That's almost 20 years ago.
+Chess, Go, and tic-tac-toe have fought bravely and fallen. {fill later} has saturated long ago. {fill later} has also saturated. Even ominously named Humanity's Last Exam is growing steadily upward, from X% last year to the current record of XX%.
+
+But those are all easy. Let's try to find benchmarks that can offer a real challenge.
+
+Fusion comes to mind as a classic "always 30 years away" field. The progress in fusion is glacial: 
+
+- From JET 1997 Q=0.67 to NIF 2023 Q≈1.9: factor ≈ 2.84 over 26 y → CAGR ≈ 4.1%/yr.
+- From TFTR 1994 Q≈0.27 to NIF 2023 Q≈1.9: factor ≈ 7.0 over 29 y → CAGR ≈ 7.0%/yr.
+- JET energy record: 21.7 MJ (1997) → 69.3 MJ (2023): factor ≈ 3.2 over 26 y → CAGR ≈ 4.6%/yr.
+
+So yes, glacial, but still crawling forward - partly thanks to machine learning.
+
+The longest-lived laboratory mouse died at 1,819 days old in 2005. That's  20 years ago.
 
 For context: in those same 20 years, we've seen CRISPR go from discovery to clinical trials, AlphaFold solve protein folding, and COVID vaccines developed in under a year. Meanwhile, the mouse longevity record—the single most direct measure of whether we can actually slow aging—hasn't budged.
 
