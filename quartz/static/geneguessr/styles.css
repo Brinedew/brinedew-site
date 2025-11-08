@@ -148,7 +148,7 @@
   font-family: 'Courier New', Consolas, Monaco, monospace;
   font-size: 0.95rem;
   letter-spacing: -0.05em;
-  color: var(--dark);
+  color: var(--darkgray);
   opacity: 0.6;
   cursor: pointer;
   user-select: none;
@@ -159,15 +159,6 @@
 
 .pg-redaction:hover {
   opacity: 0.8;
-}
-
-:root[data-theme="dark"] .pg-redaction {
-  color: var(--light);
-  opacity: 0.4;
-}
-
-:root[data-theme="dark"] .pg-redaction:hover {
-  opacity: 0.6;
 }
 
 .pg-clue-section {
