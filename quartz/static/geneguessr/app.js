@@ -1084,26 +1084,46 @@
   function buildClueSections() {
     const goTerms = targetProtein.go_slim.slice(0, 5);
     const domains = targetProtein.domains.slice(0, 3);
+    
+    // Build individual sections for each GO term
+    const goSections = goTerms.length
+      ? goTerms.map((term, idx) => ({
+          id: `hint-function-${idx}`,
+          label: idx === 0 ? 'Function' : '',
+          content: `<div class="pg-chip">${term}</div>`,
+          redactionLength: term.length,
+        }))
+      : [{
+          id: 'hint-function-0',
+          label: 'Function',
+          content: `<div class="pg-chip">Not available</div>`,
+          redactionLength: 13,
+        }];
+    
+    // Build individual sections for each domain
+    const domainSections = domains.length
+      ? domains.map((domain, idx) => ({
+          id: `hint-domain-${idx}`,
+          label: idx === 0 ? 'Domains' : '',
+          content: `<div class="pg-chip">${domain}</div>`,
+          redactionLength: domain.length,
+        }))
+      : [{
+          id: 'hint-domain-0',
+          label: 'Domains',
+          content: `<div class="pg-chip">No structured domains</div>`,
+          redactionLength: 21,
+        }];
+    
     return [
-      {
-        id: 'hint-function',
-        label: 'Function',
-        content: goTerms.length
-          ? `<div class="pg-chips">${goTerms.map(term => `<span class="pg-chip">${term}</span>`).join('')}</div>`
-          : `<div class="pg-chip">Not available</div>`,
-      },
+      ...goSections,
       {
         id: 'hint-tissue',
         label: 'Tissue Specificity',
         content: `<div class="pg-chip">${targetProtein.tissue.label}</div>`,
+        redactionLength: targetProtein.tissue.label.length,
       },
-      {
-        id: 'hint-domains',
-        label: 'Domains',
-        content: domains.length
-          ? `<div class="pg-chips">${domains.map(domain => `<span class="pg-chip">${domain}</span>`).join('')}</div>`
-          : `<div class="pg-chip">No structured domains</div>`,
-      },
+      ...domainSections,
       {
         id: 'hint-properties',
         label: 'Properties',
@@ -1116,35 +1136,43 @@
               <span>${targetProtein.secreted ? 'Secreted' : 'Intracellular'}</span>
             </div>
           </div>
-          <div class="pg-subtext">Tissue: ${targetProtein.tissue.label}</div>
         `,
+        redactionLength: 24,
       },
       {
         id: 'hint-length',
         label: 'Length',
         content: `<div>${targetProtein.length} amino acids</div>`,
+        redactionLength: 6,
       },
     ];
   }
 
   function renderSpoilerSection(section) {
     const revealed = isHintRevealed(section.id);
-    const overlay = revealed
-      ? ''
-      : `
-        <div class="pg-spoiler-overlay" aria-hidden="true">
-          <p class="pg-spoiler-text">Spend ${DEFAULT_HINT_COST} credit to reveal this hint.</p>
-          <button type="button" class="pg-spoiler-btn" data-hint-id="${section.id}">
-            Reveal hint
-          </button>
-        </div>
-      `;
+    
+    // Generate redaction blocks based on content length
+    const redactionLength = section.redactionLength || 20;
+    const numBlocks = Math.max(3, Math.min(30, Math.ceil(redactionLength / 3)));
+    const redactionBar = '█'.repeat(numBlocks);
+    
+    const content = revealed
+      ? section.content
+      : `<span class="pg-redaction">${redactionBar}</span>`;
+    
+    const labelHtml = section.label
+      ? `<div class="pg-clue-label">${section.label}</div>`
+      : '';
+    
     return `
       <div class="pg-clue-section">
-        <div class="pg-clue-label">${section.label}</div>
-        <div class="pg-spoiler ${revealed ? 'pg-spoiler--open' : ''}" data-hint-id="${section.id}">
-          <div class="pg-spoiler-content">${section.content}</div>
-          ${overlay}
+        ${labelHtml}
+        <div class="pg-spoiler ${revealed ? 'pg-spoiler--revealed' : 'pg-spoiler--redacted'}" 
+             data-hint-id="${section.id}" 
+             role="button" 
+             tabindex="0"
+             aria-label="${revealed ? 'Hint revealed' : 'Click to reveal hint for ' + DEFAULT_HINT_COST + ' credit'}">
+          ${content}
         </div>
       </div>
     `;
@@ -1439,13 +1467,21 @@
   }
 
   function setupSpoilerHandlers() {
-    document.querySelectorAll('.pg-spoiler-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const hintId = btn.dataset.hintId;
+    document.querySelectorAll('.pg-spoiler--redacted').forEach((spoiler) => {
+      const handleReveal = () => {
+        const hintId = spoiler.dataset.hintId;
         if (!hintId) return;
         const success = attemptReveal(hintId, DEFAULT_HINT_COST);
         if (success) {
           render();
+        }
+      };
+      
+      spoiler.addEventListener('click', handleReveal);
+      spoiler.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleReveal();
         }
       });
     });
