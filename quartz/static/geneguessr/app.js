@@ -1039,7 +1039,7 @@
       
       suggestionsEl.innerHTML = matches.map((p, idx) => `
         <div class="pg-suggestion" data-uniprot="${p.uniprot}" data-index="${idx}" title="${escapeHtml(p.full_name)}">
-          <div class="pg-suggestion-title">${escapeHtml(formatSuggestionSubtitle(p))}</div>
+          <div class="pg-suggestion-title">${escapeHtml(p.hgnc)}</div>
           <div class="pg-suggestion-sub">${escapeHtml(p.full_name || p.hgnc)}</div>
         </div>
       `).join('');
