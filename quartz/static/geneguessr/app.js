@@ -255,20 +255,32 @@
     };
   }
 
-  function getViewerBackgroundColor(container) {
+  function getViewerThemeColors(container) {
     const defaultLight = { r: 248, g: 241, b: 231 };
     const defaultDark = { r: 17, g: 12, b: 10 };
     if (!container) {
-      return isDarkMode() ? defaultDark : defaultLight;
+      return {
+        background: isDarkMode() ? defaultDark : defaultLight,
+        outline: isDarkMode() ? { r: 0, g: 0, b: 0 } : { r: 70, g: 55, b: 45 },
+      };
     }
     try {
       const style = window.getComputedStyle(container);
-      const parsed = parseColorString(style.backgroundColor, null);
-      if (parsed) return parsed;
+      const bg = parseColorString(style.backgroundColor, null);
+      const outline = isDarkMode() ? { r: 0, g: 0, b: 0 } : parseColorString(style.color, { r: 70, g: 55, b: 45 });
+      if (bg) {
+        return {
+          background: bg,
+          outline: outline || (isDarkMode() ? { r: 0, g: 0, b: 0 } : { r: 70, g: 55, b: 45 }),
+        };
+      }
     } catch {
       // ignore and fall through
     }
-    return isDarkMode() ? defaultDark : defaultLight;
+    return {
+      background: isDarkMode() ? defaultDark : defaultLight,
+      outline: isDarkMode() ? { r: 0, g: 0, b: 0 } : { r: 70, g: 55, b: 45 },
+    };
   }
 
   function safeApplyCanvasProps(viewer, props, label) {
@@ -329,11 +341,11 @@
   }
 
   function applyViewerThemeColors(viewer, container) {
-    const bgColor = getViewerBackgroundColor(container);
+    const theme = getViewerThemeColors(container);
     safeApplyCanvasProps(viewer, {
       renderer: {
-        backgroundColor: toMolstarColor(bgColor),
-        ambientColor: toMolstarColor(bgColor),
+        backgroundColor: toMolstarColor(theme.background),
+        ambientColor: toMolstarColor(theme.background),
         ambientIntensity: 0.55,
         interiorDarkening: 0,
       }
@@ -430,18 +442,21 @@
           params: { intensity: 0.5 }
         }
       }, 'camera fog'), delay: 150 },
-      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => safeApplyCanvasProps(viewer, {
+      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => {
+        const theme = getViewerThemeColors(container);
+        return safeApplyCanvasProps(viewer, {
         postprocessing: {
           outline: {
             name: 'on',
             params: {
               scale: 0.5,
               threshold: 0.35,
-              color: toMolstarColor({ r: 90, g: 70, b: 55 })
+              color: toMolstarColor(theme.outline)
             }
           }
         }
-      }, 'outline'), delay: 150 },
+      }, 'outline');
+      }, delay: 150 },
       { name: 'disableMarking', enabled: DEBUG_STYLIZATION.disableMarking, fn: () => safeApplyCanvasProps(viewer, {
         marking: {
           enabled: false,
