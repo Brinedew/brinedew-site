@@ -256,30 +256,35 @@
   }
 
   function getViewerThemeColors(container) {
-    const defaultLight = { r: 248, g: 241, b: 231 };
-    const defaultDark = { r: 17, g: 12, b: 10 };
+    const defaultLightBg = { r: 248, g: 241, b: 231 };
+    const defaultDarkBg = { r: 17, g: 12, b: 10 };
+    const defaultLightOutline = defaultDarkBg;
+    const defaultDarkOutline = defaultLightBg;
     if (!container) {
       return {
-        background: isDarkMode() ? defaultDark : defaultLight,
-        outline: isDarkMode() ? { r: 0, g: 0, b: 0 } : { r: 70, g: 55, b: 45 },
+        background: isDarkMode() ? defaultDarkBg : defaultLightBg,
+        outline: isDarkMode() ? defaultDarkOutline : defaultLightOutline,
       };
     }
     try {
       const style = window.getComputedStyle(container);
       const bg = parseColorString(style.backgroundColor, null);
-      const outline = isDarkMode() ? { r: 0, g: 0, b: 0 } : parseColorString(style.color, { r: 70, g: 55, b: 45 });
+      const outlineCandidate = parseColorString(style.color, null);
+      const outline = isDarkMode()
+        ? (outlineCandidate || defaultDarkOutline)
+        : (outlineCandidate || defaultLightOutline);
       if (bg) {
         return {
           background: bg,
-          outline: outline || (isDarkMode() ? { r: 0, g: 0, b: 0 } : { r: 70, g: 55, b: 45 }),
+          outline,
         };
       }
     } catch {
       // ignore and fall through
     }
     return {
-      background: isDarkMode() ? defaultDark : defaultLight,
-      outline: isDarkMode() ? { r: 0, g: 0, b: 0 } : { r: 70, g: 55, b: 45 },
+      background: isDarkMode() ? defaultDarkBg : defaultLightBg,
+      outline: isDarkMode() ? defaultDarkOutline : defaultLightOutline,
     };
   }
 
@@ -560,7 +565,7 @@
         pdbeLink: false,
         // Appearance
         visualStyle: 'cartoon',
-        lighting: 'matte',
+        lighting: 'metallic',
         // Data/behavior
         loadMaps: false,  // Disable electron density maps - they cause streaming hang
         selectInteraction: false,
