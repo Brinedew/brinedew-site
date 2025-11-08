@@ -267,23 +267,28 @@
     }
   }
 
-  function applyViewerStylizationProfile(viewer) {
+  async function applyViewerStylizationProfile(viewer) {
     const bgColor = isDarkMode()
       ? { r: 17, g: 12, b: 10 }
       : { r: 248, g: 241, b: 231 };
 
+    // Apply UI hiding and interactivity suppression immediately (these are safe)
+    hideMolstarPanels(viewer);
+    suppressViewerInteractivity(viewer);
+
+    // Define stylization steps to apply sequentially with delays
     const steps = [
-      () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'),
-      () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'),
-      () => safeApplyCanvasProps(viewer, {
+      { fn: () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'), delay: 100 },
+      { fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
+      { fn: () => safeApplyCanvasProps(viewer, {
         renderer: {
           backgroundColor: toCanvasColor(bgColor),
           ambientColor: toCanvasColor(bgColor),
           ambientIntensity: 0.35,
           interiorDarkening: 0,
         }
-      }, 'background & ambient colors'),
-      () => safeApplyCanvasProps(viewer, {
+      }, 'background & ambient colors'), delay: 150 },
+      { fn: () => safeApplyCanvasProps(viewer, {
         renderer: {
           light: [
             {
@@ -300,8 +305,8 @@
             }
           ],
         },
-      }, 'custom lighting'),
-      () => safeApplyCanvasProps(viewer, {
+      }, 'custom lighting'), delay: 200 },
+      { fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           occlusion: {
             name: 'on',
@@ -314,8 +319,8 @@
             }
           }
         }
-      }, 'ambient occlusion'),
-      () => safeApplyCanvasProps(viewer, {
+      }, 'ambient occlusion'), delay: 200 },
+      { fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           antialiasing: {
             name: 'fxaa',
@@ -327,14 +332,14 @@
             }
           }
         }
-      }, 'antialiasing'),
-      () => safeApplyCanvasProps(viewer, {
+      }, 'antialiasing'), delay: 150 },
+      { fn: () => safeApplyCanvasProps(viewer, {
         cameraFog: {
           name: 'on',
           params: { intensity: 0.5 }
         }
-      }, 'camera fog'),
-      () => safeApplyCanvasProps(viewer, {
+      }, 'camera fog'), delay: 150 },
+      { fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           outline: {
             name: 'on',
@@ -345,20 +350,24 @@
             }
           }
         }
-      }, 'outline'),
-      () => safeApplyCanvasProps(viewer, {
+      }, 'outline'), delay: 150 },
+      { fn: () => safeApplyCanvasProps(viewer, {
         marking: {
           enabled: false,
           edgeScale: 0,
           ghostEdgeStrength: 0,
           innerEdgeFactor: 0,
         }
-      }, 'marking disable'),
+      }, 'marking disable'), delay: 100 },
     ];
 
-    steps.forEach((runner) => runner());
-    hideMolstarPanels(viewer);
-    suppressViewerInteractivity(viewer);
+    // Apply steps sequentially with delays to avoid overwhelming the renderer
+    for (const step of steps) {
+      await new Promise(resolve => setTimeout(resolve, step.delay));
+      step.fn();
+    }
+    
+    console.info('[GeneGuessr] Completed sequential stylization profile');
   }
 
   function suppressViewerInteractivity(viewer) {
