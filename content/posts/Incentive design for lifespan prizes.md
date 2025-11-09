@@ -23,6 +23,12 @@ Fusion comes to mind as a classic "always 30 years away" field. The progress in 
 
 So yes, glacial, but still crawling forward - partly thanks to machine learning.
 
+Is there anything slower?
+
+![[image-10.png|The South Bend Tribune - May 7th, 1925]]
+
+As of 1925, the oldest-living person was [Louisa Thiers](https://www.nytimes.com/1926/02/18/archives/mrs-louisa-k-thiers-dies-at-111-years-s-one-of-the-orighal.html), at 111.
+As of 2025, It was Jeanne Calment
 The longest-lived laboratory mouse died at 1,819 days old in 2005. That's  20 years ago.
 
 For context: in those same 20 years, we've seen CRISPR go from discovery to clinical trials, AlphaFold solve protein folding, and COVID vaccines developed in under a year. Meanwhile, the mouse longevity record—the single most direct measure of whether we can actually slow aging—hasn't budged.
