@@ -7,17 +7,13 @@ draft: true
 ---
 # What is an agent
 
-When does it make sense to call something an "agent"?
+The literature on philosophy, cybernetics and AI is littered with debates on what does it mean to call something an agent. They are all very interesting, but for all practical purposes there's a simple pragmatic concept that is worth adopting.
+### Russel-Norvig agents
 
-In debates around LLMs, I see a persistent disagreement pattern:
+The canonical AI textbook *Artificial Intelligence: A Modern Approach* by Russel and Norvig gives a simple practical definition of agents:
+> "An agent is anything that can be viewed as perceiving its environment through **sensors** and acting upon that environment through **actuators**."
 
-One person says something like:
-"Look at this lame joke my AI said, it thinks this is funny"
-
-Another person replies:
-"AIs don't think, they are just stochastic parrots that do next-token prediction, there's no consciousness inside"
-
-This is my informal description of an agent that I'm using throughough this site.
+Note how the wording *"viewed as"* shifts focus away from metaphysics of action, and towards the researcher's own interpretation of reality. As we learned, "all models are wrong, but some are useful".
 
 Let's try to look at different things and ask ourselves if it's helpful in any way to describe them as agents. We will start simple and climb the ladder of complexity.
 
@@ -58,3 +54,4 @@ Yes, it does: large event organizers and architects use stampede-preventing mode
 So, "agentic language" is especially useful for describing behaviours arising from hidden internal states. It's not very useful for modelling behaviours that arise from environment directly (things fall under gravity) or behaviours that obviously follow from linear script execution (knee reflex).
 
 Using agentic language concedes that we're not informed enough to predict behaviours directly. 
+
