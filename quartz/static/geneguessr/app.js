@@ -739,6 +739,7 @@
   
   // DOM elements (will be populated on init)
   let rootEl;
+  let layoutHydrated = false;
   const proteinsById = new Map();
   
   function normalizeProtein(protein) {
@@ -1032,7 +1033,6 @@
   function renderClueCard() {
     const sections = buildClueSections();
     return `
-      ${renderStructureHint()}
       <div class="pg-clue-card">
         ${sections.map(renderSpoilerSection).join('')}
       </div>
@@ -1207,6 +1207,124 @@
         </div>
       </div>
     `;
+  }
+  
+  function hydrateLayoutOnce() {
+    if (layoutHydrated || !rootEl) {
+      return;
+    }
+    const structureMarkup = renderStructureHint();
+    rootEl.innerHTML = `
+      <div id="pg-structure-slot">${structureMarkup}</div>
+      <div id="pg-clue-slot"></div>
+      <div id="pg-input-slot"></div>
+      <div id="pg-guesses"></div>
+      <div id="pg-result-slot"></div>
+      <div id="pg-footer-slot"></div>
+    `;
+    layoutHydrated = true;
+  }
+  
+  function renderClueSectionsIntoDom() {
+    const slot = document.getElementById('pg-clue-slot');
+    if (slot) {
+      slot.innerHTML = renderClueCard();
+    }
+  }
+  
+  function renderInputSection(gameOver) {
+    const slot = document.getElementById('pg-input-slot');
+    if (!slot) {
+      return;
+    }
+    if (gameOver) {
+      slot.innerHTML = '';
+      return;
+    }
+    slot.innerHTML = `
+      <div class="pg-input-section">
+        <div class="pg-input-row">
+          <div class="pg-autocomplete-wrapper">
+            <input 
+              type="text" 
+              id="pg-input" 
+              class="pg-input" 
+              placeholder="Type gene name (e.g., TERT, TP53)"
+              autocomplete="off"
+            />
+            <button id="pg-submit" class="pg-submit-inline" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+            <div id="pg-suggestions" class="pg-suggestions"></div>
+          </div>
+          <div class="pg-credits-badge">
+            <span class="pg-credits-label">Credits</span>
+            <span class="pg-credits-value">${gameState.credits}</span>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    const inputEl = document.getElementById('pg-input');
+    const suggestionsEl = document.getElementById('pg-suggestions');
+    const submitBtn = document.getElementById('pg-submit');
+    
+    if (inputEl && suggestionsEl && submitBtn) {
+      setupAutocomplete(inputEl, suggestionsEl);
+      
+      submitBtn.addEventListener('click', submitGuess);
+      
+      inputEl.addEventListener('input', () => {
+        submitBtn.disabled = true;
+        delete submitBtn.dataset.uniprot;
+      });
+    }
+  }
+  
+  function renderGuessesSection() {
+    const guessesEl = document.getElementById('pg-guesses');
+    if (!guessesEl) {
+      return;
+    }
+    guessesEl.innerHTML = gameState.guesses
+      .map(g => renderFeedbackPanel(g.protein, g.score))
+      .reverse()
+      .join('');
+  }
+  
+  function renderResultSection(gameOver) {
+    const slot = document.getElementById('pg-result-slot');
+    if (!slot) {
+      return;
+    }
+    slot.innerHTML = gameOver ? renderResult() : '';
+  }
+  
+  function renderFooterSection(gameOver) {
+    const slot = document.getElementById('pg-footer-slot');
+    if (!slot) {
+      return;
+    }
+    if (gameOver) {
+      slot.innerHTML = `
+        <div class="pg-share-section">
+          <button id="pg-share-btn" class="pg-share-btn">Share Result</button>
+          <div id="pg-share-feedback" class="pg-share-feedback"></div>
+        </div>
+      `;
+      const shareBtn = document.getElementById('pg-share-btn');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', shareResult);
+      }
+    } else {
+      slot.innerHTML = `
+        <div style="text-align: center; margin-top: 1rem; color: var(--gray);">
+          ${gameState.guesses.length}/${MAX_GUESSES} guesses
+        </div>
+      `;
+    }
   }
   
   function renderStats() {
@@ -1549,81 +1667,17 @@ https://brinedew.bio/apps/geneguessr/`;
   function render() {
     try {
       const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
+
+      hydrateLayoutOnce();
+      renderClueSectionsIntoDom();
+      renderInputSection(gameOver);
+      renderGuessesSection();
+      renderResultSection(gameOver);
+      renderFooterSection(gameOver);
       
-    rootEl.innerHTML = `
-        ${renderClueCard()}
-        
-        ${!gameOver ? `
-          <div class="pg-input-section">
-            <div class="pg-input-row">
-              <div class="pg-autocomplete-wrapper">
-                <input 
-                  type="text" 
-                  id="pg-input" 
-                  class="pg-input" 
-                  placeholder="Type gene name (e.g., TERT, TP53)"
-                  autocomplete="off"
-                />
-                <button id="pg-submit" class="pg-submit-inline" disabled>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </button>
-                <div id="pg-suggestions" class="pg-suggestions"></div>
-              </div>
-              <div class="pg-credits-badge">
-                <span class="pg-credits-label">Credits</span>
-                <span class="pg-credits-value">${gameState.credits}</span>
-              </div>
-            </div>
-          </div>
-        ` : ''}
-        
-        <div id="pg-guesses">
-          ${gameState.guesses.map(g => renderFeedbackPanel(g.protein, g.score)).reverse().join('')}
-        </div>
-        
-        ${gameOver ? renderResult() : ''}
-        
-        ${gameOver ? `
-          <div class="pg-share-section">
-            <button id="pg-share-btn" class="pg-share-btn">Share Result</button>
-            <div id="pg-share-feedback" class="pg-share-feedback"></div>
-          </div>
-        ` : `
-          <div style="text-align: center; margin-top: 1rem; color: var(--gray);">
-            ${gameState.guesses.length}/${MAX_GUESSES} guesses
-          </div>
-        `}
-      `;
-      
-      // Setup event listeners
-      if (!gameOver) {
-        const inputEl = document.getElementById('pg-input');
-        const suggestionsEl = document.getElementById('pg-suggestions');
-        const submitBtn = document.getElementById('pg-submit');
-        
-        if (inputEl && suggestionsEl && submitBtn) {
-          setupAutocomplete(inputEl, suggestionsEl);
-          
-          submitBtn.addEventListener('click', submitGuess);
-          
-          // Clear button state on input change
-          inputEl.addEventListener('input', () => {
-            submitBtn.disabled = true;
-            delete submitBtn.dataset.uniprot;
-          });
-        }
-      } else {
-        const shareBtn = document.getElementById('pg-share-btn');
-      if (shareBtn) {
-        shareBtn.addEventListener('click', shareResult);
-      }
-    }
-    
-    setupSpoilerHandlers();
-    setupStructureInteractions();
-    updateSidebarStats();
+      setupSpoilerHandlers();
+      setupStructureInteractions();
+      updateSidebarStats();
     } catch (err) {
       console.error('Geneguessr: render() failed', err);
       reportError('render-failed', err?.stack || err?.message || String(err));
