@@ -1551,17 +1551,27 @@ https://brinedew.bio/apps/geneguessr/`;
         
         ${!gameOver ? `
           <div class="pg-input-section">
-            <div class="pg-autocomplete-wrapper">
-              <input 
-                type="text" 
-                id="pg-input" 
-                class="pg-input" 
-                placeholder="Type protein name (e.g., TP53, EGFR)..."
-                autocomplete="off"
-              />
-              <div id="pg-suggestions" class="pg-suggestions"></div>
+            <div class="pg-input-row">
+              <div class="pg-autocomplete-wrapper">
+                <input 
+                  type="text" 
+                  id="pg-input" 
+                  class="pg-input" 
+                  placeholder="Type gene name (e.g., TERT, TP53)"
+                  autocomplete="off"
+                />
+                <button id="pg-submit" class="pg-submit-inline" disabled>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </button>
+                <div id="pg-suggestions" class="pg-suggestions"></div>
+              </div>
+              <div class="pg-credits-badge">
+                <span class="pg-credits-label">Credits</span>
+                <span class="pg-credits-value">${gameState.credits}</span>
+              </div>
             </div>
-            <button id="pg-submit" class="pg-submit-btn" disabled>Submit Guess</button>
           </div>
         ` : ''}
         
@@ -1662,6 +1672,12 @@ https://brinedew.bio/apps/geneguessr/`;
     const sidebarCredits = document.querySelector('.pg-sidebar-credits');
     if (sidebarCredits) {
       sidebarCredits.textContent = getCreditsBalance();
+    }
+    
+    // Update inline credits badge
+    const inlineCredits = document.querySelector('.pg-credits-value');
+    if (inlineCredits) {
+      inlineCredits.textContent = getCreditsBalance();
     }
     
     const statsGrid = document.querySelector('.pg-sidebar-stats-grid');
