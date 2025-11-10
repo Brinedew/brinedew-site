@@ -993,22 +993,8 @@
   }
   
   function formatGoSimilarityNote() {
-    const meta = getGoSimilarityMetadata();
-    if (!meta) {
-      return '';
-    }
-    const details = [];
-    if (meta.go_release) {
-      details.push(`GO ${meta.go_release}`);
-    }
-    if (meta.evidence_policy) {
-      details.push(meta.evidence_policy);
-    }
-    if (meta.generated_at) {
-      const built = String(meta.generated_at);
-      details.push(`built ${built.slice(0, 10)}`);
-    }
-    return details.join(' · ');
+    // Removed metadata display to reduce mobile clutter (B-69)
+    return '';
   }
   
   function scoreGuess(guess, target) {
