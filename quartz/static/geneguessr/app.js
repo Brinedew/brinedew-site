@@ -978,18 +978,7 @@
   }
   
   function formatGoSimilarityLabel() {
-    const meta = getGoSimilarityMetadata();
-    if (!meta) {
-      return 'GO Similarity';
-    }
-    const aspect = meta.aspect === 'biological_process'
-      ? 'BP'
-      : (meta.aspect || '');
-    const metric = meta.metric ? meta.metric.toUpperCase() : '';
-    const aggregation = meta.aggregation ? meta.aggregation.toUpperCase() : '';
-    const metricPart = metric && aggregation ? `${metric}+${aggregation}` : (metric || aggregation);
-    const pieces = [aspect, metricPart].filter(Boolean);
-    return pieces.length ? `GO Similarity (${pieces.join(', ')})` : 'GO Similarity';
+    return 'Similarity';
   }
   
   function formatGoSimilarityNote() {
