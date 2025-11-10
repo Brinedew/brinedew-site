@@ -106,7 +106,11 @@
 
   function setupStructureInteractions() {
     // Auto-load structure viewer if we have structure data
-    if (hasStructureData(targetProtein) && !structureViewerLoaded) {
+    const container = document.querySelector('.pg-structure-viewer');
+    const needsLoad = hasStructureData(targetProtein) && 
+                      (!structureViewerLoaded || !container?.querySelector('canvas'));
+    
+    if (needsLoad) {
       loadStructureViewer().catch((err) => {
         console.error('Geneguessr: failed to load structure viewer', err);
       });
