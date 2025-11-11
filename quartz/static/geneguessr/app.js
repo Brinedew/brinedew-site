@@ -314,13 +314,27 @@
     }
   }
 
-  function getHintsBalance() {
-    const api = hintsApi();
+  function readHintsBalanceDirect(api) {
+    if (!api?.getHints) return null;
     try {
-      return api?.getHints?.() ?? DEFAULT_HINT_COST;
-    } catch {
-      return DEFAULT_HINT_COST;
+      const value = api.getHints();
+      return typeof value === 'number' ? value : null;
+    } catch (err) {
+      console.warn('Geneguessr: failed to read hint balance', err);
+      return null;
     }
+  }
+
+  function getHintsBalance() {
+    const direct = readHintsBalanceDirect(hintsApi());
+    return direct ?? DEFAULT_HINT_COST;
+  }
+
+  function updateHintDisplays(explicitValue) {
+    const value = typeof explicitValue === 'number' ? explicitValue : getHintsBalance();
+    document.querySelectorAll('.pg-hints-value, .pg-sidebar-hints').forEach((el) => {
+      el.textContent = value;
+    });
   }
 
   function isHintRevealed(hintId) {
@@ -339,9 +353,24 @@
     if (!api || !currentRoundId) {
       return true;
     }
+    const before = readHintsBalanceDirect(api);
     try {
       const result = api.revealHint(currentRoundId, hintId, cost);
       if (result && result.success) {
+        const after = readHintsBalanceDirect(api);
+        updateHintDisplays(after ?? before);
+        if (typeof before === 'number' && typeof after === 'number' && api?.earnHints) {
+          const actualCost = before - after;
+          if (actualCost > cost) {
+            try {
+              api.earnHints(actualCost - cost);
+              const refundBalance = readHintsBalanceDirect(api);
+              updateHintDisplays(refundBalance ?? after);
+            } catch (refundErr) {
+              console.warn('Geneguessr: failed to refund excess hint cost', refundErr);
+            }
+          }
+        }
         return true;
       }
       flashHintsWarning();
@@ -358,6 +387,8 @@
     if (!api || !amount) return;
     try {
       api.earnHints(amount);
+      const balance = readHintsBalanceDirect(api);
+      updateHintDisplays(balance);
     } catch (err) {
       console.warn('Geneguessr: unable to earn hints', err);
     }
