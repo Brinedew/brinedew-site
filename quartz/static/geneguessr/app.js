@@ -1075,8 +1075,77 @@
    * Render functions
    */
   // Unified card section builder - generates sections for both clue and guess cards
+  function formatGoTerms(protein, aspect) {
+    const names = protein.go_terms_named?.[aspect];
+    if (Array.isArray(names) && names.length) {
+      return names;
+    }
+    const raw = protein.go_terms?.[aspect];
+    return Array.isArray(raw) ? raw : [];
+  }
+
+  function formatReactomeList(protein) {
+    return (protein.reactome_pathways || [])
+      .map((entry) => {
+        if (!entry) return '';
+        if (typeof entry === 'string') return entry;
+        const trimmed = entry.name && entry.name.trim();
+        return trimmed || entry.id || '';
+      })
+      .filter(Boolean);
+  }
+
+  function collectMatchedHintTexts(target, guessEntry) {
+    const matches = {};
+    if (!target || !guessEntry) {
+      return matches;
+    }
+    const guess = guessEntry.protein;
+    const score = guessEntry.score || {};
+    const addMatches = (sectionId, values) => {
+      const filtered = values.filter(Boolean);
+      if (filtered.length) {
+        matches[sectionId] = filtered;
+      }
+    };
+    const intersect = (a, b) => {
+      if (!a.length || !b.length) {
+        return [];
+      }
+      const setB = new Set(b);
+      return a.filter((item) => setB.has(item));
+    };
+
+    addMatches('domains', score.domainMatches || []);
+    ['mf', 'cc', 'bp'].forEach((aspect) => {
+      const overlap = intersect(
+        formatGoTerms(target, aspect),
+        formatGoTerms(guess, aspect)
+      );
+      if (overlap.length) {
+        matches[`function-${aspect}`] = overlap;
+      }
+    });
+    addMatches('reactome', intersect(formatReactomeList(target), formatReactomeList(guess)));
+    if (score.tissueMatch) {
+      addMatches('tissue', [target.tissue.label]);
+    }
+    const propertyMatches = [];
+    if (score.tmMatch) {
+      propertyMatches.push(target.tmh ? 'Transmembrane' : 'Soluble');
+    }
+    if (score.secretedMatch) {
+      propertyMatches.push(target.secreted ? 'Secreted' : 'Intracellular');
+    }
+    addMatches('properties', propertyMatches);
+    if (score.lengthBinMatch) {
+      addMatches('length', [`${target.length} aa`]);
+    }
+    return matches;
+  }
+
   function buildProteinSections(protein, options = {}) {
-    const { forClue = false, matchedDomains = [] } = options;
+    const { forClue = false } = options;
     const goTermsByAspect = protein.go_terms || {};
     const goTermNamesByAspect = protein.go_terms_named || {};
     const domains = Array.isArray(protein.domains) ? protein.domains : [];
@@ -1140,10 +1209,16 @@
     pushSection({
       id: 'properties',
       label: 'Properties',
-      items: [{
-        id: forClue ? 'hint-properties' : undefined,
-        text: `${protein.tmh ? 'Transmembrane' : 'Soluble'} · ${protein.secreted ? 'Secreted' : 'Intracellular'}`,
-      }],
+      items: [
+        {
+          id: forClue ? 'hint-properties-tm' : undefined,
+          text: protein.tmh ? 'Transmembrane' : 'Soluble',
+        },
+        {
+          id: forClue ? 'hint-properties-secreted' : undefined,
+          text: protein.secreted ? 'Secreted' : 'Intracellular',
+        },
+      ],
     });
     
     // Tissue specificity
@@ -1158,12 +1233,10 @@
       pushSection({
         id: 'domains',
         label: 'Domains',
-        items: forClue
-          ? domains.map((domain, idx) => ({ id: `hint-domain-${idx}`, text: domain }))
-          : domains.map(d => ({ 
-              text: d, 
-              matched: matchedDomains.includes(d) 
-            })),
+        items: domains.map((domain, idx) => ({
+          id: forClue ? `hint-domain-${idx}` : undefined,
+          text: domain,
+        })),
       });
     } else {
       pushSection({
@@ -1229,6 +1302,14 @@
     return sections;
   }
 
+  function renderClueSectionsHtml(clueMatches) {
+    const sections = buildProteinSections(targetProtein, { forClue: true });
+    return sections.map(section => renderSpoilerSection(section, {
+      matchedItems: clueMatches[section.id] || [],
+      removeSpoilers: true,
+    })).join('');
+  }
+
   function renderClueCard(gameOver = false) {
     if (gameOver) {
       const revealCard = buildFeedbackCardMarkup(targetProtein, {
@@ -1243,14 +1324,17 @@
       `;
     }
     
-    const sections = buildProteinSections(targetProtein, { forClue: true });
+    const latestGuessEntry = gameState.guesses[gameState.guesses.length - 1] || null;
+    const clueMatches = collectMatchedHintTexts(targetProtein, latestGuessEntry);
+    // Important: renderStructureViewer builds the 3D placeholder once per guess.
+    // We only re-render the sections beneath to avoid tearing down Mol*.
     const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure');
     
     return `
       <div class="pg-clue-card">
         ${structureMarkup}
         <div class="pg-clue-sections" data-clue-sections>
-          ${sections.map(renderSpoilerSection).join('')}
+          ${renderClueSectionsHtml(clueMatches)}
         </div>
       </div>
     `;
@@ -1258,7 +1342,12 @@
 
   // Unified section renderer for both clue and feedback cards
   function renderProteinSection(section, options = {}) {
-    const { showSpoilers = false, matchedItems = [] } = options;
+    const {
+      showSpoilers = false,
+      matchedItems = [],
+      removeSpoilers = false,
+    } = options;
+    const highlightSet = new Set(matchedItems || []);
     
     // Special handling for gene summary section
     if (section.type === 'summary') {
@@ -1302,32 +1391,33 @@
       : '';
     
     // Render all items with commas, applying spoilers or match indicators as needed
-    const itemsHtml = section.items.map((item, idx) => {
-      const text = item.text;
-      const isMatched = item.matched || matchedItems.includes(item.text);
+    const itemsHtml = section.items.map((item) => {
+      const text = (item && typeof item.text === 'string') ? item.text : String(item.text ?? '');
+      const isMatched = item.matched || highlightSet.has(item.text);
      
       // For spoiler mode (clue cards)
       if (showSpoilers && item.id) {
         const revealed = isHintRevealed(item.id);
-        const hasSeparator = idx < section.items.length - 1;
-        const separator = hasSeparator ? ', ' : '';
-        return revealed
-          ? `<span class="pg-section-entry-nosep">${text}</span>${separator}`
-          : `<span class="pg-section-entry-nosep"><span class="pg-redaction" 
+        const forceReveal = removeSpoilers && isMatched;
+        if (revealed || forceReveal) {
+          const cls = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
+          return `<span class="${cls}">${text}</span>`;
+        }
+        return `<span class="pg-section-entry"><span class="pg-redaction" 
                     data-hint-id="${item.id}" 
                     role="button" 
                     tabindex="0"
-                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${text}</span></span>${separator}`;
+                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${text}</span></span>`;
       }
       
       // For feedback mode (guess cards) - apply match highlighting
       if (isMatched) {
-        return `<span class="pg-section-entry pg-matched">${text}</span>`;
+        return `<span class="pg-section-entry matched-highlight">${text}</span>`;
       }
       
       // Default
       return `<span class="pg-section-entry">${text}</span>`;
-    }).join(' ');
+    }).join('');
     
     return `
       <div class="pg-section">
@@ -1337,13 +1427,13 @@
   }
   
   // Legacy wrapper for clue cards
-  function renderSpoilerSection(section) {
-    return renderProteinSection(section, { showSpoilers: true });
+  function renderSpoilerSection(section, options = {}) {
+    return renderProteinSection(section, { showSpoilers: true, ...options });
   }
 
 
   
-  function renderFeedbackSection(section, score) {
+  function renderFeedbackSection(section, score, matchedItemsForSection = []) {
     // Add match indicators for specific sections when score data exists
     let modifiedSection = { ...section };
     
@@ -1351,34 +1441,25 @@
       if (section.id === 'tissue') {
         modifiedSection.items = section.items.map(item => ({
           ...item,
-          text: `${item.text} ${score.tissueMatch ? '✓' : ''}`
+          matched: Boolean(score.tissueMatch),
         }));
       } else if (section.id === 'properties') {
-        modifiedSection.items = section.items.map(item => {
-          const text = item.text;
-          const parts = text.split(' · ');
-          const enhanced = parts.map((part, idx) => {
-            const match = idx === 0 ? score.tmMatch : score.secretedMatch;
-            return `${part} ${match ? '✓' : ''}`;
-          }).join(' · ');
-          return { ...item, text: enhanced };
-        });
+        modifiedSection.items = section.items.map((item, idx) => ({
+          ...item,
+          matched: idx === 0 ? Boolean(score.tmMatch) : Boolean(score.secretedMatch),
+        }));
       } else if (section.id === 'length') {
         modifiedSection.items = section.items.map(item => ({
           ...item,
-          text: `${item.text} ${score.lengthBinMatch ? '✓' : ''}`
+          matched: Boolean(score.lengthBinMatch),
         }));
       }
     }
     
     // Use unified renderer with match highlighting for domains
-    const matchedItems = score && section.id === 'domains' 
-      ? section.items.filter(item => item.matched).map(item => item.text)
-      : [];
-    
     return renderProteinSection(modifiedSection, { 
       showSpoilers: false, 
-      matchedItems 
+      matchedItems: matchedItemsForSection,
     });
   }
   
@@ -1419,22 +1500,28 @@
     const slot = document.getElementById('pg-clue-slot');
     if (!slot) return;
     
-    const newContent = renderClueCard(gameOver);
+    if (gameOver) {
+      slot.innerHTML = renderClueCard(true);
+      setupSpoilerHandlers();
+      return;
+    }
     
-    if (!gameOver) {
-      const existingCard = slot.querySelector('.pg-clue-card');
-      if (existingCard) {
-        const sectionsContainer = existingCard.querySelector('[data-clue-sections]');
-        if (sectionsContainer) {
-          const sections = buildProteinSections(targetProtein, { forClue: true });
-          sectionsContainer.innerHTML = sections.map(renderSpoilerSection).join('');
-          setupSpoilerHandlers();
-          return;
-        }
+    const latestGuessEntry = gameState.guesses[gameState.guesses.length - 1] || null;
+    const clueMatches = collectMatchedHintTexts(targetProtein, latestGuessEntry);
+    const existingCard = slot.querySelector('.pg-clue-card');
+    
+    if (existingCard) {
+      const sectionsContainer = existingCard.querySelector('[data-clue-sections]');
+      if (sectionsContainer) {
+        // Keep the Mol* viewer intact; only swap the sections beneath it.
+        sectionsContainer.innerHTML = renderClueSectionsHtml(clueMatches);
+        setupSpoilerHandlers();
+        return;
       }
     }
     
-    slot.innerHTML = newContent;
+    slot.innerHTML = renderClueCard(false);
+    setupSpoilerHandlers();
   }
   
   function renderInputSection(gameOver) {
@@ -1518,6 +1605,10 @@
       const newCardHtml = renderCollapsibleFeedback(latestGuess, true);
       guessesEl.insertAdjacentHTML('afterbegin', newCardHtml);
       attachCollapseListeners();
+      // Preserve existing Mol* canvases: never touch earlier cards when inserting the new one.
+      guessesEl.querySelectorAll('.pg-feedback-card:not(:first-child) .matched-highlight').forEach((el) => {
+        el.classList.remove('matched-highlight');
+      });
       return;
     }
     
@@ -1542,6 +1633,7 @@
       expanded = true,
       showSimilarity = Boolean(score),
       headerLabel = protein.hgnc,
+      matchedHintMap = {},
     } = options;
     
     const goPercent = showSimilarity && score && typeof score.goPercent === 'number'
@@ -1550,9 +1642,10 @@
     const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
     const goWidth = goPercent === null ? 0 : goPercent;
     
-    const matchedDomains = Array.isArray(score?.domainMatches) ? score.domainMatches : [];
-    const sections = buildProteinSections(protein, { forClue: false, matchedDomains });
-    const sectionMarkup = sections.map(section => renderFeedbackSection(section, score)).join('');
+    const sections = buildProteinSections(protein, { forClue: false });
+    const sectionMarkup = sections
+      .map(section => renderFeedbackSection(section, score, matchedHintMap[section.id] || []))
+      .join('');
     
     const similarityMarkup = showSimilarity
       ? `
@@ -1604,6 +1697,7 @@
   function renderCollapsibleFeedback(guessEntry, isLatest) {
     const cardId = `guess-card-${guessEntry.guessId}`;
     const expanded = getCardExpansionState(cardId, isLatest);
+    const matchedHintMap = isLatest ? collectMatchedHintTexts(targetProtein, guessEntry) : {};
     
     return buildFeedbackCardMarkup(guessEntry.protein, {
       score: guessEntry.score,
@@ -1611,6 +1705,7 @@
       collapsible: true,
       expanded,
       showSimilarity: true,
+      matchedHintMap,
     });
   }
   
