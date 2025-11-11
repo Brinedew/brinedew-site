@@ -144,22 +144,57 @@
   margin-bottom: 1.5rem;
 }
 
-.pg-redaction {
-  font-family: 'Courier New', Consolas, Monaco, monospace;
-  font-size: 0.95rem;
-  letter-spacing: -0.05em;
-  color: var(--darkgray);
-  opacity: 0.6;
-  cursor: pointer;
-  user-select: none;
-  transition: opacity 0.15s ease;
+.pg-clue-entry {
   display: inline-block;
-  line-height: 1;
+  vertical-align: top;
   max-width: 100%;
 }
 
-.pg-redaction:hover {
-  opacity: 0.8;
+.pg-clue-gap {
+  display: inline-block;
+  width: 0.4rem;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.pg-redaction {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  user-select: none;
+  max-width: 100%;
+}
+
+.pg-redaction-shadow {
+  visibility: hidden;
+  display: inline-block;
+  white-space: pre-wrap;
+}
+
+.pg-redaction-cover {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(31, 31, 31, 0.6) 0,
+    rgba(31, 31, 31, 0.6) 6px,
+    rgba(31, 31, 31, 0.4) 6px,
+    rgba(31, 31, 31, 0.4) 8px
+  );
+  opacity: 0.7;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.pg-redaction:hover .pg-redaction-cover,
+.pg-redaction:focus-visible .pg-redaction-cover {
+  opacity: 0.9;
+}
+
+.pg-redaction:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
 }
 
 .pg-clue-section {

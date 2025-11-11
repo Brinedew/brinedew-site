@@ -1108,27 +1108,27 @@
       ? `<span class="pg-clue-label-inline">${section.label}:</span> `
       : '';
     
-    // Render all items on one line, separated by commas
-    // Wrap each item+comma together to prevent orphaned commas
+    // Render all items with commas inside the censored block so only whitespace between entries remains visible
     const itemsHtml = section.items.map((item, idx) => {
       const revealed = isHintRevealed(item.id);
       const hasSeparator = idx < section.items.length - 1;
+      const textWithComma = hasSeparator ? `${item.text},` : item.text;
       
-      if (revealed) {
-        const content = hasSeparator ? `${item.text},&nbsp;` : item.text;
-        return `<span style="display: inline-block;">${content}</span>`;
-      } else {
-        // Generate one █ per character (approximating actual censorship)
-        // Use full text length including spaces for realistic redaction
-        const textLength = item.text.length;
-        const redactionBar = '█'.repeat(Math.max(1, textLength));
-        const comma = hasSeparator ? ',&nbsp;' : '';
-        return `<span style="display: inline-block;"><span class="pg-redaction" 
-                      data-hint-id="${item.id}" 
-                      role="button" 
-                      tabindex="0"
-                      aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${redactionBar}</span>${comma}</span>`;
-      }
+      const entryHtml = revealed
+        ? `<span class="pg-clue-entry">${textWithComma}</span>`
+        : `<span class="pg-clue-entry">
+            <span class="pg-redaction" 
+                  data-hint-id="${item.id}" 
+                  role="button" 
+                  tabindex="0"
+                  aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">
+              <span class="pg-redaction-shadow" aria-hidden="true">${textWithComma}</span>
+              <span class="pg-redaction-cover" aria-hidden="true"></span>
+            </span>
+          </span>`;
+      
+      const gap = hasSeparator ? '<span class="pg-clue-gap" aria-hidden="true"> </span>' : '';
+      return `${entryHtml}${gap}`;
     }).join('');
     
     return `
