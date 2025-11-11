@@ -14,7 +14,12 @@ aliases:
 
 ---
 
-**Attribution:** GO-Slim terms derived from biological process annotations. Protein metadata from [UniProt](https://www.uniprot.org/). Domain information from InterPro. See [/About](/About) for full licensing details.
+<details>
+<summary>Attribution & Data Sources</summary>
+
+GO-Slim terms derived from biological process annotations. Protein metadata from [UniProt](https://www.uniprot.org/). Domain information from InterPro. See [/About](/About) for full licensing details.
+
+</details>
 
 
 
