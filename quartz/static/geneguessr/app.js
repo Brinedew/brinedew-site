@@ -1070,6 +1070,7 @@
   function buildProteinSections(protein, options = {}) {
     const { forClue = false, matchedDomains = [] } = options;
     const goTermsByAspect = protein.go_terms || {};
+    const goTermNamesByAspect = protein.go_terms_named || {};
     const domains = Array.isArray(protein.domains) ? protein.domains : [];
     const reactomePaths = Array.isArray(protein.reactome_pathways) ? protein.reactome_pathways : [];
     
@@ -1096,13 +1097,15 @@
     }
     
     const goSectionMeta = [
-      { aspect: 'bp', label: 'Function (BP)' },
-      { aspect: 'mf', label: 'Function (MF)' },
-      { aspect: 'cc', label: 'Cellular Component (CC)' },
+      { aspect: 'bp', label: 'Biological process' },
+      { aspect: 'mf', label: 'Molecular function' },
+      { aspect: 'cc', label: 'Cellular component' },
     ];
     let goSectionAdded = false;
     goSectionMeta.forEach(({ aspect, label }) => {
-      const terms = Array.isArray(goTermsByAspect[aspect]) ? goTermsByAspect[aspect] : [];
+      const namedTerms = Array.isArray(goTermNamesByAspect[aspect]) ? goTermNamesByAspect[aspect] : null;
+      const rawTerms = Array.isArray(goTermsByAspect[aspect]) ? goTermsByAspect[aspect] : [];
+      const terms = namedTerms && namedTerms.length ? namedTerms : rawTerms;
       if (!terms.length) {
         return;
       }
@@ -1118,18 +1121,30 @@
     if (!goSectionAdded) {
       sections.push({
         id: 'function-bp',
-        label: 'Function (BP)',
+        label: 'Biological process',
         items: [{ text: forClue ? 'Not available' : 'Not available', id: forClue ? 'hint-bp-0' : undefined }],
       });
     }
 
-    if (reactomePaths.length) {
+    const formatReactomeEntry = (entry) => {
+      if (!entry) return '';
+      if (typeof entry === 'string') return entry;
+      const name = entry.name && entry.name.trim() ? entry.name.trim() : '';
+      const id = entry.id || '';
+      if (name && id) return `${name} (${id})`;
+      return name || id;
+    };
+    const formattedReactome = reactomePaths
+      .map(formatReactomeEntry)
+      .filter(Boolean);
+
+    if (formattedReactome.length) {
       sections.push({
         id: 'reactome',
-        label: 'Reactome pathways',
+        label: 'Pathways',
         items: forClue
-          ? reactomePaths.map((path, idx) => ({ id: `hint-reactome-${idx}`, text: path }))
-          : reactomePaths.map(path => ({ text: path })),
+          ? formattedReactome.map((path, idx) => ({ id: `hint-reactome-${idx}`, text: path }))
+          : formattedReactome.map(path => ({ text: path })),
       });
     }
     
