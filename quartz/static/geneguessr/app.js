@@ -1267,35 +1267,34 @@
       : '';
     
     // Render all items with commas, applying spoilers or match indicators as needed
-    const itemsHtml = section.items.map((item, idx) => {
-      const hasSeparator = idx < section.items.length - 1;
-      const textWithComma = hasSeparator ? `${item.text},` : item.text;
+    const itemsHtml = section.items.map((item) => {
+      const text = item.text;
       const isMatched = item.matched || matchedItems.includes(item.text);
-      
+     
       // For spoiler mode (clue cards)
       if (showSpoilers && item.id) {
         const revealed = isHintRevealed(item.id);
         return revealed
-          ? `<span class="pg-section-entry">${textWithComma}</span>`
+          ? `<span class="pg-section-entry">${text}</span>`
           : `<span class="pg-section-entry">
               <span class="pg-redaction" 
                     data-hint-id="${item.id}" 
                     role="button" 
                     tabindex="0"
                     aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">
-                <span class="pg-redaction-shadow" aria-hidden="true">${textWithComma}</span>
-                <span class="pg-redaction-cover" aria-hidden="true"></span>
+                <span class="pg-redaction-shadow" aria-hidden="true">${text}</span>
+                <span class="pg-redaction-cover" aria-hidden="true">${text}</span>
               </span>
             </span>`;
       }
       
       // For feedback mode (guess cards) - apply match highlighting
       if (isMatched) {
-        return `<span class="pg-section-entry pg-matched">${textWithComma}</span>`;
+        return `<span class="pg-section-entry pg-matched">${text}</span>`;
       }
       
       // Default
-      return `<span class="pg-section-entry">${textWithComma}</span>`;
+      return `<span class="pg-section-entry">${text}</span>`;
     }).join(' ');
     
     return `

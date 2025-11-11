@@ -224,8 +224,12 @@
 
 .pg-section-entry {
   display: inline;
-  vertical-align: top;
+  vertical-align: baseline;
   max-width: 100%;
+}
+
+.pg-section-entry:not(:last-child)::after {
+  content: ", ";
 }
 
 .pg-section-entry.pg-matched {
@@ -289,42 +293,15 @@
 
 /* Redaction/Spoiler Styling */
 .pg-redaction {
-  position: relative;
-  display: inline-block;
+  display: inline;
   cursor: pointer;
   user-select: none;
-  max-width: 100%;
-  color: inherit;
-}
-
-.pg-redaction-shadow {
-  visibility: hidden;
-  display: inline-block;
-  white-space: pre-wrap;
-}
-
-.pg-redaction-cover {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 50%;
-  transform: translateY(-50%);
-  border-radius: 0;
+  color: transparent;
   background: currentColor;
-  opacity: 0.95;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-
-.pg-redaction:hover .pg-redaction-cover,
-.pg-redaction:focus-visible .pg-redaction-cover {
-  opacity: 0.9;
-}
-
-.pg-redaction:focus-visible {
-  outline: 2px solid var(--secondary);
-  outline-offset: 2px;
+  padding: 0.05em 0.15em;
+  border-radius: 0.2em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .pg-chips {
