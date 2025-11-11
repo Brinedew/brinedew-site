@@ -1178,7 +1178,9 @@
     return `
       <div class="pg-clue-card">
         ${structureMarkup}
-        ${sections.map(renderSpoilerSection).join('')}
+        <div class="pg-clue-sections" data-clue-sections>
+          ${sections.map(renderSpoilerSection).join('')}
+        </div>
       </div>
     `;
   }
@@ -1350,28 +1352,21 @@
     const slot = document.getElementById('pg-clue-slot');
     if (!slot) return;
     
-    // Check if we need to update or if existing structure is still valid
-    const existingCard = slot.querySelector('.pg-clue-card, .pg-feedback-final');
     const newContent = renderClueCard(gameOver);
     
-    // If structure hasn't changed (same card type), just update spoilers without destroying viewers
-    if (existingCard && !gameOver) {
-      // Only update the clue sections, preserve structure viewer
-      const sections = buildProteinSections(targetProtein, { forClue: true });
-      const sectionsContainer = existingCard.querySelector('.pg-clue-card');
-      if (sectionsContainer) {
-        // Find existing structure viewer to preserve it
-        const existingViewer = sectionsContainer.querySelector('.pg-card-structure-viewer');
-        const viewerHtml = existingViewer ? existingViewer.outerHTML : '';
-        
-        // Update sections only
-        sectionsContainer.innerHTML = viewerHtml + sections.map(renderSpoilerSection).join('');
-        setupSpoilerHandlers();
-        return;
+    if (!gameOver) {
+      const existingCard = slot.querySelector('.pg-clue-card');
+      if (existingCard) {
+        const sectionsContainer = existingCard.querySelector('[data-clue-sections]');
+        if (sectionsContainer) {
+          const sections = buildProteinSections(targetProtein, { forClue: true });
+          sectionsContainer.innerHTML = sections.map(renderSpoilerSection).join('');
+          setupSpoilerHandlers();
+          return;
+        }
       }
     }
     
-    // Full update needed (game state changed)
     slot.innerHTML = newContent;
   }
   
@@ -1435,8 +1430,22 @@
     // Check if we only need to add the latest guess (avoid destroying all existing cards)
     const existingCards = guessesEl.querySelectorAll('.pg-feedback-card');
     const expectedCount = gameState.guesses.length;
+    const existingCount = existingCards.length;
     
-    if (existingCards.length === expectedCount - 1 && expectedCount > 0) {
+    // Nothing to render and nothing displayed
+    if (expectedCount === 0) {
+      if (existingCount !== 0) {
+        guessesEl.innerHTML = '';
+      }
+      return;
+    }
+    
+    // No changes to guess history, keep existing DOM (prevents viewer reload)
+    if (existingCount === expectedCount) {
+      return;
+    }
+    
+    if (existingCount === expectedCount - 1) {
       // Only latest guess is new - append it instead of recreating everything
       const latestGuess = gameState.guesses[gameState.guesses.length - 1];
       const guessNum = gameState.guesses.length;
