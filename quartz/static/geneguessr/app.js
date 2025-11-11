@@ -84,37 +84,57 @@
     return '';
   }
 
-  function renderStructureHint() {
-    if (!targetProtein || !hasStructureData(targetProtein)) {
+  function renderStructureViewer(protein, viewerId) {
+    if (!protein || !hasStructureData(protein)) {
       return '';
     }
-    const structure = targetProtein.structure || {};
+    const structure = protein.structure || {};
     const meta = getStructureMetaLabel(structure);
     
     return `
-      <div class="pg-structure-card">
-        <div class="pg-structure-viewer" id="pg-structure-viewer" role="region" aria-label="3D structure viewer">
-          <div class="pg-structure-placeholder" id="pg-structure-placeholder" hidden>
-            <p class="pg-structure-tip">Loading structure…</p>
-          </div>
-          <div class="pg-structure-loading" id="pg-structure-loading" hidden>Loading viewer…</div>
-          <div class="pg-structure-error" id="pg-structure-error" hidden></div>
+      <div class="pg-card-structure-viewer" id="${viewerId}" role="region" aria-label="3D structure viewer">
+        <div class="pg-structure-placeholder" id="${viewerId}-placeholder" hidden>
+          <p class="pg-structure-tip">Loading structure…</p>
         </div>
+        <div class="pg-structure-loading" id="${viewerId}-loading" hidden>Loading viewer…</div>
+        <div class="pg-structure-error" id="${viewerId}-error" hidden></div>
       </div>
     `;
   }
+  
+  function renderStructureHint() {
+    // Legacy function - no longer used in layout
+    return '';
+  }
 
   function setupStructureInteractions() {
-    // Auto-load structure viewer if we have structure data
-    const container = document.querySelector('.pg-structure-viewer');
-    const needsLoad = hasStructureData(targetProtein) && 
-                      (!structureViewerLoaded || !container?.querySelector('canvas'));
-    
-    if (needsLoad) {
-      loadStructureViewer().catch((err) => {
-        console.error('Geneguessr: failed to load structure viewer', err);
+    // Auto-load structure viewer for clue card if present
+    const clueViewer = document.getElementById('pg-clue-structure');
+    if (clueViewer && hasStructureData(targetProtein) && !clueViewer.querySelector('canvas')) {
+      loadStructureViewerInContainer(clueViewer, targetProtein).catch((err) => {
+        console.error('Geneguessr: failed to load clue structure viewer', err);
       });
     }
+    
+    // Auto-load structure viewer for solution card if present (game over)
+    const solutionViewer = document.getElementById('pg-solution-card-structure');
+    if (solutionViewer && hasStructureData(targetProtein) && !solutionViewer.querySelector('canvas')) {
+      loadStructureViewerInContainer(solutionViewer, targetProtein).catch((err) => {
+        console.error('Geneguessr: failed to load solution structure viewer', err);
+      });
+    }
+    
+    // Auto-load structure viewers for guess cards if present
+    gameState.guesses.forEach((guess, idx) => {
+      const guessNum = gameState.guesses.length - idx;
+      const viewerId = `guess-card-${guessNum}-structure`;
+      const container = document.getElementById(viewerId);
+      if (container && hasStructureData(guess.protein) && !container.querySelector('canvas')) {
+        loadStructureViewerInContainer(container, guess.protein).catch((err) => {
+          console.error(`Geneguessr: failed to load structure viewer for guess ${guessNum}`, err);
+        });
+      }
+    });
   }
 
   function addMolstarPreconnectOnce() {
@@ -592,21 +612,17 @@
     }
   }
 
-  async function loadStructureViewer() {
-    if (!targetProtein || !hasStructureData(targetProtein)) {
-      return;
-    }
-    const container = document.getElementById('pg-structure-viewer');
-    const placeholder = document.getElementById('pg-structure-placeholder');
-    const loadingEl = document.getElementById('pg-structure-loading');
-    const errorEl = document.getElementById('pg-structure-error');
-    const button = document.getElementById('pg-view-3d-btn');
-    
-    if (!container) {
+  async function loadStructureViewerInContainer(container, protein) {
+    if (!container || !protein || !hasStructureData(protein)) {
       return;
     }
     
-    const structure = targetProtein.structure || {};
+    const containerId = container.id;
+    const placeholder = document.getElementById(`${containerId}-placeholder`);
+    const loadingEl = document.getElementById(`${containerId}-loading`);
+    const errorEl = document.getElementById(`${containerId}-error`);
+    
+    const structure = protein.structure || {};
     const options = getStructureViewerOptions(structure);
     if (!options) {
       if (errorEl) {
@@ -619,10 +635,6 @@
     if (loadingEl) loadingEl.hidden = false;
     if (placeholder) placeholder.hidden = true;
     if (errorEl) errorEl.hidden = true;
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Loading…';
-    }
     
     try {
       await ensureMolstarAssets();
@@ -659,9 +671,6 @@
 
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
-      if (button) {
-        button.textContent = '3D Loaded';
-      }
     } catch (err) {
       console.error('Geneguessr: Mol* render failed', err);
       if (errorEl) {
@@ -669,12 +678,16 @@
         errorEl.hidden = false;
       }
       if (placeholder) placeholder.hidden = false;
-      if (button) {
-        button.disabled = false;
-        button.textContent = 'View 3D';
-      }
     } finally {
       if (loadingEl) loadingEl.hidden = true;
+    }
+  }
+  
+  async function loadStructureViewer() {
+    // Legacy function - redirects to new implementation
+    const container = document.getElementById('pg-clue-structure') || document.getElementById('pg-solution-card-structure');
+    if (container && targetProtein) {
+      return loadStructureViewerInContainer(container, targetProtein);
     }
   }
   
@@ -1137,8 +1150,11 @@
     }
     
     const sections = buildProteinSections(targetProtein, { forClue: true });
+    const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure');
+    
     return `
       <div class="pg-clue-card">
+        ${structureMarkup}
         ${sections.map(renderSpoilerSection).join('')}
       </div>
     `;
@@ -1297,9 +1313,7 @@
     if (layoutHydrated || !rootEl) {
       return;
     }
-    const structureMarkup = renderStructureHint();
     rootEl.innerHTML = `
-      <div id="pg-structure-slot">${structureMarkup}</div>
       <div id="pg-clue-slot"></div>
       <div id="pg-input-slot"></div>
       <div id="pg-guesses"></div>
@@ -1414,8 +1428,13 @@
       `
       : '';
     
+    // Add structure viewer above sections
+    const viewerId = `${cardId}-structure`;
+    const structureMarkup = renderStructureViewer(protein, viewerId);
+    
     const contentMarkup = `
       <div class="pg-feedback-content" id="${cardId}-content"${expanded ? '' : ' style="display: none;"'}>
+        ${structureMarkup}
         <div class="pg-feedback-protein-name">${protein.full_name}</div>
         ${sectionMarkup}
       </div>

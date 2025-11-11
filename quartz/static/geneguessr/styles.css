@@ -51,6 +51,7 @@
   font-size: 0.85rem;
 }
 
+/* Legacy structure card (no longer used) */
 .pg-structure-card {
   margin-bottom: 1.5rem;
 }
@@ -63,6 +64,18 @@
   border-radius: 8px;
   background: var(--ui-bg);
   overflow: hidden;
+}
+
+/* Card-embedded structure viewer with 16:9 aspect ratio */
+.pg-card-structure-viewer {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
 }
 
 .pg-structure-placeholder,
@@ -98,16 +111,21 @@
 }
 
 .pg-structure-viewer,
-.pg-structure-viewer canvas {
+.pg-structure-viewer canvas,
+.pg-card-structure-viewer,
+.pg-card-structure-viewer canvas {
   background-color: rgb(248, 241, 231);
 }
 
 :root[data-theme="dark"] .pg-structure-viewer,
-:root[data-theme="dark"] .pg-structure-viewer canvas {
+:root[data-theme="dark"] .pg-structure-viewer canvas,
+:root[data-theme="dark"] .pg-card-structure-viewer,
+:root[data-theme="dark"] .pg-card-structure-viewer canvas {
   background-color: rgb(17, 12, 10);
 }
 
-.pg-structure-viewer canvas {
+.pg-structure-viewer canvas,
+.pg-card-structure-viewer canvas {
   border-radius: 8px;
 }
 
@@ -115,7 +133,11 @@
 .pg-structure-viewer .msp-viewport-controls button[title="Reset Camera"],
 .pg-structure-viewer .msp-viewport-controls button[title*="Reset"],
 .pg-structure-viewer .msp-viewport-controls button[title*="Screenshot"],
-.pg-structure-viewer .msp-viewport-controls button[title*="State"] {
+.pg-structure-viewer .msp-viewport-controls button[title*="State"],
+.pg-card-structure-viewer .msp-viewport-controls button[title="Reset Camera"],
+.pg-card-structure-viewer .msp-viewport-controls button[title*="Reset"],
+.pg-card-structure-viewer .msp-viewport-controls button[title*="Screenshot"],
+.pg-card-structure-viewer .msp-viewport-controls button[title*="State"] {
   display: none !important;
 }
 
@@ -125,13 +147,25 @@
 .pg-structure-viewer .msp-top-left-controls,
 .pg-structure-viewer .msp-top-center-controls,
 .pg-structure-viewer .msp-bottom-left-controls,
-.pg-structure-viewer .msp-bottom-center-controls {
+.pg-structure-viewer .msp-bottom-center-controls,
+.pg-card-structure-viewer .msp-viewport-info,
+.pg-card-structure-viewer .msp-hover-hint,
+.pg-card-structure-viewer .msp-controls-wrapper,
+.pg-card-structure-viewer .msp-top-left-controls,
+.pg-card-structure-viewer .msp-top-center-controls,
+.pg-card-structure-viewer .msp-bottom-left-controls,
+.pg-card-structure-viewer .msp-bottom-center-controls {
   display: none !important;
 }
 
 @media (max-width: 600px) {
   .pg-structure-viewer {
     height: 260px;
+  }
+  
+  /* Card viewer maintains 16:9 ratio on mobile */
+  .pg-card-structure-viewer {
+    aspect-ratio: 16 / 9;
   }
 }
 
