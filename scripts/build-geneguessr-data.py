@@ -301,18 +301,27 @@ def extract_interpro_domains(uniprot_id: str) -> Set[str]:
     return domains
 
 
-def extract_reactome_pathways(uniprot_id: str) -> Set[str]:
-    """Extract Reactome pathway IDs from UniProt JSON cross-references."""
+def extract_reactome_pathways(uniprot_id: str) -> List[Dict[str, str]]:
+    """Extract Reactome pathway IDs + names from UniProt JSON cross-references."""
     entry = load_uniprot_entry(uniprot_id)
     if not entry:
-        return set()
+        return []
     
-    pathways = set()
+    pathways: List[Dict[str, str]] = []
     for ref in entry.get("uniProtKBCrossReferences", []):
         if ref.get("database") == "Reactome":
             pathway_id = ref.get("id")
-            if pathway_id:
-                pathways.add(pathway_id)
+            if not pathway_id:
+                continue
+            name = None
+            for prop in ref.get("properties", []):
+                if prop.get("key") == "PathwayName":
+                    name = prop.get("value")
+                    break
+            pathways.append({
+                "id": pathway_id,
+                "name": name or "",
+            })
     return pathways
 
 
@@ -781,8 +790,9 @@ def build_protein_record(
     page: frontmatter.Post,
     feature_row: Dict[str, str],
     go_annotations: Dict[str, Set[str]],
+    ontology: Dict[str, GOTerm],
     gene_summary: Optional[Dict[str, object]] = None,
-    reactome_paths: Optional[Set[str]] = None,
+    reactome_paths: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, object]:
     """Merge wiki frontmatter + features + GO annotations + gene summary into a JSON-ready dict."""
     uniprot_id = page.get("uniprot_id").strip()
@@ -819,6 +829,13 @@ def build_protein_record(
 
     structure_info = extract_structure_info(uniprot_id)
 
+    def go_term_names(go_ids: Set[str]) -> List[str]:
+        names: List[str] = []
+        for go_id in sorted(go_ids):
+            term = ontology.get(go_id)
+            names.append(term.name if term else go_id)
+        return names
+
     record = {
         "uniprot": uniprot_id,
         "hgnc": gene_symbol,
@@ -839,7 +856,12 @@ def build_protein_record(
             "mf": sorted(go_annotations["mf"]),
             "cc": sorted(go_annotations["cc"]),
         },
-        "reactome_pathways": sorted(reactome_paths or []),
+        "go_terms_named": {
+            "bp": go_term_names(go_annotations["bp"]),
+            "mf": go_term_names(go_annotations["mf"]),
+            "cc": go_term_names(go_annotations["cc"]),
+        },
+        "reactome_pathways": reactome_paths or [],
     }
     
     # Add gene summary if available
@@ -1194,6 +1216,7 @@ def main() -> None:
             page,
             feature_row,
             go_annotations,
+            ontology,
             gene_summary,
             reactome_paths,
         )
@@ -1210,7 +1233,7 @@ def main() -> None:
             for aspect in GO_ASPECTS
         }
         interpro_signatures[uniprot_id] = extract_interpro_domains(uniprot_id)
-        reactome_signatures[uniprot_id] = reactome_paths
+        reactome_signatures[uniprot_id] = {p["id"] for p in reactome_paths if p.get("id")}
 
     if not proteins:
         raise RuntimeError("No proteins met the inclusion criteria; aborting.")
