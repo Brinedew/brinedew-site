@@ -1281,10 +1281,7 @@
                     data-hint-id="${item.id}" 
                     role="button" 
                     tabindex="0"
-                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">
-                <span class="pg-redaction-shadow" aria-hidden="true">${text}</span>
-                <span class="pg-redaction-cover" aria-hidden="true">${text}</span>
-              </span>
+                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${text}</span>
             </span>`;
       }
       

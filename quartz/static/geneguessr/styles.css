@@ -302,6 +302,17 @@
   border-radius: 0.2em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+  transition: opacity 0.15s ease;
+}
+
+.pg-redaction:hover,
+.pg-redaction:focus-visible {
+  opacity: 0.85;
+}
+
+.pg-redaction:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
 }
 
 .pg-chips {
