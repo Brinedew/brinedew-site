@@ -215,7 +215,7 @@
 }
 
 .pg-section-entry {
-  display: inline-block;
+  display: inline;
   vertical-align: top;
   max-width: 100%;
 }
