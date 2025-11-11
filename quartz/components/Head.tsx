@@ -178,7 +178,6 @@ export default (() => {
         })()}
         
         {/* Performance optimizations */}
-        <link rel="modulepreload" href="/static/search.js" />
         <link rel="prefetch" href="/posts" as="document" />
         {js
           .filter((resource) => resource.loadTime === "beforeDOMReady")
