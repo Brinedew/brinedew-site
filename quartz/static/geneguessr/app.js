@@ -1069,8 +1069,9 @@
   // Unified card section builder - generates sections for both clue and guess cards
   function buildProteinSections(protein, options = {}) {
     const { forClue = false, matchedDomains = [] } = options;
-    const goTerms = protein.go_slim.slice(0, 5);
-    const domains = protein.domains.slice(0, 3);
+    const goTermsByAspect = protein.go_terms || {};
+    const domains = Array.isArray(protein.domains) ? protein.domains : [];
+    const reactomePaths = Array.isArray(protein.reactome_pathways) ? protein.reactome_pathways : [];
     
     const sections = [];
     
@@ -1094,20 +1095,41 @@
       });
     }
     
-    // Function section
-    if (goTerms.length) {
+    const goSectionMeta = [
+      { aspect: 'bp', label: 'Function (BP)' },
+      { aspect: 'mf', label: 'Function (MF)' },
+      { aspect: 'cc', label: 'Cellular Component (CC)' },
+    ];
+    let goSectionAdded = false;
+    goSectionMeta.forEach(({ aspect, label }) => {
+      const terms = Array.isArray(goTermsByAspect[aspect]) ? goTermsByAspect[aspect] : [];
+      if (!terms.length) {
+        return;
+      }
+      goSectionAdded = true;
       sections.push({
-        id: 'function',
-        label: 'Function',
+        id: `function-${aspect}`,
+        label,
         items: forClue
-          ? goTerms.map((term, idx) => ({ id: `hint-function-${idx}`, text: term }))
-          : [{ text: goTerms.join(', ') }],
+          ? terms.map((term, idx) => ({ id: `hint-${aspect}-${idx}`, text: term }))
+          : terms.map(term => ({ text: term })),
       });
-    } else {
+    });
+    if (!goSectionAdded) {
       sections.push({
-        id: 'function',
-        label: 'Function',
-        items: [{ text: forClue ? 'Not available' : 'Not available', id: forClue ? 'hint-function-0' : undefined }],
+        id: 'function-bp',
+        label: 'Function (BP)',
+        items: [{ text: forClue ? 'Not available' : 'Not available', id: forClue ? 'hint-bp-0' : undefined }],
+      });
+    }
+
+    if (reactomePaths.length) {
+      sections.push({
+        id: 'reactome',
+        label: 'Reactome pathways',
+        items: forClue
+          ? reactomePaths.map((path, idx) => ({ id: `hint-reactome-${idx}`, text: path }))
+          : reactomePaths.map(path => ({ text: path })),
       });
     }
     

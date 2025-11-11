@@ -782,6 +782,7 @@ def build_protein_record(
     feature_row: Dict[str, str],
     go_annotations: Dict[str, Set[str]],
     gene_summary: Optional[Dict[str, object]] = None,
+    reactome_paths: Optional[Set[str]] = None,
 ) -> Dict[str, object]:
     """Merge wiki frontmatter + features + GO annotations + gene summary into a JSON-ready dict."""
     uniprot_id = page.get("uniprot_id").strip()
@@ -838,6 +839,7 @@ def build_protein_record(
             "mf": sorted(go_annotations["mf"]),
             "cc": sorted(go_annotations["cc"]),
         },
+        "reactome_pathways": sorted(reactome_paths or []),
     }
     
     # Add gene summary if available
@@ -1180,13 +1182,21 @@ def main() -> None:
             continue
 
         go_annotations = gather_go_annotations(uniprot_id, ontology)
+        reactome_paths = extract_reactome_pathways(uniprot_id)
         
         # Get gene summary with fallback chain
         uniprot_entry = load_uniprot_entry(uniprot_id)
         gene_id = extract_ncbi_gene_id(uniprot_entry)
         gene_summary = get_gene_summary(uniprot_id, gene_id, ncbi_summaries)
         
-        record = build_protein_record(md_path, page, feature_row, go_annotations, gene_summary)
+        record = build_protein_record(
+            md_path,
+            page,
+            feature_row,
+            go_annotations,
+            gene_summary,
+            reactome_paths,
+        )
 
         # Apply gameplay filters
         if not (MIN_LENGTH <= record["length"] <= MAX_LENGTH):
@@ -1200,7 +1210,7 @@ def main() -> None:
             for aspect in GO_ASPECTS
         }
         interpro_signatures[uniprot_id] = extract_interpro_domains(uniprot_id)
-        reactome_signatures[uniprot_id] = extract_reactome_pathways(uniprot_id)
+        reactome_signatures[uniprot_id] = reactome_paths
 
     if not proteins:
         raise RuntimeError("No proteins met the inclusion criteria; aborting.")
