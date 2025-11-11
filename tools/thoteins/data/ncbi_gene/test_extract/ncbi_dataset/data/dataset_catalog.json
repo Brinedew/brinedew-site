@@ -1,0 +1,12 @@
+{
+  "genes": {
+    "files": [
+      {
+        "filePath": "data_report.jsonl",
+        "fileType": "DATA_REPORT",
+        "uncompressedLengthBytes": "22744"
+      }
+    ]
+  },
+  "apiVersion": "V2"
+}

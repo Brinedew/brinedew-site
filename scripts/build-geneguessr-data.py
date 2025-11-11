@@ -436,12 +436,18 @@ def build_ncbi_gene_summaries(gene_ids: List[str]) -> Dict[str, Dict[str, object
     ids_file = NCBI_GENE_CACHE / "gene_ids.txt"
     ids_file.write_text("\n".join(gene_ids), encoding="utf-8")
     
-    # Download via datasets CLI
+    # Download via datasets CLI (use local binary if available)
     zip_path = NCBI_GENE_CACHE / "ncbi_gene_pkg.zip"
+    
+    # Try local datasets.exe first, then system PATH
+    datasets_cmd = BASE_DIR / "scripts" / "datasets.exe"
+    if not datasets_cmd.exists():
+        datasets_cmd = "datasets"
+    
     try:
         subprocess.run(
             [
-                "datasets",
+                str(datasets_cmd),
                 "download",
                 "gene",
                 "gene-id",
@@ -487,13 +493,12 @@ def build_ncbi_gene_summaries(gene_ids: List[str]) -> Dict[str, Dict[str, object
                     record = json.loads(line.decode("utf-8"))
                     
                     # Extract gene ID
-                    gene = record.get("gene", {})
-                    gene_id = str(gene.get("geneId", ""))
+                    gene_id = str(record.get("geneId", ""))
                     if not gene_id:
                         continue
                     
-                    # Extract summary (first available from summaries list)
-                    gene_summaries = gene.get("summaries", [])
+                    # Extract summary (first available from summary list)
+                    gene_summaries = record.get("summary", [])
                     if gene_summaries and isinstance(gene_summaries, list):
                         summary_obj = gene_summaries[0]
                         summary_text = summary_obj.get("description", "")
