@@ -1111,78 +1111,95 @@
     `;
   }
 
-  function renderSpoilerSection(section) {
+  // Unified section renderer for both clue and feedback cards
+  function renderProteinSection(section, options = {}) {
+    const { showSpoilers = false, matchedItems = [] } = options;
+    
     const labelHtml = section.label
-      ? `<span class="pg-clue-label-inline">${section.label}:</span> `
+      ? `<span class="pg-section-label">${section.label}:</span> `
       : '';
     
-    // Render all items with commas inside the censored block so only whitespace between entries remains visible
+    // Render all items with commas, applying spoilers or match indicators as needed
     const itemsHtml = section.items.map((item, idx) => {
-      const revealed = isHintRevealed(item.id);
       const hasSeparator = idx < section.items.length - 1;
       const textWithComma = hasSeparator ? `${item.text},` : item.text;
+      const isMatched = item.matched || matchedItems.includes(item.text);
       
-      return revealed
-        ? `<span class="pg-clue-entry">${textWithComma}</span>`
-        : `<span class="pg-clue-entry">
-            <span class="pg-redaction" 
-                  data-hint-id="${item.id}" 
-                  role="button" 
-                  tabindex="0"
-                  aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">
-              <span class="pg-redaction-shadow" aria-hidden="true">${textWithComma}</span>
-              <span class="pg-redaction-cover" aria-hidden="true"></span>
-            </span>
-          </span>`;
-    }).join('');
+      // For spoiler mode (clue cards)
+      if (showSpoilers && item.id) {
+        const revealed = isHintRevealed(item.id);
+        return revealed
+          ? `<span class="pg-section-entry">${textWithComma}</span>`
+          : `<span class="pg-section-entry">
+              <span class="pg-redaction" 
+                    data-hint-id="${item.id}" 
+                    role="button" 
+                    tabindex="0"
+                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">
+                <span class="pg-redaction-shadow" aria-hidden="true">${textWithComma}</span>
+                <span class="pg-redaction-cover" aria-hidden="true"></span>
+              </span>
+            </span>`;
+      }
+      
+      // For feedback mode (guess cards) - apply match highlighting
+      if (isMatched) {
+        return `<span class="pg-section-entry pg-matched">${textWithComma}</span>`;
+      }
+      
+      // Default
+      return `<span class="pg-section-entry">${textWithComma}</span>`;
+    }).join(' ');
     
     return `
-      <div class="pg-clue-section">
+      <div class="pg-section">
         ${labelHtml}${itemsHtml}
       </div>
     `;
+  }
+  
+  // Legacy wrapper for clue cards
+  function renderSpoilerSection(section) {
+    return renderProteinSection(section, { showSpoilers: true });
   }
 
 
   
   function renderFeedbackSection(section, score) {
-    const label = section.label;
-    let value = '';
+    // Add match indicators for specific sections
+    let modifiedSection = { ...section };
     
-    if (section.id === 'domains') {
-      // Domains: inline comma-separated with color coding for matches
-      value = section.items.map(item => {
-        const color = item.matched ? 'var(--accent)' : 'inherit';
-        return `<span style="color: ${color}">${item.text}</span>`;
-      }).join(', ');
-    } else if (section.id === 'function') {
-      // Function: plain text
-      value = section.items[0].text;
-    } else if (section.id === 'tissue') {
-      // Tissue: show match indicator
-      value = `${section.items[0].text} ${score.tissueMatch ? '✓' : ''}`;
+    if (section.id === 'tissue') {
+      modifiedSection.items = section.items.map(item => ({
+        ...item,
+        text: `${item.text} ${score.tissueMatch ? '✓' : ''}`
+      }));
     } else if (section.id === 'properties') {
-      // Properties: show match indicators for TM and Secreted
-      const text = section.items[0].text;
-      const parts = text.split(' · ');
-      value = parts.map((part, idx) => {
-        const match = idx === 0 ? score.tmMatch : score.secretedMatch;
-        return `${part} ${match ? '✓' : ''}`;
-      }).join(' · ');
+      modifiedSection.items = section.items.map(item => {
+        const text = item.text;
+        const parts = text.split(' · ');
+        const enhanced = parts.map((part, idx) => {
+          const match = idx === 0 ? score.tmMatch : score.secretedMatch;
+          return `${part} ${match ? '✓' : ''}`;
+        }).join(' · ');
+        return { ...item, text: enhanced };
+      });
     } else if (section.id === 'length') {
-      // Length: show match indicator
-      value = `${section.items[0].text} ${score.lengthBinMatch ? '✓' : ''}`;
-    } else {
-      // Default: just show the text
-      value = section.items.map(item => item.text).join(', ');
+      modifiedSection.items = section.items.map(item => ({
+        ...item,
+        text: `${item.text} ${score.lengthBinMatch ? '✓' : ''}`
+      }));
     }
     
-    return `
-      <div class="pg-feedback-row">
-        <span class="pg-feedback-label">${label}:</span>
-        <span class="pg-feedback-value">${value}</span>
-      </div>
-    `;
+    // Use unified renderer with match highlighting for domains
+    const matchedItems = section.id === 'domains' 
+      ? section.items.filter(item => item.matched).map(item => item.text)
+      : [];
+    
+    return renderProteinSection(modifiedSection, { 
+      showSpoilers: false, 
+      matchedItems 
+    });
   }
   
   function renderResult() {
