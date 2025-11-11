@@ -153,8 +153,9 @@
   cursor: pointer;
   user-select: none;
   transition: opacity 0.15s ease;
-  display: inline;
+  display: inline-block;
   line-height: 1;
+  max-width: 100%;
 }
 
 .pg-redaction:hover {
@@ -166,6 +167,8 @@
   line-height: 1.5;
   font-size: 0.95rem;
   color: var(--dark);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .pg-clue-section:last-child {
