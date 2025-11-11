@@ -1275,15 +1275,14 @@
       if (showSpoilers && item.id) {
         const revealed = isHintRevealed(item.id);
         const hasSeparator = idx < section.items.length - 1;
-        const comma = hasSeparator ? ',' : '';
-        const space = hasSeparator ? ' ' : '';
+        const separator = hasSeparator ? ', ' : '';
         return revealed
-          ? `<span class="pg-section-entry-nosep">${text}${comma}</span>${space}`
+          ? `<span class="pg-section-entry-nosep">${text}</span>${separator}`
           : `<span class="pg-section-entry-nosep"><span class="pg-redaction" 
                     data-hint-id="${item.id}" 
                     role="button" 
                     tabindex="0"
-                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${text}${comma}</span></span>${space}`;
+                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${text}</span></span>${separator}`;
       }
       
       // For feedback mode (guess cards) - apply match highlighting
