@@ -1267,7 +1267,7 @@
       : '';
     
     // Render all items with commas, applying spoilers or match indicators as needed
-    const itemsHtml = section.items.map((item) => {
+    const itemsHtml = section.items.map((item, idx) => {
       const text = item.text;
       const isMatched = item.matched || matchedItems.includes(item.text);
      
