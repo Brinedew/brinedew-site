@@ -1159,12 +1159,12 @@
         ${goNote ? `<div class="pg-feedback-note">${goNote}</div>` : ''}
         
         <div class="pg-feedback-row">
-          <span class="pg-feedback-label">Domains</span>
-          <div class="pg-chips">
-            ${guess.domains.map(d => `
-              <span class="pg-chip ${score.domainMatches.includes(d) ? 'matched' : 'unmatched'}">${d}</span>
-            `).join('')}
-          </div>
+          <span class="pg-feedback-label">Domains:</span>
+          <span class="pg-feedback-value">
+            ${guess.domains.length > 0
+              ? guess.domains.map(d => `<span style="color: ${score.domainMatches.includes(d) ? 'var(--accent)' : 'inherit'}">${d}</span>`).join(', ')
+              : 'None'}
+          </span>
         </div>
         
         <div class="pg-feedback-row">
