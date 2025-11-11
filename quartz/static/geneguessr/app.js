@@ -1172,9 +1172,9 @@
     
     // GO sections last
     const goSectionMeta = [
-      { aspect: 'bp', label: 'Biological process' },
       { aspect: 'mf', label: 'Molecular function' },
       { aspect: 'cc', label: 'Cellular component' },
+      { aspect: 'bp', label: 'Biological process' },
     ];
     let goSectionAdded = false;
     goSectionMeta.forEach(({ aspect, label }) => {
