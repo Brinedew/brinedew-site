@@ -1083,6 +1083,31 @@
     const reactomePaths = Array.isArray(protein.reactome_pathways) ? protein.reactome_pathways : [];
     
     const sections = [];
+    const filterTokens = [
+      protein.hgnc,
+      ...(Array.isArray(protein.synonyms) ? protein.synonyms : []),
+    ]
+      .filter(Boolean)
+      .map(token => token.toLowerCase());
+    
+    const shouldFilterText = (text) => {
+      if (!forClue || !filterTokens.length || typeof text !== 'string') {
+        return false;
+      }
+      const normalized = text.toLowerCase();
+      return filterTokens.some(token => token && normalized.includes(token));
+    };
+    
+    const pushSection = (section, { skipFilter = false } = {}) => {
+      const items = skipFilter ? section.items : section.items.filter(item => !shouldFilterText(item.text));
+      if (!items.length) {
+        return;
+      }
+      sections.push({
+        ...section,
+        items,
+      });
+    };
     
     // Gene summary section - only show on feedback cards, never on clue cards
     if (protein.gene_summary && !forClue) {
@@ -1093,7 +1118,7 @@
         url: summary.url,
       } : null;
       
-      sections.push({
+      pushSection({
         id: 'summary',
         label: '', // No label for summary
         type: 'summary',
@@ -1101,18 +1126,18 @@
           text: summaryText,
           meta: summaryMeta,
         }],
-      });
+      }, { skipFilter: true });
     }
     
     // Length first
-    sections.push({
+    pushSection({
       id: 'length',
       label: 'Length',
       items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein.length} aa` }],
     });
     
     // Properties (Transmembrane/Secreted)
-    sections.push({
+    pushSection({
       id: 'properties',
       label: 'Properties',
       items: [{
@@ -1122,7 +1147,7 @@
     });
     
     // Tissue specificity
-    sections.push({
+    pushSection({
       id: 'tissue',
       label: 'Tissue specificity',
       items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue.label }],
@@ -1130,7 +1155,7 @@
     
     // Domains
     if (domains.length) {
-      sections.push({
+      pushSection({
         id: 'domains',
         label: 'Domains',
         items: forClue
@@ -1141,7 +1166,7 @@
             })),
       });
     } else {
-      sections.push({
+      pushSection({
         id: 'domains',
         label: 'Domains',
         items: [{ text: 'No structured domains', id: forClue ? 'hint-domain-0' : undefined }],
@@ -1161,7 +1186,7 @@
       .filter(Boolean);
 
     if (formattedReactome.length) {
-      sections.push({
+      pushSection({
         id: 'reactome',
         label: 'Pathways',
         items: forClue
@@ -1185,7 +1210,7 @@
         return;
       }
       goSectionAdded = true;
-      sections.push({
+      pushSection({
         id: `function-${aspect}`,
         label,
         items: forClue
@@ -1194,7 +1219,7 @@
       });
     });
     if (!goSectionAdded) {
-      sections.push({
+      pushSection({
         id: 'function-bp',
         label: 'Biological process',
         items: [{ text: forClue ? 'Not available' : 'Not available', id: forClue ? 'hint-bp-0' : undefined }],
