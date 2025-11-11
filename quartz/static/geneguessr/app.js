@@ -1348,9 +1348,31 @@
   
   function renderClueSectionsIntoDom(gameOver = false) {
     const slot = document.getElementById('pg-clue-slot');
-    if (slot) {
-      slot.innerHTML = renderClueCard(gameOver);
+    if (!slot) return;
+    
+    // Check if we need to update or if existing structure is still valid
+    const existingCard = slot.querySelector('.pg-clue-card, .pg-feedback-final');
+    const newContent = renderClueCard(gameOver);
+    
+    // If structure hasn't changed (same card type), just update spoilers without destroying viewers
+    if (existingCard && !gameOver) {
+      // Only update the clue sections, preserve structure viewer
+      const sections = buildProteinSections(targetProtein, { forClue: true });
+      const sectionsContainer = existingCard.querySelector('.pg-clue-card');
+      if (sectionsContainer) {
+        // Find existing structure viewer to preserve it
+        const existingViewer = sectionsContainer.querySelector('.pg-card-structure-viewer');
+        const viewerHtml = existingViewer ? existingViewer.outerHTML : '';
+        
+        // Update sections only
+        sectionsContainer.innerHTML = viewerHtml + sections.map(renderSpoilerSection).join('');
+        setupSpoilerHandlers();
+        return;
+      }
     }
+    
+    // Full update needed (game state changed)
+    slot.innerHTML = newContent;
   }
   
   function renderInputSection(gameOver) {
@@ -1409,6 +1431,22 @@
     if (!guessesEl) {
       return;
     }
+    
+    // Check if we only need to add the latest guess (avoid destroying all existing cards)
+    const existingCards = guessesEl.querySelectorAll('.pg-feedback-card');
+    const expectedCount = gameState.guesses.length;
+    
+    if (existingCards.length === expectedCount - 1 && expectedCount > 0) {
+      // Only latest guess is new - append it instead of recreating everything
+      const latestGuess = gameState.guesses[gameState.guesses.length - 1];
+      const guessNum = gameState.guesses.length;
+      const newCardHtml = renderCollapsibleFeedback(latestGuess.protein, latestGuess.score, guessNum, true);
+      guessesEl.insertAdjacentHTML('afterbegin', newCardHtml);
+      attachCollapseListeners();
+      return;
+    }
+    
+    // Full re-render needed (initial load or state mismatch)
     guessesEl.innerHTML = gameState.guesses
       .map((g, idx) => {
         const guessNum = gameState.guesses.length - idx;
