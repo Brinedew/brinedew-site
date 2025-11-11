@@ -17,7 +17,7 @@ aliases:
 <div class="pg-feedback-card collapsed" id="attribution-card" data-expanded="false">
   <button class="pg-collapse-toggle" aria-expanded="false" aria-controls="attribution-content">
     <span class="pg-collapse-chevron">▶</span>
-    <span style="font-weight: 700; font-size: 1rem;">Attribution & Data Sources</span>
+    <span class="pg-feedback-gene">Attribution & Data Sources</span>
   </button>
   <div class="pg-feedback-content" id="attribution-content" style="display: none;">
     <div class="pg-section">
