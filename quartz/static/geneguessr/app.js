@@ -1122,8 +1122,9 @@
     return sections;
   }
 
-  function renderClueCard() {
-    const sections = buildProteinSections(targetProtein, { forClue: true });
+  function renderClueCard(gameOver = false) {
+    // When game is over, show as feedback card with gene summary
+    const sections = buildProteinSections(targetProtein, { forClue: !gameOver });
     return `
       <div class="pg-clue-card">
         ${sections.map(renderSpoilerSection).join('')}
@@ -1294,10 +1295,10 @@
     layoutHydrated = true;
   }
   
-  function renderClueSectionsIntoDom() {
+  function renderClueSectionsIntoDom(gameOver = false) {
     const slot = document.getElementById('pg-clue-slot');
     if (slot) {
-      slot.innerHTML = renderClueCard();
+      slot.innerHTML = renderClueCard(gameOver);
     }
   }
   
@@ -1841,7 +1842,7 @@ https://brinedew.bio/apps/geneguessr/`;
       const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
 
       hydrateLayoutOnce();
-      renderClueSectionsIntoDom();
+      renderClueSectionsIntoDom(gameOver);
       renderInputSection(gameOver);
       renderGuessesSection();
       renderResultSection(gameOver);
