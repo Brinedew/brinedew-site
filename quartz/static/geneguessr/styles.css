@@ -163,6 +163,7 @@
   cursor: pointer;
   user-select: none;
   max-width: 100%;
+  color: inherit;
 }
 
 .pg-redaction-shadow {
@@ -173,16 +174,14 @@
 
 .pg-redaction-cover {
   position: absolute;
-  inset: 0;
-  border-radius: 3px;
-  background: repeating-linear-gradient(
-    90deg,
-    rgba(31, 31, 31, 0.6) 0,
-    rgba(31, 31, 31, 0.6) 6px,
-    rgba(31, 31, 31, 0.4) 6px,
-    rgba(31, 31, 31, 0.4) 8px
-  );
-  opacity: 0.7;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 50%;
+  transform: translateY(-50%);
+  border-radius: 0;
+  background: currentColor;
+  opacity: 0.95;
   pointer-events: none;
   transition: opacity 0.15s ease;
 }
