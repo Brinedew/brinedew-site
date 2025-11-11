@@ -1143,37 +1143,7 @@
     `;
   }
 
-  function renderFeedbackPanel(guess, score) {
-    const sections = buildProteinSections(guess, { 
-      forClue: false, 
-      matchedDomains: score.domainMatches 
-    });
-    
-    const goLabel = formatGoSimilarityLabel();
-    const goPercent = typeof score.goPercent === 'number' ? score.goPercent : null;
-    const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
-    const goWidth = goPercent === null ? 0 : goPercent;
-    const goNote = formatGoSimilarityNote();
-    
-    return `
-      <div class="pg-feedback">
-        <div class="pg-feedback-header">
-          <span class="pg-feedback-protein">${guess.hgnc}</span>
-        </div>
-        
-        <div class="pg-feedback-row">
-          <span class="pg-feedback-label">${goLabel}</span>
-          <div class="pg-bar">
-            <div class="pg-bar-fill" style="width: ${goWidth}%"></div>
-          </div>
-          <span class="pg-feedback-value">${goValue}</span>
-        </div>
-        ${goNote ? `<div class="pg-feedback-note">${goNote}</div>` : ''}
-        
-        ${sections.map(section => renderFeedbackSection(section, score)).join('')}
-      </div>
-    `;
-  }
+
   
   function renderFeedbackSection(section, score) {
     const label = section.label;
@@ -1335,22 +1305,24 @@
     const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
     const goWidth = goPercent === null ? 0 : goPercent;
     
+    const sections = buildProteinSections(guess, { 
+      forClue: false, 
+      matchedDomains: score.domainMatches 
+    });
+    
     return `
       <div class="pg-feedback-card ${expanded ? 'expanded' : 'collapsed'}" id="${cardId}" data-expanded="${expanded}">
         <button class="pg-collapse-toggle" aria-expanded="${expanded}" aria-controls="${cardId}-content">
           <span class="pg-collapse-chevron">${chevron}</span>
-          <div class="pg-feedback-summary">
-            <span class="pg-feedback-protein">${guess.hgnc}</span>
-            <div class="pg-summary-bar">
-              <div class="pg-bar">
-                <div class="pg-bar-fill" style="width: ${goWidth}%"></div>
-              </div>
-              <span class="pg-summary-score">${goValue}</span>
-            </div>
+          <span class="pg-feedback-gene">${guess.hgnc}</span>
+          <div class="pg-bar">
+            <div class="pg-bar-fill" style="width: ${goWidth}%"></div>
           </div>
+          <span class="pg-feedback-score">${goValue}</span>
         </button>
         <div class="pg-feedback-content" id="${cardId}-content" ${expanded ? '' : 'style="display: none;"'}>
-          ${renderFeedbackPanel(guess, score)}
+          <div class="pg-feedback-protein-name">${guess.full_name}</div>
+          ${sections.map(section => renderFeedbackSection(section, score)).join('')}
         </div>
       </div>
     `;
