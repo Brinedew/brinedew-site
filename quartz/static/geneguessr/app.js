@@ -1355,8 +1355,22 @@
       `;
     }
     
-    const latestGuessEntry = gameState.guesses[gameState.guesses.length - 1] || null;
-    const clueMatches = collectMatchedHintTexts(targetProtein, latestGuessEntry);
+    // Collect matches from ALL guesses, not just the latest one
+    const clueMatches = {};
+    gameState.guesses.forEach(guessEntry => {
+      const guessMatches = collectMatchedHintTexts(targetProtein, guessEntry);
+      // Merge matches - each section ID should accumulate unique values
+      Object.keys(guessMatches).forEach(sectionId => {
+        if (!clueMatches[sectionId]) {
+          clueMatches[sectionId] = [];
+        }
+        guessMatches[sectionId].forEach(value => {
+          if (!clueMatches[sectionId].includes(value)) {
+            clueMatches[sectionId].push(value);
+          }
+        });
+      });
+    });
     // Important: renderStructureViewer builds the 3D placeholder once per guess.
     // We only re-render the sections beneath to avoid tearing down Mol*.
     const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure');
