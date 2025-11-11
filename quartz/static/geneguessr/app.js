@@ -1123,8 +1123,20 @@
   }
 
   function renderClueCard(gameOver = false) {
-    // When game is over, show as feedback card with gene summary
-    const sections = buildProteinSections(targetProtein, { forClue: !gameOver });
+    if (gameOver) {
+      const revealCard = buildFeedbackCardMarkup(targetProtein, {
+        cardId: 'pg-solution-card',
+        collapsible: false,
+        expanded: true,
+        showSimilarity: false,
+      });
+      return `
+        ${renderResult()}
+        ${revealCard}
+      `;
+    }
+    
+    const sections = buildProteinSections(targetProtein, { forClue: true });
     return `
       <div class="pg-clue-card">
         ${sections.map(renderSpoilerSection).join('')}
@@ -1224,33 +1236,35 @@
 
   
   function renderFeedbackSection(section, score) {
-    // Add match indicators for specific sections
+    // Add match indicators for specific sections when score data exists
     let modifiedSection = { ...section };
     
-    if (section.id === 'tissue') {
-      modifiedSection.items = section.items.map(item => ({
-        ...item,
-        text: `${item.text} ${score.tissueMatch ? '✓' : ''}`
-      }));
-    } else if (section.id === 'properties') {
-      modifiedSection.items = section.items.map(item => {
-        const text = item.text;
-        const parts = text.split(' · ');
-        const enhanced = parts.map((part, idx) => {
-          const match = idx === 0 ? score.tmMatch : score.secretedMatch;
-          return `${part} ${match ? '✓' : ''}`;
-        }).join(' · ');
-        return { ...item, text: enhanced };
-      });
-    } else if (section.id === 'length') {
-      modifiedSection.items = section.items.map(item => ({
-        ...item,
-        text: `${item.text} ${score.lengthBinMatch ? '✓' : ''}`
-      }));
+    if (score) {
+      if (section.id === 'tissue') {
+        modifiedSection.items = section.items.map(item => ({
+          ...item,
+          text: `${item.text} ${score.tissueMatch ? '✓' : ''}`
+        }));
+      } else if (section.id === 'properties') {
+        modifiedSection.items = section.items.map(item => {
+          const text = item.text;
+          const parts = text.split(' · ');
+          const enhanced = parts.map((part, idx) => {
+            const match = idx === 0 ? score.tmMatch : score.secretedMatch;
+            return `${part} ${match ? '✓' : ''}`;
+          }).join(' · ');
+          return { ...item, text: enhanced };
+        });
+      } else if (section.id === 'length') {
+        modifiedSection.items = section.items.map(item => ({
+          ...item,
+          text: `${item.text} ${score.lengthBinMatch ? '✓' : ''}`
+        }));
+      }
     }
     
     // Use unified renderer with match highlighting for domains
-    const matchedItems = section.id === 'domains' 
+    const matchedItems = score && section.id === 'domains' 
       ? section.items.filter(item => item.matched).map(item => item.text)
       : [];
     
@@ -1370,37 +1384,80 @@
     // Attach collapse toggle listeners
     attachCollapseListeners();
   }
-  
-  function renderCollapsibleFeedback(guess, score, guessNum, isLatest) {
-    const cardId = `guess-card-${guessNum}`;
-    const expanded = getCardExpansionState(cardId, isLatest);
-    const chevron = expanded ? '▼' : '▶';
+
+  function buildFeedbackCardMarkup(protein, options = {}) {
+    const {
+      score = null,
+      cardId = `feedback-card-${protein.uniprot}`,
+      collapsible = false,
+      expanded = true,
+      showSimilarity = Boolean(score),
+      headerLabel = protein.hgnc,
+    } = options;
     
-    const goPercent = typeof score.goPercent === 'number' ? score.goPercent : null;
+    const goPercent = showSimilarity && score && typeof score.goPercent === 'number'
+      ? score.goPercent
+      : null;
     const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
     const goWidth = goPercent === null ? 0 : goPercent;
     
-    const sections = buildProteinSections(guess, { 
-      forClue: false, 
-      matchedDomains: score.domainMatches 
-    });
+    const matchedDomains = Array.isArray(score?.domainMatches) ? score.domainMatches : [];
+    const sections = buildProteinSections(protein, { forClue: false, matchedDomains });
+    const sectionMarkup = sections.map(section => renderFeedbackSection(section, score)).join('');
+    
+    const similarityMarkup = showSimilarity
+      ? `
+        <div class="pg-bar">
+          <div class="pg-bar-fill" style="width: ${goWidth}%"></div>
+        </div>
+        <span class="pg-feedback-score">${goValue}</span>
+      `
+      : '';
+    
+    const contentMarkup = `
+      <div class="pg-feedback-content" id="${cardId}-content"${expanded ? '' : ' style="display: none;"'}>
+        <div class="pg-feedback-protein-name">${protein.full_name}</div>
+        ${sectionMarkup}
+      </div>
+    `;
+    
+    if (!collapsible) {
+      return `
+        <div class="pg-feedback-card expanded pg-feedback-final" id="${cardId}" data-expanded="true">
+          <div class="pg-collapse-toggle pg-static-toggle" role="heading" aria-level="2">
+            <span class="pg-feedback-gene">${headerLabel}</span>
+            ${similarityMarkup}
+          </div>
+          ${contentMarkup}
+        </div>
+      `;
+    }
+    
+    const chevron = expanded ? '▼' : '▶';
     
     return `
       <div class="pg-feedback-card ${expanded ? 'expanded' : 'collapsed'}" id="${cardId}" data-expanded="${expanded}">
         <button class="pg-collapse-toggle" aria-expanded="${expanded}" aria-controls="${cardId}-content">
           <span class="pg-collapse-chevron">${chevron}</span>
-          <span class="pg-feedback-gene">${guess.hgnc}</span>
-          <div class="pg-bar">
-            <div class="pg-bar-fill" style="width: ${goWidth}%"></div>
-          </div>
-          <span class="pg-feedback-score">${goValue}</span>
+          <span class="pg-feedback-gene">${headerLabel}</span>
+          ${similarityMarkup}
         </button>
-        <div class="pg-feedback-content" id="${cardId}-content" ${expanded ? '' : 'style="display: none;"'}>
-          <div class="pg-feedback-protein-name">${guess.full_name}</div>
-          ${sections.map(section => renderFeedbackSection(section, score)).join('')}
-        </div>
+        ${contentMarkup}
       </div>
     `;
+  }
+  
+  function renderCollapsibleFeedback(guess, score, guessNum, isLatest) {
+    const cardId = `guess-card-${guessNum}`;
+    const expanded = getCardExpansionState(cardId, isLatest);
+    
+    return buildFeedbackCardMarkup(guess, {
+      score,
+      cardId,
+      collapsible: true,
+      expanded,
+      showSimilarity: true,
+    });
   }
   
   function getCardExpansionState(cardId, isLatest) {
@@ -1431,7 +1488,7 @@
   }
   
   function attachCollapseListeners() {
-    const toggles = document.querySelectorAll('.pg-collapse-toggle');
+    const toggles = document.querySelectorAll('.pg-collapse-toggle:not(.pg-static-toggle)');
     toggles.forEach(toggle => {
       toggle.addEventListener('click', function() {
         const card = this.closest('.pg-feedback-card');
@@ -1472,7 +1529,8 @@
     if (!slot) {
       return;
     }
-    slot.innerHTML = gameOver ? renderResult() : '';
+    // Result messaging is now rendered above the clue/feedback card
+    slot.innerHTML = '';
   }
   
   function renderFooterSection(gameOver) {

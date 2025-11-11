@@ -585,6 +585,18 @@
   outline-offset: -2px;
 }
 
+.pg-static-toggle {
+  cursor: default;
+}
+
+.pg-static-toggle:hover {
+  background-color: transparent;
+}
+
+.pg-static-toggle:focus {
+  outline: none;
+}
+
 .pg-collapse-chevron {
   font-size: 0.9rem;
   color: var(--secondary);
