@@ -1111,7 +1111,7 @@
     // Render all items on one line, separated by commas
     const itemsHtml = section.items.map((item, idx) => {
       const revealed = isHintRevealed(item.id);
-      const separator = idx < section.items.length - 1 ? ', ' : '';
+      const separator = idx < section.items.length - 1 ? '<span style="white-space: nowrap;">,&nbsp;</span>' : '';
       
       if (revealed) {
         return `${item.text}${separator}`;
