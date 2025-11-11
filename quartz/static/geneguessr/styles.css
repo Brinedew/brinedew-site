@@ -666,9 +666,11 @@
 }
 
 .pg-feedback-content {
-  padding: 0.75rem 1rem;
-  padding-top: 0.5rem;
-  transition: max-height 0.3s ease, opacity 0.3s ease;
+  padding: 0 1rem;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.2s ease;
 }
 
 .pg-feedback-protein-name {
@@ -685,11 +687,17 @@
 }
 
 .pg-feedback-card.collapsed .pg-feedback-content {
+  max-height: 0;
   opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .pg-feedback-card.expanded .pg-feedback-content {
+  max-height: 2000px;
   opacity: 1;
+  padding: 0.75rem 1rem;
+  padding-top: 0.5rem;
 }
 
 /* Result */

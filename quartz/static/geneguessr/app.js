@@ -1503,7 +1503,7 @@
     const structureMarkup = renderStructureViewer(protein, viewerId);
     
     const contentMarkup = `
-      <div class="pg-feedback-content" id="${cardId}-content"${expanded ? '' : ' style="display: none;"'}>
+      <div class="pg-feedback-content" id="${cardId}-content">
         ${structureMarkup}
         <div class="pg-feedback-protein-name">${protein.full_name}</div>
         ${sectionMarkup}
@@ -1592,7 +1592,6 @@
         card.dataset.expanded = newExpanded;
         this.setAttribute('aria-expanded', newExpanded);
         chevron.textContent = newExpanded ? '▼' : '▶';
-        content.style.display = newExpanded ? '' : 'none';
         
         // Persist state
         setCardExpansionState(card.id, newExpanded);
