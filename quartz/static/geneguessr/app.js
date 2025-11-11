@@ -1114,7 +1114,7 @@
       const hasSeparator = idx < section.items.length - 1;
       const textWithComma = hasSeparator ? `${item.text},` : item.text;
       
-      const entryHtml = revealed
+      return revealed
         ? `<span class="pg-clue-entry">${textWithComma}</span>`
         : `<span class="pg-clue-entry">
             <span class="pg-redaction" 
@@ -1126,9 +1126,6 @@
               <span class="pg-redaction-cover" aria-hidden="true"></span>
             </span>
           </span>`;
-      
-      const gap = hasSeparator ? '<span class="pg-clue-gap" aria-hidden="true"> </span>' : '';
-      return `${entryHtml}${gap}`;
     }).join('');
     
     return `

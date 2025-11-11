@@ -148,13 +148,11 @@
   display: inline-block;
   vertical-align: top;
   max-width: 100%;
+  margin-right: 0.35rem;
 }
 
-.pg-clue-gap {
-  display: inline-block;
-  width: 0.4rem;
-  white-space: pre;
-  pointer-events: none;
+.pg-clue-entry:last-child {
+  margin-right: 0;
 }
 
 .pg-redaction {
