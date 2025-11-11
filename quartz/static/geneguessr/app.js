@@ -1030,77 +1030,85 @@
   /**
    * Render functions
    */
+  // Unified card section builder - generates sections for both clue and guess cards
+  function buildProteinSections(protein, options = {}) {
+    const { forClue = false, matchedDomains = [] } = options;
+    const goTerms = protein.go_slim.slice(0, 5);
+    const domains = protein.domains.slice(0, 3);
+    
+    const sections = [];
+    
+    // Function section
+    if (goTerms.length) {
+      sections.push({
+        id: 'function',
+        label: 'Function',
+        items: forClue
+          ? goTerms.map((term, idx) => ({ id: `hint-function-${idx}`, text: term }))
+          : [{ text: goTerms.join(', ') }],
+      });
+    } else {
+      sections.push({
+        id: 'function',
+        label: 'Function',
+        items: [{ text: forClue ? 'Not available' : 'Not available', id: forClue ? 'hint-function-0' : undefined }],
+      });
+    }
+    
+    // Domains section
+    if (domains.length) {
+      sections.push({
+        id: 'domains',
+        label: 'Domains',
+        items: forClue
+          ? domains.map((domain, idx) => ({ id: `hint-domain-${idx}`, text: domain }))
+          : domains.map(d => ({ 
+              text: d, 
+              matched: matchedDomains.includes(d) 
+            })),
+      });
+    } else {
+      sections.push({
+        id: 'domains',
+        label: 'Domains',
+        items: [{ text: 'No structured domains', id: forClue ? 'hint-domain-0' : undefined }],
+      });
+    }
+    
+    // Tissue specificity
+    sections.push({
+      id: 'tissue',
+      label: 'Tissue specificity',
+      items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue.label }],
+    });
+    
+    // Properties (Transmembrane/Secreted)
+    sections.push({
+      id: 'properties',
+      label: 'Properties',
+      items: [{
+        id: forClue ? 'hint-properties' : undefined,
+        text: `${protein.tmh ? 'Transmembrane' : 'Soluble'} · ${protein.secreted ? 'Secreted' : 'Intracellular'}`,
+      }],
+    });
+    
+    // Length
+    sections.push({
+      id: 'length',
+      label: 'Length',
+      items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein.length} aa` }],
+    });
+    
+    return sections;
+  }
+
   function renderClueCard() {
-    const sections = buildClueSections();
+    const sections = buildProteinSections(targetProtein, { forClue: true });
     return `
       <div class="pg-clue-card">
         ${sections.map(renderSpoilerSection).join('')}
       </div>
     `;
-  }
-
-  function buildClueSections() {
-    const goTerms = targetProtein.go_slim.slice(0, 5);
-    const domains = targetProtein.domains.slice(0, 3);
-    
-    // Combine all GO terms into one line with inline redactions
-    const functionContent = goTerms.length
-      ? goTerms.map((term, idx) => ({
-          id: `hint-function-${idx}`,
-          text: term,
-        }))
-      : [{
-          id: 'hint-function-0',
-          text: 'Not available',
-        }];
-    
-    // Combine all domains into one line with inline redactions
-    const domainContent = domains.length
-      ? domains.map((domain, idx) => ({
-          id: `hint-domain-${idx}`,
-          text: domain,
-        }))
-      : [{
-          id: 'hint-domain-0',
-          text: 'No structured domains',
-        }];
-    
-    return [
-      {
-        id: 'hint-function-group',
-        label: 'Function',
-        items: functionContent,
-      },
-      {
-        id: 'hint-tissue',
-        label: 'Tissue specificity',
-        items: [{
-          id: 'hint-tissue',
-          text: targetProtein.tissue.label,
-        }],
-      },
-      {
-        id: 'hint-domain-group',
-        label: 'Domains',
-        items: domainContent,
-      },
-      {
-        id: 'hint-properties',
-        label: 'Properties',
-        items: [{
-          id: 'hint-properties',
-          text: `${targetProtein.tmh ? 'Transmembrane' : 'Soluble'} · ${targetProtein.secreted ? 'Secreted' : 'Intracellular'}`,
-        }],
-      },
-      {
-        id: 'hint-length',
-        label: 'Length',
-        items: [{
-          id: 'hint-length',
-          text: `${targetProtein.length} aa`,
-        }],
-      },
-    ];
   }
 
   function renderSpoilerSection(section) {
@@ -1136,6 +1144,11 @@
   }
 
   function renderFeedbackPanel(guess, score) {
+    const sections = buildProteinSections(guess, { 
+      forClue: false, 
+      matchedDomains: score.domainMatches 
+    });
+    
     const goLabel = formatGoSimilarityLabel();
     const goPercent = typeof score.goPercent === 'number' ? score.goPercent : null;
     const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
@@ -1146,7 +1159,6 @@
       <div class="pg-feedback">
         <div class="pg-feedback-header">
           <span class="pg-feedback-protein">${guess.hgnc}</span>
-          <span>${guess.length} aa</span>
         </div>
         
         <div class="pg-feedback-row">
@@ -1158,34 +1170,47 @@
         </div>
         ${goNote ? `<div class="pg-feedback-note">${goNote}</div>` : ''}
         
-        <div class="pg-feedback-row">
-          <span class="pg-feedback-label">Domains:</span>
-          <span class="pg-feedback-value">
-            ${guess.domains.length > 0
-              ? guess.domains.map(d => `<span style="color: ${score.domainMatches.includes(d) ? 'var(--accent)' : 'inherit'}">${d}</span>`).join(', ')
-              : 'None'}
-          </span>
-        </div>
-        
-        <div class="pg-feedback-row">
-          <span class="pg-feedback-label">Length Bin</span>
-          <span class="pg-feedback-value">${score.lengthBinMatch ? 'Yes' : 'No'}</span>
-        </div>
-        
-        <div class="pg-feedback-row">
-          <span class="pg-feedback-label">Transmembrane</span>
-          <span class="pg-feedback-value">${score.tmMatch ? 'Yes' : 'No'}</span>
-        </div>
-        
-        <div class="pg-feedback-row">
-          <span class="pg-feedback-label">Secreted</span>
-          <span class="pg-feedback-value">${score.secretedMatch ? 'Yes' : 'No'}</span>
-        </div>
-        
-        <div class="pg-feedback-row">
-          <span class="pg-feedback-label">Tissue</span>
-          <span class="pg-feedback-value">${score.tissueMatch ? 'Yes' : 'No'}</span>
-        </div>
+        ${sections.map(section => renderFeedbackSection(section, score)).join('')}
+      </div>
+    `;
+  }
+  
+  function renderFeedbackSection(section, score) {
+    const label = section.label;
+    let value = '';
+    
+    if (section.id === 'domains') {
+      // Domains: inline comma-separated with color coding for matches
+      value = section.items.map(item => {
+        const color = item.matched ? 'var(--accent)' : 'inherit';
+        return `<span style="color: ${color}">${item.text}</span>`;
+      }).join(', ');
+    } else if (section.id === 'function') {
+      // Function: plain text
+      value = section.items[0].text;
+    } else if (section.id === 'tissue') {
+      // Tissue: show match indicator
+      value = `${section.items[0].text} ${score.tissueMatch ? '✓' : ''}`;
+    } else if (section.id === 'properties') {
+      // Properties: show match indicators for TM and Secreted
+      const text = section.items[0].text;
+      const parts = text.split(' · ');
+      value = parts.map((part, idx) => {
+        const match = idx === 0 ? score.tmMatch : score.secretedMatch;
+        return `${part} ${match ? '✓' : ''}`;
+      }).join(' · ');
+    } else if (section.id === 'length') {
+      // Length: show match indicator
+      value = `${section.items[0].text} ${score.lengthBinMatch ? '✓' : ''}`;
+    } else {
+      // Default: just show the text
+      value = section.items.map(item => item.text).join(', ');
+    }
+    
+    return `
+      <div class="pg-feedback-row">
+        <span class="pg-feedback-label">${label}:</span>
+        <span class="pg-feedback-value">${value}</span>
       </div>
     `;
   }
@@ -1289,9 +1314,110 @@
       return;
     }
     guessesEl.innerHTML = gameState.guesses
-      .map(g => renderFeedbackPanel(g.protein, g.score))
+      .map((g, idx) => {
+        const guessNum = gameState.guesses.length - idx;
+        const isLatest = idx === gameState.guesses.length - 1;
+        return renderCollapsibleFeedback(g.protein, g.score, guessNum, isLatest);
+      })
       .reverse()
       .join('');
+    
+    // Attach collapse toggle listeners
+    attachCollapseListeners();
+  }
+  
+  function renderCollapsibleFeedback(guess, score, guessNum, isLatest) {
+    const cardId = `guess-card-${guessNum}`;
+    const expanded = getCardExpansionState(cardId, isLatest);
+    const chevron = expanded ? '▼' : '▶';
+    
+    const goPercent = typeof score.goPercent === 'number' ? score.goPercent : null;
+    const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
+    const goWidth = goPercent === null ? 0 : goPercent;
+    
+    return `
+      <div class="pg-feedback-card ${expanded ? 'expanded' : 'collapsed'}" id="${cardId}" data-expanded="${expanded}">
+        <button class="pg-collapse-toggle" aria-expanded="${expanded}" aria-controls="${cardId}-content">
+          <span class="pg-collapse-chevron">${chevron}</span>
+          <div class="pg-feedback-summary">
+            <span class="pg-feedback-protein">${guess.hgnc}</span>
+            <div class="pg-summary-bar">
+              <div class="pg-bar">
+                <div class="pg-bar-fill" style="width: ${goWidth}%"></div>
+              </div>
+              <span class="pg-summary-score">${goValue}</span>
+            </div>
+          </div>
+        </button>
+        <div class="pg-feedback-content" id="${cardId}-content" ${expanded ? '' : 'style="display: none;"'}>
+          ${renderFeedbackPanel(guess, score)}
+        </div>
+      </div>
+    `;
+  }
+  
+  function getCardExpansionState(cardId, isLatest) {
+    try {
+      const stored = sessionStorage.getItem('guessCardStates');
+      if (stored) {
+        const states = JSON.parse(stored);
+        if (cardId in states) {
+          return states[cardId];
+        }
+      }
+    } catch (e) {
+      // Ignore storage errors
+    }
+    // Default: latest expanded, others collapsed
+    return isLatest;
+  }
+  
+  function setCardExpansionState(cardId, expanded) {
+    try {
+      const stored = sessionStorage.getItem('guessCardStates');
+      const states = stored ? JSON.parse(stored) : {};
+      states[cardId] = expanded;
+      sessionStorage.setItem('guessCardStates', JSON.stringify(states));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
+  
+  function attachCollapseListeners() {
+    const toggles = document.querySelectorAll('.pg-collapse-toggle');
+    toggles.forEach(toggle => {
+      toggle.addEventListener('click', function() {
+        const card = this.closest('.pg-feedback-card');
+        const content = card.querySelector('.pg-feedback-content');
+        const chevron = card.querySelector('.pg-collapse-chevron');
+        const currentlyExpanded = card.dataset.expanded === 'true';
+        const newExpanded = !currentlyExpanded;
+        
+        // Update UI
+        card.classList.toggle('expanded', newExpanded);
+        card.classList.toggle('collapsed', !newExpanded);
+        card.dataset.expanded = newExpanded;
+        this.setAttribute('aria-expanded', newExpanded);
+        chevron.textContent = newExpanded ? '▼' : '▶';
+        content.style.display = newExpanded ? '' : 'none';
+        
+        // Persist state
+        setCardExpansionState(card.id, newExpanded);
+        
+        // Scroll into view if expanding
+        if (newExpanded) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      });
+      
+      // Keyboard support
+      toggle.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.click();
+        }
+      });
+    });
   }
   
   function renderResultSection(gameOver) {
