@@ -1131,7 +1131,6 @@
       if (typeof entry === 'string') return entry;
       const name = entry.name && entry.name.trim() ? entry.name.trim() : '';
       const id = entry.id || '';
-      if (name && id) return `${name} (${id})`;
       return name || id;
     };
     const formattedReactome = reactomePaths
