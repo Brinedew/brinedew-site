@@ -39,26 +39,37 @@ aliases:
 </div>
 
 <script>
-// Add collapse functionality to attribution card
-document.addEventListener('DOMContentLoaded', function() {
-  const toggle = document.querySelector('#attribution-card .pg-collapse-toggle');
-  if (toggle) {
-    toggle.addEventListener('click', function() {
-      const card = document.getElementById('attribution-card');
-      const content = document.getElementById('attribution-content');
-      const chevron = card.querySelector('.pg-collapse-chevron');
-      const currentlyExpanded = card.dataset.expanded === 'true';
-      const newExpanded = !currentlyExpanded;
-      
-      card.classList.toggle('expanded', newExpanded);
-      card.classList.toggle('collapsed', !newExpanded);
-      card.dataset.expanded = newExpanded;
-      toggle.setAttribute('aria-expanded', newExpanded);
-      chevron.textContent = newExpanded ? '▼' : '▶';
-      content.style.display = newExpanded ? 'block' : 'none';
-    });
+// Add collapse functionality to attribution card (IIFE to attach immediately)
+(function() {
+  function attachToggle() {
+    const toggle = document.querySelector('#attribution-card .pg-collapse-toggle');
+    if (toggle && !toggle.dataset.listenerAttached) {
+      toggle.dataset.listenerAttached = 'true';
+      toggle.addEventListener('click', function() {
+        const card = document.getElementById('attribution-card');
+        const content = document.getElementById('attribution-content');
+        const chevron = card.querySelector('.pg-collapse-chevron');
+        const currentlyExpanded = card.dataset.expanded === 'true';
+        const newExpanded = !currentlyExpanded;
+        
+        card.classList.toggle('expanded', newExpanded);
+        card.classList.toggle('collapsed', !newExpanded);
+        card.dataset.expanded = newExpanded;
+        toggle.setAttribute('aria-expanded', newExpanded);
+        chevron.textContent = newExpanded ? '▼' : '▶';
+        content.style.display = newExpanded ? 'block' : 'none';
+      });
+    }
   }
-});
+  
+  // Try immediately
+  attachToggle();
+  
+  // Also try after DOMContentLoaded in case it hasn't fired
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachToggle);
+  }
+})();
 </script>
 
 
