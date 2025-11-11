@@ -14,12 +14,52 @@ aliases:
 
 ---
 
-<details>
-<summary>Attribution & Data Sources</summary>
+<div class="pg-feedback-card collapsed" id="attribution-card" data-expanded="false">
+  <button class="pg-collapse-toggle" aria-expanded="false" aria-controls="attribution-content">
+    <span class="pg-collapse-chevron">▶</span>
+    <span style="font-weight: 700; font-size: 1rem;">Attribution & Data Sources</span>
+  </button>
+  <div class="pg-feedback-content" id="attribution-content" style="display: none;">
+    <div class="pg-section">
+      <span class="pg-section-label">Function:</span> <span class="pg-section-entry">Gene Ontology (GO-Slim biological process annotations)</span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">Domains:</span> <span class="pg-section-entry"><a href="https://www.ebi.ac.uk/interpro/">InterPro</a> database</span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">Tissue specificity:</span> <span class="pg-section-entry"><a href="https://www.proteinatlas.org/">Human Protein Atlas</a></span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">Properties:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> (transmembrane/secreted classification)</span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">Length:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> (amino acid count)</span>
+    </div>
+  </div>
+</div>
 
-GO-Slim terms derived from biological process annotations. Protein metadata from [UniProt](https://www.uniprot.org/). Domain information from InterPro. See [/About](/About) for full licensing details.
-
-</details>
+<script>
+// Add collapse functionality to attribution card
+document.addEventListener('DOMContentLoaded', function() {
+  const toggle = document.querySelector('#attribution-card .pg-collapse-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', function() {
+      const card = document.getElementById('attribution-card');
+      const content = document.getElementById('attribution-content');
+      const chevron = card.querySelector('.pg-collapse-chevron');
+      const currentlyExpanded = card.dataset.expanded === 'true';
+      const newExpanded = !currentlyExpanded;
+      
+      card.classList.toggle('expanded', newExpanded);
+      card.classList.toggle('collapsed', !newExpanded);
+      card.dataset.expanded = newExpanded;
+      toggle.setAttribute('aria-expanded', newExpanded);
+      chevron.textContent = newExpanded ? '▼' : '▶';
+      content.style.display = newExpanded ? '' : 'none';
+    });
+  }
+});
+</script>
 
 
 
