@@ -304,6 +304,7 @@
   user-select: none;
   color: transparent;
   background: var(--dark);
+  padding: 0.05em 0.1em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   transition: opacity 0.15s ease;
