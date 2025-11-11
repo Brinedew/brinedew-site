@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function() {
       card.dataset.expanded = newExpanded;
       toggle.setAttribute('aria-expanded', newExpanded);
       chevron.textContent = newExpanded ? '▼' : '▶';
-      content.style.display = newExpanded ? '' : 'none';
+      content.style.display = newExpanded ? 'block' : 'none';
     });
   }
 });
