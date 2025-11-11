@@ -21,19 +21,22 @@ aliases:
   </button>
   <div class="pg-feedback-content" id="attribution-content" style="display: none;">
     <div class="pg-section">
-      <span class="pg-section-label">Function:</span> <span class="pg-section-entry">Gene Ontology (GO-Slim biological process annotations)</span>
+      <span class="pg-section-label">Function:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> Gene Ontology biological process annotations (experimental evidence only, IEA excluded)</span>
     </div>
     <div class="pg-section">
-      <span class="pg-section-label">Domains:</span> <span class="pg-section-entry"><a href="https://www.ebi.ac.uk/interpro/">InterPro</a> database</span>
+      <span class="pg-section-label">Domains:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> cross-references to <a href="https://www.ebi.ac.uk/interpro/">InterPro</a></span>
     </div>
     <div class="pg-section">
-      <span class="pg-section-label">Tissue specificity:</span> <span class="pg-section-entry"><a href="https://www.proteinatlas.org/">Human Protein Atlas</a></span>
+      <span class="pg-section-label">Tissue specificity:</span> <span class="pg-section-entry"><a href="https://www.proteinatlas.org/">Human Protein Atlas</a> RNA expression data (tau metric)</span>
     </div>
     <div class="pg-section">
-      <span class="pg-section-label">Properties:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> (transmembrane/secreted classification)</span>
+      <span class="pg-section-label">Properties:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> sequence features (transmembrane, signal peptide, secreted)</span>
     </div>
     <div class="pg-section">
-      <span class="pg-section-label">Length:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> (amino acid count)</span>
+      <span class="pg-section-label">Length:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a> canonical sequence length</span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">Similarity:</span> <span class="pg-section-entry">Lin semantic similarity on GO biological process terms (best-match average)</span>
     </div>
   </div>
 </div>
