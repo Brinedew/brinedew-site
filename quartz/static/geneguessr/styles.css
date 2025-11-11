@@ -33,7 +33,7 @@
   margin-bottom: 0.5rem;
 }
 
-.pg-sidebar-credits {
+.pg-sidebar-hints {
   font-size: 2rem;
   font-weight: 700;
   color: var(--accent);
@@ -319,7 +319,7 @@
   height: 20px;
 }
 
-.pg-credits-badge {
+.pg-hints-badge {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -331,12 +331,12 @@
   font-size: 0.95rem;
 }
 
-.pg-credits-label {
+.pg-hints-label {
   color: var(--secondary);
   font-weight: 500;
 }
 
-.pg-credits-value {
+.pg-hints-value {
   color: var(--accent);
   font-weight: 700;
   font-size: 1.25rem;
@@ -394,7 +394,7 @@
     width: 100%;
   }
   
-  .pg-credits-badge {
+  .pg-hints-badge {
     margin-left: auto;
   }
 }

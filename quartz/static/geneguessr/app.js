@@ -281,24 +281,24 @@
     };
   }
 
-  function creditsApi() {
-    return window.GeneGuessrCredits || null;
+  function hintsApi() {
+    return window.GeneGuessrHints || null;
   }
 
-  function initCreditsForRound(roundId) {
-    const api = creditsApi();
+  function initHintsForRound(roundId) {
+    const api = hintsApi();
     if (!api || !roundId) return;
     try {
       api.initRound(roundId);
     } catch (err) {
-      console.warn('Geneguessr: failed to init credits', err);
+      console.warn('Geneguessr: failed to init hints', err);
     }
   }
 
-  function getCreditsBalance() {
-    const api = creditsApi();
+  function getHintsBalance() {
+    const api = hintsApi();
     try {
-      return api?.getCredits?.() ?? DEFAULT_HINT_COST;
+      return api?.getHints?.() ?? DEFAULT_HINT_COST;
     } catch {
       return DEFAULT_HINT_COST;
     }
@@ -306,7 +306,7 @@
 
   function isHintRevealed(hintId) {
     if (!hintId) return true;
-    const api = creditsApi();
+    const api = hintsApi();
     if (!api || !currentRoundId) return true;
     try {
       return api.isHintRevealed(currentRoundId, hintId);
@@ -316,7 +316,7 @@
   }
 
   function attemptReveal(hintId, cost = DEFAULT_HINT_COST) {
-    const api = creditsApi();
+    const api = hintsApi();
     if (!api || !currentRoundId) {
       return true;
     }
@@ -325,30 +325,30 @@
       if (result && result.success) {
         return true;
       }
-      flashCreditsWarning();
+      flashHintsWarning();
       return false;
     } catch (err) {
       console.warn('Geneguessr: failed to reveal hint', err);
-      flashCreditsWarning();
+      flashHintsWarning();
       return false;
     }
   }
 
-  function awardCredits(amount = CREDIT_REWARD_ON_INCORRECT) {
-    const api = creditsApi();
+  function awardHints(amount = HINT_REWARD_ON_INCORRECT) {
+    const api = hintsApi();
     if (!api || !amount) return;
     try {
-      api.earnCredits(amount);
+      api.earnHints(amount);
     } catch (err) {
-      console.warn('Geneguessr: unable to earn credits', err);
+      console.warn('Geneguessr: unable to earn hints', err);
     }
   }
 
-  function flashCreditsWarning() {
-    const meter = document.querySelector('.pg-credits');
+  function flashHintsWarning() {
+    const meter = document.querySelector('.pg-hints');
     if (!meter) return;
-    meter.classList.add('pg-credits--warn');
-    setTimeout(() => meter.classList.remove('pg-credits--warn'), 600);
+    meter.classList.add('pg-hints--warn');
+    setTimeout(() => meter.classList.remove('pg-hints--warn'), 600);
   }
 
   function safeApplyCanvasProps(viewer, props, label) {
@@ -715,7 +715,7 @@
   const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net";
   const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
   const DEFAULT_HINT_COST = 1;
-  const CREDIT_REWARD_ON_INCORRECT = 1;
+  const HINT_REWARD_ON_INCORRECT = 1;
   const MAX_GUESSES = 6;
   const STORAGE_KEY = 'geneguessr_state';
   
@@ -870,7 +870,7 @@
     targetProtein = target;
     gameState.targetId = targetId;
     currentRoundId = gameState.date;
-    initCreditsForRound(currentRoundId);
+    initHintsForRound(currentRoundId);
     structureViewerLoaded = false;
     
     gameState.guesses = gameState.guesses
@@ -1124,7 +1124,7 @@
                       data-hint-id="${item.id}" 
                       role="button" 
                       tabindex="0"
-                      aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} credit">${redactionBar}</span>${separator}`;
+                      aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${redactionBar}</span>${separator}`;
       }
     }).join('');
     
@@ -1259,9 +1259,9 @@
             </button>
             <div id="pg-suggestions" class="pg-suggestions"></div>
           </div>
-          <div class="pg-credits-badge">
-            <span class="pg-credits-label">Credits</span>
-            <span class="pg-credits-value">${gameState.credits}</span>
+          <div class="pg-hints-badge">
+            <span class="pg-hints-label">Hints</span>
+            <span class="pg-hints-value">${gameState.hints}</span>
           </div>
         </div>
       </div>
@@ -1349,12 +1349,12 @@
     `;
   }
 
-  function renderCreditsMeter() {
-    const credits = getCreditsBalance();
+  function renderHintsMeter() {
+    const hints = getHintsBalance();
     return `
-      <div class="pg-credits" aria-live="polite">
-        <span class="pg-credits-label">Credits</span>
-        <span class="pg-credits-value">${credits}</span>
+      <div class="pg-hints" aria-live="polite">
+        <span class="pg-hints-label">Hints</span>
+        <span class="pg-hints-value">${hints}</span>
       </div>
     `;
   }
@@ -1597,7 +1597,7 @@
     // Unlock next hint
     if (!isCorrect) {
       gameState.hintsUnlocked = Math.min(gameState.hintsUnlocked + 1, 5);
-      awardCredits(CREDIT_REWARD_ON_INCORRECT);
+      awardHints(HINT_REWARD_ON_INCORRECT);
     }
     
     // Check win/loss
@@ -1685,7 +1685,7 @@ https://brinedew.bio/apps/geneguessr/`;
   }
   
   /**
-   * Inject stats/credits into sidebar
+   * Inject stats/hints into sidebar
    */
   function injectSidebarStats() {
     // Find Quartz right sidebar (where tags are)
@@ -1699,13 +1699,13 @@ https://brinedew.bio/apps/geneguessr/`;
     sidebarStats.id = 'pg-sidebar-stats';
     sidebarStats.className = 'pg-sidebar-stats';
     
-    const credits = getCreditsBalance();
+    const hints = getHintsBalance();
     const stats = loadStats();
     
     sidebarStats.innerHTML = `
       <div class="pg-sidebar-section">
-        <div class="pg-sidebar-label">Credits</div>
-        <div class="pg-sidebar-value pg-sidebar-credits">${credits}</div>
+        <div class="pg-sidebar-label">Hints</div>
+        <div class="pg-sidebar-value pg-sidebar-hints">${hints}</div>
       </div>
       <div class="pg-sidebar-section">
         <div class="pg-sidebar-label">Stats</div>
@@ -1727,15 +1727,15 @@ https://brinedew.bio/apps/geneguessr/`;
   }
   
   function updateSidebarStats() {
-    const sidebarCredits = document.querySelector('.pg-sidebar-credits');
-    if (sidebarCredits) {
-      sidebarCredits.textContent = getCreditsBalance();
+    const sidebarHints = document.querySelector('.pg-sidebar-hints');
+    if (sidebarHints) {
+      sidebarHints.textContent = getHintsBalance();
     }
     
-    // Update inline credits badge
-    const inlineCredits = document.querySelector('.pg-credits-value');
-    if (inlineCredits) {
-      inlineCredits.textContent = getCreditsBalance();
+    // Update inline hints badge
+    const inlineHints = document.querySelector('.pg-hints-value');
+    if (inlineHints) {
+      inlineHints.textContent = getHintsBalance();
     }
     
     const statsGrid = document.querySelector('.pg-sidebar-stats-grid');
