@@ -1104,6 +1104,73 @@
       });
     }
     
+    // Length first
+    sections.push({
+      id: 'length',
+      label: 'Length',
+      items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein.length} aa` }],
+    });
+    
+    // Properties (Transmembrane/Secreted)
+    sections.push({
+      id: 'properties',
+      label: 'Properties',
+      items: [{
+        id: forClue ? 'hint-properties' : undefined,
+        text: `${protein.tmh ? 'Transmembrane' : 'Soluble'} · ${protein.secreted ? 'Secreted' : 'Intracellular'}`,
+      }],
+    });
+    
+    // Tissue specificity
+    sections.push({
+      id: 'tissue',
+      label: 'Tissue specificity',
+      items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue.label }],
+    });
+    
+    // Domains
+    if (domains.length) {
+      sections.push({
+        id: 'domains',
+        label: 'Domains',
+        items: forClue
+          ? domains.map((domain, idx) => ({ id: `hint-domain-${idx}`, text: domain }))
+          : domains.map(d => ({ 
+              text: d, 
+              matched: matchedDomains.includes(d) 
+            })),
+      });
+    } else {
+      sections.push({
+        id: 'domains',
+        label: 'Domains',
+        items: [{ text: 'No structured domains', id: forClue ? 'hint-domain-0' : undefined }],
+      });
+    }
+    
+    // Pathways (Reactome)
+    const formatReactomeEntry = (entry) => {
+      if (!entry) return '';
+      if (typeof entry === 'string') return entry;
+      const name = entry.name && entry.name.trim() ? entry.name.trim() : '';
+      const id = entry.id || '';
+      return name || id;
+    };
+    const formattedReactome = reactomePaths
+      .map(formatReactomeEntry)
+      .filter(Boolean);
+
+    if (formattedReactome.length) {
+      sections.push({
+        id: 'reactome',
+        label: 'Pathways',
+        items: forClue
+          ? formattedReactome.map((path, idx) => ({ id: `hint-reactome-${idx}`, text: path }))
+          : formattedReactome.map(path => ({ text: path })),
+      });
+    }
+    
+    // GO sections last
     const goSectionMeta = [
       { aspect: 'bp', label: 'Biological process' },
       { aspect: 'mf', label: 'Molecular function' },
@@ -1134,71 +1201,6 @@
       });
     }
 
-    const formatReactomeEntry = (entry) => {
-      if (!entry) return '';
-      if (typeof entry === 'string') return entry;
-      const name = entry.name && entry.name.trim() ? entry.name.trim() : '';
-      const id = entry.id || '';
-      return name || id;
-    };
-    const formattedReactome = reactomePaths
-      .map(formatReactomeEntry)
-      .filter(Boolean);
-
-    if (formattedReactome.length) {
-      sections.push({
-        id: 'reactome',
-        label: 'Pathways',
-        items: forClue
-          ? formattedReactome.map((path, idx) => ({ id: `hint-reactome-${idx}`, text: path }))
-          : formattedReactome.map(path => ({ text: path })),
-      });
-    }
-    
-    // Domains section
-    if (domains.length) {
-      sections.push({
-        id: 'domains',
-        label: 'Domains',
-        items: forClue
-          ? domains.map((domain, idx) => ({ id: `hint-domain-${idx}`, text: domain }))
-          : domains.map(d => ({ 
-              text: d, 
-              matched: matchedDomains.includes(d) 
-            })),
-      });
-    } else {
-      sections.push({
-        id: 'domains',
-        label: 'Domains',
-        items: [{ text: 'No structured domains', id: forClue ? 'hint-domain-0' : undefined }],
-      });
-    }
-    
-    // Tissue specificity
-    sections.push({
-      id: 'tissue',
-      label: 'Tissue specificity',
-      items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue.label }],
-    });
-    
-    // Properties (Transmembrane/Secreted)
-    sections.push({
-      id: 'properties',
-      label: 'Properties',
-      items: [{
-        id: forClue ? 'hint-properties' : undefined,
-        text: `${protein.tmh ? 'Transmembrane' : 'Soluble'} · ${protein.secreted ? 'Secreted' : 'Intracellular'}`,
-      }],
-    });
-    
-    // Length
-    sections.push({
-      id: 'length',
-      label: 'Length',
-      items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein.length} aa` }],
-    });
-    
     return sections;
   }
 
