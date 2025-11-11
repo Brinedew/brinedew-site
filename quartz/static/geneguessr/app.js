@@ -125,13 +125,12 @@
     }
     
     // Auto-load structure viewers for guess cards if present
-    gameState.guesses.forEach((guess, idx) => {
-      const guessNum = gameState.guesses.length - idx;
-      const viewerId = `guess-card-${guessNum}-structure`;
+    gameState.guesses.forEach((guess) => {
+      const viewerId = `guess-card-${guess.guessId}-structure`;
       const container = document.getElementById(viewerId);
       if (container && hasStructureData(guess.protein) && !container.querySelector('canvas')) {
         loadStructureViewerInContainer(container, guess.protein).catch((err) => {
-          console.error(`Geneguessr: failed to load structure viewer for guess ${guessNum}`, err);
+          console.error(`Geneguessr: failed to load structure viewer for guess ${guess.guessId}`, err);
         });
       }
     });
@@ -772,6 +771,13 @@
     won: false,
     hintsUnlocked: 1 // Start with 1 hint visible
   };
+
+  function generateGuessId() {
+    if (window.crypto?.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    return `guess-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
   
   // DOM elements (will be populated on init)
   let rootEl;
@@ -911,11 +917,11 @@
     
     gameState.guesses = gameState.guesses
       .map((entry) => {
-        const guessId =
+        const guessProteinId =
           (entry && entry.protein && entry.protein.uniprot) ||
           entry.uniprot ||
           null;
-        const protein = getProteinById(guessId);
+        const protein = getProteinById(guessProteinId);
         if (!protein) {
           return null;
         }
@@ -924,12 +930,14 @@
           typeof entry.correct === "boolean"
             ? entry.correct
             : protein.uniprot === targetProtein.uniprot;
+        const guessId = entry.guessId || entry.cardId || generateGuessId();
         
         return {
           protein,
           score,
           correct,
-          uniprot: protein.uniprot
+          uniprot: protein.uniprot,
+          guessId
         };
       })
       .filter(Boolean);
@@ -1480,8 +1488,7 @@
     if (existingCount === expectedCount - 1) {
       // Only latest guess is new - append it instead of recreating everything
       const latestGuess = gameState.guesses[gameState.guesses.length - 1];
-      const guessNum = gameState.guesses.length;
-      const newCardHtml = renderCollapsibleFeedback(latestGuess.protein, latestGuess.score, guessNum, true);
+      const newCardHtml = renderCollapsibleFeedback(latestGuess, true);
       guessesEl.insertAdjacentHTML('afterbegin', newCardHtml);
       attachCollapseListeners();
       return;
@@ -1490,9 +1497,8 @@
     // Full re-render needed (initial load or state mismatch)
     guessesEl.innerHTML = gameState.guesses
       .map((g, idx) => {
-        const guessNum = gameState.guesses.length - idx;
         const isLatest = idx === gameState.guesses.length - 1;
-        return renderCollapsibleFeedback(g.protein, g.score, guessNum, isLatest);
+        return renderCollapsibleFeedback(g, isLatest);
       })
       .reverse()
       .join('');
@@ -1568,12 +1574,12 @@
     `;
   }
   
-  function renderCollapsibleFeedback(guess, score, guessNum, isLatest) {
-    const cardId = `guess-card-${guessNum}`;
+  function renderCollapsibleFeedback(guessEntry, isLatest) {
+    const cardId = `guess-card-${guessEntry.guessId}`;
     const expanded = getCardExpansionState(cardId, isLatest);
     
-    return buildFeedbackCardMarkup(guess, {
-      score,
+    return buildFeedbackCardMarkup(guessEntry.protein, {
+      score: guessEntry.score,
       cardId,
       collapsible: true,
       expanded,
@@ -1938,11 +1944,13 @@
     const isCorrect = guessProtein.uniprot === targetProtein.uniprot;
     
     // Add to guesses
+    const guessId = generateGuessId();
     gameState.guesses.push({
       protein: guessProtein,
       score: score,
       correct: isCorrect,
-      uniprot: guessProtein.uniprot
+      uniprot: guessProtein.uniprot,
+      guessId
     });
     
     // Unlock next hint
