@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "description": "Version tracking for external data sources used in GeneGuessr similarity calculations",
+    "updated": "2025-11-12"
+  },
+  "sources": {
+    "go_ontology": {
+      "version": "releases/2025-10-10",
+      "file": "../../data/go/go-basic.obo",
+      "source_url": "http://purl.obolibrary.org/obo/go/go-basic.obo",
+      "license": "CC BY 4.0",
+      "notes": "GO-Basic: acyclic ontology recommended for propagation"
+    },
+    "uniprot": {
+      "version": "2025-10",
+      "directory": "proteins/uniprot/",
+      "source_url": "https://www.uniprot.org/",
+      "license": "CC BY 4.0",
+      "notes": "UniProt JSON snapshots containing GO annotations, InterPro domains, and Reactome pathways",
+      "evidence_policy": "Exclude IEA (electronic) annotations for GO terms"
+    },
+    "interpro": {
+      "version": "embedded",
+      "source": "UniProt cross-references",
+      "source_url": "https://www.ebi.ac.uk/interpro/",
+      "license": "CC0",
+      "notes": "InterPro domain IDs extracted from UniProt JSON dbReferences"
+    },
+    "reactome": {
+      "version": "embedded",
+      "source": "UniProt cross-references",
+      "source_url": "https://reactome.org/",
+      "license": "CC BY 4.0",
+      "notes": "Reactome pathway IDs extracted from UniProt JSON dbReferences"
+    },
+    "ncbi_gene": {
+      "version": "2025-11-11",
+      "file": "ncbi_gene/gene_summaries_2025-11-11.json",
+      "source_url": "https://www.ncbi.nlm.nih.gov/gene/",
+      "license": "Public Domain",
+      "notes": "Gene summaries fetched from NCBI E-utilities"
+    }
+  }
+}

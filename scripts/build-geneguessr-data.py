@@ -31,7 +31,7 @@ import json
 import math
 import subprocess
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
@@ -57,9 +57,13 @@ MAX_LENGTH = 5_000  # aa
 MIN_DOMAINS = 1
 
 # Similarity parameters
-SIMILARITY_ASPECT = "bp"  # biological_process
+GO_ASPECTS = ("bp", "mf", "cc")
+HINT_ASPECT = "bp"  # Aspect used for clue hint text
 SIMILARITY_METRIC = "lin"
 SIMILARITY_AGGREGATION = "bma"
+ASPECT_WEIGHT_DEFAULTS = {"bp": 0.4, "mf": 0.45, "cc": 0.15}
+ENABLE_EXTRA_CHANNELS = False
+CHANNEL_WEIGHT_DEFAULTS = {"go": 0.7, "interpro": 0.25, "reactome": 0.05}
 GO_HINT_LIMIT = 5
 DROP_EVIDENCE_CODES = {"IEA"}  # Drop purely electronic GO annotations
 UNIPROT_CACHE: Dict[str, Optional[Dict[str, object]]] = {}
@@ -280,6 +284,36 @@ def gather_go_annotations(uniprot_id: str, ontology: Dict[str, GOTerm]) -> Dict[
             continue
         result[aspect].add(go_id)
     return result
+
+
+def extract_interpro_domains(uniprot_id: str) -> Set[str]:
+    """Extract InterPro domain IDs from UniProt JSON cross-references."""
+    entry = load_uniprot_entry(uniprot_id)
+    if not entry:
+        return set()
+    
+    domains = set()
+    for ref in entry.get("uniProtKBCrossReferences", []):
+        if ref.get("database") == "InterPro":
+            domain_id = ref.get("id")
+            if domain_id:
+                domains.add(domain_id)
+    return domains
+
+
+def extract_reactome_pathways(uniprot_id: str) -> Set[str]:
+    """Extract Reactome pathway IDs from UniProt JSON cross-references."""
+    entry = load_uniprot_entry(uniprot_id)
+    if not entry:
+        return set()
+    
+    pathways = set()
+    for ref in entry.get("uniProtKBCrossReferences", []):
+        if ref.get("database") == "Reactome":
+            pathway_id = ref.get("id")
+            if pathway_id:
+                pathways.add(pathway_id)
+    return pathways
 
 
 def parse_resolution(raw: Optional[str]) -> Optional[float]:
@@ -813,12 +847,10 @@ def build_protein_record(
     return record
 
 
-def compute_similarity_payload(
+def compute_go_similarity_matrix(
     annotations: Dict[str, Set[str]],
     ontology: Dict[str, GOTerm],
-    go_metadata: Dict[str, str],
-) -> Dict[str, object]:
-    """Generate similarity.json content."""
+) -> Tuple[Dict[str, Dict[str, float]], int]:
     annotated = {pid: terms for pid, terms in annotations.items() if terms}
     counts = compute_term_counts(annotated, ontology)
     ic_map = compute_ic(counts, len(annotated))
@@ -830,22 +862,288 @@ def compute_similarity_payload(
             score = gene_similarity_bma(terms_a, terms_b, ic_map, ontology)
             row[pid_b] = round(score, 6)
         matrix[pid_a] = row
+    return matrix, len(annotated)
+
+
+def calibrate_similarity_matrix(
+    matrix: Dict[str, Dict[str, float]]
+) -> Tuple[Dict[str, Dict[str, float]], Dict[str, object]]:
+    values = [score for row in matrix.values() for score in row.values()]
+    if not values:
+        return matrix, {"method": "none", "value_count": 0}
+    
+    value_counts = Counter(values)
+    total = len(values)
+    cumulative = 0
+    cdf: Dict[float, float] = {}
+    for value in sorted(value_counts):
+        cumulative += value_counts[value]
+        cdf[value] = cumulative / total
+    
+    calibrated: Dict[str, Dict[str, float]] = {}
+    for pid, row in matrix.items():
+        calibrated[pid] = {other: round(cdf[score], 6) for other, score in row.items()}
+    
+    return calibrated, {"method": "empirical_cdf", "value_count": total}
+
+
+def compute_jaccard_similarity_matrix(
+    signatures: Dict[str, Set[str]],
+) -> Tuple[Dict[str, Dict[str, float]], Dict[str, object]]:
+    proteins = sorted(signatures.keys())
+    matrix: Dict[str, Dict[str, float]] = {}
+    informative = sum(1 for sig in signatures.values() if sig)
+    for pid_a in proteins:
+        row: Dict[str, float] = {}
+        set_a = signatures.get(pid_a, set())
+        for pid_b in proteins:
+            set_b = signatures.get(pid_b, set())
+            if not set_a and not set_b:
+                score = 0.0
+            else:
+                union = set_a.union(set_b)
+                score = 0.0 if not union else len(set_a.intersection(set_b)) / len(union)
+            row[pid_b] = round(score, 6)
+        matrix[pid_a] = row
+    metadata = {
+        "similarity": "jaccard",
+        "informative_proteins": informative,
+        "total_proteins": len(proteins),
+        "average_signature_size": round(
+            sum(len(sig) for sig in signatures.values()) / max(1, len(signatures)), 3
+        ),
+    }
+    return matrix, metadata
+
+
+def build_go_training_examples(
+    calibrated_aspects: Dict[str, Dict[str, Dict[str, float]]],
+    interpro_signatures: Dict[str, Set[str]],
+    reactome_signatures: Dict[str, Set[str]],
+) -> Tuple[List[List[float]], List[int]]:
+    if not calibrated_aspects:
+        return [], []
+    
+    sample_matrix = next(iter(calibrated_aspects.values()))
+    proteins = sorted(sample_matrix.keys())
+    if len(proteins) < 2:
+        return [], []
+    
+    features: List[List[float]] = []
+    labels: List[int] = []
+    
+    for i, pid_a in enumerate(proteins):
+        for pid_b in proteins[i + 1:]:
+            vec = [
+                calibrated_aspects.get(aspect, {}).get(pid_a, {}).get(pid_b, 0.0)
+                for aspect in GO_ASPECTS
+            ]
+            domains_a = interpro_signatures.get(pid_a, set())
+            domains_b = interpro_signatures.get(pid_b, set())
+            pathways_a = reactome_signatures.get(pid_a, set())
+            pathways_b = reactome_signatures.get(pid_b, set())
+            share_domain = bool(domains_a and domains_b and domains_a.intersection(domains_b))
+            share_pathway = bool(pathways_a and pathways_b and pathways_a.intersection(pathways_b))
+            label = 1 if (share_domain or share_pathway) else 0
+            features.append(vec)
+            labels.append(label)
+    
+    return features, labels
+
+
+def learn_go_aspect_weights(
+    features: List[List[float]],
+    labels: List[int],
+    learning_rate: float = 0.1,
+    epochs: int = 400,
+) -> Tuple[Dict[str, float], Dict[str, object]]:
+    positives = sum(labels)
+    negatives = len(labels) - positives
+    if not features or positives == 0 or negatives == 0:
+        return ASPECT_WEIGHT_DEFAULTS.copy(), {
+            "source": "default",
+            "reason": "insufficient_training_pairs",
+            "positives": positives,
+            "negatives": negatives,
+        }
+    
+    weights = [0.0 for _ in GO_ASPECTS]
+    bias = 0.0
+    n = len(features)
+    
+    for _ in range(epochs):
+        grad_w = [0.0 for _ in GO_ASPECTS]
+        grad_b = 0.0
+        for vec, label in zip(features, labels):
+            z = bias + sum(w * x for w, x in zip(weights, vec))
+            pred = 1 / (1 + math.exp(-z))
+            error = pred - label
+            grad_b += error
+            for i in range(len(GO_ASPECTS)):
+                grad_w[i] += error * vec[i]
+        grad_b /= n
+        for i in range(len(GO_ASPECTS)):
+            grad_w[i] /= n
+            weights[i] -= learning_rate * grad_w[i]
+        bias -= learning_rate * grad_b
+    
+    positive = [max(0.0, w) for w in weights]
+    total = sum(positive)
+    if total <= 0:
+        return ASPECT_WEIGHT_DEFAULTS.copy(), {
+            "source": "default",
+            "reason": "non_positive_weights",
+            "positives": positives,
+            "negatives": negatives,
+        }
+    
+    normalized = {aspect: val / total for aspect, val in zip(GO_ASPECTS, positive)}
+    return normalized, {
+        "source": "learned",
+        "positives": positives,
+        "negatives": negatives,
+        "bias": round(bias, 6),
+    }
+
+
+def combine_calibrated_aspects(
+    calibrated_aspects: Dict[str, Dict[str, Dict[str, float]]],
+    weights: Dict[str, float],
+) -> Dict[str, Dict[str, float]]:
+    proteins = set()
+    for matrix in calibrated_aspects.values():
+        proteins.update(matrix.keys())
+    combined: Dict[str, Dict[str, float]] = {}
+    for pid_a in proteins:
+        row: Dict[str, float] = {}
+        for pid_b in proteins:
+            score = 0.0
+            for aspect in GO_ASPECTS:
+                weight = weights.get(aspect, 0.0)
+                if weight == 0:
+                    continue
+                aspect_matrix = calibrated_aspects.get(aspect, {})
+                aspect_row = aspect_matrix.get(pid_a, {})
+                score += weight * aspect_row.get(pid_b, 0.0)
+            row[pid_b] = round(score, 6)
+        combined[pid_a] = row
+    return combined
+
+
+def blend_similarity_channels(
+    go_scores: Dict[str, Dict[str, float]],
+    interpro_scores: Dict[str, Dict[str, float]],
+    reactome_scores: Dict[str, Dict[str, float]],
+    weights: Dict[str, float],
+) -> Dict[str, Dict[str, float]]:
+    proteins = sorted(go_scores.keys())
+    blended: Dict[str, Dict[str, float]] = {}
+    for pid_a in proteins:
+        row: Dict[str, float] = {}
+        go_row = go_scores.get(pid_a, {})
+        ipr_row = interpro_scores.get(pid_a, {})
+        pathway_row = reactome_scores.get(pid_a, {})
+        for pid_b in proteins:
+            score = (
+                weights.get("go", 0.0) * go_row.get(pid_b, 0.0)
+                + weights.get("interpro", 0.0) * ipr_row.get(pid_b, 0.0)
+                + weights.get("reactome", 0.0) * pathway_row.get(pid_b, 0.0)
+            )
+            row[pid_b] = round(score, 6)
+        blended[pid_a] = row
+    return blended
+
+
+def compute_similarity_payload(
+    annotations: Dict[str, Dict[str, Set[str]]],
+    ontology: Dict[str, GOTerm],
+    go_metadata: Dict[str, str],
+    interpro_signatures: Dict[str, Set[str]],
+    reactome_signatures: Dict[str, Set[str]],
+) -> Dict[str, object]:
+    """Generate similarity.json content."""
+    aspect_payloads: Dict[str, Dict[str, object]] = {}
+    calibrated_matrices: Dict[str, Dict[str, Dict[str, float]]] = {}
+    aspect_annotations_counts: Dict[str, int] = {}
+    
+    for aspect in GO_ASPECTS:
+        aspect_annotations = {
+            pid: annotation.get(aspect, set())
+            for pid, annotation in annotations.items()
+        }
+        raw_matrix, annotated_count = compute_go_similarity_matrix(aspect_annotations, ontology)
+        calibrated_matrix, calibration_meta = calibrate_similarity_matrix(raw_matrix)
+        aspect_payloads[aspect] = {
+            "raw_scores": raw_matrix,
+            "calibrated_scores": calibrated_matrix,
+            "metadata": {
+                "aspect": ASPECT_TO_NAMESPACE[aspect],
+                "annotated_proteins": annotated_count,
+                "calibration": calibration_meta,
+            },
+        }
+        calibrated_matrices[aspect] = calibrated_matrix
+        aspect_annotations_counts[aspect] = annotated_count
+
+    features, labels = build_go_training_examples(calibrated_matrices, interpro_signatures, reactome_signatures)
+    aspect_weights, weight_meta = learn_go_aspect_weights(features, labels)
+    combined_scores = combine_calibrated_aspects(calibrated_matrices, aspect_weights)
+
+    interpro_matrix, interpro_meta = compute_jaccard_similarity_matrix(interpro_signatures)
+    interpro_meta.update({
+        "feature": "interpro_domains",
+    })
+    reactome_matrix, reactome_meta = compute_jaccard_similarity_matrix(reactome_signatures)
+    reactome_meta.update({
+        "feature": "reactome_pathways",
+    })
+
+    if ENABLE_EXTRA_CHANNELS:
+        channel_weights = CHANNEL_WEIGHT_DEFAULTS.copy()
+        blended_scores = blend_similarity_channels(
+            combined_scores,
+            interpro_matrix,
+            reactome_matrix,
+            channel_weights,
+        )
+    else:
+        channel_weights = {"go": 1.0, "interpro": 0.0, "reactome": 0.0}
+        blended_scores = combined_scores
 
     evidence_policy = "Exclude IEA (electronic) GO annotations"
     metadata = {
-        "aspect": ASPECT_TO_NAMESPACE[SIMILARITY_ASPECT],
         "metric": SIMILARITY_METRIC,
-        "aggregation": "best_match_average",
+        "aggregation": SIMILARITY_AGGREGATION,
         "evidence_policy": evidence_policy,
         "go_release": go_metadata.get("data-version", "unknown"),
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "annotated_proteins": len(annotated),
         "total_proteins": len(annotations),
+        "aspect_weights": aspect_weights,
+        "weight_details": weight_meta,
+        "calibration": "empirical_cdf_per_aspect",
+        "go_aspects": [ASPECT_TO_NAMESPACE[a] for a in GO_ASPECTS],
+        "aspect_annotation_counts": aspect_annotations_counts,
+        "channel_weights": channel_weights,
     }
 
     return {
         "metadata": metadata,
-        "scores": matrix,
+        "scores": blended_scores,
+        "go_channels": {
+            "aspects": aspect_payloads,
+            "weights": aspect_weights,
+            "weight_details": weight_meta,
+        },
+        "interpro_channel": {
+            "enabled": ENABLE_EXTRA_CHANNELS,
+            "scores": interpro_matrix if ENABLE_EXTRA_CHANNELS else {},
+            "metadata": interpro_meta,
+        },
+        "reactome_channel": {
+            "enabled": ENABLE_EXTRA_CHANNELS,
+            "scores": reactome_matrix if ENABLE_EXTRA_CHANNELS else {},
+            "metadata": reactome_meta,
+        },
     }
 
 
@@ -869,7 +1167,9 @@ def main() -> None:
     ncbi_summaries = build_ncbi_gene_summaries(list(set(gene_ids)))
     
     proteins: List[Dict[str, object]] = []
-    annotations_for_similarity: Dict[str, Set[str]] = {}
+    annotations_for_similarity: Dict[str, Dict[str, Set[str]]] = {}
+    interpro_signatures: Dict[str, Set[str]] = {}
+    reactome_signatures: Dict[str, Set[str]] = {}
 
     print(f"==> Building dataset from {len(pages)} published protein pages")
     for md_path, page in pages:
@@ -895,17 +1195,23 @@ def main() -> None:
             continue
 
         proteins.append(record)
-        annotations_for_similarity[uniprot_id] = set(go_annotations[SIMILARITY_ASPECT])
+        annotations_for_similarity[uniprot_id] = {
+            aspect: set(go_annotations.get(aspect, set()))
+            for aspect in GO_ASPECTS
+        }
+        interpro_signatures[uniprot_id] = extract_interpro_domains(uniprot_id)
+        reactome_signatures[uniprot_id] = extract_reactome_pathways(uniprot_id)
 
     if not proteins:
         raise RuntimeError("No proteins met the inclusion criteria; aborting.")
 
     # Compute IC once we know the annotation universe
-    counts = compute_term_counts(annotations_for_similarity, ontology)
-    ic_map = compute_ic(counts, len([terms for terms in annotations_for_similarity.values() if terms]))
+    bp_annotations = {pid: ann.get(HINT_ASPECT, set()) for pid, ann in annotations_for_similarity.items()}
+    counts = compute_term_counts(bp_annotations, ontology)
+    ic_map = compute_ic(counts, len([terms for terms in bp_annotations.values() if terms]))
     for record in proteins:
         hint_terms = select_go_hint_terms(
-            record["go_terms"][SIMILARITY_ASPECT],
+            record["go_terms"][HINT_ASPECT],
             ontology,
             ic_map,
         )
@@ -934,6 +1240,8 @@ def main() -> None:
         annotations_for_similarity,
         ontology,
         go_meta,
+        interpro_signatures,
+        reactome_signatures,
     )
     with SIMILARITY_JSON.open("w", encoding="utf-8") as handle:
         json.dump(similarity_payload, handle, indent=2)
@@ -944,7 +1252,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-
