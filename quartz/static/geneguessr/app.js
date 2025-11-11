@@ -1274,14 +1274,16 @@
       // For spoiler mode (clue cards)
       if (showSpoilers && item.id) {
         const revealed = isHintRevealed(item.id);
+        const hasSeparator = idx < section.items.length - 1;
+        const textWithComma = hasSeparator ? `${text}, ` : text;
         return revealed
-          ? `<span class="pg-section-entry">${text}</span>`
-          : `<span class="pg-section-entry">
+          ? `<span class="pg-section-entry-nosep">${textWithComma}</span>`
+          : `<span class="pg-section-entry-nosep">
               <span class="pg-redaction" 
                     data-hint-id="${item.id}" 
                     role="button" 
                     tabindex="0"
-                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${text}</span>
+                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${textWithComma}</span>
             </span>`;
       }
       

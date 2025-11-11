@@ -232,6 +232,12 @@
   content: ", ";
 }
 
+.pg-section-entry-nosep {
+  display: inline;
+  vertical-align: baseline;
+  max-width: 100%;
+}
+
 .pg-section-entry.pg-matched {
   color: var(--accent);
   font-weight: 500;
@@ -297,7 +303,7 @@
   cursor: pointer;
   user-select: none;
   color: transparent;
-  background: currentColor;
+  background: var(--dark);
   padding: 0.05em 0.15em;
   border-radius: 0.2em;
   box-decoration-break: clone;
