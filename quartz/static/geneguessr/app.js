@@ -388,6 +388,7 @@
 
   let activeViewerInstance = null;
   let themeSyncInitialized = false;
+  const activeViewers = new Map(); // Track all active viewers by container ID
 
   function hideMolstarPanels(viewer) {
     try {
@@ -457,9 +458,13 @@
   function ensureThemeSync() {
     if (themeSyncInitialized) return;
     const handleThemeChange = () => {
-      if (!activeViewerInstance) return;
-      const container = document.getElementById('pg-structure-viewer');
-      applyViewerThemeColors(activeViewerInstance, container);
+      // Update all active viewers
+      activeViewers.forEach((viewer, containerId) => {
+        const container = document.getElementById(containerId);
+        if (container && viewer) {
+          applyViewerThemeColors(viewer, container);
+        }
+      });
     };
 
     const observer = new MutationObserver(handleThemeChange);
@@ -482,6 +487,11 @@
   async function applyViewerStylizationProfile(viewer, container) {
     ensureThemeSync();
     activeViewerInstance = viewer;
+    
+    // Register this viewer for theme updates
+    if (container && container.id) {
+      activeViewers.set(container.id, viewer);
+    }
 
     // Apply UI hiding and interactivity suppression immediately (these are safe)
     hideMolstarPanels(viewer);
@@ -580,10 +590,18 @@
   }
 
   function suppressViewerInteractivity(viewer) {
+    // Disable all interactivity
     try {
-      viewer.plugin?.managers?.interactivity?.setProps?.({ granularity: 'structure' });
-      viewer.plugin?.managers?.interactivity?.lociHighlights?.setProps?.({ granularity: 'structure' });
-      viewer.plugin?.managers?.interactivity?.lociSelects?.setProps?.({ granularity: 'structure' });
+      viewer.plugin?.managers?.interactivity?.setProps?.({ 
+        granularity: 'element',
+        maxFps: 0  // Disable hover updates
+      });
+      viewer.plugin?.managers?.interactivity?.lociHighlights?.setProps?.({ 
+        enabled: false
+      });
+      viewer.plugin?.managers?.interactivity?.lociSelects?.setProps?.({ 
+        enabled: false
+      });
     } catch (err) {
       console.warn('Geneguessr: unable to set interactivity props', err);
     }
@@ -592,23 +610,26 @@
       return;
     }
 
-    if (!interactivityGuards) {
-      const hoverSub = viewer.plugin.behaviors.interaction.hover.subscribe(() => {
-        try {
-          viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true);
-        } catch {
-          // ignore
-        }
-      });
-      const clickSub = viewer.plugin.behaviors.interaction.click.subscribe(() => {
-        try {
-          viewer.plugin?.managers?.interactivity?.lociSelects?.deselectAll?.();
-          viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true);
-        } catch {
-          // ignore
-        }
-      });
-      interactivityGuards = { hoverSub, clickSub };
+    // Subscribe to hover/click events and immediately clear any highlights
+    const hoverSub = viewer.plugin.behaviors.interaction.hover.subscribe(() => {
+      try {
+        viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true);
+      } catch {
+        // ignore
+      }
+    });
+    const clickSub = viewer.plugin.behaviors.interaction.click.subscribe(() => {
+      try {
+        viewer.plugin?.managers?.interactivity?.lociSelects?.deselectAll?.();
+        viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true);
+      } catch {
+        // ignore
+      }
+    });
+    
+    // Store subscriptions on the viewer instance so they can be cleaned up
+    if (!viewer._interactivityGuards) {
+      viewer._interactivityGuards = { hoverSub, clickSub };
     }
   }
 
@@ -657,6 +678,8 @@
         selectInteraction: false,
         // Disable streaming to prevent hangs
         lowPrecisionCoords: false,
+        // Disable hover tooltip
+        hideStructureSourceTooltip: true,
       });
 
       // Apply incremental stylization after render completes

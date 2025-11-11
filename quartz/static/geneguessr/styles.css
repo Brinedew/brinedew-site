@@ -148,14 +148,25 @@
 .pg-structure-viewer .msp-top-center-controls,
 .pg-structure-viewer .msp-bottom-left-controls,
 .pg-structure-viewer .msp-bottom-center-controls,
+.pg-structure-viewer .msp-highlight-info,
+.pg-structure-viewer .msp-sequence-wrapper,
 .pg-card-structure-viewer .msp-viewport-info,
 .pg-card-structure-viewer .msp-hover-hint,
 .pg-card-structure-viewer .msp-controls-wrapper,
 .pg-card-structure-viewer .msp-top-left-controls,
 .pg-card-structure-viewer .msp-top-center-controls,
 .pg-card-structure-viewer .msp-bottom-left-controls,
-.pg-card-structure-viewer .msp-bottom-center-controls {
+.pg-card-structure-viewer .msp-bottom-center-controls,
+.pg-card-structure-viewer .msp-highlight-info,
+.pg-card-structure-viewer .msp-sequence-wrapper {
   display: none !important;
+}
+
+/* Disable pointer events on hover tooltips and info boxes */
+.pg-structure-viewer .msp-highlight-info-wrapper,
+.pg-card-structure-viewer .msp-highlight-info-wrapper {
+  display: none !important;
+  pointer-events: none !important;
 }
 
 @media (max-width: 600px) {
