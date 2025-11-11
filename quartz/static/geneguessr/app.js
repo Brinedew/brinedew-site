@@ -1038,8 +1038,8 @@
     
     const sections = [];
     
-    // Gene summary section (if available)
-    if (protein.gene_summary) {
+    // Gene summary section - only show on feedback cards, never on clue cards
+    if (protein.gene_summary && !forClue) {
       const summary = protein.gene_summary;
       const summaryText = typeof summary === 'string' ? summary : summary.text;
       const summaryMeta = typeof summary === 'object' && summary.text ? {
@@ -1052,7 +1052,6 @@
         label: '', // No label for summary
         type: 'summary',
         items: [{ 
-          id: forClue ? 'hint-summary' : undefined, 
           text: summaryText,
           meta: summaryMeta,
         }],
