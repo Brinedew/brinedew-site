@@ -1038,6 +1038,27 @@
     
     const sections = [];
     
+    // Gene summary section (if available)
+    if (protein.gene_summary) {
+      const summary = protein.gene_summary;
+      const summaryText = typeof summary === 'string' ? summary : summary.text;
+      const summaryMeta = typeof summary === 'object' && summary.text ? {
+        source: summary.source,
+        url: summary.url,
+      } : null;
+      
+      sections.push({
+        id: 'summary',
+        label: '', // No label for summary
+        type: 'summary',
+        items: [{ 
+          id: forClue ? 'hint-summary' : undefined, 
+          text: summaryText,
+          meta: summaryMeta,
+        }],
+      });
+    }
+    
     // Function section
     if (goTerms.length) {
       sections.push({
@@ -1114,6 +1135,43 @@
   // Unified section renderer for both clue and feedback cards
   function renderProteinSection(section, options = {}) {
     const { showSpoilers = false, matchedItems = [] } = options;
+    
+    // Special handling for gene summary section
+    if (section.type === 'summary') {
+      const item = section.items[0];
+      const summaryText = item.text;
+      const meta = item.meta;
+      
+      // For spoiler mode (clue cards) - hide until revealed
+      if (showSpoilers && item.id) {
+        const revealed = isHintRevealed(item.id);
+        if (!revealed) {
+          return `
+            <div class="pg-section pg-gene-summary">
+              <span class="pg-redaction" 
+                    data-hint-id="${item.id}" 
+                    role="button" 
+                    tabindex="0"
+                    aria-label="Click to reveal gene summary for ${DEFAULT_HINT_COST} hint">
+                <span class="pg-redaction-shadow" aria-hidden="true">${summaryText}</span>
+                <span class="pg-redaction-cover" aria-hidden="true"></span>
+              </span>
+            </div>
+          `;
+        }
+      }
+      
+      // For feedback/revealed mode - show with source attribution
+      const sourceLink = meta && meta.url && meta.source
+        ? ` <a href="${meta.url}" target="_blank" class="pg-gene-summary-source" title="Retrieved ${meta.retrieved || ''}">Source: ${meta.source}</a>`
+        : '';
+      
+      return `
+        <div class="pg-section pg-gene-summary">
+          <span class="pg-section-entry">${summaryText}${sourceLink}</span>
+        </div>
+      `;
+    }
     
     const labelHtml = section.label
       ? `<span class="pg-section-label">${section.label}:</span> `

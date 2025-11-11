@@ -29,12 +29,15 @@ import csv
 import hashlib
 import json
 import math
+import subprocess
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import frontmatter
+import requests
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
@@ -42,6 +45,7 @@ CONTENT_DIR = BASE_DIR / "content" / "wiki"
 FEATURES_CSV = BASE_DIR / "tools" / "thoteins" / "data" / "proteins" / "features.csv"
 UNIPROT_JSON_DIR = BASE_DIR / "tools" / "thoteins" / "data" / "proteins" / "uniprot"
 GO_ONTOLOGY_PATH = BASE_DIR / "data" / "go" / "go-basic.obo"
+NCBI_GENE_CACHE = BASE_DIR / "tools" / "thoteins" / "data" / "ncbi_gene"
 OUTPUT_DIR = BASE_DIR / "quartz" / "static" / "geneguessr"
 DATA_JSON = OUTPUT_DIR / "data.json"
 INDEX_JSON = OUTPUT_DIR / "index.json"
@@ -343,6 +347,196 @@ def build_alphafold_info(uniprot_id: str, alphafold_ref: Optional[Dict[str, obje
     }
 
 
+def extract_ncbi_gene_id(uniprot_entry: Optional[Dict[str, object]]) -> Optional[str]:
+    """Extract NCBI GeneID from UniProt JSON cross-references."""
+    if not uniprot_entry:
+        return None
+    cross_refs = uniprot_entry.get("uniProtKBCrossReferences", [])
+    for ref in cross_refs:
+        if ref.get("database") == "GeneID":
+            gene_id = ref.get("id")
+            if gene_id:
+                return str(gene_id)
+    return None
+
+
+def fetch_mygene_summary(gene_id: str) -> Optional[Dict[str, object]]:
+    """Fallback: fetch gene summary from MyGene.info API."""
+    try:
+        url = f"https://mygene.info/v3/gene/{gene_id}"
+        params = {"fields": "summary"}
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            summary_text = data.get("summary")
+            if summary_text and isinstance(summary_text, str):
+                return {
+                    "text": summary_text.strip(),
+                    "source": "MyGene.info",
+                    "source_id": f"GeneID:{gene_id}",
+                    "retrieved": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "license": "See MyGene terms",
+                    "url": f"https://mygene.info/v3/gene/{gene_id}",
+                }
+    except Exception as e:
+        print(f"[warn] MyGene.info fetch failed for {gene_id}: {e}")
+    return None
+
+
+def extract_uniprot_function(uniprot_entry: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
+    """Fallback: extract first sentence of UniProt Function comment."""
+    if not uniprot_entry:
+        return None
+    
+    comments = uniprot_entry.get("comments", [])
+    for comment in comments:
+        if comment.get("commentType") == "FUNCTION":
+            texts = comment.get("texts", [])
+            if texts and isinstance(texts, list):
+                full_text = texts[0].get("value", "")
+                # Take first sentence, up to ~350 chars
+                first_sentence = full_text.split(". ")[0]
+                if len(first_sentence) > 350:
+                    first_sentence = first_sentence[:347] + "..."
+                if first_sentence:
+                    uniprot_id = uniprot_entry.get("primaryAccession", "")
+                    return {
+                        "text": first_sentence.strip(),
+                        "source": "UniProtKB",
+                        "source_id": f"UniProt:{uniprot_id}",
+                        "retrieved": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "license": "CC BY 4.0",
+                        "url": f"https://www.uniprot.org/uniprotkb/{uniprot_id}/entry",
+                    }
+    return None
+
+
+def build_ncbi_gene_summaries(gene_ids: List[str]) -> Dict[str, Dict[str, object]]:
+    """
+    Bulk-fetch gene summaries from NCBI Datasets CLI.
+    Returns dict mapping GeneID → summary object.
+    """
+    if not gene_ids:
+        return {}
+    
+    # Create cache directory
+    NCBI_GENE_CACHE.mkdir(parents=True, exist_ok=True)
+    
+    # Check for existing cache
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cache_file = NCBI_GENE_CACHE / f"gene_summaries_{today}.json"
+    
+    if cache_file.exists():
+        print(f"[info] Loading cached NCBI gene summaries from {cache_file}")
+        return json.loads(cache_file.read_text(encoding="utf-8"))
+    
+    print(f"[info] Fetching {len(gene_ids)} gene summaries from NCBI Datasets...")
+    
+    # Write gene IDs to temp file
+    ids_file = NCBI_GENE_CACHE / "gene_ids.txt"
+    ids_file.write_text("\n".join(gene_ids), encoding="utf-8")
+    
+    # Download via datasets CLI
+    zip_path = NCBI_GENE_CACHE / "ncbi_gene_pkg.zip"
+    try:
+        subprocess.run(
+            [
+                "datasets",
+                "download",
+                "gene",
+                "gene-id",
+                "--inputfile",
+                str(ids_file),
+                "--include",
+                "none",
+                "--filename",
+                str(zip_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"[warn] NCBI Datasets download failed: {e.stderr}")
+        return {}
+    except FileNotFoundError:
+        print("[warn] 'datasets' CLI not found. Install from: https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/")
+        return {}
+    
+    # Extract and parse data_report.jsonl
+    import zipfile
+    summaries = {}
+    
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            # Find data_report.jsonl inside the zip
+            report_path = None
+            for name in zf.namelist():
+                if name.endswith("data_report.jsonl"):
+                    report_path = name
+                    break
+            
+            if not report_path:
+                print("[warn] No data_report.jsonl found in NCBI Datasets package")
+                return {}
+            
+            with zf.open(report_path) as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    record = json.loads(line.decode("utf-8"))
+                    
+                    # Extract gene ID
+                    gene = record.get("gene", {})
+                    gene_id = str(gene.get("geneId", ""))
+                    if not gene_id:
+                        continue
+                    
+                    # Extract summary (first available from summaries list)
+                    gene_summaries = gene.get("summaries", [])
+                    if gene_summaries and isinstance(gene_summaries, list):
+                        summary_obj = gene_summaries[0]
+                        summary_text = summary_obj.get("description", "")
+                        if summary_text:
+                            summaries[gene_id] = {
+                                "text": summary_text.strip(),
+                                "source": "NCBI Gene",
+                                "source_id": f"GeneID:{gene_id}",
+                                "retrieved": today,
+                                "license": "Public Domain",
+                                "url": f"https://www.ncbi.nlm.nih.gov/gene/{gene_id}",
+                            }
+    except Exception as e:
+        print(f"[warn] Failed to parse NCBI Datasets package: {e}")
+        return {}
+    
+    # Cache results
+    cache_file.write_text(json.dumps(summaries, indent=2), encoding="utf-8")
+    print(f"[info] Cached {len(summaries)} gene summaries to {cache_file}")
+    
+    return summaries
+
+
+def get_gene_summary(uniprot_id: str, gene_id: Optional[str], ncbi_summaries: Dict[str, Dict[str, object]]) -> Optional[Dict[str, object]]:
+    """
+    Get gene summary with fallback chain: NCBI → MyGene.info → UniProt Function.
+    """
+    # Try NCBI first
+    if gene_id and gene_id in ncbi_summaries:
+        return ncbi_summaries[gene_id]
+    
+    # Try MyGene.info as fallback
+    if gene_id:
+        mygene_result = fetch_mygene_summary(gene_id)
+        if mygene_result:
+            time.sleep(0.2)  # Rate limiting for MyGene.info
+            return mygene_result
+    
+    # Final fallback: UniProt Function
+    uniprot_entry = load_uniprot_entry(uniprot_id)
+    return extract_uniprot_function(uniprot_entry)
+
+
 def extract_structure_info(uniprot_id: str) -> Dict[str, Optional[object]]:
     entry = load_uniprot_entry(uniprot_id)
     if not entry:
@@ -548,8 +742,9 @@ def build_protein_record(
     page: frontmatter.Post,
     feature_row: Dict[str, str],
     go_annotations: Dict[str, Set[str]],
+    gene_summary: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
-    """Merge wiki frontmatter + features + GO annotations into a JSON-ready dict."""
+    """Merge wiki frontmatter + features + GO annotations + gene summary into a JSON-ready dict."""
     uniprot_id = page.get("uniprot_id").strip()
     gene_symbol = (
         page.get("gene_symbol")
@@ -584,7 +779,7 @@ def build_protein_record(
 
     structure_info = extract_structure_info(uniprot_id)
 
-    return {
+    record = {
         "uniprot": uniprot_id,
         "hgnc": gene_symbol,
         "synonyms": build_synonyms(page, feature_row),
@@ -605,6 +800,12 @@ def build_protein_record(
             "cc": sorted(go_annotations["cc"]),
         },
     }
+    
+    # Add gene summary if available
+    if gene_summary:
+        record["gene_summary"] = gene_summary
+    
+    return record
 
 
 def compute_similarity_payload(
@@ -649,6 +850,19 @@ def main() -> None:
     features = load_features()
     pages = load_protein_pages()
 
+    # First pass: collect all gene IDs for bulk fetch
+    print("==> Collecting NCBI Gene IDs")
+    gene_ids = []
+    for md_path, page in pages:
+        uniprot_id = page.get("uniprot_id").strip()
+        uniprot_entry = load_uniprot_entry(uniprot_id)
+        gene_id = extract_ncbi_gene_id(uniprot_entry)
+        if gene_id:
+            gene_ids.append(gene_id)
+    
+    # Bulk fetch NCBI gene summaries
+    ncbi_summaries = build_ncbi_gene_summaries(list(set(gene_ids)))
+    
     proteins: List[Dict[str, object]] = []
     annotations_for_similarity: Dict[str, Set[str]] = {}
 
@@ -661,7 +875,13 @@ def main() -> None:
             continue
 
         go_annotations = gather_go_annotations(uniprot_id, ontology)
-        record = build_protein_record(md_path, page, feature_row, go_annotations)
+        
+        # Get gene summary with fallback chain
+        uniprot_entry = load_uniprot_entry(uniprot_id)
+        gene_id = extract_ncbi_gene_id(uniprot_entry)
+        gene_summary = get_gene_summary(uniprot_id, gene_id, ncbi_summaries)
+        
+        record = build_protein_record(md_path, page, feature_row, go_annotations, gene_summary)
 
         # Apply gameplay filters
         if not (MIN_LENGTH <= record["length"] <= MAX_LENGTH):

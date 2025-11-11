@@ -180,6 +180,30 @@
   font-weight: 500;
 }
 
+/* Gene summary styling */
+.pg-gene-summary {
+  font-style: italic;
+  font-size: 0.9rem;
+  color: var(--secondary);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--lightgray);
+}
+
+.pg-gene-summary-source {
+  opacity: 0.7;
+  font-size: 0.8em;
+  margin-left: 0.35rem;
+  font-style: normal;
+  text-decoration: none;
+  color: var(--secondary);
+}
+
+.pg-gene-summary-source:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 /* Legacy aliases for backward compatibility */
 .pg-clue-section {
   margin-bottom: 0.4rem;
