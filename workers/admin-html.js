@@ -236,6 +236,123 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       <div class="override-list" id="override-list"></div>
     </div>
     
+    <!-- Graphics Options -->
+    <div class="section">
+      <h2>Graphics Options</h2>
+      <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;">
+        Configure 3D protein viewer rendering settings.
+      </p>
+      
+      <form id="graphics-form">
+        <!-- Camera -->
+        <div class="form-group">
+          <label for="graphics-cameraMode" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Camera Mode</label>
+          <select id="graphics-cameraMode" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+            <option value="perspective">Perspective</option>
+            <option value="orthographic">Orthographic</option>
+          </select>
+        </div>
+
+        <!-- Ambient Occlusion -->
+        <div class="form-group">
+          <label for="graphics-occlusionQuality" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Ambient Occlusion</label>
+          <select id="graphics-occlusionQuality" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+            <option value="off">Off</option>
+            <option value="low">Low (16 samples, radius 2)</option>
+            <option value="medium">Medium (32 samples, radius 4)</option>
+            <option value="high">High (64 samples, radius 6)</option>
+            <option value="ultra">Ultra (128 samples, radius 8)</option>
+          </select>
+        </div>
+
+        <!-- Antialiasing -->
+        <div class="form-group">
+          <label for="graphics-antialiasingMode" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Antialiasing</label>
+          <select id="graphics-antialiasingMode" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+            <option value="off">Off</option>
+            <option value="fxaa">FXAA</option>
+          </select>
+        </div>
+
+        <!-- Fog Intensity -->
+        <div class="form-group">
+          <label for="graphics-fogIntensity" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+            Fog Intensity <span id="fog-value" style="font-weight: 400; color: #64748b;">0.50</span>
+          </label>
+          <input type="range" id="graphics-fogIntensity" min="0" max="1" step="0.05" value="0.5" 
+                 style="width: 100%;"
+                 oninput="document.getElementById('fog-value').textContent = parseFloat(this.value).toFixed(2)">
+        </div>
+
+        <!-- Outline -->
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="graphics-outlineEnabled" checked 
+                   onchange="document.getElementById('outline-controls').style.display = this.checked ? 'block' : 'none'">
+            <label for="graphics-outlineEnabled" style="margin: 0; font-weight: 600;">Outline Rendering</label>
+          </div>
+        </div>
+        <div id="outline-controls" style="margin-left: 1.5rem; display: block;">
+          <div class="form-group">
+            <label for="graphics-outlineScale" style="display: block; margin-bottom: 0.5rem;">
+              Scale <span id="outline-scale-value" style="color: #64748b;">0.50</span>
+            </label>
+            <input type="range" id="graphics-outlineScale" min="0.1" max="2" step="0.1" value="0.5"
+                   style="width: 100%;"
+                   oninput="document.getElementById('outline-scale-value').textContent = parseFloat(this.value).toFixed(2)">
+          </div>
+          <div class="form-group">
+            <label for="graphics-outlineThreshold" style="display: block; margin-bottom: 0.5rem;">
+              Threshold <span id="outline-threshold-value" style="color: #64748b;">0.35</span>
+            </label>
+            <input type="range" id="graphics-outlineThreshold" min="0.1" max="1" step="0.05" value="0.35"
+                   style="width: 100%;"
+                   oninput="document.getElementById('outline-threshold-value').textContent = parseFloat(this.value).toFixed(2)">
+          </div>
+        </div>
+
+        <!-- Lighting Preset -->
+        <div class="form-group">
+          <label for="graphics-lightingPreset" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Lighting Preset</label>
+          <select id="graphics-lightingPreset" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+            <option value="default">Default (Single Light)</option>
+            <option value="dramatic">Dramatic (High Contrast)</option>
+            <option value="soft">Soft (Balanced)</option>
+            <option value="studio">Studio (Three-Point)</option>
+          </select>
+        </div>
+
+        <!-- Simple Toggles -->
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="graphics-backgroundColor" checked>
+            <label for="graphics-backgroundColor" style="margin: 0;">Custom Background Color</label>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="graphics-hideAxes" checked>
+            <label for="graphics-hideAxes" style="margin: 0;">Hide XYZ Axes</label>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="graphics-disableMarking" checked>
+            <label for="graphics-disableMarking" style="margin: 0;">Disable Selection Marking</label>
+          </div>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+          <button type="submit">Apply Graphics Settings</button>
+          <button type="button" onclick="resetGraphics()">Reset to Defaults</button>
+        </div>
+      </form>
+      
+      <div id="graphics-message"></div>
+    </div>
+    
     <!-- Feature Flags -->
     <div class="section">
       <h2>Feature Flags</h2>
@@ -283,6 +400,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         displayStatus(data);
         displayOverrides(data.all_overrides);
         updateFlagCheckboxes(data.feature_flags);
+        updateGraphicsCheckboxes(data.graphics_settings);
       } catch (err) {
         console.error('Error loading status:', err);
         document.getElementById('status-display').innerHTML = 
@@ -335,6 +453,39 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     function updateFlagCheckboxes(flags) {
       document.getElementById('flag-randomizer').checked = flags.randomizer || false;
       document.getElementById('flag-archive').checked = flags.archive || false;
+    }
+    
+    function updateGraphicsCheckboxes(graphics) {
+      if (!graphics) return;
+      
+      // Dropdowns and selects
+      document.getElementById('graphics-cameraMode').value = graphics.cameraMode || 'perspective';
+      document.getElementById('graphics-occlusionQuality').value = graphics.occlusionQuality || 'off';
+      document.getElementById('graphics-antialiasingMode').value = graphics.antialiasingMode || 'fxaa';
+      document.getElementById('graphics-lightingPreset').value = graphics.lightingPreset || 'default';
+      
+      // Sliders
+      const fogIntensity = graphics.fogIntensity !== undefined ? graphics.fogIntensity : 0.5;
+      document.getElementById('graphics-fogIntensity').value = fogIntensity;
+      document.getElementById('fog-value').textContent = fogIntensity.toFixed(2);
+      
+      // Outline controls
+      const outlineEnabled = graphics.outlineEnabled !== false;
+      document.getElementById('graphics-outlineEnabled').checked = outlineEnabled;
+      document.getElementById('outline-controls').style.display = outlineEnabled ? 'block' : 'none';
+      
+      const outlineScale = graphics.outlineScale !== undefined ? graphics.outlineScale : 0.5;
+      document.getElementById('graphics-outlineScale').value = outlineScale;
+      document.getElementById('outline-scale-value').textContent = outlineScale.toFixed(2);
+      
+      const outlineThreshold = graphics.outlineThreshold !== undefined ? graphics.outlineThreshold : 0.35;
+      document.getElementById('graphics-outlineThreshold').value = outlineThreshold;
+      document.getElementById('outline-threshold-value').textContent = outlineThreshold.toFixed(2);
+      
+      // Simple checkboxes
+      document.getElementById('graphics-backgroundColor').checked = graphics.backgroundColor !== false;
+      document.getElementById('graphics-hideAxes').checked = graphics.hideAxes !== false;
+      document.getElementById('graphics-disableMarking').checked = graphics.disableMarking !== false;
     }
     
     // Set today's date as default
@@ -400,6 +551,65 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         showMessage('flags-message', 'Failed to update flags', 'error');
       }
     });
+    
+    // Handle graphics form
+    document.getElementById('graphics-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const graphics = {
+        cameraMode: document.getElementById('graphics-cameraMode').value,
+        occlusionQuality: document.getElementById('graphics-occlusionQuality').value,
+        antialiasingMode: document.getElementById('graphics-antialiasingMode').value,
+        fogIntensity: parseFloat(document.getElementById('graphics-fogIntensity').value),
+        outlineEnabled: document.getElementById('graphics-outlineEnabled').checked,
+        outlineScale: parseFloat(document.getElementById('graphics-outlineScale').value),
+        outlineThreshold: parseFloat(document.getElementById('graphics-outlineThreshold').value),
+        lightingPreset: document.getElementById('graphics-lightingPreset').value,
+        backgroundColor: document.getElementById('graphics-backgroundColor').checked,
+        hideAxes: document.getElementById('graphics-hideAxes').checked,
+        disableMarking: document.getElementById('graphics-disableMarking').checked,
+      };
+      
+      try {
+        const response = await fetch(\`\${API_BASE}/api/admin/graphics-settings\`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(graphics)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          showMessage('graphics-message', data.message, 'success');
+          await loadStatus();
+        } else {
+          showMessage('graphics-message', data.error || 'Failed to update graphics', 'error');
+        }
+      } catch (err) {
+        console.error('Error updating graphics:', err);
+        showMessage('graphics-message', 'Failed to update graphics', 'error');
+      }
+    });
+    
+    // Reset graphics to defaults
+    window.resetGraphics = function() {
+      document.getElementById('graphics-cameraMode').value = 'perspective';
+      document.getElementById('graphics-occlusionQuality').value = 'off';
+      document.getElementById('graphics-antialiasingMode').value = 'fxaa';
+      document.getElementById('graphics-fogIntensity').value = 0.5;
+      document.getElementById('fog-value').textContent = '0.50';
+      document.getElementById('graphics-outlineEnabled').checked = true;
+      document.getElementById('graphics-outlineScale').value = 0.5;
+      document.getElementById('outline-scale-value').textContent = '0.50';
+      document.getElementById('graphics-outlineThreshold').value = 0.35;
+      document.getElementById('outline-threshold-value').textContent = '0.35';
+      document.getElementById('outline-controls').style.display = 'block';
+      document.getElementById('graphics-lightingPreset').value = 'default';
+      document.getElementById('graphics-backgroundColor').checked = true;
+      document.getElementById('graphics-hideAxes').checked = true;
+      document.getElementById('graphics-disableMarking').checked = true;
+    };
     
     // Delete override
     window.deleteOverride = async function(date) {

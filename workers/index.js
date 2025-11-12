@@ -11,7 +11,7 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
 // Import stats handlers
 import { handleMigrateStats, handleGetStats, handleUpdateStats } from './stats.js';
 // Import admin handlers
-import { handleOverrideProtein, handleFeatureFlags, handleAdminStatus, handleDeleteOverride } from './admin.js';
+import { handleOverrideProtein, handleFeatureFlags, handleAdminStatus, handleDeleteOverride, handleGraphicsSettings } from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
 
@@ -117,6 +117,40 @@ export default {
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    if (url.pathname === '/api/admin/graphics-settings' && request.method === 'POST') {
+      const response = await handleGraphicsSettings(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    // Public graphics settings endpoint (no auth required)
+    if (url.pathname === '/api/graphics-settings' && request.method === 'GET') {
+      const settings = await env.KV.get('graphics_settings');
+      if (settings) {
+        return Response.json(JSON.parse(settings), {
+          headers: CORS_HEADERS
+        });
+      }
+      // Return defaults if no settings saved
+      return Response.json({
+        cameraMode: 'perspective',
+        occlusionQuality: 'off',
+        antialiasingMode: 'fxaa',
+        fogIntensity: 0.5,
+        outlineEnabled: true,
+        outlineScale: 0.5,
+        outlineThreshold: 0.35,
+        lightingPreset: 'default',
+        backgroundColor: true,
+        hideAxes: true,
+        disableMarking: true
+      }, {
+        headers: CORS_HEADERS
       });
     }
     

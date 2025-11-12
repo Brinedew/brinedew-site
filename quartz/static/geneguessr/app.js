@@ -432,7 +432,9 @@
   }
 
   // Debug flags for viewer stylization (can be disabled via URL params)
-  const DEBUG_STYLIZATION = {
+  // Graphics settings loaded from admin panel
+  let GRAPHICS_SETTINGS = null;
+  let DEBUG_STYLIZATION = {
     hideAxes: true,
     orthographic: false,
     backgroundColor: true,
@@ -443,6 +445,28 @@
     outline: true,
     disableMarking: true,
   };
+  
+  // Fetch graphics settings from API and update DEBUG_STYLIZATION
+  fetch('https://geneguessr-api.decap.workers.dev/api/graphics-settings', {
+    credentials: 'include'
+  })
+    .then(response => response.ok ? response.json() : null)
+    .then(settings => {
+      if (settings) {
+        GRAPHICS_SETTINGS = settings;
+        DEBUG_STYLIZATION.hideAxes = settings.hideAxes !== false;
+        DEBUG_STYLIZATION.orthographic = settings.cameraMode === 'orthographic';
+        DEBUG_STYLIZATION.backgroundColor = settings.backgroundColor !== false;
+        DEBUG_STYLIZATION.lighting = settings.lightingPreset && settings.lightingPreset !== 'default';
+        DEBUG_STYLIZATION.occlusion = settings.occlusionQuality && settings.occlusionQuality !== 'off';
+        DEBUG_STYLIZATION.antialiasing = settings.antialiasingMode === 'fxaa';
+        DEBUG_STYLIZATION.fog = settings.fogIntensity !== undefined;
+        DEBUG_STYLIZATION.outline = settings.outlineEnabled !== false;
+        DEBUG_STYLIZATION.disableMarking = settings.disableMarking !== false;
+        console.info('[GeneGuessr] Loaded graphics settings from admin panel:', settings);
+      }
+    })
+    .catch(err => console.warn('[GeneGuessr] Failed to load graphics settings, using defaults:', err));
 
   // Parse URL params for debug flags (e.g., ?debug_viewer&no_occlusion&no_outline)
   const urlParams = new URLSearchParams(window.location.search);
@@ -533,38 +557,54 @@
       { name: 'hideAxes', enabled: DEBUG_STYLIZATION.hideAxes, fn: () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'), delay: 100 },
       { name: 'orthographic', enabled: DEBUG_STYLIZATION.orthographic, fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
       { name: 'backgroundColor', enabled: DEBUG_STYLIZATION.backgroundColor, fn: () => applyViewerThemeColors(viewer, container), delay: 150 },
-      { name: 'lighting', enabled: DEBUG_STYLIZATION.lighting, fn: () => safeApplyCanvasProps(viewer, {
-        renderer: {
-          light: [
-            {
-              inclination: 170,
-              azimuth: 45,
-              color: toMolstarColor({ r: 255, g: 255, b: 255 }),
-              intensity: 1.1,
-            },
-            {
-              inclination: 25,
-              azimuth: 200,
-              color: toMolstarColor({ r: 255, g: 236, b: 210 }),
-              intensity: 0.6,
-            }
+      { name: 'lighting', enabled: DEBUG_STYLIZATION.lighting, fn: () => {
+        const preset = GRAPHICS_SETTINGS?.lightingPreset || 'default';
+        const lightingPresets = {
+          dramatic: [
+            { inclination: 170, azimuth: 45, color: toMolstarColor({ r: 255, g: 255, b: 255 }), intensity: 1.5 },
+            { inclination: 25, azimuth: 200, color: toMolstarColor({ r: 50, g: 50, b: 80 }), intensity: 0.3 }
           ],
-        },
-      }, 'custom lighting'), delay: 200 },
-      { name: 'occlusion', enabled: DEBUG_STYLIZATION.occlusion, fn: () => safeApplyCanvasProps(viewer, {
-        postprocessing: {
-          occlusion: {
-            name: 'on',
-            params: {
-              samples: 32,
-              radius: 4,
-              bias: 0.8,
-              blurKernelSize: 7,
-              resolutionScale: 1
+          soft: [
+            { inclination: 160, azimuth: 0, color: toMolstarColor({ r: 255, g: 250, b: 240 }), intensity: 0.9 },
+            { inclination: 30, azimuth: 180, color: toMolstarColor({ r: 240, g: 240, b: 255 }), intensity: 0.7 }
+          ],
+          studio: [
+            { inclination: 170, azimuth: 315, color: toMolstarColor({ r: 255, g: 255, b: 255 }), intensity: 1.2 },
+            { inclination: 40, azimuth: 135, color: toMolstarColor({ r: 255, g: 240, b: 220 }), intensity: 0.5 },
+            { inclination: 90, azimuth: 90, color: toMolstarColor({ r: 200, g: 220, b: 255 }), intensity: 0.4 }
+          ]
+        };
+        const lights = lightingPresets[preset] || lightingPresets.dramatic;
+        safeApplyCanvasProps(viewer, {
+          renderer: {
+            light: lights
+          }
+        }, `custom lighting (${preset})`);
+      }, delay: 200 },
+      { name: 'occlusion', enabled: DEBUG_STYLIZATION.occlusion, fn: () => {
+        const quality = GRAPHICS_SETTINGS?.occlusionQuality || 'medium';
+        const qualityPresets = {
+          low: { samples: 16, radius: 2 },
+          medium: { samples: 32, radius: 4 },
+          high: { samples: 64, radius: 6 },
+          ultra: { samples: 128, radius: 8 }
+        };
+        const preset = qualityPresets[quality] || qualityPresets.medium;
+        safeApplyCanvasProps(viewer, {
+          postprocessing: {
+            occlusion: {
+              name: 'on',
+              params: {
+                samples: preset.samples,
+                radius: preset.radius,
+                bias: 0.8,
+                blurKernelSize: 7,
+                resolutionScale: 1
+              }
             }
           }
-        }
-      }, 'ambient occlusion'), delay: 200 },
+        }, `ambient occlusion (${quality}: ${preset.samples} samples)`);
+      }, delay: 200 },
       { name: 'antialiasing', enabled: DEBUG_STYLIZATION.antialiasing, fn: () => safeApplyCanvasProps(viewer, {
         postprocessing: {
           antialiasing: {
@@ -578,24 +618,31 @@
           }
         }
       }, 'antialiasing'), delay: 150 },
-      { name: 'fog', enabled: DEBUG_STYLIZATION.fog, fn: () => safeApplyCanvasProps(viewer, {
-        cameraFog: {
-          name: 'on',
-          params: { intensity: 0.5 }
-        }
-      }, 'camera fog'), delay: 150 },
-      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => safeApplyCanvasProps(viewer, {
-        postprocessing: {
-          outline: {
+      { name: 'fog', enabled: DEBUG_STYLIZATION.fog, fn: () => {
+        const intensity = GRAPHICS_SETTINGS?.fogIntensity !== undefined ? GRAPHICS_SETTINGS.fogIntensity : 0.5;
+        safeApplyCanvasProps(viewer, {
+          cameraFog: {
             name: 'on',
-            params: {
-              scale: 0.5,
-              threshold: 0.35,
-              color: toMolstarColor(getViewerThemeColors(container).background)
+            params: { intensity }
+          }
+        }, `camera fog (intensity: ${intensity.toFixed(2)})`);
+      }, delay: 150 },
+      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => {
+        const scale = GRAPHICS_SETTINGS?.outlineScale !== undefined ? GRAPHICS_SETTINGS.outlineScale : 0.5;
+        const threshold = GRAPHICS_SETTINGS?.outlineThreshold !== undefined ? GRAPHICS_SETTINGS.outlineThreshold : 0.35;
+        safeApplyCanvasProps(viewer, {
+          postprocessing: {
+            outline: {
+              name: 'on',
+              params: {
+                scale,
+                threshold,
+                color: toMolstarColor(getViewerThemeColors(container).background)
+              }
             }
           }
-        }
-      }, 'outline'), delay: 150 },
+        }, `outline (scale: ${scale.toFixed(2)}, threshold: ${threshold.toFixed(2)})`);
+      }, delay: 150 },
       { name: 'disableMarking', enabled: DEBUG_STYLIZATION.disableMarking, fn: () => safeApplyCanvasProps(viewer, {
         marking: {
           enabled: false,

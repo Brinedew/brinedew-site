@@ -119,6 +119,10 @@ export async function handleAdminStatus(request, env) {
     const featureFlagsJson = await env.KV.get('feature_flags');
     const featureFlags = featureFlagsJson ? JSON.parse(featureFlagsJson) : {};
     
+    // Get graphics settings
+    const graphicsSettingsJson = await env.KV.get('graphics_settings');
+    const graphicsSettings = graphicsSettingsJson ? JSON.parse(graphicsSettingsJson) : null;
+    
     // List all puzzle overrides (scan KV keys)
     const overridesList = await env.KV.list({ prefix: 'puzzle_override:' });
     const overrides = await Promise.all(
@@ -146,6 +150,7 @@ export async function handleAdminStatus(request, env) {
         override: todayOverride || null
       },
       feature_flags: featureFlags,
+      graphics_settings: graphicsSettings,
       all_overrides: validOverrides
     });
   } catch (err) {
@@ -155,6 +160,65 @@ export async function handleAdminStatus(request, env) {
       details: err.message 
     }, { status: 500 });
   }
+}
+
+/**
+ * POST /api/admin/graphics-settings
+ * Update graphics settings for 3D protein viewer
+ */
+export async function handleGraphicsSettings(request, env) {
+  if (!isAdmin(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+  
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (err) {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+  
+  // Validate fields
+  const validationRules = {
+    // String enums
+    cameraMode: (v) => ['perspective', 'orthographic'].includes(v),
+    occlusionQuality: (v) => ['off', 'low', 'medium', 'high', 'ultra'].includes(v),
+    antialiasingMode: (v) => ['off', 'fxaa'].includes(v),
+    lightingPreset: (v) => ['default', 'dramatic', 'soft', 'studio'].includes(v),
+    
+    // Numbers
+    fogIntensity: (v) => typeof v === 'number' && v >= 0 && v <= 1,
+    outlineScale: (v) => typeof v === 'number' && v >= 0.1 && v <= 2,
+    outlineThreshold: (v) => typeof v === 'number' && v >= 0.1 && v <= 1,
+    
+    // Booleans
+    outlineEnabled: (v) => typeof v === 'boolean',
+    backgroundColor: (v) => typeof v === 'boolean',
+    hideAxes: (v) => typeof v === 'boolean',
+    disableMarking: (v) => typeof v === 'boolean',
+  };
+  
+  for (const [field, validator] of Object.entries(validationRules)) {
+    if (field in payload && !validator(payload[field])) {
+      return Response.json({ 
+        error: `Invalid value for ${field}` 
+      }, { status: 400 });
+    }
+  }
+  
+  // Save to KV
+  await env.KV.put('graphics_settings', JSON.stringify(payload), {
+    metadata: {
+      updated_by: 'admin',
+      updated_at: Date.now()
+    }
+  });
+  
+  return Response.json({
+    success: true,
+    message: 'Graphics settings updated',
+    settings: payload
+  });
 }
 
 /**
