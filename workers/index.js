@@ -10,6 +10,8 @@ const CORS_HEADERS = {
 import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
 // Import stats handlers
 import { handleMigrateStats, handleGetStats, handleUpdateStats } from './stats.js';
+// Import admin handlers
+import { handleOverrideProtein, handleFeatureFlags, handleAdminStatus, handleDeleteOverride } from './admin.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -75,6 +77,39 @@ export default {
     
     if (url.pathname === '/api/stats/update' && request.method === 'POST') {
       const response = await handleUpdateStats(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+
+    // Admin endpoints (protected by Cloudflare Access)
+    if (url.pathname === '/api/admin/override-protein' && request.method === 'POST') {
+      const response = await handleOverrideProtein(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    if (url.pathname === '/api/admin/override-protein' && request.method === 'DELETE') {
+      const response = await handleDeleteOverride(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    if (url.pathname === '/api/admin/feature-flags' && request.method === 'POST') {
+      const response = await handleFeatureFlags(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    if (url.pathname === '/api/admin/status' && request.method === 'GET') {
+      const response = await handleAdminStatus(request, env);
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
