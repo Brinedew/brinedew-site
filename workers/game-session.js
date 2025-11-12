@@ -1,88 +1,3 @@
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    
-    // Health check endpoint
-    if (url.pathname === '/api/health') {
-      return Response.json({
-        status: 'ok',
-        timestamp: Date.now(),
-        database: await checkD1Health(env.DB),
-        kv: await checkKVHealth(env.KV),
-        durableObjects: 'configured'
-      });
-    }
-
-    // Session management endpoints
-    if (url.pathname.startsWith('/api/session')) {
-      return handleSession(request, env);
-    }
-    
-    return Response.json({ error: 'Not found' }, { status: 404 });
-  }
-};
-
-/**
- * Handle session management requests
- */
-async function handleSession(request, env) {
-  const url = new URL(request.url);
-  
-  // Get session identifier (user ID or IP hash)
-  const sessionId = getSessionId(request);
-  
-  // Get Durable Object stub
-  const id = env.GAME_SESSIONS.idFromName(sessionId);
-  const stub = env.GAME_SESSIONS.get(id);
-  
-  // Forward request to Durable Object
-  return stub.fetch(request);
-}
-
-/**
- * Get session identifier from request
- * Uses user ID if authenticated, otherwise IP hash for guests
- */
-function getSessionId(request) {
-  // TODO: Extract from auth cookie when B-94 (Discord OAuth) is implemented
-  // For now, use IP address for guest sessions
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  return `guest_${hashIP(ip)}`;
-}
-
-/**
- * Hash IP address for guest session identification
- */
-function hashIP(ip) {
-  // Simple hash for demo - replace with proper hashing in production
-  let hash = 0;
-  for (let i = 0; i < ip.length; i++) {
-    const char = ip.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(36);
-}
-
-async function checkD1Health(db) {
-  try {
-    const result = await db.prepare('SELECT 1 as test').first();
-    return result?.test === 1 ? 'connected' : 'error';
-  } catch (e) {
-    return 'error';
-  }
-}
-
-async function checkKVHealth(kv) {
-  try {
-    await kv.put('health_check', Date.now().toString(), { expirationTtl: 60 });
-    const value = await kv.get('health_check');
-    return value ? 'connected' : 'error';
-  } catch (e) {
-    return 'error';
-  }
-}
-
 /**
  * GameSession Durable Object
  * Manages per-user game sessions and guest rate limiting
@@ -98,13 +13,13 @@ export class GameSession {
     const path = url.pathname;
 
     // Route requests
-    if (path === '/api/session/get' && request.method === 'GET') {
+    if (path === '/session/get' && request.method === 'GET') {
       return this.getSession();
-    } else if (path === '/api/session/update' && request.method === 'POST') {
+    } else if (path === '/session/update' && request.method === 'POST') {
       return this.updateSession(request);
-    } else if (path === '/api/session/reset' && request.method === 'POST') {
+    } else if (path === '/session/reset' && request.method === 'POST') {
       return this.resetSession();
-    } else if (path === '/api/session/check-played-today' && request.method === 'GET') {
+    } else if (path === '/session/check-played-today' && request.method === 'GET') {
       return this.checkPlayedToday();
     } else {
       return new Response('Not found', { status: 404 });

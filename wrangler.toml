@@ -10,3 +10,12 @@ database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
 [[kv_namespaces]]
 binding = "KV"
 id = "7d59f063885e415ab3df5301393a114d"
+
+[[durable_objects.bindings]]
+name = "GAME_SESSIONS"
+class_name = "GameSession"
+script_name = "geneguessr-api"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameSession"]
