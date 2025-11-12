@@ -302,7 +302,7 @@ export async function handleLogout(request, env) {
 /**
  * Parse cookie header
  */
-function parseCookies(cookieHeader) {
+export function parseCookies(cookieHeader) {
   const cookies = {};
   cookieHeader.split(';').forEach(cookie => {
     const [name, ...rest] = cookie.trim().split('=');

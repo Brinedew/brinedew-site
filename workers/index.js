@@ -3,10 +3,13 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'https://brinedew.bio',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Credentials': 'true',
 };
 
 // Import auth handlers
 import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
+// Import stats handlers
+import { handleMigrateStats, handleGetStats, handleUpdateStats } from './stats.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -51,6 +54,31 @@ export default {
     
     if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
       return handleLogout(request, env);
+    }
+
+    // Stats endpoints
+    if (url.pathname === '/api/migrate-stats' && request.method === 'POST') {
+      const response = await handleMigrateStats(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    if (url.pathname === '/api/stats' && request.method === 'GET') {
+      const response = await handleGetStats(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    if (url.pathname === '/api/stats/update' && request.method === 'POST') {
+      const response = await handleUpdateStats(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
     }
 
     // Session management endpoints

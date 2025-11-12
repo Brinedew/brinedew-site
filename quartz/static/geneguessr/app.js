@@ -1925,6 +1925,29 @@
     };
   }
   
+  async function loadStatsFromAPI() {
+    if (!currentUser) {
+      return loadStats(); // Fall back to localStorage if not authenticated
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/stats`, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        console.warn('Failed to load stats from API, using localStorage');
+        return loadStats();
+      }
+      
+      return await response.json();
+    } catch (err) {
+      console.error('Error loading stats from API:', err);
+      return loadStats();
+    }
+  }
+  
   function updateStats(won) {
     const stats = loadStats();
     stats.played++;
@@ -1937,6 +1960,93 @@
     }
     stats.winRate = stats.played > 0 ? stats.won / stats.played : 0;
     localStorage.setItem('geneguessr_stats', JSON.stringify(stats));
+  }
+  
+  async function updateStatsAPI(won) {
+    // Always update localStorage for offline support
+    updateStats(won);
+    
+    // If authenticated, also update D1
+    if (!currentUser) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/stats/update`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ won })
+      });
+      
+      if (!response.ok) {
+        console.warn('Failed to update stats on server');
+      }
+    } catch (err) {
+      console.error('Error updating stats on server:', err);
+    }
+  }
+  
+  async function promptStatsMigration() {
+    // Only prompt if user is authenticated and has localStorage stats
+    if (!currentUser) {
+      return;
+    }
+    
+    const localStats = loadStats();
+    if (localStats.played === 0) {
+      return; // No stats to migrate
+    }
+    
+    // Check if already migrated
+    try {
+      const response = await fetch(`${API_BASE}/api/stats`, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const serverStats = await response.json();
+        if (serverStats.migratedAt) {
+          return; // Already migrated
+        }
+      }
+    } catch (err) {
+      console.error('Error checking migration status:', err);
+      return;
+    }
+    
+    // Prompt user to migrate
+    const migrate = confirm(
+      `Sync your existing stats to your Discord account?\n\n` +
+      `You have played ${localStats.played} game${localStats.played !== 1 ? 's' : ''} with ${localStats.won} win${localStats.won !== 1 ? 's' : ''}.\n\n` +
+      `This will allow your stats to persist across devices.`
+    );
+    
+    if (!migrate) {
+      return;
+    }
+    
+    // Migrate stats
+    try {
+      const response = await fetch(`${API_BASE}/api/migrate-stats`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localStats)
+      });
+      
+      if (response.ok) {
+        alert('Stats synced successfully! Your progress is now saved to your Discord account.');
+      } else {
+        const error = await response.json();
+        console.error('Migration failed:', error);
+        alert('Failed to sync stats. Please try again later.');
+      }
+    } catch (err) {
+      console.error('Error migrating stats:', err);
+      alert('Failed to sync stats. Please try again later.');
+    }
   }
   
   /**
@@ -2124,7 +2234,7 @@
   /**
    * Handle guess submission
    */
-  function submitGuess() {
+  async function submitGuess() {
     const submitBtn = document.getElementById('pg-submit');
     const uniprot = submitBtn.dataset.uniprot;
     
@@ -2164,9 +2274,9 @@
     // Check win/loss
     if (isCorrect) {
       gameState.won = true;
-      updateStats(true);
+      await updateStatsAPI(true);
     } else if (gameState.guesses.length >= MAX_GUESSES) {
-      updateStats(false);
+      await updateStatsAPI(false);
     }
     
     // Save state
@@ -2393,6 +2503,9 @@ https://brinedew.bio/apps/geneguessr/`;
     
     // Check auth status
     await checkAuth();
+    
+    // Prompt for stats migration if needed
+    await promptStatsMigration();
     
     // Inject stats into sidebar
     injectSidebarStats();
