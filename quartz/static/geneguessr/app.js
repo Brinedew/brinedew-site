@@ -1401,7 +1401,8 @@
       removeSpoilers = false,
     } = options;
     const highlightSet = new Set(matchedItems || []);
-    const revealSet = new Set(allRevealedItems.length > 0 ? allRevealedItems : matchedItems);
+    const normalizedRevealed = allRevealedItems || [];
+    const revealSet = new Set(normalizedRevealed.length > 0 ? normalizedRevealed : matchedItems);
     
     // Special handling for gene summary section
     if (section.type === 'summary') {
