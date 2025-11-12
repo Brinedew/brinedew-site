@@ -109,36 +109,52 @@ export async function handleAdminStatus(request, env) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
   
-  const today = new Date().toISOString().split('T')[0];
-  
-  // Check if there's an override for today
-  const todayOverride = await env.KV.get(`puzzle_override:${today}`);
-  
-  // Get feature flags
-  const featureFlagsJson = await env.KV.get('feature_flags');
-  const featureFlags = featureFlagsJson ? JSON.parse(featureFlagsJson) : {};
-  
-  // List all puzzle overrides (scan KV keys)
-  const overridesList = await env.KV.list({ prefix: 'puzzle_override:' });
-  const overrides = await Promise.all(
-    overridesList.keys.map(async (key) => {
-      const value = await env.KV.get(key.name, { type: 'text', cacheTtl: 0 });
-      return {
-        date: key.name.replace('puzzle_override:', ''),
-        uniprot_id: value,
-        metadata: key.metadata
-      };
-    })
-  );
-  
-  return Response.json({
-    today: {
-      date: today,
-      override: todayOverride || null
-    },
-    feature_flags: featureFlags,
-    all_overrides: overrides
-  });
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Check if there's an override for today
+    const todayOverride = await env.KV.get(`puzzle_override:${today}`);
+    
+    // Get feature flags
+    const featureFlagsJson = await env.KV.get('feature_flags');
+    const featureFlags = featureFlagsJson ? JSON.parse(featureFlagsJson) : {};
+    
+    // List all puzzle overrides (scan KV keys)
+    const overridesList = await env.KV.list({ prefix: 'puzzle_override:' });
+    const overrides = await Promise.all(
+      overridesList.keys.map(async (key) => {
+        try {
+          const value = await env.KV.get(key.name);
+          return {
+            date: key.name.replace('puzzle_override:', ''),
+            uniprot_id: value,
+            metadata: key.metadata || {}
+          };
+        } catch (err) {
+          console.error(`Error fetching override ${key.name}:`, err);
+          return null;
+        }
+      })
+    );
+    
+    // Filter out null values (failed fetches)
+    const validOverrides = overrides.filter(o => o !== null);
+    
+    return Response.json({
+      today: {
+        date: today,
+        override: todayOverride || null
+      },
+      feature_flags: featureFlags,
+      all_overrides: validOverrides
+    });
+  } catch (err) {
+    console.error('Error in handleAdminStatus:', err);
+    return Response.json({ 
+      error: 'Internal server error', 
+      details: err.message 
+    }, { status: 500 });
+  }
 }
 
 /**

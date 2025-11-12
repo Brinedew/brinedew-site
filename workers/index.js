@@ -12,6 +12,8 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
 import { handleMigrateStats, handleGetStats, handleUpdateStats } from './stats.js';
 // Import admin handlers
 import { handleOverrideProtein, handleFeatureFlags, handleAdminStatus, handleDeleteOverride } from './admin.js';
+// Import admin HTML
+import { ADMIN_HTML } from './admin-html.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -80,6 +82,16 @@ export default {
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+
+    // Admin panel UI (protected by Cloudflare Access)
+    if (url.pathname === '/admin' && request.method === 'GET') {
+      // Serve admin HTML directly from Worker
+      return new Response(ADMIN_HTML, {
+        headers: {
+          'Content-Type': 'text/html;charset=UTF-8',
+        }
       });
     }
 
