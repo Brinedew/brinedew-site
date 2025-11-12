@@ -110,10 +110,22 @@ export async function handleCallback(request, env) {
   // Retrieve stored verifier and validate state
   const id = env.GAME_SESSIONS.idFromName(`oauth:${oauthSessionId}`);
   const stub = env.GAME_SESSIONS.get(id);
-  const oauthDataResp = await stub.fetch('http://internal/get');
-  const oauthData = await oauthDataResp.json();
+  
+  let oauthData;
+  try {
+    const oauthDataResp = await stub.fetch('http://internal/get');
+    if (!oauthDataResp.ok) {
+      console.error('Failed to fetch OAuth data from DO:', await oauthDataResp.text());
+      return Response.json({ error: 'Failed to retrieve OAuth session' }, { status: 500 });
+    }
+    oauthData = await oauthDataResp.json();
+  } catch (err) {
+    console.error('Error fetching OAuth data:', err);
+    return Response.json({ error: 'Internal server error' }, { status: 500 });
+  }
   
   if (!oauthData || oauthData.state !== state) {
+    console.error('Invalid state. Expected:', oauthData?.state, 'Got:', state);
     return Response.json({ error: 'Invalid state parameter' }, { status: 400 });
   }
   
@@ -131,19 +143,25 @@ export async function handleCallback(request, env) {
     code_verifier: oauthData.code_verifier
   });
   
-  const tokenResp = await fetch(DISCORD_TOKEN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: tokenParams.toString()
-  });
-  
-  if (!tokenResp.ok) {
-    const error = await tokenResp.text();
-    console.error('Token exchange failed:', error);
-    return Response.json({ error: 'Failed to exchange code' }, { status: 500 });
+  let tokens;
+  try {
+    const tokenResp = await fetch(DISCORD_TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenParams.toString()
+    });
+    
+    if (!tokenResp.ok) {
+      const error = await tokenResp.text();
+      console.error('Token exchange failed:', tokenResp.status, error);
+      return Response.json({ error: 'Failed to exchange code', details: error }, { status: 500 });
+    }
+    
+    tokens = await tokenResp.json();
+  } catch (err) {
+    console.error('Token exchange error:', err);
+    return Response.json({ error: 'Token exchange failed' }, { status: 500 });
   }
-  
-  const tokens = await tokenResp.json();
   
   // Fetch user info
   const userResp = await fetch(`${DISCORD_API}/users/@me`, {
@@ -164,22 +182,25 @@ export async function handleCallback(request, env) {
   const isMember = guildResp.ok;
   
   // Create or update user in D1
+  const avatarUrl = user.avatar 
+    ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` 
+    : null;
+  
+  const now = Date.now();
   await env.DB.prepare(`
-    INSERT INTO users (discord_id, username, discriminator, avatar, tier, created_at, last_login)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (discord_id, username, avatar_url, tier, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(discord_id) DO UPDATE SET
       username = excluded.username,
-      discriminator = excluded.discriminator,
-      avatar = excluded.avatar,
-      last_login = excluded.last_login
+      avatar_url = excluded.avatar_url,
+      updated_at = excluded.updated_at
   `).bind(
     user.id,
     user.username,
-    user.discriminator || '0',
-    user.avatar,
+    avatarUrl,
     'registered',
-    Date.now(),
-    Date.now()
+    now,
+    now
   ).run();
   
   // Create persistent session
@@ -193,8 +214,7 @@ export async function handleCallback(request, env) {
     body: JSON.stringify({
       user_id: user.id,
       username: user.username,
-      discriminator: user.discriminator || '0',
-      avatar: user.avatar,
+      avatar_url: avatarUrl,
       tier: 'registered',
       is_guild_member: isMember,
       access_token: tokens.access_token,
@@ -247,8 +267,7 @@ export async function handleMe(request, env) {
     user: {
       id: session.user_id,
       username: session.username,
-      discriminator: session.discriminator,
-      avatar: session.avatar,
+      avatar_url: session.avatar_url,
       tier: session.tier,
       is_guild_member: session.is_guild_member
     }
