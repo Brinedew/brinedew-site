@@ -1,6 +1,20 @@
+// CORS headers for frontend access
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': 'https://brinedew.bio',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    
+    // Handle CORS preflight requests
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: CORS_HEADERS
+      });
+    }
     
     // Health check endpoint
     if (url.pathname === '/api/health') {
@@ -10,15 +24,26 @@ export default {
         database: await checkD1Health(env.DB),
         kv: await checkKVHealth(env.KV),
         durableObjects: 'configured'
+      }, {
+        headers: CORS_HEADERS
       });
     }
 
     // Session management endpoints
     if (url.pathname.startsWith('/api/session')) {
-      return handleSession(request, env);
+      const response = await handleSession(request, env);
+      // Clone response with CORS headers
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
     }
     
-    return Response.json({ error: 'Not found' }, { status: 404 });
+    return Response.json({ error: 'Not found' }, { 
+      status: 404,
+      headers: CORS_HEADERS 
+    });
   }
 };
 
