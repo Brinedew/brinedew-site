@@ -1333,10 +1333,11 @@
     return sections;
   }
 
-  function renderClueSectionsHtml(clueMatches) {
+  function renderClueSectionsHtml(allMatches, latestMatches) {
     const sections = buildProteinSections(targetProtein, { forClue: true });
     return sections.map(section => renderSpoilerSection(section, {
-      matchedItems: clueMatches[section.id] || [],
+      matchedItems: latestMatches[section.id] || [],  // Only highlight latest matches
+      allRevealedItems: allMatches[section.id] || [], // But keep all revealed
       removeSpoilers: true,
     })).join('');
   }
@@ -1355,22 +1356,28 @@
       `;
     }
     
-    // Collect matches from ALL guesses, not just the latest one
-    const clueMatches = {};
+    // Collect matches from ALL guesses (for revealing items)
+    const allClueMatches = {};
     gameState.guesses.forEach(guessEntry => {
       const guessMatches = collectMatchedHintTexts(targetProtein, guessEntry);
       // Merge matches - each section ID should accumulate unique values
       Object.keys(guessMatches).forEach(sectionId => {
-        if (!clueMatches[sectionId]) {
-          clueMatches[sectionId] = [];
+        if (!allClueMatches[sectionId]) {
+          allClueMatches[sectionId] = [];
         }
         guessMatches[sectionId].forEach(value => {
-          if (!clueMatches[sectionId].includes(value)) {
-            clueMatches[sectionId].push(value);
+          if (!allClueMatches[sectionId].includes(value)) {
+            allClueMatches[sectionId].push(value);
           }
         });
       });
     });
+    
+    // Get matches from ONLY the latest guess (for accent highlighting)
+    const latestGuessEntry = gameState.guesses[gameState.guesses.length - 1] || null;
+    const latestClueMatches = latestGuessEntry 
+      ? collectMatchedHintTexts(targetProtein, latestGuessEntry)
+      : {};
     // Important: renderStructureViewer builds the 3D placeholder once per guess.
     // We only re-render the sections beneath to avoid tearing down Mol*.
     const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure');
@@ -1379,7 +1386,7 @@
       <div class="pg-clue-card">
         ${structureMarkup}
         <div class="pg-clue-sections" data-clue-sections>
-          ${renderClueSectionsHtml(clueMatches)}
+          ${renderClueSectionsHtml(allClueMatches, latestClueMatches)}
         </div>
       </div>
     `;
@@ -1390,9 +1397,11 @@
     const {
       showSpoilers = false,
       matchedItems = [],
+      allRevealedItems = [],
       removeSpoilers = false,
     } = options;
     const highlightSet = new Set(matchedItems || []);
+    const revealSet = new Set(allRevealedItems.length > 0 ? allRevealedItems : matchedItems);
     
     // Special handling for gene summary section
     if (section.type === 'summary') {
@@ -1439,11 +1448,12 @@
     const itemsHtml = section.items.map((item) => {
       const text = (item && typeof item.text === 'string') ? item.text : String(item.text ?? '');
       const isMatched = item.matched || highlightSet.has(item.text);
+      const shouldReveal = revealSet.has(item.text);
      
       // For spoiler mode (clue cards)
       if (showSpoilers && item.id) {
         const revealed = isHintRevealed(item.id);
-        const forceReveal = removeSpoilers && isMatched;
+        const forceReveal = removeSpoilers && shouldReveal;
         if (revealed || forceReveal) {
           const cls = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
           return `<span class="${cls}">${text}</span>`;
