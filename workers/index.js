@@ -5,6 +5,9 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+// Import auth handlers
+import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -27,6 +30,27 @@ export default {
       }, {
         headers: CORS_HEADERS
       });
+    }
+
+    // Auth endpoints
+    if (url.pathname === '/api/auth/login' && request.method === 'GET') {
+      return handleLogin(request, env);
+    }
+    
+    if (url.pathname === '/api/auth/callback' && request.method === 'GET') {
+      return handleCallback(request, env);
+    }
+    
+    if (url.pathname === '/api/auth/me' && request.method === 'GET') {
+      const response = await handleMe(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+    
+    if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
+      return handleLogout(request, env);
     }
 
     // Session management endpoints
@@ -131,6 +155,15 @@ export class GameSession {
       return this.resetSession();
     } else if (path === '/api/session/check-played-today' && request.method === 'GET') {
       return this.checkPlayedToday();
+    } else if (path === '/store' && request.method === 'POST') {
+      // Internal route for OAuth session storage
+      return this.storeData(request);
+    } else if (path === '/get' && request.method === 'GET') {
+      // Internal route for OAuth session retrieval
+      return this.getData();
+    } else if (path === '/reset' && request.method === 'POST') {
+      // Internal route for clearing OAuth session
+      return this.clearData();
     } else {
       return new Response('Not found', { status: 404 });
     }
@@ -212,6 +245,40 @@ export class GameSession {
       played_today,
       last_played_date: session.last_played_date 
     }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  /**
+   * Store arbitrary data (for OAuth sessions)
+   * Internal route only
+   */
+  async storeData(request) {
+    const data = await request.json();
+    await this.state.storage.put('data', data);
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  /**
+   * Get stored data (for OAuth sessions)
+   * Internal route only
+   */
+  async getData() {
+    const data = await this.state.storage.get('data');
+    return new Response(JSON.stringify(data || {}), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  /**
+   * Clear stored data (for logout)
+   * Internal route only
+   */
+  async clearData() {
+    await this.state.storage.deleteAll();
+    return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
