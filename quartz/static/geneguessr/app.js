@@ -1562,15 +1562,35 @@
       return;
     }
     
+    // Collect matches from ALL guesses (for revealing items)
+    const allClueMatches = {};
+    gameState.guesses.forEach(guessEntry => {
+      const guessMatches = collectMatchedHintTexts(targetProtein, guessEntry);
+      Object.keys(guessMatches).forEach(sectionId => {
+        if (!allClueMatches[sectionId]) {
+          allClueMatches[sectionId] = [];
+        }
+        guessMatches[sectionId].forEach(value => {
+          if (!allClueMatches[sectionId].includes(value)) {
+            allClueMatches[sectionId].push(value);
+          }
+        });
+      });
+    });
+    
+    // Get matches from ONLY the latest guess (for accent highlighting)
     const latestGuessEntry = gameState.guesses[gameState.guesses.length - 1] || null;
-    const clueMatches = collectMatchedHintTexts(targetProtein, latestGuessEntry);
+    const latestClueMatches = latestGuessEntry 
+      ? collectMatchedHintTexts(targetProtein, latestGuessEntry)
+      : {};
+    
     const existingCard = slot.querySelector('.pg-clue-card');
     
     if (existingCard) {
       const sectionsContainer = existingCard.querySelector('[data-clue-sections]');
       if (sectionsContainer) {
         // Keep the Mol* viewer intact; only swap the sections beneath it.
-        sectionsContainer.innerHTML = renderClueSectionsHtml(clueMatches);
+        sectionsContainer.innerHTML = renderClueSectionsHtml(allClueMatches, latestClueMatches);
         setupSpoilerHandlers();
         return;
       }
