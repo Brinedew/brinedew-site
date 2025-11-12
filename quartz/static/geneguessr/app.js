@@ -2098,8 +2098,12 @@
 
   function setupSpoilerHandlers() {
     document.querySelectorAll('.pg-redaction[data-hint-id]').forEach((redaction) => {
+      // Remove any existing handlers by cloning the node (drops all listeners)
+      const clean = redaction.cloneNode(true);
+      redaction.replaceWith(clean);
+      
       const handleReveal = () => {
-        const hintId = redaction.dataset.hintId;
+        const hintId = clean.dataset.hintId;
         if (!hintId) return;
         const success = attemptReveal(hintId, DEFAULT_HINT_COST);
         if (success) {
@@ -2107,8 +2111,8 @@
         }
       };
       
-      redaction.addEventListener('click', handleReveal);
-      redaction.addEventListener('keydown', (e) => {
+      clean.addEventListener('click', handleReveal);
+      clean.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           handleReveal();
