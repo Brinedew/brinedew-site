@@ -226,8 +226,8 @@ export async function handleCallback(request, env) {
   // Clear OAuth session and set persistent session cookie
   const headers = new Headers();
   headers.set('Set-Cookie', `oauth_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
-  headers.append('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`); // 30 days
-  headers.set('Location', '/geneguessr/');
+  headers.append('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}`); // 30 days
+  headers.set('Location', 'https://brinedew.bio/apps/geneguessr');
   
   return new Response(null, {
     status: 302,
@@ -293,8 +293,8 @@ export async function handleLogout(request, env) {
   return new Response(null, {
     status: 302,
     headers: {
-      'Location': '/geneguessr/',
-      'Set-Cookie': `session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
+      'Location': 'https://brinedew.bio/apps/geneguessr',
+      'Set-Cookie': `session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`
     }
   });
 }
