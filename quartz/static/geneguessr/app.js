@@ -2714,6 +2714,8 @@ https://brinedew.bio/apps/geneguessr/`;
     // Render
     render();
     setStatus('rendered');
+    // Attach collapse logic for Attribution & Data Sources card
+    attachAttributionCollapseLogic();
   }
   
   // Start when DOM ready (but only if root element exists)
@@ -2734,4 +2736,47 @@ https://brinedew.bio/apps/geneguessr/`;
     boot();
   }
   
+
+// Collapse logic for Attribution & Data Sources card
+function attachAttributionCollapseLogic() {
+  // Find the attribution button by its text content
+  const buttons = Array.from(document.querySelectorAll('button'));
+  const attributionBtn = buttons.find(btn => btn.textContent && btn.textContent.includes('Attribution & Data Sources'));
+  if (!attributionBtn) return;
+
+  // Find or create the chevron (assume first child span or create one)
+  let chevron = attributionBtn.querySelector('span');
+  if (!chevron) {
+    chevron = document.createElement('span');
+    chevron.textContent = '▶';
+    attributionBtn.insertBefore(chevron, attributionBtn.firstChild);
+  }
+
+  // Find or create the content region after the button
+  let attributionContent = attributionBtn.nextElementSibling;
+  if (!attributionContent || !attributionContent.classList.contains('pg-attribution-content')) {
+    attributionContent = document.createElement('div');
+    attributionContent.className = 'pg-attribution-content';
+    attributionContent.style.display = 'none';
+    attributionContent.innerHTML = `
+      <div style="padding: 1em; background: #f9f9f9; border-radius: 6px; margin-top: 0.5em;">
+        <b>Attribution & Data Sources</b><br>
+        <ul style="margin: 0.5em 0 0 1em;">
+          <li>Protein/gene data: <a href='https://www.uniprot.org/' target='_blank'>UniProt</a></li>
+          <li>Structure viewer: <a href='https://www.ebi.ac.uk/pdbe/' target='_blank'>PDBe Molstar</a></li>
+          <li>Pathways: <a href='https://reactome.org/' target='_blank'>Reactome</a></li>
+        </ul>
+      </div>
+    `;
+    attributionBtn.parentNode.insertBefore(attributionContent, attributionBtn.nextSibling);
+  }
+
+  // Attach click handler to toggle
+  attributionBtn.addEventListener('click', function () {
+    const expanded = attributionContent.style.display !== 'none';
+    attributionContent.style.display = expanded ? 'none' : 'block';
+    chevron.textContent = expanded ? '▶' : '▼';
+  });
+}
+
 })();
