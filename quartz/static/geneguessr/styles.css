@@ -93,19 +93,52 @@
   text-transform: capitalize;
 }
 
-.pg-auth-logout {
-  padding: 0.4rem 0.8rem;
-  background: var(--ui-border);
-  border: 1px solid var(--ui-border);
-  border-radius: 4px;
-  color: var(--dark);
+.pg-auth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-start;
+  margin-top: 0.35rem;
+}
+
+.pg-auth-discord {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: #5865f2;
+  color: #fff;
   font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.pg-auth-discord:hover {
+  background: #4752c4;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.pg-auth-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.9rem;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  color: var(--dark);
+  font-size: 0.8rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .pg-auth-logout:hover {
-  background: var(--ui-bg);
+  background: var(--light);
   border-color: var(--secondary);
 }
 
@@ -242,11 +275,29 @@
 /* Unified Card Styling */
 .pg-clue-card,
 .pg-feedback-card {
+  position: relative;
   background: var(--light);
-  border: 1px solid var(--ui-border);
   border-radius: 8px;
   margin-bottom: 1.5rem;
   overflow: hidden;
+  isolation: isolate;
+}
+
+.pg-clue-card::after,
+.pg-feedback-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--ui-border);
+  z-index: 1;
+}
+
+.pg-clue-card > *,
+.pg-feedback-card > * {
+  position: relative;
+  z-index: 2;
 }
 
 .pg-clue-card {
@@ -444,6 +495,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .pg-autocomplete-wrapper {
@@ -753,6 +805,14 @@
   padding-top: 0.5rem;
 }
 
+.pg-feedback-final .pg-feedback-content {
+  max-height: none;
+  opacity: 1;
+  padding: 0.75rem 1rem;
+  padding-top: 0.5rem;
+  overflow: visible;
+}
+
 /* Result */
 .pg-result {
   background: oklch(50% 0.08 185);
@@ -807,6 +867,31 @@
   margin-top: 1rem;
 }
 
+.pg-result-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pg-play-again {
+  border: 1px solid var(--ui-border);
+  background: var(--light);
+  color: var(--dark);
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.pg-play-again:hover {
+  background: var(--ui-bg);
+  border-color: var(--secondary);
+}
+
 .pg-link-btn {
   padding: 0.5rem 1rem;
   background: white;
@@ -829,6 +914,26 @@
 }
 
 .pg-result.failed .pg-link-btn:hover {
+  background: var(--ui-bg);
+}
+
+.pg-practice-tag,
+.pg-practice-badge {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.pg-practice-tag {
+  text-align: center;
+}
+
+.pg-practice-badge {
+  align-self: flex-start;
+  flex-shrink: 0;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--ui-border);
   background: var(--ui-bg);
 }
 

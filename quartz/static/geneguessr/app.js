@@ -300,6 +300,42 @@
     };
   }
 
+  function hexToRgb(hex) {
+    if (typeof hex !== 'string') {
+      return null;
+    }
+    const normalized = hex.trim().replace(/^#/, '');
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      return null;
+    }
+    return {
+      r: parseInt(normalized.slice(0, 2), 16),
+      g: parseInt(normalized.slice(2, 4), 16),
+      b: parseInt(normalized.slice(4, 6), 16),
+    };
+  }
+
+  function resolveViewerColors(container) {
+    const defaults = getViewerThemeColors(container);
+    if (!GRAPHICS_SETTINGS || !GRAPHICS_SETTINGS.background) {
+      return defaults;
+    }
+    const mode = GRAPHICS_SETTINGS.background.mode || 'auto';
+    if (mode === 'dark') {
+      const dark = hexToRgb(GRAPHICS_SETTINGS.background.dark);
+      return dark ? { background: dark, outline: defaults.outline } : defaults;
+    }
+    if (mode === 'light') {
+      const light = hexToRgb(GRAPHICS_SETTINGS.background.light);
+      return light ? { background: light, outline: defaults.outline } : defaults;
+    }
+    if (mode === 'custom') {
+      const custom = hexToRgb(GRAPHICS_SETTINGS.background.custom);
+      return custom ? { background: custom, outline: defaults.outline } : defaults;
+    }
+    return defaults;
+  }
+
   function hintsApi() {
     return window.GeneGuessrHints || null;
   }
@@ -434,6 +470,7 @@
   // Debug flags for viewer stylization (can be disabled via URL params)
   // Graphics settings loaded from admin panel
   let GRAPHICS_SETTINGS = null;
+  const numericOr = (value, fallback) => (typeof value === 'number' ? value : fallback);
   let DEBUG_STYLIZATION = {
     hideAxes: true,
     orthographic: false,
@@ -454,15 +491,15 @@
     .then(settings => {
       if (settings) {
         GRAPHICS_SETTINGS = settings;
-        DEBUG_STYLIZATION.hideAxes = settings.hideAxes !== false;
-        DEBUG_STYLIZATION.orthographic = settings.cameraMode === 'orthographic';
-        DEBUG_STYLIZATION.backgroundColor = settings.backgroundColor !== false;
-        DEBUG_STYLIZATION.lighting = settings.lightingPreset && settings.lightingPreset !== 'default';
-        DEBUG_STYLIZATION.occlusion = settings.occlusionQuality && settings.occlusionQuality !== 'off';
-        DEBUG_STYLIZATION.antialiasing = settings.antialiasingMode === 'fxaa';
-        DEBUG_STYLIZATION.fog = settings.fogIntensity !== undefined;
-        DEBUG_STYLIZATION.outline = settings.outlineEnabled !== false;
-        DEBUG_STYLIZATION.disableMarking = settings.disableMarking !== false;
+        DEBUG_STYLIZATION.hideAxes = !(settings.extras && settings.extras.hideAxes === false);
+        DEBUG_STYLIZATION.orthographic = settings.camera && settings.camera.mode === 'orthographic';
+        DEBUG_STYLIZATION.backgroundColor = true;
+        DEBUG_STYLIZATION.lighting = !(settings.lighting && settings.lighting.enabled === false);
+        DEBUG_STYLIZATION.occlusion = !(settings.occlusion && settings.occlusion.enabled === false);
+        DEBUG_STYLIZATION.antialiasing = settings.antialiasing && settings.antialiasing.mode === 'fxaa';
+        DEBUG_STYLIZATION.fog = !(settings.fog && settings.fog.enabled === false);
+        DEBUG_STYLIZATION.outline = !(settings.outline && settings.outline.enabled === false);
+        DEBUG_STYLIZATION.disableMarking = !(settings.extras && settings.extras.disableMarking === false);
         console.info('[GeneGuessr] Loaded graphics settings from admin panel:', settings);
       }
     })
@@ -486,7 +523,7 @@
   }
 
   function applyViewerThemeColors(viewer, container) {
-    const theme = getViewerThemeColors(container);
+    const theme = resolveViewerColors(container);
     safeApplyCanvasProps(viewer, {
       renderer: {
         backgroundColor: toMolstarColor(theme.background),
@@ -495,18 +532,6 @@
         interiorDarkening: 0,
       }
     }, 'theme background & ambient colors');
-    safeApplyCanvasProps(viewer, {
-      postprocessing: {
-        outline: {
-          name: 'on',
-          params: {
-            scale: 0.5,
-            threshold: 0.35,
-            color: toMolstarColor(theme.background),
-          },
-        },
-      },
-    }, 'theme outline color');
   }
 
   function ensureThemeSync() {
@@ -558,78 +583,111 @@
       { name: 'orthographic', enabled: DEBUG_STYLIZATION.orthographic, fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
       { name: 'backgroundColor', enabled: DEBUG_STYLIZATION.backgroundColor, fn: () => applyViewerThemeColors(viewer, container), delay: 150 },
       { name: 'lighting', enabled: DEBUG_STYLIZATION.lighting, fn: () => {
-        const preset = GRAPHICS_SETTINGS?.lightingPreset || 'default';
-        const lightingPresets = {
-          dramatic: [
-            { inclination: 170, azimuth: 45, color: toMolstarColor({ r: 255, g: 255, b: 255 }), intensity: 1.5 },
-            { inclination: 25, azimuth: 200, color: toMolstarColor({ r: 50, g: 50, b: 80 }), intensity: 0.3 }
-          ],
-          soft: [
-            { inclination: 160, azimuth: 0, color: toMolstarColor({ r: 255, g: 250, b: 240 }), intensity: 0.9 },
-            { inclination: 30, azimuth: 180, color: toMolstarColor({ r: 240, g: 240, b: 255 }), intensity: 0.7 }
-          ],
-          studio: [
-            { inclination: 170, azimuth: 315, color: toMolstarColor({ r: 255, g: 255, b: 255 }), intensity: 1.2 },
-            { inclination: 40, azimuth: 135, color: toMolstarColor({ r: 255, g: 240, b: 220 }), intensity: 0.5 },
-            { inclination: 90, azimuth: 90, color: toMolstarColor({ r: 200, g: 220, b: 255 }), intensity: 0.4 }
-          ]
-        };
-        const lights = lightingPresets[preset] || lightingPresets.dramatic;
+        const lighting = GRAPHICS_SETTINGS?.lighting;
+        if (!lighting || lighting.enabled === false) {
+          safeApplyCanvasProps(viewer, {
+            renderer: { light: [] }
+          }, 'custom lighting (disabled)');
+          return;
+        }
+        const exposure = numericOr(lighting.exposure, 1);
+        const lights = (lighting.lights || []).map((light, index) => {
+          const rgb = hexToRgb(light.color) || { r: 255, g: 255, b: 255 };
+          return {
+            inclination: numericOr(light.inclination, 160),
+            azimuth: numericOr(light.azimuth, index * 120),
+            color: toMolstarColor(rgb),
+            intensity: numericOr(light.intensity, 1) * exposure,
+          };
+        });
         safeApplyCanvasProps(viewer, {
           renderer: {
             light: lights
           }
-        }, `custom lighting (${preset})`);
+        }, 'custom lighting (profile-defined)');
       }, delay: 200 },
       { name: 'occlusion', enabled: DEBUG_STYLIZATION.occlusion, fn: () => {
-        const quality = GRAPHICS_SETTINGS?.occlusionQuality || 'medium';
-        const qualityPresets = {
-          low: { samples: 16, radius: 2 },
-          medium: { samples: 32, radius: 4 },
-          high: { samples: 64, radius: 6 },
-          ultra: { samples: 128, radius: 8 }
-        };
-        const preset = qualityPresets[quality] || qualityPresets.medium;
+        const occlusion = GRAPHICS_SETTINGS?.occlusion;
+        if (!occlusion || occlusion.enabled === false) {
+          safeApplyCanvasProps(viewer, {
+            postprocessing: {
+              occlusion: { name: 'off' }
+            }
+          }, 'ambient occlusion (disabled)');
+          return;
+        }
         safeApplyCanvasProps(viewer, {
           postprocessing: {
             occlusion: {
               name: 'on',
               params: {
-                samples: preset.samples,
-                radius: preset.radius,
-                bias: 0.8,
-                blurKernelSize: 7,
-                resolutionScale: 1
+                samples: numericOr(occlusion.samples, 64),
+                radius: numericOr(occlusion.radius, 6),
+                bias: numericOr(occlusion.bias, 0.8),
+                blurKernelSize: numericOr(occlusion.blurKernelSize, 7),
+                resolutionScale: numericOr(occlusion.resolutionScale, 1)
               }
             }
           }
-        }, `ambient occlusion (${quality}: ${preset.samples} samples)`);
+        }, 'ambient occlusion (custom)');
       }, delay: 200 },
-      { name: 'antialiasing', enabled: DEBUG_STYLIZATION.antialiasing, fn: () => safeApplyCanvasProps(viewer, {
-        postprocessing: {
-          antialiasing: {
-            name: 'fxaa',
-            params: {
-              edgeThresholdMin: 0.125,
-              edgeThresholdMax: 0.25,
-              iterations: 2,
-              subpixelQuality: 0.75
+      { name: 'antialiasing', enabled: DEBUG_STYLIZATION.antialiasing, fn: () => {
+        const antialiasing = GRAPHICS_SETTINGS?.antialiasing;
+        if (!antialiasing || antialiasing.mode !== 'fxaa') {
+          safeApplyCanvasProps(viewer, {
+            postprocessing: {
+              antialiasing: { name: 'off' }
+            }
+          }, 'antialiasing (off)');
+          return;
+        }
+        safeApplyCanvasProps(viewer, {
+          postprocessing: {
+            antialiasing: {
+              name: 'fxaa',
+              params: {
+                edgeThresholdMin: numericOr(antialiasing.edgeThresholdMin, 0.125),
+                edgeThresholdMax: numericOr(antialiasing.edgeThresholdMax, 0.25),
+                iterations: numericOr(antialiasing.iterations, 2),
+                subpixelQuality: numericOr(antialiasing.subpixelQuality, 0.75)
+              }
             }
           }
-        }
-      }, 'antialiasing'), delay: 150 },
+        }, 'antialiasing (FXAA)');
+      }, delay: 150 },
       { name: 'fog', enabled: DEBUG_STYLIZATION.fog, fn: () => {
-        const intensity = GRAPHICS_SETTINGS?.fogIntensity !== undefined ? GRAPHICS_SETTINGS.fogIntensity : 0.5;
+        const fog = GRAPHICS_SETTINGS?.fog;
+        if (!fog || fog.enabled === false) {
+          safeApplyCanvasProps(viewer, {
+            cameraFog: { name: 'off' }
+          }, 'camera fog (disabled)');
+          return;
+        }
+        const fogColor = hexToRgb(fog.color) || resolveViewerColors(container).background;
+        const intensity = numericOr(fog.intensity, 0.5);
         safeApplyCanvasProps(viewer, {
           cameraFog: {
             name: 'on',
-            params: { intensity }
+            params: {
+              intensity,
+              color: toMolstarColor(fogColor)
+            }
           }
         }, `camera fog (intensity: ${intensity.toFixed(2)})`);
       }, delay: 150 },
       { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => {
-        const scale = GRAPHICS_SETTINGS?.outlineScale !== undefined ? GRAPHICS_SETTINGS.outlineScale : 0.5;
-        const threshold = GRAPHICS_SETTINGS?.outlineThreshold !== undefined ? GRAPHICS_SETTINGS.outlineThreshold : 0.35;
+        const outline = GRAPHICS_SETTINGS?.outline;
+        if (!outline || outline.enabled === false) {
+          safeApplyCanvasProps(viewer, {
+            postprocessing: {
+              outline: { name: 'off' }
+            }
+          }, 'outline (disabled)');
+          return;
+        }
+        const color = hexToRgb(outline.color) || resolveViewerColors(container).background;
+        const scale = numericOr(outline.scale, 0.5);
+        const threshold = numericOr(outline.threshold, 0.35);
         safeApplyCanvasProps(viewer, {
           postprocessing: {
             outline: {
@@ -637,7 +695,7 @@
               params: {
                 scale,
                 threshold,
-                color: toMolstarColor(getViewerThemeColors(container).background)
+                color: toMolstarColor(color)
               }
             }
           }
@@ -843,12 +901,15 @@
   let structureViewerLoaded = false;
   let interactivityGuards = null;
   let currentRoundId = null;
-  let gameState = {
-    date: null,
-    guesses: [],
-    won: false,
-    hintsUnlocked: 1 // Start with 1 hint visible
-  };
+let gameState = {
+  date: null,
+  guesses: [],
+  won: false,
+  hintsUnlocked: 1, // Start with 1 hint visible
+  targetId: null,
+  practiceMode: false,
+  statsRecorded: false
+};
 
   function generateGuessId() {
     if (window.crypto?.randomUUID) {
@@ -968,7 +1029,9 @@
         guesses: Array.isArray(saved.guesses) ? saved.guesses : [],
         won: Boolean(saved.won),
         hintsUnlocked: Math.max(1, Math.min(5, saved.hintsUnlocked || 1)),
-        targetId: saved.targetId || null
+        targetId: saved.targetId || null,
+        practiceMode: Boolean(saved.practiceMode),
+        statsRecorded: Boolean(saved.statsRecorded)
       };
     } else {
       gameState = {
@@ -976,7 +1039,9 @@
         guesses: [],
         won: false,
         hintsUnlocked: 1,
-        targetId: null
+        targetId: null,
+        practiceMode: false,
+        statsRecorded: false
       };
     }
     
@@ -1569,6 +1634,17 @@
   function renderResult() {
     const title = gameState.won ? 'You Win!' : 'Game Over';
     const className = gameState.won ? '' : 'failed';
+    const practiceMessage = gameState.practiceMode
+      ? 'Practice mode active — stats paused.'
+      : 'Practice runs do not update your stats.';
+    const practiceCta = `
+      <div class="pg-result-actions">
+        <button class="pg-play-again" type="button" onclick="window.geneguessrPlayAgain()">
+          ${gameState.practiceMode ? 'Restart Practice' : 'Play Again (Practice)'}
+        </button>
+        <div class="pg-practice-tag">${practiceMessage}</div>
+      </div>
+    `;
     
     return `
       <div class="pg-result ${className}">
@@ -1581,6 +1657,7 @@
           <a href="${targetProtein.links.wiki}" class="pg-link-btn">View Protein Page</a>
           <a href="${targetProtein.links.uniprot}" target="_blank" class="pg-link-btn">UniProt</a>
         </div>
+        ${practiceCta}
       </div>
     `;
   }
@@ -1656,6 +1733,10 @@
       slot.innerHTML = '';
       return;
     }
+    const hints = getHintsBalance();
+    const practiceBadge = gameState.practiceMode
+      ? `<div class="pg-practice-badge" aria-live="polite">Practice mode</div>`
+      : '';
     slot.innerHTML = `
       <div class="pg-input-section">
         <div class="pg-input-row">
@@ -1676,8 +1757,9 @@
           </div>
           <div class="pg-hints-badge">
             <span class="pg-hints-label">Hints</span>
-            <span class="pg-hints-value">${gameState.hints}</span>
+            <span class="pg-hints-value">${hints}</span>
           </div>
+          ${practiceBadge}
         </div>
       </div>
     `;
@@ -2033,6 +2115,17 @@
       console.error('Error updating stats on server:', err);
     }
   }
+
+  async function recordStatsOnce(won) {
+    if (gameState.practiceMode || gameState.statsRecorded) {
+      return;
+    }
+    try {
+      await updateStatsAPI(won);
+    } finally {
+      gameState.statsRecorded = true;
+    }
+  }
   
   async function promptStatsMigration() {
     // Only prompt if user is authenticated and has localStorage stats
@@ -2321,9 +2414,9 @@
     // Check win/loss
     if (isCorrect) {
       gameState.won = true;
-      await updateStatsAPI(true);
+      await recordStatsOnce(true);
     } else if (gameState.guesses.length >= MAX_GUESSES) {
-      await updateStatsAPI(false);
+      await recordStatsOnce(false);
     }
     
     // Save state
@@ -2446,13 +2539,34 @@ https://brinedew.bio/apps/geneguessr/`;
     const hints = getHintsBalance();
     const stats = loadStats();
     
+    const formatTierLabel = (tier) => {
+      if (!tier) {
+        return '';
+      }
+      const normalized = `${tier}`.toLowerCase();
+      if (normalized === 'registered') {
+        return '';
+      }
+      return normalized
+        .split(/[\s_]+/)
+        .map(word => word ? word[0].toUpperCase() + word.slice(1) : '')
+        .join(' ');
+    };
+    const tierLabel = currentUser ? formatTierLabel(currentUser.tier) : '';
+    const discordInvite = 'https://discord.com/invite/kx8FVzUrpf';
+    
     const authSection = currentUser ? `
       <div class="pg-sidebar-section pg-auth-section">
         <div class="pg-sidebar-label">Account</div>
         <div class="pg-auth-info">
           <div class="pg-auth-username">${currentUser.username}</div>
-          <div class="pg-auth-tier">${currentUser.tier}</div>
-          <button class="pg-auth-logout" onclick="window.geneguessrLogout()">Sign Out</button>
+          ${tierLabel ? `<div class="pg-auth-tier">${tierLabel}</div>` : ''}
+          <div class="pg-auth-buttons">
+            <a href="${discordInvite}" class="pg-auth-discord" target="_blank" rel="noopener noreferrer">
+              Join Brinedew Discord
+            </a>
+            <button class="pg-auth-logout" onclick="window.geneguessrLogout()">Sign Out</button>
+          </div>
         </div>
       </div>
     ` : `
@@ -2507,6 +2621,27 @@ https://brinedew.bio/apps/geneguessr/`;
     } catch (err) {
       console.error('Logout failed:', err);
     }
+  };
+
+  window.geneguessrPlayAgain = function() {
+    if (!(gameState.won || gameState.guesses.length >= MAX_GUESSES)) {
+      return;
+    }
+    const api = hintsApi();
+    if (api?.resetRound && currentRoundId) {
+      try {
+        api.resetRound(currentRoundId);
+      } catch (err) {
+        console.warn('Geneguessr: failed to reset hints for practice mode', err);
+      }
+    }
+    gameState.guesses = [];
+    gameState.won = false;
+    gameState.hintsUnlocked = 1;
+    gameState.practiceMode = true;
+    saveState();
+    updateHintDisplays();
+    render();
   };
   
   function updateSidebarStats() {

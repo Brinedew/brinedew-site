@@ -11,7 +11,15 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
 // Import stats handlers
 import { handleMigrateStats, handleGetStats, handleUpdateStats } from './stats.js';
 // Import admin handlers
-import { handleOverrideProtein, handleFeatureFlags, handleAdminStatus, handleDeleteOverride, handleGraphicsSettings } from './admin.js';
+import { 
+  handleOverrideProtein, 
+  handleFeatureFlags, 
+  handleAdminStatus, 
+  handleDeleteOverride, 
+  handleGraphicsSettings,
+  DEFAULT_GRAPHICS_SETTINGS,
+  normalizeGraphicsSettings
+} from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
 
@@ -130,26 +138,17 @@ export default {
     
     // Public graphics settings endpoint (no auth required)
     if (url.pathname === '/api/graphics-settings' && request.method === 'GET') {
-      const settings = await env.KV.get('graphics_settings');
-      if (settings) {
-        return Response.json(JSON.parse(settings), {
-          headers: CORS_HEADERS
-        });
+      const storedSettings = await env.KV.get('graphics_settings');
+      let graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS));
+      if (storedSettings) {
+        try {
+          graphicsPayload = normalizeGraphicsSettings(JSON.parse(storedSettings));
+        } catch (err) {
+          console.error('Failed to parse stored graphics settings, serving defaults', err);
+          graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS));
+        }
       }
-      // Return defaults if no settings saved
-      return Response.json({
-        cameraMode: 'perspective',
-        occlusionQuality: 'off',
-        antialiasingMode: 'fxaa',
-        fogIntensity: 0.5,
-        outlineEnabled: true,
-        outlineScale: 0.5,
-        outlineThreshold: 0.35,
-        lightingPreset: 'default',
-        backgroundColor: true,
-        hideAxes: true,
-        disableMarking: true
-      }, {
+      return Response.json(graphicsPayload, {
         headers: CORS_HEADERS
       });
     }
