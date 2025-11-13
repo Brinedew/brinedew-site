@@ -2366,8 +2366,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           customData: {
             url: representation.alphafold.model_url,
             format: 'cif'
-          },
-          alphafoldView: true
+          }
         };
       }
       return null;
