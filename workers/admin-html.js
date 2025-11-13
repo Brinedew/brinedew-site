@@ -246,15 +246,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       margin-left: 0.5rem;
     }
 
-    .outline-controls {
-      margin-left: 1.5rem;
-      display: none;
-    }
-
-    .outline-controls.is-visible {
-      display: block;
-    }
-
     .form-actions {
       display: flex;
       gap: 1rem;
@@ -370,6 +361,80 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     .viewer-error {
       background: rgba(127, 29, 29, 0.85);
     }
+
+    .form-subsection {
+      border: 1px solid #2c3a52;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #111b2f;
+    }
+
+    .form-subsection h3 {
+      margin-bottom: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .inline-inputs {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .inline-inputs input[type="range"] {
+      flex: 1;
+    }
+
+    input[type="color"] {
+      height: 42px;
+      padding: 0;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: transparent;
+    }
+
+    .profile-manager {
+      border: 1px solid #2c3a52;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+      background: #111b2f;
+    }
+
+    .profile-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .profile-actions button {
+      flex: none;
+      padding: 0.5rem 1rem;
+    }
+
+    .light-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .light-card {
+      border: 1px solid #2c3a52;
+      border-radius: 8px;
+      padding: 0.75rem;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .light-card h4 {
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
   </style>
 </head>
 <body>
@@ -435,89 +500,299 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       </div>
 
       <form id="graphics-form">
-        <div class="form-group">
-          <label for="graphics-cameraMode">Camera Mode</label>
-          <select id="graphics-cameraMode">
-            <option value="perspective">Perspective</option>
-            <option value="orthographic">Orthographic</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="graphics-occlusionQuality">Ambient Occlusion</label>
-          <select id="graphics-occlusionQuality">
-            <option value="off">Off</option>
-            <option value="low">Low (16 samples, radius 2)</option>
-            <option value="medium">Medium (32 samples, radius 4)</option>
-            <option value="high">High (64 samples, radius 6)</option>
-            <option value="ultra">Ultra (128 samples, radius 8)</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="graphics-antialiasingMode">Antialiasing</label>
-          <select id="graphics-antialiasingMode">
-            <option value="off">Off</option>
-            <option value="fxaa">FXAA</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="graphics-fogIntensity">
-            Fog Intensity <span class="value-pill" id="fog-value">0.50</span>
-          </label>
-          <input type="range" id="graphics-fogIntensity" min="0" max="1" step="0.05" value="0.5">
-        </div>
-
-        <div class="form-group">
-          <div class="checkbox-group">
-            <input type="checkbox" id="graphics-outlineEnabled" checked>
-            <label for="graphics-outlineEnabled">Outline Rendering</label>
+        <div class="profile-manager">
+          <h3>Profile Manager</h3>
+          <div class="form-grid">
+            <div>
+              <label for="profile-select">Profile Preset</label>
+              <select id="profile-select"></select>
+            </div>
+            <div class="profile-actions">
+              <button type="button" id="profile-load">Load</button>
+              <button type="button" id="profile-save">Save As</button>
+              <button type="button" id="profile-delete">Delete</button>
+              <button type="button" id="profile-reset">Restore Built-ins</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div>
+              <label for="profile-name">Profile Name</label>
+              <input type="text" id="profile-name" placeholder="Custom Studio">
+            </div>
+            <div>
+              <label for="profile-description">Description</label>
+              <textarea id="profile-description" rows="2" placeholder="Short note for this preset"></textarea>
+            </div>
           </div>
         </div>
-        <div class="outline-controls is-visible" id="outline-controls">
+
+        <div class="form-subsection">
+          <h3>Camera</h3>
           <div class="form-group">
-            <label for="graphics-outlineScale">
-              Scale <span class="value-pill" id="outline-scale-value">0.50</span>
-            </label>
-            <input type="range" id="graphics-outlineScale" min="0.1" max="2" step="0.1" value="0.5">
+            <label for="camera-mode">Projection Mode</label>
+            <select id="camera-mode">
+              <option value="perspective">Perspective</option>
+              <option value="orthographic">Orthographic</option>
+            </select>
           </div>
           <div class="form-group">
-            <label for="graphics-outlineThreshold">
-              Threshold <span class="value-pill" id="outline-threshold-value">0.35</span>
-            </label>
-            <input type="range" id="graphics-outlineThreshold" min="0.1" max="1" step="0.05" value="0.35">
+            <label for="camera-fov">Field of View <span class="value-pill" id="camera-fov-value">48°</span></label>
+            <input type="range" id="camera-fov" min="20" max="120" step="1" value="48">
+          </div>
+          <div class="form-grid">
+            <div>
+              <label for="camera-near">Near Plane</label>
+              <input type="number" id="camera-near" min="0.01" max="10" step="0.01">
+            </div>
+            <div>
+              <label for="camera-far">Far Plane</label>
+              <input type="number" id="camera-far" min="10" max="5000" step="10">
+            </div>
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="graphics-lightingPreset">Lighting Preset</label>
-          <select id="graphics-lightingPreset">
-            <option value="default">Default (Single Light)</option>
-            <option value="dramatic">Dramatic (High Contrast)</option>
-            <option value="soft">Soft (Balanced)</option>
-            <option value="studio">Studio (Three-Point)</option>
-          </select>
+        <div class="form-subsection">
+          <h3>Background & Theme</h3>
+          <div class="form-group">
+            <label for="background-mode">Background Mode</label>
+            <select id="background-mode">
+              <option value="auto">Auto (match site)</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="form-grid">
+            <div>
+              <label for="background-dark">Dark Color</label>
+              <input type="color" id="background-dark" value="#0f172a">
+            </div>
+            <div>
+              <label for="background-light">Light Color</label>
+              <input type="color" id="background-light" value="#f8f1e7">
+            </div>
+            <div>
+              <label for="background-custom">Custom Color</label>
+              <input type="color" id="background-custom" value="#0f172a">
+            </div>
+          </div>
         </div>
 
-        <div class="form-group">
-          <div class="checkbox-group">
-            <input type="checkbox" id="graphics-backgroundColor" checked>
-            <label for="graphics-backgroundColor">Auto Background (light/dark)</label>
+        <div class="form-subsection">
+          <h3>Lighting & Exposure</h3>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="lighting-enabled" checked>
+              <label for="lighting-enabled">Enable Lighting</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="lighting-exposure">Exposure <span class="value-pill" id="lighting-exposure-value">1.00</span></label>
+            <input type="range" id="lighting-exposure" min="0" max="3" step="0.05" value="1">
+          </div>
+          <div class="form-group">
+            <label for="lighting-preset">Lighting Preset</label>
+            <select id="lighting-preset">
+              <option value="studio">Studio Balanced</option>
+              <option value="cinematic">Cinematic Ultra</option>
+              <option value="performance">Performance</option>
+            </select>
+          </div>
+          <div class="light-grid">
+            <div class="light-card">
+              <h4>Key Light</h4>
+              <div class="form-group">
+                <label for="light-key-color">Color</label>
+                <input type="color" id="light-key-color" value="#ffffff">
+              </div>
+              <div class="form-group">
+                <label for="light-key-intensity">Intensity <span class="value-pill" id="light-key-intensity-value">1.00</span></label>
+                <input type="range" id="light-key-intensity" min="0" max="3" step="0.05">
+              </div>
+              <div class="form-group">
+                <label for="light-key-inclination">Inclination</label>
+                <input type="number" id="light-key-inclination" min="0" max="180" step="1">
+              </div>
+              <div class="form-group">
+                <label for="light-key-azimuth">Azimuth</label>
+                <input type="number" id="light-key-azimuth" min="0" max="360" step="1">
+              </div>
+            </div>
+            <div class="light-card">
+              <h4>Fill Light</h4>
+              <div class="form-group">
+                <label for="light-fill-color">Color</label>
+                <input type="color" id="light-fill-color" value="#c9d5ff">
+              </div>
+              <div class="form-group">
+                <label for="light-fill-intensity">Intensity <span class="value-pill" id="light-fill-intensity-value">0.70</span></label>
+                <input type="range" id="light-fill-intensity" min="0" max="3" step="0.05">
+              </div>
+              <div class="form-group">
+                <label for="light-fill-inclination">Inclination</label>
+                <input type="number" id="light-fill-inclination" min="0" max="180" step="1">
+              </div>
+              <div class="form-group">
+                <label for="light-fill-azimuth">Azimuth</label>
+                <input type="number" id="light-fill-azimuth" min="0" max="360" step="1">
+              </div>
+            </div>
+            <div class="light-card">
+              <h4>Rim Light</h4>
+              <div class="form-group">
+                <label for="light-rim-color">Color</label>
+                <input type="color" id="light-rim-color" value="#92b4ff">
+              </div>
+              <div class="form-group">
+                <label for="light-rim-intensity">Intensity <span class="value-pill" id="light-rim-intensity-value">0.45</span></label>
+                <input type="range" id="light-rim-intensity" min="0" max="3" step="0.05">
+              </div>
+              <div class="form-group">
+                <label for="light-rim-inclination">Inclination</label>
+                <input type="number" id="light-rim-inclination" min="0" max="180" step="1">
+              </div>
+              <div class="form-group">
+                <label for="light-rim-azimuth">Azimuth</label>
+                <input type="number" id="light-rim-azimuth" min="0" max="360" step="1">
+              </div>
+            </div>
           </div>
         </div>
-        
-        <div class="form-group">
-          <div class="checkbox-group">
-            <input type="checkbox" id="graphics-hideAxes" checked>
-            <label for="graphics-hideAxes">Hide XYZ Axes</label>
+
+        <div class="form-subsection">
+          <h3>Ambient Occlusion</h3>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="occlusion-enabled" checked>
+              <label for="occlusion-enabled">Enable Ambient Occlusion</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="occlusion-quality">Quality Preset</label>
+            <select id="occlusion-quality">
+              <option value="off">Off</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </div>
+          <div class="form-grid">
+            <div>
+              <label for="occlusion-samples">Samples</label>
+              <input type="number" id="occlusion-samples" min="0" max="256" step="1">
+            </div>
+            <div>
+              <label for="occlusion-radius">Radius</label>
+              <input type="number" id="occlusion-radius" min="0" max="20" step="0.25">
+            </div>
+            <div>
+              <label for="occlusion-bias">Bias</label>
+              <input type="number" id="occlusion-bias" min="0" max="2" step="0.05">
+            </div>
+            <div>
+              <label for="occlusion-blur">Blur Kernel</label>
+              <input type="number" id="occlusion-blur" min="1" max="15" step="1">
+            </div>
+            <div>
+              <label for="occlusion-resolution">Resolution Scale</label>
+              <input type="number" id="occlusion-resolution" min="0.25" max="2" step="0.05">
+            </div>
           </div>
         </div>
-        
-        <div class="form-group">
-          <div class="checkbox-group">
-            <input type="checkbox" id="graphics-disableMarking" checked>
-            <label for="graphics-disableMarking">Disable Selection Marking</label>
+
+        <div class="form-subsection">
+          <h3>Antialiasing</h3>
+          <div class="form-group">
+            <label for="antialiasing-mode">Mode</label>
+            <select id="antialiasing-mode">
+              <option value="fxaa">FXAA</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+          <div class="form-grid">
+            <div>
+              <label for="antialiasing-edgeMin">Edge Threshold (Min)</label>
+              <input type="number" id="antialiasing-edgeMin" min="0" max="1" step="0.01">
+            </div>
+            <div>
+              <label for="antialiasing-edgeMax">Edge Threshold (Max)</label>
+              <input type="number" id="antialiasing-edgeMax" min="0" max="1" step="0.01">
+            </div>
+            <div>
+              <label for="antialiasing-iterations">Iterations</label>
+              <input type="number" id="antialiasing-iterations" min="1" max="4" step="1">
+            </div>
+            <div>
+              <label for="antialiasing-subpixel">Subpixel Quality</label>
+              <input type="number" id="antialiasing-subpixel" min="0" max="1" step="0.05">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-subsection">
+          <h3>Fog</h3>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="fog-enabled" checked>
+              <label for="fog-enabled">Enable Fog</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="fog-intensity">Intensity <span class="value-pill" id="fog-value">0.50</span></label>
+            <input type="range" id="fog-intensity" min="0" max="1" step="0.01" value="0.5">
+          </div>
+          <div class="form-grid">
+            <div>
+              <label for="fog-color">Fog Color</label>
+              <input type="color" id="fog-color" value="#0f172a">
+            </div>
+            <div>
+              <label for="fog-near">Near Distance</label>
+              <input type="number" id="fog-near" min="0" max="500" step="5">
+            </div>
+            <div>
+              <label for="fog-far">Far Distance</label>
+              <input type="number" id="fog-far" min="0" max="5000" step="10">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-subsection">
+          <h3>Outlines</h3>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="outline-enabled" checked>
+              <label for="outline-enabled">Enable Outline Rendering</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="outline-color">Outline Color</label>
+            <input type="color" id="outline-color" value="#0f172a">
+          </div>
+          <div class="form-group">
+            <label for="outline-scale">Scale <span class="value-pill" id="outline-scale-value">0.50</span></label>
+            <input type="range" id="outline-scale" min="0.05" max="2" step="0.05" value="0.5">
+          </div>
+          <div class="form-group">
+            <label for="outline-threshold">Threshold <span class="value-pill" id="outline-threshold-value">0.35</span></label>
+            <input type="range" id="outline-threshold" min="0.05" max="1" step="0.01" value="0.35">
+          </div>
+        </div>
+
+        <div class="form-subsection">
+          <h3>Extras</h3>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="extras-hideAxes" checked>
+              <label for="extras-hideAxes">Hide XYZ Axes</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="extras-disableMarking" checked>
+              <label for="extras-disableMarking">Disable Selection Marking</label>
+            </div>
           </div>
         </div>
         
@@ -572,94 +847,158 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     const LIGHTING_PRESETS = {
-      default: {
+      studio: {
         enabled: true,
         exposure: 1.1,
         lights: [
-          { inclination: 170, azimuth: 30, intensity: 1.4, color: '#ffffff' },
-          { inclination: 32, azimuth: 210, intensity: 0.7, color: '#c9d5ff' },
-          { inclination: 85, azimuth: 315, intensity: 0.45, color: '#92b4ff' }
+          { id: 'key', label: 'Key', inclination: 170, azimuth: 30, intensity: 1.4, color: '#ffffff' },
+          { id: 'fill', label: 'Fill', inclination: 32, azimuth: 210, intensity: 0.7, color: '#c9d5ff' },
+          { id: 'rim', label: 'Rim', inclination: 85, azimuth: 315, intensity: 0.45, color: '#92b4ff' }
         ]
       },
-      dramatic: {
+      cinematic: {
         enabled: true,
         exposure: 1.25,
         lights: [
-          { inclination: 160, azimuth: 20, intensity: 1.6, color: '#ffe7d3' },
-          { inclination: 25, azimuth: 210, intensity: 0.8, color: '#c4d2ff' },
-          { inclination: 95, azimuth: 315, intensity: 0.6, color: '#7dafff' }
+          { id: 'key', label: 'Key', inclination: 160, azimuth: 20, intensity: 1.6, color: '#ffe7d3' },
+          { id: 'fill', label: 'Fill', inclination: 25, azimuth: 210, intensity: 0.8, color: '#c4d2ff' },
+          { id: 'rim', label: 'Rim', inclination: 95, azimuth: 315, intensity: 0.6, color: '#7dafff' }
         ]
       },
-      soft: {
+      performance: {
         enabled: true,
-        exposure: 0.95,
+        exposure: 1,
         lights: [
-          { inclination: 140, azimuth: 30, intensity: 1.1, color: '#fff7e8' },
-          { inclination: 35, azimuth: 210, intensity: 0.5, color: '#f0f4ff' },
-          { inclination: 80, azimuth: 300, intensity: 0.35, color: '#b6c7ff' }
-        ]
-      },
-      studio: {
-        enabled: true,
-        exposure: 1.05,
-        lights: [
-          { inclination: 175, azimuth: 25, intensity: 1.2, color: '#ffffff' },
-          { inclination: 35, azimuth: 200, intensity: 0.35, color: '#cdd5ff' },
-          { inclination: 90, azimuth: 300, intensity: 0.25, color: '#91a4ff' }
+          { id: 'key', label: 'Key', inclination: 175, azimuth: 25, intensity: 1.2, color: '#ffffff' },
+          { id: 'fill', label: 'Fill', inclination: 35, azimuth: 200, intensity: 0.35, color: '#cdd5ff' },
+          { id: 'rim', label: 'Rim', inclination: 90, azimuth: 300, intensity: 0.25, color: '#91a4ff' }
         ]
       }
     };
 
+    function mergeDeep(target, source) {
+      if (!source || typeof source !== 'object') {
+        return target;
+      }
+      Object.entries(source).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          target[key] = value.map((item) => (item && typeof item === 'object' ? mergeDeep({}, item) : item));
+          return;
+        }
+        if (value && typeof value === 'object') {
+          target[key] = mergeDeep(target[key] || {}, value);
+          return;
+        }
+        target[key] = value;
+      });
+      return target;
+    }
+
+    function createProfileTemplate() {
+      return {
+        camera: {
+          mode: 'perspective',
+          fieldOfView: 48,
+          near: 0.1,
+          far: 1800
+        },
+        lighting: deepClone(LIGHTING_PRESETS.studio),
+        occlusion: {
+          enabled: true,
+          samples: 64,
+          radius: 6,
+          bias: 0.8,
+          blurKernelSize: 7,
+          resolutionScale: 1
+        },
+        antialiasing: {
+          mode: 'fxaa',
+          edgeThresholdMin: 0.125,
+          edgeThresholdMax: 0.25,
+          iterations: 2,
+          subpixelQuality: 0.75
+        },
+        fog: {
+          enabled: true,
+          intensity: 0.5,
+          color: '#0f172a',
+          near: 0,
+          far: 200
+        },
+        outline: {
+          enabled: true,
+          scale: 0.5,
+          threshold: 0.35,
+          color: '#0f172a'
+        },
+        background: {
+          mode: 'auto',
+          dark: '#0f172a',
+          light: '#f8f1e7',
+          custom: '#0f172a'
+        },
+        extras: {
+          hideAxes: true,
+          disableMarking: true
+        }
+      };
+    }
+
+    function buildProfile(id, name, description, overrides = {}) {
+      const template = createProfileTemplate();
+      const merged = mergeDeep(template, overrides);
+      return { id, name, description, ...merged };
+    }
+
+    const LIGHT_IDS = ['key', 'fill', 'rim'];
+    const LIGHT_LABELS = {
+      key: 'Key Light',
+      fill: 'Fill Light',
+      rim: 'Rim Light'
+    };
+
+    const BUILT_IN_PROFILES = [
+      buildProfile('studio', 'Studio Balanced', 'Cinematic soft lighting with subtle fog.'),
+      buildProfile('cinematic', 'Cinematic Ultra', 'High quality occlusion + deeper fog.', {
+        occlusion: { samples: 128, radius: 8, blurKernelSize: 9, resolutionScale: 1 },
+        fog: { intensity: 0.75, color: '#050816' },
+        lighting: deepClone(LIGHTING_PRESETS.cinematic)
+      }),
+      buildProfile('performance', 'Performance', 'Lightweight settings for low-power GPUs.', {
+        occlusion: { enabled: false, samples: 0, radius: 0 },
+        fog: { enabled: false, intensity: 0 },
+        outline: { enabled: false },
+        antialiasing: { mode: 'fxaa', iterations: 1, subpixelQuality: 0.5 },
+        lighting: deepClone(LIGHTING_PRESETS.performance)
+      })
+    ];
+
+    function extractProfileSections(profile) {
+      return {
+        camera: deepClone(profile.camera),
+        lighting: deepClone(profile.lighting),
+        occlusion: deepClone(profile.occlusion),
+        antialiasing: deepClone(profile.antialiasing),
+        fog: deepClone(profile.fog),
+        outline: deepClone(profile.outline),
+        background: deepClone(profile.background),
+        extras: deepClone(profile.extras)
+      };
+    }
+
+    function slugifyProfileName(value) {
+      return value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+
     const DEFAULT_GRAPHICS_SETTINGS = {
       version: 2,
-      camera: {
-        mode: 'perspective',
-        fieldOfView: 48,
-        near: 0.1,
-        far: 1800
-      },
-      lighting: deepClone(LIGHTING_PRESETS.default),
-      occlusion: {
-        enabled: true,
-        samples: 64,
-        radius: 6,
-        bias: 0.8,
-        blurKernelSize: 7,
-        resolutionScale: 1
-      },
-      antialiasing: {
-        mode: 'fxaa',
-        edgeThresholdMin: 0.125,
-        edgeThresholdMax: 0.25,
-        iterations: 2,
-        subpixelQuality: 0.75
-      },
-      fog: {
-        enabled: true,
-        intensity: 0.5,
-        color: '#0f172a',
-        near: 0,
-        far: 200
-      },
-      outline: {
-        enabled: true,
-        scale: 0.5,
-        threshold: 0.35,
-        color: '#0f172a'
-      },
-      background: {
-        mode: 'auto',
-        dark: '#0f172a',
-        light: '#f8f1e7',
-        custom: '#0f172a'
-      },
-      extras: {
-        hideAxes: true,
-        disableMarking: true
-      },
+      ...extractProfileSections(BUILT_IN_PROFILES[0]),
       profileManager: {
-        activeProfileId: 'studio',
-        profiles: []
+        activeProfileId: BUILT_IN_PROFILES[0].id,
+        profiles: BUILT_IN_PROFILES.map((profile) => deepClone(profile))
       }
     };
 
@@ -695,6 +1034,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let molstarLoaderPromise = null;
     let molstarCssLoaded = false;
     let molstarPreconnectAdded = false;
+    const profileState = {
+      builtInIds: new Set(BUILT_IN_PROFILES.map((p) => p.id)),
+      profiles: deepClone(DEFAULT_GRAPHICS_SETTINGS.profileManager.profiles),
+      activeId: DEFAULT_GRAPHICS_SETTINGS.profileManager.activeProfileId,
+      selectedId: DEFAULT_GRAPHICS_SETTINGS.profileManager.activeProfileId
+    };
 
     const viewerPreviewEl = document.getElementById('viewer-preview');
     const previewContainer = document.getElementById('graphics-preview');
@@ -734,13 +1079,29 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       document.getElementById('graphics-form').addEventListener('submit', handleGraphicsSubmit);
       document.getElementById('graphics-reset').addEventListener('click', () => {
         pendingGraphicsSettings = deepClone(DEFAULT_GRAPHICS_SETTINGS);
+        syncProfileState(pendingGraphicsSettings.profileManager);
         applyGraphicsSettingsToForm(pendingGraphicsSettings);
         refreshPreview({ immediate: true });
       });
       document.getElementById('graphics-revert').addEventListener('click', () => {
         pendingGraphicsSettings = deepClone(currentGraphicsSettings);
+        syncProfileState(pendingGraphicsSettings.profileManager);
         applyGraphicsSettingsToForm(pendingGraphicsSettings);
         refreshPreview({ immediate: true });
+      });
+      document.getElementById('profile-select').addEventListener('change', (event) => {
+        profileState.selectedId = event.target.value;
+        hydrateProfileControls();
+      });
+      document.getElementById('profile-load').addEventListener('click', loadSelectedProfile);
+      document.getElementById('profile-save').addEventListener('click', saveProfileFromCurrent);
+      document.getElementById('profile-delete').addEventListener('click', deleteSelectedProfile);
+      document.getElementById('profile-reset').addEventListener('click', resetBuiltInProfiles);
+      document.getElementById('lighting-preset').addEventListener('change', (event) => {
+        applyLightingPresetToFields(event.target.value);
+      });
+      document.getElementById('occlusion-quality').addEventListener('change', (event) => {
+        applyOcclusionPresetToFields(event.target.value);
       });
     }
 
@@ -772,12 +1133,25 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         control.addEventListener(eventName, handleGraphicsInputChange);
       });
       applyGraphicsSettingsToForm(pendingGraphicsSettings);
+      hydrateProfileControls();
       const debouncedResize = debounce(autoSizeSelects, 150);
       window.addEventListener('resize', debouncedResize);
     }
+
     function handleGraphicsInputChange(event) {
-      if (event && event.target && event.target.id === 'graphics-outlineEnabled') {
-        updateOutlineControlsVisibility();
+      const target = event?.target;
+      if (target) {
+        if (target.id === 'profile-name' || target.id === 'profile-description') {
+          return;
+        }
+        if (target.id === 'lighting-preset') {
+          applyLightingPresetToFields(target.value);
+          return;
+        }
+        if (target.id === 'occlusion-quality') {
+          applyOcclusionPresetToFields(target.value);
+          return;
+        }
       }
       updateValueBadges();
       pendingGraphicsSettings = collectGraphicsSettingsFromForm();
@@ -785,21 +1159,38 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     function updateValueBadges() {
-      const fog = document.getElementById('graphics-fogIntensity');
-      const outlineScale = document.getElementById('graphics-outlineScale');
-      const outlineThreshold = document.getElementById('graphics-outlineThreshold');
-      document.getElementById('fog-value').textContent = Number(fog.value).toFixed(2);
-      document.getElementById('outline-scale-value').textContent = Number(outlineScale.value).toFixed(2);
-      document.getElementById('outline-threshold-value').textContent = Number(outlineThreshold.value).toFixed(2);
-    }
-
-    function updateOutlineControlsVisibility() {
-      const controls = document.getElementById('outline-controls');
-      if (!controls) {
-        return;
+      const fog = document.getElementById('fog-intensity');
+      const outlineScale = document.getElementById('outline-scale');
+      const outlineThreshold = document.getElementById('outline-threshold');
+      const cameraFov = document.getElementById('camera-fov');
+      const exposure = document.getElementById('lighting-exposure');
+      const fogValueEl = document.getElementById('fog-value');
+      if (fog && fogValueEl) {
+        fogValueEl.textContent = Number(fog.value || 0).toFixed(2);
       }
-      const enabled = document.getElementById('graphics-outlineEnabled').checked;
-      controls.classList.toggle('is-visible', enabled);
+      const outlineScaleEl = document.getElementById('outline-scale-value');
+      if (outlineScale && outlineScaleEl) {
+        outlineScaleEl.textContent = Number(outlineScale.value || 0).toFixed(2);
+      }
+      const outlineThresholdEl = document.getElementById('outline-threshold-value');
+      if (outlineThreshold && outlineThresholdEl) {
+        outlineThresholdEl.textContent = Number(outlineThreshold.value || 0).toFixed(2);
+      }
+      const cameraFovValueEl = document.getElementById('camera-fov-value');
+      if (cameraFov && cameraFovValueEl) {
+        cameraFovValueEl.textContent = `${Number(cameraFov.value || 0).toFixed(0)}°`;
+      }
+      const exposureValueEl = document.getElementById('lighting-exposure-value');
+      if (exposure && exposureValueEl) {
+        exposureValueEl.textContent = Number(exposure.value || 0).toFixed(2);
+      }
+      LIGHT_IDS.forEach((id) => {
+        const el = document.getElementById(`light-${id}-intensity`);
+        const pill = document.getElementById(`light-${id}-intensity-value`);
+        if (el && pill) {
+          pill.textContent = Number(el.value || 0).toFixed(2);
+        }
+      });
     }
 
     async function handleOverrideSubmit(event) {
@@ -943,62 +1334,277 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       currentGraphicsSettings = next;
       pendingGraphicsSettings = deepClone(next);
       GRAPHICS_SETTINGS = deepClone(next);
+      syncProfileState(next.profileManager);
       applyGraphicsSettingsToForm(pendingGraphicsSettings);
+      refreshPreview({ immediate: true });
+    }
+
+    function syncProfileState(manager) {
+      const source = manager && Array.isArray(manager.profiles) && manager.profiles.length
+        ? manager
+        : DEFAULT_GRAPHICS_SETTINGS.profileManager;
+      profileState.profiles = deepClone(source.profiles);
+      profileState.activeId = source.activeProfileId || profileState.profiles[0].id;
+      profileState.selectedId = profileState.activeId;
+      hydrateProfileControls();
+      persistProfilesToPending();
+    }
+
+    function hydrateProfileControls() {
+      const select = document.getElementById('profile-select');
+      if (!select) {
+        return;
+      }
+      select.innerHTML = '';
+      profileState.profiles.forEach((profile) => {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = profile.name || profile.id;
+        select.appendChild(option);
+      });
+      select.value = profileState.selectedId;
+      const currentProfile = profileState.profiles.find((p) => p.id === profileState.selectedId);
+      document.getElementById('profile-name').value = currentProfile ? currentProfile.name : '';
+      document.getElementById('profile-description').value = currentProfile ? (currentProfile.description || '') : '';
+      document.getElementById('profile-delete').disabled = !currentProfile || profileState.builtInIds.has(currentProfile.id);
+    }
+
+    function loadSelectedProfile() {
+      const profile = profileState.profiles.find((p) => p.id === profileState.selectedId);
+      if (!profile) {
+        return;
+      }
+      pendingGraphicsSettings = {
+        ...pendingGraphicsSettings,
+        ...extractProfileSections(profile),
+        profileManager: {
+          activeProfileId: profile.id,
+          profiles: deepClone(profileState.profiles)
+        }
+      };
+      profileState.activeId = profile.id;
+      profileState.selectedId = profile.id;
+      applyGraphicsSettingsToForm(pendingGraphicsSettings);
+      refreshPreview({ immediate: true });
+      showMessage('graphics-message', `Loaded profile \"${profile.name}\"`, 'success');
+    }
+
+    function saveProfileFromCurrent() {
+      const name = document.getElementById('profile-name').value.trim();
+      if (!name) {
+        showMessage('graphics-message', 'Enter a profile name before saving', 'error');
+        return;
+      }
+      let id = slugifyProfileName(name);
+      if (!id) {
+        showMessage('graphics-message', 'Profile name must include letters or numbers', 'error');
+        return;
+      }
+      if (profileState.builtInIds.has(id)) {
+        id = `${id}-custom`;
+      }
+      const profilePayload = {
+        id,
+        name,
+        description: document.getElementById('profile-description').value.trim(),
+        ...extractProfileSections(pendingGraphicsSettings)
+      };
+      const existingIndex = profileState.profiles.findIndex((p) => p.id === id);
+      if (existingIndex >= 0) {
+        profileState.profiles.splice(existingIndex, 1, profilePayload);
+      } else {
+        profileState.profiles.push(profilePayload);
+      }
+      profileState.selectedId = id;
+      profileState.activeId = id;
+      persistProfilesToPending();
+      hydrateProfileControls();
+      showMessage('graphics-message', `Saved profile \"${name}\"`, 'success');
+    }
+
+    function deleteSelectedProfile() {
+      const profile = profileState.profiles.find((p) => p.id === profileState.selectedId);
+      if (!profile || profileState.builtInIds.has(profile.id)) {
+        showMessage('graphics-message', 'Built-in profiles cannot be deleted', 'error');
+        return;
+      }
+      profileState.profiles = profileState.profiles.filter((p) => p.id !== profile.id);
+      profileState.selectedId = profileState.profiles[0]?.id || profileState.activeId;
+      profileState.activeId = profileState.selectedId;
+      persistProfilesToPending();
+      hydrateProfileControls();
+      pendingGraphicsSettings.profileManager = {
+        activeProfileId: profileState.activeId,
+        profiles: deepClone(profileState.profiles)
+      };
+      showMessage('graphics-message', 'Profile deleted', 'success');
+    }
+
+    function resetBuiltInProfiles() {
+      profileState.profiles = deepClone(DEFAULT_GRAPHICS_SETTINGS.profileManager.profiles);
+      profileState.selectedId = DEFAULT_GRAPHICS_SETTINGS.profileManager.activeProfileId;
+      profileState.activeId = profileState.selectedId;
+      persistProfilesToPending();
+      hydrateProfileControls();
+      showMessage('graphics-message', 'Restored built-in profiles', 'success');
+    }
+
+    function persistProfilesToPending() {
+      pendingGraphicsSettings.profileManager = {
+        activeProfileId: profileState.activeId,
+        profiles: deepClone(profileState.profiles)
+      };
+    }
+
+    function applyLightingPresetToFields(key) {
+      const preset = LIGHTING_PRESETS[key];
+      if (!preset) {
+        return;
+      }
+      document.getElementById('lighting-preset').value = key;
+      document.getElementById('lighting-enabled').checked = preset.enabled !== false;
+      document.getElementById('lighting-exposure').value = preset.exposure ?? 1;
+      LIGHT_IDS.forEach((id, index) => {
+        const light = preset.lights[index] || preset.lights[0];
+        document.getElementById(`light-${id}-color`).value = light?.color || '#ffffff';
+        document.getElementById(`light-${id}-intensity`).value = light?.intensity ?? 1;
+        document.getElementById(`light-${id}-inclination`).value = light?.inclination ?? 160;
+        document.getElementById(`light-${id}-azimuth`).value = light?.azimuth ?? (index * 120);
+      });
+      updateValueBadges();
+      pendingGraphicsSettings = collectGraphicsSettingsFromForm();
+      refreshPreview({ immediate: true });
+    }
+
+    function applyOcclusionPresetToFields(key) {
+      const preset = OCCLUSION_PRESETS[key];
+      if (!preset) {
+        return;
+      }
+      document.getElementById('occlusion-quality').value = key;
+      document.getElementById('occlusion-enabled').checked = preset.enabled !== false;
+      document.getElementById('occlusion-samples').value = preset.samples ?? 32;
+      document.getElementById('occlusion-radius').value = preset.radius ?? 4;
+      document.getElementById('occlusion-bias').value = preset.bias ?? 0.8;
+      document.getElementById('occlusion-blur').value = preset.blurKernelSize ?? 7;
+      document.getElementById('occlusion-resolution').value = preset.resolutionScale ?? 1;
+      pendingGraphicsSettings = collectGraphicsSettingsFromForm();
       refreshPreview({ immediate: true });
     }
 
     function applyGraphicsSettingsToForm(settings) {
       const safe = settings || DEFAULT_GRAPHICS_SETTINGS;
-      document.getElementById('graphics-cameraMode').value = safe.camera && safe.camera.mode ? safe.camera.mode : 'perspective';
-      document.getElementById('graphics-occlusionQuality').value = deriveOcclusionQuality(safe.occlusion);
-      document.getElementById('graphics-antialiasingMode').value = safe.antialiasing && safe.antialiasing.mode === 'off' ? 'off' : 'fxaa';
-      document.getElementById('graphics-lightingPreset').value = deriveLightingPresetKey(safe.lighting);
-      document.getElementById('graphics-fogIntensity').value = typeof safe.fog === 'object' && typeof safe.fog.intensity === 'number' ? safe.fog.intensity : 0.5;
-      document.getElementById('graphics-outlineEnabled').checked = !safe.outline || safe.outline.enabled !== false;
-      document.getElementById('graphics-outlineScale').value = typeof safe.outline === 'object' && typeof safe.outline.scale === 'number' ? safe.outline.scale : 0.5;
-      document.getElementById('graphics-outlineThreshold').value = typeof safe.outline === 'object' && typeof safe.outline.threshold === 'number' ? safe.outline.threshold : 0.35;
-      document.getElementById('graphics-backgroundColor').checked = !safe.background || safe.background.mode === 'auto';
-      document.getElementById('graphics-hideAxes').checked = !safe.extras || safe.extras.hideAxes !== false;
-      document.getElementById('graphics-disableMarking').checked = !safe.extras || safe.extras.disableMarking !== false;
+      document.getElementById('camera-mode').value = safe.camera?.mode || 'perspective';
+      document.getElementById('camera-fov').value = safe.camera?.fieldOfView ?? 48;
+      document.getElementById('camera-near').value = safe.camera?.near ?? 0.1;
+      document.getElementById('camera-far').value = safe.camera?.far ?? 1800;
+      document.getElementById('background-mode').value = safe.background?.mode || 'auto';
+      document.getElementById('background-dark').value = safe.background?.dark || '#0f172a';
+      document.getElementById('background-light').value = safe.background?.light || '#f8f1e7';
+      document.getElementById('background-custom').value = safe.background?.custom || '#0f172a';
+      document.getElementById('lighting-enabled').checked = safe.lighting?.enabled !== false;
+      document.getElementById('lighting-exposure').value = safe.lighting?.exposure ?? 1;
+      document.getElementById('lighting-preset').value = deriveLightingPresetKey(safe.lighting);
+      LIGHT_IDS.forEach((id, index) => {
+        const lightInput = safe.lighting?.lights?.find((light) => light.id === id) || safe.lighting?.lights?.[index] || LIGHTING_PRESETS.studio.lights[index];
+        document.getElementById(`light-${id}-color`).value = lightInput?.color || '#ffffff';
+        document.getElementById(`light-${id}-intensity`).value = lightInput?.intensity ?? 1;
+        document.getElementById(`light-${id}-inclination`).value = lightInput?.inclination ?? 160;
+        document.getElementById(`light-${id}-azimuth`).value = lightInput?.azimuth ?? (index * 120);
+      });
+      document.getElementById('occlusion-enabled').checked = safe.occlusion?.enabled !== false;
+      document.getElementById('occlusion-quality').value = deriveOcclusionQuality(safe.occlusion);
+      document.getElementById('occlusion-samples').value = safe.occlusion?.samples ?? 32;
+      document.getElementById('occlusion-radius').value = safe.occlusion?.radius ?? 4;
+      document.getElementById('occlusion-bias').value = safe.occlusion?.bias ?? 0.8;
+      document.getElementById('occlusion-blur').value = safe.occlusion?.blurKernelSize ?? 7;
+      document.getElementById('occlusion-resolution').value = safe.occlusion?.resolutionScale ?? 1;
+      document.getElementById('antialiasing-mode').value = safe.antialiasing?.mode === 'off' ? 'off' : 'fxaa';
+      document.getElementById('antialiasing-edgeMin').value = safe.antialiasing?.edgeThresholdMin ?? 0.125;
+      document.getElementById('antialiasing-edgeMax').value = safe.antialiasing?.edgeThresholdMax ?? 0.25;
+      document.getElementById('antialiasing-iterations').value = safe.antialiasing?.iterations ?? 2;
+      document.getElementById('antialiasing-subpixel').value = safe.antialiasing?.subpixelQuality ?? 0.75;
+      document.getElementById('fog-enabled').checked = safe.fog?.enabled !== false;
+      document.getElementById('fog-intensity').value = safe.fog?.intensity ?? 0.5;
+      document.getElementById('fog-color').value = safe.fog?.color || '#0f172a';
+      document.getElementById('fog-near').value = safe.fog?.near ?? 0;
+      document.getElementById('fog-far').value = safe.fog?.far ?? 200;
+      document.getElementById('outline-enabled').checked = safe.outline?.enabled !== false;
+      document.getElementById('outline-color').value = safe.outline?.color || '#0f172a';
+      document.getElementById('outline-scale').value = safe.outline?.scale ?? 0.5;
+      document.getElementById('outline-threshold').value = safe.outline?.threshold ?? 0.35;
+      document.getElementById('extras-hideAxes').checked = safe.extras?.hideAxes !== false;
+      document.getElementById('extras-disableMarking').checked = safe.extras?.disableMarking !== false;
+      hydrateProfileControls();
       updateValueBadges();
-      updateOutlineControlsVisibility();
       autoSizeSelects();
     }
     function collectGraphicsSettingsFromForm() {
-      const source = pendingGraphicsSettings || currentGraphicsSettings || DEFAULT_GRAPHICS_SETTINGS;
-      const next = deepClone(source || DEFAULT_GRAPHICS_SETTINGS);
-      next.camera = next.camera || {};
-      next.camera.mode = document.getElementById('graphics-cameraMode').value;
-      const occlusionKey = document.getElementById('graphics-occlusionQuality').value;
-      next.occlusion = Object.assign({}, OCCLUSION_PRESETS[occlusionKey] || OCCLUSION_PRESETS.medium);
-      const aaMode = document.getElementById('graphics-antialiasingMode').value;
-      next.antialiasing = aaMode === 'fxaa'
-        ? {
-            mode: 'fxaa',
-            edgeThresholdMin: 0.125,
-            edgeThresholdMax: 0.25,
-            iterations: 2,
-            subpixelQuality: 0.75
-          }
-        : { mode: 'off' };
-      const fogValue = Number.parseFloat(document.getElementById('graphics-fogIntensity').value);
-      next.fog = next.fog || {};
-      next.fog.enabled = true;
-      next.fog.intensity = Number.isFinite(fogValue) ? fogValue : 0.5;
-      next.outline = next.outline || {};
-      next.outline.enabled = document.getElementById('graphics-outlineEnabled').checked;
-      next.outline.scale = Number.parseFloat(document.getElementById('graphics-outlineScale').value) || 0.5;
-      next.outline.threshold = Number.parseFloat(document.getElementById('graphics-outlineThreshold').value) || 0.35;
-      if (!next.outline.color) {
-        next.outline.color = '#0f172a';
-      }
-      const presetKey = document.getElementById('graphics-lightingPreset').value;
-      next.lighting = deepClone(LIGHTING_PRESETS[presetKey] || LIGHTING_PRESETS.default);
-      next.background = next.background || deepClone(DEFAULT_GRAPHICS_SETTINGS.background);
-      next.background.mode = document.getElementById('graphics-backgroundColor').checked ? 'auto' : 'dark';
-      next.extras = next.extras || {};
-      next.extras.hideAxes = document.getElementById('graphics-hideAxes').checked;
-      next.extras.disableMarking = document.getElementById('graphics-disableMarking').checked;
+      const cameraFov = readNumber('camera-fov', 48);
+      const next = {
+        version: 2,
+        camera: {
+          mode: document.getElementById('camera-mode').value,
+          fieldOfView: cameraFov,
+          near: readNumber('camera-near', 0.1),
+          far: readNumber('camera-far', 1800)
+        },
+        background: {
+          mode: document.getElementById('background-mode').value,
+          dark: document.getElementById('background-dark').value || '#0f172a',
+          light: document.getElementById('background-light').value || '#f8f1e7',
+          custom: document.getElementById('background-custom').value || '#0f172a'
+        },
+        lighting: {
+          enabled: document.getElementById('lighting-enabled').checked,
+          exposure: readNumber('lighting-exposure', 1),
+          lights: LIGHT_IDS.map((id) => ({
+            id,
+            label: LIGHT_LABELS[id],
+            color: document.getElementById(`light-${id}-color`).value || '#ffffff',
+            intensity: readNumber(`light-${id}-intensity`, 1),
+            inclination: readNumber(`light-${id}-inclination`, 160),
+            azimuth: readNumber(`light-${id}-azimuth`, 30)
+          }))
+        },
+        occlusion: {
+          enabled: document.getElementById('occlusion-enabled').checked,
+          samples: readNumber('occlusion-samples', 32),
+          radius: readNumber('occlusion-radius', 4),
+          bias: readNumber('occlusion-bias', 0.8),
+          blurKernelSize: readNumber('occlusion-blur', 7),
+          resolutionScale: readNumber('occlusion-resolution', 1)
+        },
+        antialiasing: {
+          mode: document.getElementById('antialiasing-mode').value,
+          edgeThresholdMin: readNumber('antialiasing-edgeMin', 0.125),
+          edgeThresholdMax: readNumber('antialiasing-edgeMax', 0.25),
+          iterations: readNumber('antialiasing-iterations', 2),
+          subpixelQuality: readNumber('antialiasing-subpixel', 0.75)
+        },
+        fog: {
+          enabled: document.getElementById('fog-enabled').checked,
+          intensity: readNumber('fog-intensity', 0.5),
+          color: document.getElementById('fog-color').value || '#0f172a',
+          near: readNumber('fog-near', 0),
+          far: readNumber('fog-far', 200)
+        },
+        outline: {
+          enabled: document.getElementById('outline-enabled').checked,
+          color: document.getElementById('outline-color').value || '#0f172a',
+          scale: readNumber('outline-scale', 0.5),
+          threshold: readNumber('outline-threshold', 0.35)
+        },
+        extras: {
+          hideAxes: document.getElementById('extras-hideAxes').checked,
+          disableMarking: document.getElementById('extras-disableMarking').checked
+        }
+      };
+      persistProfilesToPending();
+      next.profileManager = {
+        activeProfileId: profileState.activeId,
+        profiles: deepClone(profileState.profiles)
+      };
       return next;
     }
 
@@ -1020,7 +1626,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     function deriveLightingPresetKey(lighting) {
       if (!lighting) {
-        return 'default';
+        return 'studio';
       }
       const normalized = normalizeLightingForComparison(lighting);
       const entries = Object.entries(LIGHTING_PRESETS);
@@ -1031,7 +1637,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           return key;
         }
       }
-      return 'default';
+      return 'studio';
     }
 
     function normalizeLightingForComparison(lighting) {
@@ -1354,6 +1960,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         g: parseInt(normalized.slice(2, 4), 16),
         b: parseInt(normalized.slice(4, 6), 16)
       };
+    }
+
+    function readNumber(id, fallback) {
+      const el = document.getElementById(id);
+      if (!el) {
+        return fallback;
+      }
+      const value = Number.parseFloat(el.value);
+      return Number.isFinite(value) ? value : fallback;
     }
 
     function numericOr(value, fallback) {
