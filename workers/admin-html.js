@@ -2376,7 +2376,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       if (!value) {
         return null;
       }
-      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      const match = value.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
       if (!match) {
         return null;
       }
