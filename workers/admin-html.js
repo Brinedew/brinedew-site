@@ -1117,6 +1117,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
     };
     const PDB_COVERAGE_THRESHOLD = 0.6;
+    const SWISS_MODEL_COVERAGE_THRESHOLD = 0.6;
+    const SWISS_MODEL_QMEAN_THRESHOLD = 0.7;
     const ACCENT_COLOR_HEX = '#1b7269';
     const LIGHT_NEUTRAL_GRAY_HEX = '#ab9b8f';
     const DARK_NEUTRAL_GRAY_HEX = '#87776d';
@@ -2262,11 +2264,29 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
       const alphafoldAvailable = Boolean(structure.alphafold && structure.alphafold.model_url);
       const pdbAvailable = Boolean(structure.pdb && structure.pdb.id);
+      const swissModel = normalizeSwissModel(structure.swiss_model, proteinLength);
+      const swissAvailable = Boolean(swissModel && (swissModel.coordinates_url || swissModel.coordinatesUrl || swissModel.model_url || swissModel.modelcif));
       const coverage = computePdbCoverage(structure, proteinLength);
+      const structureId = structure.structure_id || (structure.pdb && structure.pdb.id) || (swissModel && (swissModel.model_id || swissModel.template || swissModel.pdb_id)) || (structure.alphafold && structure.alphafold.id) || '';
       const base = {
         coverage,
-        structureId: structure.structure_id || (structure.pdb && structure.pdb.id) || (structure.alphafold && structure.alphafold.id) || ''
+        structureId
       };
+      const swissRepresentation = swissAvailable ? {
+        ...base,
+        coverage: typeof swissModel.coverage === 'number' ? swissModel.coverage : base.coverage,
+        structureId: structureId || swissModel.model_id || swissModel.template || swissModel.pdb_id || 'SWISS',
+        source: 'swissmodel',
+        swissModel,
+        chains: deriveSwissChainSegments(swissModel)
+      } : null;
+      const swissQuality = typeof swissModel?.qmean === 'number' ? swissModel.qmean : null;
+      const swissAcceptable = Boolean(
+        swissRepresentation &&
+        swissRepresentation.coverage >= SWISS_MODEL_COVERAGE_THRESHOLD &&
+        (typeof swissQuality !== 'number' || swissQuality >= SWISS_MODEL_QMEAN_THRESHOLD)
+      );
+
       if (pdbAvailable && coverage >= PDB_COVERAGE_THRESHOLD) {
         return {
           ...base,
@@ -2275,12 +2295,18 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           chains: parseChainSegments(structure.pdb && structure.pdb.chains)
         };
       }
+      if (swissAcceptable) {
+        return swissRepresentation;
+      }
       if (alphafoldAvailable) {
         return {
           ...base,
           source: 'alphafold',
           alphafold: structure.alphafold
         };
+      }
+      if (swissRepresentation) {
+        return swissRepresentation;
       }
       if (pdbAvailable) {
         return {
@@ -2292,6 +2318,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
       return null;
     }
+
 
     function parseChainSegments(spec) {
       if (typeof spec !== 'string') {
@@ -2346,6 +2373,93 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       return Math.max(0, Math.min(1, covered / proteinLength));
     }
 
+    function normalizeSwissModel(raw, proteinLength) {
+      if (!raw) {
+        return null;
+      }
+      const normalized = { ...raw };
+      normalized.coverage = typeof raw.coverage === 'number' ? raw.coverage : computeSwissCoverage(raw, proteinLength);
+      normalized.qmean = typeof raw.qmean === 'number' ? raw.qmean : extractSwissQuality(raw);
+      const chainCandidates = Array.isArray(raw.chain_ids) && raw.chain_ids.length
+        ? raw.chain_ids
+        : Array.isArray(raw.chains) && raw.chains.length ? raw.chains.map((c) => c && c.id).filter(Boolean)
+        : raw.chain_id ? [raw.chain_id] : [];
+      normalized.chain_ids = chainCandidates;
+      normalized.uniprot_start = toFiniteNumber(raw.uniprot_start ?? raw.uniprot_from ?? raw.start ?? raw.from);
+      normalized.uniprot_end = toFiniteNumber(raw.uniprot_end ?? raw.uniprot_to ?? raw.end ?? raw.to);
+      return normalized;
+    }
+
+    function computeSwissCoverage(model, proteinLength) {
+      if (!model) {
+        return 0;
+      }
+      if (typeof model.coverage === 'number') {
+        return model.coverage;
+      }
+      if (!Number.isFinite(proteinLength) || proteinLength <= 0) {
+        return 0;
+      }
+      const start = toFiniteNumber(model.uniprot_start ?? model.uniprot_from ?? model.start ?? model.from);
+      const end = toFiniteNumber(model.uniprot_end ?? model.uniprot_to ?? model.end ?? model.to);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return 0;
+      }
+      const normalizedStart = Math.min(start, end);
+      const normalizedEnd = Math.max(start, end);
+      const span = Math.max(0, normalizedEnd - normalizedStart + 1);
+      return Math.max(0, Math.min(1, span / proteinLength));
+    }
+
+    function extractSwissQuality(model) {
+      if (!model) {
+        return null;
+      }
+      const candidates = [
+        model.qmean,
+        model.qmeanDisCo_global,
+        model.qmean_dis_co_global,
+        model.quality && (model.quality.qmeanDisCo_global ?? model.quality.qmean_dis_co_global),
+        model.qmean && (model.qmean.qmeanDisCo_global ?? model.qmean.qmean_dis_co_global ?? model.qmean.qmean4_norm_score ?? model.qmean.avg_local_score)
+      ];
+      for (const candidate of candidates) {
+        const num = Number(candidate);
+        if (Number.isFinite(num)) {
+          return num;
+        }
+      }
+      return null;
+    }
+
+    function deriveSwissChainSegments(model) {
+      if (!model) {
+        return [];
+      }
+      const chainIds = Array.isArray(model.chain_ids) ? model.chain_ids : [];
+      if (!chainIds.length) {
+        return [];
+      }
+      const start = toFiniteNumber(model.uniprot_start);
+      const end = toFiniteNumber(model.uniprot_end);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return [];
+      }
+      const normalizedStart = Math.min(start, end);
+      const normalizedEnd = Math.max(start, end);
+      const length = Math.max(0, normalizedEnd - normalizedStart + 1);
+      return chainIds.map((chainId) => ({
+        chains: [chainId],
+        start: normalizedStart,
+        end: normalizedEnd,
+        length
+      }));
+    }
+
+    function toFiniteNumber(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    }
+
     function buildMolstarOptionsFromRepresentation(representation) {
       if (!representation) {
         return null;
@@ -2369,7 +2483,37 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           }
         };
       }
+      if (representation.source === 'swissmodel' && representation.swissModel) {
+        const swissUrl = representation.swissModel.coordinates_url || representation.swissModel.coordinatesUrl || representation.swissModel.model_url || representation.swissModel.modelcif;
+        if (!swissUrl) {
+          return null;
+        }
+        return {
+          moleculeId: representation.swissModel.model_id || representation.swissModel.template || representation.structureId || 'SWISS',
+          assemblyId: '1',
+          customData: {
+            url: swissUrl,
+            format: detectStructureFormat(swissUrl, representation.swissModel.format)
+          }
+        };
+      }
       return null;
+    }
+
+    function detectStructureFormat(url, explicitFormat) {
+      if (explicitFormat) {
+        return explicitFormat;
+      }
+      if (typeof url === 'string') {
+        const lower = url.toLowerCase();
+        if (lower.includes('.cif')) {
+          return 'cif';
+        }
+        if (lower.includes('.bcif')) {
+          return 'bcif';
+        }
+      }
+      return 'pdb';
     }
 
     function parseColorString(value) {
@@ -2417,10 +2561,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     function buildChainHighlightData(representation, accentRgb) {
-      if (!representation || representation.source !== 'pdb' || !accentRgb) {
+      if (!representation || !accentRgb) {
         return [];
       }
-      const segments = representation.chains && representation.chains.length > 0 ? representation.chains : parseChainSegments(representation.pdb && representation.pdb.chains);
+      let segments = [];
+      if (representation.source === 'pdb') {
+        segments = representation.chains && representation.chains.length > 0 ? representation.chains : parseChainSegments(representation.pdb && representation.pdb.chains);
+      } else if (representation.source === 'swissmodel') {
+        segments = representation.chains && representation.chains.length > 0 ? representation.chains : deriveSwissChainSegments(representation.swissModel);
+      }
       if (!segments || segments.length === 0) {
         return [];
       }
@@ -2450,10 +2599,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     function applyPreviewChainColoring(viewer) {
-      if (!viewer || typeof viewer.visual?.select !== 'function' || !previewStructureChoice || previewStructureChoice.source !== 'pdb') {
+      if (!viewer || typeof viewer.visual?.select !== 'function' || !previewStructureChoice || (previewStructureChoice.source !== 'pdb' && previewStructureChoice.source !== 'swissmodel')) {
         return;
       }
-      const structureId = (previewStructureChoice.pdb && previewStructureChoice.pdb.id) || previewStructureChoice.structureId;
+      const structureId = previewStructureChoice.structureId || (previewStructureChoice.pdb && previewStructureChoice.pdb.id);
       if (!structureId) {
         return;
       }
