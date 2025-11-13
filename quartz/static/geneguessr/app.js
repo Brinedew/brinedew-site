@@ -14,6 +14,10 @@
 
   const GENEGUESSR_STATUS_ATTR = 'data-geneguessr-status';
   const GENEGUESSR_ROOT_ID = 'geneguessr-root';
+  const PDB_COVERAGE_THRESHOLD = 0.6;
+  const ACCENT_COLOR_HEX = '#1b7269';
+  const LIGHT_NEUTRAL_GRAY_HEX = '#ab9b8f';
+  const DARK_NEUTRAL_GRAY_HEX = '#87776d';
 
   function setStatus(status) {
     try {
@@ -82,6 +86,125 @@
       return `AlphaFold ${structure.alphafold.id}`;
     }
     return '';
+  }
+
+  function resolveStructureRepresentation(structure, proteinLength) {
+    if (!structure) {
+      return null;
+    }
+    const alphafoldAvailable = Boolean(structure.alphafold && structure.alphafold.model_url);
+    const pdbAvailable = Boolean(structure.pdb && structure.pdb.id);
+    const coverage = computePdbCoverage(structure, proteinLength);
+    const base = {
+      coverage,
+      structureId: structure.structure_id || (structure.pdb && structure.pdb.id) || (structure.alphafold && structure.alphafold.id) || ''
+    };
+    if (pdbAvailable && coverage >= PDB_COVERAGE_THRESHOLD) {
+      return {
+        ...base,
+        source: 'pdb',
+        pdb: structure.pdb,
+        chains: parseChainSegments(structure.pdb && structure.pdb.chains)
+      };
+    }
+    if (alphafoldAvailable) {
+      return {
+        ...base,
+        source: 'alphafold',
+        alphafold: structure.alphafold
+      };
+    }
+    if (pdbAvailable) {
+      return {
+        ...base,
+        source: 'pdb',
+        pdb: structure.pdb,
+        chains: parseChainSegments(structure.pdb && structure.pdb.chains)
+      };
+    }
+    return null;
+  }
+
+  function parseChainSegments(spec) {
+    if (typeof spec !== 'string') {
+      return [];
+    }
+    return spec
+      .split(/[,;]/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const [chainToken, rangeToken] = part.split('=');
+        if (!rangeToken) {
+          return null;
+        }
+        const chains = (chainToken || '')
+          .split('/')
+          .map((c) => c.trim())
+          .filter(Boolean);
+        if (chains.length === 0) {
+          return null;
+        }
+        const [startToken, endToken] = rangeToken.split('-');
+        const start = Number.parseInt(startToken, 10);
+        const end = Number.parseInt(endToken, 10);
+        if (!Number.isFinite(start) || !Number.isFinite(end)) {
+          return null;
+        }
+        const normalizedStart = Math.min(start, end);
+        const normalizedEnd = Math.max(start, end);
+        return {
+          chains,
+          start: normalizedStart,
+          end: normalizedEnd,
+          length: normalizedEnd - normalizedStart + 1
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function computePdbCoverage(structure, proteinLength) {
+    if (!structure || !structure.pdb || !structure.pdb.chains) {
+      return 0;
+    }
+    if (!Number.isFinite(proteinLength) || proteinLength <= 0) {
+      return 1;
+    }
+    const segments = parseChainSegments(structure.pdb.chains);
+    if (segments.length === 0) {
+      return 0;
+    }
+    const coveredResidues = segments.reduce((sum, segment) => {
+      return sum + Math.max(0, segment.length || 0);
+    }, 0);
+    return Math.max(0, Math.min(1, coveredResidues / proteinLength));
+  }
+
+  function buildMolstarOptionsFromRepresentation(representation) {
+    if (!representation) {
+      return null;
+    }
+    if (representation.source === 'pdb' && representation.pdb && representation.pdb.id) {
+      return {
+        moleculeId: representation.pdb.id,
+        assemblyId: '1',
+        customData: {
+          url: `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`,
+          format: 'cif'
+        }
+      };
+    }
+    if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
+      return {
+        moleculeId: representation.alphafold.id || representation.structureId || targetProtein?.uniprot,
+        customData: {
+          url: representation.alphafold.model_url,
+          format: 'cif'
+        },
+        alphafoldView: true
+      };
+    }
+    return null;
   }
 
   function renderStructureViewer(protein, viewerId) {
@@ -202,33 +325,6 @@
     return molstarLoaderPromise;
   }
 
-  function getStructureViewerOptions(structure) {
-    if (!structure) {
-      return null;
-    }
-    if (structure.primary_source === 'pdb' && structure.structure_id) {
-      return {
-        moleculeId: structure.structure_id,
-        assemblyId: '1',
-        customData: {
-          url: `${RCSB_PDB_DOWNLOAD_URL}${structure.structure_id}.cif`,
-          format: 'cif'
-        }
-      };
-    }
-    if (structure.primary_source === 'alphafold' && structure.alphafold && structure.alphafold.model_url) {
-      return {
-        moleculeId: structure.alphafold.id || structure.structure_id || targetProtein?.uniprot,
-        customData: {
-          url: structure.alphafold.model_url,
-          format: 'cif'
-        },
-        alphafoldView: true
-      };
-    }
-    return null;
-  }
-
   function isDarkMode() {
     return document.documentElement.classList.contains('dark') || 
            document.body.classList.contains('dark') ||
@@ -334,6 +430,109 @@
       return custom ? { background: custom, outline: defaults.outline } : defaults;
     }
     return defaults;
+  }
+
+  function getAccentColorRgb() {
+    return resolveCssColorValue('var(--accent)') || hexToRgb(ACCENT_COLOR_HEX) || { r: 27, g: 114, b: 105 };
+  }
+
+  function getNeutralChainColor(container) {
+    const fallbackHex = isDarkMode() ? DARK_NEUTRAL_GRAY_HEX : LIGHT_NEUTRAL_GRAY_HEX;
+    const fromVar = resolveCssColorValue('var(--gray)');
+    if (fromVar) {
+      return fromVar;
+    }
+    if (container && window.getComputedStyle) {
+      const computed = window.getComputedStyle(container).color;
+      const parsed = parseColorString(computed, null);
+      if (parsed) {
+        return parsed;
+      }
+    }
+    return hexToRgb(fallbackHex);
+  }
+
+  function resolveCssColorValue(value) {
+    if (!value || !document || !document.body) {
+      return null;
+    }
+    try {
+      const probe = document.createElement('span');
+      probe.style.position = 'absolute';
+      probe.style.opacity = '0';
+      probe.style.pointerEvents = 'none';
+      probe.style.color = value;
+      document.body.appendChild(probe);
+      const computed = window.getComputedStyle(probe).color;
+      probe.remove();
+      return parseColorString(computed, null);
+    } catch (err) {
+      console.warn('Geneguessr: unable to resolve CSS color', err);
+      return null;
+    }
+  }
+
+  async function applyChainColoring(viewer, representation, container) {
+    if (!viewer?.visual?.select || !representation || representation.source !== 'pdb') {
+      return;
+    }
+    const highlightData = buildChainHighlightData(representation, getAccentColorRgb());
+    if (!highlightData.length) {
+      return;
+    }
+    const structureId = (representation.pdb && representation.pdb.id) || representation.structureId;
+    if (!structureId) {
+      return;
+    }
+    const neutralColor = getNeutralChainColor(container) || hexToRgb(DARK_NEUTRAL_GRAY_HEX);
+    try {
+      await viewer.visual.select({
+        data: highlightData,
+        nonSelectedColor: {
+          r: Math.round(neutralColor.r || 0),
+          g: Math.round(neutralColor.g || 0),
+          b: Math.round(neutralColor.b || 0)
+        },
+        structureId: structureId
+      });
+    } catch (err) {
+      console.warn('Geneguessr: failed to apply chain coloring', err);
+    }
+  }
+
+  function buildChainHighlightData(representation, accentRgb) {
+    if (!representation || representation.source !== 'pdb' || !accentRgb) {
+      return [];
+    }
+    const segments = representation.chains && representation.chains.length > 0
+      ? representation.chains
+      : parseChainSegments(representation.pdb && representation.pdb.chains);
+    if (!segments || segments.length === 0) {
+      return [];
+    }
+    const normalizedColor = {
+      r: Math.round(accentRgb.r || 0),
+      g: Math.round(accentRgb.g || 0),
+      b: Math.round(accentRgb.b || 0)
+    };
+    const data = [];
+    segments.forEach((segment) => {
+      if (!segment || !Array.isArray(segment.chains)) {
+        return;
+      }
+      segment.chains.forEach((chainId) => {
+        if (!chainId) {
+          return;
+        }
+        data.push({
+          auth_asym_id: chainId,
+          start_residue_number: segment.start,
+          end_residue_number: segment.end,
+          color: normalizedColor
+        });
+      });
+    });
+    return data;
   }
 
   function hintsApi() {
@@ -779,7 +978,8 @@
     const errorEl = document.getElementById(`${containerId}-error`);
     
     const structure = protein.structure || {};
-    const options = getStructureViewerOptions(structure);
+    const representation = resolveStructureRepresentation(structure, protein.length);
+    const options = buildMolstarOptionsFromRepresentation(representation);
     if (!options) {
       if (errorEl) {
         errorEl.textContent = 'No 3D structure available for this protein.';
@@ -818,13 +1018,15 @@
       });
 
       // Apply incremental stylization after render completes
+      const finalizeViewerStyling = () => {
+        applyViewerStylizationProfile(viewer, container);
+        applyChainColoring(viewer, representation, container);
+      };
       if (viewer.events?.loadComplete) {
-        viewer.events.loadComplete.subscribe(() => {
-          applyViewerStylizationProfile(viewer, container);
-        });
+        viewer.events.loadComplete.subscribe(finalizeViewerStyling);
       } else {
         // Fallback: apply shortly after render
-        setTimeout(() => applyViewerStylizationProfile(viewer, container), 500);
+        setTimeout(finalizeViewerStyling, 500);
       }
 
       container.dataset.viewerLoaded = 'true';

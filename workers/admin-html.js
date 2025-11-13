@@ -16,13 +16,33 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #0f172a;
       color: #ffffff;
-      padding: 2rem;
+      margin: 0;
+      padding: 0;
       line-height: 1.6;
+      overflow-x: hidden;
     }
     
     .container {
-      max-width: 900px;
-      margin: 0 auto;
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    .left-panel {
+      flex: 1;
+      padding: 2rem;
+      overflow-y: auto;
+      max-height: 100vh;
+    }
+    
+    .right-panel {
+      width: 500px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: #1e293b;
+      border-left: 1px solid #334155;
+      padding: 2rem;
     }
     
     h1 {
@@ -362,6 +382,65 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       background: rgba(127, 29, 29, 0.85);
     }
 
+    .protein-selector-wrapper {
+      position: relative;
+    }
+
+    .protein-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      max-height: 320px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: none;
+    }
+
+    .protein-suggestions.show {
+      display: block;
+    }
+
+    .protein-suggestion {
+      padding: 0.75rem;
+      cursor: pointer;
+      border-bottom: 1px solid #1e293b;
+      transition: background 0.15s;
+    }
+
+    .protein-suggestion:hover,
+    .protein-suggestion.selected {
+      background: #1e293b;
+    }
+
+    .protein-suggestion:last-child {
+      border-bottom: none;
+    }
+
+    .protein-suggestion-title {
+      font-weight: 600;
+      color: #ffffff;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .protein-suggestion-sub {
+      font-size: 0.75rem;
+      color: #ffffff;
+      opacity: 0.7;
+    }
+
+    .protein-suggestion-uniprot {
+      font-size: 0.7rem;
+      color: #38bdf8;
+      font-family: monospace;
+      margin-top: 0.25rem;
+    }
+
     .form-subsection {
       border: 1px solid #2c3a52;
       border-radius: 8px;
@@ -439,10 +518,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 </head>
 <body>
   <div class="container">
-    <h1>GeneGuessr Admin Panel</h1>
-    <p class="subtitle">Protected by Cloudflare Access</p>
-    
-    <!-- Current Status -->
+    <div class="left-panel">
+      <h1>GeneGuessr Admin Panel</h1>
+      <p class="subtitle">Protected by Cloudflare Access</p>
+      
+      <!-- Current Status -->
     <div class="section">
       <h2>Current Status</h2>
       <div class="status" id="status-display">
@@ -480,25 +560,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     <div class="section">
       <h2>Graphics Options</h2>
       <p class="helper-text helper-text--title" style="margin-bottom: 1rem;">
-        Configure 3D protein viewer rendering settings.
+        Configure 3D protein viewer rendering settings. Preview updates live in the right panel.
       </p>
       
-      <div class="viewer-preview" id="viewer-preview" data-theme="dark">
-        <div class="viewer-preview__header">
-          <h3>Live 3D Preview</h3>
-          <div class="viewer-preview__toggles" role="group" aria-label="Toggle preview theme">
-            <button type="button" class="viewer-preview__toggle is-active" data-theme="dark">Dark</button>
-            <button type="button" class="viewer-preview__toggle" data-theme="light">Light</button>
-          </div>
-        </div>
-        <p class="helper-text viewer-preview__status" id="viewer-preview-status">Loading preview...</p>
-        <div class="viewer-preview__canvas" id="graphics-preview">
-          <div class="viewer-placeholder" id="graphics-preview-placeholder">Preparing sample protein...</div>
-          <div class="viewer-loading" id="graphics-preview-loading" hidden>Loading viewer...</div>
-          <div class="viewer-error" id="graphics-preview-error" hidden></div>
-        </div>
-      </div>
-
       <form id="graphics-form">
         <div class="profile-manager">
           <h3>Profile Manager</h3>
@@ -833,6 +897,37 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       
       <div id="flags-message"></div>
     </div>
+    </div>
+    
+    <div class="right-panel">
+      <div class="viewer-preview" id="viewer-preview" data-theme="dark">
+        <div class="viewer-preview__header">
+          <h3>Live 3D Preview</h3>
+          <div class="viewer-preview__toggles" role="group" aria-label="Toggle preview theme">
+            <button type="button" class="viewer-preview__toggle is-active" data-theme="dark">Dark</button>
+            <button type="button" class="viewer-preview__toggle" data-theme="light">Light</button>
+          </div>
+        </div>
+        <p class="helper-text viewer-preview__status" id="viewer-preview-status">Loading preview...</p>
+        <div class="viewer-preview__canvas" id="graphics-preview">
+          <div class="viewer-placeholder" id="graphics-preview-placeholder">Preparing sample protein...</div>
+          <div class="viewer-loading" id="graphics-preview-loading" hidden>Loading viewer...</div>
+          <div class="viewer-error" id="graphics-preview-error" hidden></div>
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label for="preview-protein-select">Select Protein to Preview</label>
+          <div class="protein-selector-wrapper">
+            <input 
+              type="text" 
+              id="preview-protein-select" 
+              placeholder="Type to search (e.g., p53, AKT1, EGFR)..."
+              autocomplete="off"
+            />
+            <div class="protein-suggestions" id="preview-protein-suggestions"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   
 
@@ -1012,14 +1107,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     const PREVIEW_PROTEIN = {
       name: 'AlphaFold Preview',
+      length: 393,
       structure: {
         primary_source: 'alphafold',
         alphafold: {
           id: 'P04637',
-          model_url: 'https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v4.cif'
+          model_url: 'https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v6.cif'
         }
       }
     };
+    const PDB_COVERAGE_THRESHOLD = 0.6;
+    const ACCENT_COLOR_HEX = '#1b7269';
+    const LIGHT_NEUTRAL_GRAY_HEX = '#ab9b8f';
+    const DARK_NEUTRAL_GRAY_HEX = '#87776d';
 
     const MOLSTAR_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js';
     const MOLSTAR_FALLBACK_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js';
@@ -1034,6 +1134,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let molstarLoaderPromise = null;
     let molstarCssLoaded = false;
     let molstarPreconnectAdded = false;
+    let currentPreviewProtein = deepClone(PREVIEW_PROTEIN);
+    let previewStructureChoice = resolveStructureRepresentation(currentPreviewProtein.structure, currentPreviewProtein.length || 0);
+    let proteinDatabase = [];
     const profileState = {
       builtInIds: new Set(BUILT_IN_PROFILES.map((p) => p.id)),
       profiles: deepClone(DEFAULT_GRAPHICS_SETTINGS.profileManager.profiles),
@@ -1054,6 +1157,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     setupGraphicsForm();
     bindForms();
     loadStatus();
+    loadProteinDatabase();
     initializePreview();
 
     async function loadStatus() {
@@ -1178,15 +1282,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
       const cameraFovValueEl = document.getElementById('camera-fov-value');
       if (cameraFov && cameraFovValueEl) {
-        cameraFovValueEl.textContent = `${Number(cameraFov.value || 0).toFixed(0)}°`;
+        cameraFovValueEl.textContent = Number(cameraFov.value || 0).toFixed(0) + '°';
       }
       const exposureValueEl = document.getElementById('lighting-exposure-value');
       if (exposure && exposureValueEl) {
         exposureValueEl.textContent = Number(exposure.value || 0).toFixed(2);
       }
       LIGHT_IDS.forEach((id) => {
-        const el = document.getElementById(`light-${id}-intensity`);
-        const pill = document.getElementById(`light-${id}-intensity-value`);
+        const el = document.getElementById('light-' + id + '-intensity');
+        const pill = document.getElementById('light-' + id + '-intensity-value');
         if (el && pill) {
           pill.textContent = Number(el.value || 0).toFixed(2);
         }
@@ -1386,7 +1490,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       profileState.selectedId = profile.id;
       applyGraphicsSettingsToForm(pendingGraphicsSettings);
       refreshPreview({ immediate: true });
-      showMessage('graphics-message', `Loaded profile \"${profile.name}\"`, 'success');
+      const loadedName = profile.name || profile.id;
+      showMessage('graphics-message', 'Loaded profile \"' + loadedName + '\"', 'success');
     }
 
     function saveProfileFromCurrent() {
@@ -1401,7 +1506,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         return;
       }
       if (profileState.builtInIds.has(id)) {
-        id = `${id}-custom`;
+        id = id + '-custom';
       }
       const profilePayload = {
         id,
@@ -1419,7 +1524,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       profileState.activeId = id;
       persistProfilesToPending();
       hydrateProfileControls();
-      showMessage('graphics-message', `Saved profile \"${name}\"`, 'success');
+      showMessage('graphics-message', 'Saved profile \"' + name + '\"', 'success');
     }
 
     function deleteSelectedProfile() {
@@ -1466,10 +1571,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       document.getElementById('lighting-exposure').value = preset.exposure ?? 1;
       LIGHT_IDS.forEach((id, index) => {
         const light = preset.lights[index] || preset.lights[0];
-        document.getElementById(`light-${id}-color`).value = light?.color || '#ffffff';
-        document.getElementById(`light-${id}-intensity`).value = light?.intensity ?? 1;
-        document.getElementById(`light-${id}-inclination`).value = light?.inclination ?? 160;
-        document.getElementById(`light-${id}-azimuth`).value = light?.azimuth ?? (index * 120);
+        document.getElementById('light-' + id + '-color').value = light && light.color ? light.color : '#ffffff';
+        document.getElementById('light-' + id + '-intensity').value = light && light.intensity !== undefined ? light.intensity : 1;
+        document.getElementById('light-' + id + '-inclination').value = light && light.inclination !== undefined ? light.inclination : 160;
+        document.getElementById('light-' + id + '-azimuth').value = light && light.azimuth !== undefined ? light.azimuth : (index * 120);
       });
       updateValueBadges();
       pendingGraphicsSettings = collectGraphicsSettingsFromForm();
@@ -1506,11 +1611,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       document.getElementById('lighting-exposure').value = safe.lighting?.exposure ?? 1;
       document.getElementById('lighting-preset').value = deriveLightingPresetKey(safe.lighting);
       LIGHT_IDS.forEach((id, index) => {
-        const lightInput = safe.lighting?.lights?.find((light) => light.id === id) || safe.lighting?.lights?.[index] || LIGHTING_PRESETS.studio.lights[index];
-        document.getElementById(`light-${id}-color`).value = lightInput?.color || '#ffffff';
-        document.getElementById(`light-${id}-intensity`).value = lightInput?.intensity ?? 1;
-        document.getElementById(`light-${id}-inclination`).value = lightInput?.inclination ?? 160;
-        document.getElementById(`light-${id}-azimuth`).value = lightInput?.azimuth ?? (index * 120);
+        const lightList = safe.lighting && safe.lighting.lights;
+        const lightInput = (Array.isArray(lightList) && (lightList.find((light) => light.id === id) || lightList[index])) || LIGHTING_PRESETS.studio.lights[index];
+        document.getElementById('light-' + id + '-color').value = lightInput && lightInput.color ? lightInput.color : '#ffffff';
+        document.getElementById('light-' + id + '-intensity').value = lightInput && lightInput.intensity !== undefined ? lightInput.intensity : 1;
+        document.getElementById('light-' + id + '-inclination').value = lightInput && lightInput.inclination !== undefined ? lightInput.inclination : 160;
+        document.getElementById('light-' + id + '-azimuth').value = lightInput && lightInput.azimuth !== undefined ? lightInput.azimuth : (index * 120);
       });
       document.getElementById('occlusion-enabled').checked = safe.occlusion?.enabled !== false;
       document.getElementById('occlusion-quality').value = deriveOcclusionQuality(safe.occlusion);
@@ -1561,10 +1667,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           lights: LIGHT_IDS.map((id) => ({
             id,
             label: LIGHT_LABELS[id],
-            color: document.getElementById(`light-${id}-color`).value || '#ffffff',
-            intensity: readNumber(`light-${id}-intensity`, 1),
-            inclination: readNumber(`light-${id}-inclination`, 160),
-            azimuth: readNumber(`light-${id}-azimuth`, 30)
+            color: document.getElementById('light-' + id + '-color').value || '#ffffff',
+            intensity: readNumber('light-' + id + '-intensity', 1),
+            inclination: readNumber('light-' + id + '-inclination', 160),
+            azimuth: readNumber('light-' + id + '-azimuth', 30)
           }))
         },
         occlusion: {
@@ -1699,6 +1805,207 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       applyGraphicsToViewer(previewViewer, GRAPHICS_SETTINGS, options || {});
     }
 
+    async function loadProteinDatabase() {
+      try {
+        const response = await fetch('https://geneguessr-api.decap.workers.dev/api/proteins');
+        if (response.ok) {
+          proteinDatabase = await response.json();
+          setupProteinSelector();
+        }
+      } catch (err) {
+        console.warn('Failed to load protein database:', err);
+      }
+    }
+
+    function setupProteinSelector() {
+      const inputEl = document.getElementById('preview-protein-select');
+      const suggestionsEl = document.getElementById('preview-protein-suggestions');
+      if (!inputEl || !suggestionsEl) return;
+
+      let selectedIndex = -1;
+
+      inputEl.addEventListener('input', (e) => {
+        const query = e.target.value.trim().toLowerCase();
+
+        if (query.length < 1) {
+          suggestionsEl.innerHTML = '';
+          suggestionsEl.classList.remove('show');
+          return;
+        }
+
+        const matches = searchProteins(query);
+
+        if (matches.length === 0) {
+          suggestionsEl.innerHTML = '<div class="protein-suggestion"><div class="protein-suggestion-title">No matches found</div></div>';
+          suggestionsEl.classList.add('show');
+          return;
+        }
+
+        suggestionsEl.innerHTML = matches.map((p, idx) => \`
+          <div class="protein-suggestion" data-uniprot="\${p.uniprot}" data-index="\${idx}" title="\${escapeHtml(p.full_name)}">
+            <div class="protein-suggestion-title">\${escapeHtml(p.hgnc)}</div>
+            <div class="protein-suggestion-sub">\${escapeHtml(p.full_name || p.hgnc)}</div>
+            <div class="protein-suggestion-uniprot">\${p.uniprot}</div>
+          </div>
+        \`).join('');
+        suggestionsEl.classList.add('show');
+        selectedIndex = -1;
+
+        suggestionsEl.querySelectorAll('.protein-suggestion').forEach(el => {
+          el.addEventListener('click', () => {
+            const uniprot = el.dataset.uniprot;
+            loadProteinInPreview(uniprot);
+          });
+        });
+      });
+
+      inputEl.addEventListener('keydown', (e) => {
+        const suggestions = suggestionsEl.querySelectorAll('.protein-suggestion');
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
+          updateSelectedSuggestion(suggestions);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectedIndex = Math.max(selectedIndex - 1, -1);
+          updateSelectedSuggestion(suggestions);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+            const uniprot = suggestions[selectedIndex].dataset.uniprot;
+            loadProteinInPreview(uniprot);
+          }
+        } else if (e.key === 'Escape') {
+          suggestionsEl.innerHTML = '';
+          suggestionsEl.classList.remove('show');
+          selectedIndex = -1;
+        }
+      });
+
+      function updateSelectedSuggestion(suggestions) {
+        suggestions.forEach((el, idx) => {
+          el.classList.toggle('selected', idx === selectedIndex);
+        });
+      }
+
+      document.addEventListener('click', (e) => {
+        if (!inputEl.contains(e.target) && !suggestionsEl.contains(e.target)) {
+          suggestionsEl.classList.remove('show');
+        }
+      });
+    }
+
+    function searchProteins(query) {
+      const normalizedQuery = query.toLowerCase();
+      const MAX_RESULTS = 8;
+
+      return proteinDatabase
+        .map((protein) => ({
+          protein,
+          score: getSearchScore(protein, normalizedQuery),
+        }))
+        .filter((entry) => entry.score !== Number.POSITIVE_INFINITY)
+        .sort((a, b) => {
+          if (a.score !== b.score) return a.score - b.score;
+          return a.protein.hgnc.localeCompare(b.protein.hgnc);
+        })
+        .slice(0, MAX_RESULTS)
+        .map((entry) => entry.protein);
+    }
+
+    function getSearchScore(protein, query) {
+      if (!query) return Number.POSITIVE_INFINITY;
+      const hgnc = (protein.hgnc || '').toLowerCase();
+      const uniprot = (protein.uniprot || '').toLowerCase();
+
+      if (hgnc === query || uniprot === query) return 0;
+      if (hgnc.startsWith(query) || uniprot.startsWith(query)) return 1;
+
+      const synonyms = (protein.synonyms || []).map(s => (s || '').toLowerCase());
+      if (synonyms.some(s => s === query)) return 2;
+      if (synonyms.some(s => s.startsWith(query))) return 3;
+
+      const fullName = (protein.full_name || '').toLowerCase();
+      if (fullName.startsWith(query)) return 4;
+      if (fullName.includes(query)) return 5;
+
+      const subSynonym = synonyms.find(s => s.includes(query));
+      if (subSynonym) return 6;
+
+      return Number.POSITIVE_INFINITY;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function loadProteinInPreview(uniprot) {
+      const protein = proteinDatabase.find(p => p.uniprot === uniprot);
+      if (!protein || !protein.structure) {
+        previewStatusEl.textContent = 'No structure available for this protein';
+        return;
+      }
+
+      const inputEl = document.getElementById('preview-protein-select');
+      const suggestionsEl = document.getElementById('preview-protein-suggestions');
+      inputEl.value = protein.hgnc;
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.classList.remove('show');
+
+      currentPreviewProtein = {
+        name: protein.hgnc,
+        length: protein.length,
+        structure: protein.structure
+      };
+
+      previewStatusEl.textContent = \`Loading \${protein.hgnc}...\`;
+      previewLoadingEl.hidden = false;
+      previewErrorEl.hidden = true;
+
+      try {
+        if (previewViewer && previewViewer.plugin) {
+          await previewViewer.plugin.clear();
+        }
+
+        await ensureMolstarAssets();
+        const viewer = new window.PDBeMolstarPlugin();
+        const previewOptions = getPreviewRenderOptions();
+        if (!previewOptions) {
+          throw new Error('No 3D structure available for preview');
+        }
+        viewer.render(previewContainer, previewOptions);
+        previewViewer = viewer;
+        disableViewerUi(viewer);
+        suppressViewerInteractivity(viewer);
+
+        const finalize = () => {
+          previewReady = true;
+          previewLoadingEl.hidden = true;
+          previewStatusEl.textContent = \`Showing \${protein.hgnc}\`;
+          refreshPreview({ immediate: true });
+          applyPreviewChainColoring(viewer);
+        };
+
+        if (viewer.events && viewer.events.loadComplete) {
+          viewer.events.loadComplete.subscribe(finalize);
+        } else {
+          setTimeout(finalize, 600);
+        }
+      } catch (err) {
+        console.error('Failed to load protein in preview:', err);
+        previewLoadingEl.hidden = true;
+        previewErrorEl.hidden = false;
+        previewErrorEl.textContent = \`Failed to load \${protein.hgnc}: \${err.message}\`;
+        previewStatusEl.textContent = 'Error loading protein';
+      }
+    }
+
     async function initializePreview() {
       if (!previewContainer || previewViewer) {
         return;
@@ -1710,7 +2017,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       try {
         await ensureMolstarAssets();
         const viewer = new window.PDBeMolstarPlugin();
-        viewer.render(previewContainer, getPreviewRenderOptions());
+        const previewOptions = getPreviewRenderOptions();
+        if (!previewOptions) {
+          throw new Error('No 3D structure available for preview');
+        }
+        viewer.render(previewContainer, previewOptions);
         previewViewer = viewer;
         disableViewerUi(viewer);
         suppressViewerInteractivity(viewer);
@@ -1718,8 +2029,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewReady = true;
           previewPlaceholderEl.hidden = true;
           previewLoadingEl.hidden = true;
-          previewStatusEl.textContent = 'Preview ready';
+          previewStatusEl.textContent = 'Preview ready (p53 loaded)';
           refreshPreview({ immediate: true });
+          applyPreviewChainColoring(viewer);
         };
         if (viewer.events && viewer.events.loadComplete) {
           viewer.events.loadComplete.subscribe(finalize);
@@ -1731,31 +2043,30 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         previewLoadingEl.hidden = true;
         previewPlaceholderEl.hidden = true;
         previewErrorEl.hidden = false;
-        previewErrorEl.textContent = 'Could not load 3D viewer. Please refresh.';
+        previewErrorEl.textContent = 'Could not load 3D viewer: ' + err.message;
         previewStatusEl.textContent = 'Preview unavailable';
       }
     }
 
     function getPreviewRenderOptions() {
-      const structure = PREVIEW_PROTEIN.structure;
-      if (structure && structure.primary_source === 'alphafold' && structure.alphafold && structure.alphafold.model_url) {
-        return {
-          customData: {
-            url: structure.alphafold.model_url,
-            format: 'cif'
-          },
-          moleculeId: structure.alphafold.id || 'Preview',
-          alphafoldView: true,
-          hideControls: true,
-          pdbeLink: false,
-          hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
-          visualStyle: 'cartoon',
-          lighting: 'glossy',
-          loadMaps: false,
-          lowPrecisionCoords: false
-        };
+      const structure = currentPreviewProtein.structure || {};
+      previewStructureChoice = resolveStructureRepresentation(structure, currentPreviewProtein.length || 0);
+      const baseOptions = buildMolstarOptionsFromRepresentation(previewStructureChoice);
+      if (!baseOptions) {
+        return null;
       }
-      return {};
+      return {
+        ...baseOptions,
+        hideControls: true,
+        pdbeLink: false,
+        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
+        visualStyle: 'cartoon',
+        lighting: 'glossy',
+        loadMaps: false,
+        selectInteraction: false,
+        lowPrecisionCoords: false,
+        hideStructureSourceTooltip: true
+      };
     }
 
     function disableViewerUi(viewer) {
@@ -1943,6 +2254,231 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         return background.custom || '#0f172a';
       }
       return previewTheme === 'dark' ? (background.dark || '#0f172a') : (background.light || '#f8f1e7');
+    }
+
+    function resolveStructureRepresentation(structure, proteinLength) {
+      if (!structure) {
+        return null;
+      }
+      const alphafoldAvailable = Boolean(structure.alphafold && structure.alphafold.model_url);
+      const pdbAvailable = Boolean(structure.pdb && structure.pdb.id);
+      const coverage = computePdbCoverage(structure, proteinLength);
+      const base = {
+        coverage,
+        structureId: structure.structure_id || (structure.pdb && structure.pdb.id) || (structure.alphafold && structure.alphafold.id) || ''
+      };
+      if (pdbAvailable && coverage >= PDB_COVERAGE_THRESHOLD) {
+        return {
+          ...base,
+          source: 'pdb',
+          pdb: structure.pdb,
+          chains: parseChainSegments(structure.pdb && structure.pdb.chains)
+        };
+      }
+      if (alphafoldAvailable) {
+        return {
+          ...base,
+          source: 'alphafold',
+          alphafold: structure.alphafold
+        };
+      }
+      if (pdbAvailable) {
+        return {
+          ...base,
+          source: 'pdb',
+          pdb: structure.pdb,
+          chains: parseChainSegments(structure.pdb && structure.pdb.chains)
+        };
+      }
+      return null;
+    }
+
+    function parseChainSegments(spec) {
+      if (typeof spec !== 'string') {
+        return [];
+      }
+      return spec
+        .split(/[,;]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+          const [chainToken, rangeToken] = part.split('=');
+          if (!rangeToken) {
+            return null;
+          }
+          const chains = (chainToken || '')
+            .split('/')
+            .map((c) => c.trim())
+            .filter(Boolean);
+          if (chains.length === 0) {
+            return null;
+          }
+          const [startToken, endToken] = rangeToken.split('-');
+          const start = Number.parseInt(startToken, 10);
+          const end = Number.parseInt(endToken, 10);
+          if (!Number.isFinite(start) || !Number.isFinite(end)) {
+            return null;
+          }
+          const normalizedStart = Math.min(start, end);
+          const normalizedEnd = Math.max(start, end);
+          return {
+            chains,
+            start: normalizedStart,
+            end: normalizedEnd,
+            length: normalizedEnd - normalizedStart + 1
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function computePdbCoverage(structure, proteinLength) {
+      if (!structure || !structure.pdb || !structure.pdb.chains) {
+        return 0;
+      }
+      if (!Number.isFinite(proteinLength) || proteinLength <= 0) {
+        return 1;
+      }
+      const segments = parseChainSegments(structure.pdb.chains);
+      if (!segments.length) {
+        return 0;
+      }
+      const covered = segments.reduce((sum, segment) => sum + Math.max(0, segment.length || 0), 0);
+      return Math.max(0, Math.min(1, covered / proteinLength));
+    }
+
+    function buildMolstarOptionsFromRepresentation(representation) {
+      if (!representation) {
+        return null;
+      }
+      if (representation.source === 'pdb' && representation.pdb && representation.pdb.id) {
+        return {
+          moleculeId: representation.pdb.id,
+          assemblyId: '1',
+          customData: {
+            url: 'https://files.rcsb.org/download/' + representation.pdb.id + '.cif',
+            format: 'cif'
+          }
+        };
+      }
+      if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
+        return {
+          moleculeId: representation.alphafold.id || representation.structureId || 'Preview',
+          customData: {
+            url: representation.alphafold.model_url,
+            format: 'cif'
+          },
+          alphafoldView: true
+        };
+      }
+      return null;
+    }
+
+    function parseColorString(value) {
+      if (!value) {
+        return null;
+      }
+      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!match) {
+        return null;
+      }
+      return {
+        r: Number.parseInt(match[1], 10),
+        g: Number.parseInt(match[2], 10),
+        b: Number.parseInt(match[3], 10)
+      };
+    }
+
+    function resolveCssColorValue(value) {
+      if (!value || !document || !document.body) {
+        return null;
+      }
+      try {
+        const probe = document.createElement('span');
+        probe.style.position = 'absolute';
+        probe.style.opacity = '0';
+        probe.style.pointerEvents = 'none';
+        probe.style.color = value;
+        document.body.appendChild(probe);
+        const computed = window.getComputedStyle(probe).color;
+        probe.remove();
+        return parseColorString(computed);
+      } catch (err) {
+        console.warn('Admin preview: unable to resolve CSS color', err);
+        return null;
+      }
+    }
+
+    function getAccentColorRgb() {
+      return resolveCssColorValue('var(--accent)') || hexToRgb(ACCENT_COLOR_HEX) || { r: 27, g: 114, b: 105 };
+    }
+
+    function getNeutralChainColor() {
+      const fallbackHex = previewTheme === 'dark' ? DARK_NEUTRAL_GRAY_HEX : LIGHT_NEUTRAL_GRAY_HEX;
+      return resolveCssColorValue('var(--gray)') || hexToRgb(fallbackHex);
+    }
+
+    function buildChainHighlightData(representation, accentRgb) {
+      if (!representation || representation.source !== 'pdb' || !accentRgb) {
+        return [];
+      }
+      const segments = representation.chains && representation.chains.length > 0 ? representation.chains : parseChainSegments(representation.pdb && representation.pdb.chains);
+      if (!segments || segments.length === 0) {
+        return [];
+      }
+      const color = {
+        r: Math.round(accentRgb.r || 0),
+        g: Math.round(accentRgb.g || 0),
+        b: Math.round(accentRgb.b || 0)
+      };
+      const data = [];
+      segments.forEach((segment) => {
+        if (!segment || !Array.isArray(segment.chains)) {
+          return;
+        }
+        segment.chains.forEach((chainId) => {
+          if (!chainId) {
+            return;
+          }
+          data.push({
+            auth_asym_id: chainId,
+            start_residue_number: segment.start,
+            end_residue_number: segment.end,
+            color
+          });
+        });
+      });
+      return data;
+    }
+
+    function applyPreviewChainColoring(viewer) {
+      if (!viewer || typeof viewer.visual?.select !== 'function' || !previewStructureChoice || previewStructureChoice.source !== 'pdb') {
+        return;
+      }
+      const structureId = (previewStructureChoice.pdb && previewStructureChoice.pdb.id) || previewStructureChoice.structureId;
+      if (!structureId) {
+        return;
+      }
+      const highlightData = buildChainHighlightData(previewStructureChoice, getAccentColorRgb());
+      if (!highlightData.length) {
+        return;
+      }
+      const neutral = getNeutralChainColor() || { r: 128, g: 128, b: 128 };
+      try {
+        const result = viewer.visual.select({
+          data: highlightData,
+          nonSelectedColor: {
+            r: Math.round(neutral.r || 0),
+            g: Math.round(neutral.g || 0),
+            b: Math.round(neutral.b || 0)
+          },
+          structureId
+        });
+        if (result && typeof result.catch === 'function') {
+          result.catch((err) => console.warn('Admin preview: chain coloring failed', err));
+        }
+      } catch (err) {
+        console.warn('Admin preview: chain coloring failed', err);
+      }
     }
 
     function hexToMolstarColor(hex) {

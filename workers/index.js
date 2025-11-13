@@ -160,6 +160,36 @@ export default {
         headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
       });
     }
+    
+    // Public proteins endpoint for autocomplete
+    if (url.pathname === '/api/proteins' && request.method === 'GET') {
+      try {
+        // Fetch the protein database from the static site
+        const proteinsResponse = await fetch('https://brinedew.bio/static/geneguessr/data.json');
+        if (!proteinsResponse.ok) {
+          throw new Error('Failed to fetch protein database');
+        }
+        const proteins = await proteinsResponse.json();
+        
+        // Return simplified protein list for autocomplete
+        const simplifiedProteins = proteins.map(p => ({
+          uniprot: p.uniprot,
+          hgnc: p.hgnc,
+          synonyms: p.synonyms || [],
+          full_name: p.full_name,
+          structure: p.structure
+        }));
+        
+        return Response.json(simplifiedProteins, {
+          headers: CORS_HEADERS
+        });
+      } catch (error) {
+        return Response.json({ error: 'Failed to load protein database' }, {
+          status: 500,
+          headers: CORS_HEADERS
+        });
+      }
+    }
 
     // Session management endpoints
     if (url.pathname.startsWith('/api/session')) {
