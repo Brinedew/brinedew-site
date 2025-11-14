@@ -18,7 +18,8 @@ import {
   handleDeleteOverride, 
   handleGraphicsSettings,
   DEFAULT_GRAPHICS_SETTINGS,
-  normalizeGraphicsSettings
+  normalizeGraphicsSettings,
+  handleProteinPreview
 } from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
@@ -130,6 +131,14 @@ export default {
     
     if (url.pathname === '/api/admin/graphics-settings' && request.method === 'POST') {
       const response = await handleGraphicsSettings(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+      });
+    }
+
+    if (url.pathname === '/api/admin/protein-preview' && request.method === 'GET') {
+      const response = await handleProteinPreview(request, env);
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }

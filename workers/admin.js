@@ -4,6 +4,7 @@
  */
 
 import { parseCookies } from './auth.js';
+import { buildStructurePreviewPayload, sanitizeProteinSummary } from './lib/structure-utils.js';
 
 const CAMERA_MODES = ['perspective', 'orthographic'];
 const ANTIALIASING_MODES = ['off', 'fxaa'];
@@ -699,4 +700,49 @@ export async function handleDeleteOverride(request, env) {
     success: true,
     message: `Protein override removed for ${date}`
   });
+}
+
+/**
+ * GET /api/admin/protein-preview
+ * Prepare Mol* render payload for admin preview
+ */
+export async function handleProteinPreview(request, env) {
+  if (!isAdmin(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const uniprot = url.searchParams.get('uniprot');
+  if (!uniprot) {
+    return Response.json({ error: 'Missing required parameter: uniprot' }, { status: 400 });
+  }
+
+  try {
+    const protein = await fetchProteinByUniprot(uniprot);
+    if (!protein) {
+      return Response.json({ error: `Protein ${uniprot} not found` }, { status: 404 });
+    }
+    const preview = buildStructurePreviewPayload(protein);
+    if (!preview) {
+      return Response.json({ error: 'No valid structure available for preview' }, { status: 422 });
+    }
+    return Response.json({
+      protein: sanitizeProteinSummary(protein),
+      representation: preview.representation,
+      renderOptions: preview.renderOptions
+    });
+  } catch (err) {
+    console.error('Error building protein preview', err);
+    return Response.json({ error: 'Failed to build preview' }, { status: 500 });
+  }
+}
+
+async function fetchProteinByUniprot(uniprot) {
+  const response = await fetch('https://brinedew.bio/static/geneguessr/data.json');
+  if (!response.ok) {
+    throw new Error('Failed to fetch protein database');
+  }
+  const proteins = await response.json();
+  const normalized = `${uniprot}`.trim().toUpperCase();
+  return proteins.find((protein) => (protein.uniprot || '').toUpperCase() === normalized) || null;
 }
