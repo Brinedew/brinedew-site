@@ -356,6 +356,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       border-radius: 8px;
     }
 
+    .viewer-mount {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .viewer-mount > .msp-plugin {
+      height: 100%;
+    }
+
     .viewer-preview__status {
       margin: 0 0 0.5rem 0;
     }
@@ -913,6 +923,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           <div class="viewer-placeholder" id="graphics-preview-placeholder">Preparing sample protein...</div>
           <div class="viewer-loading" id="graphics-preview-loading" hidden>Loading viewer...</div>
           <div class="viewer-error" id="graphics-preview-error" hidden></div>
+          <div class="viewer-mount" id="graphics-preview-mount" aria-hidden="true"></div>
         </div>
         <div class="form-group" style="margin-top: 1rem;">
           <label for="preview-protein-select">Select Protein to Preview</label>
@@ -1133,6 +1144,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let previewViewer = null;
     let previewTheme = 'dark';
     let previewReady = false;
+    let previewLoadToken = 0;
     let molstarLoaderPromise = null;
     let molstarCssLoaded = false;
     let molstarPreconnectAdded = false;
@@ -1148,6 +1160,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     const viewerPreviewEl = document.getElementById('viewer-preview');
     const previewContainer = document.getElementById('graphics-preview');
+    const previewMountEl = document.getElementById('graphics-preview-mount');
     const previewStatusEl = document.getElementById('viewer-preview-status');
     const previewPlaceholderEl = document.getElementById('graphics-preview-placeholder');
     const previewLoadingEl = document.getElementById('graphics-preview-loading');
@@ -1807,6 +1820,46 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       applyGraphicsToViewer(previewViewer, GRAPHICS_SETTINGS, options || {});
     }
 
+    function clearPreviewMount() {
+      if (previewMountEl) {
+        previewMountEl.innerHTML = '';
+      } else if (previewContainer) {
+        const pluginNodes = previewContainer.querySelectorAll('.msp-plugin');
+        pluginNodes.forEach((node) => node.remove());
+      }
+    }
+
+    async function disposePreviewViewer(viewer) {
+      if (!viewer) {
+        return;
+      }
+      try {
+        if (viewer.plugin && typeof viewer.plugin.clear === 'function') {
+          await viewer.plugin.clear();
+        }
+      } catch (err) {
+        console.warn('Admin preview: unable to clear viewer', err);
+      }
+      try {
+        if (viewer.plugin && typeof viewer.plugin.dispose === 'function') {
+          viewer.plugin.dispose();
+        } else if (typeof viewer.destroy === 'function') {
+          viewer.destroy();
+        }
+      } catch (err) {
+        console.warn('Admin preview: unable to dispose viewer', err);
+      }
+    }
+
+    async function destroyPreviewViewer() {
+      previewReady = false;
+      if (previewViewer) {
+        await disposePreviewViewer(previewViewer);
+        previewViewer = null;
+      }
+      clearPreviewMount();
+    }
+
     async function loadProteinDatabase() {
       try {
         const response = await fetch('https://geneguessr-api.decap.workers.dev/api/proteins');
@@ -1947,6 +2000,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         .replace(/'/g, '&#39;');
     }
 
+
+
+
+
+
     async function loadProteinInPreview(uniprot) {
       const protein = proteinDatabase.find(p => p.uniprot === uniprot);
       if (!protein || !protein.structure) {
@@ -1960,33 +2018,40 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       suggestionsEl.innerHTML = '';
       suggestionsEl.classList.remove('show');
 
+      const loadToken = ++previewLoadToken;
       currentPreviewProtein = {
         name: protein.hgnc,
         length: protein.length,
-        structure: protein.structure
+        structure: deepClone(protein.structure)
       };
 
       previewStatusEl.textContent = \`Loading \${protein.hgnc}...\`;
       previewLoadingEl.hidden = false;
       previewErrorEl.hidden = true;
+      previewPlaceholderEl.hidden = true;
 
       try {
-        if (previewViewer && previewViewer.plugin) {
-          await previewViewer.plugin.clear();
-        }
-
+        await destroyPreviewViewer();
         await ensureMolstarAssets();
         const viewer = new window.PDBeMolstarPlugin();
         const previewOptions = getPreviewRenderOptions();
         if (!previewOptions) {
           throw new Error('No 3D structure available for preview');
         }
-        viewer.render(previewContainer, previewOptions);
-        previewViewer = viewer;
+        const mountTarget = previewMountEl || previewContainer;
+        if (!mountTarget) {
+          throw new Error('Preview container unavailable');
+        }
+        viewer.render(mountTarget, previewOptions);
         disableViewerUi(viewer);
         suppressViewerInteractivity(viewer);
 
-        const finalize = () => {
+        const finalize = async () => {
+          if (loadToken !== previewLoadToken) {
+            await disposePreviewViewer(viewer);
+            return;
+          }
+          previewViewer = viewer;
           previewReady = true;
           previewLoadingEl.hidden = true;
           previewStatusEl.textContent = \`Showing \${protein.hgnc}\`;
@@ -2000,34 +2065,49 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           setTimeout(finalize, 600);
         }
       } catch (err) {
-        console.error('Failed to load protein in preview:', err);
-        previewLoadingEl.hidden = true;
-        previewErrorEl.hidden = false;
-        previewErrorEl.textContent = \`Failed to load \${protein.hgnc}: \${err.message}\`;
-        previewStatusEl.textContent = 'Error loading protein';
+        if (loadToken === previewLoadToken) {
+          console.error('Failed to load protein in preview:', err);
+          previewLoadingEl.hidden = true;
+          previewErrorEl.hidden = false;
+          previewErrorEl.textContent = \`Failed to load \${protein.hgnc}: \${err.message}\`;
+          previewStatusEl.textContent = 'Error loading protein';
+        } else {
+          console.warn('Admin preview: ignored stale protein load', err);
+        }
       }
     }
+
 
     async function initializePreview() {
       if (!previewContainer || previewViewer) {
         return;
       }
+      const initToken = ++previewLoadToken;
       previewPlaceholderEl.hidden = false;
       previewLoadingEl.hidden = false;
       previewErrorEl.hidden = true;
       previewStatusEl.textContent = 'Loading preview...';
       try {
+        await destroyPreviewViewer();
         await ensureMolstarAssets();
         const viewer = new window.PDBeMolstarPlugin();
         const previewOptions = getPreviewRenderOptions();
         if (!previewOptions) {
           throw new Error('No 3D structure available for preview');
         }
-        viewer.render(previewContainer, previewOptions);
-        previewViewer = viewer;
+        const mountTarget = previewMountEl || previewContainer;
+        if (!mountTarget) {
+          throw new Error('Preview container unavailable');
+        }
+        viewer.render(mountTarget, previewOptions);
         disableViewerUi(viewer);
         suppressViewerInteractivity(viewer);
-        const finalize = () => {
+        const finalize = async () => {
+          if (initToken !== previewLoadToken) {
+            await disposePreviewViewer(viewer);
+            return;
+          }
+          previewViewer = viewer;
           previewReady = true;
           previewPlaceholderEl.hidden = true;
           previewLoadingEl.hidden = true;
@@ -2041,12 +2121,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           setTimeout(finalize, 600);
         }
       } catch (err) {
-        console.error('Preview viewer failed', err);
-        previewLoadingEl.hidden = true;
-        previewPlaceholderEl.hidden = true;
-        previewErrorEl.hidden = false;
-        previewErrorEl.textContent = 'Could not load 3D viewer: ' + err.message;
-        previewStatusEl.textContent = 'Preview unavailable';
+        if (initToken === previewLoadToken) {
+          console.error('Preview viewer failed', err);
+          previewLoadingEl.hidden = true;
+          previewPlaceholderEl.hidden = true;
+          previewErrorEl.hidden = false;
+          previewErrorEl.textContent = 'Could not load 3D viewer: ' + err.message;
+          previewStatusEl.textContent = 'Preview unavailable';
+        }
       }
     }
 
