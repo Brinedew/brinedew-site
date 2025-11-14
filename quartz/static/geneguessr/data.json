@@ -29,7 +29,7 @@
     },
     "structure": {
       "structure_id": "1UNQ",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "1UNQ",
         "method": "X-ray",
@@ -44,6 +44,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P31749-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P31749-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P31749"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "1620296e269940b19bafa78ca71e003a",
+        "template": "6hhj.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P31749.pdb?range=3-444&template=6hhj.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P31749.cif?range=3-444&template=6hhj.1.A&provider=swissmodel",
+        "gmqe": 0.801,
+        "identity": 99.326,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.752,
+        "coverage": 0.921,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 3,
+        "uniprot_end": 444,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-13T13:50:17.540000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "1UNQ",
@@ -554,6 +575,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P31751-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P31751-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P31751"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "1dd26f451aea463f58467576eff14899",
+        "template": "3d0e.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P31751.pdb?range=146-480&template=3d0e.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P31751.cif?range=146-480&template=3d0e.1.A&provider=swissmodel",
+        "gmqe": 0.636,
+        "identity": 99.701,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.73,
+        "coverage": 0.696,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 146,
+        "uniprot_end": 480,
+        "template_qsqe": 0.351,
+        "updated_at": "2025-11-11T15:31:03.344000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "1O6L",
@@ -827,6 +869,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O14727-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O14727-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/O14727"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "f18138faf1f708eefef6654a64adf62e",
+        "template": "5juy.1.E",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/O14727.pdb?range=1-1248&template=5juy.1.E&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/O14727.cif?range=1-1248&template=5juy.1.E&provider=swissmodel",
+        "gmqe": 0.775,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.67,
+        "coverage": 1,
+        "chain_ids": [
+          "E"
+        ],
+        "uniprot_start": 1,
+        "uniprot_end": 1248,
+        "template_qsqe": 0.534,
+        "updated_at": "2025-11-12T23:10:10.093000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "1CY5",
@@ -1189,7 +1252,29 @@
         "chains": "A=3024-3056",
         "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/6HKA"
       },
-      "alphafold": null
+      "alphafold": null,
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "abfe47c0ad1e011582d8a7e49b7efe49",
+        "template": "7sic.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q13315.pdb?range=5-3056&template=7sic.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q13315.cif?range=5-3056&template=7sic.1.A&provider=swissmodel",
+        "gmqe": 0.629,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.694,
+        "coverage": 0.999,
+        "chain_ids": [
+          "A",
+          "B"
+        ],
+        "uniprot_start": 5,
+        "uniprot_end": 3056,
+        "template_qsqe": 0.467,
+        "updated_at": "2025-11-13T09:49:36.405000+00:00",
+        "recommended": false
+      }
     },
     "structure_id": "6HKA",
     "alphafold_id": null,
@@ -1520,6 +1605,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q13535-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q13535-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q13535"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "3e54b3bf9e6202c2eb5b407cb67fc5fe",
+        "template": "9l46.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q13535.pdb?range=91-2644&template=9l46.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q13535.cif?range=91-2644&template=9l46.1.A&provider=swissmodel",
+        "gmqe": 0.58,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.593,
+        "coverage": 0.966,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 91,
+        "uniprot_end": 2644,
+        "template_qsqe": 0.392,
+        "updated_at": "2025-11-13T07:10:01.926000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "5YZ0",
@@ -1724,6 +1830,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q16611-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q16611-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q16611"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "6081c2c20caffcf6174ac3ee92a6b1e6",
+        "template": "2jcn.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q16611.pdb?range=23-184&template=2jcn.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q16611.cif?range=23-184&template=2jcn.1.A&provider=swissmodel",
+        "gmqe": 0.708,
+        "identity": 99.415,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.745,
+        "coverage": 0.768,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 23,
+        "uniprot_end": 184,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-11T05:17:44.124000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "5VX1",
@@ -1887,6 +2014,28 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q07812-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q07812-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q07812"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "5313e7a61ef315debba53332f09f2f4d",
+        "template": "4s0o.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q07812.pdb?range=13-192&template=4s0o.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q07812.cif?range=13-192&template=4s0o.1.A&provider=swissmodel",
+        "gmqe": 0.808,
+        "identity": 99.479,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.743,
+        "coverage": 0.938,
+        "chain_ids": [
+          "A",
+          "B"
+        ],
+        "uniprot_start": 13,
+        "uniprot_end": 192,
+        "template_qsqe": 0.542,
+        "updated_at": "2025-11-11T11:00:53.965000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "4ZIE",
@@ -2108,6 +2257,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P10415-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P10415-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P10415"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "923ac553741e48aefbfe868055206a8e",
+        "template": "8u27.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P10415.pdb?range=1-217&template=8u27.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P10415.cif?range=1-217&template=8u27.1.A&provider=swissmodel",
+        "gmqe": 0.606,
+        "identity": 90.909,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.607,
+        "coverage": 0.908,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 1,
+        "uniprot_end": 217,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-13T05:40:15.779000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "8HTS",
@@ -2347,6 +2517,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q07817-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q07817-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q07817"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "f72151617ea1b327823c13fe9e86af8d",
+        "template": "4qnq.5.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q07817.pdb?range=1-197&template=4qnq.5.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q07817.cif?range=1-197&template=4qnq.5.A&provider=swissmodel",
+        "gmqe": 0.583,
+        "identity": 97.854,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.716,
+        "coverage": 0.845,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 1,
+        "uniprot_end": 197,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-11T01:02:21.359000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "7JGW",
@@ -2507,7 +2698,7 @@
     },
     "structure": {
       "structure_id": "3FQN",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "3FQN",
         "method": "X-ray",
@@ -2522,6 +2713,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P35222-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P35222-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P35222"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "a00a625595b355216652c9194fabab84",
+        "template": "2z6g.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P35222.pdb?range=127-682&template=2z6g.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P35222.cif?range=127-682&template=2z6g.1.A&provider=swissmodel",
+        "gmqe": 0.755,
+        "identity": 97.179,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.725,
+        "coverage": 0.712,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 127,
+        "uniprot_end": 682,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-13T14:20:14.856000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "3FQN",
@@ -2967,6 +3179,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P15056"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "74c9b69323bd112084c1b5b385e7e6c5",
+        "template": "9o2z.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P15056.pdb?range=156-738&template=9o2z.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P15056.cif?range=156-738&template=9o2z.1.A&provider=swissmodel",
+        "gmqe": 0.554,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.587,
+        "coverage": 0.761,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 156,
+        "uniprot_end": 738,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T10:29:15.030000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "8C7X",
@@ -3167,6 +3400,28 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P42574-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P42574-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P42574"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "cd9050995bb3aa9f42ca5d1eedd10b2d",
+        "template": "5ibc.1.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P42574.pdb?range=29-277&template=5ibc.1.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P42574.cif?range=29-277&template=5ibc.1.B&provider=swissmodel",
+        "gmqe": 0.858,
+        "identity": 99.639,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.699,
+        "coverage": 0.899,
+        "chain_ids": [
+          "A",
+          "B"
+        ],
+        "uniprot_start": 29,
+        "uniprot_end": 277,
+        "template_qsqe": 0.901,
+        "updated_at": "2025-11-12T09:10:15.684000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "2DKO",
@@ -3371,6 +3626,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P16410-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P16410-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P16410"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "16edf55fd204a38f8d026ec118fa1560",
+        "template": "3osk.1.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P16410.pdb?range=38-160&template=3osk.1.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P16410.cif?range=38-160&template=3osk.1.B&provider=swissmodel",
+        "gmqe": 0.488,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.79,
+        "coverage": 0.552,
+        "chain_ids": [
+          "B"
+        ],
+        "uniprot_start": 38,
+        "uniprot_end": 160,
+        "template_qsqe": 0.392,
+        "updated_at": "2025-11-11T02:54:31.680000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "7CIO",
@@ -3476,7 +3752,7 @@
     },
     "structure": {
       "structure_id": "6X9J",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "6X9J",
         "method": "X-ray",
@@ -3491,6 +3767,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P26358-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P26358-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P26358"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "aa4d2df629c398a84bfe0389ad4bb83a",
+        "template": "4wxx.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P26358.pdb?range=351-1600&template=4wxx.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P26358.cif?range=351-1600&template=4wxx.1.A&provider=swissmodel",
+        "gmqe": 0.591,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.701,
+        "coverage": 0.774,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 351,
+        "uniprot_end": 1600,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-13T02:19:58.469000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "6X9J",
@@ -3633,6 +3930,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q01094-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q01094-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q01094"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "74f8df526bce906c2e3d72bac31357fd",
+        "template": "1cf7.1.C",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q01094.pdb?range=126-191&template=1cf7.1.C&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q01094.cif?range=126-191&template=1cf7.1.C&provider=swissmodel",
+        "gmqe": 0.11,
+        "identity": 64.384,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.631,
+        "coverage": 0.151,
+        "chain_ids": [
+          "C"
+        ],
+        "uniprot_start": 126,
+        "uniprot_end": 191,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-11T09:38:05.670000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "6G0P",
@@ -3852,6 +4170,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01133-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01133-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01133"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "fc76ad916a9b87ea6db6e57b20f424f3",
+        "template": "8em4.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P01133.pdb?range=23-773&template=8em4.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P01133.cif?range=23-773&template=8em4.1.A&provider=swissmodel",
+        "gmqe": 0.368,
+        "identity": 28.825,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.637,
+        "coverage": 0.622,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 23,
+        "uniprot_end": 773,
+        "template_qsqe": 0.365,
+        "updated_at": "2025-11-12T22:18:01.285000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "1NQL",
@@ -4148,6 +4487,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P00533"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "99d03b567dbcdd7fb0dd21fb40d5d283",
+        "template": "7syd.1.C",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P00533.pdb?range=25-638&template=7syd.1.C&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P00533.cif?range=25-638&template=7syd.1.C&provider=swissmodel",
+        "gmqe": 0.622,
+        "identity": 99.917,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.741,
+        "coverage": 0.507,
+        "chain_ids": [
+          "C"
+        ],
+        "uniprot_start": 25,
+        "uniprot_end": 638,
+        "template_qsqe": 0.678,
+        "updated_at": "2025-11-12T21:59:29.349000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "8A27",
@@ -4536,6 +4896,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P25445-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P25445-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P25445"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "c5307d9ea0352c763cf6a51e81db2585",
+        "template": "3ezq.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P25445.pdb?range=223-335&template=3ezq.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P25445.cif?range=223-335&template=3ezq.1.A&provider=swissmodel",
+        "gmqe": 0.23,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.771,
+        "coverage": 0.337,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 223,
+        "uniprot_end": 335,
+        "template_qsqe": 0.341,
+        "updated_at": "2025-11-10T17:09:02.355000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "3TJE",
@@ -4712,6 +5093,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P02671-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P02671-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P02671"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "84fa193d8097c882078d49fb137bf1de",
+        "template": "1ltj.1.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P02671.pdb?range=596-864&template=1ltj.1.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P02671.cif?range=596-864&template=1ltj.1.B&provider=swissmodel",
+        "gmqe": 0.225,
+        "identity": 42.164,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.635,
+        "coverage": 0.311,
+        "chain_ids": [
+          "B"
+        ],
+        "uniprot_start": 596,
+        "uniprot_end": 864,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T14:12:01.145000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "5CFA",
@@ -4949,6 +5351,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O43524-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O43524-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/O43524"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "54a8fb9d2db572d0504ac9a0c799b6ab",
+        "template": "2uzk.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/O43524.pdb?range=158-253&template=2uzk.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/O43524.cif?range=158-253&template=2uzk.1.A&provider=swissmodel",
+        "gmqe": 0.066,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.448,
+        "coverage": 0.143,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 158,
+        "uniprot_end": 253,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T06:03:16.933000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "7V9B",
@@ -5173,6 +5596,30 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P04406-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P04406-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P04406"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "b6ea07ccd5812b42ea024c079a4ddb8f",
+        "template": "1u8f.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P04406.pdb?range=3-335&template=1u8f.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P04406.cif?range=3-335&template=1u8f.1.A&provider=swissmodel",
+        "gmqe": 0.951,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.787,
+        "coverage": 0.994,
+        "chain_ids": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "uniprot_start": 3,
+        "uniprot_end": 335,
+        "template_qsqe": 0.964,
+        "updated_at": "2025-11-13T14:30:18.672000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "6YND",
@@ -5334,6 +5781,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P04439-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P04439-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P04439"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "a8110ce1e1d70c50593356e8ea695702",
+        "template": "8rbv.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P04439.pdb?range=24-299&template=8rbv.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P04439.cif?range=24-299&template=8rbv.1.A&provider=swissmodel",
+        "gmqe": 0.794,
+        "identity": 93.699,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.795,
+        "coverage": 0.756,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 24,
+        "uniprot_end": 299,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T18:50:16.771000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "3MRE",
@@ -5551,6 +6019,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P05019-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P05019-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P05019"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "79aec6418070cd4c837ad5971d9becb6",
+        "template": "8eyr.1.C",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P05019.pdb?range=52-111&template=8eyr.1.C&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P05019.cif?range=52-111&template=8eyr.1.C&provider=swissmodel",
+        "gmqe": 0.189,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.622,
+        "coverage": 0.308,
+        "chain_ids": [
+          "C"
+        ],
+        "uniprot_start": 52,
+        "uniprot_end": 111,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-11T10:19:39.893000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "1TGR",
@@ -5814,6 +6303,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01308-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01308-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01308"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "12e9c9e4e2835c302e8ba615115edda3",
+        "template": "2lwz.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P01308.pdb?range=25-110&template=2lwz.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P01308.cif?range=25-110&template=2lwz.1.A&provider=swissmodel",
+        "gmqe": 0.335,
+        "identity": 91.228,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.575,
+        "coverage": 0.782,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 25,
+        "uniprot_end": 110,
+        "template_qsqe": 0,
+        "updated_at": "2025-04-14T08:55:12.867000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "3W7Y",
@@ -6078,7 +6588,7 @@
     },
     "structure": {
       "structure_id": "8BXH",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "8BXH",
         "method": "X-ray",
@@ -6093,6 +6603,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O60674-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O60674-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/O60674"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "06a47ffcc300b3340ae364cbdaf040be",
+        "template": "8ewy.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/O60674.pdb?range=36-1128&template=8ewy.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/O60674.cif?range=36-1128&template=8ewy.1.A&provider=swissmodel",
+        "gmqe": 0.64,
+        "identity": 45.877,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.701,
+        "coverage": 0.966,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 36,
+        "uniprot_end": 1128,
+        "template_qsqe": 0.197,
+        "updated_at": "2025-11-13T12:55:15.724000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "8BXH",
@@ -6507,6 +7038,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01116-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01116-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01116"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "4a8c310887927cecc35b9de4b784596e",
+        "template": "4dso.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P01116.pdb?range=2-181&template=4dso.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P01116.cif?range=2-181&template=4dso.1.A&provider=swissmodel",
+        "gmqe": 0.855,
+        "identity": 88.77,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.746,
+        "coverage": 0.952,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 2,
+        "uniprot_end": 181,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T02:30:18.607000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "6P0Z",
@@ -6906,6 +7458,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P02545-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P02545-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P02545"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "eb7150b50eb8f886ff7e2f733b1dcf05",
+        "template": "8to0.19.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P02545.pdb?range=264-380&template=8to0.19.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P02545.cif?range=264-380&template=8to0.19.A&provider=swissmodel",
+        "gmqe": 0.084,
+        "identity": 14.53,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.824,
+        "coverage": 0.176,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 264,
+        "uniprot_end": 380,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T05:47:02.410000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "7WZZ",
@@ -7086,6 +7659,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q02750-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q02750-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q02750"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "f551ff58c2776de1376b4f8830643b0f",
+        "template": "9o0u.1.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q02750.pdb?range=30-380&template=9o0u.1.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q02750.cif?range=30-380&template=9o0u.1.B&provider=swissmodel",
+        "gmqe": 0.813,
+        "identity": 99.491,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.745,
+        "coverage": 0.893,
+        "chain_ids": [
+          "B"
+        ],
+        "uniprot_start": 30,
+        "uniprot_end": 380,
+        "template_qsqe": 0,
+        "updated_at": "2025-10-15T14:05:16.725000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "7B7R",
@@ -7298,6 +7892,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q07820-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q07820-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q07820"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "ac05f6a57fb5fffa7a8ddcdf26e1ba8d",
+        "template": "5jsb.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q07820.pdb?range=172-322&template=5jsb.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q07820.cif?range=172-322&template=5jsb.1.A&provider=swissmodel",
+        "gmqe": 0.378,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.734,
+        "coverage": 0.431,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 172,
+        "uniprot_end": 322,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-10T19:51:54.532000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "8VJP",
@@ -7443,6 +8058,28 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q00987-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q00987-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q00987"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "d660115260cd44ac16a7f28c9627208c",
+        "template": "5j7f.2.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q00987.pdb?range=11-114&template=5j7f.2.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q00987.cif?range=11-114&template=5j7f.2.A&provider=swissmodel",
+        "gmqe": 0.205,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.742,
+        "coverage": 0.212,
+        "chain_ids": [
+          "A",
+          "B"
+        ],
+        "uniprot_start": 11,
+        "uniprot_end": 114,
+        "template_qsqe": 0.333,
+        "updated_at": "2025-11-11T16:35:31.544000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "6Q9L",
@@ -7681,7 +8318,7 @@
     },
     "structure": {
       "structure_id": "6ESM",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "6ESM",
         "method": "X-ray",
@@ -7696,6 +8333,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P14780-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P14780-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P14780"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "3007ea164b0dd6f5ac6deefabf78e21b",
+        "template": "1ck7.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P14780.pdb?range=28-704&template=1ck7.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P14780.cif?range=28-704&template=1ck7.1.A&provider=swissmodel",
+        "gmqe": 0.671,
+        "identity": 48.47,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.706,
+        "coverage": 0.958,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 28,
+        "uniprot_end": 704,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T07:50:25.885000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "6ESM",
@@ -7887,6 +8545,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P42345-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P42345-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P42345"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "d3be1a657b7fdb5ab4c03e12d4452164",
+        "template": "9f45.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P42345.pdb?range=17-2549&template=9f45.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P42345.cif?range=17-2549&template=9f45.1.A&provider=swissmodel",
+        "gmqe": 0.612,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.693,
+        "coverage": 0.994,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 17,
+        "uniprot_end": 2549,
+        "template_qsqe": 0.519,
+        "updated_at": "2025-11-13T06:45:22.960000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "4DRI",
@@ -8459,6 +9138,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q16236-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q16236-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q16236"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "117b97a399e87be2f7924ce56f248f54",
+        "template": "7x5g.2.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q16236.pdb?range=455-558&template=7x5g.2.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q16236.cif?range=455-558&template=7x5g.2.B&provider=swissmodel",
+        "gmqe": 0.121,
+        "identity": 99.083,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.894,
+        "coverage": 0.172,
+        "chain_ids": [
+          "B"
+        ],
+        "uniprot_start": 455,
+        "uniprot_end": 558,
+        "template_qsqe": 0,
+        "updated_at": "2025-10-29T08:10:17.429000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "2FLU",
@@ -8700,6 +9400,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P46531-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P46531-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P46531"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "3804777010fb8e332bdafeb7268cd14b",
+        "template": "3l95.1.C",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P46531.pdb?range=1448-1726&template=3l95.1.C&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P46531.cif?range=1448-1726&template=3l95.1.C&provider=swissmodel",
+        "gmqe": 0.07,
+        "identity": 97.5,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.603,
+        "coverage": 0.109,
+        "chain_ids": [
+          "C"
+        ],
+        "uniprot_start": 1448,
+        "uniprot_end": 1726,
+        "template_qsqe": 0.198,
+        "updated_at": "2025-11-13T06:37:17.783000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "5L0R",
@@ -9083,6 +9804,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P38936"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "9ce8168c00c3f6d663f866816b83e0b2",
+        "template": "6p8h.1.C",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P38936.pdb?range=14-67&template=6p8h.1.C&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P38936.cif?range=14-67&template=6p8h.1.C&provider=swissmodel",
+        "gmqe": 0.244,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.553,
+        "coverage": 0.329,
+        "chain_ids": [
+          "C"
+        ],
+        "uniprot_start": 14,
+        "uniprot_end": 67,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T15:10:15.596000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "5E0U",
@@ -9353,7 +10095,7 @@
     },
     "structure": {
       "structure_id": "9C5S",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "9C5S",
         "method": "X-ray",
@@ -9368,6 +10110,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P04637"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "c133dfce69f606f20865e9008199f852",
+        "template": "3q01.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P04637.pdb?range=94-356&template=3q01.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P04637.cif?range=94-356&template=3q01.1.A&provider=swissmodel",
+        "gmqe": 0.505,
+        "identity": 92.704,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.756,
+        "coverage": 0.669,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 94,
+        "uniprot_end": 356,
+        "template_qsqe": 0.382,
+        "updated_at": "2025-11-13T12:20:17.416000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "9C5S",
@@ -9849,6 +10612,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q15116-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q15116-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q15116"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "9d3bad62b9c482f023605c4836d94d8f",
+        "template": "6jjp.2.C",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q15116.pdb?range=29-146&template=6jjp.2.C&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q15116.cif?range=29-146&template=6jjp.2.C&provider=swissmodel",
+        "gmqe": 0.371,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.726,
+        "coverage": 0.41,
+        "chain_ids": [
+          "C"
+        ],
+        "uniprot_start": 29,
+        "uniprot_end": 146,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T20:40:15.377000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "6UMU",
@@ -9946,7 +10730,7 @@
     },
     "structure": {
       "structure_id": "5O45",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "5O45",
         "method": "X-ray",
@@ -9961,6 +10745,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q9NZQ7-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q9NZQ7-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q9NZQ7"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "59e77826124f78fb87da94c44752feb3",
+        "template": "7xae.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q9NZQ7.pdb?range=18-229&template=7xae.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q9NZQ7.cif?range=18-229&template=7xae.1.A&provider=swissmodel",
+        "gmqe": 0.714,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.738,
+        "coverage": 0.731,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 18,
+        "uniprot_end": 229,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-13T09:45:16.237000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "5O45",
@@ -10092,7 +10897,7 @@
     },
     "structure": {
       "structure_id": "9ASF",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "9ASF",
         "method": "X-ray",
@@ -10107,6 +10912,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P42336-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P42336-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P42336"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "57dfffeaf93feb9540374ed9ab20eaca",
+        "template": "4l2y.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P42336.pdb?range=8-1053&template=4l2y.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P42336.cif?range=8-1053&template=4l2y.1.A&provider=swissmodel",
+        "gmqe": 0.847,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.733,
+        "coverage": 0.979,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 8,
+        "uniprot_end": 1053,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T19:43:21.344000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "9ASF",
@@ -10510,6 +11336,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q13131-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q13131-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q13131"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "676dc3992822c9654f4f67c3eea7f843",
+        "template": "6b1u.2.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q13131.pdb?range=20-559&template=6b1u.2.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q13131.cif?range=20-559&template=6b1u.2.A&provider=swissmodel",
+        "gmqe": 0.745,
+        "identity": 76.427,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.708,
+        "coverage": 0.966,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 20,
+        "uniprot_end": 559,
+        "template_qsqe": 0,
+        "updated_at": "2025-08-18T18:58:25.740000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "6C9H",
@@ -10710,11 +11557,11 @@
     },
     "structure": {
       "structure_id": "3LLK",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "3LLK",
         "method": "X-ray",
-        "resolution": 2.0,
+        "resolution": 2,
         "resolution_raw": "2.00 A",
         "chains": "A/B/C=286-546",
         "url": "https://www.ebi.ac.uk/pdbe/entry/pdb/3LLK"
@@ -10725,6 +11572,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O00391-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O00391-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/O00391"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "b93b1717a747a6c55e810b3b737bb504",
+        "template": "3t58.2.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/O00391.pdb?range=33-544&template=3t58.2.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/O00391.cif?range=33-544&template=3t58.2.A&provider=swissmodel",
+        "gmqe": 0.596,
+        "identity": 78.752,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.701,
+        "coverage": 0.685,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 33,
+        "uniprot_end": 544,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T09:39:32.463000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "3LLK",
@@ -10855,6 +11723,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P06400-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P06400-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P06400"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "dd07f145658e8063a5dbfaaa0ca3590b",
+        "template": "4ell.2.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P06400.pdb?range=384-786&template=4ell.2.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P06400.cif?range=384-786&template=4ell.2.A&provider=swissmodel",
+        "gmqe": 0.329,
+        "identity": 99.02,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.709,
+        "coverage": 0.434,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 384,
+        "uniprot_end": 786,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T16:22:51.174000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "2R7G",
@@ -11109,6 +11998,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q15465-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q15465-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q15465"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "de7c46413cafd35f32f55196538802d6",
+        "template": "6n7h.1.C",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q15465.pdb?range=24-197&template=6n7h.1.C&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q15465.cif?range=24-197&template=6n7h.1.C&provider=swissmodel",
+        "gmqe": 0.262,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.718,
+        "coverage": 0.377,
+        "chain_ids": [
+          "C"
+        ],
+        "uniprot_start": 24,
+        "uniprot_end": 197,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T09:20:15.544000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "6PJV",
@@ -11418,6 +12328,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q96EB6-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q96EB6-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q96EB6"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "0504ad1f1969d5cda2f0b748b808c459",
+        "template": "4zzh.1.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q96EB6.pdb?range=183-502&template=4zzh.1.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q96EB6.cif?range=183-502&template=4zzh.1.B&provider=swissmodel",
+        "gmqe": 0.352,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.769,
+        "coverage": 0.428,
+        "chain_ids": [
+          "B"
+        ],
+        "uniprot_start": 183,
+        "uniprot_end": 502,
+        "template_qsqe": 0.472,
+        "updated_at": "2025-11-12T09:39:36.482000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "8ANB",
@@ -11822,6 +12753,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q9GZV5-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q9GZV5-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q9GZV5"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "e2249e84895920a5d2baa7c76c2a2e41",
+        "template": "6jk1.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q9GZV5.pdb?range=124-182&template=6jk1.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q9GZV5.cif?range=124-182&template=6jk1.1.A&provider=swissmodel",
+        "gmqe": 0.057,
+        "identity": 63.636,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.561,
+        "coverage": 0.147,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 124,
+        "uniprot_end": 182,
+        "template_qsqe": 0,
+        "updated_at": "2025-04-29T05:09:50.924000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "6RHC",
@@ -11977,6 +12929,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-O14746-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-O14746-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/O14746"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "f29891ffdde8a48d91af6a6f7e54fcf1",
+        "template": "7qxa.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/O14746.pdb?range=4-1132&template=7qxa.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/O14746.cif?range=4-1132&template=7qxa.1.A&provider=swissmodel",
+        "gmqe": 0.731,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.669,
+        "coverage": 0.997,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 4,
+        "uniprot_end": 1132,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-12T20:43:18.783000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "5MEO",
@@ -12169,6 +13142,28 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01137-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01137-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01137"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "6a3c4e880657514cb397541b39488dd1",
+        "template": "5vqf.2.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P01137.pdb?range=30-390&template=5vqf.2.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P01137.cif?range=30-390&template=5vqf.2.A&provider=swissmodel",
+        "gmqe": 0.719,
+        "identity": 93.629,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.714,
+        "coverage": 0.926,
+        "chain_ids": [
+          "A",
+          "B"
+        ],
+        "uniprot_start": 30,
+        "uniprot_end": 390,
+        "template_qsqe": 0.739,
+        "updated_at": "2025-11-11T01:46:45.453000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "8UDZ",
@@ -12579,6 +13574,29 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P01375-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P01375-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P01375"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "60ada54e69e411bcf6b08e9dacff7a48",
+        "template": "2e7a.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P01375.pdb?range=84-233&template=2e7a.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P01375.cif?range=84-233&template=2e7a.1.A&provider=swissmodel",
+        "gmqe": 0.587,
+        "identity": 92.357,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.76,
+        "coverage": 0.644,
+        "chain_ids": [
+          "A",
+          "B",
+          "C"
+        ],
+        "uniprot_start": 84,
+        "uniprot_end": 233,
+        "template_qsqe": 0.754,
+        "updated_at": "2025-11-11T04:40:16.613000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "5UUI",
@@ -12920,7 +13938,7 @@
     },
     "structure": {
       "structure_id": "6TGK",
-      "primary_source": "pdb",
+      "primary_source": "swissmodel",
       "pdb": {
         "id": "6TGK",
         "method": "X-ray",
@@ -12935,6 +13953,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-Q05086-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-Q05086-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/Q05086"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "332420ce84984c65d8e5bd64d8e9642a",
+        "template": "8jrn.1.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/Q05086.pdb?range=120-869&template=8jrn.1.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/Q05086.cif?range=120-869&template=8jrn.1.B&provider=swissmodel",
+        "gmqe": 0.747,
+        "identity": 99.886,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.7,
+        "coverage": 0.857,
+        "chain_ids": [
+          "B"
+        ],
+        "uniprot_start": 120,
+        "uniprot_end": 869,
+        "template_qsqe": 0.79,
+        "updated_at": "2025-11-12T14:32:37.957000+00:00",
+        "recommended": true
       }
     },
     "structure_id": "6TGK",
@@ -13055,6 +14094,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P56704-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P56704-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P56704"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "d4718be3a074cacad6067a212ae06e44",
+        "template": "7drt.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P56704.pdb?range=19-352&template=7drt.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P56704.cif?range=19-352&template=7drt.1.A&provider=swissmodel",
+        "gmqe": 0.804,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.654,
+        "coverage": 0.949,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 19,
+        "uniprot_end": 352,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-10T20:07:56.650000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "7DRT",
@@ -13265,6 +14325,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P98170-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P98170-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P98170"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "fd05da3fb84e9e4058be71e0c1491d3d",
+        "template": "2kna.1.A",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P98170.pdb?range=367-448&template=2kna.1.A&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P98170.cif?range=367-448&template=2kna.1.A&provider=swissmodel",
+        "gmqe": 0.116,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.699,
+        "coverage": 0.165,
+        "chain_ids": [
+          "A"
+        ],
+        "uniprot_start": 367,
+        "uniprot_end": 448,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-11T17:19:17.906000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "4J44",
@@ -13460,6 +14541,27 @@
         "pae_url": "https://alphafold.ebi.ac.uk/files/AF-P46937-F1-predicted_aligned_error_v4.json",
         "thumbnail_url": "https://alphafold.ebi.ac.uk/files/AF-P46937-F1-thumbnail.png",
         "viewer_url": "https://alphafold.ebi.ac.uk/entry/P46937"
+      },
+      "swiss_model": {
+        "provider": "SWISSMODEL",
+        "model_id": "ee00c5e5e15f1ce0df80df8f9edd2e73",
+        "template": "3kys.1.B",
+        "coordinates_url": "https://swissmodel.expasy.org/repository/uniprot/P46937.pdb?range=51-100&template=3kys.1.B&provider=swissmodel",
+        "format": "pdb",
+        "modelcif_url": "https://swissmodel.expasy.org/repository/uniprot/P46937.cif?range=51-100&template=3kys.1.B&provider=swissmodel",
+        "gmqe": 0.067,
+        "identity": 100,
+        "method": "HOMOLOGY MODELLING",
+        "qmean": 0.819,
+        "coverage": 0.099,
+        "chain_ids": [
+          "B"
+        ],
+        "uniprot_start": 51,
+        "uniprot_end": 100,
+        "template_qsqe": 0,
+        "updated_at": "2025-11-11T18:05:00.521000+00:00",
+        "recommended": false
       }
     },
     "structure_id": "6G6X",

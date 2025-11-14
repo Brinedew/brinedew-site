@@ -2197,6 +2197,7 @@ let gameState = {
       const newCardHtml = renderCollapsibleFeedback(latestGuess, true);
       guessesEl.insertAdjacentHTML('afterbegin', newCardHtml);
       attachCollapseListeners();
+      syncFeedbackContentHeights();
       // Preserve existing Mol* canvases: never touch earlier cards when inserting the new one.
       guessesEl.querySelectorAll('.pg-feedback-card:not(:first-child) .matched-highlight').forEach((el) => {
         el.classList.remove('matched-highlight');
@@ -2215,6 +2216,7 @@ let gameState = {
     
     // Attach collapse toggle listeners
     attachCollapseListeners();
+    syncFeedbackContentHeights();
   }
 
   function buildFeedbackCardMarkup(protein, options = {}) {
@@ -2343,6 +2345,7 @@ let gameState = {
         card.classList.toggle('collapsed', !newExpanded);
         card.dataset.expanded = newExpanded;
         this.setAttribute('aria-expanded', newExpanded);
+        setFeedbackContentHeight(content, newExpanded);
         chevron.textContent = newExpanded ? '▼' : '▶';
         
         // Persist state
@@ -2363,6 +2366,42 @@ let gameState = {
       });
     });
   }
+
+  function setFeedbackContentHeight(content, expanded) {
+    if (!content) {
+      return;
+    }
+    if (expanded) {
+      content.style.maxHeight = content.scrollHeight + 'px';
+    } else {
+      content.style.maxHeight = '0px';
+    }
+  }
+
+  function syncFeedbackContentHeights() {
+    window.requestAnimationFrame(() => {
+      const cards = document.querySelectorAll('.pg-feedback-card');
+      cards.forEach((card) => {
+        const content = card.querySelector('.pg-feedback-content');
+        if (!content) {
+          return;
+        }
+        const expanded = card.dataset.expanded === 'true';
+        setFeedbackContentHeight(content, expanded || card.classList.contains('pg-feedback-final'));
+      });
+    });
+  }
+
+  let feedbackResizeHandle = null;
+  window.addEventListener('resize', () => {
+    if (feedbackResizeHandle) {
+      clearTimeout(feedbackResizeHandle);
+    }
+    feedbackResizeHandle = setTimeout(() => {
+      feedbackResizeHandle = null;
+      syncFeedbackContentHeights();
+    }, 200);
+  });
   
   function renderResultSection(gameOver) {
     const slot = document.getElementById('pg-result-slot');
