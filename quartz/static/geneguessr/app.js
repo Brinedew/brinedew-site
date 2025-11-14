@@ -89,27 +89,27 @@
     const swissModel = structure.swiss_model;
     if (structure.primary_source === 'pdb' && structure.structure_id) {
       const resolution = structure.pdb && typeof structure.pdb.resolution === 'number'
-        ? ${structure.pdb.resolution.toFixed(2)} A
+        ? `${structure.pdb.resolution.toFixed(2)} A`
         : (structure.pdb && structure.pdb.resolution_raw) || '';
-      return resolution ? PDB  -  : PDB ;
+      return resolution ? `PDB - ${resolution}` : 'PDB';
     }
     if (structure.primary_source === 'swissmodel' && swissModel) {
       return formatSwissLabel(swissModel);
     }
     if (structure.primary_source === 'alphafold' && structure.alphafold && structure.alphafold.id) {
-      return AlphaFold ;
+      return 'AlphaFold';
     }
     if (swissModel) {
       return formatSwissLabel(swissModel);
     }
     if (structure.pdb && structure.pdb.id) {
       const resolution = typeof structure.pdb.resolution === 'number'
-        ? ${structure.pdb.resolution.toFixed(2)} A
+        ? `${structure.pdb.resolution.toFixed(2)} A`
         : structure.pdb.resolution_raw || '';
-      return resolution ? PDB  -  : PDB ;
+      return resolution ? `PDB - ${resolution}` : 'PDB';
     }
     if (structure.alphafold && structure.alphafold.id) {
-      return AlphaFold ;
+      return 'AlphaFold';
     }
     return '';
   }
@@ -119,10 +119,14 @@
       return 'SWISS-MODEL';
     }
     const labelId = model.model_id || model.template || model.pdb_id || 'SWISS-MODEL';
-    const coveragePart = typeof model.coverage === 'number' ? ${Math.round(model.coverage * 100)}% : '';
-    const qmeanPart = typeof model.qmean === 'number' ? QMEAN  : '';
+    const coveragePart = typeof model.coverage === 'number'
+      ? `${Math.round(model.coverage * 100)}%`
+      : '';
+    const qmeanPart = typeof model.qmean === 'number'
+      ? `QMEAN ${model.qmean.toFixed(2)}`
+      : '';
     const extras = [coveragePart, qmeanPart].filter(Boolean).join(', ');
-    return extras ? SWISS-MODEL  () : SWISS-MODEL ;
+    return extras ? `SWISS-MODEL (${extras})` : 'SWISS-MODEL';
   }
 
   function resolveStructureRepresentation(structure, proteinLength) {
