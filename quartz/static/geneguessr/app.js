@@ -1528,8 +1528,8 @@
   const viewerStructureInfo = new Map();
   const renderedViewers = new Set();
   let gamePayload = null;
-  let collapseDelegationBound = false;
-  let spoilerDelegationBound = false;
+let collapseDelegationBound = false;
+let spoilerDelegationBound = false;
 
   function markViewerDirty(containerId) {
     if (!containerId) {
@@ -1539,14 +1539,13 @@
     viewerStructureInfo.delete(containerId);
   }
 
-  function markGuessViewersDirty() {
-    for (const id of Array.from(renderedViewers)) {
-      if (id.startsWith('guess-card-')) {
-        markViewerDirty(id);
-      }
+function markGuessViewersDirty() {
+  for (const id of Array.from(renderedViewers)) {
+    if (id.startsWith('guess-card-')) {
+      markViewerDirty(id);
     }
   }
-  let collapseDelegationBound = false;
+}
 
   async function fetchGameBootstrap() {
     const response = await fetch(`${API_BASE}/api/game/bootstrap`, {
