@@ -158,6 +158,12 @@
 }
 
 /* Card-embedded structure viewer with 16:9 aspect ratio */
+.pg-card-structure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .pg-card-structure-viewer {
   position: relative;
   width: 100%;
@@ -166,7 +172,6 @@
   border-radius: 8px;
   background: var(--ui-bg);
   overflow: hidden;
-  margin-bottom: 0.75rem;
 }
 
 .pg-structure-placeholder,
@@ -183,6 +188,22 @@
   color: var(--secondary);
   gap: 0.5rem;
   background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(245,245,245,0.9));
+}
+
+.pg-structure-source {
+  font-size: 0.8rem;
+  text-align: right;
+  color: var(--secondary);
+  letter-spacing: 0.02em;
+}
+
+.pg-structure-source[data-structure-source="alphafold"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+:root[data-theme="dark"] .pg-structure-source:not([data-structure-source="alphafold"]) {
+  color: var(--gray);
 }
 
 :root[data-theme="dark"] .pg-structure-placeholder,

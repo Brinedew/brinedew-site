@@ -190,6 +190,39 @@
     return null;
   }
 
+  function resolveProteinStructure(protein) {
+    if (!protein || !protein.structure) {
+      return null;
+    }
+    return resolveStructureRepresentation(protein.structure, protein.length);
+  }
+
+  function getStructureSourceInfo(protein) {
+    const representation = resolveProteinStructure(protein);
+    if (!representation) {
+      return null;
+    }
+    const source = representation.source;
+    if (source === 'alphafold') {
+      return { source, label: 'AlphaFold', representation };
+    }
+    if (source === 'pdb') {
+      return { source, label: 'PDB', representation };
+    }
+    if (source === 'swissmodel') {
+      return { source, label: 'SWISS-MODEL', representation };
+    }
+    return { source, label: source, representation };
+  }
+
+  function isAlphaFoldOnlyProtein(protein) {
+    if (!protein) {
+      return false;
+    }
+    const resolved = resolveProteinStructure(protein);
+    return Boolean(resolved && resolved.source === 'alphafold');
+  }
+
 
   function parseChainSegments(spec) {
     if (typeof spec !== 'string') {
@@ -393,20 +426,26 @@
     if (!protein || !hasStructureData(protein)) {
       return '';
     }
-    const structure = protein.structure || {};
-    const meta = getStructureMetaLabel(structure);
+    const structureSource = getStructureSourceInfo(protein);
+    const showAlphaFoldSource = Boolean(structureSource && structureSource.source === 'alphafold');
+    const sourceBadge = showAlphaFoldSource
+      ? `<div class="pg-structure-source" data-structure-source="alphafold">Source: ${structureSource.label}</div>`
+      : '';
     
     return `
-      <div class="pg-card-structure-viewer" id="${viewerId}" role="region" aria-label="3D structure viewer">
-        <div class="pg-structure-placeholder" id="${viewerId}-placeholder" hidden>
-          <p class="pg-structure-tip">Loading structure…</p>
+      <div class="pg-card-structure">
+        <div class="pg-card-structure-viewer" id="${viewerId}" role="region" aria-label="3D structure viewer">
+          <div class="pg-structure-placeholder" id="${viewerId}-placeholder" hidden>
+            <p class="pg-structure-tip">Loading structure.</p>
+          </div>
+          <div class="pg-structure-loading" id="${viewerId}-loading" hidden>Loading viewer.</div>
+          <div class="pg-structure-error" id="${viewerId}-error" hidden></div>
         </div>
-        <div class="pg-structure-loading" id="${viewerId}-loading" hidden>Loading viewer…</div>
-        <div class="pg-structure-error" id="${viewerId}-error" hidden></div>
+        ${sourceBadge}
       </div>
     `;
   }
-  
+
   function renderStructureHint() {
     // Legacy function - no longer used in layout
     return '';
@@ -1508,6 +1547,12 @@ let gameState = {
     if (answerOverride && eligibleIds.includes(answerOverride)) {
       return answerOverride;
     }
+
+    const filteredIds = filterEligibleQuestionIds(eligibleIds);
+    const selectionPool = filteredIds.length ? filteredIds : eligibleIds;
+    if (!filteredIds.length) {
+      console.warn('[Geneguessr] AlphaFold-only question pool detected, falling back to full eligible list.');
+    }
     
     // Hash date + salt
     const message = today + '|' + salt;
@@ -1515,9 +1560,29 @@ let gameState = {
     
     // Convert first 16 hex chars to int, mod by array length
     const hashInt = parseInt(hash.slice(0, 16), 16);
-    const index = hashInt % eligibleIds.length;
+    const index = hashInt % selectionPool.length;
     
-    return eligibleIds[index];
+    return selectionPool[index];
+  }
+
+  function filterEligibleQuestionIds(eligibleIds) {
+    if (!Array.isArray(eligibleIds)) {
+      return [];
+    }
+    const filtered = [];
+    let skipped = 0;
+    for (const id of eligibleIds) {
+      const protein = getProteinById(id);
+      if (protein && isAlphaFoldOnlyProtein(protein)) {
+        skipped += 1;
+        continue;
+      }
+      filtered.push(id);
+    }
+    if (skipped) {
+      console.info(`[Geneguessr] Skipped ${skipped} AlphaFold-only proteins from today's question pool.`);
+    }
+    return filtered;
   }
 
   /**

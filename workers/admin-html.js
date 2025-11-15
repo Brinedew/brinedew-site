@@ -1882,13 +1882,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           return;
         }
 
-        suggestionsEl.innerHTML = matches.map((p, idx) => \`
-          <div class="protein-suggestion" data-uniprot="\${p.uniprot}" data-index="\${idx}" title="\${escapeHtml(p.full_name)}">
-            <div class="protein-suggestion-title">\${escapeHtml(p.hgnc)}</div>
-            <div class="protein-suggestion-sub">\${escapeHtml(p.full_name || p.hgnc)}</div>
-            <div class="protein-suggestion-uniprot">\${p.uniprot}</div>
-          </div>
-        \`).join('');
+        suggestionsEl.innerHTML = matches.map((p, idx) => {
+          const title = escapeHtml(p.full_name || '');
+          const hgnc = escapeHtml(p.hgnc || '');
+          const fullName = escapeHtml(p.full_name || p.hgnc || '');
+          return ''
+            + '<div class="protein-suggestion" data-uniprot="' + p.uniprot + '" data-index="' + idx + '" title="' + title + '">'
+            + '<div class="protein-suggestion-title">' + hgnc + '</div>'
+            + '<div class="protein-suggestion-sub">' + fullName + '</div>'
+            + '<div class="protein-suggestion-uniprot">' + p.uniprot + '</div>'
+            + '</div>';
+        }).join('');
         suggestionsEl.classList.add('show');
         selectedIndex = -1;
 
@@ -2005,13 +2009,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
       const loadToken = ++previewLoadToken;
       const pendingLabel = localProtein ? localProtein.hgnc : uniprot;
-      previewStatusEl.textContent = `Loading ${pendingLabel}...`;
+      previewStatusEl.textContent = 'Loading ' + pendingLabel + '...';
       previewLoadingEl.hidden = false;
       previewErrorEl.hidden = true;
       previewPlaceholderEl.hidden = true;
 
       try {
-        const response = await fetch(`${API_BASE}/api/admin/protein-preview?uniprot=${encodeURIComponent(uniprot)}`, {
+        const response = await fetch(API_BASE + '/api/admin/protein-preview?uniprot=' + encodeURIComponent(uniprot), {
           credentials: 'include'
         });
         const payload = await response.json();
@@ -2042,7 +2046,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewStructureChoice = payload.representation;
           previewReady = true;
           previewLoadingEl.hidden = true;
-          previewStatusEl.textContent = `Showing ${payload.protein?.hgnc || uniprot}`;
+          previewStatusEl.textContent = 'Showing ' + (payload.protein && payload.protein.hgnc ? payload.protein.hgnc : uniprot);
           refreshPreview({ immediate: true });
           applyPreviewChainColoring(viewer);
         };
@@ -2057,7 +2061,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           console.error('Failed to load protein in preview:', err);
           previewLoadingEl.hidden = true;
           previewErrorEl.hidden = false;
-          previewErrorEl.textContent = `Failed to load ${pendingLabel}: ${err.message}`;
+          previewErrorEl.textContent = 'Failed to load ' + pendingLabel + ': ' + (err && err.message ? err.message : err);
           previewStatusEl.textContent = 'Error loading protein';
         } else {
           console.warn('Admin preview: ignored stale protein load', err);
@@ -2085,19 +2089,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
     }
 
-      return {
-        ...baseOptions,
-        hideControls: true,
-        pdbeLink: false,
-        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
-        visualStyle: 'cartoon',
-        lighting: 'glossy',
-        loadMaps: false,
-        selectInteraction: false,
-        lowPrecisionCoords: false,
-        hideStructureSourceTooltip: true
-      };
-    }
 
     function disableViewerUi(viewer) {
       try {
@@ -2459,7 +2450,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
 </body>
 </html>`;
-
 
 
 
