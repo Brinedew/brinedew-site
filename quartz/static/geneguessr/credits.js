@@ -108,6 +108,13 @@
     }
   }
 
+  function resetHintsToDefault() {
+    const state = readState()
+    state.hints = DEFAULT_HINTS
+    writeState(state)
+    return state.hints
+  }
+
   global.GeneGuessrHints = {
     initRound,
     getHints,
@@ -117,6 +124,7 @@
     isHintRevealed,
     revealHint,
     resetRound,
+    resetHintsToDefault,
     DEFAULT_COST,
   }
 })(window)

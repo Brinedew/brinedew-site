@@ -800,6 +800,19 @@
     });
   }
 
+  function resetHintBalanceToDefault() {
+    const api = hintsApi();
+    if (!api || typeof api.resetHintsToDefault !== 'function') {
+      return;
+    }
+    try {
+      const value = api.resetHintsToDefault();
+      updateHintDisplays(typeof value === 'number' ? value : undefined);
+    } catch (err) {
+      console.warn('Geneguessr: failed to reset hint balance for new daily', err);
+    }
+  }
+
   function isHintRevealed(hintId) {
     if (!hintId) return true;
     const api = hintsApi();
@@ -1453,6 +1466,8 @@ let gameState = {
     const today = new Date().toISOString().slice(0, 10);
     const saved = loadState();
     
+    let resetHintsForDaily = false;
+    
     if (saved && saved.date === today) {
       gameState = {
         date: today,
@@ -1473,6 +1488,7 @@ let gameState = {
         practiceMode: false,
         statsRecorded: false
       };
+      resetHintsForDaily = true;
     }
     
     const targetId = await pickTodaysProtein(indexData.eligible_ids, indexData.salt_hash);
@@ -1515,10 +1531,16 @@ let gameState = {
       })
       .filter(Boolean);
     
-    if (saved && saved.date === today && saved.targetId && saved.targetId !== targetId) {
+    const savedTargetMismatch = Boolean(saved && saved.date === today && saved.targetId && saved.targetId !== targetId);
+    if (savedTargetMismatch) {
       gameState.guesses = [];
       gameState.won = false;
       gameState.hintsUnlocked = 1;
+      resetHintsForDaily = true;
+    }
+    
+    if (resetHintsForDaily) {
+      resetHintBalanceToDefault();
     }
     
     saveState();
