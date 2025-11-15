@@ -1234,6 +1234,28 @@
     if (errorEl) errorEl.hidden = true;
     
     try {
+      // Before loading the plugin, attempt to verify the coordinates URL is reachable.
+      // This avoids feeding an HTML error page or a timed-out response to Mol*, which
+      // can cause "Invalid data cell" parsing errors.
+      const coordsUrl = options.customData && options.customData.url;
+      if (coordsUrl) {
+        const ok = await checkUrlAccessible(coordsUrl, 3000);
+        if (!ok) {
+          // Try a fallback: if this representation is from SwissModel, try RCSB PDB by pdb id
+          if (representation && representation.pdb && representation.pdb.id) {
+            const rcsbUrl = `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`;
+            const rcsbOk = await checkUrlAccessible(rcsbUrl, 3000);
+            if (rcsbOk) {
+              options.customData.url = rcsbUrl;
+              options.customData.format = detectStructureFormat(rcsbUrl, options.customData.format);
+            } else {
+              throw new Error('structure-source-unavailable');
+            }
+          } else {
+            throw new Error('structure-source-unavailable');
+          }
+        }
+      }
       await ensureMolstarAssets();
       if (!window.PDBeMolstarPlugin) {
         throw new Error('PDBeMolstarPlugin missing after script load');
@@ -1281,6 +1303,19 @@
       if (placeholder) placeholder.hidden = false;
     } finally {
       if (loadingEl) loadingEl.hidden = true;
+    }
+  }
+
+  async function checkUrlAccessible(url, timeoutMs = 3000) {
+    if (!url || typeof url !== 'string') return false;
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      const resp = await fetch(url, { method: 'HEAD', mode: 'cors', signal: controller.signal });
+      clearTimeout(id);
+      return !!(resp && resp.ok);
+    } catch (err) {
+      return false;
     }
   }
   
