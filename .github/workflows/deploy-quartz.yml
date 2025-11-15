@@ -65,9 +65,7 @@ jobs:
       - name: Verify Geneguessr assets bundled
         run: |
           ls -lah public/static/geneguessr
-          grep -n "loadData" public/static/geneguessr/app.js
-          test -s public/static/geneguessr/data.json
-          test -s public/static/geneguessr/index.json
+          grep -n "bootstrapGame" public/static/geneguessr/app.js
 
       - name: Ensure CNAME file exists
         run: |

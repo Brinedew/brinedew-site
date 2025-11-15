@@ -476,7 +476,7 @@
     }
     if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
       const obj = {
-        moleculeId: representation.alphafold.id || representation.structureId || targetProtein?.uniprot,
+        moleculeId: representation.alphafold.id || representation.structureId || 'structure',
         customData: {
           url: representation.alphafold.model_url,
           format: 'cif'
@@ -687,8 +687,9 @@
     
     // Auto-load structure viewer for solution card if present (game over)
     const solutionViewer = document.getElementById('pg-solution-card-structure');
-    if (solutionViewer && hasStructureData(targetProtein) && !solutionViewer.querySelector('canvas')) {
-      loadStructureViewerInContainer(solutionViewer, targetProtein).catch((err) => {
+    const solutionTarget = targetReveal || targetProtein;
+    if (solutionViewer && hasStructureData(solutionTarget) && !solutionViewer.querySelector('canvas')) {
+      loadStructureViewerInContainer(solutionViewer, solutionTarget).catch((err) => {
         console.error('Geneguessr: failed to load solution structure viewer', err);
       });
     }
@@ -988,110 +989,31 @@
     return data;
   }
 
-  function hintsApi() {
-    return window.GeneGuessrHints || null;
-  }
-
-  function initHintsForRound(roundId) {
-    const api = hintsApi();
-    if (!api || !roundId) return;
-    try {
-      api.initRound(roundId);
-    } catch (err) {
-      console.warn('Geneguessr: failed to init hints', err);
-    }
-  }
-
-  function readHintsBalanceDirect(api) {
-    if (!api?.getHints) return null;
-    try {
-      const value = api.getHints();
-      return typeof value === 'number' ? value : null;
-    } catch (err) {
-      console.warn('Geneguessr: failed to read hint balance', err);
-      return null;
-    }
-  }
-
   function getHintsBalance() {
-    const direct = readHintsBalanceDirect(hintsApi());
-    return direct ?? DEFAULT_HINT_COST;
+    return typeof gameStatus?.hintBalance === 'number' ? gameStatus.hintBalance : 0;
   }
-
+  
   function updateHintDisplays(explicitValue) {
     const value = typeof explicitValue === 'number' ? explicitValue : getHintsBalance();
     document.querySelectorAll('.pg-hints-value, .pg-sidebar-hints').forEach((el) => {
       el.textContent = value;
     });
   }
-
-  function resetHintBalanceToDefault() {
-    const api = hintsApi();
-    if (!api || typeof api.resetHintsToDefault !== 'function') {
-      return;
-    }
-    try {
-      const value = api.resetHintsToDefault();
-      updateHintDisplays(typeof value === 'number' ? value : undefined);
-    } catch (err) {
-      console.warn('Geneguessr: failed to reset hint balance for new daily', err);
-    }
-  }
-
-  function isHintRevealed(hintId) {
-    if (!hintId) return true;
-    const api = hintsApi();
-    if (!api || !currentRoundId) return true;
-    try {
-      return api.isHintRevealed(currentRoundId, hintId);
-    } catch {
+  
+  async function requestHintReveal(hintId) {
+    if (!hintId) {
       return true;
     }
-  }
-
-  function attemptReveal(hintId, cost = DEFAULT_HINT_COST) {
-    const api = hintsApi();
-    if (!api || !currentRoundId) {
+    try {
+      const payload = await revealHintRequest(hintId);
+      hydrateStateFromPayload(payload);
+      updateHintDisplays();
+      render();
       return true;
-    }
-    const before = readHintsBalanceDirect(api);
-    try {
-      const result = api.revealHint(currentRoundId, hintId, cost);
-      if (result && result.success) {
-        const after = readHintsBalanceDirect(api);
-        updateHintDisplays(after ?? before);
-        if (typeof before === 'number' && typeof after === 'number' && api?.earnHints) {
-          const actualCost = before - after;
-          if (actualCost > cost) {
-            try {
-              api.earnHints(actualCost - cost);
-              const refundBalance = readHintsBalanceDirect(api);
-              updateHintDisplays(refundBalance ?? after);
-            } catch (refundErr) {
-              console.warn('Geneguessr: failed to refund excess hint cost', refundErr);
-            }
-          }
-        }
-        return true;
-      }
+    } catch (err) {
+      console.warn('Geneguessr: hint reveal failed', err);
       flashHintsWarning();
       return false;
-    } catch (err) {
-      console.warn('Geneguessr: failed to reveal hint', err);
-      flashHintsWarning();
-      return false;
-    }
-  }
-
-  function awardHints(amount = HINT_REWARD_ON_INCORRECT) {
-    const api = hintsApi();
-    if (!api || !amount) return;
-    try {
-      api.earnHints(amount);
-      const balance = readHintsBalanceDirect(api);
-      updateHintDisplays(balance);
-    } catch (err) {
-      console.warn('Geneguessr: unable to earn hints', err);
     }
   }
 
@@ -1563,9 +1485,6 @@
   const STATIC_BASE = resolveStaticBase();
   
   // Constants
-  const DATA_URL = `${STATIC_BASE}data.json`;
-  const INDEX_URL = `${STATIC_BASE}index.json`;
-  const SIMILARITY_URL = `${STATIC_BASE}similarity.json`;
   const MOLSTAR_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js";
   const MOLSTAR_FALLBACK_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js";
   const MOLSTAR_CSS_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css";
@@ -1574,32 +1493,92 @@
   const DEFAULT_HINT_COST = 1;
   const HINT_REWARD_ON_INCORRECT = 1;
   const MAX_GUESSES = 6;
-  const STORAGE_KEY = 'geneguessr_state';
   
   // State
   let proteins = [];
-  let indexData = null;
+  let gameStatus = null;
+  let clueData = null;
+  let guessEntries = [];
+  let targetReveal = null;
+  let shareText = '';
   let targetProtein = null;
-  let similarityMatrix = null;
   let molstarLoaderPromise = null;
   let molstarCssLoaded = false;
   let molstarPreconnectAdded = false;
   let structureViewerLoaded = false;
   let interactivityGuards = null;
-  let currentRoundId = null;
-let gameState = {
-  date: null,
-  guesses: [],
-  won: false,
-  hintsUnlocked: 1, // Start with 1 hint visible
-  targetId: null,
-  practiceMode: false,
-  statsRecorded: false
-};
+  let gameState = {
+    date: null,
+    guesses: [],
+    won: false,
+    targetId: null,
+    practiceMode: false,
+    statsRecorded: false
+  };
   let tutorialBootRequested = false;
   const structureTokenCache = new Map();
   let targetStructureInfo = null;
   const viewerStructureInfo = new Map();
+  let gamePayload = null;
+
+  async function fetchGameBootstrap() {
+    const response = await fetch(`${API_BASE}/api/game/bootstrap`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      throw new Error(`Bootstrap failed with status ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async function submitGuessRequest(uniprot) {
+    const normalized = (uniprot || '').toUpperCase();
+    const response = await fetch(`${API_BASE}/api/game/guess`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uniprot: normalized })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error?.error || `Guess failed with status ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async function revealHintRequest(hintId) {
+    const response = await fetch(`${API_BASE}/api/game/reveal-hint`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hintId })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error?.error || `Hint reveal failed with status ${response.status}`);
+    }
+    return response.json();
+  }
+
+  function hydrateStateFromPayload(payload) {
+    if (!payload || !payload.status) {
+      return;
+    }
+    gamePayload = payload;
+    gameStatus = payload.status;
+    clueData = payload.clue || { sections: [], allMatches: {}, latestMatches: {} };
+    guessEntries = Array.isArray(payload.guesses) ? payload.guesses : [];
+    targetProtein = payload.clueTarget || null;
+    targetReveal = payload.targetReveal || null;
+    shareText = payload.shareText || '';
+    gameState.date = gameStatus.date;
+    gameState.guesses = guessEntries;
+    gameState.won = Boolean(gameStatus.won);
+    gameState.targetId = targetReveal?.uniprot || null;
+    gameState.practiceMode = Boolean(gameStatus.practiceMode);
+    gameState.statsRecorded = false;
+    updateHintDisplays();
+  }
 
   function generateGuessId() {
     if (window.crypto?.randomUUID) {
@@ -1656,148 +1635,36 @@ let gameState = {
     return proteinsById.get(id) || null;
   }
   
-  async function loadData() {
+  async function loadSearchIndex() {
+    if (proteins.length) {
+      return;
+    }
     try {
-      const [proteinsResp, indexResp, similarityResp] = await Promise.all([
-        fetch(DATA_URL, { cache: "no-store" }),
-        fetch(INDEX_URL, { cache: "no-store" }),
-        fetch(SIMILARITY_URL, { cache: "no-store" })
-      ]);
-      
-      if (!proteinsResp.ok) {
-        throw new Error(`data.json request failed with status ${proteinsResp.status}`);
+      const response = await fetch(`${API_BASE}/api/proteins`, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`Protein list failed with status ${response.status}`);
       }
-      if (!indexResp.ok) {
-        throw new Error(`index.json request failed with status ${indexResp.status}`);
-      }
-      if (!similarityResp.ok) {
-        throw new Error(`similarity.json request failed with status ${similarityResp.status}`);
-      }
-      
-      const [proteinsJson, indexJson, similarityJson] = await Promise.all([
-        proteinsResp.json(),
-        indexResp.json(),
-        similarityResp.json()
-      ]);
-      
-      if (!Array.isArray(proteinsJson)) {
-        throw new Error("data.json payload must be an array");
-      }
-      
-      proteins = proteinsJson.map(normalizeProtein);
-      indexData = indexJson || null;
-      similarityMatrix = similarityJson || null;
-      if (!similarityMatrix || !similarityMatrix.scores) {
-        throw new Error("similarity.json payload missing scores");
-      }
-      
-      if (!indexData || !Array.isArray(indexData.eligible_ids) || indexData.eligible_ids.length === 0) {
-        throw new Error("index.json payload missing eligible_ids");
-      }
-      
+      const payload = await response.json();
+      proteins = Array.isArray(payload) ? payload.map(normalizeProtein) : [];
       indexProteins(proteins);
-      return true;
     } catch (err) {
-      console.error("Geneguessr: failed to load static data", err);
-      const detail = err?.stack || err?.message || String(err);
-      reportError('load-data-failed', detail);
-      return false;
+      console.warn('Geneguessr: failed to load protein index', err);
+      proteins = [];
+      proteinsById.clear();
     }
   }
   
-  async function initGame() {
-    if (!Array.isArray(proteins) || proteins.length === 0 || !indexData) {
-      throw new Error("Geneguessr data has not been loaded yet");
-    }
-    
-    const today = new Date().toISOString().slice(0, 10);
-    const saved = loadState();
-    
-    let resetHintsForDaily = false;
-    
-    if (saved && saved.date === today) {
-      gameState = {
-        date: today,
-        guesses: Array.isArray(saved.guesses) ? saved.guesses : [],
-        won: Boolean(saved.won),
-        hintsUnlocked: Math.max(1, Math.min(5, saved.hintsUnlocked || 1)),
-        targetId: saved.targetId || null,
-        practiceMode: Boolean(saved.practiceMode),
-        statsRecorded: Boolean(saved.statsRecorded)
-      };
-    } else {
-      gameState = {
-        date: today,
-        guesses: [],
-        won: false,
-        hintsUnlocked: 1,
-        targetId: null,
-        practiceMode: false,
-        statsRecorded: false
-      };
-      resetHintsForDaily = true;
-    }
-    
-    const targetId = await pickTodaysProtein(indexData.eligible_ids, indexData.salt_hash);
-    const target = getProteinById(targetId);
-    
-    if (!target) {
-      throw new Error(`Target protein ${targetId} not found in dataset`);
-    }
-    
-    targetProtein = target;
-    gameState.targetId = targetId;
-    currentRoundId = gameState.date;
-    initHintsForRound(currentRoundId);
-    structureViewerLoaded = false;
-    
-    gameState.guesses = gameState.guesses
-      .map((entry) => {
-        const guessProteinId =
-          (entry && entry.protein && entry.protein.uniprot) ||
-          entry.uniprot ||
-          null;
-        const protein = getProteinById(guessProteinId);
-        if (!protein) {
-          return null;
-        }
-        const score = scoreGuess(protein, targetProtein);
-        const correct =
-          typeof entry.correct === "boolean"
-            ? entry.correct
-            : protein.uniprot === targetProtein.uniprot;
-        const guessId = entry.guessId || entry.cardId || generateGuessId();
-        
-        return {
-          protein,
-          score,
-          correct,
-          uniprot: protein.uniprot,
-          guessId
-        };
-      })
-      .filter(Boolean);
-    
-    const savedTargetMismatch = Boolean(saved && saved.date === today && saved.targetId && saved.targetId !== targetId);
-    if (savedTargetMismatch) {
-      gameState.guesses = [];
-      gameState.won = false;
-      gameState.hintsUnlocked = 1;
-      resetHintsForDaily = true;
-    }
-    
-    if (resetHintsForDaily) {
-      resetHintBalanceToDefault();
-    }
-
+  async function bootstrapGame() {
+    const payload = await fetchGameBootstrap();
+    hydrateStateFromPayload(payload);
     await ensureStructureTokenForTarget();
     await hydrateStructureTokensForGuesses(gameState.guesses);
     const solvedOrExhausted = gameState.won || gameState.guesses.length >= MAX_GUESSES;
-    if (solvedOrExhausted && targetProtein?.uniprot) {
-      await ensureStructureTokenForProtein(targetProtein.uniprot);
+    if (solvedOrExhausted && targetReveal?.uniprot) {
+      await ensureStructureTokenForProtein(targetReveal.uniprot);
     }
-
-    saveState();
   }
   
   /**
@@ -1865,85 +1732,18 @@ let gameState = {
    * Local storage helpers
    */
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+    // State is persisted server-side; no-op.
   }
   
   function loadState() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
+    return null;
   }
   
   /**
    * Scoring functions
    */
-  function getGoSimilarityScore(guessId, targetId) {
-    if (!similarityMatrix || !similarityMatrix.scores) {
-      return null;
-    }
-    if (!guessId || !targetId) {
-      return null;
-    }
-    const direct = similarityMatrix.scores[guessId];
-    if (direct && typeof direct[targetId] === 'number') {
-      return direct[targetId];
-    }
-    const inverse = similarityMatrix.scores[targetId];
-    if (inverse && typeof inverse[guessId] === 'number') {
-      return inverse[guessId];
-    }
-    return null;
-  }
-  
-  function getGoSimilarityMetadata() {
-    if (!similarityMatrix || !similarityMatrix.metadata) {
-      return null;
-    }
-    return similarityMatrix.metadata;
-  }
-  
-  function formatGoSimilarityLabel() {
-    return 'Similarity';
-  }
-  
-  function formatGoSimilarityNote() {
-    // Removed metadata display to reduce mobile clutter (B-69)
-    return '';
-  }
-  
-  function scoreGuess(guess, target) {
-    const goSimilarity = getGoSimilarityScore(guess.uniprot, target.uniprot);
-    const goPercent = typeof goSimilarity === 'number' ? Math.round(goSimilarity * 100) : null;
-    
-    // Domain overlap
-    const domainIntersection = guess.domains.filter(d => target.domains.includes(d));
-    const domainOverlap = domainIntersection.length;
-    
-    // Length bin match
-    const binLength = (len) => {
-      if (len < 400) return 0;
-      if (len < 800) return 1;
-      if (len < 1600) return 2;
-      return 3;
-    };
-    const lengthBinMatch = binLength(guess.length) === binLength(target.length);
-    
-    // Binary flags
-    const tmMatch = guess.tmh === target.tmh;
-    const secretedMatch = guess.secreted === target.secreted;
-    
-    // Tissue specificity match
-    const tissueMatch = guess.tissue.label === target.tissue.label;
-    
-    return {
-      goSimilarity,
-      goPercent,
-      domainOverlap,
-      domainMatches: domainIntersection,
-      lengthBinMatch,
-      tmMatch,
-      secretedMatch,
-      tissueMatch
-    };
+  function scoreGuess(guessEntry) {
+    return guessEntry?.score || null;
   }
   
   /**
@@ -1970,53 +1770,8 @@ let gameState = {
       .filter(Boolean);
   }
 
-  function collectMatchedHintTexts(target, guessEntry) {
-    const matches = {};
-    if (!target || !guessEntry) {
-      return matches;
-    }
-    const guess = guessEntry.protein;
-    const score = guessEntry.score || {};
-    const addMatches = (sectionId, values) => {
-      const filtered = values.filter(Boolean);
-      if (filtered.length) {
-        matches[sectionId] = filtered;
-      }
-    };
-    const intersect = (a, b) => {
-      if (!a.length || !b.length) {
-        return [];
-      }
-      const setB = new Set(b);
-      return a.filter((item) => setB.has(item));
-    };
-
-    addMatches('domains', score.domainMatches || []);
-    ['mf', 'cc', 'bp'].forEach((aspect) => {
-      const overlap = intersect(
-        formatGoTerms(target, aspect),
-        formatGoTerms(guess, aspect)
-      );
-      if (overlap.length) {
-        matches[`function-${aspect}`] = overlap;
-      }
-    });
-    addMatches('reactome', intersect(formatReactomeList(target), formatReactomeList(guess)));
-    if (score.tissueMatch) {
-      addMatches('tissue', [target.tissue.label]);
-    }
-    const propertyMatches = [];
-    if (score.tmMatch) {
-      propertyMatches.push(target.tmh ? 'Transmembrane' : 'Soluble');
-    }
-    if (score.secretedMatch) {
-      propertyMatches.push(target.secreted ? 'Secreted' : 'Intracellular');
-    }
-    addMatches('properties', propertyMatches);
-    if (score.lengthBinMatch) {
-      addMatches('length', [`${target.length} aa`]);
-    }
-    return matches;
+  function collectMatchedHintTexts(_target, guessEntry) {
+    return guessEntry?.matchedHints || {};
   }
 
   function buildProteinSections(protein, options = {}) {
@@ -2177,19 +1932,34 @@ let gameState = {
     return sections;
   }
 
-  function renderClueSectionsHtml(allMatches, latestMatches) {
-    const sections = buildProteinSections(targetProtein, { forClue: true });
-    return sections.map(section => renderSpoilerSection(section, {
-      matchedItems: latestMatches[section.id] || [],  // Only highlight latest matches
-      allRevealedItems: allMatches[section.id] || [], // But keep all revealed
-      removeSpoilers: true,
-    })).join('');
+  function renderClueSectionsHtml() {
+    const sections = Array.isArray(clueData?.sections) ? clueData.sections : [];
+    return sections.map(section => renderServerManagedSection(section)).join('');
+  }
+
+  function renderServerManagedSection(section) {
+    const labelHtml = section.label
+      ? `<span class="pg-section-label">${escapeHtml(section.label)}:</span> `
+      : '';
+    const latestMatches = clueData?.latestMatches?.[section.id] || [];
+    const itemsHtml = (section.items || []).map(item => {
+      const isMatched = item.revealed && latestMatches.includes(item.text);
+      const entryClass = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
+      if (!item.id || item.revealed) {
+        const text = item.text ?? '';
+        return `<span class="${entryClass}">${escapeHtml(text)}</span>`;
+      }
+      const placeholder = item.placeholder || 'Hint locked';
+      return `<span class="${entryClass}"><span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}" role="button" tabindex="0">${escapeHtml(placeholder)}</span></span>`;
+    }).join('');
+    return `<div class="pg-section">${labelHtml}${itemsHtml}</div>`;
   }
 
   function renderClueCard(gameOver = false) {
     if (gameOver) {
-      const revealStructureInfo = getStructureInfoForProtein(targetProtein.uniprot) || getTargetStructureInfo();
-      const revealCard = buildFeedbackCardMarkup(targetProtein, {
+      const solutionTarget = targetReveal || targetProtein;
+      const revealStructureInfo = solutionTarget?.uniprot ? getStructureInfoForProtein(solutionTarget.uniprot) : getTargetStructureInfo();
+      const revealCard = buildFeedbackCardMarkup(solutionTarget, {
         cardId: 'pg-solution-card',
         collapsible: false,
         expanded: true,
@@ -2203,40 +1973,25 @@ let gameState = {
       `;
     }
     
-    // Collect matches from ALL guesses (for revealing items)
-    const allClueMatches = {};
-    gameState.guesses.forEach(guessEntry => {
-      const guessMatches = collectMatchedHintTexts(targetProtein, guessEntry);
-      // Merge matches - each section ID should accumulate unique values
-      Object.keys(guessMatches).forEach(sectionId => {
-        if (!allClueMatches[sectionId]) {
-          allClueMatches[sectionId] = [];
-        }
-        guessMatches[sectionId].forEach(value => {
-          if (!allClueMatches[sectionId].includes(value)) {
-            allClueMatches[sectionId].push(value);
-          }
-        });
-      });
-    });
-    
-    // Get matches from ONLY the latest guess (for accent highlighting)
-    const latestGuessEntry = gameState.guesses[gameState.guesses.length - 1] || null;
-    const latestClueMatches = latestGuessEntry 
-      ? collectMatchedHintTexts(targetProtein, latestGuessEntry)
-      : {};
-    // Important: renderStructureViewer builds the 3D placeholder once per guess.
-    // We only re-render the sections beneath to avoid tearing down Mol*.
+    if (!targetProtein) {
+      return `
+        <div class="pg-clue-card" data-game-over="false">
+          <div class="pg-structure-placeholder">
+            <p class="pg-structure-tip">Loading structure.</p>
+          </div>
+        </div>
+      `;
+    }
     const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure', {
       linkable: false,
       structureInfo: getTargetStructureInfo()
     });
     
     return `
-      <div class="pg-clue-card">
+      <div class="pg-clue-card" data-game-over="false">
         ${structureMarkup}
         <div class="pg-clue-sections" data-clue-sections>
-          ${renderClueSectionsHtml(allClueMatches, latestClueMatches)}
+          ${renderClueSectionsHtml()}
         </div>
       </div>
     `;
@@ -2384,16 +2139,23 @@ let gameState = {
       </div>
     `;
     
+    const solution = targetReveal || targetProtein || {};
+    const hasIdentity = Boolean(solution.hgnc);
+    const proteinLabel = hasIdentity
+      ? `${solution.hgnc} (${solution.full_name})`
+      : 'Protein identity hidden';
+    const wikiLink = hasIdentity && solution.links?.wiki ? `<a href="${solution.links.wiki}" class="pg-link-btn">View Protein Page</a>` : '';
+    const uniprotLink = hasIdentity && solution.links?.uniprot ? `<a href="${solution.links.uniprot}" target="_blank" class="pg-link-btn">UniProt</a>` : '';
     return `
       <div class="pg-result ${className}">
         <div class="pg-result-title">${title}</div>
         <div class="pg-result-protein">
-          ${targetProtein.hgnc} (${targetProtein.full_name})
+          ${proteinLabel}
         </div>
         <div>Guesses: ${gameState.guesses.length}/${MAX_GUESSES}</div>
         <div class="pg-result-links">
-          <a href="${targetProtein.links.wiki}" class="pg-link-btn">View Protein Page</a>
-          <a href="${targetProtein.links.uniprot}" target="_blank" class="pg-link-btn">UniProt</a>
+          ${wikiLink}
+          ${uniprotLink}
         </div>
         ${practiceCta}
       </div>
@@ -2417,6 +2179,10 @@ let gameState = {
   function renderClueSectionsIntoDom(gameOver = false) {
     const slot = document.getElementById('pg-clue-slot');
     if (!slot) return;
+    if (!clueData) {
+      slot.innerHTML = '<div class="pg-clue-card"><p>Loading clues...</p></div>';
+      return;
+    }
     
     if (gameOver) {
       slot.innerHTML = renderClueCard(true);
@@ -2424,38 +2190,15 @@ let gameState = {
       return;
     }
     
-    // Collect matches from ALL guesses (for revealing items)
-    const allClueMatches = {};
-    gameState.guesses.forEach(guessEntry => {
-      const guessMatches = collectMatchedHintTexts(targetProtein, guessEntry);
-      Object.keys(guessMatches).forEach(sectionId => {
-        if (!allClueMatches[sectionId]) {
-          allClueMatches[sectionId] = [];
-        }
-        guessMatches[sectionId].forEach(value => {
-          if (!allClueMatches[sectionId].includes(value)) {
-            allClueMatches[sectionId].push(value);
-          }
-        });
-      });
-    });
-    
-    // Get matches from ONLY the latest guess (for accent highlighting)
-    const latestGuessEntry = gameState.guesses[gameState.guesses.length - 1] || null;
-    const latestClueMatches = latestGuessEntry 
-      ? collectMatchedHintTexts(targetProtein, latestGuessEntry)
-      : {};
-    
     const existingCard = slot.querySelector('.pg-clue-card');
     
-    if (existingCard) {
+    if (existingCard && existingCard.dataset.gameOver === String(gameOver)) {
       const sectionsContainer = existingCard.querySelector('[data-clue-sections]');
       if (sectionsContainer) {
-        // Keep the Mol* viewer intact; only swap the sections beneath it.
-        sectionsContainer.innerHTML = renderClueSectionsHtml(allClueMatches, latestClueMatches);
+        sectionsContainer.innerHTML = renderClueSectionsHtml();
         setupSpoilerHandlers();
-        return;
       }
+      return;
     }
     
     slot.innerHTML = renderClueCard(false);
@@ -3137,16 +2880,17 @@ let gameState = {
 
   function setupSpoilerHandlers() {
     document.querySelectorAll('.pg-redaction[data-hint-id]').forEach((redaction) => {
-      // Remove any existing handlers by cloning the node (drops all listeners)
       const clean = redaction.cloneNode(true);
       redaction.replaceWith(clean);
       
-      const handleReveal = () => {
+      const handleReveal = async () => {
         const hintId = clean.dataset.hintId;
         if (!hintId) return;
-        const success = attemptReveal(hintId, DEFAULT_HINT_COST);
-        if (success) {
-          render();
+        clean.classList.add('pg-redaction-loading');
+        try {
+          await requestHintReveal(hintId);
+        } finally {
+          clean.classList.remove('pg-redaction-loading');
         }
       };
       
@@ -3172,60 +2916,42 @@ let gameState = {
     const guessProtein = proteins.find(p => p.uniprot === uniprot);
     if (!guessProtein) return;
     
-    // Check if already guessed
-    if (gameState.guesses.some(g => g.uniprot === uniprot)) {
-      alert('You already guessed this protein!');
-      return;
+    if (submitBtn.disabled) return;
+    
+    submitBtn.disabled = true;
+    const previousLabel = submitBtn.textContent;
+    submitBtn.textContent = 'Submitting...';
+    
+    try {
+      const payload = await submitGuessRequest(uniprot);
+      hydrateStateFromPayload(payload);
+      await ensureStructureTokenForProtein(uniprot);
+      const reachedEndOfRound = gameState.won || gameState.guesses.length >= MAX_GUESSES;
+      if (reachedEndOfRound && targetReveal?.uniprot) {
+        await ensureStructureTokenForProtein(targetReveal.uniprot);
+      }
+      render();
+    } catch (err) {
+      console.error('Geneguessr: failed to submit guess', err);
+      alert(err?.message || 'Failed to submit guess. Please try again.');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = previousLabel;
+      submitBtn.removeAttribute('data-uniprot');
+      const inputEl = document.getElementById('pg-input');
+      if (inputEl) {
+        inputEl.value = '';
+      }
     }
-    
-    // Score the guess
-    const score = scoreGuess(guessProtein, targetProtein);
-    
-    // Check if correct
-    const isCorrect = guessProtein.uniprot === targetProtein.uniprot;
-    
-    // Add to guesses
-    const guessId = generateGuessId();
-    gameState.guesses.push({
-      protein: guessProtein,
-      score: score,
-      correct: isCorrect,
-      uniprot: guessProtein.uniprot,
-      guessId
-    });
-    
-    // Unlock next hint
-    if (!isCorrect) {
-      gameState.hintsUnlocked = Math.min(gameState.hintsUnlocked + 1, 5);
-      awardHints(HINT_REWARD_ON_INCORRECT);
-    }
-    
-    // Check win/loss
-    if (isCorrect) {
-      gameState.won = true;
-      await recordStatsOnce(true);
-    } else if (gameState.guesses.length >= MAX_GUESSES) {
-      await recordStatsOnce(false);
-    }
-
-    await ensureStructureTokenForProtein(guessProtein.uniprot);
-    const reachedEndOfRound = isCorrect || gameState.guesses.length >= MAX_GUESSES;
-    if (reachedEndOfRound && targetProtein?.uniprot) {
-      await ensureStructureTokenForProtein(targetProtein.uniprot);
-    }
-    
-    // Save state
-    gameState.targetId = targetProtein.uniprot;
-    saveState();
-    
-    // Re-render
-    render();
   }
   
   /**
    * Share functionality
    */
   function generateShareText() {
+    if (shareText) {
+      return shareText;
+    }
     const emoji = gameState.won ? 'You Win!' : 'Game Over';
     const guessCount = gameState.guesses.length;
     const today = new Date().toISOString().slice(0, 10);
@@ -3272,7 +2998,7 @@ https://brinedew.bio/apps/geneguessr/`;
    */
   function render() {
     try {
-      const gameOver = gameState.won || gameState.guesses.length >= MAX_GUESSES;
+      const gameOver = Boolean(gameState.won || (gameStatus && gameStatus.lost) || gameState.guesses.length >= MAX_GUESSES);
 
       hydrateLayoutOnce();
       renderClueSectionsIntoDom(gameOver);
@@ -3419,24 +3145,7 @@ https://brinedew.bio/apps/geneguessr/`;
   };
 
   window.geneguessrPlayAgain = function() {
-    if (!(gameState.won || gameState.guesses.length >= MAX_GUESSES)) {
-      return;
-    }
-    const api = hintsApi();
-    if (api?.resetRound && currentRoundId) {
-      try {
-        api.resetRound(currentRoundId);
-      } catch (err) {
-        console.warn('Geneguessr: failed to reset hints for practice mode', err);
-      }
-    }
-    gameState.guesses = [];
-    gameState.won = false;
-    gameState.hintsUnlocked = 1;
-    gameState.practiceMode = true;
-    saveState();
-    updateHintDisplays();
-    render();
+    window.location.reload();
   };
   
   function updateSidebarStats() {
@@ -3489,16 +3198,10 @@ https://brinedew.bio/apps/geneguessr/`;
     
     setStatus('loading-data');
     
-    // Load data
-    const success = await loadData();
-    if (!success) {
-      reportError('load-data-returned-false', '');
-      return;
-    }
+    await loadSearchIndex();
     
-    // Initialize game
     try {
-      await initGame();
+      await bootstrapGame();
     } catch (err) {
       console.error('Geneguessr: failed to initialise game state', err);
       const detail = err?.stack || err?.message || String(err);
@@ -3581,4 +3284,3 @@ function attachAttributionCollapseLogic() {
 }
 
 })();
-

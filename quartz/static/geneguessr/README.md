@@ -12,7 +12,7 @@ The `resolveStructureRepresentation` helper in both the public app (`Website/qua
 
 ## Refreshing SWISS-MODEL data
 
-The repo includes a small utility that queries the SWISS-MODEL REST API and stamps the best model metadata directly into `data.json`. Run it whenever you add new proteins or want to refresh existing entries:
+The repo includes a small utility that queries the SWISS-MODEL REST API and stamps the best model metadata directly into `proteins.json`. Run it whenever you add new proteins or want to refresh existing entries:
 
 ```bash
 node Website/tools/fetch-swiss-models.mjs
@@ -24,7 +24,7 @@ Useful flags:
 | --- | --- |
 | `--only P01116,P31751` | Limit updates to a comma-separated list of UniProt IDs. |
 | `--dry-run` | Fetch data and log decisions without writing changes. |
-| `--input <path>` / `--output <path>` | Override the default `Website/quartz/static/geneguessr/data.json` path. |
+| `--input <path>` / `--output <path>` | Override the default `Website/workers/data/proteins.json` path. |
 
 Environment variables let you tweak the acceptance thresholds:
 

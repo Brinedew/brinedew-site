@@ -5,6 +5,7 @@
 
 import { parseCookies } from './auth.js';
 import { buildStructurePreviewPayload, sanitizeProteinSummary } from './lib/structure-utils.js';
+import { getProteinByUniprot } from './lib/game-engine.js';
 
 const CAMERA_MODES = ['perspective', 'orthographic'];
 const ANTIALIASING_MODES = ['off', 'fxaa'];
@@ -738,11 +739,9 @@ export async function handleProteinPreview(request, env) {
 }
 
 async function fetchProteinByUniprot(uniprot) {
-  const response = await fetch('https://brinedew.bio/static/geneguessr/data.json');
-  if (!response.ok) {
-    throw new Error('Failed to fetch protein database');
+  if (!uniprot) {
+    return null;
   }
-  const proteins = await response.json();
   const normalized = `${uniprot}`.trim().toUpperCase();
-  return proteins.find((protein) => (protein.uniprot || '').toUpperCase() === normalized) || null;
+  return getProteinByUniprot(normalized);
 }

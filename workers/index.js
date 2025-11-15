@@ -5,16 +5,10 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Credentials': 'true',
 };
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const STRUCTURE_TOKEN_TTL_SECONDS = 300;
-const PROTEIN_DATA_URL = 'https://brinedew.bio/static/geneguessr/data.json';
-const INDEX_DATA_URL = 'https://brinedew.bio/static/geneguessr/index.json';
-const DATA_CACHE_TTL_MS = 60 * 60 * 1000;
 const TOKEN_PREFIX = 'structure_token:';
 
-let proteinDataCache = null;
-let proteinDataCacheTimestamp = 0;
-let indexDataCache = null;
-let indexDataCacheTimestamp = 0;
 
 // Import auth handlers
 import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
@@ -33,6 +27,21 @@ import {
 } from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
+import {
+  DEFAULT_HINT_COST,
+  HINT_REWARD_ON_INCORRECT,
+  MAX_GUESSES,
+  buildClueSections,
+  collectMatchedHintTexts,
+  extractHintText,
+  getIndexData,
+  getProteinByUniprot,
+  listProteins,
+  maskClueSections,
+  pickDailyTarget,
+  sanitizeTargetProtein,
+  scoreGuess
+} from './lib/game-engine.js';
 import { resolveStructureRepresentation } from './lib/structure-utils.js';
 
 export default {
@@ -189,16 +198,22 @@ export default {
       return handleStructureFetch(request, env);
     }
 
+    if (url.pathname === '/api/game/bootstrap' && request.method === 'GET') {
+      return handleGameBootstrap(request, env);
+    }
+
+    if (url.pathname === '/api/game/guess' && request.method === 'POST') {
+      return handleGuessSubmission(request, env);
+    }
+
+    if (url.pathname === '/api/game/reveal-hint' && request.method === 'POST') {
+      return handleHintReveal(request, env);
+    }
+
     // Public proteins endpoint for autocomplete
     if (url.pathname === '/api/proteins' && request.method === 'GET') {
       try {
-        // Fetch the protein database from the static site
-        const proteinsResponse = await fetch('https://brinedew.bio/static/geneguessr/data.json');
-        if (!proteinsResponse.ok) {
-          throw new Error('Failed to fetch protein database');
-        }
-        const proteins = await proteinsResponse.json();
-        
+        const proteins = listProteins();
         // Return simplified protein list for autocomplete
         const simplifiedProteins = proteins.map(p => ({
           uniprot: p.uniprot,
@@ -279,6 +294,30 @@ function hashIP(ip) {
   return Math.abs(hash).toString(36);
 }
 
+async function getGameState(env, sessionId) {
+  const id = env.GAME_SESSIONS.idFromName(sessionId);
+  const stub = env.GAME_SESSIONS.get(id);
+  const response = await stub.fetch('https://sessions/game/state', { method: 'GET' });
+  if (!response.ok) {
+    throw new Error('Failed to load session state');
+  }
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function saveGameState(env, sessionId, state) {
+  const id = env.GAME_SESSIONS.idFromName(sessionId);
+  const stub = env.GAME_SESSIONS.get(id);
+  const response = await stub.fetch('https://sessions/game/state', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(state || null)
+  });
+  if (!response.ok) {
+    throw new Error('Failed to persist session state');
+  }
+}
+
 async function checkD1Health(db) {
   try {
     const result = await db.prepare('SELECT 1 as test').first();
@@ -321,6 +360,10 @@ export class GameSession {
       return this.resetSession();
     } else if (path === '/api/session/check-played-today' && request.method === 'GET') {
       return this.checkPlayedToday();
+    } else if (path === '/game/state' && request.method === 'GET') {
+      return this.getGameState();
+    } else if (path === '/game/state' && request.method === 'POST') {
+      return this.setGameState(request);
     } else if (path === '/store' && request.method === 'POST') {
       // Internal route for OAuth session storage
       return this.storeData(request);
@@ -412,6 +455,21 @@ export class GameSession {
       last_played_date: session.last_played_date 
     }), {
       headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  async getGameState() {
+    const state = await this.state.storage.get('game_state');
+    return new Response(JSON.stringify(state || null), {
+      headers: JSON_HEADERS
+    });
+  }
+
+  async setGameState(request) {
+    const payload = await request.json();
+    await this.state.storage.put('game_state', payload);
+    return new Response(JSON.stringify({ success: true }), {
+      headers: JSON_HEADERS
     });
   }
 
@@ -538,80 +596,104 @@ async function handleStructureFetch(request, env) {
   });
 }
 
-async function getProteinDataset() {
-  const now = Date.now();
-  if (proteinDataCache && (now - proteinDataCacheTimestamp) < DATA_CACHE_TTL_MS) {
-    return proteinDataCache;
-  }
-  const response = await fetch(PROTEIN_DATA_URL, { cf: { cacheEverything: true, cacheTtl: 300 } });
-  if (!response.ok) {
-    throw new Error('Failed to fetch protein dataset');
-  }
-  const list = await response.json();
-  const map = new Map();
-  list.forEach((protein) => {
-    if (protein && protein.uniprot) {
-      map.set(protein.uniprot.toUpperCase(), protein);
+async function handleGameBootstrap(request, env) {
+  try {
+    const sessionId = getSessionId(request);
+    const targetProtein = await getDailyTargetProtein();
+    if (!targetProtein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
-  });
-  proteinDataCache = map;
-  proteinDataCacheTimestamp = now;
-  return map;
+    const state = await ensureSessionForToday(env, sessionId, targetProtein);
+    const payload = buildGamePayload(state, targetProtein);
+    return Response.json(payload, { headers: CORS_HEADERS });
+  } catch (err) {
+    console.error('GeneGuessr: bootstrap failed', err);
+    return Response.json({ error: 'Failed to load game state' }, { status: 500, headers: CORS_HEADERS });
+  }
 }
 
-async function getProteinByUniprot(uniprot) {
-  const dataset = await getProteinDataset();
-  return dataset.get(uniprot.toUpperCase()) || null;
+async function handleGuessSubmission(request, env) {
+  try {
+    const sessionId = getSessionId(request);
+    const targetProtein = await getDailyTargetProtein();
+    if (!targetProtein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+    }
+    const body = await safeJson(request);
+    const uniprot = (body?.uniprot || '').toUpperCase();
+    if (!uniprot) {
+      return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: CORS_HEADERS });
+    }
+    let state = await ensureSessionForToday(env, sessionId, targetProtein);
+    if (state.won || (state.guesses?.length || 0) >= MAX_GUESSES) {
+      return Response.json({ error: 'Round already completed' }, { status: 409, headers: CORS_HEADERS });
+    }
+    if ((state.guesses || []).some((entry) => entry.uniprot === uniprot)) {
+      return Response.json({ error: 'Protein already guessed' }, { status: 409, headers: CORS_HEADERS });
+    }
+    const guessProtein = getProteinByUniprot(uniprot);
+    if (!guessProtein) {
+      return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
+    }
+    const score = scoreGuess(guessProtein, targetProtein);
+    const correct = guessProtein.uniprot === targetProtein.uniprot;
+    const guessEntry = {
+      guessId: crypto.randomUUID(),
+      uniprot,
+      correct,
+      score,
+      createdAt: Date.now()
+    };
+    state.guesses = [...(state.guesses || []), guessEntry];
+    if (correct) {
+      state.won = true;
+    } else {
+      state.hintBalance = (state.hintBalance || 0) + HINT_REWARD_ON_INCORRECT;
+    }
+    await saveGameState(env, sessionId, state);
+    const payload = buildGamePayload(state, targetProtein);
+    return Response.json(payload, { headers: CORS_HEADERS });
+  } catch (err) {
+    console.error('GeneGuessr: guess submission failed', err);
+    return Response.json({ error: 'Guess submission failed' }, { status: 500, headers: CORS_HEADERS });
+  }
 }
 
-async function getIndexData() {
-  const now = Date.now();
-  if (indexDataCache && (now - indexDataCacheTimestamp) < DATA_CACHE_TTL_MS) {
-    return indexDataCache;
+async function handleHintReveal(request, env) {
+  try {
+    const sessionId = getSessionId(request);
+    const targetProtein = await getDailyTargetProtein();
+    if (!targetProtein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+    }
+    const body = await safeJson(request);
+    const hintId = body?.hintId || body?.id;
+    if (!hintId) {
+      return Response.json({ error: 'Missing hintId' }, { status: 400, headers: CORS_HEADERS });
+    }
+    const clueSections = buildClueSections(targetProtein);
+    const hintText = extractHintText(clueSections, hintId);
+    if (!hintText) {
+      return Response.json({ error: 'Hint not found' }, { status: 404, headers: CORS_HEADERS });
+    }
+    const state = await ensureSessionForToday(env, sessionId, targetProtein);
+    if (!(state.revealedHints || []).includes(hintId)) {
+      if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
+        return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: CORS_HEADERS });
+      }
+      state.revealedHints = [...(state.revealedHints || []), hintId];
+      state.hintBalance = Math.max(0, (state.hintBalance || 0) - DEFAULT_HINT_COST);
+      await saveGameState(env, sessionId, state);
+    }
+    const payload = buildGamePayload(state, targetProtein, { clueSections });
+    payload.revealedHint = { id: hintId, text: hintText };
+    return Response.json(payload, { headers: CORS_HEADERS });
+  } catch (err) {
+    console.error('GeneGuessr: hint reveal failed', err);
+    return Response.json({ error: 'Hint reveal failed' }, { status: 500, headers: CORS_HEADERS });
   }
-  const response = await fetch(INDEX_DATA_URL, { cf: { cacheEverything: true, cacheTtl: 300 } });
-  if (!response.ok) {
-    throw new Error('Failed to fetch index data');
-  }
-  const data = await response.json();
-  indexDataCache = data;
-  indexDataCacheTimestamp = now;
-  return data;
 }
 
-async function getDailyTargetProtein(env) {
-  const indexData = await getIndexData();
-  const eligibleIds = indexData?.eligible_ids || [];
-  if (!eligibleIds.length) {
-    return null;
-  }
-  const dataset = await getProteinDataset();
-  const filteredIds = [];
-  let skippedAlphaFoldOnly = 0;
-  for (const id of eligibleIds) {
-    const normalizedId = (id || '').toString().toUpperCase();
-    if (!normalizedId) {
-      continue;
-    }
-    const protein = dataset.get(normalizedId);
-    if (protein && isAlphaFoldOnlyProtein(protein)) {
-      skippedAlphaFoldOnly += 1;
-      continue;
-    }
-    filteredIds.push(normalizedId);
-  }
-  const selectionPool = filteredIds.length ? filteredIds : eligibleIds;
-  if (!filteredIds.length && skippedAlphaFoldOnly) {
-    console.warn(`[GeneGuessr Worker] AlphaFold-only pool fallback; skipped ${skippedAlphaFoldOnly} entries but using full eligible list.`);
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  const salt = indexData.salt_hash || '';
-  const hash = await sha256(`${today}|${salt}`);
-  const hashInt = parseInt(hash.slice(0, 16), 16);
-  const idx = hashInt % selectionPool.length;
-  const uniprot = selectionPool[idx];
-  return getProteinByUniprot(uniprot);
-}
 
 async function createStructureToken(env, meta) {
   const token = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
@@ -619,6 +701,172 @@ async function createStructureToken(env, meta) {
     expirationTtl: STRUCTURE_TOKEN_TTL_SECONDS
   });
   return token;
+}
+
+async function getDailyTargetProtein() {
+  const indexData = getIndexData();
+  const eligibleIds = indexData?.eligible_ids || [];
+  if (!eligibleIds.length) {
+    return null;
+  }
+  const selection = await pickDailyTarget(eligibleIds, indexData?.salt_hash || '');
+  if (!selection?.uniprot) {
+    return null;
+  }
+  return getProteinByUniprot(selection.uniprot);
+}
+
+function createInitialGameState(date, targetId) {
+  return {
+    version: 2,
+    date,
+    targetId,
+    guesses: [],
+    hintBalance: DEFAULT_HINT_COST,
+    revealedHints: [],
+    won: false,
+    statsRecorded: false,
+    practiceMode: false,
+    createdAt: Date.now()
+  };
+}
+
+async function ensureSessionForToday(env, sessionId, targetProtein) {
+  const today = new Date().toISOString().slice(0, 10);
+  let state = null;
+  try {
+    state = await getGameState(env, sessionId);
+  } catch (err) {
+    console.warn('GeneGuessr: failed to load session, resetting', err);
+    state = null;
+  }
+  if (!state || state.date !== today || state.targetId !== targetProtein.uniprot) {
+    state = createInitialGameState(today, targetProtein.uniprot);
+    await saveGameState(env, sessionId, state);
+  }
+  return state;
+}
+
+function buildGamePayload(state, targetProtein, options = {}) {
+  const revealedHints = new Set(state.revealedHints || []);
+  const clueSections = options.clueSections || buildClueSections(targetProtein);
+  const maskedSections = maskClueSections(clueSections, revealedHints);
+  const clueTarget = sanitizeTargetProtein(targetProtein, {
+    revealIdentity: state.won || (state.guesses?.length || 0) >= MAX_GUESSES
+  });
+  const guessEntries = [];
+  const aggregatedMatches = {};
+  let latestMatches = {};
+  (state.guesses || []).forEach((entry, index) => {
+    const guessProtein = getProteinByUniprot(entry.uniprot);
+    if (!guessProtein) {
+      return;
+    }
+    const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein);
+    const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore);
+    aggregateMatches(aggregatedMatches, matches);
+    if (index === (state.guesses.length - 1)) {
+      latestMatches = matches;
+    }
+    guessEntries.push({
+      guessId: entry.guessId,
+      uniprot: entry.uniprot,
+      correct: Boolean(entry.correct),
+      createdAt: entry.createdAt,
+      score: resolvedScore,
+      matchedHints: matches,
+      protein: guessProtein
+    });
+  });
+  const lost = !state.won && guessEntries.length >= MAX_GUESSES;
+  const targetReveal = (state.won || lost)
+    ? sanitizeTargetProtein(targetProtein, { revealIdentity: true })
+    : null;
+  const shareText = targetReveal ? buildShareText(state, guessEntries) : null;
+  applyMatchReveals(maskedSections, aggregatedMatches);
+  return {
+    status: {
+      date: state.date,
+      won: Boolean(state.won),
+      lost,
+      guessCount: guessEntries.length,
+      maxGuesses: MAX_GUESSES,
+      hintBalance: state.hintBalance,
+      revealedHints: state.revealedHints || [],
+      practiceMode: Boolean(state.practiceMode)
+    },
+    clueTarget,
+    clue: {
+      sections: maskedSections,
+      allMatches: aggregatedMatches,
+      latestMatches
+    },
+    guesses: guessEntries,
+    targetReveal,
+    shareText
+  };
+}
+
+function aggregateMatches(destination, matches) {
+  Object.entries(matches || {}).forEach(([sectionId, values]) => {
+    if (!destination[sectionId]) {
+      destination[sectionId] = [];
+    }
+    values.forEach((value) => {
+      if (!destination[sectionId].includes(value)) {
+        destination[sectionId].push(value);
+      }
+    });
+  });
+}
+
+function buildShareText(state, guesses) {
+  const emoji = state.won ? 'You Win!' : 'Game Over';
+  const guessCount = guesses.length;
+  const today = state.date || new Date().toISOString().slice(0, 10);
+  const grid = guesses.map((entry) => {
+    if (entry.correct) {
+      return '??';
+    }
+    const simScore = typeof entry.score?.goSimilarity === 'number' ? entry.score.goSimilarity : 0;
+    return simScore >= 0.35 ? '??' : '?';
+  }).join('');
+  return `Geneguessr ${today}
+${emoji} ${guessCount}/${MAX_GUESSES}
+
+${grid}
+
+https://brinedew.bio/apps/geneguessr/`;
+}
+
+function applyMatchReveals(sections, matches) {
+  if (!Array.isArray(sections)) {
+    return;
+  }
+  sections.forEach((section) => {
+    const matchedValues = matches?.[section.id];
+    if (!Array.isArray(matchedValues) || matchedValues.length === 0) {
+      return;
+    }
+    const set = new Set(matchedValues);
+    section.items.forEach((item) => {
+      if (!item || !item.fullText) {
+        return;
+      }
+      if (set.has(item.fullText)) {
+        item.revealed = true;
+        item.text = item.fullText;
+      }
+    });
+  });
+}
+
+async function safeJson(request) {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
 }
 
 async function getCanonicalStructureMeta(protein) {
@@ -692,12 +940,4 @@ function isAlphaFoldOnlyProtein(protein) {
   }
   const representation = resolveStructureRepresentation(protein.structure, protein.length || 0);
   return Boolean(representation && representation.source === 'alphafold');
-}
-
-async function sha256(message) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
