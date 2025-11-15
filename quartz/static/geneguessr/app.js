@@ -679,7 +679,7 @@
   function setupStructureInteractions() {
     // Auto-load structure viewer for clue card if present
     const clueViewer = document.getElementById('pg-clue-structure');
-    if (clueViewer && hasStructureData(targetProtein) && !clueViewer.querySelector('canvas')) {
+    if (clueViewer && hasStructureData(targetProtein) && !renderedViewers.has('pg-clue-structure')) {
       loadStructureViewerInContainer(clueViewer, targetProtein).catch((err) => {
         console.error('Geneguessr: failed to load clue structure viewer', err);
       });
@@ -688,7 +688,7 @@
     // Auto-load structure viewer for solution card if present (game over)
     const solutionViewer = document.getElementById('pg-solution-card-structure');
     const solutionTarget = targetReveal || targetProtein;
-    if (solutionViewer && hasStructureData(solutionTarget) && !solutionViewer.querySelector('canvas')) {
+    if (solutionViewer && hasStructureData(solutionTarget) && !renderedViewers.has('pg-solution-card-structure')) {
       loadStructureViewerInContainer(solutionViewer, solutionTarget).catch((err) => {
         console.error('Geneguessr: failed to load solution structure viewer', err);
       });
@@ -698,8 +698,9 @@
     gameState.guesses.forEach((guess) => {
       const viewerId = `guess-card-${guess.guessId}-structure`;
       const container = document.getElementById(viewerId);
-      if (container && hasStructureData(guess.protein) && !container.querySelector('canvas')) {
-        loadStructureViewerInContainer(container, guess.protein).catch((err) => {
+      const guessProtein = guess.proteinResolved || guess.protein;
+      if (container && hasStructureData(guessProtein) && !renderedViewers.has(viewerId)) {
+        loadStructureViewerInContainer(container, guessProtein).catch((err) => {
           console.error(`Geneguessr: failed to load structure viewer for guess ${guess.guessId}`, err);
         });
       }
@@ -1361,6 +1362,9 @@
     }
     
     const containerId = container.id;
+    if (renderedViewers.has(containerId)) {
+      return;
+    }
     const placeholder = document.getElementById(`${containerId}-placeholder`);
     const loadingEl = document.getElementById(`${containerId}-loading`);
     const errorEl = document.getElementById(`${containerId}-error`);
@@ -1437,6 +1441,7 @@
       });
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
+      renderedViewers.add(containerId);
     } catch (err) {
       console.error('Geneguessr: Mol* render failed', err);
       if (errorEl) {
@@ -1444,6 +1449,7 @@
         errorEl.hidden = false;
       }
       if (placeholder) placeholder.hidden = false;
+      renderedViewers.delete(containerId);
     } finally {
       if (loadingEl) loadingEl.hidden = true;
     }
@@ -1493,6 +1499,7 @@
   const DEFAULT_HINT_COST = 1;
   const HINT_REWARD_ON_INCORRECT = 1;
   const MAX_GUESSES = 6;
+  const LOCKED_HINT_PLACEHOLDER = 'Hint locked';
   
   // State
   let proteins = [];
@@ -1519,8 +1526,26 @@
   const structureTokenCache = new Map();
   let targetStructureInfo = null;
   const viewerStructureInfo = new Map();
+  const renderedViewers = new Set();
   let gamePayload = null;
   let collapseDelegationBound = false;
+  let spoilerDelegationBound = false;
+
+  function markViewerDirty(containerId) {
+    if (!containerId) {
+      return;
+    }
+    renderedViewers.delete(containerId);
+    viewerStructureInfo.delete(containerId);
+  }
+
+  function markGuessViewersDirty() {
+    for (const id of Array.from(renderedViewers)) {
+      if (id.startsWith('guess-card-')) {
+        markViewerDirty(id);
+      }
+    }
+  }
   let collapseDelegationBound = false;
 
   async function fetchGameBootstrap() {
@@ -1566,6 +1591,7 @@
     if (!payload || !payload.status) {
       return;
     }
+    targetStructureInfo = null;
     gamePayload = payload;
     gameStatus = payload.status;
     clueData = payload.clue || { sections: [], allMatches: {}, latestMatches: {} };
@@ -1973,15 +1999,17 @@
       : '';
     const highlightCandidates = getHighlightCandidates(section.id);
     const itemsHtml = (section.items || []).map(item => {
-      const normalizedText = normalizeMatchText(item.fullText ?? item.text);
-      const isMatched = item.revealed && highlightCandidates.has(normalizedText);
+      const text = typeof item.text === 'string' ? item.text : null;
+      const normalizedText = normalizeMatchText(text);
+      const isMatched = Boolean(text && highlightCandidates.has(normalizedText));
       const entryClass = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
       if (!item.id || item.revealed) {
-        const text = item.text ?? '';
-        return `<span class="${entryClass}">${escapeHtml(text)}</span>`;
+        if (text) {
+          return `<span class="${entryClass}">${escapeHtml(text)}</span>`;
+        }
+        return `<span class="${entryClass}"></span>`;
       }
-      const placeholder = item.placeholder || 'Hint locked';
-      return `<span class="${entryClass}"><span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}" role="button" tabindex="0">${escapeHtml(placeholder)}</span></span>`;
+      return renderLockedHintPlaceholder(item, entryClass);
     }).join('');
     return `<div class="pg-section">${labelHtml}${itemsHtml}</div>`;
   }
@@ -1995,6 +2023,21 @@
     const fallback = clueData?.allMatches?.[sectionId] || [];
     const source = latest.length ? latest : fallback;
     return new Set(source.map(normalizeMatchText));
+  }
+
+  function renderLockedHintPlaceholder(item, entryClass) {
+    if (!item?.id) {
+      return `<span class="${entryClass}">${escapeHtml(item?.placeholder || LOCKED_HINT_PLACEHOLDER)}</span>`;
+    }
+    const placeholder = item?.placeholder || LOCKED_HINT_PLACEHOLDER;
+    const maskLength = Number(item?.maskLength) || placeholder.length || LOCKED_HINT_PLACEHOLDER.length;
+    const width = Math.max(maskLength, placeholder.length, LOCKED_HINT_PLACEHOLDER.length);
+    const mask = buildMaskCharacters(width);
+    return `<span class="${entryClass}">
+      <span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}" role="button" tabindex="0" aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint" style="min-width:${width}ch">
+        <span class="pg-redaction-cover" aria-hidden="true">${mask}</span>
+      </span>
+    </span>`;
   }
 
   function renderClueCard(gameOver = false) {
@@ -2047,9 +2090,10 @@
       allRevealedItems = [],
       removeSpoilers = false,
     } = options;
-    const highlightSet = new Set(matchedItems || []);
+    const highlightSet = new Set((matchedItems || []).map(normalizeMatchText));
     const normalizedRevealed = allRevealedItems || [];
-    const revealSet = new Set(normalizedRevealed.length > 0 ? normalizedRevealed : matchedItems);
+    const revealSetSource = normalizedRevealed.length > 0 ? normalizedRevealed : matchedItems;
+    const revealSet = new Set((revealSetSource || []).map(normalizeMatchText));
     
     // Special handling for gene summary section
     if (section.type === 'summary') {
@@ -2061,18 +2105,12 @@
       if (showSpoilers && item.id) {
         const revealed = isHintRevealed(item.id);
         if (!revealed) {
-          return `
-            <div class="pg-section pg-gene-summary">
-              <span class="pg-redaction" 
-                    data-hint-id="${item.id}" 
-                    role="button" 
-                    tabindex="0"
-                    aria-label="Click to reveal gene summary for ${DEFAULT_HINT_COST} hint">
-                <span class="pg-redaction-shadow" aria-hidden="true">${summaryText}</span>
-                <span class="pg-redaction-cover" aria-hidden="true"></span>
-              </span>
-            </div>
-          `;
+          const placeholderNode = renderLockedHintPlaceholder({
+            id: item.id,
+            placeholder: 'Gene summary locked',
+            maskLength: summaryText.length || 16
+          }, 'pg-section-entry');
+          return `<div class="pg-section pg-gene-summary">${placeholderNode}</div>`;
         }
       }
       
@@ -2094,32 +2132,32 @@
     
     // Render all items with commas, applying spoilers or match indicators as needed
     const itemsHtml = section.items.map((item) => {
-      const text = (item && typeof item.text === 'string') ? item.text : String(item.text ?? '');
-      const isMatched = item.matched || highlightSet.has(item.text);
-      const shouldReveal = revealSet.has(item.text);
+      const text = typeof item.text === 'string' ? item.text : null;
+      const normalizedText = normalizeMatchText(text);
+      const isMatched = Boolean(item.matched) || (text && highlightSet.has(normalizedText));
+      const shouldReveal = text && revealSet.has(normalizedText);
      
       // For spoiler mode (clue cards)
       if (showSpoilers && item.id) {
         const revealed = isHintRevealed(item.id);
         const forceReveal = removeSpoilers && shouldReveal;
-        if (revealed || forceReveal) {
+        if ((revealed || forceReveal) && text) {
           const cls = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
-          return `<span class="${cls}">${text}</span>`;
+          return `<span class="${cls}">${escapeHtml(text)}</span>`;
         }
-        return `<span class="pg-section-entry"><span class="pg-redaction" 
-                    data-hint-id="${item.id}" 
-                    role="button" 
-                    tabindex="0"
-                    aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint">${text}</span></span>`;
+        return renderLockedHintPlaceholder(item, isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry');
       }
       
       // For feedback mode (guess cards) - apply match highlighting
-      if (isMatched) {
-        return `<span class="pg-section-entry matched-highlight">${text}</span>`;
+      if (text && isMatched) {
+        return `<span class="pg-section-entry matched-highlight">${escapeHtml(text)}</span>`;
       }
       
       // Default
-      return `<span class="pg-section-entry">${text}</span>`;
+      if (text) {
+        return `<span class="pg-section-entry">${escapeHtml(text)}</span>`;
+      }
+      return renderLockedHintPlaceholder(item, 'pg-section-entry');
     }).join('');
     
     return `
@@ -2227,25 +2265,12 @@
       return;
     }
     
+    markViewerDirty('pg-clue-structure');
     if (gameOver) {
-      slot.innerHTML = renderClueCard(true);
-      setupSpoilerHandlers();
-      return;
+      markViewerDirty('pg-solution-card-structure');
     }
-    
-    const existingCard = slot.querySelector('.pg-clue-card');
-    
-    if (existingCard && existingCard.dataset.gameOver === String(gameOver)) {
-      const sectionsContainer = existingCard.querySelector('[data-clue-sections]');
-      if (sectionsContainer) {
-        sectionsContainer.innerHTML = renderClueSectionsHtml();
-        setupSpoilerHandlers();
-      }
-      return;
-    }
-    
-    slot.innerHTML = renderClueCard(false);
-    setupSpoilerHandlers();
+    slot.innerHTML = renderClueCard(gameOver);
+    ensureSpoilerDelegation();
   }
   
   function renderInputSection(gameOver) {
@@ -2328,6 +2353,7 @@
     if (expectedCount === 0) {
       if (existingCount !== 0) {
         guessesEl.innerHTML = '';
+        markGuessViewersDirty();
       }
       return;
     }
@@ -2347,6 +2373,7 @@
     }
     
     // Full re-render needed (initial load or state mismatch)
+    markGuessViewersDirty();
     guessesEl.innerHTML = gameState.guesses
       .map((g, idx) => {
         const isLatest = idx === gameState.guesses.length - 1;
@@ -2432,7 +2459,7 @@
   function renderCollapsibleFeedback(guessEntry, isLatest) {
     const cardId = `guess-card-${guessEntry.guessId}`;
     const expanded = getCardExpansionState(cardId, isLatest);
-    const matchedHintMap = isLatest ? collectMatchedHintTexts(targetProtein, guessEntry) : {};
+    const matchedHintMap = guessEntry.matchedHints || {};
     const protein = guessEntry.proteinResolved || resolveGuessProtein(guessEntry);
     if (!protein) {
       return '';
@@ -2532,6 +2559,53 @@
     
     if (newExpanded) {
       card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function ensureSpoilerDelegation() {
+    if (spoilerDelegationBound) {
+      return;
+    }
+    const handleClick = (event) => {
+      const redaction = event.target.closest('.pg-redaction[data-hint-id]');
+      if (!redaction) {
+        return;
+      }
+      event.preventDefault();
+      activateSpoiler(redaction);
+    };
+    const handleKeydown = (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      const redaction = event.target.closest('.pg-redaction[data-hint-id]');
+      if (!redaction) {
+        return;
+      }
+      event.preventDefault();
+      activateSpoiler(redaction);
+    };
+    document.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleKeydown);
+    spoilerDelegationBound = true;
+  }
+
+  async function activateSpoiler(redaction) {
+    const hintId = redaction.dataset.hintId;
+    if (!hintId || redaction.dataset.loading === 'true') {
+      return;
+    }
+    redaction.dataset.loading = 'true';
+    redaction.classList.add('pg-redaction-loading');
+    try {
+      const payload = await requestHintReveal(hintId);
+      hydrateStateFromPayload(payload);
+      render();
+    } catch (err) {
+      console.error('Geneguessr: failed to reveal hint', err);
+    } finally {
+      redaction.dataset.loading = 'false';
+      redaction.classList.remove('pg-redaction-loading');
     }
   }
 
@@ -2940,31 +3014,6 @@
     document.getElementById('pg-submit').dataset.uniprot = uniprot;
   }
 
-  function setupSpoilerHandlers() {
-    document.querySelectorAll('.pg-redaction[data-hint-id]').forEach((redaction) => {
-      const clean = redaction.cloneNode(true);
-      redaction.replaceWith(clean);
-      
-      const handleReveal = async () => {
-        const hintId = clean.dataset.hintId;
-        if (!hintId) return;
-        clean.classList.add('pg-redaction-loading');
-        try {
-          await requestHintReveal(hintId);
-        } finally {
-          clean.classList.remove('pg-redaction-loading');
-        }
-      };
-      
-      clean.addEventListener('click', handleReveal);
-      clean.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleReveal();
-        }
-      });
-    });
-  }
   
   /**
    * Handle guess submission
@@ -3069,7 +3118,7 @@ https://brinedew.bio/apps/geneguessr/`;
       renderResultSection(gameOver);
       renderFooterSection(gameOver);
       
-      setupSpoilerHandlers();
+    ensureSpoilerDelegation();
       setupStructureInteractions();
       updateSidebarStats();
     } catch (err) {
@@ -3347,3 +3396,7 @@ function attachAttributionCollapseLogic() {
 
 })();
 
+  function buildMaskCharacters(length) {
+    const cap = Math.min(Math.max(Number(length) || LOCKED_HINT_PLACEHOLDER.length, LOCKED_HINT_PLACEHOLDER.length), 64);
+    return '█'.repeat(cap);
+  }
