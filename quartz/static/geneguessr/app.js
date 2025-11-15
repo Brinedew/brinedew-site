@@ -1353,6 +1353,7 @@ let gameState = {
   practiceMode: false,
   statsRecorded: false
 };
+  let tutorialBootRequested = false;
 
   function generateGuessId() {
     if (window.crypto?.randomUUID) {
@@ -2238,6 +2239,7 @@ let gameState = {
             <span class="pg-hints-value">${hints}</span>
           </div>
           ${practiceBadge}
+          <button type="button" class="pg-how-to-play" id="pg-how-to-play">How to Play</button>
         </div>
       </div>
     `;
@@ -2254,6 +2256,13 @@ let gameState = {
       inputEl.addEventListener('input', () => {
         submitBtn.disabled = true;
         delete submitBtn.dataset.uniprot;
+      });
+    }
+
+    const howToPlayButton = document.getElementById('pg-how-to-play');
+    if (howToPlayButton && window.GeneGuessrTutorial && typeof window.GeneGuessrTutorial.open === 'function') {
+      howToPlayButton.addEventListener('click', () => {
+        window.GeneGuessrTutorial.open();
       });
     }
   }
@@ -3231,6 +3240,12 @@ https://brinedew.bio/apps/geneguessr/`;
     // Render
     render();
     setStatus('rendered');
+
+    if (!tutorialBootRequested && window.GeneGuessrTutorial && typeof window.GeneGuessrTutorial.boot === 'function') {
+      tutorialBootRequested = true;
+      window.GeneGuessrTutorial.boot();
+    }
+
     // Attach collapse logic for Attribution & Data Sources card
     attachAttributionCollapseLogic();
   }

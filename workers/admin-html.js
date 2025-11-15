@@ -660,18 +660,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               <label for="lighting-enabled">Enable Lighting</label>
             </div>
           </div>
-          <div class="form-group">
-            <label for="lighting-exposure">Exposure <span class="value-pill" id="lighting-exposure-value">1.00</span></label>
-            <input type="range" id="lighting-exposure" min="0" max="3" step="0.05" value="1">
-          </div>
-          <div class="form-group">
-            <label for="lighting-preset">Lighting Preset</label>
-            <select id="lighting-preset">
-              <option value="studio">Studio Balanced</option>
-              <option value="cinematic">Cinematic Ultra</option>
-              <option value="performance">Performance</option>
-            </select>
-          </div>
+        <div class="form-group">
+          <label for="lighting-exposure">Exposure <span class="value-pill" id="lighting-exposure-value">1.00</span></label>
+          <input type="range" id="lighting-exposure" min="0" max="3" step="0.05" value="1">
+        </div>
+        <p class="helper-text" style="margin-bottom: 1rem;">
+          Adjust the individual key, fill, and rim lights below. Use the profile manager to save custom lighting sets.
+        </p>
           <div class="light-grid">
             <div class="light-card">
               <h4>Key Light</h4>
@@ -1202,9 +1197,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       document.getElementById('profile-save').addEventListener('click', saveProfileFromCurrent);
       document.getElementById('profile-delete').addEventListener('click', deleteSelectedProfile);
       document.getElementById('profile-reset').addEventListener('click', resetBuiltInProfiles);
-      document.getElementById('lighting-preset').addEventListener('change', (event) => {
-        applyLightingPresetToFields(event.target.value);
-      });
       document.getElementById('occlusion-quality').addEventListener('change', (event) => {
         applyOcclusionPresetToFields(event.target.value);
       });
@@ -1247,10 +1239,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       const target = event?.target;
       if (target) {
         if (target.id === 'profile-name' || target.id === 'profile-description') {
-          return;
-        }
-        if (target.id === 'lighting-preset') {
-          applyLightingPresetToFields(target.value);
           return;
         }
         if (target.id === 'occlusion-quality') {
@@ -1562,26 +1550,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       };
     }
 
-    function applyLightingPresetToFields(key) {
-      const preset = LIGHTING_PRESETS[key];
-      if (!preset) {
-        return;
-      }
-      document.getElementById('lighting-preset').value = key;
-      document.getElementById('lighting-enabled').checked = preset.enabled !== false;
-      document.getElementById('lighting-exposure').value = preset.exposure ?? 1;
-      LIGHT_IDS.forEach((id, index) => {
-        const light = preset.lights[index] || preset.lights[0];
-        document.getElementById('light-' + id + '-color').value = light && light.color ? light.color : '#ffffff';
-        document.getElementById('light-' + id + '-intensity').value = light && light.intensity !== undefined ? light.intensity : 1;
-        document.getElementById('light-' + id + '-inclination').value = light && light.inclination !== undefined ? light.inclination : 160;
-        document.getElementById('light-' + id + '-azimuth').value = light && light.azimuth !== undefined ? light.azimuth : (index * 120);
-      });
-      updateValueBadges();
-      pendingGraphicsSettings = collectGraphicsSettingsFromForm();
-      refreshPreview({ immediate: true });
-    }
-
     function applyOcclusionPresetToFields(key) {
       const preset = OCCLUSION_PRESETS[key];
       if (!preset) {
@@ -1610,7 +1578,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       document.getElementById('background-custom').value = safe.background?.custom || '#0f172a';
       document.getElementById('lighting-enabled').checked = safe.lighting?.enabled !== false;
       document.getElementById('lighting-exposure').value = safe.lighting?.exposure ?? 1;
-      document.getElementById('lighting-preset').value = deriveLightingPresetKey(safe.lighting);
       LIGHT_IDS.forEach((id, index) => {
         const lightList = safe.lighting && safe.lighting.lights;
         const lightInput = (Array.isArray(lightList) && (lightList.find((light) => light.id === id) || lightList[index])) || LIGHTING_PRESETS.studio.lights[index];
@@ -1729,35 +1696,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         return 'medium';
       }
       return 'low';
-    }
-
-    function deriveLightingPresetKey(lighting) {
-      if (!lighting) {
-        return 'studio';
-      }
-      const normalized = normalizeLightingForComparison(lighting);
-      const entries = Object.entries(LIGHTING_PRESETS);
-      for (let i = 0; i < entries.length; i += 1) {
-        const key = entries[i][0];
-        const preset = entries[i][1];
-        if (JSON.stringify(normalized) === JSON.stringify(normalizeLightingForComparison(preset))) {
-          return key;
-        }
-      }
-      return 'studio';
-    }
-
-    function normalizeLightingForComparison(lighting) {
-      return {
-        enabled: lighting.enabled !== false,
-        exposure: Number(lighting.exposure !== undefined ? lighting.exposure : 1).toFixed(2),
-        lights: (lighting.lights || []).map((light) => ({
-          inclination: Math.round(light.inclination !== undefined ? light.inclination : 0),
-          azimuth: Math.round(light.azimuth !== undefined ? light.azimuth : 0),
-          intensity: Number(light.intensity !== undefined ? light.intensity : 1).toFixed(2),
-          color: (light.color || '#ffffff').toLowerCase()
-        }))
-      };
     }
 
     function autoSizeSelects() {
@@ -2450,6 +2388,3 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
 </body>
 </html>`;
-
-
-

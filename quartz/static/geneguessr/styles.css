@@ -281,6 +281,216 @@
   pointer-events: none !important;
 }
 
+.pg-how-to-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-bg);
+  color: var(--dark);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.pg-how-to-play:hover {
+  background: var(--light);
+  border-color: var(--dark);
+}
+
+:root[data-theme="dark"] .pg-how-to-play {
+  color: var(--light, #f8f1e7);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+:root[data-theme="dark"] .pg-how-to-play:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pg-tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1050;
+}
+
+.pg-tutorial-overlay.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pg-tutorial-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px);
+}
+
+.pg-tutorial-card {
+  position: relative;
+  width: min(540px, 100%);
+  padding: 2rem 2rem 1.5rem;
+  border-radius: 18px;
+  background: var(--ui-bg);
+  color: var(--dark);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.5);
+  z-index: 1;
+}
+
+:root[data-theme="dark"] .pg-tutorial-card {
+  background: rgba(15, 23, 42, 0.95);
+  color: var(--light, #f8f1e7);
+}
+
+.pg-tutorial-skip {
+  position: absolute;
+  top: 1rem;
+  right: 1.25rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.9rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pg-tutorial-status {
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--secondary);
+}
+
+.pg-tutorial-content h2 {
+  font-size: 1.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.pg-tutorial-list {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pg-tutorial-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.pg-tutorial-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--ui-border);
+  background: var(--light);
+  color: var(--dark);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.pg-tutorial-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+:root[data-theme="dark"] .pg-tutorial-nav-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--light, #f8f1e7);
+}
+
+.pg-tutorial-forward.is-play {
+  border-radius: 999px;
+  width: auto;
+  padding: 0.5rem 1.5rem;
+}
+
+.pg-tutorial-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex: 1;
+}
+
+.pg-tutorial-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ui-border);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.pg-tutorial-dot.is-active {
+  transform: scale(1.2);
+  background: var(--dark);
+}
+
+:root[data-theme="dark"] .pg-tutorial-dot.is-active {
+  background: var(--light, #f8f1e7);
+}
+
+.pg-tutorial-footer {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.pg-tutorial-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--secondary);
+}
+
+.pg-tutorial-locked {
+  overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .pg-tutorial-card {
+    padding: 1.5rem;
+  }
+
+  .pg-tutorial-nav-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-tutorial-overlay {
+    transition: none;
+  }
+
+  .pg-tutorial-dot,
+  .pg-tutorial-nav-btn {
+    transition: none;
+  }
+}
+
 @media (max-width: 600px) {
   .pg-structure-viewer {
     height: 260px;

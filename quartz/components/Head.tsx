@@ -162,13 +162,17 @@ export default (() => {
               )}
               {isGeneguessr && (
                 <>
-                  <link
+              <link
                     rel="stylesheet"
                     href={joinSegments(root, "static", `geneguessr/styles.css?v=${CACHE_BUST}`)}
                   />
                   <script
                     defer
                     src={joinSegments(root, "static", `geneguessr/credits.js?v=${CACHE_BUST}`)}
+                  ></script>
+                  <script
+                    defer
+                    src={joinSegments(root, "static", `geneguessr/tutorial.js?v=${CACHE_BUST}`)}
                   ></script>
                   <script defer src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}></script>
                 </>
@@ -195,7 +199,6 @@ export default (() => {
 
   return Head
 }) satisfies QuartzComponentConstructor
-
 
 
 
