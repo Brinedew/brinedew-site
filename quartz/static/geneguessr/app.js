@@ -604,6 +604,17 @@
     return targetStructureInfo;
   }
 
+  async function hydrateStructureTokensForGuesses(guessEntries) {
+    if (!Array.isArray(guessEntries) || guessEntries.length === 0) {
+      return;
+    }
+    const tasks = guessEntries
+      .map((entry) => entry?.uniprot)
+      .filter(Boolean)
+      .map((uniprot) => ensureStructureTokenForProtein(uniprot));
+    await Promise.all(tasks);
+  }
+
   function renderStructureViewer(protein, viewerId, options = {}) {
     if (!protein || !hasStructureData(protein)) {
       return '';
@@ -648,9 +659,12 @@
       return;
     }
     const linkable = sourceEl.dataset.sourceLinkable === 'true';
-    const label = metadata?.label || 'Source unavailable';
+    const fallbackLabel = metadata?.label || 'Source unavailable';
+    const shortLabel = metadata?.shortLabel || fallbackLabel;
+    const longLabel = metadata?.longLabel || fallbackLabel;
+    const label = linkable ? (longLabel || shortLabel) : shortLabel;
     const safeLabel = escapeAttribute(label);
-    const safeUrl = metadata?.linkUrl ? escapeAttribute(metadata.linkUrl) : null;
+    const safeUrl = linkable && metadata?.linkUrl ? escapeAttribute(metadata.linkUrl) : null;
     const inner = linkable && safeUrl
       ? `Source: <a href="${safeUrl}" target="_blank" rel="noopener" class="pg-structure-source-link">${safeLabel}</a>`
       : `Source: ${safeLabel}`;
@@ -1492,9 +1506,11 @@
       }
 
       const metadata = getStructureSourceMetadataFromRepresentation(representation);
+      const refreshedShortLabel = structureInfo?.sourceLabel || metadata?.label || 'Source unavailable';
+      const refreshedLongLabel = structureInfo?.displayLabel || metadata?.label || refreshedShortLabel;
       updateStructureSourceDisplay(containerId, {
-        label: structureInfo.displayLabel || structureInfo.sourceLabel || metadata?.label || 'Source unavailable',
-        linkable: Boolean(options.linkable),
+        shortLabel: refreshedShortLabel,
+        longLabel: refreshedLongLabel,
         linkUrl: metadata?.url || null
       });
       container.dataset.viewerLoaded = 'true';
@@ -1773,7 +1789,14 @@ let gameState = {
     if (resetHintsForDaily) {
       resetHintBalanceToDefault();
     }
-    
+
+    await ensureStructureTokenForTarget();
+    await hydrateStructureTokensForGuesses(gameState.guesses);
+    const solvedOrExhausted = gameState.won || gameState.guesses.length >= MAX_GUESSES;
+    if (solvedOrExhausted && targetProtein?.uniprot) {
+      await ensureStructureTokenForProtein(targetProtein.uniprot);
+    }
+
     saveState();
   }
   
@@ -2165,11 +2188,14 @@ let gameState = {
 
   function renderClueCard(gameOver = false) {
     if (gameOver) {
+      const revealStructureInfo = getStructureInfoForProtein(targetProtein.uniprot) || getTargetStructureInfo();
       const revealCard = buildFeedbackCardMarkup(targetProtein, {
         cardId: 'pg-solution-card',
         collapsible: false,
         expanded: true,
         showSimilarity: false,
+        structureInfo: revealStructureInfo,
+        linkable: true,
       });
       return `
         ${renderResult()}
@@ -2561,6 +2587,8 @@ let gameState = {
       showSimilarity = Boolean(score),
       headerLabel = protein.hgnc,
       matchedHintMap = {},
+      structureInfo = null,
+      linkable = false,
     } = options;
     
     const goPercent = showSimilarity && score && typeof score.goPercent === 'number'
@@ -2585,7 +2613,7 @@ let gameState = {
     
     // Add structure viewer above sections
     const viewerId = `${cardId}-structure`;
-    const structureMarkup = renderStructureViewer(protein, viewerId, { linkable: true });
+    const structureMarkup = renderStructureViewer(protein, viewerId, { linkable, structureInfo });
     
     const contentMarkup = `
       <div class="pg-feedback-content" id="${cardId}-content">
@@ -3178,6 +3206,12 @@ let gameState = {
       await recordStatsOnce(true);
     } else if (gameState.guesses.length >= MAX_GUESSES) {
       await recordStatsOnce(false);
+    }
+
+    await ensureStructureTokenForProtein(guessProtein.uniprot);
+    const reachedEndOfRound = isCorrect || gameState.guesses.length >= MAX_GUESSES;
+    if (reachedEndOfRound && targetProtein?.uniprot) {
+      await ensureStructureTokenForProtein(targetProtein.uniprot);
     }
     
     // Save state
