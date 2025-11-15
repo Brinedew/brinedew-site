@@ -1521,6 +1521,7 @@
   const viewerStructureInfo = new Map();
   let gamePayload = null;
   let collapseDelegationBound = false;
+  let collapseDelegationBound = false;
 
   async function fetchGameBootstrap() {
     const response = await fetch(`${API_BASE}/api/game/bootstrap`, {
@@ -1573,7 +1574,10 @@
     targetReveal = payload.targetReveal || null;
     shareText = payload.shareText || '';
     gameState.date = gameStatus.date;
-    gameState.guesses = guessEntries;
+    gameState.guesses = guessEntries.map((entry) => ({
+      ...entry,
+      proteinResolved: resolveGuessProtein(entry)
+    }));
     gameState.won = Boolean(gameStatus.won);
     gameState.targetId = targetReveal?.uniprot || null;
     gameState.practiceMode = Boolean(gameStatus.practiceMode);
@@ -1619,6 +1623,30 @@
       links: protein && protein.links ? protein.links : {}
     };
   }
+
+  function resolveGuessProtein(entry) {
+    if (!entry || !entry.uniprot) {
+      return null;
+    }
+    const datasetProtein = getProteinById(entry.uniprot);
+    if (datasetProtein) {
+      return datasetProtein;
+    }
+    if (entry.protein) {
+      return normalizeProtein(entry.protein);
+    }
+    return null;
+  }
+
+  function hydrateGuessProteins() {
+    if (!Array.isArray(gameState.guesses)) {
+      return;
+    }
+    gameState.guesses = gameState.guesses.map((entry) => {
+      const resolved = resolveGuessProtein(entry);
+      return resolved ? { ...entry, proteinResolved: resolved } : entry;
+    });
+  }
   
   function indexProteins(list) {
     proteinsById.clear();
@@ -1660,6 +1688,7 @@
   async function bootstrapGame() {
     const payload = await fetchGameBootstrap();
     hydrateStateFromPayload(payload);
+    hydrateGuessProteins();
     await ensureStructureTokenForTarget();
     await hydrateStructureTokensForGuesses(gameState.guesses);
     const solvedOrExhausted = gameState.won || gameState.guesses.length >= MAX_GUESSES;
@@ -1942,9 +1971,10 @@
     const labelHtml = section.label
       ? `<span class="pg-section-label">${escapeHtml(section.label)}:</span> `
       : '';
-    const latestMatches = clueData?.latestMatches?.[section.id] || [];
+    const highlightCandidates = getHighlightCandidates(section.id);
     const itemsHtml = (section.items || []).map(item => {
-      const isMatched = item.revealed && latestMatches.includes(item.text);
+      const normalizedText = normalizeMatchText(item.fullText ?? item.text);
+      const isMatched = item.revealed && highlightCandidates.has(normalizedText);
       const entryClass = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
       if (!item.id || item.revealed) {
         const text = item.text ?? '';
@@ -1954,6 +1984,17 @@
       return `<span class="${entryClass}"><span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}" role="button" tabindex="0">${escapeHtml(placeholder)}</span></span>`;
     }).join('');
     return `<div class="pg-section">${labelHtml}${itemsHtml}</div>`;
+  }
+
+  function normalizeMatchText(value) {
+    return (value ?? '').toString().trim().toLowerCase();
+  }
+
+  function getHighlightCandidates(sectionId) {
+    const latest = clueData?.latestMatches?.[sectionId] || [];
+    const fallback = clueData?.allMatches?.[sectionId] || [];
+    const source = latest.length ? latest : fallback;
+    return new Set(source.map(normalizeMatchText));
   }
 
   function renderClueCard(gameOver = false) {
@@ -1989,11 +2030,11 @@
     });
     
     return `
-      <div class="pg-clue-card" data-game-over="false">
-        ${structureMarkup}
-        <div class="pg-clue-sections" data-clue-sections>
-          ${renderClueSectionsHtml()}
-        </div>
+        <div class="pg-clue-card" data-game-over="false">
+          ${structureMarkup}
+          <div class="pg-clue-sections" data-clue-sections>
+            ${renderClueSectionsHtml()}
+          </div>
       </div>
     `;
   }
@@ -2302,10 +2343,6 @@
       const newCardHtml = renderCollapsibleFeedback(latestGuess, true);
       guessesEl.insertAdjacentHTML('afterbegin', newCardHtml);
       syncFeedbackContentHeights();
-      // Preserve existing Mol* canvases: never touch earlier cards when inserting the new one.
-      guessesEl.querySelectorAll('.pg-feedback-card:not(:first-child) .matched-highlight').forEach((el) => {
-        el.classList.remove('matched-highlight');
-      });
       return;
     }
     
@@ -2396,8 +2433,12 @@
     const cardId = `guess-card-${guessEntry.guessId}`;
     const expanded = getCardExpansionState(cardId, isLatest);
     const matchedHintMap = isLatest ? collectMatchedHintTexts(targetProtein, guessEntry) : {};
+    const protein = guessEntry.proteinResolved || resolveGuessProtein(guessEntry);
+    if (!protein) {
+      return '';
+    }
     
-    return buildFeedbackCardMarkup(guessEntry.protein, {
+    return buildFeedbackCardMarkup(protein, {
       score: guessEntry.score,
       cardId,
       collapsible: true,
