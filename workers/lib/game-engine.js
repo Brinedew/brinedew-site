@@ -198,7 +198,7 @@ export function collectMatchedHintTexts(target, guessProtein, score) {
   if (propertyMatches.length) {
     matches.properties = propertyMatches;
   }
-  if (score?.lengthBinMatch) {
+  if (isLengthWithinTolerance(target?.length, guessProtein?.length)) {
     matches.length = [`${target.length} aa`];
   }
   return matches;
@@ -249,6 +249,16 @@ function determineLengthBin(len) {
   if (len < 1200) return 2;
   if (len < 1600) return 3;
   return 4;
+}
+
+function isLengthWithinTolerance(targetLength, guessLength, toleranceRatio = 0.1) {
+  const target = Number(targetLength);
+  const guess = Number(guessLength);
+  if (!Number.isFinite(target) || !Number.isFinite(guess) || target <= 0) {
+    return false;
+  }
+  const diff = Math.abs(target - guess);
+  return diff <= target * toleranceRatio;
 }
 
 function getGoSimilarityScore(guessId, targetId) {
