@@ -585,12 +585,31 @@ async function getDailyTargetProtein(env) {
   if (!eligibleIds.length) {
     return null;
   }
+  const dataset = await getProteinDataset();
+  const filteredIds = [];
+  let skippedAlphaFoldOnly = 0;
+  for (const id of eligibleIds) {
+    const normalizedId = (id || '').toString().toUpperCase();
+    if (!normalizedId) {
+      continue;
+    }
+    const protein = dataset.get(normalizedId);
+    if (protein && isAlphaFoldOnlyProtein(protein)) {
+      skippedAlphaFoldOnly += 1;
+      continue;
+    }
+    filteredIds.push(normalizedId);
+  }
+  const selectionPool = filteredIds.length ? filteredIds : eligibleIds;
+  if (!filteredIds.length && skippedAlphaFoldOnly) {
+    console.warn(`[GeneGuessr Worker] AlphaFold-only pool fallback; skipped ${skippedAlphaFoldOnly} entries but using full eligible list.`);
+  }
   const today = new Date().toISOString().slice(0, 10);
   const salt = indexData.salt_hash || '';
   const hash = await sha256(`${today}|${salt}`);
   const hashInt = parseInt(hash.slice(0, 16), 16);
-  const idx = hashInt % eligibleIds.length;
-  const uniprot = eligibleIds[idx];
+  const idx = hashInt % selectionPool.length;
+  const uniprot = selectionPool[idx];
   return getProteinByUniprot(uniprot);
 }
 
@@ -665,6 +684,14 @@ function getFileExtensionFromUrl(url) {
   if (lower.includes('.bcif')) return 'bcif';
   if (lower.includes('.pdb')) return 'pdb';
   return 'cif';
+}
+
+function isAlphaFoldOnlyProtein(protein) {
+  if (!protein || !protein.structure) {
+    return false;
+  }
+  const representation = resolveStructureRepresentation(protein.structure, protein.length || 0);
+  return Boolean(representation && representation.source === 'alphafold');
 }
 
 async function sha256(message) {
