@@ -458,57 +458,62 @@
     return Number.isFinite(num) ? num : null;
   }
 
-  function buildMolstarOptionsFromRepresentation(representation) {
+  function buildMolstarOptionsFromRepresentation(representation, overrides = {}) {
     if (!representation) {
       return null;
     }
     if (representation.source === 'pdb' && representation.pdb && representation.pdb.id) {
-      const rawUrl = `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`;
-      const proxiedUrl = buildStructureFetchUrl(rawUrl);
-      if (!proxiedUrl) {
-        return null;
-      }
-      return {
+      const obj = {
         moleculeId: representation.pdb.id,
         assemblyId: '1',
         customData: {
-          url: proxiedUrl,
+          url: `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`,
           format: 'cif'
         }
       };
+      applyStructureOverrides(obj, overrides);
+      return obj;
     }
     if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
-      const proxiedUrl = buildStructureFetchUrl(representation.alphafold.model_url);
-      if (!proxiedUrl) {
-        return null;
-      }
-      return {
+      const obj = {
         moleculeId: representation.alphafold.id || representation.structureId || targetProtein?.uniprot,
         customData: {
-          url: proxiedUrl,
+          url: representation.alphafold.model_url,
           format: 'cif'
         }
       };
+      applyStructureOverrides(obj, overrides);
+      return obj;
     }
     if (representation.source === 'swissmodel' && representation.swissModel) {
       const swissUrl = representation.swissModel.coordinates_url || representation.swissModel.coordinatesUrl || representation.swissModel.model_url || representation.swissModel.modelcif;
       if (!swissUrl) {
         return null;
       }
-      const proxiedUrl = buildStructureFetchUrl(swissUrl);
-      if (!proxiedUrl) {
-        return null;
-      }
-      return {
+      const obj = {
         moleculeId: representation.swissModel.model_id || representation.swissModel.template || representation.structureId || 'SWISS',
         assemblyId: '1',
         customData: {
-          url: proxiedUrl,
+          url: swissUrl,
           format: detectStructureFormat(swissUrl, representation.swissModel.format)
         }
       };
+      applyStructureOverrides(obj, overrides);
+      return obj;
     }
     return null;
+  }
+
+  function applyStructureOverrides(option, overrides) {
+    if (!option || !option.customData || !overrides) {
+      return;
+    }
+    if (overrides.structureToken) {
+      option.customData.url = `${API_BASE}/api/structure?token=${overrides.structureToken}`;
+      if (overrides.format) {
+        option.customData.format = overrides.format;
+      }
+    }
   }
 
   function detectStructureFormat(url, explicitFormat) {
@@ -527,18 +532,99 @@
     return 'pdb';
   }
 
+  async function ensureStructureTokenForTarget() {
+    if (targetStructureInfo && targetStructureInfo.token) {
+      return targetStructureInfo;
+    }
+    try {
+      const resp = await fetch(`${API_BASE}/api/structure-token?type=target`, {
+        credentials: 'include'
+      });
+      if (!resp.ok) {
+        throw new Error(`Token request failed: ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (!data || !data.token) {
+        throw new Error('Missing token in response');
+      }
+      targetStructureInfo = {
+        token: data.token,
+        sourceLabel: data.sourceLabel || 'Source unavailable'
+      };
+      return targetStructureInfo;
+    } catch (err) {
+      console.warn('Geneguessr: failed to fetch target structure token', err);
+      targetStructureInfo = null;
+      return null;
+    }
+  }
+
+  async function ensureStructureTokenForProtein(uniprot) {
+    if (!uniprot) {
+      return null;
+    }
+    const key = String(uniprot).toUpperCase();
+    const cached = structureTokenCache.get(key);
+    if (cached && cached.token) {
+      return cached;
+    }
+    try {
+      const resp = await fetch(`${API_BASE}/api/structure-token?uniprot=${encodeURIComponent(key)}`, {
+        credentials: 'include'
+      });
+      if (!resp.ok) {
+        throw new Error(`Token request failed: ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (!data || !data.token) {
+        throw new Error('Missing token in response');
+      }
+      const info = {
+        token: data.token,
+        sourceLabel: data.sourceLabel || 'Source unavailable',
+        displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable'
+      };
+      structureTokenCache.set(key, info);
+      return info;
+    } catch (err) {
+      console.warn('Geneguessr: failed to fetch structure token for', key, err);
+      structureTokenCache.set(key, null);
+      return null;
+    }
+  }
+
+  function getStructureInfoForProtein(uniprot) {
+    if (!uniprot) {
+      return null;
+    }
+    return structureTokenCache.get(String(uniprot).toUpperCase()) || null;
+  }
+
+  function getTargetStructureInfo() {
+    return targetStructureInfo;
+  }
+
   function renderStructureViewer(protein, viewerId, options = {}) {
     if (!protein || !hasStructureData(protein)) {
       return '';
     }
     const linkable = Boolean(options.linkable);
+    const structureInfo = options.structureInfo || null;
     const structureSource = getStructureSourceInfo(protein);
-    const initialLabel = structureSource?.label ? escapeAttribute(structureSource.label) : '—';
-    const sourceLabel = `Source: ${initialLabel}`;
+    if (structureInfo) {
+      viewerStructureInfo.set(viewerId, structureInfo);
+    } else {
+      viewerStructureInfo.delete(viewerId);
+    }
     const linkableAttr = ` data-source-linkable="${linkable ? 'true' : 'false'}"`;
-    const sourceContent = linkable && structureSource?.url
-      ? `<a href="${escapeAttribute(structureSource.url)}" target="_blank" rel="noopener" class="pg-structure-source-link">${escapeAttribute(structureSource.label)}</a>`
-      : sourceLabel;
+    const shortLabel = structureInfo?.sourceLabel || structureSource?.label || 'Source unavailable';
+    const longLabel = structureInfo?.displayLabel || structureSource?.label || shortLabel;
+    const displayLabel = linkable ? longLabel : shortLabel;
+    const linkUrl = linkable ? structureSource?.url : null;
+    const escapedLabel = escapeAttribute(displayLabel);
+    const sourceText = linkable && linkUrl
+      ? `Source: <a href="${escapeAttribute(linkUrl)}" target="_blank" rel="noopener" class="pg-structure-source-link">${escapedLabel}</a>`
+      : `Source: ${escapedLabel}`;
     
     return `
       <div class="pg-card-structure">
@@ -550,39 +636,24 @@
           <div class="pg-structure-error" id="${viewerId}-error" hidden></div>
         </div>
         <div class="pg-structure-source" id="${viewerId}-source"${linkableAttr}>
-          ${linkable && structureSource?.url ? `Source: ${sourceContent}` : sourceLabel}
+          ${sourceText}
         </div>
       </div>
     `;
   }
 
-  function buildStructureFetchUrl(rawUrl) {
-    if (!rawUrl) {
-      return null;
-    }
-    try {
-      return `${API_BASE}/api/structure?url=${encodeURIComponent(rawUrl)}`;
-    } catch (err) {
-      return null;
-    }
-  }
-
-  function updateStructureSourceDisplay(containerId, representation) {
+  function updateStructureSourceDisplay(containerId, metadata) {
     const sourceEl = document.getElementById(`${containerId}-source`);
     if (!sourceEl) {
       return;
     }
     const linkable = sourceEl.dataset.sourceLinkable === 'true';
-    const meta = getStructureSourceMetadataFromRepresentation(representation);
-    const label = meta?.label || 'Source unavailable';
+    const label = metadata?.label || 'Source unavailable';
     const safeLabel = escapeAttribute(label);
-    const safeUrl = meta?.url ? escapeAttribute(meta.url) : null;
-    let inner;
-    if (linkable && safeUrl) {
-      inner = `Source: <a href="${safeUrl}" target="_blank" rel="noopener" class="pg-structure-source-link">${safeLabel}</a>`;
-    } else {
-      inner = `Source: ${safeLabel}`;
-    }
+    const safeUrl = metadata?.linkUrl ? escapeAttribute(metadata.linkUrl) : null;
+    const inner = linkable && safeUrl
+      ? `Source: <a href="${safeUrl}" target="_blank" rel="noopener" class="pg-structure-source-link">${safeLabel}</a>`
+      : `Source: ${safeLabel}`;
     sourceEl.innerHTML = inner;
   }
 
@@ -1357,12 +1428,30 @@
     const placeholder = document.getElementById(`${containerId}-placeholder`);
     const loadingEl = document.getElementById(`${containerId}-loading`);
     const errorEl = document.getElementById(`${containerId}-error`);
+    const structureInfo = viewerStructureInfo.get(containerId);
+    
+    if (!structureInfo || !structureInfo.token) {
+      if (errorEl) {
+        errorEl.textContent = 'Structure unavailable.';
+        errorEl.hidden = false;
+      }
+      return;
+    }
     
     const structure = protein.structure || {};
-    const candidates = getRepresentationCandidates(structure, protein.length);
-    if (!candidates.length) {
+    const representation = resolveStructureRepresentation(structure, protein.length);
+    if (!representation) {
       if (errorEl) {
         errorEl.textContent = 'No 3D structure available for this protein.';
+        errorEl.hidden = false;
+      }
+      return;
+    }
+    
+    const options = buildMolstarOptionsFromRepresentation(representation, { structureToken: structureInfo.token });
+    if (!options) {
+      if (errorEl) {
+        errorEl.textContent = 'Could not build viewer options.';
         errorEl.hidden = false;
       }
       return;
@@ -1372,61 +1461,53 @@
     if (placeholder) placeholder.hidden = true;
     if (errorEl) errorEl.hidden = true;
     
-    let lastError = null;
-    for (const candidate of candidates) {
-      const options = buildMolstarOptionsFromRepresentation(candidate);
-      if (!options) {
-        continue;
+    try {
+      await ensureMolstarAssets();
+      if (!window.PDBeMolstarPlugin) {
+        throw new Error('PDBeMolstarPlugin missing after script load');
       }
-      try {
-        await ensureMolstarAssets();
-        if (!window.PDBeMolstarPlugin) {
-          throw new Error('PDBeMolstarPlugin missing after script load');
-        }
-        container.innerHTML = '';
-        const viewer = new window.PDBeMolstarPlugin();
-        viewer.render(container, {
-          ...options,
-          hideControls: true,
-          hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
-          pdbeLink: false,
-          visualStyle: 'cartoon',
-          lighting: 'glossy',
-          loadMaps: false,
-          selectInteraction: false,
-          lowPrecisionCoords: false,
-          hideStructureSourceTooltip: true,
-        });
+      container.innerHTML = '';
+      const viewer = new window.PDBeMolstarPlugin();
+      viewer.render(container, {
+        ...options,
+        hideControls: true,
+        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
+        pdbeLink: false,
+        visualStyle: 'cartoon',
+        lighting: 'glossy',
+        loadMaps: false,
+        selectInteraction: false,
+        lowPrecisionCoords: false,
+        hideStructureSourceTooltip: true,
+      });
 
-        const finalizeViewerStyling = () => {
-          applyViewerStylizationProfile(viewer, container);
-          applyChainColoring(viewer, candidate, container);
-        };
-        if (viewer.events?.loadComplete) {
-          viewer.events.loadComplete.subscribe(finalizeViewerStyling);
-        } else {
-          setTimeout(finalizeViewerStyling, 500);
-        }
-
-        updateStructureSourceDisplay(containerId, candidate);
-        container.dataset.viewerLoaded = 'true';
-        structureViewerLoaded = true;
-        if (loadingEl) loadingEl.hidden = true;
-        return;
-      } catch (err) {
-        lastError = err;
-        console.error('Geneguessr: Mol* render failed', err);
+      const finalizeViewerStyling = () => {
+        applyViewerStylizationProfile(viewer, container);
+        applyChainColoring(viewer, representation, container);
+      };
+      if (viewer.events?.loadComplete) {
+        viewer.events.loadComplete.subscribe(finalizeViewerStyling);
+      } else {
+        setTimeout(finalizeViewerStyling, 500);
       }
-    }
 
-    if (errorEl) {
-      errorEl.textContent = 'Could not load 3D viewer. Please try again.';
-      errorEl.hidden = false;
-    }
-    if (placeholder) placeholder.hidden = false;
-    if (loadingEl) loadingEl.hidden = true;
-    if (lastError) {
-      console.error('Geneguessr: all structure sources failed', lastError);
+      const metadata = getStructureSourceMetadataFromRepresentation(representation);
+      updateStructureSourceDisplay(containerId, {
+        label: structureInfo.displayLabel || structureInfo.sourceLabel || metadata?.label || 'Source unavailable',
+        linkable: Boolean(options.linkable),
+        linkUrl: metadata?.url || null
+      });
+      container.dataset.viewerLoaded = 'true';
+      structureViewerLoaded = true;
+    } catch (err) {
+      console.error('Geneguessr: Mol* render failed', err);
+      if (errorEl) {
+        errorEl.textContent = 'Could not load 3D viewer. Please try again.';
+        errorEl.hidden = false;
+      }
+      if (placeholder) placeholder.hidden = false;
+    } finally {
+      if (loadingEl) loadingEl.hidden = true;
     }
   }
 
@@ -1500,6 +1581,9 @@ let gameState = {
   statsRecorded: false
 };
   let tutorialBootRequested = false;
+  const structureTokenCache = new Map();
+  let targetStructureInfo = null;
+  const viewerStructureInfo = new Map();
 
   function generateGuessId() {
     if (window.crypto?.randomUUID) {
@@ -2117,7 +2201,10 @@ let gameState = {
       : {};
     // Important: renderStructureViewer builds the 3D placeholder once per guess.
     // We only re-render the sections beneath to avoid tearing down Mol*.
-    const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure', { linkable: false });
+    const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure', {
+      linkable: false,
+      structureInfo: getTargetStructureInfo()
+    });
     
     return `
       <div class="pg-clue-card">
@@ -2546,6 +2633,8 @@ let gameState = {
       expanded,
       showSimilarity: true,
       matchedHintMap,
+      structureInfo: getStructureInfoForProtein(guessEntry.uniprot),
+      linkable: true
     });
   }
   
@@ -3458,3 +3547,4 @@ function attachAttributionCollapseLogic() {
 }
 
 })();
+

@@ -5,11 +5,16 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Credentials': 'true',
 };
-const STRUCTURE_PROXY_HOSTS = [
-  'alphafold.ebi.ac.uk',
-  'swissmodel.expasy.org',
-  'files.rcsb.org'
-];
+const STRUCTURE_TOKEN_TTL_SECONDS = 300;
+const PROTEIN_DATA_URL = 'https://brinedew.bio/static/geneguessr/data.json';
+const INDEX_DATA_URL = 'https://brinedew.bio/static/geneguessr/index.json';
+const DATA_CACHE_TTL_MS = 60 * 60 * 1000;
+const TOKEN_PREFIX = 'structure_token:';
+
+let proteinDataCache = null;
+let proteinDataCacheTimestamp = 0;
+let indexDataCache = null;
+let indexDataCacheTimestamp = 0;
 
 // Import auth handlers
 import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
@@ -28,6 +33,7 @@ import {
 } from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
+import { resolveStructureRepresentation } from './lib/structure-utils.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -175,6 +181,14 @@ export default {
       });
     }
     
+    if (url.pathname === '/api/structure-token' && request.method === 'GET') {
+      return handleStructureToken(request, env);
+    }
+
+    if (url.pathname === '/api/structure' && request.method === 'GET') {
+      return handleStructureFetch(request, env);
+    }
+
     // Public proteins endpoint for autocomplete
     if (url.pathname === '/api/proteins' && request.method === 'GET') {
       try {
@@ -203,10 +217,6 @@ export default {
           headers: CORS_HEADERS
         });
       }
-    }
-
-    if (url.pathname === '/api/structure' && request.method === 'GET') {
-      return handleStructureProxy(request);
     }
 
     // Session management endpoints
@@ -440,50 +450,227 @@ export class GameSession {
   }
 }
 
-function isAllowedStructureHost(hostname) {
-  if (!hostname) {
-    return false;
+async function handleStructureToken(request, env) {
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type');
+  if (type === 'target') {
+    const protein = await getDailyTargetProtein(env);
+    if (!protein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+    }
+    const meta = await getCanonicalStructureMeta(protein);
+    if (!meta) {
+      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+    }
+    const token = await createStructureToken(env, meta);
+    return Response.json({
+      token,
+      sourceLabel: meta.shortLabel
+    }, { headers: CORS_HEADERS });
   }
-  return STRUCTURE_PROXY_HOSTS.some((allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`));
+
+  const uniprot = (url.searchParams.get('uniprot') || '').toUpperCase();
+  if (!uniprot) {
+    return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: CORS_HEADERS });
+  }
+  const protein = await getProteinByUniprot(uniprot);
+  if (!protein) {
+    return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
+  }
+  const meta = await getCanonicalStructureMeta(protein);
+  if (!meta) {
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+  }
+  const token = await createStructureToken(env, meta);
+  return Response.json({
+    token,
+    sourceLabel: meta.shortLabel,
+    displayLabel: meta.displayLabel
+  }, { headers: CORS_HEADERS });
 }
 
-async function handleStructureProxy(request) {
+async function handleStructureFetch(request, env) {
   const url = new URL(request.url);
-  const target = url.searchParams.get('url');
-  if (!target) {
-    return Response.json({ error: 'Missing url parameter' }, { status: 400, headers: CORS_HEADERS });
+  const token = url.searchParams.get('token');
+  if (!token) {
+    return Response.json({ error: 'Missing token' }, { status: 400, headers: CORS_HEADERS });
   }
-  let parsedTarget;
-  try {
-    parsedTarget = new URL(target);
-  } catch (err) {
-    return Response.json({ error: 'Invalid url parameter' }, { status: 400, headers: CORS_HEADERS });
+  const record = await env.STRUCTURE_TOKENS.get(`${TOKEN_PREFIX}${token}`, { type: 'json' });
+  if (!record) {
+    return Response.json({ error: 'Invalid or expired token' }, { status: 410, headers: CORS_HEADERS });
   }
-  if (parsedTarget.protocol !== 'https:') {
-    return Response.json({ error: 'Only HTTPS sources allowed' }, { status: 400, headers: CORS_HEADERS });
+  const { r2Key, upstreamUrl } = record;
+  if (!r2Key) {
+    return Response.json({ error: 'Token missing key' }, { status: 500, headers: CORS_HEADERS });
   }
-  if (!isAllowedStructureHost(parsedTarget.hostname)) {
-    return Response.json({ error: 'Host not allowed' }, { status: 400, headers: CORS_HEADERS });
-  }
-  try {
-    const upstream = await fetch(parsedTarget.toString(), {
+  let object = await env.STRUCTURES_BUCKET.get(r2Key);
+  if (!object) {
+    if (!upstreamUrl) {
+      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+    }
+    const upstreamResp = await fetch(upstreamUrl, {
       method: 'GET',
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'GeneGuessr-Worker/1.0'
+      headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
+    });
+    if (!upstreamResp.ok) {
+      return new Response(upstreamResp.body, { status: upstreamResp.status, headers: CORS_HEADERS });
+    }
+    const arrayBuffer = await upstreamResp.arrayBuffer();
+    await env.STRUCTURES_BUCKET.put(r2Key, arrayBuffer, {
+      httpMetadata: {
+        contentType: upstreamResp.headers.get('Content-Type') || 'application/octet-stream'
       }
     });
-    const headers = {
-      ...CORS_HEADERS,
-      'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=3600'
-    };
-    if (!upstream.ok) {
-      return new Response(upstream.body, { status: upstream.status, headers });
-    }
-    return new Response(upstream.body, { status: 200, headers });
-  } catch (err) {
-    console.error('Structure proxy failed', err);
-    return Response.json({ error: 'Failed to fetch structure data' }, { status: 502, headers: CORS_HEADERS });
+    return new Response(arrayBuffer, {
+      headers: {
+        ...CORS_HEADERS,
+        'Content-Type': upstreamResp.headers.get('Content-Type') || 'application/octet-stream'
+      }
+    });
   }
+
+  return new Response(object.body, {
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=3600'
+    }
+  });
+}
+
+async function getProteinDataset() {
+  const now = Date.now();
+  if (proteinDataCache && (now - proteinDataCacheTimestamp) < DATA_CACHE_TTL_MS) {
+    return proteinDataCache;
+  }
+  const response = await fetch(PROTEIN_DATA_URL, { cf: { cacheEverything: true, cacheTtl: 300 } });
+  if (!response.ok) {
+    throw new Error('Failed to fetch protein dataset');
+  }
+  const list = await response.json();
+  const map = new Map();
+  list.forEach((protein) => {
+    if (protein && protein.uniprot) {
+      map.set(protein.uniprot.toUpperCase(), protein);
+    }
+  });
+  proteinDataCache = map;
+  proteinDataCacheTimestamp = now;
+  return map;
+}
+
+async function getProteinByUniprot(uniprot) {
+  const dataset = await getProteinDataset();
+  return dataset.get(uniprot.toUpperCase()) || null;
+}
+
+async function getIndexData() {
+  const now = Date.now();
+  if (indexDataCache && (now - indexDataCacheTimestamp) < DATA_CACHE_TTL_MS) {
+    return indexDataCache;
+  }
+  const response = await fetch(INDEX_DATA_URL, { cf: { cacheEverything: true, cacheTtl: 300 } });
+  if (!response.ok) {
+    throw new Error('Failed to fetch index data');
+  }
+  const data = await response.json();
+  indexDataCache = data;
+  indexDataCacheTimestamp = now;
+  return data;
+}
+
+async function getDailyTargetProtein(env) {
+  const indexData = await getIndexData();
+  const eligibleIds = indexData?.eligible_ids || [];
+  if (!eligibleIds.length) {
+    return null;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const salt = indexData.salt_hash || '';
+  const hash = await sha256(`${today}|${salt}`);
+  const hashInt = parseInt(hash.slice(0, 16), 16);
+  const idx = hashInt % eligibleIds.length;
+  const uniprot = eligibleIds[idx];
+  return getProteinByUniprot(uniprot);
+}
+
+async function createStructureToken(env, meta) {
+  const token = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  await env.STRUCTURE_TOKENS.put(`${TOKEN_PREFIX}${token}`, JSON.stringify(meta), {
+    expirationTtl: STRUCTURE_TOKEN_TTL_SECONDS
+  });
+  return token;
+}
+
+async function getCanonicalStructureMeta(protein) {
+  if (!protein || !protein.structure) {
+    return null;
+  }
+  const representation = resolveStructureRepresentation(protein.structure, protein.length || 0);
+  if (!representation) {
+    return null;
+  }
+  if (representation.source === 'pdb' && representation.pdb && representation.pdb.id) {
+    const id = representation.pdb.id.toUpperCase();
+    return {
+      source: 'pdb',
+      r2Key: `pdb/${id}.cif`,
+      upstreamUrl: `https://files.rcsb.org/download/${id}.cif`,
+      shortLabel: 'PDB',
+      displayLabel: `PDB (${id})`
+    };
+  }
+  if (representation.source === 'swissmodel' && representation.swissModel) {
+    const url = representation.swissModel.coordinates_url ||
+      representation.swissModel.coordinatesUrl ||
+      representation.swissModel.model_url ||
+      representation.swissModel.modelcif;
+    if (!url) {
+      return null;
+    }
+    const ext = getFileExtensionFromUrl(url);
+    const structureId = sanitizeKeySegment(
+      representation.structureId ||
+      representation.swissModel.model_id ||
+      representation.swissModel.template ||
+      protein.uniprot
+    );
+    return {
+      source: 'swissmodel',
+      r2Key: `swissmodel/${structureId}.${ext}`,
+      upstreamUrl: url,
+      shortLabel: 'SWISS-MODEL',
+      displayLabel: `SWISS-MODEL (${structureId})`
+    };
+  }
+  if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
+    const id = representation.alphafold.id || protein.uniprot;
+    return {
+      source: 'alphafold',
+      r2Key: `alphafold/${sanitizeKeySegment(id)}.cif`,
+      upstreamUrl: representation.alphafold.model_url,
+      shortLabel: 'AlphaFold',
+      displayLabel: `AlphaFold (${id})`
+    };
+  }
+  return null;
+}
+
+function sanitizeKeySegment(value) {
+  return (value || 'unknown').toString().replace(/[^A-Za-z0-9_\-]/g, '_');
+}
+
+function getFileExtensionFromUrl(url) {
+  const lower = url.toLowerCase();
+  if (lower.includes('.bcif')) return 'bcif';
+  if (lower.includes('.pdb')) return 'pdb';
+  return 'cif';
+}
+
+async function sha256(message) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
