@@ -190,6 +190,104 @@
     return null;
   }
 
+  function escapeAttribute(value) {
+    if (value == null) {
+      return '';
+    }
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function getStructureSourceMetadataFromRepresentation(representation) {
+    if (!representation || !representation.source) {
+      return null;
+    }
+    if (representation.source === 'pdb' && representation.pdb) {
+      const id = representation.pdb.id;
+      const label = id ? `PDB (${id})` : 'PDB';
+      const url = representation.pdb.url || (id ? `https://www.rcsb.org/structure/${id}` : null);
+      return { label, url };
+    }
+    if (representation.source === 'swissmodel' && representation.swissModel) {
+      const label = 'SWISS-MODEL';
+      const url = representation.swissModel.model_url || representation.swissModel.coordinates_url || null;
+      return { label, url };
+    }
+    if (representation.source === 'alphafold' && representation.alphafold) {
+      const label = 'AlphaFold';
+      const url = representation.alphafold.viewer_url || representation.alphafold.model_url || null;
+      return { label, url };
+    }
+    return null;
+  }
+
+  function buildRepresentationFromStructure(structure, proteinLength, preferredSource) {
+    if (!structure || !preferredSource) {
+      return null;
+    }
+    if (preferredSource === 'pdb' && structure.pdb && structure.pdb.id) {
+      const coverage = computePdbCoverage(structure, proteinLength);
+      return {
+        source: 'pdb',
+        pdb: structure.pdb,
+        coverage,
+        structureId: structure.pdb.id,
+        chains: parseChainSegments(structure.pdb.chains)
+      };
+    }
+    if (preferredSource === 'swissmodel' && structure.swiss_model) {
+      const swissModel = normalizeSwissModel(structure.swiss_model, proteinLength);
+      if (!swissModel) {
+        return null;
+      }
+      return {
+        source: 'swissmodel',
+        swissModel,
+        coverage: typeof swissModel.coverage === 'number' ? swissModel.coverage : 0,
+        structureId: swissModel.model_id || swissModel.template || swissModel.pdb_id || 'SWISS',
+        chains: deriveSwissChainSegments(swissModel)
+      };
+    }
+    if (preferredSource === 'alphafold' && structure.alphafold && structure.alphafold.model_url) {
+      return {
+        source: 'alphafold',
+        alphafold: structure.alphafold,
+        coverage: 1,
+        structureId: structure.alphafold.id || structure.alphafold.model_url
+      };
+    }
+    return null;
+  }
+
+  function getRepresentationCandidates(structure, proteinLength) {
+    const candidates = [];
+    const seen = new Set();
+    const pushCandidate = (rep) => {
+      if (!rep || !rep.source) {
+        return;
+      }
+      const key = `${rep.source}|${rep.structureId || ''}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      candidates.push(rep);
+    };
+    const preferred = resolveStructureRepresentation(structure, proteinLength);
+    if (preferred) {
+      pushCandidate(preferred);
+    }
+    ['pdb', 'swissmodel', 'alphafold'].forEach((source) => {
+      const rep = buildRepresentationFromStructure(structure, proteinLength, source);
+      pushCandidate(rep);
+    });
+    return candidates;
+  }
+
   function resolveProteinStructure(protein) {
     if (!protein || !protein.structure) {
       return null;
@@ -202,17 +300,11 @@
     if (!representation) {
       return null;
     }
-    const source = representation.source;
-    if (source === 'alphafold') {
-      return { source, label: 'AlphaFold', representation };
+    const meta = getStructureSourceMetadataFromRepresentation(representation);
+    if (meta) {
+      return { source: representation.source, label: meta.label, url: meta.url, representation };
     }
-    if (source === 'pdb') {
-      return { source, label: 'PDB', representation };
-    }
-    if (source === 'swissmodel') {
-      return { source, label: 'SWISS-MODEL', representation };
-    }
-    return { source, label: source, representation };
+    return { source: representation.source, label: representation.source, representation };
   }
 
   function isAlphaFoldOnlyProtein(protein) {
@@ -422,15 +514,18 @@
     return 'pdb';
   }
 
-  function renderStructureViewer(protein, viewerId) {
+  function renderStructureViewer(protein, viewerId, options = {}) {
     if (!protein || !hasStructureData(protein)) {
       return '';
     }
+    const linkable = Boolean(options.linkable);
     const structureSource = getStructureSourceInfo(protein);
-    const showAlphaFoldSource = Boolean(structureSource && structureSource.source === 'alphafold');
-    const sourceBadge = showAlphaFoldSource
-      ? `<div class="pg-structure-source" data-structure-source="alphafold">Source: ${structureSource.label}</div>`
-      : '';
+    const initialLabel = structureSource?.label ? escapeAttribute(structureSource.label) : '—';
+    const sourceLabel = `Source: ${initialLabel}`;
+    const linkableAttr = ` data-source-linkable="${linkable ? 'true' : 'false'}"`;
+    const sourceContent = linkable && structureSource?.url
+      ? `<a href="${escapeAttribute(structureSource.url)}" target="_blank" rel="noopener" class="pg-structure-source-link">${escapeAttribute(structureSource.label)}</a>`
+      : sourceLabel;
     
     return `
       <div class="pg-card-structure">
@@ -441,9 +536,30 @@
           <div class="pg-structure-loading" id="${viewerId}-loading" hidden>Loading viewer.</div>
           <div class="pg-structure-error" id="${viewerId}-error" hidden></div>
         </div>
-        ${sourceBadge}
+        <div class="pg-structure-source" id="${viewerId}-source"${linkableAttr}>
+          ${linkable && structureSource?.url ? `Source: ${sourceContent}` : sourceLabel}
+        </div>
       </div>
     `;
+  }
+
+  function updateStructureSourceDisplay(containerId, representation) {
+    const sourceEl = document.getElementById(`${containerId}-source`);
+    if (!sourceEl) {
+      return;
+    }
+    const linkable = sourceEl.dataset.sourceLinkable === 'true';
+    const meta = getStructureSourceMetadataFromRepresentation(representation);
+    const label = meta?.label || 'Source unavailable';
+    const safeLabel = escapeAttribute(label);
+    const safeUrl = meta?.url ? escapeAttribute(meta.url) : null;
+    let inner;
+    if (linkable && safeUrl) {
+      inner = `Source: <a href="${safeUrl}" target="_blank" rel="noopener" class="pg-structure-source-link">${safeLabel}</a>`;
+    } else {
+      inner = `Source: ${safeLabel}`;
+    }
+    sourceEl.innerHTML = inner;
   }
 
   function renderStructureHint() {
@@ -1219,9 +1335,8 @@
     const errorEl = document.getElementById(`${containerId}-error`);
     
     const structure = protein.structure || {};
-    const representation = resolveStructureRepresentation(structure, protein.length);
-    const options = buildMolstarOptionsFromRepresentation(representation);
-    if (!options) {
+    const candidates = getRepresentationCandidates(structure, protein.length);
+    if (!candidates.length) {
       if (errorEl) {
         errorEl.textContent = 'No 3D structure available for this protein.';
         errorEl.hidden = false;
@@ -1233,76 +1348,69 @@
     if (placeholder) placeholder.hidden = true;
     if (errorEl) errorEl.hidden = true;
     
-    try {
-      // Before loading the plugin, attempt to verify the coordinates URL is reachable.
-      // This avoids feeding an HTML error page or a timed-out response to Mol*, which
-      // can cause "Invalid data cell" parsing errors.
+    let lastError = null;
+    for (const candidate of candidates) {
+      const options = buildMolstarOptionsFromRepresentation(candidate);
+      if (!options) {
+        continue;
+      }
       const coordsUrl = options.customData && options.customData.url;
       if (coordsUrl) {
         const ok = await checkUrlAccessible(coordsUrl, 3000);
         if (!ok) {
-          // Try a fallback: if this representation is from SwissModel, try RCSB PDB by pdb id
-          if (representation && representation.pdb && representation.pdb.id) {
-            const rcsbUrl = `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`;
-            const rcsbOk = await checkUrlAccessible(rcsbUrl, 3000);
-            if (rcsbOk) {
-              options.customData.url = rcsbUrl;
-              options.customData.format = detectStructureFormat(rcsbUrl, options.customData.format);
-            } else {
-              throw new Error('structure-source-unavailable');
-            }
-          } else {
-            throw new Error('structure-source-unavailable');
-          }
+          lastError = new Error(`structure-source-unavailable:${candidate.source}`);
+          continue;
         }
       }
-      await ensureMolstarAssets();
-      if (!window.PDBeMolstarPlugin) {
-        throw new Error('PDBeMolstarPlugin missing after script load');
-      }
-      container.innerHTML = '';
-      const viewer = new window.PDBeMolstarPlugin();
-      viewer.render(container, {
-        ...options,
-        // UI lockdown (conservative approach)
-        hideControls: true,
-        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
-        pdbeLink: false,
-        // Appearance
-        visualStyle: 'cartoon',
-        lighting: 'glossy',
-        // Data/behavior
-        loadMaps: false,  // Disable electron density maps - they cause streaming hang
-        selectInteraction: false,
-        // Disable streaming to prevent hangs
-        lowPrecisionCoords: false,
-        // Disable hover tooltip
-        hideStructureSourceTooltip: true,
-      });
+      try {
+        await ensureMolstarAssets();
+        if (!window.PDBeMolstarPlugin) {
+          throw new Error('PDBeMolstarPlugin missing after script load');
+        }
+        container.innerHTML = '';
+        const viewer = new window.PDBeMolstarPlugin();
+        viewer.render(container, {
+          ...options,
+          hideControls: true,
+          hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
+          pdbeLink: false,
+          visualStyle: 'cartoon',
+          lighting: 'glossy',
+          loadMaps: false,
+          selectInteraction: false,
+          lowPrecisionCoords: false,
+          hideStructureSourceTooltip: true,
+        });
 
-      // Apply incremental stylization after render completes
-      const finalizeViewerStyling = () => {
-        applyViewerStylizationProfile(viewer, container);
-        applyChainColoring(viewer, representation, container);
-      };
-      if (viewer.events?.loadComplete) {
-        viewer.events.loadComplete.subscribe(finalizeViewerStyling);
-      } else {
-        // Fallback: apply shortly after render
-        setTimeout(finalizeViewerStyling, 500);
-      }
+        const finalizeViewerStyling = () => {
+          applyViewerStylizationProfile(viewer, container);
+          applyChainColoring(viewer, candidate, container);
+        };
+        if (viewer.events?.loadComplete) {
+          viewer.events.loadComplete.subscribe(finalizeViewerStyling);
+        } else {
+          setTimeout(finalizeViewerStyling, 500);
+        }
 
-      container.dataset.viewerLoaded = 'true';
-      structureViewerLoaded = true;
-    } catch (err) {
-      console.error('Geneguessr: Mol* render failed', err);
-      if (errorEl) {
-        errorEl.textContent = 'Could not load 3D viewer. Please try again.';
-        errorEl.hidden = false;
+        updateStructureSourceDisplay(containerId, candidate);
+        container.dataset.viewerLoaded = 'true';
+        structureViewerLoaded = true;
+        if (loadingEl) loadingEl.hidden = true;
+        return;
+      } catch (err) {
+        lastError = err;
+        console.error('Geneguessr: Mol* render failed', err);
       }
-      if (placeholder) placeholder.hidden = false;
-    } finally {
-      if (loadingEl) loadingEl.hidden = true;
+    }
+
+    if (errorEl) {
+      errorEl.textContent = 'Could not load 3D viewer. Please try again.';
+      errorEl.hidden = false;
+    }
+    if (placeholder) placeholder.hidden = false;
+    if (loadingEl) loadingEl.hidden = true;
+    if (lastError) {
+      console.error('Geneguessr: all structure sources failed', lastError);
     }
   }
 
@@ -2006,7 +2114,7 @@ let gameState = {
       : {};
     // Important: renderStructureViewer builds the 3D placeholder once per guess.
     // We only re-render the sections beneath to avoid tearing down Mol*.
-    const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure');
+    const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure', { linkable: false });
     
     return `
       <div class="pg-clue-card">
@@ -2387,7 +2495,7 @@ let gameState = {
     
     // Add structure viewer above sections
     const viewerId = `${cardId}-structure`;
-    const structureMarkup = renderStructureViewer(protein, viewerId);
+    const structureMarkup = renderStructureViewer(protein, viewerId, { linkable: true });
     
     const contentMarkup = `
       <div class="pg-feedback-content" id="${cardId}-content">
