@@ -5,6 +5,11 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Credentials': 'true',
 };
+const STRUCTURE_PROXY_HOSTS = [
+  'alphafold.ebi.ac.uk',
+  'swissmodel.expasy.org',
+  'files.rcsb.org'
+];
 
 // Import auth handlers
 import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
@@ -198,6 +203,10 @@ export default {
           headers: CORS_HEADERS
         });
       }
+    }
+
+    if (url.pathname === '/api/structure' && request.method === 'GET') {
+      return handleStructureProxy(request);
     }
 
     // Session management endpoints
@@ -428,5 +437,53 @@ export class GameSession {
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+}
+
+function isAllowedStructureHost(hostname) {
+  if (!hostname) {
+    return false;
+  }
+  return STRUCTURE_PROXY_HOSTS.some((allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`));
+}
+
+async function handleStructureProxy(request) {
+  const url = new URL(request.url);
+  const target = url.searchParams.get('url');
+  if (!target) {
+    return Response.json({ error: 'Missing url parameter' }, { status: 400, headers: CORS_HEADERS });
+  }
+  let parsedTarget;
+  try {
+    parsedTarget = new URL(target);
+  } catch (err) {
+    return Response.json({ error: 'Invalid url parameter' }, { status: 400, headers: CORS_HEADERS });
+  }
+  if (parsedTarget.protocol !== 'https:') {
+    return Response.json({ error: 'Only HTTPS sources allowed' }, { status: 400, headers: CORS_HEADERS });
+  }
+  if (!isAllowedStructureHost(parsedTarget.hostname)) {
+    return Response.json({ error: 'Host not allowed' }, { status: 400, headers: CORS_HEADERS });
+  }
+  try {
+    const upstream = await fetch(parsedTarget.toString(), {
+      method: 'GET',
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'GeneGuessr-Worker/1.0'
+      }
+    });
+    const headers = {
+      ...CORS_HEADERS,
+      'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=3600'
+    };
+    if (!upstream.ok) {
+      return new Response(upstream.body, { status: upstream.status, headers });
+    }
+    return new Response(upstream.body, { status: 200, headers });
+  } catch (err) {
+    console.error('Structure proxy failed', err);
+    return Response.json({ error: 'Failed to fetch structure data' }, { status: 502, headers: CORS_HEADERS });
   }
 }

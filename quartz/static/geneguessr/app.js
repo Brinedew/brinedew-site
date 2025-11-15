@@ -463,20 +463,29 @@
       return null;
     }
     if (representation.source === 'pdb' && representation.pdb && representation.pdb.id) {
+      const rawUrl = `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`;
+      const proxiedUrl = buildStructureFetchUrl(rawUrl);
+      if (!proxiedUrl) {
+        return null;
+      }
       return {
         moleculeId: representation.pdb.id,
         assemblyId: '1',
         customData: {
-          url: `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`,
+          url: proxiedUrl,
           format: 'cif'
         }
       };
     }
     if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
+      const proxiedUrl = buildStructureFetchUrl(representation.alphafold.model_url);
+      if (!proxiedUrl) {
+        return null;
+      }
       return {
         moleculeId: representation.alphafold.id || representation.structureId || targetProtein?.uniprot,
         customData: {
-          url: representation.alphafold.model_url,
+          url: proxiedUrl,
           format: 'cif'
         }
       };
@@ -486,11 +495,15 @@
       if (!swissUrl) {
         return null;
       }
+      const proxiedUrl = buildStructureFetchUrl(swissUrl);
+      if (!proxiedUrl) {
+        return null;
+      }
       return {
         moleculeId: representation.swissModel.model_id || representation.swissModel.template || representation.structureId || 'SWISS',
         assemblyId: '1',
         customData: {
-          url: swissUrl,
+          url: proxiedUrl,
           format: detectStructureFormat(swissUrl, representation.swissModel.format)
         }
       };
@@ -541,6 +554,17 @@
         </div>
       </div>
     `;
+  }
+
+  function buildStructureFetchUrl(rawUrl) {
+    if (!rawUrl) {
+      return null;
+    }
+    try {
+      return `${API_BASE}/api/structure?url=${encodeURIComponent(rawUrl)}`;
+    } catch (err) {
+      return null;
+    }
   }
 
   function updateStructureSourceDisplay(containerId, representation) {
@@ -1354,14 +1378,6 @@
       if (!options) {
         continue;
       }
-      const coordsUrl = options.customData && options.customData.url;
-      if (coordsUrl) {
-        const ok = await checkUrlAccessible(coordsUrl, 3000);
-        if (!ok) {
-          lastError = new Error(`structure-source-unavailable:${candidate.source}`);
-          continue;
-        }
-      }
       try {
         await ensureMolstarAssets();
         if (!window.PDBeMolstarPlugin) {
@@ -1414,19 +1430,6 @@
     }
   }
 
-  async function checkUrlAccessible(url, timeoutMs = 3000) {
-    if (!url || typeof url !== 'string') return false;
-    try {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), timeoutMs);
-      const resp = await fetch(url, { method: 'HEAD', mode: 'cors', signal: controller.signal });
-      clearTimeout(id);
-      return !!(resp && resp.ok);
-    } catch (err) {
-      return false;
-    }
-  }
-  
   async function loadStructureViewer() {
     // Legacy function - redirects to new implementation
     const container = document.getElementById('pg-clue-structure') || document.getElementById('pg-solution-card-structure');
