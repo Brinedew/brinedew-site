@@ -1520,6 +1520,7 @@
   let targetStructureInfo = null;
   const viewerStructureInfo = new Map();
   let gamePayload = null;
+  let collapseDelegationBound = false;
 
   async function fetchGameBootstrap() {
     const response = await fetch(`${API_BASE}/api/game/bootstrap`, {
@@ -2174,6 +2175,7 @@
       <div id="pg-footer-slot"></div>
     `;
     layoutHydrated = true;
+    ensureCollapseDelegation();
   }
   
   function renderClueSectionsIntoDom(gameOver = false) {
@@ -2274,6 +2276,7 @@
     if (!guessesEl) {
       return;
     }
+    ensureCollapseDelegation();
     
     // Check if we only need to add the latest guess (avoid destroying all existing cards)
     const existingCards = guessesEl.querySelectorAll('.pg-feedback-card');
@@ -2298,7 +2301,6 @@
       const latestGuess = gameState.guesses[gameState.guesses.length - 1];
       const newCardHtml = renderCollapsibleFeedback(latestGuess, true);
       guessesEl.insertAdjacentHTML('afterbegin', newCardHtml);
-      attachCollapseListeners();
       syncFeedbackContentHeights();
       // Preserve existing Mol* canvases: never touch earlier cards when inserting the new one.
       guessesEl.querySelectorAll('.pg-feedback-card:not(:first-child) .matched-highlight').forEach((el) => {
@@ -2316,8 +2318,6 @@
       .reverse()
       .join('');
     
-    // Attach collapse toggle listeners
-    attachCollapseListeners();
     syncFeedbackContentHeights();
   }
 
@@ -2436,41 +2436,62 @@
     }
   }
   
-  function attachCollapseListeners() {
-    const toggles = document.querySelectorAll('.pg-collapse-toggle:not(.pg-static-toggle)');
-    toggles.forEach(toggle => {
-      toggle.addEventListener('click', function() {
-        const card = this.closest('.pg-feedback-card');
-        const content = card.querySelector('.pg-feedback-content');
-        const chevron = card.querySelector('.pg-collapse-chevron');
-        const currentlyExpanded = card.dataset.expanded === 'true';
-        const newExpanded = !currentlyExpanded;
-        
-        // Update UI
-        card.classList.toggle('expanded', newExpanded);
-        card.classList.toggle('collapsed', !newExpanded);
-        card.dataset.expanded = newExpanded;
-        this.setAttribute('aria-expanded', newExpanded);
-        setFeedbackContentHeight(content, newExpanded);
-        chevron.textContent = newExpanded ? '▼' : '▶';
-        
-        // Persist state
-        setCardExpansionState(card.id, newExpanded);
-        
-        // Scroll into view if expanding
-        if (newExpanded) {
-          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      });
-      
-      // Keyboard support
-      toggle.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          this.click();
-        }
-      });
-    });
+  function ensureCollapseDelegation() {
+    if (collapseDelegationBound) {
+      return;
+    }
+    const guessesEl = document.getElementById('pg-guesses');
+    if (!guessesEl) {
+      return;
+    }
+    const handleClick = (event) => {
+      const toggle = event.target.closest('.pg-collapse-toggle:not(.pg-static-toggle)');
+      if (!toggle || !guessesEl.contains(toggle)) {
+        return;
+      }
+      event.preventDefault();
+      toggleFeedbackCard(toggle);
+    };
+    const handleKeydown = (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      const toggle = event.target.closest('.pg-collapse-toggle:not(.pg-static-toggle)');
+      if (!toggle || !guessesEl.contains(toggle)) {
+        return;
+      }
+      event.preventDefault();
+      toggleFeedbackCard(toggle);
+    };
+    guessesEl.addEventListener('click', handleClick);
+    guessesEl.addEventListener('keydown', handleKeydown);
+    collapseDelegationBound = true;
+  }
+
+  function toggleFeedbackCard(toggleEl) {
+    const card = toggleEl.closest('.pg-feedback-card');
+    if (!card || card.classList.contains('pg-feedback-final')) {
+      return;
+    }
+    const content = card.querySelector('.pg-feedback-content');
+    const chevron = card.querySelector('.pg-collapse-chevron');
+    const currentlyExpanded = card.dataset.expanded === 'true';
+    const newExpanded = !currentlyExpanded;
+    
+    card.classList.toggle('expanded', newExpanded);
+    card.classList.toggle('collapsed', !newExpanded);
+    card.dataset.expanded = String(newExpanded);
+    toggleEl.setAttribute('aria-expanded', newExpanded);
+    setFeedbackContentHeight(content, newExpanded);
+    if (chevron) {
+      chevron.textContent = newExpanded ? '▼' : '▶';
+    }
+    
+    setCardExpansionState(card.id, newExpanded);
+    
+    if (newExpanded) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 
   function setFeedbackContentHeight(content, expanded) {
@@ -3284,3 +3305,4 @@ function attachAttributionCollapseLogic() {
 }
 
 })();
+
