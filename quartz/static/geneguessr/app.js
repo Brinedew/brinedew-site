@@ -1779,12 +1779,16 @@ function markGuessViewersDirty() {
     const payload = await fetchGameBootstrap();
     hydrateStateFromPayload(payload);
     hydrateGuessProteins();
-    await ensureStructureTokenForTarget();
-    await hydrateStructureTokensForGuesses(gameState.guesses);
+    const tokenTasks = [];
+    tokenTasks.push(ensureStructureTokenForTarget());
+    tokenTasks.push(hydrateStructureTokensForGuesses(gameState.guesses));
     const solvedOrExhausted = gameState.won || gameState.guesses.length >= MAX_GUESSES;
     if (solvedOrExhausted && targetReveal?.uniprot) {
-      await ensureStructureTokenForProtein(targetReveal.uniprot);
+      tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
     }
+    Promise.allSettled(tokenTasks).catch((err) => {
+      console.warn('Geneguessr: structure token hydration deferred with errors', err);
+    });
   }
   
   /**
@@ -3109,12 +3113,19 @@ function markGuessViewersDirty() {
     try {
       const payload = await submitGuessRequest(uniprot);
       hydrateStateFromPayload(payload);
-      await ensureStructureTokenForProtein(uniprot);
+      render();
+      const tokenTasks = [ensureStructureTokenForProtein(uniprot)];
       const reachedEndOfRound = gameState.won || gameState.guesses.length >= MAX_GUESSES;
       if (reachedEndOfRound && targetReveal?.uniprot) {
-        await ensureStructureTokenForProtein(targetReveal.uniprot);
+        tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
       }
-      render();
+      Promise.allSettled(tokenTasks)
+        .then(() => {
+          requestAnimationFrame(() => setupStructureInteractions());
+        })
+        .catch((err) => {
+          console.warn('Geneguessr: structure token fetch after guess failed', err);
+        });
     } catch (err) {
       console.error('Geneguessr: failed to submit guess', err);
       alert(err?.message || 'Failed to submit guess. Please try again.');
