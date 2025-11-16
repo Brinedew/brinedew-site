@@ -2373,17 +2373,29 @@ function markGuessViewersDirty() {
       return;
     }
     
+    const existingViewer = document.getElementById('pg-clue-structure');
+    let preservedViewer = null;
     const nextStructureId = targetProtein?.structure?.structure_id
       || targetProtein?.structure_id
       || targetProtein?.uniprot
       || null;
-    if (!lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId) {
+    const structureChanged = !lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId;
+    if (structureChanged) {
       markViewerDirty('pg-clue-structure');
+    } else if (existingViewer && !gameOver) {
+      preservedViewer = existingViewer;
+      preservedViewer.remove();
     }
     if (gameOver) {
       markViewerDirty('pg-solution-card-structure');
     }
     slot.innerHTML = renderClueCard(gameOver);
+    if (preservedViewer) {
+      const newViewerShell = document.getElementById('pg-clue-structure');
+      if (newViewerShell && newViewerShell.parentElement) {
+        newViewerShell.replaceWith(preservedViewer);
+      }
+    }
     lastRenderedTargetStructureId = nextStructureId;
     ensureSpoilerDelegation();
   }
