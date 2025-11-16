@@ -1715,15 +1715,13 @@ function markGuessViewersDirty() {
     if (!entry || !entry.uniprot) {
       return null;
     }
-    const payloadProtein = entry.protein ? normalizeProtein(entry.protein) : null;
+    const payloadProtein = entry.protein ? cacheEnrichedProtein(entry.protein) : null;
+    const enrichedProtein = payloadProtein || getEnrichedProteinById(entry.uniprot);
     const datasetProtein = getProteinById(entry.uniprot);
-    if (payloadProtein && datasetProtein) {
-      return { ...datasetProtein, ...payloadProtein };
+    if (enrichedProtein && datasetProtein) {
+      return mergeProteinRecords(datasetProtein, enrichedProtein);
     }
-    if (payloadProtein) {
-      return payloadProtein;
-    }
-    return datasetProtein;
+    return enrichedProtein || datasetProtein || null;
   }
 
   function hydrateGuessProteins() {
