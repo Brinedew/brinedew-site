@@ -41,3 +41,4 @@ tools/thoteins/temp_workflow.json
 !tools/thoteins/data/
 !tools/thoteins/scripts/
 !tools/thoteins/apps/
+tools/thoteins/data/embeddings/

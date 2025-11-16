@@ -1,4 +1,3 @@
-import similarityJson from '../data/similarity.json' assert { type: 'json' };
 import { resolveStructureRepresentation } from './structure-utils.js';
 
 const MAX_GUESSES = 6;
@@ -6,7 +5,6 @@ const DEFAULT_HINT_COST = 1;
 const HINT_REWARD_ON_INCORRECT = 1;
 
 const LOCKED_HINT_PLACEHOLDER = 'Hint locked';
-const SIMILARITY_MATRIX = similarityJson || { scores: {}, metadata: {} };
 
 function stripRefSeqAttribution(text) {
   if (typeof text !== 'string') {
@@ -29,10 +27,6 @@ function cleanGeneSummary(summary) {
     };
   }
   return summary;
-}
-
-export function getSimilarityMatrix() {
-  return SIMILARITY_MATRIX;
 }
 
 export function sanitizeTargetProtein(protein, options = {}) {
@@ -108,11 +102,13 @@ export function extractHintText(sections, hintId) {
   return null;
 }
 
-export function scoreGuess(guessProtein, targetProtein) {
+export function scoreGuess(guessProtein, targetProtein, options = {}) {
   if (!guessProtein || !targetProtein) {
     return null;
   }
-  const goSimilarity = getGoSimilarityScore(guessProtein.uniprot, targetProtein.uniprot);
+  const goSimilarity = (typeof options.goSimilarity === 'number')
+    ? options.goSimilarity
+    : null;
   const goPercent = typeof goSimilarity === 'number' ? Math.round(goSimilarity * 100) : null;
   const domainIntersection = guessProtein.domains.filter((domain) => targetProtein.domains.includes(domain));
   const lengthBinMatch = determineLengthBin(guessProtein.length) === determineLengthBin(targetProtein.length);
@@ -229,22 +225,6 @@ function isLengthWithinTolerance(targetLength, guessLength, toleranceRatio = 0.1
   }
   const diff = Math.abs(target - guess);
   return diff <= target * toleranceRatio;
-}
-
-function getGoSimilarityScore(guessId, targetId) {
-  if (!guessId || !targetId) {
-    return null;
-  }
-  const scores = SIMILARITY_MATRIX?.scores || {};
-  const direct = scores[guessId]?.[targetId];
-  if (typeof direct === 'number') {
-    return direct;
-  }
-  const inverse = scores[targetId]?.[guessId];
-  if (typeof inverse === 'number') {
-    return inverse;
-  }
-  return null;
 }
 
 function formatGoTerms(protein, aspect) {
@@ -426,5 +406,6 @@ export {
   MAX_GUESSES,
   DEFAULT_HINT_COST,
   HINT_REWARD_ON_INCORRECT,
-  cleanGeneSummary
+  cleanGeneSummary,
+  isAlphaFoldOnlyProtein
 };

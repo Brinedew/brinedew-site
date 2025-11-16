@@ -47,7 +47,8 @@ import {
   fetchProteinSummaries,
   searchProteins,
   getEligibleProteinIds,
-  pickDailyTarget
+  pickDailyTarget,
+  getGoSimilarityFromEmbeddings
 } from './lib/protein-store.js';
 import { resolveStructureRepresentation } from './lib/structure-utils.js';
 
@@ -616,7 +617,7 @@ async function handleGameBootstrap(request, env) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
     const state = await ensureSessionForToday(env, sessionId, targetProtein);
-    await hydrateGuessProteins(env, sessionId, state);
+    await hydrateGuessProteins(env, sessionId, state, targetProtein);
     const payload = buildGamePayload(state, targetProtein);
     return Response.json(payload, { headers: CORS_HEADERS });
   } catch (err) {
@@ -648,7 +649,12 @@ async function handleGuessSubmission(request, env) {
     if (!guessProtein) {
       return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
     }
-    const score = scoreGuess(guessProtein, targetProtein);
+    const goSimilarity = await getGoSimilarityFromEmbeddings(
+      env.DB,
+      guessProtein.uniprot,
+      targetProtein.uniprot
+    );
+    const score = scoreGuess(guessProtein, targetProtein, { goSimilarity });
     const correct = guessProtein.uniprot === targetProtein.uniprot;
     const guessEntry = {
       guessId: crypto.randomUUID(),
@@ -694,7 +700,7 @@ async function handleHintReveal(request, env) {
       return Response.json({ error: 'Hint not found' }, { status: 404, headers: CORS_HEADERS });
     }
     const state = await ensureSessionForToday(env, sessionId, targetProtein);
-    await hydrateGuessProteins(env, sessionId, state);
+    await hydrateGuessProteins(env, sessionId, state, targetProtein);
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
         return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: CORS_HEADERS });
@@ -762,21 +768,32 @@ async function ensureSessionForToday(env, sessionId, targetProtein) {
   return state;
 }
 
-async function hydrateGuessProteins(env, sessionId, state) {
+async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
   if (!Array.isArray(state?.guesses)) {
     return;
   }
   let dirty = false;
   for (const entry of state.guesses) {
-    if (!entry || entry.protein) {
+    if (!entry) {
       continue;
     }
-    const protein = await fetchProteinByUniprot(env.DB, entry.uniprot);
-    if (protein) {
-      entry.protein = {
-        ...protein,
-        gene_summary: cleanGeneSummary(protein.gene_summary)
-      };
+    if (!entry.protein) {
+      const protein = await fetchProteinByUniprot(env.DB, entry.uniprot);
+      if (protein) {
+        entry.protein = {
+          ...protein,
+          gene_summary: cleanGeneSummary(protein.gene_summary)
+        };
+        dirty = true;
+      }
+    }
+    if ((!entry.score || typeof entry.score.goSimilarity !== 'number') && entry.protein && targetProtein) {
+      const goSimilarity = await getGoSimilarityFromEmbeddings(
+        env.DB,
+        entry.uniprot,
+        targetProtein.uniprot
+      );
+      entry.score = scoreGuess(entry.protein, targetProtein, { goSimilarity });
       dirty = true;
     }
   }
@@ -804,7 +821,9 @@ function buildGamePayload(state, targetProtein, options = {}) {
       ...guessProtein,
       gene_summary: cleanGeneSummary(guessProtein.gene_summary)
     };
-    const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein);
+    const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein, {
+      goSimilarity: entry.score?.goSimilarity
+    });
     const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore);
     aggregateMatches(aggregatedMatches, matches);
     const isLatest = index === (state.guesses.length - 1);

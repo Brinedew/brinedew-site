@@ -1,7 +1,10 @@
-import { sanitizeProteinSummary, isAlphaFoldOnlyProtein } from './game-engine.js';
+import { isAlphaFoldOnlyProtein } from './game-engine.js';
+import { sanitizeProteinSummary } from './structure-utils.js';
 
 const MAX_CACHE_SIZE = 512;
+const MAX_EMBEDDING_CACHE_SIZE = 256;
 const proteinCache = new Map();
+const embeddingCache = new Map();
 const eligibleCache = {
   ids: null,
   fetchedAt: 0,
@@ -21,6 +24,51 @@ function rememberProtein(key, value) {
     const oldestKey = proteinCache.keys().next().value;
     proteinCache.delete(oldestKey);
   }
+}
+
+function rememberEmbedding(key, vector) {
+  if (!key) {
+    return;
+  }
+  embeddingCache.set(key, vector || null);
+  if (embeddingCache.size > MAX_EMBEDDING_CACHE_SIZE) {
+    const oldestKey = embeddingCache.keys().next().value;
+    embeddingCache.delete(oldestKey);
+  }
+}
+
+function cloneArrayBuffer(value) {
+  if (value instanceof ArrayBuffer) {
+    return value.slice(0);
+  }
+  if (ArrayBuffer.isView(value) && value?.buffer instanceof ArrayBuffer) {
+    const { buffer, byteOffset = 0, byteLength } = value;
+    const length = typeof byteLength === 'number' ? byteLength : buffer.byteLength;
+    return buffer.slice(byteOffset, byteOffset + length);
+  }
+  return null;
+}
+
+function toFloat32Vector(row) {
+  if (!row?.vector) {
+    return null;
+  }
+  const buffer = cloneArrayBuffer(row.vector);
+  if (!buffer || buffer.byteLength === 0) {
+    return null;
+  }
+  const vector = new Float32Array(buffer);
+  const dim = Number(row.dim);
+  if (Number.isFinite(dim) && dim > 0) {
+    if (vector.length === dim) {
+      return vector;
+    }
+    if (vector.length > dim) {
+      return vector.slice(0, dim);
+    }
+    return null;
+  }
+  return vector;
 }
 
 function toProteinObject(row) {
@@ -76,6 +124,26 @@ export async function fetchProteinSummaries(db, limit = 100) {
      LIMIT ?`
   ).bind(limit).all();
   return (results || []).map((row) => sanitizeProteinSummary(row));
+}
+
+export async function fetchProteinEmbedding(db, uniprot) {
+  const key = normalizeKey(uniprot);
+  if (!key) {
+    return null;
+  }
+  if (embeddingCache.has(key)) {
+    return embeddingCache.get(key);
+  }
+  const row = await db.prepare(
+    `SELECT e.vector, e.dim
+     FROM proteins p
+     JOIN protein_embeddings e ON e.protein_id = p.id
+     WHERE upper(p.uniprot) = ?
+     LIMIT 1`
+  ).bind(key).first();
+  const vector = toFloat32Vector(row);
+  rememberEmbedding(key, vector);
+  return vector;
 }
 
 export async function searchProteins(db, query, limit = 20) {
@@ -146,4 +214,55 @@ export async function pickDailyTarget(db, eligibleIds, salt, date = new Date()) 
     skippedAlphaFold,
     date: today
   };
+}
+
+function cosineSimilarity(vecA, vecB) {
+  if (!vecA || !vecB || vecA.length !== vecB.length || !vecA.length) {
+    return null;
+  }
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
+  for (let i = 0; i < vecA.length; i += 1) {
+    const a = vecA[i];
+    const b = vecB[i];
+    dot += a * b;
+    magA += a * a;
+    magB += b * b;
+  }
+  if (magA <= 0 || magB <= 0) {
+    return null;
+  }
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+}
+
+function normalizeCosine(value) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  const normalized = (value + 1) / 2;
+  if (normalized <= 0) {
+    return 0;
+  }
+  if (normalized >= 1) {
+    return 1;
+  }
+  return normalized;
+}
+
+export async function getGoSimilarityFromEmbeddings(db, guessId, targetId) {
+  const guessKey = normalizeKey(guessId);
+  const targetKey = normalizeKey(targetId);
+  if (!guessKey || !targetKey) {
+    return null;
+  }
+  const [guessVec, targetVec] = await Promise.all([
+    fetchProteinEmbedding(db, guessKey),
+    fetchProteinEmbedding(db, targetKey)
+  ]);
+  if (!guessVec || !targetVec) {
+    return null;
+  }
+  const cosine = cosineSimilarity(guessVec, targetVec);
+  return normalizeCosine(cosine);
 }
