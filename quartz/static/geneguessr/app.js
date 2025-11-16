@@ -1591,8 +1591,20 @@ function markGuessViewersDirty() {
   }
 }
 
-  async function fetchGameBootstrap() {
-    const response = await fetch(`${API_BASE}/api/game/bootstrap`, {
+  function buildPracticeQuery(options = {}) {
+    const practice = typeof options.practice === 'boolean' ? options.practice : Boolean(gameState.practiceMode);
+    if (!practice) {
+      return '';
+    }
+    const params = ['practice=1'];
+    if (options.restart) {
+      params.push('restart=1');
+    }
+    return `?${params.join('&')}`;
+  }
+
+  async function fetchGameBootstrap(options = {}) {
+    const response = await fetch(`${API_BASE}/api/game/bootstrap${buildPracticeQuery({ practice: options.practice, restart: options.restart })}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -1603,7 +1615,7 @@ function markGuessViewersDirty() {
 
   async function submitGuessRequest(uniprot) {
     const normalized = (uniprot || '').toUpperCase();
-    const response = await fetch(`${API_BASE}/api/game/guess`, {
+    const response = await fetch(`${API_BASE}/api/game/guess${buildPracticeQuery()}`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1617,7 +1629,7 @@ function markGuessViewersDirty() {
   }
 
   async function revealHintRequest(hintId) {
-    const response = await fetch(`${API_BASE}/api/game/reveal-hint`, {
+    const response = await fetch(`${API_BASE}/api/game/reveal-hint${buildPracticeQuery()}`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -3430,8 +3442,19 @@ https://brinedew.bio/apps/geneguessr/`;
     }
   };
 
-  window.geneguessrPlayAgain = function() {
-    window.location.reload();
+  window.geneguessrPlayAgain = async function() {
+    try {
+      setStatus('loading-data');
+      const payload = await fetchGameBootstrap({ practice: true, restart: true });
+      hydrateStateFromPayload(payload);
+      hydrateGuessProteins();
+      render();
+      setStatus('rendered');
+    } catch (err) {
+      console.error('Practice restart failed', err);
+      alert('Failed to start a practice round. Please try again.');
+      setStatus('errored');
+    }
   };
   
   function updateSidebarStats() {

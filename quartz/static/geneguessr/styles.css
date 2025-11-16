@@ -1161,6 +1161,7 @@
 
 .pg-practice-tag {
   text-align: center;
+  color: inherit;
 }
 
 .pg-practice-badge {

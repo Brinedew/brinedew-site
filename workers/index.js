@@ -283,6 +283,18 @@ function getSessionId(request) {
   return `guest_${hashIP(ip)}`;
 }
 
+function resolveSessionContext(request) {
+  const url = new URL(request.url);
+  const practiceMode = url.searchParams.get('practice') === '1';
+  const practiceRestart = practiceMode && url.searchParams.get('restart') === '1';
+  const baseSessionId = getSessionId(request);
+  return {
+    practiceMode,
+    practiceRestart,
+    sessionId: practiceMode ? `practice_${baseSessionId}` : baseSessionId
+  };
+}
+
 /**
  * Hash IP address for guest session identification
  */
@@ -621,12 +633,12 @@ async function handleStructureFetch(request, env) {
 
 async function handleGameBootstrap(request, env) {
   try {
-    const sessionId = getSessionId(request);
+    const { sessionId, practiceMode, practiceRestart } = resolveSessionContext(request);
     const targetProtein = await getDailyTargetProtein(env);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
-    const state = await ensureSessionForToday(env, sessionId, targetProtein);
+    const state = await ensureSessionForToday(env, sessionId, targetProtein, { practiceMode, forceReset: practiceRestart });
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     const payload = buildGamePayload(state, targetProtein);
     return Response.json(payload, { headers: CORS_HEADERS });
@@ -638,7 +650,7 @@ async function handleGameBootstrap(request, env) {
 
 async function handleGuessSubmission(request, env) {
   try {
-    const sessionId = getSessionId(request);
+    const { sessionId, practiceMode } = resolveSessionContext(request);
     const targetProtein = await getDailyTargetProtein(env);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
@@ -648,7 +660,7 @@ async function handleGuessSubmission(request, env) {
     if (!uniprot) {
       return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: CORS_HEADERS });
     }
-    let state = await ensureSessionForToday(env, sessionId, targetProtein);
+    let state = await ensureSessionForToday(env, sessionId, targetProtein, { practiceMode });
     if (state.won || (state.guesses?.length || 0) >= MAX_GUESSES) {
       return Response.json({ error: 'Round already completed' }, { status: 409, headers: CORS_HEADERS });
     }
@@ -694,7 +706,7 @@ async function handleGuessSubmission(request, env) {
 
 async function handleHintReveal(request, env) {
   try {
-    const sessionId = getSessionId(request);
+    const { sessionId, practiceMode } = resolveSessionContext(request);
     const targetProtein = await getDailyTargetProtein(env);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
@@ -709,7 +721,7 @@ async function handleHintReveal(request, env) {
     if (!hintText) {
       return Response.json({ error: 'Hint not found' }, { status: 404, headers: CORS_HEADERS });
     }
-    const state = await ensureSessionForToday(env, sessionId, targetProtein);
+    const state = await ensureSessionForToday(env, sessionId, targetProtein, { practiceMode });
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
@@ -747,7 +759,7 @@ async function getDailyTargetProtein(env) {
   return selection?.protein || null;
 }
 
-function createInitialGameState(date, targetId) {
+function createInitialGameState(date, targetId, options = {}) {
   return {
     version: 2,
     date,
@@ -757,12 +769,14 @@ function createInitialGameState(date, targetId) {
     revealedHints: [],
     won: false,
     statsRecorded: false,
-    practiceMode: false,
+    practiceMode: Boolean(options.practiceMode),
     createdAt: Date.now()
   };
 }
 
-async function ensureSessionForToday(env, sessionId, targetProtein) {
+async function ensureSessionForToday(env, sessionId, targetProtein, options = {}) {
+  const practiceMode = Boolean(options.practiceMode);
+  const forceReset = Boolean(options.forceReset);
   const today = new Date().toISOString().slice(0, 10);
   let state = null;
   try {
@@ -771,8 +785,11 @@ async function ensureSessionForToday(env, sessionId, targetProtein) {
     console.warn('GeneGuessr: failed to load session, resetting', err);
     state = null;
   }
-  if (!state || state.date !== today || state.targetId !== targetProtein.uniprot) {
-    state = createInitialGameState(today, targetProtein.uniprot);
+  if (forceReset || !state || state.date !== today || state.targetId !== targetProtein.uniprot) {
+    state = createInitialGameState(today, targetProtein.uniprot, { practiceMode });
+    await saveGameState(env, sessionId, state);
+  } else if (state.practiceMode !== practiceMode) {
+    state.practiceMode = practiceMode;
     await saveGameState(env, sessionId, state);
   }
   return state;
