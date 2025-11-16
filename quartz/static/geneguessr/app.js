@@ -1535,8 +1535,9 @@
   const viewerStructureInfo = new Map();
   const renderedViewers = new Set();
   let gamePayload = null;
-let collapseDelegationBound = false;
-let spoilerDelegationBound = false;
+  let collapseDelegationBound = false;
+  let spoilerDelegationBound = false;
+  let lastRenderedTargetStructureId = null;
 
   function markViewerDirty(containerId) {
     if (!containerId) {
@@ -1598,6 +1599,9 @@ function markGuessViewersDirty() {
       return;
     }
     targetStructureInfo = null;
+    if (!payload?.clueTarget && lastRenderedTargetStructureId) {
+      lastRenderedTargetStructureId = null;
+    }
     gamePayload = payload;
     gameStatus = payload.status;
     clueData = payload.clue || { sections: [], allMatches: {}, latestMatches: {} };
@@ -2319,11 +2323,18 @@ function markGuessViewersDirty() {
       return;
     }
     
-    markViewerDirty('pg-clue-structure');
+    const nextStructureId = targetProtein?.structure?.structure_id
+      || targetProtein?.structure_id
+      || targetProtein?.uniprot
+      || null;
+    if (!lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId) {
+      markViewerDirty('pg-clue-structure');
+    }
     if (gameOver) {
       markViewerDirty('pg-solution-card-structure');
     }
     slot.innerHTML = renderClueCard(gameOver);
+    lastRenderedTargetStructureId = nextStructureId;
     ensureSpoilerDelegation();
   }
   
