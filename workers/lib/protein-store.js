@@ -57,7 +57,33 @@ function toFloat32Vector(row) {
   if (!row?.vector) {
     return null;
   }
-  const buffer = cloneArrayBuffer(row.vector);
+  let buffer = cloneArrayBuffer(row.vector);
+  // Some D1 clients or drivers return BLOBs as hex or base64 strings.
+  // If so, convert them into ArrayBuffer/Uint8Array for Float32Array view.
+  if (!buffer && typeof row.vector === 'string') {
+    const s = row.vector.trim();
+    // Hex string (even length, only hex chars)
+    if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0) {
+      const len = s.length / 2;
+      const u8 = new Uint8Array(len);
+      for (let i = 0; i < len; i += 1) {
+        u8[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+      }
+      buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+    } else {
+      // Attempt base64 decode common in web contexts
+      try {
+        const bin = atob(s);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) {
+          u8[i] = bin.charCodeAt(i);
+        }
+        buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      } catch (e) {
+        buffer = null;
+      }
+    }
+  }
   if (!buffer || buffer.byteLength === 0) {
     return null;
   }
