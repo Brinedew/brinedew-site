@@ -2100,6 +2100,10 @@ function markGuessViewersDirty() {
     if (gameOver) {
       const solutionTarget = targetReveal || targetProtein;
       const revealStructureInfo = solutionTarget?.uniprot ? getStructureInfoForProtein(solutionTarget.uniprot) : getTargetStructureInfo();
+      const latestGuessEntry = Array.isArray(gameState.guesses) && gameState.guesses.length
+        ? gameState.guesses[gameState.guesses.length - 1]
+        : null;
+      const matchedHintMap = latestGuessEntry?.matchedHints || clueData?.latestMatches || {};
       const revealCard = buildFeedbackCardMarkup(solutionTarget, {
         cardId: 'pg-solution-card',
         collapsible: false,
@@ -2107,6 +2111,8 @@ function markGuessViewersDirty() {
         showSimilarity: false,
         structureInfo: revealStructureInfo,
         linkable: true,
+        matchedHintMap,
+        highlightMatches: true
       });
       return `
         ${renderResult()}
