@@ -10,6 +10,8 @@ const STRUCTURE_TOKEN_TTL_SECONDS = 300;
 const TOKEN_PREFIX = 'structure_token:';
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB);
+const STRUCTURE_CACHE_META_PREFIX = 'structure_meta:';
+const STRUCTURE_CACHE_TARGET_RATIO = 0.9;
 const DAILY_TARGET_SALT = 'geneguessr-v2-939b5a0b';
 
 
@@ -567,12 +569,20 @@ async function handleStructureFetch(request, env) {
   }
   let object = await env.STRUCTURES_BUCKET.get(r2Key);
   if (!object) {
-    const usage = await getStructureBucketUsage(env);
+    let usage = await getStructureBucketUsage(env);
     if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
-      return Response.json({
-        error: 'Structure downloads temporarily paused',
-        detail: 'Storage cap reached. Please try again later.'
-      }, { status: 507, headers: CORS_HEADERS });
+      const targetBytes = Math.floor(STRUCTURE_BUCKET_CAP_BYTES * STRUCTURE_CACHE_TARGET_RATIO);
+      const eviction = await evictStructureCache(env, targetBytes);
+      if (eviction.removed > 0) {
+        console.warn('GeneGuessr: structure cache eviction', eviction);
+      }
+      usage = { bytes: eviction.afterBytes };
+      if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
+        return Response.json({
+          error: 'Structure downloads temporarily paused',
+          detail: 'Storage cap reached. Please try again later.'
+        }, { status: 507, headers: CORS_HEADERS });
+      }
     }
     if (!upstreamUrl) {
       return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
@@ -590,6 +600,7 @@ async function handleStructureFetch(request, env) {
         contentType: upstreamResp.headers.get('Content-Type') || 'application/octet-stream'
       }
     });
+    await recordStructureCacheEntry(env, r2Key, arrayBuffer.byteLength);
     return new Response(arrayBuffer, {
       headers: {
         ...CORS_HEADERS,
@@ -598,6 +609,7 @@ async function handleStructureFetch(request, env) {
     });
   }
 
+  await touchStructureCacheEntry(env, r2Key, object.size);
   return new Response(object.body, {
     headers: {
       ...CORS_HEADERS,
@@ -1032,6 +1044,98 @@ async function getStructureBucketUsage(env) {
     cursor = listResp?.truncated ? listResp?.cursor : undefined;
   } while (cursor);
   return { bytes, objects };
+}
+
+async function recordStructureCacheEntry(env, key, size) {
+  if (!env?.KV || !key) {
+    return;
+  }
+  const meta = {
+    key,
+    size: Number(size) || 0,
+    lastAccess: Date.now()
+  };
+  await env.KV.put(`${STRUCTURE_CACHE_META_PREFIX}${key}`, JSON.stringify(meta), {
+    expirationTtl: 60 * 60 * 24 * 30
+  });
+}
+
+async function touchStructureCacheEntry(env, key, sizeHint) {
+  if (!env?.KV || !key) {
+    return;
+  }
+  const cacheKey = `${STRUCTURE_CACHE_META_PREFIX}${key}`;
+  const raw = await env.KV.get(cacheKey);
+  if (!raw) {
+    await recordStructureCacheEntry(env, key, sizeHint);
+    return;
+  }
+  try {
+    const meta = JSON.parse(raw);
+    meta.lastAccess = Date.now();
+    if (typeof sizeHint === 'number' && sizeHint > 0) {
+      meta.size = sizeHint;
+    }
+    await env.KV.put(cacheKey, JSON.stringify(meta), { expirationTtl: 60 * 60 * 24 * 30 });
+  } catch (err) {
+    console.warn('GeneGuessr: failed to touch cache entry, recreating', err);
+    await recordStructureCacheEntry(env, key, sizeHint);
+  }
+}
+
+async function listStructureCacheMeta(env) {
+  if (!env?.KV) {
+    return [];
+  }
+  const entries = [];
+  let cursor = undefined;
+  do {
+    const resp = await env.KV.list({ prefix: STRUCTURE_CACHE_META_PREFIX, cursor });
+    for (const key of resp.keys || []) {
+      const raw = await env.KV.get(key.name);
+      if (!raw) {
+        continue;
+      }
+      try {
+        const meta = JSON.parse(raw);
+        if (meta?.key) {
+          entries.push(meta);
+        }
+      } catch {
+        // ignore malformed entry
+      }
+    }
+    cursor = resp.list_complete ? undefined : resp.cursor;
+  } while (cursor);
+  return entries;
+}
+
+async function evictStructureCache(env, targetBytes) {
+  const usage = await getStructureBucketUsage(env);
+  if (usage.bytes <= targetBytes) {
+    return { beforeBytes: usage.bytes, afterBytes: usage.bytes, removed: 0 };
+  }
+  const entries = await listStructureCacheMeta(env);
+  entries.sort((a, b) => (a.lastAccess || 0) - (b.lastAccess || 0));
+  let currentBytes = usage.bytes;
+  let removed = 0;
+  for (const meta of entries) {
+    if (!meta?.key) {
+      continue;
+    }
+    try {
+      await env.STRUCTURES_BUCKET.delete(meta.key);
+    } catch (err) {
+      console.warn('GeneGuessr: failed to delete R2 object during eviction', meta.key, err);
+    }
+    await env.KV.delete(`${STRUCTURE_CACHE_META_PREFIX}${meta.key}`);
+    currentBytes -= Number(meta.size) || 0;
+    removed += 1;
+    if (currentBytes <= targetBytes) {
+      break;
+    }
+  }
+  return { beforeBytes: usage.bytes, afterBytes: currentBytes, removed };
 }
 
 function sanitizeKeySegment(value) {

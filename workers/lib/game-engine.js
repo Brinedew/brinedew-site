@@ -109,7 +109,9 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   const goSimilarity = (typeof options.goSimilarity === 'number')
     ? options.goSimilarity
     : null;
-  const goPercent = typeof goSimilarity === 'number' ? Math.round(goSimilarity * 100) : null;
+  const goPercent = typeof goSimilarity === 'number'
+    ? Math.round(((goSimilarity + 1) / 2) * 100)
+    : null;
   const domainIntersection = guessProtein.domains.filter((domain) => targetProtein.domains.includes(domain));
   const lengthBinMatch = determineLengthBin(guessProtein.length) === determineLengthBin(targetProtein.length);
   const tmMatch = Boolean(guessProtein.tmh) === Boolean(targetProtein.tmh);
