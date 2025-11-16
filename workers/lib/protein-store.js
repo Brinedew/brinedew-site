@@ -150,17 +150,45 @@ export async function searchProteins(db, query, limit = 20) {
   if (!query || !query.trim()) {
     return [];
   }
-  const normalized = `%${query.trim().toLowerCase()}%`;
+  const needle = query.trim().toLowerCase();
+  const wildcard = `%${needle}%`;
+  const prefix = `${needle}%`;
   const statement = `
-    SELECT p.uniprot, p.hgnc, p.full_name, p.length
+    SELECT p.uniprot, p.hgnc, p.full_name, p.length,
+      MIN(
+        CASE
+          WHEN lower(p.hgnc) = ? THEN 0
+          WHEN s.normalized = ? THEN 1
+          WHEN lower(p.hgnc) LIKE ? ESCAPE '\\' THEN 2
+          WHEN s.normalized LIKE ? ESCAPE '\\' THEN 3
+          WHEN lower(p.full_name) LIKE ? ESCAPE '\\' THEN 4
+          WHEN lower(p.hgnc) LIKE ? ESCAPE '\\' THEN 5
+          WHEN s.normalized LIKE ? ESCAPE '\\' THEN 6
+          WHEN lower(p.full_name) LIKE ? ESCAPE '\\' THEN 7
+          ELSE 8
+        END
+      ) AS match_rank
     FROM proteins p
     LEFT JOIN protein_synonyms s ON s.protein_id = p.id
     WHERE lower(p.hgnc) LIKE ? OR lower(p.full_name) LIKE ? OR s.normalized LIKE ?
     GROUP BY p.id
-    ORDER BY p.hgnc
+    ORDER BY match_rank ASC, lower(p.hgnc) ASC
     LIMIT ?`;
   const { results } = await db.prepare(statement)
-    .bind(normalized, normalized, normalized, limit)
+    .bind(
+      needle,
+      needle,
+      prefix,
+      prefix,
+      prefix,
+      wildcard,
+      wildcard,
+      wildcard,
+      wildcard,
+      wildcard,
+      wildcard,
+      limit
+    )
     .all();
   return (results || []).map((row) => sanitizeProteinSummary(row));
 }

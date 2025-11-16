@@ -838,8 +838,6 @@
   background: var(--light);
   border: 1px solid var(--ui-border);
   border-radius: 8px;
-  max-height: 200px;
-  overflow-y: auto;
   z-index: 10;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
