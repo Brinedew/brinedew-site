@@ -624,6 +624,13 @@
     }
     const linkable = Boolean(options.linkable);
     const structureInfo = options.structureInfo || null;
+    const structureSourceSpec = options.structureSource
+      || (protein?.uniprot ? { type: 'uniprot', id: protein.uniprot } : null);
+    if (structureSourceSpec) {
+      viewerStructureSources.set(viewerId, structureSourceSpec);
+    } else {
+      viewerStructureSources.delete(viewerId);
+    }
     const structureSource = getStructureSourceInfo(protein);
     if (structureInfo) {
       viewerStructureInfo.set(viewerId, structureInfo);
@@ -1359,6 +1366,31 @@
     }
   }
 
+  async function resolveStructureInfoForViewer(containerId, protein) {
+    const sourceSpec = viewerStructureSources.get(containerId);
+    try {
+      if (sourceSpec?.type === 'target') {
+        const info = await ensureStructureTokenForTarget();
+        if (info?.token) {
+          viewerStructureInfo.set(containerId, info);
+          return info;
+        }
+      } else {
+        const uniprot = sourceSpec?.id || protein?.uniprot;
+        if (uniprot) {
+          const info = await ensureStructureTokenForProtein(uniprot);
+          if (info?.token) {
+            viewerStructureInfo.set(containerId, info);
+            return info;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Geneguessr: failed to resolve structure token for viewer', containerId, err);
+    }
+    return viewerStructureInfo.get(containerId) || null;
+  }
+
   async function loadStructureViewerInContainer(container, protein) {
     if (!container || !protein || !hasStructureData(protein)) {
       return;
@@ -1371,7 +1403,10 @@
     const placeholder = document.getElementById(`${containerId}-placeholder`);
     const loadingEl = document.getElementById(`${containerId}-loading`);
     const errorEl = document.getElementById(`${containerId}-error`);
-    const structureInfo = viewerStructureInfo.get(containerId);
+    let structureInfo = viewerStructureInfo.get(containerId);
+    if (!structureInfo || !structureInfo.token) {
+      structureInfo = await resolveStructureInfoForViewer(containerId, protein);
+    }
     
     if (!structureInfo || !structureInfo.token) {
       if (errorEl) {
@@ -1533,6 +1568,7 @@
   const structureTokenCache = new Map();
   let targetStructureInfo = null;
   const viewerStructureInfo = new Map();
+  const viewerStructureSources = new Map();
   const renderedViewers = new Set();
   let gamePayload = null;
   let collapseDelegationBound = false;
@@ -1545,6 +1581,7 @@
     }
     renderedViewers.delete(containerId);
     viewerStructureInfo.delete(containerId);
+    viewerStructureSources.delete(containerId);
   }
 
 function markGuessViewersDirty() {
@@ -2100,6 +2137,9 @@ function markGuessViewersDirty() {
     if (gameOver) {
       const solutionTarget = targetReveal || targetProtein;
       const revealStructureInfo = solutionTarget?.uniprot ? getStructureInfoForProtein(solutionTarget.uniprot) : getTargetStructureInfo();
+      const solutionStructureSource = solutionTarget?.uniprot
+        ? { type: 'uniprot', id: solutionTarget.uniprot }
+        : { type: 'target' };
       const latestGuessEntry = Array.isArray(gameState.guesses) && gameState.guesses.length
         ? gameState.guesses[gameState.guesses.length - 1]
         : null;
@@ -2111,6 +2151,7 @@ function markGuessViewersDirty() {
         showSimilarity: false,
         structureInfo: revealStructureInfo,
         linkable: true,
+        structureSource: solutionStructureSource,
         matchedHintMap,
         highlightMatches: true
       });
@@ -2131,7 +2172,8 @@ function markGuessViewersDirty() {
     }
     const structureMarkup = renderStructureViewer(targetProtein, 'pg-clue-structure', {
       linkable: false,
-      structureInfo: getTargetStructureInfo()
+      structureInfo: getTargetStructureInfo(),
+      structureSource: { type: 'target' }
     });
     
     return `
