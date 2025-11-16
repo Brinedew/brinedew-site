@@ -45,6 +45,16 @@ function cloneArrayBuffer(value) {
   if (value instanceof ArrayBuffer) {
     return value.slice(0);
   }
+  if (Array.isArray(value)) {
+    const u8 = new Uint8Array(value.length);
+    for (let i = 0; i < value.length; i += 1) {
+      const byte = value[i];
+      u8[i] = (typeof byte === 'number' && Number.isFinite(byte))
+        ? (byte & 0xFF)
+        : 0;
+    }
+    return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+  }
   if (ArrayBuffer.isView(value) && value?.buffer instanceof ArrayBuffer) {
     const { buffer, byteOffset = 0, byteLength } = value;
     const length = typeof byteLength === 'number' ? byteLength : buffer.byteLength;
