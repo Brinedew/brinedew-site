@@ -1,8 +1,9 @@
-import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
 import style from "./styles/tagExplorer.scss"
 // @ts-ignore
 import script from "./scripts/tagExplorer.inline"
+import { JSX } from "preact"
 
 type Options = {
   title?: string
@@ -140,7 +141,7 @@ let numTagExplorers = 0
 export default ((user?: Options) => {
   const opts = { ...defaultOpts, ...user }
 
-  function TagExplorer({ allFiles, displayClass, cfg }: QuartzComponentProps) {
+  function TagExplorer({ allFiles, displayClass }: QuartzComponentProps) {
     // Build hierarchical tag tree
     const root = buildTagTree(allFiles, opts)
     

@@ -1,4 +1,5 @@
 import { QuartzConfig } from "./quartz/cfg"
+import { SimpleSlug } from "./quartz/util/path"
 import * as Plugin from "./quartz/plugins"
 
 const config: QuartzConfig = {
@@ -94,7 +95,7 @@ const config: QuartzConfig = {
       Plugin.ComponentResources(),
       Plugin.ContentPage(),
       Plugin.FolderPage({
-        excludeFolders: ["apps/geneguessr"],
+        excludeFolders: ["apps/geneguessr" as SimpleSlug],
       }),
       Plugin.TagPage(),
       Plugin.ContentIndex({

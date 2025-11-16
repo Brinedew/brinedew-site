@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Obsidian plugin for Lineage grouped-by-depth normalization
 // Maintains scaffold (depth 1-2) + content (depth 3+) structure
 

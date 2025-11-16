@@ -161,6 +161,9 @@ function setupTagExplorer() {
 
   root.querySelectorAll<HTMLElement>(".tag-group").forEach(group => {
     const container = group.querySelector<HTMLElement>(".tag-container")
+    if (!container) {
+      return
+    }
     const tagRaw = container?.getAttribute("data-tag")
     const outer = group.querySelector<HTMLElement>(".tag-pages-outer")
     if (!tagRaw || !outer) return

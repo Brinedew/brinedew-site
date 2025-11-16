@@ -21,14 +21,38 @@ const MAPPINGS: Mapping[] = [
 ]
 
 const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzComponentProps) => {
-  const fm = fileData.frontmatter
-  
-  if (!fm?.tags?.includes("protein")) {
+  const fm = (fileData.frontmatter ?? {}) as Record<string, any>
+  const tagList = Array.isArray(fm.tags) ? fm.tags : []
+
+  if (!tagList.includes("protein")) {
     return null
   }
 
   // Build mappings from hardcoded list
   const mappings: Mapping[] = MAPPINGS
+
+  const toStringValue = (value: any, fallback = ""): string => {
+    if (typeof value === "string") {
+      return value
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value)
+    }
+    return fallback
+  }
+
+  const toNumberValue = (value: any, fallback = 0): number => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
+    }
+    return fallback
+  }
   
   // Filter to only show pairs where both values exist in frontmatter
   const visibleMappings = mappings.filter(m => {
@@ -52,7 +76,9 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
   })
 
   // Get persona image
-  const personaImage = fm?.persona_image || `/static/proteins/${fm?.uniprot_id}.png`
+  const personaImage =
+    toStringValue(fm.persona_image) ||
+    (typeof fm.uniprot_id === "string" ? `/static/proteins/${fm.uniprot_id}.png` : "")
   
   // HSLuv conversion (no RGB/HSL fallback) 
   const toHexHsluv = (h: number, s: number, l: number): string => { 
@@ -67,18 +93,18 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
     return conv.hex 
   } 
   
-  let hexcode = fm?.persona_hexcode 
+  let hexcode = toStringValue(fm.persona_hexcode) 
   if (!hexcode || hexcode === 'null') { 
-    const hue = fm?.persona_skintone_hue ?? 0 
-    const sat = fm?.persona_skintone_saturation ?? 50 
-    const light = fm?.persona_skintone_lightness ?? 50 
+    const hue = toNumberValue(fm.persona_skintone_hue, 0) 
+    const sat = toNumberValue(fm.persona_skintone_saturation, 50) 
+    const light = toNumberValue(fm.persona_skintone_lightness, 50) 
     hexcode = toHexHsluv(hue, sat, light) 
   } 
-  
-  const geneSymbol = fm?.symbol || fm?.gene_symbol || fm?.title || 'Protein'
-  
-  // Get first letter for enclosed alphanumeric display
-  const firstLetter = fm?.first_letter || geneSymbol.charAt(0).toUpperCase()
+ 
+  const geneSymbol =
+    toStringValue(fm.symbol) ||
+    toStringValue(fm.gene_symbol) ||
+    toStringValue(fm.title, "Protein")
 
   // Helper to prettify field names and format values with units
   const prettifyLabel = (fieldName: string): string => {
@@ -121,16 +147,6 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
     return `${value}${unit}`
   }
   
-  // Special formatter for hue - returns enclosed alphanumeric with HSLuv color 
-  const formatHue = (hue: number, letter: string): { display: string, color: string } => { 
-    // Use HSLuv with fixed S/L for legibility parity across hues 
-    const color = toHexHsluv(hue, 100, 50) 
-    return { 
-      display: letter, 
-      color: color 
-    } 
-  } 
-
   return (
     <div class={classNames(displayClass, "protein-infobox")}>
       {/* Persona Image */}

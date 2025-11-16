@@ -23,17 +23,18 @@ export const ImageCaptions: QuartzTransformerPlugin<Options> = (userOpts) => {
     name: "ImageCaptions",
     htmlPlugins() {
       return [() => (tree: Root) => {
-        visit(tree, "element", (node: Element, index: number | null, parent: Element | Root | null) => {
-          if (!parent || index === null) return
-          if (node.tagName !== "img") return
+        visit(tree, "element", (node, index, parent) => {
+          if (!parent || typeof index !== "number") return
+          const element = node as Element
+          if (element.tagName !== "img") return
 
           // Skip if already inside a figure
           if ((parent as Element).tagName === "figure") return
 
-          const alt = (node.properties?.["alt"] as string | undefined) ?? ""
+          const alt = (element.properties?.["alt"] as string | undefined) ?? ""
           if (opts.requireAlt && alt.trim().length === 0) return
 
-          const imgClone = clone(node) as Element
+          const imgClone = clone(element) as Element
 
           const figure: Element = {
             type: "element",
@@ -56,4 +57,3 @@ export const ImageCaptions: QuartzTransformerPlugin<Options> = (userOpts) => {
     },
   }
 }
-

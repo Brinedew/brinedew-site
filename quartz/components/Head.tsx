@@ -123,12 +123,7 @@ export default (() => {
         
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {
-          const slugValue =
-            typeof fileData.slug === "string"
-              ? fileData.slug
-              : Array.isArray(fileData.slug)
-                ? fileData.slug.join("/")
-                : undefined;
+          const slugValue = typeof fileData.slug === "string" ? fileData.slug : undefined;
 
           if (!slugValue) {
             return null;
@@ -199,6 +194,4 @@ export default (() => {
 
   return Head
 }) satisfies QuartzComponentConstructor
-
-
 

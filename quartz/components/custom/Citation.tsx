@@ -1,5 +1,6 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "../types"
-import { classNames } from "../util/lang"
+import { classNames } from "../../util/lang"
+import { useEffect, useState } from "preact/hooks"
 
 interface CitationData {
   doi?: string
@@ -9,44 +10,64 @@ interface CitationData {
   year?: string
 }
 
-export const Citation: QuartzComponent = ({ displayClass, cite }: QuartzComponentProps & { cite: CitationData }) => {
-  const [showPopover, setShowPopover] = React.useState(false)
-  const [metadata, setMetadata] = React.useState<CitationData | null>(null)
-  
-  React.useEffect(() => {
-    if (cite.doi) {
-      fetch(`https://api.crossref.org/works/${cite.doi}`)
-        .then(r => r.json())
-        .then(data => {
+type CitationProps = QuartzComponentProps & { cite: CitationData }
+
+const CitationComponent = ({ displayClass, cite }: CitationProps) => {
+  const [showPopover, setShowPopover] = useState(false)
+  const [metadata, setMetadata] = useState<CitationData | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchMetadata() {
+      try {
+        if (cite.doi) {
+          const resp = await fetch(`https://api.crossref.org/works/${cite.doi}`)
+          if (!resp.ok) return
+          const data = await resp.json()
+          if (cancelled) return
           setMetadata({
-            title: data.message.title?.[0],
-            authors: data.message.author?.map((a: any) => `${a.given} ${a.family}`),
-            year: data.message.published?.['date-parts']?.[0]?.[0]
+            title: data.message?.title?.[0],
+            authors: Array.isArray(data.message?.author)
+              ? data.message.author.map((a: { given: string; family: string }) => `${a.given} ${a.family}`)
+              : undefined,
+            year: data.message?.published?.["date-parts"]?.[0]?.[0],
           })
-        })
-    } else if (cite.zoteroKey) {
-      // Zotero integration - using public library
-      fetch(`https://api.zotero.org/users/biokozlov/items/${cite.zoteroKey}?format=json`)
-        .then(r => r.json())
-        .then(data => {
+        } else if (cite.zoteroKey) {
+          const resp = await fetch(
+            `https://api.zotero.org/users/biokozlov/items/${cite.zoteroKey}?format=json`,
+          )
+          if (!resp.ok) return
+          const data = await resp.json()
+          if (cancelled) return
           setMetadata({
-            title: data.data.title,
-            authors: data.data.creators?.map((c: any) => `${c.firstName} ${c.lastName}`),
-            year: data.data.date
+            title: data?.data?.title,
+            authors: Array.isArray(data?.data?.creators)
+              ? data.data.creators.map((c: { firstName?: string; lastName?: string }) =>
+                  [c.firstName, c.lastName].filter(Boolean).join(" "),
+                )
+              : undefined,
+            year: typeof data?.data?.date === "string" ? data.data.date : undefined,
           })
-        })
+        }
+      } catch (err) {
+        console.warn("Failed to load citation data", err)
+      }
     }
-  }, [cite])
+    fetchMetadata()
+    return () => {
+      cancelled = true
+    }
+  }, [cite.doi, cite.zoteroKey])
   
   return (
-    <span 
-      className={classNames(displayClass, "citation")}
+    <span
+      class={classNames(displayClass, "citation")}
       onMouseEnter={() => setShowPopover(true)}
       onMouseLeave={() => setShowPopover(false)}
     >
       <sup>[{metadata?.year || cite.year || '...'}]</sup>
       {showPopover && metadata && (
-        <div className="citation-popover">
+        <div class="citation-popover">
           <h4>{metadata.title}</h4>
           <p>{metadata.authors?.join(', ')}</p>
           <div className="citation-actions">
@@ -59,6 +80,8 @@ export const Citation: QuartzComponent = ({ displayClass, cite }: QuartzComponen
     </span>
   )
 }
+
+export const Citation = CitationComponent as QuartzComponent
 
 Citation.css = `
 .citation {

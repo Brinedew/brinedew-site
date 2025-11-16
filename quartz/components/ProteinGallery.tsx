@@ -22,10 +22,21 @@ const SORT_OPTIONS = [
   { value: "tissue_tau-desc", label: "Tissue Tau (High-Low)" },
 ]
 
+const isString = (value: unknown): value is string => typeof value === "string"
+const toStringValue = (value: unknown): string => (typeof value === "string" ? value : value != null ? String(value) : "")
+
 export default ((userOpts?: ProteinGalleryOptions) => {
-  const ProteinGallery: QuartzComponent = ({ allFiles, displayClass, cfg, fileData }: QuartzComponentProps) => {
-    // Only render on the gallery page
-    if (fileData.slug !== "apps/proteins/index") {
+  const ProteinGallery: QuartzComponent = ({
+    allFiles,
+    displayClass,
+    cfg,
+    fileData,
+    ctx,
+    externalResources,
+    tree,
+  }: QuartzComponentProps) => {
+    const slugValue = isString(fileData.slug) ? fileData.slug : ""
+    if (slugValue !== "apps/proteins/index") {
       return null
     }
 
@@ -34,16 +45,22 @@ export default ((userOpts?: ProteinGalleryOptions) => {
 
     // Filter for protein pages (non-draft by default)
     const proteins = allFiles
-      .filter(file => 
-        file.slug?.startsWith("wiki/") && 
-        file.frontmatter?.tags?.includes("protein") &&
-        (userOpts?.showDrafts || !file.frontmatter?.draft)
-      )
+      .filter((file) => {
+        const fileSlug = isString(file.slug) ? file.slug : ""
+        if (!fileSlug.startsWith("wiki/")) {
+          return false
+        }
+        const tags = Array.isArray(file.frontmatter?.tags) ? file.frontmatter?.tags : []
+        const hasProteinTag = tags.includes("protein")
+        const isDraft = Boolean(file.frontmatter?.draft)
+        return hasProteinTag && (userOpts?.showDrafts || !isDraft)
+      })
       .sort((a, b) => {
-        // Sort by gene_symbol by default
-        const aName = a.frontmatter?.gene_symbol ?? a.frontmatter?.symbol ?? a.frontmatter?.title ?? ''
-        const bName = b.frontmatter?.gene_symbol ?? b.frontmatter?.symbol ?? b.frontmatter?.title ?? ''
-        return aName.localeCompare(bName)
+        const resolveName = (entry: typeof a) =>
+          toStringValue(entry.frontmatter?.gene_symbol) ||
+          toStringValue(entry.frontmatter?.symbol) ||
+          toStringValue(entry.frontmatter?.title)
+        return resolveName(a).localeCompare(resolveName(b))
       })
 
     if (proteins.length === 0) {
@@ -66,27 +83,30 @@ export default ((userOpts?: ProteinGalleryOptions) => {
           </div>
         </div>
         <div class="protein-gallery-grid">
-          {proteins.map(protein => {
+          {proteins.map((protein) => {
             // Add data attributes for sorting
             const fm = protein.frontmatter
-            // Use gene_symbol/symbol for sorting (canonical), not title (display name)
             const sortAttrs = {
-              'data-name': fm?.gene_symbol ?? fm?.symbol ?? fm?.title ?? '',
-              'data-mass': fm?.mass ?? '',
-              'data-length': fm?.length ?? '',
-              'data-percent-disordered': fm?.percent_disordered ?? '',
-              'data-rvis': fm?.rvis_percentile ?? '',
-              'data-tissue-tau': fm?.tissue_tau ?? '',
+              "data-name":
+                toStringValue(fm?.gene_symbol) || toStringValue(fm?.symbol) || toStringValue(fm?.title),
+              "data-mass": toStringValue(fm?.mass),
+              "data-length": toStringValue(fm?.length),
+              "data-percent-disordered": toStringValue(fm?.percent_disordered),
+              "data-rvis": toStringValue(fm?.rvis_percentile),
+              "data-tissue-tau": toStringValue(fm?.tissue_tau),
             }
             
             return (
               <div class="gallery-item" {...sortAttrs}>
                 <InfoboxComponent 
                   fileData={protein}
-                  displayClass="in-gallery"
+                  displayClass={undefined}
                   cfg={cfg}
+                  ctx={ctx}
+                  externalResources={externalResources}
                   allFiles={allFiles}
-                  tree={null as any}
+                  tree={tree}
+                  children={[]}
                 />
               </div>
             )
