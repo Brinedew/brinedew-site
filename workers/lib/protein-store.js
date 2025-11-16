@@ -30,7 +30,11 @@ function rememberEmbedding(key, vector) {
   if (!key) {
     return;
   }
-  embeddingCache.set(key, vector || null);
+  if (!vector) {
+    embeddingCache.delete(key);
+    return;
+  }
+  embeddingCache.set(key, vector);
   if (embeddingCache.size > MAX_EMBEDDING_CACHE_SIZE) {
     const oldestKey = embeddingCache.keys().next().value;
     embeddingCache.delete(oldestKey);
