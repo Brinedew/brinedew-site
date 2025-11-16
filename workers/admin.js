@@ -5,7 +5,7 @@
 
 import { parseCookies } from './auth.js';
 import { buildStructurePreviewPayload, sanitizeProteinSummary } from './lib/structure-utils.js';
-import { getProteinByUniprot } from './lib/game-engine.js';
+import { fetchProteinByUniprot as loadProtein } from './lib/protein-store.js';
 
 const CAMERA_MODES = ['perspective', 'orthographic'];
 const ANTIALIASING_MODES = ['off', 'fxaa'];
@@ -719,7 +719,8 @@ export async function handleProteinPreview(request, env) {
   }
 
   try {
-    const protein = await fetchProteinByUniprot(uniprot);
+    const normalized = (uniprot || '').trim().toUpperCase();
+    const protein = await loadProtein(env.DB, normalized);
     if (!protein) {
       return Response.json({ error: `Protein ${uniprot} not found` }, { status: 404 });
     }
@@ -738,10 +739,3 @@ export async function handleProteinPreview(request, env) {
   }
 }
 
-async function fetchProteinByUniprot(uniprot) {
-  if (!uniprot) {
-    return null;
-  }
-  const normalized = `${uniprot}`.trim().toUpperCase();
-  return getProteinByUniprot(normalized);
-}

@@ -1,5 +1,3 @@
-import proteinsJson from '../data/proteins.json' assert { type: 'json' };
-import indexJson from '../data/index.json' assert { type: 'json' };
 import similarityJson from '../data/similarity.json' assert { type: 'json' };
 import { resolveStructureRepresentation } from './structure-utils.js';
 
@@ -8,15 +6,6 @@ const DEFAULT_HINT_COST = 1;
 const HINT_REWARD_ON_INCORRECT = 1;
 
 const LOCKED_HINT_PLACEHOLDER = 'Hint locked';
-const PROTEIN_LIST = (Array.isArray(proteinsJson) ? proteinsJson : []).map(normalizeProtein);
-const PROTEIN_MAP = new Map();
-PROTEIN_LIST.forEach((protein) => {
-  if (protein && protein.uniprot) {
-    PROTEIN_MAP.set(protein.uniprot.toUpperCase(), protein);
-  }
-});
-
-const INDEX_DATA = indexJson || {};
 const SIMILARITY_MATRIX = similarityJson || { scores: {}, metadata: {} };
 
 function stripRefSeqAttribution(text) {
@@ -42,54 +31,8 @@ function cleanGeneSummary(summary) {
   return summary;
 }
 
-export function getProteinByUniprot(uniprot) {
-  if (!uniprot) {
-    return null;
-  }
-  return PROTEIN_MAP.get(uniprot.toUpperCase()) || null;
-}
-
-export function listProteins() {
-  return PROTEIN_LIST.slice();
-}
-
-export function getIndexData() {
-  return INDEX_DATA;
-}
-
 export function getSimilarityMatrix() {
   return SIMILARITY_MATRIX;
-}
-
-export async function pickDailyTarget(eligibleIds, salt, date = new Date()) {
-  if (!Array.isArray(eligibleIds) || eligibleIds.length === 0) {
-    return null;
-  }
-  const today = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
-  const filteredIds = [];
-  let skippedAlphaFold = 0;
-  eligibleIds.forEach((id) => {
-    const protein = getProteinByUniprot(id);
-    if (protein && isAlphaFoldOnlyProtein(protein)) {
-      skippedAlphaFold += 1;
-      return;
-    }
-    filteredIds.push(id);
-  });
-  const selectionPool = filteredIds.length ? filteredIds : eligibleIds;
-  const encoder = new TextEncoder();
-  const hashInput = encoder.encode(`${today}|${salt || ''}`);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', hashInput);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-  const hashInt = parseInt(hash.slice(0, 16), 16);
-  const idx = hashInt % selectionPool.length;
-  const chosenId = selectionPool[idx];
-  return {
-    uniprot: chosenId,
-    skippedAlphaFold,
-    date: today
-  };
 }
 
 export function sanitizeTargetProtein(protein, options = {}) {

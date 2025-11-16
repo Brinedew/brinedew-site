@@ -77,8 +77,9 @@ def build_sql(use_transactions: bool = True) -> List[str]:
         full_name = entry.get("full_name")
         length = entry.get("length")
         structure = entry.get("structure") or {}
-        has_structure = 1 if structure else 0
-        structure_source = structure.get("primary_source")
+        primary_source = structure.get("primary_source")
+        has_structure = 1 if (structure and primary_source and primary_source != "alphafold") else 0
+        structure_source = primary_source
         metadata = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
 
         columns = [

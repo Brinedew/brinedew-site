@@ -10,6 +10,7 @@ const STRUCTURE_TOKEN_TTL_SECONDS = 300;
 const TOKEN_PREFIX = 'structure_token:';
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB);
+const DAILY_TARGET_SALT = 'geneguessr-v2-939b5a0b';
 
 
 // Import auth handlers
@@ -37,14 +38,17 @@ import {
   buildClueSections,
   collectMatchedHintTexts,
   extractHintText,
-  getIndexData,
-  getProteinByUniprot,
-  listProteins,
   maskClueSections,
-  pickDailyTarget,
   sanitizeTargetProtein,
   scoreGuess
 } from './lib/game-engine.js';
+import {
+  fetchProteinByUniprot,
+  fetchProteinSummaries,
+  searchProteins,
+  getEligibleProteinIds,
+  pickDailyTarget
+} from './lib/protein-store.js';
 import { resolveStructureRepresentation } from './lib/structure-utils.js';
 
 export default {
@@ -216,20 +220,15 @@ export default {
     // Public proteins endpoint for autocomplete
     if (url.pathname === '/api/proteins' && request.method === 'GET') {
       try {
-        const proteins = listProteins();
-        // Return simplified protein list for autocomplete
-        const simplifiedProteins = proteins.map(p => ({
-          uniprot: p.uniprot,
-          hgnc: p.hgnc,
-          synonyms: p.synonyms || [],
-          full_name: p.full_name,
-          structure: p.structure
-        }));
-        
-        return Response.json(simplifiedProteins, {
-          headers: CORS_HEADERS
-        });
+        const query = (url.searchParams.get('query') || '').trim();
+        if (query) {
+          const matches = await searchProteins(env.DB, query, 20);
+          return Response.json(matches, { headers: CORS_HEADERS });
+        }
+        const summaries = await fetchProteinSummaries(env.DB, 200);
+        return Response.json(summaries, { headers: CORS_HEADERS });
       } catch (error) {
+        console.error('Failed to load protein search results', error);
         return Response.json({ error: 'Failed to load protein database' }, {
           status: 500,
           headers: CORS_HEADERS
@@ -536,7 +535,7 @@ async function handleStructureToken(request, env) {
   if (!uniprot) {
     return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: CORS_HEADERS });
   }
-  const protein = await getProteinByUniprot(uniprot);
+  const protein = await fetchProteinByUniprot(env.DB, uniprot);
   if (!protein) {
     return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
   }
@@ -612,11 +611,12 @@ async function handleStructureFetch(request, env) {
 async function handleGameBootstrap(request, env) {
   try {
     const sessionId = getSessionId(request);
-    const targetProtein = await getDailyTargetProtein();
+    const targetProtein = await getDailyTargetProtein(env);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
     const state = await ensureSessionForToday(env, sessionId, targetProtein);
+    await hydrateGuessProteins(env, sessionId, state);
     const payload = buildGamePayload(state, targetProtein);
     return Response.json(payload, { headers: CORS_HEADERS });
   } catch (err) {
@@ -628,7 +628,7 @@ async function handleGameBootstrap(request, env) {
 async function handleGuessSubmission(request, env) {
   try {
     const sessionId = getSessionId(request);
-    const targetProtein = await getDailyTargetProtein();
+    const targetProtein = await getDailyTargetProtein(env);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
@@ -644,7 +644,7 @@ async function handleGuessSubmission(request, env) {
     if ((state.guesses || []).some((entry) => entry.uniprot === uniprot)) {
       return Response.json({ error: 'Protein already guessed' }, { status: 409, headers: CORS_HEADERS });
     }
-    const guessProtein = getProteinByUniprot(uniprot);
+    const guessProtein = await fetchProteinByUniprot(env.DB, uniprot);
     if (!guessProtein) {
       return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
     }
@@ -655,7 +655,11 @@ async function handleGuessSubmission(request, env) {
       uniprot,
       correct,
       score,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      protein: {
+        ...guessProtein,
+        gene_summary: cleanGeneSummary(guessProtein.gene_summary)
+      }
     };
     state.guesses = [...(state.guesses || []), guessEntry];
     if (correct) {
@@ -675,7 +679,7 @@ async function handleGuessSubmission(request, env) {
 async function handleHintReveal(request, env) {
   try {
     const sessionId = getSessionId(request);
-    const targetProtein = await getDailyTargetProtein();
+    const targetProtein = await getDailyTargetProtein(env);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
@@ -690,6 +694,7 @@ async function handleHintReveal(request, env) {
       return Response.json({ error: 'Hint not found' }, { status: 404, headers: CORS_HEADERS });
     }
     const state = await ensureSessionForToday(env, sessionId, targetProtein);
+    await hydrateGuessProteins(env, sessionId, state);
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
         return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: CORS_HEADERS });
@@ -716,17 +721,14 @@ async function createStructureToken(env, meta) {
   return token;
 }
 
-async function getDailyTargetProtein() {
-  const indexData = getIndexData();
-  const eligibleIds = indexData?.eligible_ids || [];
+async function getDailyTargetProtein(env) {
+  const eligibleIds = await getEligibleProteinIds(env.DB);
   if (!eligibleIds.length) {
     return null;
   }
-  const selection = await pickDailyTarget(eligibleIds, indexData?.salt_hash || '');
-  if (!selection?.uniprot) {
-    return null;
-  }
-  return getProteinByUniprot(selection.uniprot);
+  const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
+  const selection = await pickDailyTarget(env.DB, eligibleIds, salt);
+  return selection?.protein || null;
 }
 
 function createInitialGameState(date, targetId) {
@@ -760,6 +762,29 @@ async function ensureSessionForToday(env, sessionId, targetProtein) {
   return state;
 }
 
+async function hydrateGuessProteins(env, sessionId, state) {
+  if (!Array.isArray(state?.guesses)) {
+    return;
+  }
+  let dirty = false;
+  for (const entry of state.guesses) {
+    if (!entry || entry.protein) {
+      continue;
+    }
+    const protein = await fetchProteinByUniprot(env.DB, entry.uniprot);
+    if (protein) {
+      entry.protein = {
+        ...protein,
+        gene_summary: cleanGeneSummary(protein.gene_summary)
+      };
+      dirty = true;
+    }
+  }
+  if (dirty && sessionId) {
+    await saveGameState(env, sessionId, state);
+  }
+}
+
 function buildGamePayload(state, targetProtein, options = {}) {
   const revealedHints = new Set(state.revealedHints || []);
   const clueSections = options.clueSections || buildClueSections(targetProtein);
@@ -771,7 +796,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
   const aggregatedMatches = {};
   let latestMatches = {};
   (state.guesses || []).forEach((entry, index) => {
-    const guessProtein = getProteinByUniprot(entry.uniprot);
+    const guessProtein = entry.protein || null;
     if (!guessProtein) {
       return;
     }
