@@ -31,6 +31,7 @@ import {
   DEFAULT_HINT_COST,
   HINT_REWARD_ON_INCORRECT,
   MAX_GUESSES,
+  cleanGeneSummary,
   buildClueSections,
   collectMatchedHintTexts,
   extractHintText,
@@ -765,6 +766,10 @@ function buildGamePayload(state, targetProtein, options = {}) {
     if (!guessProtein) {
       return;
     }
+    const guessProteinCleaned = {
+      ...guessProtein,
+      gene_summary: cleanGeneSummary(guessProtein.gene_summary)
+    };
     const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein);
     const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore);
     aggregateMatches(aggregatedMatches, matches);
@@ -779,7 +784,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       createdAt: entry.createdAt,
       score: resolvedScore,
       matchedHints: matches,
-      protein: guessProtein,
+      protein: guessProteinCleaned,
       isLatest
     });
   });

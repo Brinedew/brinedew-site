@@ -19,6 +19,29 @@ PROTEIN_LIST.forEach((protein) => {
 const INDEX_DATA = indexJson || {};
 const SIMILARITY_MATRIX = similarityJson || { scores: {}, metadata: {} };
 
+function stripRefSeqAttribution(text) {
+  if (typeof text !== 'string') {
+    return text;
+  }
+  return text.replace(/\s*\[provided by RefSeq[^\]]*\]\s*$/i, '').trim();
+}
+
+function cleanGeneSummary(summary) {
+  if (!summary) {
+    return summary;
+  }
+  if (typeof summary === 'string') {
+    return stripRefSeqAttribution(summary);
+  }
+  if (typeof summary === 'object' && typeof summary.text === 'string') {
+    return {
+      ...summary,
+      text: stripRefSeqAttribution(summary.text)
+    };
+  }
+  return summary;
+}
+
 export function getProteinByUniprot(uniprot) {
   if (!uniprot) {
     return null;
@@ -70,6 +93,7 @@ export async function pickDailyTarget(eligibleIds, salt, date = new Date()) {
 }
 
 export function sanitizeTargetProtein(protein, options = {}) {
+  const geneSummary = cleanGeneSummary(protein?.gene_summary);
   const sanitized = {
     uniprot: null,
     hgnc: null,
@@ -84,7 +108,7 @@ export function sanitizeTargetProtein(protein, options = {}) {
     reactome_pathways: Array.isArray(protein?.reactome_pathways) ? [...protein.reactome_pathways] : [],
     structure: protein?.structure || null,
     links: protein?.links || {},
-    gene_summary: protein?.gene_summary || null,
+    gene_summary: geneSummary || null,
     subcell: Array.isArray(protein?.subcell) ? [...protein.subcell] : [],
     synonyms: Array.isArray(protein?.synonyms) ? [...protein.synonyms] : [],
   };
@@ -335,9 +359,9 @@ function buildProteinSections(protein, options = {}) {
   };
   
   if (protein?.gene_summary && !forClue) {
-    const summary = protein.gene_summary;
-    const summaryText = typeof summary === 'string' ? summary : summary.text;
-    const summaryMeta = typeof summary === 'object' && summary.text ? {
+    const summary = cleanGeneSummary(protein.gene_summary);
+    const summaryText = typeof summary === 'string' ? summary : summary?.text;
+    const summaryMeta = typeof summary === 'object' && summary?.text ? {
       source: summary.source,
       url: summary.url,
     } : null;
@@ -458,5 +482,6 @@ function isAlphaFoldOnlyProtein(protein) {
 export {
   MAX_GUESSES,
   DEFAULT_HINT_COST,
-  HINT_REWARD_ON_INCORRECT
+  HINT_REWARD_ON_INCORRECT,
+  cleanGeneSummary
 };
