@@ -1601,9 +1601,21 @@ function markGuessViewersDirty() {
     gamePayload = payload;
     gameStatus = payload.status;
     clueData = payload.clue || { sections: [], allMatches: {}, latestMatches: {} };
-    guessEntries = Array.isArray(payload.guesses) ? payload.guesses : [];
-    targetProtein = payload.clueTarget || null;
-    targetReveal = payload.targetReveal || null;
+    guessEntries = Array.isArray(payload.guesses)
+      ? payload.guesses.map((entry) => {
+          if (!entry) {
+            return entry;
+          }
+          if (entry.protein) {
+            const normalizedProtein = cacheEnrichedProtein(entry.protein) || entry.protein;
+            return { ...entry, protein: normalizedProtein };
+          }
+          const cachedProtein = getEnrichedProteinById(entry.uniprot);
+          return cachedProtein ? { ...entry, protein: cachedProtein } : entry;
+        })
+      : [];
+    targetProtein = payload.clueTarget ? (cacheEnrichedProtein(payload.clueTarget) || payload.clueTarget) : null;
+    targetReveal = payload.targetReveal ? (cacheEnrichedProtein(payload.targetReveal) || payload.targetReveal) : null;
     shareText = payload.shareText || '';
     gameState.date = gameStatus.date;
     gameState.guesses = guessEntries.map((entry) => ({
@@ -1628,6 +1640,11 @@ function markGuessViewersDirty() {
   let rootEl;
   let layoutHydrated = false;
   const proteinsById = new Map();
+  const enrichedProteinsById = new Map();
+  
+  function normalizeUniprotId(uniprot) {
+    return (uniprot || '').toUpperCase();
+  }
   
   function normalizeProtein(protein) {
     const safeArray = (value) => (Array.isArray(value) ? value : []);
@@ -1653,6 +1670,44 @@ function markGuessViewersDirty() {
       subcell: safeArray(protein.subcell),
       tissue: protein && protein.tissue ? protein.tissue : { label: "unknown", score: null },
       links: protein && protein.links ? protein.links : {}
+    };
+  }
+  
+  function cacheEnrichedProtein(protein) {
+    if (!protein || !protein.uniprot) {
+      return null;
+    }
+    const normalized = normalizeProtein(protein);
+    enrichedProteinsById.set(normalizeUniprotId(normalized.uniprot), normalized);
+    return normalized;
+  }
+  
+  function getEnrichedProteinById(uniprot) {
+    if (!uniprot) {
+      return null;
+    }
+    return enrichedProteinsById.get(normalizeUniprotId(uniprot)) || null;
+  }
+  
+  function mergeProteinRecords(base, overrides) {
+    if (!base) {
+      return overrides || null;
+    }
+    if (!overrides) {
+      return base;
+    }
+    return {
+      ...base,
+      ...overrides,
+      go_terms: overrides.go_terms || base.go_terms,
+      go_terms_named: overrides.go_terms_named || base.go_terms_named,
+      reactome_pathways: Array.isArray(overrides.reactome_pathways) ? overrides.reactome_pathways : base.reactome_pathways,
+      tissue: overrides.tissue || base.tissue,
+      structure: overrides.structure || base.structure,
+      links: {
+        ...(base.links || {}),
+        ...(overrides.links || {})
+      }
     };
   }
 
