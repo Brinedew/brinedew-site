@@ -1886,10 +1886,6 @@ function markGuessViewersDirty() {
       .filter(Boolean);
   }
 
-  function collectMatchedHintTexts(_target, guessEntry) {
-    return guessEntry?.matchedHints || {};
-  }
-
   function buildProteinSections(protein, options = {}) {
     const { forClue = false } = options;
     const goTermsByAspect = protein.go_terms || {};
@@ -2057,12 +2053,11 @@ function markGuessViewersDirty() {
     const labelHtml = section.label
       ? `<span class="pg-section-label">${escapeHtml(section.label)}:</span> `
       : '';
-    const highlightCandidates = getHighlightCandidates(section.id);
     const itemsHtml = (section.items || []).map(item => {
       const text = typeof item.text === 'string' ? item.text : null;
-      const normalizedText = normalizeMatchText(text);
-      const isMatched = Boolean(text && highlightCandidates.has(normalizedText));
-      const entryClass = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
+      const entryClass = item?.highlighted
+        ? 'pg-section-entry matched-highlight'
+        : 'pg-section-entry';
       if (!item.id || item.revealed) {
         if (text) {
           return `<span class="${entryClass}">${escapeHtml(text)}</span>`;
@@ -2076,13 +2071,6 @@ function markGuessViewersDirty() {
 
   function normalizeMatchText(value) {
     return (value ?? '').toString().trim().toLowerCase();
-  }
-
-  function getHighlightCandidates(sectionId) {
-    const latest = clueData?.latestMatches?.[sectionId] || [];
-    const fallback = clueData?.allMatches?.[sectionId] || [];
-    const source = latest.length ? latest : fallback;
-    return new Set(source.map(normalizeMatchText));
   }
 
   function renderLockedHintPlaceholder(item, entryClass) {
@@ -2149,8 +2137,11 @@ function markGuessViewersDirty() {
       matchedItems = [],
       allRevealedItems = [],
       removeSpoilers = false,
+      highlightMatches = true,
     } = options;
-    const highlightSet = new Set((matchedItems || []).map(normalizeMatchText));
+    const highlightSet = highlightMatches
+      ? new Set((matchedItems || []).map(normalizeMatchText))
+      : new Set();
     const normalizedRevealed = allRevealedItems || [];
     const revealSetSource = normalizedRevealed.length > 0 ? normalizedRevealed : matchedItems;
     const revealSet = new Set((revealSetSource || []).map(normalizeMatchText));
@@ -2194,7 +2185,8 @@ function markGuessViewersDirty() {
     const itemsHtml = section.items.map((item) => {
       const text = typeof item.text === 'string' ? item.text : null;
       const normalizedText = normalizeMatchText(text);
-      const isMatched = Boolean(item.matched) || (text && highlightSet.has(normalizedText));
+      const shouldHighlight = highlightMatches && text && highlightSet.has(normalizedText);
+      const isMatched = (highlightMatches && Boolean(item.matched)) || shouldHighlight;
       const shouldReveal = text && revealSet.has(normalizedText);
      
       // For spoiler mode (clue cards)
@@ -2234,11 +2226,12 @@ function markGuessViewersDirty() {
 
 
   
-  function renderFeedbackSection(section, score, matchedItemsForSection = []) {
+  function renderFeedbackSection(section, score, matchedItemsForSection = [], options = {}) {
+    const highlightMatches = Boolean(options.highlightMatches);
     // Add match indicators for specific sections when score data exists
-    let modifiedSection = { ...section };
+    let modifiedSection = highlightMatches ? { ...section } : section;
     
-    if (score) {
+    if (highlightMatches && score) {
       if (section.id === 'tissue') {
         modifiedSection.items = section.items.map(item => ({
           ...item,
@@ -2260,7 +2253,8 @@ function markGuessViewersDirty() {
     // Use unified renderer with match highlighting for domains
     return renderProteinSection(modifiedSection, { 
       showSpoilers: false, 
-      matchedItems: matchedItemsForSection,
+      matchedItems: highlightMatches ? matchedItemsForSection : [],
+      highlightMatches,
     });
   }
   
@@ -2456,6 +2450,7 @@ function markGuessViewersDirty() {
       matchedHintMap = {},
       structureInfo = null,
       linkable = false,
+      highlightMatches = false,
     } = options;
     
     const goPercent = showSimilarity && score && typeof score.goPercent === 'number'
@@ -2466,7 +2461,12 @@ function markGuessViewersDirty() {
     
     const sections = buildProteinSections(protein, { forClue: false });
     const sectionMarkup = sections
-      .map(section => renderFeedbackSection(section, score, matchedHintMap[section.id] || []))
+      .map(section => renderFeedbackSection(
+        section,
+        score,
+        matchedHintMap[section.id] || [],
+        { highlightMatches }
+      ))
       .join('');
     
     const similarityMarkup = showSimilarity
@@ -2518,7 +2518,8 @@ function markGuessViewersDirty() {
   
   function renderCollapsibleFeedback(guessEntry, isLatest) {
     const cardId = `guess-card-${guessEntry.guessId}`;
-    const expanded = getCardExpansionState(cardId, isLatest);
+    const isLatestGuess = typeof guessEntry.isLatest === 'boolean' ? guessEntry.isLatest : Boolean(isLatest);
+    const expanded = getCardExpansionState(cardId, isLatestGuess);
     const matchedHintMap = guessEntry.matchedHints || {};
     const protein = guessEntry.proteinResolved || resolveGuessProtein(guessEntry);
     if (!protein) {
@@ -2533,7 +2534,8 @@ function markGuessViewersDirty() {
       showSimilarity: true,
       matchedHintMap,
       structureInfo: getStructureInfoForProtein(guessEntry.uniprot),
-      linkable: true
+      linkable: true,
+      highlightMatches: isLatestGuess
     });
   }
   

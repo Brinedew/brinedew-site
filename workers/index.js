@@ -768,7 +768,8 @@ function buildGamePayload(state, targetProtein, options = {}) {
     const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein);
     const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore);
     aggregateMatches(aggregatedMatches, matches);
-    if (index === (state.guesses.length - 1)) {
+    const isLatest = index === (state.guesses.length - 1);
+    if (isLatest) {
       latestMatches = matches;
     }
     guessEntries.push({
@@ -778,7 +779,8 @@ function buildGamePayload(state, targetProtein, options = {}) {
       createdAt: entry.createdAt,
       score: resolvedScore,
       matchedHints: matches,
-      protein: guessProtein
+      protein: guessProtein,
+      isLatest
     });
   });
   const lost = !state.won && guessEntries.length >= MAX_GUESSES;
@@ -787,6 +789,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
     : null;
   const shareText = targetReveal ? buildShareText(state, guessEntries) : null;
   applyMatchReveals(maskedSections, aggregatedMatches);
+  applyLatestHighlights(maskedSections, latestMatches);
   return {
     status: {
       date: state.date,
@@ -860,6 +863,31 @@ function applyMatchReveals(sections, matches) {
         item.revealed = true;
         item.text = item.fullText;
       }
+    });
+  });
+}
+
+function applyLatestHighlights(sections, latestMatches) {
+  if (!Array.isArray(sections) || !latestMatches) {
+    return;
+  }
+  sections.forEach((section) => {
+    const values = latestMatches?.[section.id];
+    if (!Array.isArray(values) || !values.length) {
+      section.items.forEach((item) => {
+        if (item) {
+          item.highlighted = false;
+        }
+      });
+      return;
+    }
+    const set = new Set(values);
+    section.items.forEach((item) => {
+      if (!item || !item.fullText) {
+        item && (item.highlighted = false);
+        return;
+      }
+      item.highlighted = set.has(item.fullText);
     });
   });
 }
