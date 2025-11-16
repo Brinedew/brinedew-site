@@ -8,6 +8,8 @@ const CORS_HEADERS = {
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const STRUCTURE_TOKEN_TTL_SECONDS = 300;
 const TOKEN_PREFIX = 'structure_token:';
+const BYTES_PER_GB = 1024 * 1024 * 1024;
+const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB);
 
 
 // Import auth handlers
@@ -567,6 +569,13 @@ async function handleStructureFetch(request, env) {
   }
   let object = await env.STRUCTURES_BUCKET.get(r2Key);
   if (!object) {
+    const usage = await getStructureBucketUsage(env);
+    if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
+      return Response.json({
+        error: 'Structure downloads temporarily paused',
+        detail: 'Storage cap reached. Please try again later.'
+      }, { status: 507, headers: CORS_HEADERS });
+    }
     if (!upstreamUrl) {
       return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
     }
@@ -961,6 +970,22 @@ async function getCanonicalStructureMeta(protein) {
     };
   }
   return null;
+}
+
+async function getStructureBucketUsage(env) {
+  let cursor = undefined;
+  let bytes = 0;
+  let objects = 0;
+  do {
+    const listResp = await env.STRUCTURES_BUCKET.list({ cursor, limit: 1000 });
+    const currentObjects = listResp?.objects || [];
+    currentObjects.forEach((obj) => {
+      bytes += obj.size || 0;
+      objects += 1;
+    });
+    cursor = listResp?.truncated ? listResp?.cursor : undefined;
+  } while (cursor);
+  return { bytes, objects };
 }
 
 function sanitizeKeySegment(value) {
