@@ -785,14 +785,18 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
         dirty = true;
       }
     }
-    if ((!entry.score || typeof entry.score.goSimilarity !== 'number') && entry.protein && targetProtein) {
+    if (entry.protein && targetProtein) {
       const goSimilarity = await getGoSimilarityFromEmbeddings(
         env.DB,
         entry.uniprot,
         targetProtein.uniprot
       );
-      entry.score = scoreGuess(entry.protein, targetProtein, { goSimilarity });
-      dirty = true;
+      const nextScore = scoreGuess(entry.protein, targetProtein, { goSimilarity });
+      const prevGoPercent = entry.score?.goPercent ?? null;
+      entry.score = nextScore;
+      if (nextScore?.goPercent !== prevGoPercent) {
+        dirty = true;
+      }
     }
   }
   if (dirty && sessionId) {
