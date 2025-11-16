@@ -1660,14 +1660,15 @@ function markGuessViewersDirty() {
     if (!entry || !entry.uniprot) {
       return null;
     }
+    const payloadProtein = entry.protein ? normalizeProtein(entry.protein) : null;
     const datasetProtein = getProteinById(entry.uniprot);
-    if (datasetProtein) {
-      return datasetProtein;
+    if (payloadProtein && datasetProtein) {
+      return { ...datasetProtein, ...payloadProtein };
     }
-    if (entry.protein) {
-      return normalizeProtein(entry.protein);
+    if (payloadProtein) {
+      return payloadProtein;
     }
-    return null;
+    return datasetProtein;
   }
 
   function hydrateGuessProteins() {
