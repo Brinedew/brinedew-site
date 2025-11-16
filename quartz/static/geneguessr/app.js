@@ -3400,9 +3400,9 @@ function attachAttributionCollapseLogic() {
   });
 }
 
-})();
-
   function buildMaskCharacters(length) {
     const cap = Math.min(Math.max(Number(length) || LOCKED_HINT_PLACEHOLDER.length, LOCKED_HINT_PLACEHOLDER.length), 64);
     return '█'.repeat(cap);
   }
+
+})();
