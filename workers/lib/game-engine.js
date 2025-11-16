@@ -108,13 +108,14 @@ export function maskClueSections(sections, revealedHints = new Set()) {
   return sections.map((section) => ({
     ...section,
     items: section.items.map((item) => {
+      const textValue = typeof item.text === 'string' ? item.text : String(item.text ?? '');
       if (!item?.id) {
-        return { ...item, revealed: true };
+        return { ...item, revealed: true, fullText: textValue };
       }
       const revealed = revealedHints.has(item.id);
-      const textValue = typeof item.text === 'string' ? item.text : String(item.text ?? '');
       return {
         ...item,
+        fullText: textValue,
         revealed,
         text: revealed ? textValue : null,
         maskLength: revealed ? undefined : Math.max(textValue.length, LOCKED_HINT_PLACEHOLDER.length),
