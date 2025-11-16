@@ -549,7 +549,9 @@
       }
       targetStructureInfo = {
         token: data.token,
-        sourceLabel: data.sourceLabel || 'Source unavailable'
+        sourceLabel: data.sourceLabel || 'Source unavailable',
+        displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
+        format: data.format || 'cif'
       };
       return targetStructureInfo;
     } catch (err) {
@@ -582,7 +584,8 @@
       const info = {
         token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
-        displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable'
+        displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
+        format: data.format || 'cif'
       };
       structureTokenCache.set(key, info);
       return info;
@@ -1388,7 +1391,11 @@
       return;
     }
     
-    const options = buildMolstarOptionsFromRepresentation(representation, { structureToken: structureInfo.token });
+    const overrides = { structureToken: structureInfo.token };
+    if (structureInfo.format) {
+      overrides.format = structureInfo.format;
+    }
+    const options = buildMolstarOptionsFromRepresentation(representation, overrides);
     if (!options) {
       if (errorEl) {
         errorEl.textContent = 'Could not build viewer options.';

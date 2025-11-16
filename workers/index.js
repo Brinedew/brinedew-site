@@ -523,7 +523,9 @@ async function handleStructureToken(request, env) {
     const token = await createStructureToken(env, meta);
     return Response.json({
       token,
-      sourceLabel: meta.shortLabel
+      sourceLabel: meta.shortLabel,
+      displayLabel: meta.displayLabel,
+      format: meta.format || 'cif'
     }, { headers: CORS_HEADERS });
   }
 
@@ -543,7 +545,8 @@ async function handleStructureToken(request, env) {
   return Response.json({
     token,
     sourceLabel: meta.shortLabel,
-    displayLabel: meta.displayLabel
+    displayLabel: meta.displayLabel,
+    format: meta.format || 'cif'
   }, { headers: CORS_HEADERS });
 }
 
@@ -884,7 +887,8 @@ async function getCanonicalStructureMeta(protein) {
       r2Key: `pdb/${id}.cif`,
       upstreamUrl: `https://files.rcsb.org/download/${id}.cif`,
       shortLabel: 'PDB',
-      displayLabel: `PDB (${id})`
+      displayLabel: `PDB (${id})`,
+      format: 'cif'
     };
   }
   if (representation.source === 'swissmodel' && representation.swissModel) {
@@ -902,12 +906,14 @@ async function getCanonicalStructureMeta(protein) {
       representation.swissModel.template ||
       protein.uniprot
     );
+    const normalizedFormat = ext === 'pdb' ? 'pdb' : (ext === 'bcif' ? 'bcif' : 'cif');
     return {
       source: 'swissmodel',
       r2Key: `swissmodel/${structureId}.${ext}`,
       upstreamUrl: url,
       shortLabel: 'SWISS-MODEL',
-      displayLabel: `SWISS-MODEL (${structureId})`
+      displayLabel: `SWISS-MODEL (${structureId})`,
+      format: normalizedFormat
     };
   }
   if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
@@ -917,7 +923,8 @@ async function getCanonicalStructureMeta(protein) {
       r2Key: `alphafold/${sanitizeKeySegment(id)}.cif`,
       upstreamUrl: representation.alphafold.model_url,
       shortLabel: 'AlphaFold',
-      displayLabel: `AlphaFold (${id})`
+      displayLabel: `AlphaFold (${id})`,
+      format: 'cif'
     };
   }
   return null;
