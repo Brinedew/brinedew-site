@@ -44,7 +44,6 @@ import {
 } from './lib/game-engine.js';
 import {
   fetchProteinByUniprot,
-  fetchProteinSummaries,
   searchProteins,
   getEligibleProteinIds,
   pickDailyTarget,
@@ -222,12 +221,11 @@ export default {
     if (url.pathname === '/api/proteins' && request.method === 'GET') {
       try {
         const query = (url.searchParams.get('query') || '').trim();
-        if (query) {
-          const matches = await searchProteins(env.DB, query, 20);
-          return Response.json(matches, { headers: CORS_HEADERS });
+        if (!query) {
+          return Response.json([], { headers: CORS_HEADERS });
         }
-        const summaries = await fetchProteinSummaries(env.DB, 200);
-        return Response.json(summaries, { headers: CORS_HEADERS });
+        const matches = await searchProteins(env.DB, query, 3);
+        return Response.json(matches, { headers: CORS_HEADERS });
       } catch (error) {
         console.error('Failed to load protein search results', error);
         return Response.json({ error: 'Failed to load protein database' }, {

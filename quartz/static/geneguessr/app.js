@@ -1544,7 +1544,6 @@
   const LOCKED_HINT_PLACEHOLDER = 'Hint locked';
   
   // State
-  let proteins = [];
   let gameStatus = null;
   let clueData = null;
   let guessEntries = [];
@@ -1714,12 +1713,28 @@ function markGuessViewersDirty() {
     };
   }
   
+  function rememberProteinRecord(protein, options = {}) {
+    if (!protein || !protein.uniprot) {
+      return null;
+    }
+    const normalized = normalizeProtein(protein);
+    const key = normalizeUniprotId(normalized.uniprot);
+    const preferExisting = options.preferExisting !== false;
+    if (preferExisting && proteinsById.has(key)) {
+      return proteinsById.get(key);
+    }
+    proteinsById.set(key, normalized);
+    return normalized;
+  }
+
   function cacheEnrichedProtein(protein) {
     if (!protein || !protein.uniprot) {
       return null;
     }
     const normalized = normalizeProtein(protein);
-    enrichedProteinsById.set(normalizeUniprotId(normalized.uniprot), normalized);
+    const key = normalizeUniprotId(normalized.uniprot);
+    enrichedProteinsById.set(key, normalized);
+    proteinsById.set(key, normalized);
     return normalized;
   }
   
@@ -1775,41 +1790,12 @@ function markGuessViewersDirty() {
     });
   }
   
-  function indexProteins(list) {
-    proteinsById.clear();
-    list.forEach((protein) => {
-      if (protein && protein.uniprot) {
-        proteinsById.set(protein.uniprot, protein);
-      }
-    });
-  }
-  
   function getProteinById(id) {
     if (!id) {
       return null;
     }
-    return proteinsById.get(id) || null;
-  }
-  
-  async function loadSearchIndex() {
-    if (proteins.length) {
-      return;
-    }
-    try {
-      const response = await fetch(`${API_BASE}/api/proteins`, {
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        throw new Error(`Protein list failed with status ${response.status}`);
-      }
-      const payload = await response.json();
-      proteins = Array.isArray(payload) ? payload.map(normalizeProtein) : [];
-      indexProteins(proteins);
-    } catch (err) {
-      console.warn('Geneguessr: failed to load protein index', err);
-      proteins = [];
-      proteinsById.clear();
-    }
+    const key = normalizeUniprotId(id);
+    return proteinsById.get(key) || enrichedProteinsById.get(key) || null;
   }
   
   async function bootstrapGame() {
@@ -2985,7 +2971,9 @@ function markGuessViewersDirty() {
   /**
    * Autocomplete
    */
-  const SEARCH_MAX_RESULTS = 8;
+  const SEARCH_MAX_RESULTS = 3;
+  const AUTOCOMPLETE_DEBOUNCE_MS = 120;
+  let autocompleteAbortController = null;
 
   function normalizeText(value) {
     return (value || '').toLowerCase();
@@ -3013,26 +3001,57 @@ function markGuessViewersDirty() {
     return Number.POSITIVE_INFINITY;
   }
 
-  function searchProteins(query) {
-    const cleanedQuery = query.trim().toLowerCase();
+  async function searchProteins(query) {
+    const cleanedQuery = query.trim();
     if (!cleanedQuery) {
       return [];
     }
-    const guessedSet = new Set(gameState.guesses.map(g => g.uniprot));
-
-    return proteins
-      .filter((p) => !guessedSet.has(p.uniprot))
-      .map((protein) => ({
-        protein,
-        score: getSearchScore(protein, cleanedQuery),
-      }))
-      .filter((entry) => entry.score !== Number.POSITIVE_INFINITY)
-      .sort((a, b) => {
-        if (a.score !== b.score) return a.score - b.score;
-        return a.protein.hgnc.localeCompare(b.protein.hgnc);
-      })
-      .slice(0, SEARCH_MAX_RESULTS)
-      .map((entry) => entry.protein);
+    const guessedSet = new Set((gameState.guesses || []).map((g) => normalizeUniprotId(g.uniprot)));
+    if (autocompleteAbortController) {
+      autocompleteAbortController.abort();
+    }
+    const controller = new AbortController();
+    autocompleteAbortController = controller;
+    try {
+      const response = await fetch(`${API_BASE}/api/proteins?query=${encodeURIComponent(cleanedQuery)}`, {
+        credentials: 'include',
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        throw new Error(`Protein search failed with status ${response.status}`);
+      }
+      const payload = await response.json();
+      const normalizedResults = Array.isArray(payload)
+        ? payload
+            .map((protein) => rememberProteinRecord(protein))
+            .filter(Boolean)
+        : [];
+      const matches = normalizedResults
+        .filter((protein) => protein && !guessedSet.has(normalizeUniprotId(protein.uniprot)))
+        .map((protein) => ({
+          protein,
+          score: getSearchScore(protein, cleanedQuery.toLowerCase()),
+        }))
+        .filter((entry) => entry.score !== Number.POSITIVE_INFINITY)
+        .sort((a, b) => {
+          if (a.score !== b.score) return a.score - b.score;
+          return a.protein.hgnc.localeCompare(b.protein.hgnc);
+        })
+        .slice(0, SEARCH_MAX_RESULTS)
+        .map((entry) => entry.protein);
+      if (autocompleteAbortController === controller) {
+        autocompleteAbortController = null;
+      }
+      return matches;
+    } catch (err) {
+      if (autocompleteAbortController === controller) {
+        autocompleteAbortController = null;
+      }
+      if (err.name !== 'AbortError') {
+        console.warn('Geneguessr: protein search failed', err);
+      }
+      return [];
+    }
   }
 
   function escapeHtml(str) {
@@ -3055,41 +3074,57 @@ function markGuessViewersDirty() {
 
   function setupAutocomplete(inputEl, suggestionsEl) {
     let selectedIndex = -1;
-    
-    inputEl.addEventListener('input', (e) => {
-      const query = e.target.value.trim().toLowerCase();
-      
-      if (query.length < 1) {
-        suggestionsEl.innerHTML = '';
-        suggestionsEl.style.display = 'none';
-        return;
-      }
-      
-      // Find matches
-      const matches = searchProteins(query);
-      
-      if (matches.length === 0) {
-        suggestionsEl.innerHTML = '<div class="pg-suggestion">No matches found</div>';
-        suggestionsEl.style.display = 'block';
-        return;
-      }
-      
-      suggestionsEl.innerHTML = matches.map((p, idx) => `
-        <div class="pg-suggestion" data-uniprot="${p.uniprot}" data-index="${idx}" title="${escapeHtml(p.full_name)}">
-          <div class="pg-suggestion-title">${escapeHtml(p.hgnc)}</div>
-          <div class="pg-suggestion-sub">${escapeHtml(p.full_name || p.hgnc)}</div>
-        </div>
-      `).join('');
-      suggestionsEl.style.display = 'block';
+    let debounceHandle = null;
+    let requestToken = 0;
+
+    const hideSuggestions = () => {
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.style.display = 'none';
       selectedIndex = -1;
-      
-      // Click handler
-      suggestionsEl.querySelectorAll('.pg-suggestion').forEach(el => {
+    };
+
+    const attachClickHandlers = () => {
+      suggestionsEl.querySelectorAll('.pg-suggestion').forEach((el) => {
         el.addEventListener('click', () => {
           const uniprot = el.dataset.uniprot;
           selectProtein(uniprot);
         });
       });
+    };
+
+    inputEl.addEventListener('input', (e) => {
+      const query = e.target.value.trim();
+      if (debounceHandle) {
+        clearTimeout(debounceHandle);
+      }
+      if (!query) {
+        hideSuggestions();
+        return;
+      }
+      const currentToken = ++requestToken;
+      debounceHandle = setTimeout(async () => {
+        suggestionsEl.innerHTML = '<div class="pg-suggestion">Searching...</div>';
+        suggestionsEl.style.display = 'block';
+        const matches = await searchProteins(query);
+        if (currentToken !== requestToken) {
+          return;
+        }
+        if (!matches.length) {
+          suggestionsEl.innerHTML = '<div class="pg-suggestion">No matches found</div>';
+          suggestionsEl.style.display = 'block';
+          selectedIndex = -1;
+          return;
+        }
+        suggestionsEl.innerHTML = matches.map((p, idx) => `
+          <div class="pg-suggestion" data-uniprot="${p.uniprot}" data-index="${idx}" title="${escapeHtml(p.full_name)}">
+            <div class="pg-suggestion-title">${escapeHtml(p.hgnc)}</div>
+            <div class="pg-suggestion-sub">${escapeHtml(p.full_name || p.hgnc)}</div>
+          </div>
+        `).join('');
+        suggestionsEl.style.display = 'block';
+        selectedIndex = -1;
+        attachClickHandlers();
+      }, AUTOCOMPLETE_DEBOUNCE_MS);
     });
     
     inputEl.addEventListener('keydown', (e) => {
@@ -3110,9 +3145,7 @@ function markGuessViewersDirty() {
           selectProtein(uniprot);
         }
       } else if (e.key === 'Escape') {
-        suggestionsEl.innerHTML = '';
-        suggestionsEl.style.display = 'none';
-        selectedIndex = -1;
+        hideSuggestions();
       }
     });
     
@@ -3124,19 +3157,26 @@ function markGuessViewersDirty() {
   }
   
   function selectProtein(uniprot) {
-    const protein = proteins.find(p => p.uniprot === uniprot);
-    if (!protein) return;
+    if (!uniprot) return;
+    const normalizedId = normalizeUniprotId(uniprot);
+    const protein = getProteinById(normalizedId) || getEnrichedProteinById(normalizedId);
+    const label = protein?.hgnc || normalizedId;
     
-    // Clear input and suggestions
     const inputEl = document.getElementById('pg-input');
     const suggestionsEl = document.getElementById('pg-suggestions');
-    inputEl.value = protein.hgnc;
-    suggestionsEl.innerHTML = '';
-    suggestionsEl.style.display = 'none';
+    if (inputEl) {
+      inputEl.value = label;
+    }
+    if (suggestionsEl) {
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.style.display = 'none';
+    }
     
-    // Enable submit button
-    document.getElementById('pg-submit').disabled = false;
-    document.getElementById('pg-submit').dataset.uniprot = uniprot;
+    const submitBtn = document.getElementById('pg-submit');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.dataset.uniprot = normalizedId;
+    }
   }
 
   
@@ -3145,12 +3185,15 @@ function markGuessViewersDirty() {
    */
   async function submitGuess() {
     const submitBtn = document.getElementById('pg-submit');
-    const uniprot = submitBtn.dataset.uniprot;
+    const uniprot = normalizeUniprotId(submitBtn.dataset.uniprot || '');
     
     if (!uniprot) return;
     
-    const guessProtein = proteins.find(p => p.uniprot === uniprot);
-    if (!guessProtein) return;
+    const guessProtein = getProteinById(uniprot) || getEnrichedProteinById(uniprot);
+    if (!guessProtein) {
+      alert('Please select a protein from the suggestions before submitting.');
+      return;
+    }
     
     if (submitBtn.disabled) return;
     
@@ -3440,8 +3483,6 @@ https://brinedew.bio/apps/geneguessr/`;
     injectSidebarStats();
     
     setStatus('loading-data');
-    
-    await loadSearchIndex();
     
     try {
       await bootstrapGame();
