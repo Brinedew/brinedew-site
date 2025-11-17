@@ -71,15 +71,23 @@
       return true;
     }
     const structure = protein.structure;
-    return Boolean(
-      structure &&
+    if (structure &&
       (
         structure.primary_source ||
         (structure.pdb && structure.pdb.id) ||
         (structure.swiss_model && structure.swiss_model.coordinates_url) ||
         (structure.alphafold && structure.alphafold.model_url)
-      )
-    );
+      )) {
+      return true;
+    }
+    // Check for cached structure token
+    if (protein.uniprot) {
+      const cached = structureTokenCache.get(String(protein.uniprot).toUpperCase());
+      if (cached && cached.token && cached.url) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function getStructureMetaLabel(structure) {
@@ -551,7 +559,8 @@
         token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
-        format: data.format || 'cif'
+        format: data.format || 'cif',
+        url: data.url
       };
       return targetStructureInfo;
     } catch (err) {
@@ -581,11 +590,13 @@
       if (!data || !data.token) {
         throw new Error('Missing token in response');
       }
+      console.log('Geneguessr: token response data:', data);
       const info = {
         token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
-        format: data.format || 'cif'
+        format: data.format || 'cif',
+        url: data.url
       };
       structureTokenCache.set(key, info);
       return info;
@@ -1416,9 +1427,7 @@
       return;
     }
     
-    const structure = protein.structure || {};
-    const representation = resolveStructureRepresentation(structure, protein.length);
-    if (!representation) {
+    if (!structureInfo.url) {
       if (errorEl) {
         errorEl.textContent = 'No 3D structure available for this protein.';
         errorEl.hidden = false;
@@ -1426,11 +1435,26 @@
       return;
     }
     
-    const overrides = { structureToken: structureInfo.token };
-    if (structureInfo.format) {
-      overrides.format = structureInfo.format;
+    let moleculeId;
+    if (structureInfo.sourceLabel === 'PDB') {
+      const match = structureInfo.displayLabel.match(/PDB \(([^)]+)\)/);
+      moleculeId = match ? match[1] : 'unknown';
+    } else if (structureInfo.sourceLabel === 'AlphaFold') {
+      moleculeId = protein.uniprot || 'unknown';
+    } else if (structureInfo.sourceLabel === 'SWISS-MODEL') {
+      const match = structureInfo.displayLabel.match(/SWISS-MODEL \(([^)]+)\)/);
+      moleculeId = match ? match[1] : 'unknown';
+    } else {
+      moleculeId = 'unknown';
     }
-    const options = buildMolstarOptionsFromRepresentation(representation, overrides);
+    
+    const options = {
+      moleculeId,
+      customData: {
+        url: structureInfo.url,
+        format: structureInfo.format || 'cif'
+      }
+    };
     if (!options) {
       if (errorEl) {
         errorEl.textContent = 'Could not build viewer options.';
@@ -1465,7 +1489,6 @@
 
       const finalizeViewerStyling = () => {
         applyViewerStylizationProfile(viewer, container);
-        applyChainColoring(viewer, representation, container);
       };
       if (viewer.events?.loadComplete) {
         viewer.events.loadComplete.subscribe(finalizeViewerStyling);
@@ -1473,14 +1496,12 @@
         setTimeout(finalizeViewerStyling, 500);
       }
 
-      const metadata = getStructureSourceMetadataFromRepresentation(representation);
-      const refreshedShortLabel = structureInfo?.sourceLabel || metadata?.label || 'Source unavailable';
-      const refreshedLongLabel = structureInfo?.displayLabel || metadata?.label || refreshedShortLabel;
-      updateStructureSourceDisplay(containerId, {
-        shortLabel: refreshedShortLabel,
-        longLabel: refreshedLongLabel,
-        linkUrl: metadata?.url || null
-      });
+      const metadata = {
+        shortLabel: structureInfo.sourceLabel,
+        longLabel: structureInfo.displayLabel,
+        linkUrl: null
+      };
+      updateStructureSourceDisplay(containerId, metadata);
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
       renderedViewers.add(containerId);
@@ -2903,7 +2924,18 @@ function markGuessViewersDirty() {
   
   function loadStats() {
     const saved = localStorage.getItem('geneguessr_stats');
-    return saved ? JSON.parse(saved) : {
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Validate basic shape
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch (err) {
+        console.warn('Geneguessr: corrupt stats in localStorage, resetting', err);
+      }
+    }
+    return {
       played: 0,
       won: 0,
       winRate: 0,
