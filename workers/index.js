@@ -634,7 +634,7 @@ async function handleStructureFetch(request, env) {
 async function handleGameBootstrap(request, env) {
   try {
     const { sessionId, practiceMode, practiceRestart } = resolveSessionContext(request);
-    const targetProtein = await getDailyTargetProtein(env);
+    const targetProtein = await getDailyTargetProtein(env, { practice: practiceMode && practiceRestart });
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
@@ -651,7 +651,7 @@ async function handleGameBootstrap(request, env) {
 async function handleGuessSubmission(request, env) {
   try {
     const { sessionId, practiceMode } = resolveSessionContext(request);
-    const targetProtein = await getDailyTargetProtein(env);
+    const targetProtein = await getDailyTargetProtein(env, { practice: practiceMode });
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
@@ -749,10 +749,15 @@ async function createStructureToken(env, meta) {
   return token;
 }
 
-async function getDailyTargetProtein(env) {
+async function getDailyTargetProtein(env, options = {}) {
   const eligibleIds = await getEligibleProteinIds(env.DB);
   if (!eligibleIds.length) {
     return null;
+  }
+  if (options.practice) {
+    const randomIndex = Math.floor(Math.random() * eligibleIds.length);
+    const randomId = eligibleIds[randomIndex];
+    return await fetchProteinByUniprot(env.DB, randomId);
   }
   const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
   const selection = await pickDailyTarget(env.DB, eligibleIds, salt);
