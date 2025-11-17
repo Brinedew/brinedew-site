@@ -1,6 +1,5 @@
 import { isAlphaFoldOnlyProtein } from './game-engine.js';
 import { sanitizeProteinSummary } from './structure-utils.js';
-import proteinDataset from '../data/proteins.json' assert { type: 'json' };
 
 const MAX_CACHE_SIZE = 512;
 const MAX_EMBEDDING_CACHE_SIZE = 256;
@@ -11,16 +10,6 @@ const eligibleCache = {
   fetchedAt: 0,
   ttl: 5 * 60 * 1000
 };
-
-const STATIC_PROTEINS = Array.isArray(proteinDataset) ? proteinDataset : [];
-const STATIC_PROTEIN_MAP = new Map(
-  STATIC_PROTEINS
-    .filter((protein) => protein?.uniprot)
-    .map((protein) => [normalizeKey(protein.uniprot), protein])
-);
-const STATIC_ELIGIBLE_IDS = STATIC_PROTEINS
-  .filter((protein) => protein && !isAlphaFoldOnlyProtein(protein))
-  .map((protein) => protein.uniprot);
 
 function normalizeKey(uniprot) {
   return (uniprot || '').toUpperCase();
@@ -49,17 +38,6 @@ function rememberEmbedding(key, vector) {
   if (embeddingCache.size > MAX_EMBEDDING_CACHE_SIZE) {
     const oldestKey = embeddingCache.keys().next().value;
     embeddingCache.delete(oldestKey);
-  }
-}
-
-function cloneStaticProtein(protein) {
-  if (!protein) {
-    return null;
-  }
-  try {
-    return JSON.parse(JSON.stringify(protein));
-  } catch {
-    return null;
   }
 }
 
@@ -175,19 +153,12 @@ export async function fetchProteinByUniprot(db, uniprot) {
     ).bind(key).first();
     protein = toProteinObject(row);
   } catch (err) {
-    console.warn('GeneGuessr: D1 fetchProteinByUniprot failed, using static dataset', err);
+    console.warn('GeneGuessr: D1 fetchProteinByUniprot failed', err);
   }
   if (protein) {
     rememberProtein(key, protein);
   }
-  if (protein) {
-    return protein;
-  }
-  const fallback = cloneStaticProtein(STATIC_PROTEIN_MAP.get(key));
-  if (fallback) {
-    rememberProtein(key, fallback);
-  }
-  return fallback || null;
+  return protein || null;
 }
 
 export async function fetchProteinSummaries(db, limit = 100) {
@@ -267,30 +238,9 @@ export async function searchProteins(db, query, limit = 20) {
       .all();
     return (results || []).map((row) => sanitizeProteinSummary(row));
   } catch (err) {
-    console.warn('GeneGuessr: D1 searchProteins failed, using static dataset', err);
-    return fallbackSearch(needle, limit);
+    console.warn('GeneGuessr: D1 searchProteins failed', err);
+    return [];
   }
-}
-
-function fallbackSearch(lowerQuery, limit) {
-  const matches = [];
-  for (const protein of STATIC_PROTEINS) {
-    if (!protein?.uniprot) continue;
-    const haystacks = [
-      protein.hgnc,
-      protein.full_name,
-      ...(Array.isArray(protein.synonyms) ? protein.synonyms : []),
-    ]
-      .filter(Boolean)
-      .map((value) => value.toLowerCase());
-    if (haystacks.some((value) => value.includes(lowerQuery))) {
-      matches.push(sanitizeProteinSummary(protein));
-    }
-    if (matches.length >= limit) {
-      break;
-    }
-  }
-  return matches;
 }
 
 export async function getEligibleProteinIds(db) {
@@ -305,8 +255,8 @@ export async function getEligibleProteinIds(db) {
     ).all();
     ids = (results || []).map((row) => row.uniprot);
   } catch (err) {
-    console.warn('GeneGuessr: D1 getEligibleProteinIds failed, using static dataset', err);
-    ids = STATIC_ELIGIBLE_IDS.slice();
+    console.warn('GeneGuessr: D1 getEligibleProteinIds failed', err);
+    ids = [];
   }
   eligibleCache.ids = ids;
   eligibleCache.fetchedAt = now;

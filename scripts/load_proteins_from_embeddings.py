@@ -240,9 +240,17 @@ def run_query(sql: str, remote: bool) -> List[dict]:
     if not payload:
         return []
     data = json.loads(payload)
-    if not data.get("success", False):
+    if isinstance(data, list):
+        if not data:
+            return []
+        first = data[0]
+    elif isinstance(data, dict):
+        first = data
+    else:
+        raise SystemExit(f"Unexpected D1 response: {payload}")
+    if not first.get("success", False):
         raise SystemExit(f"D1 query failed: {payload}")
-    return data.get("results") or []
+    return first.get("results") or []
 
 
 def validate_counts(expected: int, remote: bool) -> None:
