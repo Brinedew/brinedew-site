@@ -220,6 +220,26 @@ export default {
     }
 
     // Public proteins endpoint for autocomplete
+    if (url.pathname === '/api/protein' && request.method === 'GET') {
+      try {
+        const uniprot = (url.searchParams.get('uniprot') || '').toUpperCase();
+        if (!uniprot) {
+          return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: CORS_HEADERS });
+        }
+        const protein = await fetchProteinByUniprot(env.DB, uniprot);
+        if (!protein) {
+          return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
+        }
+        return Response.json(sanitizeTargetProtein(protein, { revealIdentity: true }), { headers: CORS_HEADERS });
+      } catch (error) {
+        console.error('Failed to load protein details', error);
+        return Response.json({ error: 'Failed to load protein' }, {
+          status: 500,
+          headers: CORS_HEADERS
+        });
+      }
+    }
+
     if (url.pathname === '/api/proteins' && request.method === 'GET') {
       try {
         const query = (url.searchParams.get('query') || '').trim();
@@ -634,11 +654,24 @@ async function handleStructureFetch(request, env) {
 async function handleGameBootstrap(request, env) {
   try {
     const { sessionId, practiceMode, practiceRestart } = resolveSessionContext(request);
-    const targetProtein = await getDailyTargetProtein(env, { practice: practiceMode && practiceRestart });
+    let targetSeed = null;
+    if (practiceMode) {
+      if (practiceRestart) {
+        targetSeed = await getDailyTargetProtein(env, { practice: true });
+      }
+    } else {
+      targetSeed = await getDailyTargetProtein(env);
+    }
+    if (!targetSeed && !practiceMode) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+    }
+    const state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode, forceReset: practiceRestart });
+    const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
+      ? targetSeed
+      : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
-    const state = await ensureSessionForToday(env, sessionId, targetProtein, { practiceMode, forceReset: practiceRestart });
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     const payload = buildGamePayload(state, targetProtein);
     return Response.json(payload, { headers: CORS_HEADERS });
@@ -651,8 +684,8 @@ async function handleGameBootstrap(request, env) {
 async function handleGuessSubmission(request, env) {
   try {
     const { sessionId, practiceMode } = resolveSessionContext(request);
-    const targetProtein = await getDailyTargetProtein(env, { practice: practiceMode });
-    if (!targetProtein) {
+    const targetSeed = practiceMode ? null : await getDailyTargetProtein(env);
+    if (!targetSeed && !practiceMode) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
     const body = await safeJson(request);
@@ -660,7 +693,13 @@ async function handleGuessSubmission(request, env) {
     if (!uniprot) {
       return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: CORS_HEADERS });
     }
-    let state = await ensureSessionForToday(env, sessionId, targetProtein, { practiceMode });
+    let state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
+    const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
+      ? targetSeed
+      : await fetchProteinByUniprot(env.DB, state.targetId);
+    if (!targetProtein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+    }
     if (state.won || (state.guesses?.length || 0) >= MAX_GUESSES) {
       return Response.json({ error: 'Round already completed' }, { status: 409, headers: CORS_HEADERS });
     }
@@ -707,8 +746,8 @@ async function handleGuessSubmission(request, env) {
 async function handleHintReveal(request, env) {
   try {
     const { sessionId, practiceMode } = resolveSessionContext(request);
-    const targetProtein = await getDailyTargetProtein(env);
-    if (!targetProtein) {
+    const targetSeed = practiceMode ? null : await getDailyTargetProtein(env);
+    if (!targetSeed && !practiceMode) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
     const body = await safeJson(request);
@@ -716,12 +755,17 @@ async function handleHintReveal(request, env) {
     if (!hintId) {
       return Response.json({ error: 'Missing hintId' }, { status: 400, headers: CORS_HEADERS });
     }
+    const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
+      ? targetSeed
+      : await fetchProteinByUniprot(env.DB, state.targetId);
+    if (!targetProtein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+    }
     const clueSections = buildClueSections(targetProtein);
     const hintText = extractHintText(clueSections, hintId);
     if (!hintText) {
       return Response.json({ error: 'Hint not found' }, { status: 404, headers: CORS_HEADERS });
     }
-    const state = await ensureSessionForToday(env, sessionId, targetProtein, { practiceMode });
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
@@ -790,7 +834,15 @@ async function ensureSessionForToday(env, sessionId, targetProtein, options = {}
     console.warn('GeneGuessr: failed to load session, resetting', err);
     state = null;
   }
-  if (forceReset || !state || state.date !== today || state.targetId !== targetProtein.uniprot) {
+  const desiredTargetId = targetProtein?.uniprot || null;
+  const needsReset = forceReset
+    || !state
+    || state.date !== today
+    || (desiredTargetId && state.targetId !== desiredTargetId);
+  if (needsReset) {
+    if (!targetProtein?.uniprot) {
+      throw new Error('Target protein required to reset session');
+    }
     state = createInitialGameState(today, targetProtein.uniprot, { practiceMode });
     await saveGameState(env, sessionId, state);
   } else if (state.practiceMode !== practiceMode) {
@@ -845,6 +897,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
   const clueTarget = sanitizeTargetProtein(targetProtein, {
     revealIdentity: state.won || (state.guesses?.length || 0) >= MAX_GUESSES
   });
+  const includeProteins = Boolean(options.includeProteins);
   const guessEntries = [];
   const aggregatedMatches = {};
   let latestMatches = {};
@@ -873,7 +926,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       createdAt: entry.createdAt,
       score: resolvedScore,
       matchedHints: matches,
-      protein: guessProteinCleaned,
+      ...(includeProteins ? { protein: guessProteinCleaned } : {}),
       isLatest
     });
   });

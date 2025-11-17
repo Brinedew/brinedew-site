@@ -1613,6 +1613,20 @@ function markGuessViewersDirty() {
     return response.json();
   }
 
+  async function fetchProteinDetails(uniprot) {
+    if (!uniprot) {
+      throw new Error('Missing uniprot id');
+    }
+    const response = await fetch(`${API_BASE}/api/protein?uniprot=${encodeURIComponent(uniprot)}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error?.error || `Protein lookup failed (${response.status})`);
+    }
+    return response.json();
+  }
+
   async function submitGuessRequest(uniprot) {
     const normalized = (uniprot || '').toUpperCase();
     const response = await fetch(`${API_BASE}/api/game/guess${buildPracticeQuery()}`, {
@@ -1792,11 +1806,38 @@ function markGuessViewersDirty() {
     return enrichedProtein || datasetProtein || null;
   }
 
-  function hydrateGuessProteins() {
-    if (!Array.isArray(gameState.guesses)) {
+  async function hydrateGuessProteins() {
+    if (!Array.isArray(gameState.guesses) || gameState.guesses.length === 0) {
       return;
     }
+    const pending = [];
     gameState.guesses = gameState.guesses.map((entry) => {
+      const resolved = resolveGuessProtein(entry);
+      if (resolved) {
+        return { ...entry, proteinResolved: resolved };
+      }
+      pending.push(entry);
+      return entry;
+    });
+    if (!pending.length) {
+      return;
+    }
+    await Promise.all(
+      pending.map(async (entry) => {
+        try {
+          const details = await fetchProteinDetails(entry.uniprot);
+          entry.protein = details;
+          cacheEnrichedProtein(details);
+          entry.proteinResolved = resolveGuessProtein(entry);
+        } catch (err) {
+          console.warn('Geneguessr: failed to load protein details', entry.uniprot, err);
+        }
+      })
+    );
+    gameState.guesses = gameState.guesses.map((entry) => {
+      if (entry.proteinResolved) {
+        return entry;
+      }
       const resolved = resolveGuessProtein(entry);
       return resolved ? { ...entry, proteinResolved: resolved } : entry;
     });
@@ -1813,7 +1854,7 @@ function markGuessViewersDirty() {
   async function bootstrapGame() {
     const payload = await fetchGameBootstrap();
     hydrateStateFromPayload(payload);
-    hydrateGuessProteins();
+    await hydrateGuessProteins();
     const tokenTasks = [];
     tokenTasks.push(ensureStructureTokenForTarget());
     tokenTasks.push(hydrateStructureTokensForGuesses(gameState.guesses));
@@ -2735,6 +2776,7 @@ function markGuessViewersDirty() {
     try {
       const payload = await requestHintReveal(hintId);
       hydrateStateFromPayload(payload);
+      await hydrateGuessProteins();
       render();
     } catch (err) {
       console.error('Geneguessr: failed to reveal hint', err);
@@ -3228,6 +3270,7 @@ function markGuessViewersDirty() {
     try {
       const payload = await submitGuessRequest(uniprot);
       hydrateStateFromPayload(payload);
+      await hydrateGuessProteins();
       render();
       const tokenTasks = [ensureStructureTokenForProtein(uniprot)];
       const reachedEndOfRound = gameState.won || gameState.guesses.length >= MAX_GUESSES;
@@ -3459,7 +3502,7 @@ https://brinedew.bio/apps/geneguessr/`;
       setStatus('loading-data');
       const payload = await fetchGameBootstrap({ practice: true, restart: true });
       hydrateStateFromPayload(payload);
-      hydrateGuessProteins();
+      await hydrateGuessProteins();
       render();
       setStatus('rendered');
     } catch (err) {
