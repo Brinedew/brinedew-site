@@ -1561,7 +1561,8 @@
     won: false,
     targetId: null,
     practiceMode: false,
-    statsRecorded: false
+    statsRecorded: false,
+    revealedHints: []
   };
   let tutorialBootRequested = false;
   const structureTokenCache = new Map();
@@ -1689,9 +1690,10 @@ function markGuessViewersDirty() {
       proteinResolved: resolveGuessProtein(entry)
     }));
     gameState.won = Boolean(gameStatus.won);
-    gameState.targetId = targetReveal?.uniprot || null;
+    gameState.targetId = gameStatus.targetId || targetReveal?.uniprot || targetProtein?.uniprot || null;
     gameState.practiceMode = Boolean(gameStatus.practiceMode);
     gameState.statsRecorded = false;
+    gameState.revealedHints = Array.isArray(gameStatus.revealedHints) ? [...gameStatus.revealedHints] : [];
     updateHintDisplays();
   }
 
@@ -2242,6 +2244,17 @@ function markGuessViewersDirty() {
     const revealSet = new Set((revealSetSource || []).map(normalizeMatchText));
     
     // Special handling for gene summary section
+    const isEntryUnlocked = (item) => {
+      if (!item) return false;
+      if (typeof item.revealed === 'boolean') {
+        if (item.revealed) return true;
+      }
+      if (item.id && Array.isArray(gameState.revealedHints)) {
+        return gameState.revealedHints.includes(item.id);
+      }
+      return false;
+    };
+
     if (section.type === 'summary') {
       const item = section.items[0];
       const summaryText = item.text;
@@ -2249,7 +2262,7 @@ function markGuessViewersDirty() {
       
       // For spoiler mode (clue cards) - hide until revealed
       if (showSpoilers && item.id) {
-        const revealed = isHintRevealed(item.id);
+        const revealed = isEntryUnlocked(item);
         if (!revealed) {
           const placeholderNode = renderLockedHintPlaceholder({
             id: item.id,
@@ -2286,7 +2299,7 @@ function markGuessViewersDirty() {
      
       // For spoiler mode (clue cards)
       if (showSpoilers && item.id) {
-        const revealed = isHintRevealed(item.id);
+        const revealed = isEntryUnlocked(item);
         const forceReveal = removeSpoilers && shouldReveal;
         if ((revealed || forceReveal) && text) {
           const cls = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
