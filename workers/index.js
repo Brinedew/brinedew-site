@@ -748,6 +748,7 @@ async function handleHintReveal(request, env) {
     if (!hintId) {
       return Response.json({ error: 'Missing hintId' }, { status: 400, headers: CORS_HEADERS });
     }
+    const state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
