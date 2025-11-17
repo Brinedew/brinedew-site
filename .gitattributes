@@ -1,1 +1,2 @@
 * text=auto eol=lf
+tools/thoteins/data/embeddings/hig2vec_human_200dim.pth filter=lfs diff=lfs merge=lfs -text

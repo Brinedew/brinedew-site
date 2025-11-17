@@ -18,12 +18,15 @@ DATA_ROOT = Path(__file__).resolve().parents[1] / "tools" / "thoteins" / "data"
 GENE_DIR = DATA_ROOT / "geneguessr"
 UNIPROT_DIR = DATA_ROOT / "proteins" / "uniprot"
 FEATURES_PATH = DATA_ROOT / "proteins" / "features.csv"
+BULK_UNIPROT_PATH = UNIPROT_DIR / "uniprot_human.json"
 
 MAPPINGS_PATH = GENE_DIR / "embedding_token_mappings.json"
 LEGACY_DATA_PATH = GENE_DIR / "proteins.json"
 OUTPUT_PATH = GENE_DIR / "proteins.json"
 SNAPSHOT_PATH = GENE_DIR / "embedding_proteins.json"
 UNRESOLVED_METADATA_PATH = GENE_DIR / "embedding_metadata_needing_sources.json"
+
+BULK_UNIPROT_CACHE: Dict[str, Dict[str, object]] | None = None
 
 
 def load_mappings() -> List[Dict[str, str]]:
@@ -42,7 +45,35 @@ def load_features() -> Dict[str, Dict[str, str]]:
     return features
 
 
+def get_bulk_uniprot_entries() -> Dict[str, Dict[str, object]]:
+    global BULK_UNIPROT_CACHE
+    if BULK_UNIPROT_CACHE is not None:
+        return BULK_UNIPROT_CACHE
+    if not BULK_UNIPROT_PATH.exists():
+        BULK_UNIPROT_CACHE = {}
+        return BULK_UNIPROT_CACHE
+    try:
+        payload = json.loads(BULK_UNIPROT_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        BULK_UNIPROT_CACHE = {}
+        return BULK_UNIPROT_CACHE
+    results = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(results, list):
+        BULK_UNIPROT_CACHE = {}
+        return BULK_UNIPROT_CACHE
+    BULK_UNIPROT_CACHE = {}
+    for entry in results:
+        accession = entry.get("primaryAccession")
+        if accession:
+            BULK_UNIPROT_CACHE[accession.strip().upper()] = entry
+    return BULK_UNIPROT_CACHE
+
+
 def load_uniprot_entry(uniprot: str) -> Dict[str, object] | None:
+    bulk_entries = get_bulk_uniprot_entries()
+    entry = bulk_entries.get(uniprot.strip().upper())
+    if entry:
+        return entry
     path = UNIPROT_DIR / f"{uniprot}.json"
     if not path.exists():
         return None

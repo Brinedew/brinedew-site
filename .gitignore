@@ -42,3 +42,6 @@ tools/thoteins/temp_workflow.json
 !tools/thoteins/scripts/
 !tools/thoteins/apps/
 tools/thoteins/data/embeddings/
+tools/thoteins/data/proteins/uniprot/
+tools/thoteins/data/ncbi_gene/
+tools/thoteins/data/geneguessr/embedding_token_remote_hits.json
