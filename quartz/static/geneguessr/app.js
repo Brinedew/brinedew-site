@@ -1455,6 +1455,7 @@
         format: structureInfo.format || 'cif'
       }
     };
+    console.debug('[Geneguessr] Mol* options', options, 'containerId', containerId);
     if (!options) {
       if (errorEl) {
         errorEl.textContent = 'Could not build viewer options.';
