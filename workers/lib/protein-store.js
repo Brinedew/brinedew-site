@@ -179,6 +179,8 @@ export async function fetchProteinByUniprot(db, uniprot) {
   }
   if (protein) {
     rememberProtein(key, protein);
+  }
+  if (protein) {
     return protein;
   }
   const fallback = cloneStaticProtein(STATIC_PROTEIN_MAP.get(key));
