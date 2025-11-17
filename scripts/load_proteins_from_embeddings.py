@@ -10,6 +10,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -34,10 +35,19 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 ROOT = SCRIPT_DIR.parent
-PROTEINS_JSON = ROOT / "workers" / "data" / "proteins.json"
+GENEGUESSR_DATA_DIR = ROOT / "tools" / "thoteins" / "data" / "geneguessr"
+PROTEINS_JSON = GENEGUESSR_DATA_DIR / "proteins.json"
 EMBEDDING_PATH = ROOT / "tools" / "thoteins" / "data" / "embeddings" / "hig2vec_human_200dim.pth"
 EXPECTED_DIM = 200
 SAMPLE_UNIPROT = "P02671"
+
+
+def hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def normalize_token(value) -> str:
@@ -74,7 +84,7 @@ def collect_candidate_tokens(entry: dict) -> Iterable[str]:
             yield token
 
 
-def build_vector_lookup() -> Tuple[Dict[str, str], int]:
+def build_vector_lookup() -> Tuple[Dict[str, str], int, Dict[str, object]]:
     if not EMBEDDING_PATH.exists():
         raise SystemExit(f"Missing embedding file at {EMBEDDING_PATH}")
     model = torch.load(EMBEDDING_PATH, map_location="cpu")
@@ -88,16 +98,31 @@ def build_vector_lookup() -> Tuple[Dict[str, str], int]:
     if dim != EXPECTED_DIM:
         raise SystemExit(f"Expected {EXPECTED_DIM}-dimensional embeddings, got {dim}")
     lookup: Dict[str, str] = {}
+    stats = {
+        "objects": len(objects) if hasattr(objects, "__len__") else 0,
+        "skipped_go": 0,
+        "skipped_nonstring": 0,
+        "deduped": 0,
+        "file_sha256": hash_file(EMBEDDING_PATH),
+        "file_size": EMBEDDING_PATH.stat().st_size,
+    }
     for idx, raw_name in enumerate(objects):
         if not isinstance(raw_name, str):
+            stats["skipped_nonstring"] += 1
             continue
         token = normalize_token(raw_name)
-        if not token or token.startswith("GO:"):
+        if not token:
+            stats["skipped_nonstring"] += 1
+            continue
+        if token.startswith("GO:"):
+            stats["skipped_go"] += 1
             continue
         if token in lookup:
+            stats["deduped"] += 1
             continue
         lookup[token] = tensor_to_hex(embeddings[idx])
-    return lookup, dim
+    stats["vectors"] = len(lookup)
+    return lookup, dim, stats
 
 
 def build_records(metadata: Sequence[dict], lookup: Dict[str, str], dim: int) -> Tuple[List[dict], List[str]]:
@@ -253,7 +278,7 @@ def run_query(sql: str, remote: bool) -> List[dict]:
     return first.get("results") or []
 
 
-def validate_counts(expected: int, remote: bool) -> None:
+def validate_counts(expected: int, remote: bool) -> Dict[str, object]:
     sql = (
         "SELECT "
         "(SELECT COUNT(*) FROM proteins) AS proteins, "
@@ -271,13 +296,63 @@ def validate_counts(expected: int, remote: bool) -> None:
             f"Validation failed: expected {expected} proteins/embeddings, "
             f"found proteins={proteins}, embeddings={embeddings}"
         )
+    return row
 
 
-def validate_sample(remote: bool) -> None:
+def validate_sample(remote: bool) -> Dict[str, object]:
     sql = f"SELECT uniprot, hgnc FROM proteins WHERE upper(uniprot) = {sql_literal(SAMPLE_UNIPROT)};"
     results = run_query(sql, remote)
     if not results:
         raise SystemExit(f"Validation failed: {SAMPLE_UNIPROT} not present in proteins table")
+    return results[0]
+
+
+def print_validation_report(
+    metadata_total: int,
+    inserted: int,
+    missing: Sequence[str],
+    embedding_stats: Dict[str, object],
+    counts_row: Dict[str, object],
+    sample_row: Dict[str, object],
+) -> None:
+    missing_count = len(missing)
+    missing_preview = ", ".join(missing[:5])
+    size_mb = embedding_stats["file_size"] / (1024 * 1024)
+    print(
+        "[stats] Metadata entries=%d | matched embeddings=%d | missing embeddings=%d%s"
+        % (
+            metadata_total,
+            inserted,
+            missing_count,
+            f" ({missing_preview} ...)" if missing_preview else "",
+        )
+    )
+    print(
+        "[stats] Embedding file %s | sha256=%s | size=%.2f MB | objects=%s | usable vectors=%s | skipped GO=%s | skipped/invalid=%s | deduped=%s"
+        % (
+            EMBEDDING_PATH.name,
+            str(embedding_stats.get("file_sha256", ""))[:16],
+            size_mb,
+            embedding_stats.get("objects"),
+            embedding_stats.get("vectors"),
+            embedding_stats.get("skipped_go"),
+            embedding_stats.get("skipped_nonstring"),
+            embedding_stats.get("deduped"),
+        )
+    )
+    print(
+        "[stats] D1 row counts => proteins=%s | embeddings=%s | synonyms=%s"
+        % (
+            counts_row.get("proteins"),
+            counts_row.get("embeddings"),
+            counts_row.get("synonyms"),
+        )
+    )
+    if sample_row:
+        print(
+            "[stats] Sample %s => HGNC=%s"
+            % (SAMPLE_UNIPROT, sample_row.get("hgnc") or "unknown")
+        )
 
 
 def main() -> None:
@@ -286,7 +361,8 @@ def main() -> None:
     args = parser.parse_args()
 
     metadata = collect_metadata()
-    lookup, dim = build_vector_lookup()
+    metadata_total = len(metadata)
+    lookup, dim, embedding_stats = build_vector_lookup()
     records, missing = build_records(metadata, lookup, dim)
     if not records:
         raise SystemExit("No proteins had matching embeddings; aborting")
@@ -297,8 +373,9 @@ def main() -> None:
         print(f"[loader] Warning: {len(missing)} proteins lacked embeddings ({', '.join(missing[:5])} ...)")
 
     execute_sql(statements, remote=args.remote)
-    validate_counts(len(records), remote=args.remote)
-    validate_sample(remote=args.remote)
+    counts_row = validate_counts(len(records), remote=args.remote)
+    sample_row = validate_sample(remote=args.remote)
+    print_validation_report(metadata_total, len(records), missing, embedding_stats, counts_row, sample_row)
     print("[loader] Validation succeeded.")
 
 

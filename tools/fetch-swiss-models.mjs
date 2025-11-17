@@ -8,7 +8,7 @@
  *   node Website/tools/fetch-swiss-models.mjs --only P01116,P31751 --dry-run
  *
  * Flags:
- *   --input <path>   Path to data.json (defaults to Website/workers/data/proteins.json)
+ *   --input <path>   Path to data.json (defaults to Website/tools/thoteins/data/geneguessr/proteins.json)
  *   --output <path>  Where to write the updated JSON (defaults to input path)
  *   --only <list>    Comma-separated list of UniProt IDs to refresh
  *   --dry-run        Fetch and print results without modifying files
@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DEFAULT_DATA_PATH = path.resolve('Website/workers/data/proteins.json');
+const DEFAULT_DATA_PATH = path.resolve('Website/tools/thoteins/data/geneguessr/proteins.json');
 const COVERAGE_THRESHOLD = Number(process.env.SWISS_MODEL_COVERAGE_THRESHOLD ?? '0.6');
 const QMEAN_THRESHOLD = Number(process.env.SWISS_MODEL_QMEAN_THRESHOLD ?? '0.7');
 const PDB_COVERAGE_THRESHOLD = Number(process.env.PDB_COVERAGE_THRESHOLD ?? '0.6');

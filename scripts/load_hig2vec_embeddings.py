@@ -26,7 +26,8 @@ if hasattr(sys.stdout, "reconfigure"):
     pass
 
 ROOT = Path(__file__).resolve().parents[1]
-PROTEINS_JSON = ROOT / "workers" / "data" / "proteins.json"
+GENEGUESSR_DATA_DIR = ROOT / "tools" / "thoteins" / "data" / "geneguessr"
+PROTEINS_JSON = GENEGUESSR_DATA_DIR / "proteins.json"
 EMBEDDING_PATH = ROOT / "tools" / "thoteins" / "data" / "embeddings" / "hig2vec_human_200dim.pth"
 
 

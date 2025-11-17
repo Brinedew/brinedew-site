@@ -24,7 +24,7 @@ Useful flags:
 | --- | --- |
 | `--only P01116,P31751` | Limit updates to a comma-separated list of UniProt IDs. |
 | `--dry-run` | Fetch data and log decisions without writing changes. |
-| `--input <path>` / `--output <path>` | Override the default `Website/workers/data/proteins.json` path. |
+| `--input <path>` / `--output <path>` | Override the default `Website/tools/thoteins/data/geneguessr/proteins.json` path. |
 
 Environment variables let you tweak the acceptance thresholds:
 

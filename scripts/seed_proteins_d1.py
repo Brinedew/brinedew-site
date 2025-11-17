@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Populate the geneguessr D1 database from workers/data/proteins.json.
+Populate the geneguessr D1 database from tools/thoteins/data/geneguessr/proteins.json.
 
 Usage:
     python scripts/seed_proteins_d1.py
@@ -30,7 +30,8 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 ROOT = SCRIPT_DIR.parent
-PROTEINS_PATH = ROOT / "workers" / "data" / "proteins.json"
+GENEGUESSR_DATA_DIR = ROOT / "tools" / "thoteins" / "data" / "geneguessr"
+PROTEINS_PATH = GENEGUESSR_DATA_DIR / "proteins.json"
 
 
 def build_sql(use_transactions: bool = True) -> List[str]:

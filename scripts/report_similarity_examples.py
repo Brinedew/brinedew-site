@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 import numpy as np
 
-with open('workers/data/proteins.json','r',encoding='utf-8') as f:
+from pathlib import Path
+
+DATA_PATH = Path(__file__).resolve().parents[1] / "tools" / "thoteins" / "data" / "geneguessr" / "proteins.json"
+
+with DATA_PATH.open('r',encoding='utf-8') as f:
     proteins=json.load(f)
 name_map={row['uniprot']:row.get('hgnc') or row.get('full_name') for row in proteins}
 rows=json.loads(Path('scripts/embedding_dump.json').read_text())[0]['results']

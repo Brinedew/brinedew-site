@@ -9,9 +9,9 @@ This script now pulls data directly from:
 - A cached GO ontology file (Website/data/go/go-basic.obo)
 
 Outputs:
-- workers/data/proteins.json         → normalized protein records
-- workers/data/index.json        → eligible IDs + seed salt
-- workers/data/similarity.json   → GO similarity matrix + metadata
+- tools/thoteins/data/geneguessr/proteins.json         → normalized protein records
+- tools/thoteins/data/geneguessr/index.json        → eligible IDs + seed salt
+- tools/thoteins/data/geneguessr/similarity.json   → GO similarity matrix + metadata
 
 GO similarity defaults:
 - Aspect: Biological Process
@@ -46,7 +46,7 @@ FEATURES_CSV = BASE_DIR / "tools" / "thoteins" / "data" / "proteins" / "features
 UNIPROT_JSON_DIR = BASE_DIR / "tools" / "thoteins" / "data" / "proteins" / "uniprot"
 GO_ONTOLOGY_PATH = BASE_DIR / "data" / "go" / "go-basic.obo"
 NCBI_GENE_CACHE = BASE_DIR / "tools" / "thoteins" / "data" / "ncbi_gene"
-OUTPUT_DIR = BASE_DIR / "workers" / "data"
+OUTPUT_DIR = BASE_DIR / "tools" / "thoteins" / "data" / "geneguessr"
 DATA_JSON = OUTPUT_DIR / "proteins.json"
 INDEX_JSON = OUTPUT_DIR / "index.json"
 SIMILARITY_JSON = OUTPUT_DIR / "similarity.json"
