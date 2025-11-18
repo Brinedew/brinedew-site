@@ -30,7 +30,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install pandas pyyaml python-frontmatter
+          pip install pandas pyyaml python-frontmatter requests
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Enrich protein pages
@@ -61,9 +61,14 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: npm install -g wrangler@4
 
-      - name: Build Geneguessr data (main only)
+      - name: Build Geneguessr data (main only — skip if pre-built)
         if: github.ref == 'refs/heads/main'
-        run: python scripts/build-geneguessr-data.py
+        run: |
+          if [ -f "tools/thoteins/data/geneguessr/proteins.json" ]; then
+            echo "proteins.json already present — skipping build-geneguessr-data.py";
+          else
+            python scripts/build-geneguessr-data.py;
+          fi
 
       - name: Seed D1 protein data (main only)
         if: github.ref == 'refs/heads/main'
