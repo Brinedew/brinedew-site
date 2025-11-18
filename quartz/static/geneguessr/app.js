@@ -9,7 +9,7 @@
  * - Share functionality
  */
 
-(function() {
+(function () {
   'use strict';
 
   const GENEGUESSR_STATUS_ATTR = 'data-geneguessr-status';
@@ -459,7 +459,7 @@
     const chainCandidates = Array.isArray(raw.chain_ids) && raw.chain_ids.length
       ? raw.chain_ids
       : Array.isArray(raw.chains) && raw.chains.length ? raw.chains.map((c) => c && c.id).filter(Boolean)
-      : raw.chain_id ? [raw.chain_id] : [];
+        : raw.chain_id ? [raw.chain_id] : [];
     normalized.chain_ids = chainCandidates;
     normalized.uniprot_start = toFiniteNumber(raw.uniprot_start ?? raw.uniprot_from ?? raw.start ?? raw.from);
     normalized.uniprot_end = toFiniteNumber(raw.uniprot_end ?? raw.uniprot_to ?? raw.end ?? raw.to);
@@ -619,11 +619,11 @@
         credentials: 'include'
       });
       if (!resp.ok) {
-          if (resp.status === 404) {
-            console.warn('Geneguessr: target structure unavailable (404)');
-            targetStructureInfo = null;
-            return null;
-          }
+        if (resp.status === 404) {
+          console.warn('Geneguessr: target structure unavailable (404)');
+          targetStructureInfo = null;
+          return null;
+        }
         throw new Error(`Token request failed: ${resp.status}`);
       }
       const data = await parseJsonResponse(resp, 'target structure token');
@@ -741,7 +741,7 @@
     const sourceText = linkable && linkUrl
       ? `Source: <a href="${escapeAttribute(linkUrl)}" target="_blank" rel="noopener" class="pg-structure-source-link">${escapedLabel}</a>`
       : `Source: ${escapedLabel}`;
-    
+
     return `
       <div class="pg-card-structure">
         <div class="pg-card-structure-viewer" id="${viewerId}" role="region" aria-label="3D structure viewer">
@@ -789,7 +789,7 @@
         console.error('Geneguessr: failed to load clue structure viewer', err);
       });
     }
-    
+
     // Auto-load structure viewer for solution card if present (game over)
     const solutionViewer = document.getElementById('pg-solution-card-structure');
     const solutionTarget = targetReveal || targetProtein;
@@ -798,7 +798,7 @@
         console.error('Geneguessr: failed to load solution structure viewer', err);
       });
     }
-    
+
     // Auto-load structure viewers for guess cards if present
     gameState.guesses.forEach((guess) => {
       const viewerId = `guess-card-${guess.guessId}-structure`;
@@ -855,7 +855,7 @@
   async function ensureMolstarAssets() {
     addMolstarPreconnectOnce();
     appendMolstarCssOnce();
-    
+
     if (window.PDBeMolstarPlugin) {
       return;
     }
@@ -879,9 +879,9 @@
   }
 
   function isDarkMode() {
-    return document.documentElement.classList.contains('dark') || 
-           document.body.classList.contains('dark') ||
-           (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    return document.documentElement.classList.contains('dark') ||
+      document.body.classList.contains('dark') ||
+      (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   }
 
   function toMolstarColor(rgb) {
@@ -1098,14 +1098,14 @@
   function getHintsBalance() {
     return typeof gameStatus?.hintBalance === 'number' ? gameStatus.hintBalance : 0;
   }
-  
+
   function updateHintDisplays(explicitValue) {
     const value = typeof explicitValue === 'number' ? explicitValue : getHintsBalance();
     document.querySelectorAll('.pg-hints-value, .pg-sidebar-hints').forEach((el) => {
       el.textContent = value;
     });
   }
-  
+
   async function requestHintReveal(hintId) {
     if (!hintId) {
       return true;
@@ -1175,7 +1175,7 @@
     outline: true,
     disableMarking: true,
   };
-  
+
   // Fetch graphics settings from API and update DEBUG_STYLIZATION
   fetch('https://geneguessr-api.decap.workers.dev/api/graphics-settings', {
     credentials: 'include'
@@ -1259,7 +1259,7 @@
   async function applyViewerStylizationProfile(viewer, container) {
     ensureThemeSync();
     activeViewerInstance = viewer;
-    
+
     // Register this viewer for theme updates
     if (container && container.id) {
       activeViewers.set(container.id, viewer);
@@ -1275,133 +1275,145 @@
       { name: 'hideAxes', enabled: DEBUG_STYLIZATION.hideAxes, fn: () => safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: 'off' } } } }, 'axis helper'), delay: 100 },
       { name: 'orthographic', enabled: DEBUG_STYLIZATION.orthographic, fn: () => safeApplyCanvasProps(viewer, { camera: { mode: 'orthographic' } }, 'orthographic camera'), delay: 150 },
       { name: 'backgroundColor', enabled: DEBUG_STYLIZATION.backgroundColor, fn: () => applyViewerThemeColors(viewer, container), delay: 150 },
-      { name: 'lighting', enabled: DEBUG_STYLIZATION.lighting, fn: () => {
-        const lighting = GRAPHICS_SETTINGS?.lighting;
-        if (!lighting || lighting.enabled === false) {
-          safeApplyCanvasProps(viewer, {
-            renderer: { light: [] }
-          }, 'custom lighting (disabled)');
-          return;
-        }
-        const exposure = numericOr(lighting.exposure, 1);
-        const lights = (lighting.lights || []).map((light, index) => {
-          const rgb = hexToRgb(light.color) || { r: 255, g: 255, b: 255 };
-          return {
-            inclination: numericOr(light.inclination, 160),
-            azimuth: numericOr(light.azimuth, index * 120),
-            color: toMolstarColor(rgb),
-            intensity: numericOr(light.intensity, 1) * exposure,
-          };
-        });
-        safeApplyCanvasProps(viewer, {
-          renderer: {
-            light: lights
+      {
+        name: 'lighting', enabled: DEBUG_STYLIZATION.lighting, fn: () => {
+          const lighting = GRAPHICS_SETTINGS?.lighting;
+          if (!lighting || lighting.enabled === false) {
+            safeApplyCanvasProps(viewer, {
+              renderer: { light: [] }
+            }, 'custom lighting (disabled)');
+            return;
           }
-        }, 'custom lighting (profile-defined)');
-      }, delay: 200 },
-      { name: 'occlusion', enabled: DEBUG_STYLIZATION.occlusion, fn: () => {
-        const occlusion = GRAPHICS_SETTINGS?.occlusion;
-        if (!occlusion || occlusion.enabled === false) {
+          const exposure = numericOr(lighting.exposure, 1);
+          const lights = (lighting.lights || []).map((light, index) => {
+            const rgb = hexToRgb(light.color) || { r: 255, g: 255, b: 255 };
+            return {
+              inclination: numericOr(light.inclination, 160),
+              azimuth: numericOr(light.azimuth, index * 120),
+              color: toMolstarColor(rgb),
+              intensity: numericOr(light.intensity, 1) * exposure,
+            };
+          });
+          safeApplyCanvasProps(viewer, {
+            renderer: {
+              light: lights
+            }
+          }, 'custom lighting (profile-defined)');
+        }, delay: 200
+      },
+      {
+        name: 'occlusion', enabled: DEBUG_STYLIZATION.occlusion, fn: () => {
+          const occlusion = GRAPHICS_SETTINGS?.occlusion;
+          if (!occlusion || occlusion.enabled === false) {
+            safeApplyCanvasProps(viewer, {
+              postprocessing: {
+                occlusion: { name: 'off' }
+              }
+            }, 'ambient occlusion (disabled)');
+            return;
+          }
           safeApplyCanvasProps(viewer, {
             postprocessing: {
-              occlusion: { name: 'off' }
+              occlusion: {
+                name: 'on',
+                params: {
+                  samples: numericOr(occlusion.samples, 64),
+                  radius: numericOr(occlusion.radius, 6),
+                  bias: numericOr(occlusion.bias, 0.8),
+                  blurKernelSize: numericOr(occlusion.blurKernelSize, 7),
+                  resolutionScale: numericOr(occlusion.resolutionScale, 1)
+                }
+              }
             }
-          }, 'ambient occlusion (disabled)');
-          return;
-        }
-        safeApplyCanvasProps(viewer, {
-          postprocessing: {
-            occlusion: {
+          }, 'ambient occlusion (custom)');
+        }, delay: 200
+      },
+      {
+        name: 'antialiasing', enabled: DEBUG_STYLIZATION.antialiasing, fn: () => {
+          const antialiasing = GRAPHICS_SETTINGS?.antialiasing;
+          if (!antialiasing || antialiasing.mode !== 'fxaa') {
+            safeApplyCanvasProps(viewer, {
+              postprocessing: {
+                antialiasing: { name: 'off' }
+              }
+            }, 'antialiasing (off)');
+            return;
+          }
+          safeApplyCanvasProps(viewer, {
+            postprocessing: {
+              antialiasing: {
+                name: 'fxaa',
+                params: {
+                  edgeThresholdMin: numericOr(antialiasing.edgeThresholdMin, 0.125),
+                  edgeThresholdMax: numericOr(antialiasing.edgeThresholdMax, 0.25),
+                  iterations: numericOr(antialiasing.iterations, 2),
+                  subpixelQuality: numericOr(antialiasing.subpixelQuality, 0.75)
+                }
+              }
+            }
+          }, 'antialiasing (FXAA)');
+        }, delay: 150
+      },
+      {
+        name: 'fog', enabled: DEBUG_STYLIZATION.fog, fn: () => {
+          const fog = GRAPHICS_SETTINGS?.fog;
+          if (!fog || fog.enabled === false) {
+            safeApplyCanvasProps(viewer, {
+              cameraFog: { name: 'off' }
+            }, 'camera fog (disabled)');
+            return;
+          }
+          const fogColor = hexToRgb(fog.color) || resolveViewerColors(container).background;
+          const intensity = numericOr(fog.intensity, 0.5);
+          safeApplyCanvasProps(viewer, {
+            cameraFog: {
               name: 'on',
               params: {
-                samples: numericOr(occlusion.samples, 64),
-                radius: numericOr(occlusion.radius, 6),
-                bias: numericOr(occlusion.bias, 0.8),
-                blurKernelSize: numericOr(occlusion.blurKernelSize, 7),
-                resolutionScale: numericOr(occlusion.resolutionScale, 1)
+                intensity,
+                color: toMolstarColor(fogColor)
               }
             }
+          }, `camera fog (intensity: ${intensity.toFixed(2)})`);
+        }, delay: 150
+      },
+      {
+        name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => {
+          const outline = GRAPHICS_SETTINGS?.outline;
+          if (!outline || outline.enabled === false) {
+            safeApplyCanvasProps(viewer, {
+              postprocessing: {
+                outline: { name: 'off' }
+              }
+            }, 'outline (disabled)');
+            return;
           }
-        }, 'ambient occlusion (custom)');
-      }, delay: 200 },
-      { name: 'antialiasing', enabled: DEBUG_STYLIZATION.antialiasing, fn: () => {
-        const antialiasing = GRAPHICS_SETTINGS?.antialiasing;
-        if (!antialiasing || antialiasing.mode !== 'fxaa') {
+          const color = hexToRgb(outline.color) || resolveViewerColors(container).background;
+          const scale = numericOr(outline.scale, 0.5);
+          const threshold = numericOr(outline.threshold, 0.35);
           safeApplyCanvasProps(viewer, {
             postprocessing: {
-              antialiasing: { name: 'off' }
-            }
-          }, 'antialiasing (off)');
-          return;
-        }
-        safeApplyCanvasProps(viewer, {
-          postprocessing: {
-            antialiasing: {
-              name: 'fxaa',
-              params: {
-                edgeThresholdMin: numericOr(antialiasing.edgeThresholdMin, 0.125),
-                edgeThresholdMax: numericOr(antialiasing.edgeThresholdMax, 0.25),
-                iterations: numericOr(antialiasing.iterations, 2),
-                subpixelQuality: numericOr(antialiasing.subpixelQuality, 0.75)
+              outline: {
+                name: 'on',
+                params: {
+                  scale,
+                  threshold,
+                  color: toMolstarColor(color)
+                }
               }
             }
+          }, `outline (scale: ${scale.toFixed(2)}, threshold: ${threshold.toFixed(2)})`);
+        }, delay: 150
+      },
+      {
+        name: 'disableMarking', enabled: DEBUG_STYLIZATION.disableMarking, fn: () => safeApplyCanvasProps(viewer, {
+          marking: {
+            enabled: false,
+            edgeScale: 0,
+            ghostEdgeStrength: 0,
+            innerEdgeFactor: 0,
           }
-        }, 'antialiasing (FXAA)');
-      }, delay: 150 },
-      { name: 'fog', enabled: DEBUG_STYLIZATION.fog, fn: () => {
-        const fog = GRAPHICS_SETTINGS?.fog;
-        if (!fog || fog.enabled === false) {
-          safeApplyCanvasProps(viewer, {
-            cameraFog: { name: 'off' }
-          }, 'camera fog (disabled)');
-          return;
-        }
-        const fogColor = hexToRgb(fog.color) || resolveViewerColors(container).background;
-        const intensity = numericOr(fog.intensity, 0.5);
-        safeApplyCanvasProps(viewer, {
-          cameraFog: {
-            name: 'on',
-            params: {
-              intensity,
-              color: toMolstarColor(fogColor)
-            }
-          }
-        }, `camera fog (intensity: ${intensity.toFixed(2)})`);
-      }, delay: 150 },
-      { name: 'outline', enabled: DEBUG_STYLIZATION.outline, fn: () => {
-        const outline = GRAPHICS_SETTINGS?.outline;
-        if (!outline || outline.enabled === false) {
-          safeApplyCanvasProps(viewer, {
-            postprocessing: {
-              outline: { name: 'off' }
-            }
-          }, 'outline (disabled)');
-          return;
-        }
-        const color = hexToRgb(outline.color) || resolveViewerColors(container).background;
-        const scale = numericOr(outline.scale, 0.5);
-        const threshold = numericOr(outline.threshold, 0.35);
-        safeApplyCanvasProps(viewer, {
-          postprocessing: {
-            outline: {
-              name: 'on',
-              params: {
-                scale,
-                threshold,
-                color: toMolstarColor(color)
-              }
-            }
-          }
-        }, `outline (scale: ${scale.toFixed(2)}, threshold: ${threshold.toFixed(2)})`);
-      }, delay: 150 },
-      { name: 'disableMarking', enabled: DEBUG_STYLIZATION.disableMarking, fn: () => safeApplyCanvasProps(viewer, {
-        marking: {
-          enabled: false,
-          edgeScale: 0,
-          ghostEdgeStrength: 0,
-          innerEdgeFactor: 0,
-        }
-      }, 'marking disable'), delay: 100 },
+        }, 'marking disable'), delay: 100
+      },
     ];
 
     // Apply steps sequentially with delays to avoid overwhelming the renderer
@@ -1413,21 +1425,21 @@
       await new Promise(resolve => setTimeout(resolve, step.delay));
       step.fn();
     }
-    
+
     console.info('[GeneGuessr] Completed sequential stylization profile');
   }
 
   function suppressViewerInteractivity(viewer) {
     // Disable all interactivity
     try {
-      viewer.plugin?.managers?.interactivity?.setProps?.({ 
+      viewer.plugin?.managers?.interactivity?.setProps?.({
         granularity: 'element',
         maxFps: 0  // Disable hover updates
       });
-      viewer.plugin?.managers?.interactivity?.lociHighlights?.setProps?.({ 
+      viewer.plugin?.managers?.interactivity?.lociHighlights?.setProps?.({
         enabled: false
       });
-      viewer.plugin?.managers?.interactivity?.lociSelects?.setProps?.({ 
+      viewer.plugin?.managers?.interactivity?.lociSelects?.setProps?.({
         enabled: false
       });
     } catch (err) {
@@ -1454,7 +1466,7 @@
         // ignore
       }
     });
-    
+
     // Store subscriptions on the viewer instance so they can be cleaned up
     if (!viewer._interactivityGuards) {
       viewer._interactivityGuards = { hoverSub, clickSub };
@@ -1495,7 +1507,7 @@
       console.warn('[Geneguessr] loadStructureViewerInContainer: missing container or protein', { container: !!container, protein: !!protein });
       return;
     }
-    
+
     const containerId = container.id;
     if (renderedViewers.has(containerId)) {
       console.debug('[Geneguessr] loadStructureViewerInContainer: already rendered', containerId);
@@ -1510,7 +1522,7 @@
       structureInfo = await resolveStructureInfoForViewer(containerId, protein);
       console.debug('[Geneguessr] loadStructureViewerInContainer: resolved structureInfo', containerId, structureInfo);
     }
-    
+
     if (structureInfo && structureInfo.unavailable) {
       console.warn('[Geneguessr] loadStructureViewerInContainer: structureInfo marked unavailable', containerId);
       if (errorEl) {
@@ -1519,7 +1531,7 @@
       }
       return;
     }
-    
+
     if (!structureInfo || !structureInfo.token) {
       console.warn('[Geneguessr] loadStructureViewerInContainer: no structureInfo or token', containerId, structureInfo);
       if (errorEl) {
@@ -1528,7 +1540,7 @@
       }
       return;
     }
-    
+
     const structureUrl = structureInfo.internalUrl || structureInfo.url;
     console.debug('[Geneguessr] loadStructureViewerInContainer: structureUrl resolved', containerId, structureUrl);
     if (!structureUrl) {
@@ -1539,7 +1551,7 @@
       }
       return;
     }
-    
+
     let moleculeId;
     if (structureInfo.sourceLabel === 'PDB') {
       const match = structureInfo.displayLabel.match(/PDB \(([^)]+)\)/);
@@ -1552,7 +1564,7 @@
     } else {
       moleculeId = 'unknown';
     }
-    
+
     const options = {
       moleculeId,
       customData: {
@@ -1568,11 +1580,11 @@
       }
       return;
     }
-    
+
     if (loadingEl) loadingEl.hidden = false;
     if (placeholder) placeholder.hidden = true;
     if (errorEl) errorEl.hidden = true;
-    
+
     try {
       await ensureMolstarAssets();
       if (!window.PDBeMolstarPlugin) {
@@ -1631,7 +1643,7 @@
       return loadStructureViewerInContainer(container, targetProtein);
     }
   }
-  
+
   /**
    * Resolve the static base URL for fetching data files
    * Works with subpath deploys and relative paths
@@ -1644,7 +1656,7 @@
       if (!u.endsWith('/')) u += '/';
       return u;
     }
-    
+
     // 2) From script tag URL (robust if served from /static/geneguessr/app.js)
     const s = document.currentScript && document.currentScript.src;
     if (s) {
@@ -1652,13 +1664,13 @@
       // Strip 'app.js' (and query) → leave directory
       return url.href.replace(/app\.js(\?.*)?$/, '');
     }
-    
+
     // 3) Fallback (domain-root; works if site is at '/')
     return '/static/geneguessr/';
   }
-  
+
   const STATIC_BASE = resolveStaticBase();
-  
+
   // Constants
   const MOLSTAR_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js";
   const MOLSTAR_FALLBACK_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js";
@@ -1669,7 +1681,7 @@
   const HINT_REWARD_ON_INCORRECT = 1;
   const MAX_GUESSES = 6;
   const LOCKED_HINT_PLACEHOLDER = 'Hint locked';
-  
+
   // State
   let gameStatus = null;
   let clueData = null;
@@ -1711,13 +1723,13 @@
     viewerStructureSources.delete(containerId);
   }
 
-function markGuessViewersDirty() {
-  for (const id of Array.from(renderedViewers)) {
-    if (id.startsWith('guess-card-')) {
-      markViewerDirty(id);
+  function markGuessViewersDirty() {
+    for (const id of Array.from(renderedViewers)) {
+      if (id.startsWith('guess-card-')) {
+        markViewerDirty(id);
+      }
     }
   }
-}
 
   function buildPracticeQuery(options = {}) {
     const practice = typeof options.practice === 'boolean' ? options.practice : Boolean(gameState.practiceMode);
@@ -1797,16 +1809,16 @@ function markGuessViewersDirty() {
     clueData = payload.clue || { sections: [], allMatches: {}, latestMatches: {} };
     guessEntries = Array.isArray(payload.guesses)
       ? payload.guesses.map((entry) => {
-          if (!entry) {
-            return entry;
-          }
-          if (entry.protein) {
-            const normalizedProtein = cacheEnrichedProtein(entry.protein) || entry.protein;
-            return { ...entry, protein: normalizedProtein };
-          }
-          const cachedProtein = getEnrichedProteinById(entry.uniprot);
-          return cachedProtein ? { ...entry, protein: cachedProtein } : entry;
-        })
+        if (!entry) {
+          return entry;
+        }
+        if (entry.protein) {
+          const normalizedProtein = cacheEnrichedProtein(entry.protein) || entry.protein;
+          return { ...entry, protein: normalizedProtein };
+        }
+        const cachedProtein = getEnrichedProteinById(entry.uniprot);
+        return cachedProtein ? { ...entry, protein: cachedProtein } : entry;
+      })
       : [];
     targetProtein = payload.clueTarget ? (cacheEnrichedProtein(payload.clueTarget) || payload.clueTarget) : null;
     targetReveal = payload.targetReveal ? (cacheEnrichedProtein(payload.targetReveal) || payload.targetReveal) : null;
@@ -1830,17 +1842,17 @@ function markGuessViewersDirty() {
     }
     return `guess-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
-  
+
   // DOM elements (will be populated on init)
   let rootEl;
   let layoutHydrated = false;
   const proteinsById = new Map();
   const enrichedProteinsById = new Map();
-  
+
   function normalizeUniprotId(uniprot) {
     return (uniprot || '').toUpperCase();
   }
-  
+
   function normalizeProtein(protein) {
     const safeArray = (value) => (Array.isArray(value) ? value : []);
     const normalizeGoTerms = (terms) => {
@@ -1867,7 +1879,7 @@ function markGuessViewersDirty() {
       links: protein && protein.links ? protein.links : {}
     };
   }
-  
+
   function rememberProteinRecord(protein, options = {}) {
     if (!protein || !protein.uniprot) {
       return null;
@@ -1892,14 +1904,14 @@ function markGuessViewersDirty() {
     proteinsById.set(key, normalized);
     return normalized;
   }
-  
+
   function getEnrichedProteinById(uniprot) {
     if (!uniprot) {
       return null;
     }
     return enrichedProteinsById.get(normalizeUniprotId(uniprot)) || null;
   }
-  
+
   function mergeProteinRecords(base, overrides) {
     if (!base) {
       return overrides || null;
@@ -1971,7 +1983,7 @@ function markGuessViewersDirty() {
       return resolved ? { ...entry, proteinResolved: resolved } : entry;
     });
   }
-  
+
   function getProteinById(id) {
     if (!id) {
       return null;
@@ -1979,7 +1991,7 @@ function markGuessViewersDirty() {
     const key = normalizeUniprotId(id);
     return proteinsById.get(key) || enrichedProteinsById.get(key) || null;
   }
-  
+
   async function bootstrapGame() {
     const payload = await fetchGameBootstrap();
     hydrateStateFromPayload(payload);
@@ -2004,7 +2016,7 @@ function markGuessViewersDirty() {
         console.warn('Geneguessr: structure token hydration deferred with errors', err);
       });
   }
-  
+
   /**
    * SHA-256 implementation for deterministic daily selection
    */
@@ -2014,14 +2026,14 @@ function markGuessViewersDirty() {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
-  
+
   /**
    * Pick today's protein deterministically
    */
   async function pickTodaysProtein(eligibleIds, salt) {
     // Use local date YYYY-MM-DD
     const today = new Date().toISOString().slice(0, 10);
-    
+
     // Check for debug override
     const urlParams = new URLSearchParams(window.location.search);
     const answerOverride = urlParams.get('answer');
@@ -2034,15 +2046,15 @@ function markGuessViewersDirty() {
     if (!filteredIds.length) {
       console.warn('[Geneguessr] AlphaFold-only question pool detected, falling back to full eligible list.');
     }
-    
+
     // Hash date + salt
     const message = today + '|' + salt;
     const hash = await sha256(message);
-    
+
     // Convert first 16 hex chars to int, mod by array length
     const hashInt = parseInt(hash.slice(0, 16), 16);
     const index = hashInt % selectionPool.length;
-    
+
     return selectionPool[index];
   }
 
@@ -2072,18 +2084,18 @@ function markGuessViewersDirty() {
   function saveState() {
     // State is persisted server-side; no-op.
   }
-  
+
   function loadState() {
     return null;
   }
-  
+
   /**
    * Scoring functions
    */
   function scoreGuess(guessEntry) {
     return guessEntry?.score || null;
   }
-  
+
   /**
    * Render functions
    */
@@ -2114,7 +2126,7 @@ function markGuessViewersDirty() {
     const goTermNamesByAspect = protein.go_terms_named || {};
     const domains = Array.isArray(protein.domains) ? protein.domains : [];
     const reactomePaths = Array.isArray(protein.reactome_pathways) ? protein.reactome_pathways : [];
-    
+
     const sections = [];
     const filterTokens = [
       protein.hgnc,
@@ -2122,7 +2134,7 @@ function markGuessViewersDirty() {
     ]
       .filter(Boolean)
       .map(token => token.toLowerCase());
-    
+
     const shouldFilterText = (text) => {
       if (!forClue || !filterTokens.length || typeof text !== 'string') {
         return false;
@@ -2130,7 +2142,7 @@ function markGuessViewersDirty() {
       const normalized = text.toLowerCase();
       return filterTokens.some(token => token && normalized.includes(token));
     };
-    
+
     const pushSection = (section, { skipFilter = false } = {}) => {
       const items = skipFilter ? section.items : section.items.filter(item => !shouldFilterText(item.text));
       if (!items.length) {
@@ -2141,7 +2153,7 @@ function markGuessViewersDirty() {
         items,
       });
     };
-    
+
     // Gene summary section - only show on feedback cards, never on clue cards
     if (protein.gene_summary && !forClue) {
       const summary = protein.gene_summary;
@@ -2150,25 +2162,25 @@ function markGuessViewersDirty() {
         source: summary.source,
         url: summary.url,
       } : null;
-      
+
       pushSection({
         id: 'summary',
         label: '', // No label for summary
         type: 'summary',
-        items: [{ 
+        items: [{
           text: summaryText,
           meta: summaryMeta,
         }],
       }, { skipFilter: true });
     }
-    
+
     // Length first
     pushSection({
       id: 'length',
       label: 'Length',
       items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein.length} aa` }],
     });
-    
+
     // Properties (Transmembrane/Secreted)
     pushSection({
       id: 'properties',
@@ -2184,14 +2196,14 @@ function markGuessViewersDirty() {
         },
       ],
     });
-    
+
     // Tissue specificity
     pushSection({
       id: 'tissue',
       label: 'Tissue specificity',
       items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue.label }],
     });
-    
+
     // Domains
     if (domains.length) {
       pushSection({
@@ -2209,7 +2221,7 @@ function markGuessViewersDirty() {
         items: [{ text: 'No structured domains', id: forClue ? 'hint-domain-0' : undefined }],
       });
     }
-    
+
     // Pathways (Reactome)
     const formatReactomeEntry = (entry) => {
       if (!entry) return '';
@@ -2231,7 +2243,7 @@ function markGuessViewersDirty() {
           : formattedReactome.map(path => ({ text: path })),
       });
     }
-    
+
     // GO sections last
     const goSectionMeta = [
       { aspect: 'mf', label: 'Molecular function' },
@@ -2337,7 +2349,7 @@ function markGuessViewersDirty() {
         ${revealCard}
       `;
     }
-    
+
     if (!targetProtein) {
       return `
         <div class="pg-clue-card" data-game-over="false">
@@ -2352,7 +2364,7 @@ function markGuessViewersDirty() {
       structureInfo: getTargetStructureInfo(),
       structureSource: { type: 'target' }
     });
-    
+
     return `
         <div class="pg-clue-card" data-game-over="false">
           ${structureMarkup}
@@ -2378,7 +2390,7 @@ function markGuessViewersDirty() {
     const normalizedRevealed = allRevealedItems || [];
     const revealSetSource = normalizedRevealed.length > 0 ? normalizedRevealed : matchedItems;
     const revealSet = new Set((revealSetSource || []).map(normalizeMatchText));
-    
+
     // Special handling for gene summary section
     const isEntryUnlocked = (item) => {
       if (!item) return false;
@@ -2395,7 +2407,7 @@ function markGuessViewersDirty() {
       const item = section.items[0];
       const summaryText = item.text;
       const meta = item.meta;
-      
+
       // For spoiler mode (clue cards) - hide until revealed
       if (showSpoilers && item.id) {
         const revealed = isEntryUnlocked(item);
@@ -2408,23 +2420,23 @@ function markGuessViewersDirty() {
           return `<div class="pg-section pg-gene-summary">${placeholderNode}</div>`;
         }
       }
-      
+
       // For feedback/revealed mode - show with source attribution
       const sourceLink = meta && meta.url && meta.source
         ? ` <a href="${meta.url}" target="_blank" class="pg-gene-summary-source" title="Retrieved ${meta.retrieved || ''}">Source: ${meta.source}</a>`
         : '';
-      
+
       return `
         <div class="pg-section pg-gene-summary">
           <span class="pg-section-entry">${summaryText}${sourceLink}</span>
         </div>
       `;
     }
-    
+
     const labelHtml = section.label
       ? `<span class="pg-section-label">${section.label}:</span> `
       : '';
-    
+
     // Render all items with commas, applying spoilers or match indicators as needed
     const itemsHtml = section.items.map((item) => {
       const text = typeof item.text === 'string' ? item.text : null;
@@ -2432,7 +2444,7 @@ function markGuessViewersDirty() {
       const shouldHighlight = highlightMatches && text && highlightSet.has(normalizedText);
       const isMatched = (highlightMatches && Boolean(item.matched)) || shouldHighlight;
       const shouldReveal = text && revealSet.has(normalizedText);
-     
+
       // For spoiler mode (clue cards)
       if (showSpoilers && item.id) {
         const revealed = isEntryUnlocked(item);
@@ -2443,38 +2455,38 @@ function markGuessViewersDirty() {
         }
         return renderLockedHintPlaceholder(item, isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry');
       }
-      
+
       // For feedback mode (guess cards) - apply match highlighting
       if (text && isMatched) {
         return `<span class="pg-section-entry matched-highlight">${escapeHtml(text)}</span>`;
       }
-      
+
       // Default
       if (text) {
         return `<span class="pg-section-entry">${escapeHtml(text)}</span>`;
       }
       return renderLockedHintPlaceholder(item, 'pg-section-entry');
     }).join('');
-    
+
     return `
       <div class="pg-section">
         ${labelHtml}${itemsHtml}
       </div>
     `;
   }
-  
+
   // Legacy wrapper for clue cards
   function renderSpoilerSection(section, options = {}) {
     return renderProteinSection(section, { showSpoilers: true, ...options });
   }
 
 
-  
+
   function renderFeedbackSection(section, score, matchedItemsForSection = [], options = {}) {
     const highlightMatches = Boolean(options.highlightMatches);
     // Add match indicators for specific sections when score data exists
     let modifiedSection = highlightMatches ? { ...section } : section;
-    
+
     if (highlightMatches && score) {
       if (section.id === 'tissue') {
         modifiedSection.items = section.items.map(item => ({
@@ -2493,15 +2505,15 @@ function markGuessViewersDirty() {
         }));
       }
     }
-    
+
     // Use unified renderer with match highlighting for domains
-    return renderProteinSection(modifiedSection, { 
-      showSpoilers: false, 
+    return renderProteinSection(modifiedSection, {
+      showSpoilers: false,
       matchedItems: highlightMatches ? matchedItemsForSection : [],
       highlightMatches,
     });
   }
-  
+
   function renderResult() {
     const title = gameState.won ? 'You Win!' : 'Game Over';
     const className = gameState.won ? '' : 'failed';
@@ -2516,7 +2528,7 @@ function markGuessViewersDirty() {
         <div class="pg-practice-tag">${practiceMessage}</div>
       </div>
     `;
-    
+
     const solution = targetReveal || targetProtein || {};
     const hasIdentity = Boolean(solution.hgnc);
     const proteinLabel = hasIdentity
@@ -2539,7 +2551,7 @@ function markGuessViewersDirty() {
       </div>
     `;
   }
-  
+
   function hydrateLayoutOnce() {
     if (layoutHydrated || !rootEl) {
       return;
@@ -2554,7 +2566,7 @@ function markGuessViewersDirty() {
     layoutHydrated = true;
     ensureCollapseDelegation();
   }
-  
+
   function renderClueSectionsIntoDom(gameOver = false) {
     const slot = document.getElementById('pg-clue-slot');
     if (!slot) return;
@@ -2562,7 +2574,7 @@ function markGuessViewersDirty() {
       slot.innerHTML = '<div class="pg-clue-card"><p>Loading clues...</p></div>';
       return;
     }
-    
+
     const existingViewer = document.getElementById('pg-clue-structure');
     let preservedViewer = null;
     const nextStructureId = targetProtein?.structure?.structure_id
@@ -2589,7 +2601,7 @@ function markGuessViewersDirty() {
     lastRenderedTargetStructureId = nextStructureId;
     ensureSpoilerDelegation();
   }
-  
+
   function renderInputSection(gameOver) {
     const slot = document.getElementById('pg-input-slot');
     if (!slot) {
@@ -2630,16 +2642,16 @@ function markGuessViewersDirty() {
         </div>
       </div>
     `;
-    
+
     const inputEl = document.getElementById('pg-input');
     const suggestionsEl = document.getElementById('pg-suggestions');
     const submitBtn = document.getElementById('pg-submit');
-    
+
     if (inputEl && suggestionsEl && submitBtn) {
       setupAutocomplete(inputEl, suggestionsEl);
-      
+
       submitBtn.addEventListener('click', submitGuess);
-      
+
       inputEl.addEventListener('input', () => {
         submitBtn.disabled = true;
         delete submitBtn.dataset.uniprot;
@@ -2653,19 +2665,19 @@ function markGuessViewersDirty() {
       });
     }
   }
-  
+
   function renderGuessesSection() {
     const guessesEl = document.getElementById('pg-guesses');
     if (!guessesEl) {
       return;
     }
     ensureCollapseDelegation();
-    
+
     // Check if we only need to add the latest guess (avoid destroying all existing cards)
     const existingCards = guessesEl.querySelectorAll('.pg-feedback-card');
     const expectedCount = gameState.guesses.length;
     const existingCount = existingCards.length;
-    
+
     // Nothing to render and nothing displayed
     if (expectedCount === 0) {
       if (existingCount !== 0) {
@@ -2674,12 +2686,12 @@ function markGuessViewersDirty() {
       }
       return;
     }
-    
+
     // No changes to guess history, keep existing DOM (prevents viewer reload)
     if (existingCount === expectedCount) {
       return;
     }
-    
+
     if (existingCount === expectedCount - 1) {
       // Only latest guess is new - append it instead of recreating everything
       const latestGuess = gameState.guesses[gameState.guesses.length - 1];
@@ -2688,7 +2700,7 @@ function markGuessViewersDirty() {
       syncFeedbackContentHeights();
       return;
     }
-    
+
     // Full re-render needed (initial load or state mismatch)
     markGuessViewersDirty();
     guessesEl.innerHTML = gameState.guesses
@@ -2698,7 +2710,7 @@ function markGuessViewersDirty() {
       })
       .reverse()
       .join('');
-    
+
     syncFeedbackContentHeights();
   }
 
@@ -2715,13 +2727,13 @@ function markGuessViewersDirty() {
       linkable = false,
       highlightMatches = false,
     } = options;
-    
+
     const goPercent = showSimilarity && score && typeof score.goPercent === 'number'
       ? score.goPercent
       : null;
     const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
     const goWidth = goPercent === null ? 0 : goPercent;
-    
+
     const sections = buildProteinSections(protein, { forClue: false });
     const sectionMarkup = sections
       .map(section => renderFeedbackSection(
@@ -2731,7 +2743,7 @@ function markGuessViewersDirty() {
         { highlightMatches }
       ))
       .join('');
-    
+
     const similarityMarkup = showSimilarity
       ? `
         <div class="pg-bar">
@@ -2740,11 +2752,11 @@ function markGuessViewersDirty() {
         <span class="pg-feedback-score">${goValue}</span>
       `
       : '';
-    
+
     // Add structure viewer above sections
     const viewerId = `${cardId}-structure`;
     const structureMarkup = renderStructureViewer(protein, viewerId, { linkable, structureInfo });
-    
+
     const contentMarkup = `
       <div class="pg-feedback-content" id="${cardId}-content">
         ${structureMarkup}
@@ -2752,7 +2764,7 @@ function markGuessViewersDirty() {
         ${sectionMarkup}
       </div>
     `;
-    
+
     if (!collapsible) {
       return `
         <div class="pg-feedback-card expanded pg-feedback-final" id="${cardId}" data-expanded="true">
@@ -2764,9 +2776,9 @@ function markGuessViewersDirty() {
         </div>
       `;
     }
-    
+
     const chevron = expanded ? '▼' : '▶';
-    
+
     return `
       <div class="pg-feedback-card ${expanded ? 'expanded' : 'collapsed'}" id="${cardId}" data-expanded="${expanded}">
         <button class="pg-collapse-toggle" aria-expanded="${expanded}" aria-controls="${cardId}-content">
@@ -2778,7 +2790,7 @@ function markGuessViewersDirty() {
       </div>
     `;
   }
-  
+
   function renderCollapsibleFeedback(guessEntry, isLatest) {
     const cardId = `guess-card-${guessEntry.guessId}`;
     const isLatestGuess = typeof guessEntry.isLatest === 'boolean' ? guessEntry.isLatest : Boolean(isLatest);
@@ -2788,7 +2800,7 @@ function markGuessViewersDirty() {
     if (!protein) {
       return '';
     }
-    
+
     return buildFeedbackCardMarkup(protein, {
       score: guessEntry.score,
       cardId,
@@ -2801,7 +2813,7 @@ function markGuessViewersDirty() {
       highlightMatches: isLatestGuess
     });
   }
-  
+
   function getCardExpansionState(cardId, isLatest) {
     try {
       const stored = sessionStorage.getItem('guessCardStates');
@@ -2822,7 +2834,7 @@ function markGuessViewersDirty() {
     // Default: latest expanded, others collapsed
     return isLatest;
   }
-  
+
   function setCardExpansionState(cardId, expanded) {
     try {
       const stored = sessionStorage.getItem('guessCardStates');
@@ -2841,7 +2853,7 @@ function markGuessViewersDirty() {
       // Ignore storage errors
     }
   }
-  
+
   function ensureCollapseDelegation() {
     if (collapseDelegationBound) {
       return;
@@ -2883,7 +2895,7 @@ function markGuessViewersDirty() {
     const chevron = card.querySelector('.pg-collapse-chevron');
     const currentlyExpanded = card.dataset.expanded === 'true';
     const newExpanded = !currentlyExpanded;
-    
+
     card.classList.toggle('expanded', newExpanded);
     card.classList.toggle('collapsed', !newExpanded);
     card.dataset.expanded = String(newExpanded);
@@ -2892,9 +2904,9 @@ function markGuessViewersDirty() {
     if (chevron) {
       chevron.textContent = newExpanded ? '▼' : '▶';
     }
-    
+
     setCardExpansionState(card.id, newExpanded);
-    
+
     if (newExpanded) {
       card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -2983,7 +2995,7 @@ function markGuessViewersDirty() {
       syncFeedbackContentHeights();
     }, 200);
   });
-  
+
   function renderResultSection(gameOver) {
     const slot = document.getElementById('pg-result-slot');
     if (!slot) {
@@ -2992,7 +3004,7 @@ function markGuessViewersDirty() {
     // Result messaging is now rendered above the clue/feedback card
     slot.innerHTML = '';
   }
-  
+
   function renderFooterSection(gameOver) {
     const slot = document.getElementById('pg-footer-slot');
     if (!slot) {
@@ -3017,11 +3029,11 @@ function markGuessViewersDirty() {
       `;
     }
   }
-  
+
   function renderStats() {
     // Load stats from localStorage
     const stats = loadStats();
-    
+
     return `
       <div class="pg-stats">
         <div class="pg-stat">
@@ -3049,7 +3061,7 @@ function markGuessViewersDirty() {
       </div>
     `;
   }
-  
+
   function loadStats() {
     const saved = localStorage.getItem('geneguessr_stats');
     if (saved) {
@@ -3070,30 +3082,30 @@ function markGuessViewersDirty() {
       maxStreak: 0
     };
   }
-  
+
   async function loadStatsFromAPI() {
     if (!currentUser) {
       return loadStats(); // Fall back to localStorage if not authenticated
     }
-    
+
     try {
       const response = await fetch(`${API_BASE}/api/stats`, {
         method: 'GET',
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
         console.warn('Failed to load stats from API, using localStorage');
         return loadStats();
       }
-      
+
       return await response.json();
     } catch (err) {
       console.error('Error loading stats from API:', err);
       return loadStats();
     }
   }
-  
+
   function updateStats(won) {
     const stats = loadStats();
     stats.played++;
@@ -3107,16 +3119,16 @@ function markGuessViewersDirty() {
     stats.winRate = stats.played > 0 ? stats.won / stats.played : 0;
     localStorage.setItem('geneguessr_stats', JSON.stringify(stats));
   }
-  
+
   async function updateStatsAPI(won) {
     // Always update localStorage for offline support
     updateStats(won);
-    
+
     // If authenticated, also update D1
     if (!currentUser) {
       return;
     }
-    
+
     try {
       const response = await fetch(`${API_BASE}/api/stats/update`, {
         method: 'POST',
@@ -3124,7 +3136,7 @@ function markGuessViewersDirty() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ won })
       });
-      
+
       if (!response.ok) {
         console.warn('Failed to update stats on server');
       }
@@ -3143,25 +3155,25 @@ function markGuessViewersDirty() {
       gameState.statsRecorded = true;
     }
   }
-  
+
   async function promptStatsMigration() {
     // Only prompt if user is authenticated and has localStorage stats
     if (!currentUser) {
       return;
     }
-    
+
     const localStats = loadStats();
     if (localStats.played === 0) {
       return; // No stats to migrate
     }
-    
+
     // Check if already migrated
     try {
       const response = await fetch(`${API_BASE}/api/stats`, {
         method: 'GET',
         credentials: 'include'
       });
-      
+
       if (response.ok) {
         const serverStats = await response.json();
         if (serverStats.migratedAt) {
@@ -3172,18 +3184,18 @@ function markGuessViewersDirty() {
       console.error('Error checking migration status:', err);
       return;
     }
-    
+
     // Prompt user to migrate
     const migrate = confirm(
       `Sync your existing stats to your Discord account?\n\n` +
       `You have played ${localStats.played} game${localStats.played !== 1 ? 's' : ''} with ${localStats.won} win${localStats.won !== 1 ? 's' : ''}.\n\n` +
       `This will allow your stats to persist across devices.`
     );
-    
+
     if (!migrate) {
       return;
     }
-    
+
     // Migrate stats
     try {
       const response = await fetch(`${API_BASE}/api/migrate-stats`, {
@@ -3192,7 +3204,7 @@ function markGuessViewersDirty() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(localStats)
       });
-      
+
       if (response.ok) {
         alert('Stats synced successfully! Your progress is now saved to your Discord account.');
       } else {
@@ -3205,7 +3217,7 @@ function markGuessViewersDirty() {
       alert('Failed to sync stats. Please try again later.');
     }
   }
-  
+
   /**
    * Autocomplete
    */
@@ -3261,8 +3273,8 @@ function markGuessViewersDirty() {
       const payload = await response.json();
       const normalizedResults = Array.isArray(payload)
         ? payload
-            .map((protein) => rememberProteinRecord(protein))
-            .filter(Boolean)
+          .map((protein) => rememberProteinRecord(protein))
+          .filter(Boolean)
         : [];
       const matches = normalizedResults
         .filter((protein) => protein && !guessedSet.has(normalizeUniprotId(protein.uniprot)))
@@ -3364,10 +3376,10 @@ function markGuessViewersDirty() {
         attachClickHandlers();
       }, AUTOCOMPLETE_DEBOUNCE_MS);
     });
-    
+
     inputEl.addEventListener('keydown', (e) => {
       const suggestions = suggestionsEl.querySelectorAll('.pg-suggestion');
-      
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
@@ -3386,20 +3398,20 @@ function markGuessViewersDirty() {
         hideSuggestions();
       }
     });
-    
+
     function updateSelectedSuggestion(suggestions) {
       suggestions.forEach((el, idx) => {
         el.classList.toggle('selected', idx === selectedIndex);
       });
     }
   }
-  
+
   function selectProtein(uniprot) {
     if (!uniprot) return;
     const normalizedId = normalizeUniprotId(uniprot);
     const protein = getProteinById(normalizedId) || getEnrichedProteinById(normalizedId);
     const label = protein?.hgnc || normalizedId;
-    
+
     const inputEl = document.getElementById('pg-input');
     const suggestionsEl = document.getElementById('pg-suggestions');
     if (inputEl) {
@@ -3409,7 +3421,7 @@ function markGuessViewersDirty() {
       suggestionsEl.innerHTML = '';
       suggestionsEl.style.display = 'none';
     }
-    
+
     const submitBtn = document.getElementById('pg-submit');
     if (submitBtn) {
       submitBtn.disabled = false;
@@ -3417,28 +3429,67 @@ function markGuessViewersDirty() {
     }
   }
 
-  
+
   /**
    * Handle guess submission
    */
   async function submitGuess() {
     const submitBtn = document.getElementById('pg-submit');
-    const uniprot = normalizeUniprotId(submitBtn.dataset.uniprot || '');
-    
-    if (!uniprot) return;
-    
+    const inputEl = document.getElementById('pg-input');
+    let uniprot = normalizeUniprotId(submitBtn.dataset.uniprot || '');
+
+    // If no UniProt ID is attached (user typed but didn't select), try to resolve it
+    if (!uniprot && inputEl && inputEl.value.trim()) {
+      const query = inputEl.value.trim();
+      submitBtn.disabled = true;
+      const originalText = submitBtn.textContent;
+      submitBtn.textContent = '...';
+
+      try {
+        const matches = await searchProteins(query);
+        // Look for exact match on symbol
+        const exactMatch = matches.find(p =>
+          p.hgnc.toUpperCase() === query.toUpperCase()
+        );
+
+        if (exactMatch) {
+          uniprot = normalizeUniprotId(exactMatch.uniprot);
+        } else if (matches.length > 0) {
+          // If top result is a very strong match (score 0 or 1), use it
+          // But for safety, let's stick to exact symbol matches or ask user to select
+          const best = matches[0];
+          if (best.hgnc.toUpperCase() === query.toUpperCase()) {
+            uniprot = normalizeUniprotId(best.uniprot);
+          }
+        }
+      } catch (err) {
+        console.warn('Auto-resolution failed', err);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
+    }
+
+    if (!uniprot) {
+      alert('Please select a protein from the suggestions before submitting.');
+      return;
+    }
+
     const guessProtein = getProteinById(uniprot) || getEnrichedProteinById(uniprot);
+    // If we auto-resolved, we might need to fetch details if not in cache, 
+    // but searchProteins calls rememberProteinRecord so it should be there.
+
     if (!guessProtein) {
       alert('Please select a protein from the suggestions before submitting.');
       return;
     }
-    
+
     if (submitBtn.disabled) return;
-    
+
     submitBtn.disabled = true;
     const previousLabel = submitBtn.textContent;
     submitBtn.textContent = 'Submitting...';
-    
+
     try {
       const payload = await submitGuessRequest(uniprot);
       hydrateStateFromPayload(payload);
@@ -3469,7 +3520,7 @@ function markGuessViewersDirty() {
       }
     }
   }
-  
+
   /**
    * Share functionality
    */
@@ -3480,7 +3531,7 @@ function markGuessViewersDirty() {
     const emoji = gameState.won ? 'You Win!' : 'Game Over';
     const guessCount = gameState.guesses.length;
     const today = new Date().toISOString().slice(0, 10);
-    
+
     // Build emoji grid
     const grid = gameState.guesses.map(g => {
       if (g.correct) {
@@ -3489,7 +3540,7 @@ function markGuessViewersDirty() {
       const simScore = typeof g.score.goSimilarity === 'number' ? g.score.goSimilarity : 0;
       return simScore >= 0.35 ? '🟨' : '⬜';
     }).join('');
-    
+
     return `Geneguessr ${today}
 ${emoji} ${guessCount}/${MAX_GUESSES}
 
@@ -3497,10 +3548,10 @@ ${grid}
 
 https://brinedew.bio/apps/geneguessr/`;
   }
-  
+
   function shareResult() {
     const shareText = generateShareText();
-    
+
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareText).then(() => {
         const feedbackEl = document.getElementById('pg-share-feedback');
@@ -3517,7 +3568,7 @@ https://brinedew.bio/apps/geneguessr/`;
       alert(shareText);
     }
   }
-  
+
   /**
    * Main render function
    */
@@ -3531,8 +3582,8 @@ https://brinedew.bio/apps/geneguessr/`;
       renderGuessesSection();
       renderResultSection(gameOver);
       renderFooterSection(gameOver);
-      
-    ensureSpoilerDelegation();
+
+      ensureSpoilerDelegation();
       setupStructureInteractions();
       updateSidebarStats();
     } catch (err) {
@@ -3540,7 +3591,7 @@ https://brinedew.bio/apps/geneguessr/`;
       reportError('render-failed', err?.stack || err?.message || String(err));
     }
   }
-  
+
   // Auth state
   let currentUser = null;
   const API_BASE = 'https://geneguessr-api.decap.workers.dev';
@@ -3577,14 +3628,14 @@ https://brinedew.bio/apps/geneguessr/`;
       console.warn('Geneguessr: right sidebar not found, skipping stats injection');
       return;
     }
-    
+
     const sidebarStats = document.createElement('div');
     sidebarStats.id = 'pg-sidebar-stats';
     sidebarStats.className = 'pg-sidebar-stats';
-    
+
     const hints = getHintsBalance();
     const stats = loadStats();
-    
+
     const formatTierLabel = (tier) => {
       if (!tier) {
         return '';
@@ -3600,7 +3651,7 @@ https://brinedew.bio/apps/geneguessr/`;
     };
     const tierLabel = currentUser ? formatTierLabel(currentUser.tier) : '';
     const discordInvite = 'https://discord.com/invite/kx8FVzUrpf';
-    
+
     const authSection = currentUser ? `
       <div class="pg-sidebar-section pg-auth-section">
         <div class="pg-sidebar-label">Account</div>
@@ -3626,7 +3677,7 @@ https://brinedew.bio/apps/geneguessr/`;
         </a>
       </div>
     `;
-    
+
     sidebarStats.innerHTML = `
       ${authSection}
       <div class="pg-sidebar-section">
@@ -3642,7 +3693,7 @@ https://brinedew.bio/apps/geneguessr/`;
         </div>
       </div>
     `;
-    
+
     // Insert before tags section
     const tagsSection = sidebar.querySelector('.page-tags-section');
     if (tagsSection) {
@@ -3655,7 +3706,7 @@ https://brinedew.bio/apps/geneguessr/`;
   /**
    * Logout handler
    */
-  window.geneguessrLogout = async function() {
+  window.geneguessrLogout = async function () {
     try {
       await fetch(`${API_BASE}/api/auth/logout`, {
         method: 'POST',
@@ -3669,7 +3720,7 @@ https://brinedew.bio/apps/geneguessr/`;
     }
   };
 
-  window.geneguessrPlayAgain = async function() {
+  window.geneguessrPlayAgain = async function () {
     try {
       setStatus('loading-data');
       const payload = await fetchGameBootstrap({ practice: true, restart: true });
@@ -3683,19 +3734,19 @@ https://brinedew.bio/apps/geneguessr/`;
       setStatus('errored');
     }
   };
-  
+
   function updateSidebarStats() {
     const sidebarHints = document.querySelector('.pg-sidebar-hints');
     if (sidebarHints) {
       sidebarHints.textContent = getHintsBalance();
     }
-    
+
     // Update inline hints badge
     const inlineHints = document.querySelector('.pg-hints-value');
     if (inlineHints) {
       inlineHints.textContent = getHintsBalance();
     }
-    
+
     const statsGrid = document.querySelector('.pg-sidebar-stats-grid');
     if (statsGrid) {
       const stats = loadStats();
@@ -3713,27 +3764,27 @@ https://brinedew.bio/apps/geneguessr/`;
   async function init() {
     setStatus('init-start');
     rootEl = document.getElementById('geneguessr-root');
-    
+
     if (!rootEl) {
       console.error('Geneguessr root element not found!');
       reportError('root-element-missing', '');
       return;
     }
-    
+
     // Show loading
     rootEl.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading Geneguessr...</div>';
-    
+
     // Check auth status
     await checkAuth();
-    
+
     // Prompt for stats migration if needed
     await promptStatsMigration();
-    
+
     // Inject stats into sidebar
     injectSidebarStats();
-    
+
     setStatus('loading-data');
-    
+
     try {
       await bootstrapGame();
     } catch (err) {
@@ -3742,7 +3793,7 @@ https://brinedew.bio/apps/geneguessr/`;
       reportError('init-game-failed', detail);
       return;
     }
-    
+
     // Render
     render();
     setStatus('rendered');
@@ -3755,7 +3806,7 @@ https://brinedew.bio/apps/geneguessr/`;
     // Attach collapse logic for Attribution & Data Sources card
     attachAttributionCollapseLogic();
   }
-  
+
   // Start when DOM ready (but only if root element exists)
   function boot() {
     // Guard: do nothing if root doesn't exist (helps when loaded on wrong pages)
@@ -3767,36 +3818,36 @@ https://brinedew.bio/apps/geneguessr/`;
     setStatus('booting');
     init();
   }
-  
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {
     boot();
   }
-  
 
-// Collapse logic for Attribution & Data Sources card
-function attachAttributionCollapseLogic() {
-  // Find the attribution button by its text content
-  const buttons = Array.from(document.querySelectorAll('button'));
-  const attributionBtn = buttons.find(btn => btn.textContent && btn.textContent.includes('Attribution & Data Sources'));
-  if (!attributionBtn) return;
 
-  // Find or create the chevron (assume first child span or create one)
-  let chevron = attributionBtn.querySelector('span');
-  if (!chevron) {
-    chevron = document.createElement('span');
-    chevron.textContent = '▶';
-    attributionBtn.insertBefore(chevron, attributionBtn.firstChild);
-  }
+  // Collapse logic for Attribution & Data Sources card
+  function attachAttributionCollapseLogic() {
+    // Find the attribution button by its text content
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const attributionBtn = buttons.find(btn => btn.textContent && btn.textContent.includes('Attribution & Data Sources'));
+    if (!attributionBtn) return;
 
-  // Find or create the content region after the button
-  let attributionContent = attributionBtn.nextElementSibling;
-  if (!attributionContent || !attributionContent.classList.contains('pg-attribution-content')) {
-    attributionContent = document.createElement('div');
-    attributionContent.className = 'pg-attribution-content';
-    attributionContent.style.display = 'none';
-    attributionContent.innerHTML = `
+    // Find or create the chevron (assume first child span or create one)
+    let chevron = attributionBtn.querySelector('span');
+    if (!chevron) {
+      chevron = document.createElement('span');
+      chevron.textContent = '▶';
+      attributionBtn.insertBefore(chevron, attributionBtn.firstChild);
+    }
+
+    // Find or create the content region after the button
+    let attributionContent = attributionBtn.nextElementSibling;
+    if (!attributionContent || !attributionContent.classList.contains('pg-attribution-content')) {
+      attributionContent = document.createElement('div');
+      attributionContent.className = 'pg-attribution-content';
+      attributionContent.style.display = 'none';
+      attributionContent.innerHTML = `
       <div style="padding: 1em; background: #f9f9f9; border-radius: 6px; margin-top: 0.5em;">
         <b>Attribution & Data Sources</b><br>
         <ul style="margin: 0.5em 0 0 1em;">
@@ -3806,16 +3857,16 @@ function attachAttributionCollapseLogic() {
         </ul>
       </div>
     `;
-    attributionBtn.parentNode.insertBefore(attributionContent, attributionBtn.nextSibling);
-  }
+      attributionBtn.parentNode.insertBefore(attributionContent, attributionBtn.nextSibling);
+    }
 
-  // Attach click handler to toggle
-  attributionBtn.addEventListener('click', function () {
-    const expanded = attributionContent.style.display !== 'none';
-    attributionContent.style.display = expanded ? 'none' : 'block';
-    chevron.textContent = expanded ? '▶' : '▼';
-  });
-}
+    // Attach click handler to toggle
+    attributionBtn.addEventListener('click', function () {
+      const expanded = attributionContent.style.display !== 'none';
+      attributionContent.style.display = expanded ? 'none' : 'block';
+      chevron.textContent = expanded ? '▶' : '▼';
+    });
+  }
 
   function buildMaskCharacters(length) {
     const cap = Math.min(Math.max(Number(length) || LOCKED_HINT_PLACEHOLDER.length, LOCKED_HINT_PLACEHOLDER.length), 64);
