@@ -113,6 +113,26 @@
 
   prunePersistedState();
 
+  async function parseJsonResponse(resp, context) {
+    if (!resp) {
+      throw new Error(`No response for ${context}`);
+    }
+    const clone = resp.clone();
+    try {
+      return await resp.json();
+    } catch (err) {
+      let raw = '';
+      try {
+        raw = await clone.text();
+      } catch (textErr) {
+        raw = `[unreadable: ${textErr?.message || textErr}]`;
+      }
+      const snippet = typeof raw === 'string' && raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
+      console.error(`[Geneguessr] ${context} JSON parse failed`, snippet, err);
+      throw new Error(`Invalid JSON in ${context}`);
+    }
+  }
+
   function hasStructureData(protein) {
     if (!protein) {
       return false;
@@ -599,9 +619,14 @@
         credentials: 'include'
       });
       if (!resp.ok) {
+          if (resp.status === 404) {
+            console.warn('Geneguessr: target structure unavailable (404)');
+            targetStructureInfo = null;
+            return null;
+          }
         throw new Error(`Token request failed: ${resp.status}`);
       }
-      const data = await resp.json();
+      const data = await parseJsonResponse(resp, 'target structure token');
       if (!data || !data.token) {
         throw new Error('Missing token in response');
       }
@@ -634,9 +659,14 @@
         credentials: 'include'
       });
       if (!resp.ok) {
+        if (resp.status === 404) {
+          console.warn('Geneguessr: structure unavailable for', key);
+          structureTokenCache.set(key, null);
+          return null;
+        }
         throw new Error(`Token request failed: ${resp.status}`);
       }
-      const data = await resp.json();
+      const data = await parseJsonResponse(resp, `structure token ${key}`);
       if (!data || !data.token) {
         throw new Error('Missing token in response');
       }
@@ -1436,6 +1466,8 @@
           viewerStructureInfo.set(containerId, info);
           return info;
         }
+        viewerStructureInfo.set(containerId, { unavailable: true });
+        return null;
       } else {
         const uniprot = sourceSpec?.id || protein?.uniprot;
         if (uniprot) {
@@ -1444,6 +1476,8 @@
             viewerStructureInfo.set(containerId, info);
             return info;
           }
+          viewerStructureInfo.set(containerId, { unavailable: true });
+          return null;
         }
       }
     } catch (err) {
