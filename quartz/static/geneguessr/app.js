@@ -1492,22 +1492,27 @@
 
   async function loadStructureViewerInContainer(container, protein) {
     if (!container || !protein) {
+      console.warn('[Geneguessr] loadStructureViewerInContainer: missing container or protein', { container: !!container, protein: !!protein });
       return;
     }
     
     const containerId = container.id;
     if (renderedViewers.has(containerId)) {
+      console.debug('[Geneguessr] loadStructureViewerInContainer: already rendered', containerId);
       return;
     }
     const placeholder = document.getElementById(`${containerId}-placeholder`);
     const loadingEl = document.getElementById(`${containerId}-loading`);
     const errorEl = document.getElementById(`${containerId}-error`);
     let structureInfo = viewerStructureInfo.get(containerId);
+    console.debug('[Geneguessr] loadStructureViewerInContainer: initial structureInfo', containerId, structureInfo);
     if (!structureInfo || !structureInfo.token) {
       structureInfo = await resolveStructureInfoForViewer(containerId, protein);
+      console.debug('[Geneguessr] loadStructureViewerInContainer: resolved structureInfo', containerId, structureInfo);
     }
     
     if (structureInfo && structureInfo.unavailable) {
+      console.warn('[Geneguessr] loadStructureViewerInContainer: structureInfo marked unavailable', containerId);
       if (errorEl) {
         errorEl.textContent = 'Structure unavailable.';
         errorEl.hidden = false;
@@ -1516,6 +1521,7 @@
     }
     
     if (!structureInfo || !structureInfo.token) {
+      console.warn('[Geneguessr] loadStructureViewerInContainer: no structureInfo or token', containerId, structureInfo);
       if (errorEl) {
         errorEl.textContent = 'Structure unavailable.';
         errorEl.hidden = false;
@@ -1524,7 +1530,9 @@
     }
     
     const structureUrl = structureInfo.internalUrl || structureInfo.url;
+    console.debug('[Geneguessr] loadStructureViewerInContainer: structureUrl resolved', containerId, structureUrl);
     if (!structureUrl) {
+      console.warn('[Geneguessr] loadStructureViewerInContainer: no structureUrl', containerId, structureInfo);
       if (errorEl) {
         errorEl.textContent = 'No 3D structure available for this protein.';
         errorEl.hidden = false;
