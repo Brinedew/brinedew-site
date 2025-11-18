@@ -10,6 +10,7 @@ const eligibleCache = {
   fetchedAt: 0,
   ttl: 5 * 60 * 1000
 };
+let structureFailureTableEnsured = false;
 
 function normalizeKey(uniprot) {
   return (uniprot || '').toUpperCase();
@@ -191,10 +192,46 @@ export async function fetchProteinEmbedding(db, uniprot) {
   return vector;
 }
 
+async function ensureStructureFailureTable(db) {
+  if (!db || structureFailureTableEnsured) {
+    return;
+  }
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS structure_failures (
+       uniprot TEXT PRIMARY KEY,
+       failed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+     )`
+  ).run();
+  structureFailureTableEnsured = true;
+}
+
+export async function markStructureFailure(db, uniprot) {
+  if (!db || !uniprot) {
+    return;
+  }
+  await ensureStructureFailureTable(db);
+  await db.prepare(
+    `INSERT INTO structure_failures (uniprot, failed_at)
+     VALUES (upper(?), CURRENT_TIMESTAMP)
+     ON CONFLICT(uniprot) DO UPDATE SET failed_at = excluded.failed_at`
+  ).bind(uniprot).run();
+}
+
+export async function clearStructureFailure(db, uniprot) {
+  if (!db || !uniprot) {
+    return;
+  }
+  await ensureStructureFailureTable(db);
+  await db.prepare(
+    `DELETE FROM structure_failures WHERE uniprot = upper(?)`
+  ).bind(uniprot).run();
+}
+
 export async function searchProteins(db, query, limit = 20) {
   if (!query || !query.trim()) {
     return [];
   }
+  await ensureStructureFailureTable(db);
   const needle = query.trim().toLowerCase();
   const wildcard = `%${needle}%`;
   const prefix = `${needle}%`;
@@ -216,7 +253,10 @@ export async function searchProteins(db, query, limit = 20) {
         ) AS match_rank
       FROM proteins p
       LEFT JOIN protein_synonyms s ON s.protein_id = p.id
-      WHERE lower(p.hgnc) LIKE ? OR lower(p.full_name) LIKE ? OR s.normalized LIKE ?
+      LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
+      WHERE (lower(p.hgnc) LIKE ? OR lower(p.full_name) LIKE ? OR s.normalized LIKE ?)
+        AND json_extract(p.metadata, '$.structure.primary_source') IS NOT NULL
+        AND sf.uniprot IS NULL
       GROUP BY p.id
       ORDER BY match_rank ASC, lower(p.hgnc) ASC
       LIMIT ?`;
@@ -248,10 +288,12 @@ export async function getEligibleProteinIds(db) {
   if (eligibleCache.ids && (now - eligibleCache.fetchedAt) < eligibleCache.ttl) {
     return eligibleCache.ids.slice();
   }
+  await ensureStructureFailureTable(db);
   const fetchIds = async (clause) => {
     const statement = `
-      SELECT uniprot
-      FROM proteins
+      SELECT p.uniprot
+      FROM proteins p
+      LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
       ${clause}
     `;
     const { results } = await db.prepare(statement).all();
@@ -260,15 +302,10 @@ export async function getEligibleProteinIds(db) {
   let ids = [];
   try {
     ids = await fetchIds(
-      `WHERE has_structure = 1
-         AND json_extract(metadata, '$.gene_summary') IS NOT NULL`
+      `WHERE json_extract(p.metadata, '$.structure.primary_source') IS NOT NULL
+         AND json_extract(p.metadata, '$.gene_summary') IS NOT NULL
+         AND sf.uniprot IS NULL`
     );
-    if (!ids.length) {
-      // If no high-confidence structures exist yet, fall back to well-annotated entries (incl. Alphafold).
-      ids = await fetchIds(
-        `WHERE json_extract(metadata, '$.gene_summary') IS NOT NULL`
-      );
-    }
   } catch (err) {
     console.warn('GeneGuessr: D1 getEligibleProteinIds failed', err);
     ids = [];

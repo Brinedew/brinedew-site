@@ -49,7 +49,9 @@ import {
   searchProteins,
   getEligibleProteinIds,
   pickDailyTarget,
-  getGoSimilarityFromEmbeddings
+  getGoSimilarityFromEmbeddings,
+  markStructureFailure,
+  clearStructureFailure
 } from './lib/protein-store.js';
 import { resolveStructureRepresentation } from './lib/structure-utils.js';
 
@@ -551,7 +553,7 @@ async function handleStructureToken(request, env) {
     if (!protein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
     }
-    const meta = await getCanonicalStructureMeta(protein);
+    const meta = await getCanonicalStructureMeta(protein, env);
     if (!meta) {
       return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
     }
@@ -572,7 +574,7 @@ async function handleStructureToken(request, env) {
   // For structure tokens, we don't require the protein to be in the database
   // Structure discovery works from UniProt APIs directly
   const protein = { uniprot }; // Minimal protein object for structure discovery
-  const meta = await getCanonicalStructureMeta(protein);
+  const meta = await getCanonicalStructureMeta(protein, env);
   if (!meta) {
     return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
   }
@@ -1044,7 +1046,7 @@ async function safeJson(request) {
   }
 }
 
-async function getCanonicalStructureMeta(protein) {
+async function getCanonicalStructureMeta(protein, env) {
   if (!protein) {
     return null;
   }
@@ -1170,12 +1172,16 @@ async function getCanonicalStructureMeta(protein) {
   }
   
   if (!selected) {
+    if (env?.DB && protein?.uniprot) {
+      await markStructureFailure(env.DB, protein.uniprot);
+    }
     return null;
   }
   
   // Build meta for selected candidate
+  let meta = null;
   if (selected.source === 'pdb') {
-    return {
+    meta = {
       source: 'pdb',
       r2Key: `pdb/${selected.id}.cif`,
       upstreamUrl: selected.upstreamUrl,
@@ -1186,7 +1192,7 @@ async function getCanonicalStructureMeta(protein) {
   } else if (selected.source === 'swissmodel') {
     const ext = getFileExtensionFromUrl(selected.upstreamUrl);
     const normalizedFormat = ext === 'pdb' ? 'pdb' : (ext === 'bcif' ? 'bcif' : 'cif');
-    return {
+    meta = {
       source: 'swissmodel',
       r2Key: `swissmodel/${sanitizeKeySegment(selected.id)}.${ext}`,
       upstreamUrl: selected.upstreamUrl,
@@ -1195,7 +1201,7 @@ async function getCanonicalStructureMeta(protein) {
       format: normalizedFormat
     };
   } else if (selected.source === 'alphafold') {
-    return {
+    meta = {
       source: 'alphafold',
       r2Key: `alphafold/${sanitizeKeySegment(selected.id)}.cif`,
       upstreamUrl: selected.upstreamUrl,
@@ -1204,8 +1210,17 @@ async function getCanonicalStructureMeta(protein) {
       format: 'cif'
     };
   }
-  
-  return null;
+
+  if (!meta) {
+    if (env?.DB && protein?.uniprot) {
+      await markStructureFailure(env.DB, protein.uniprot);
+    }
+    return null;
+  }
+  if (env?.DB && protein?.uniprot) {
+    await clearStructureFailure(env.DB, protein.uniprot);
+  }
+  return meta;
 }
 
 async function getStructureBucketUsage(env) {

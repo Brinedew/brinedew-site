@@ -63,6 +63,56 @@
     reportError('unhandled-rejection', message);
   });
 
+  function safeJsonParse(raw, options = {}) {
+    const {
+      label = 'value',
+      storageKey,
+      storageArea = 'local',
+      fallback = null
+    } = options;
+    if (typeof raw !== 'string' || !raw.length) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      const preview = raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
+      console.error(`[Geneguessr] Failed to parse ${label}`, preview, err);
+      if (storageKey) {
+        try {
+          const storage = storageArea === 'session' ? sessionStorage : localStorage;
+          storage.removeItem(storageKey);
+        } catch (storageErr) {
+          console.warn('Geneguessr: unable to clear corrupt storage for', storageKey, storageErr);
+        }
+      }
+      return fallback;
+    }
+  }
+
+  function prunePersistedState() {
+    try {
+      safeJsonParse(localStorage.getItem('geneguessr_stats'), {
+        label: 'stats cache',
+        storageKey: 'geneguessr_stats',
+        storageArea: 'local'
+      });
+    } catch {
+      // ignore localStorage access issues
+    }
+    try {
+      safeJsonParse(sessionStorage.getItem('guessCardStates'), {
+        label: 'guessCardStates',
+        storageKey: 'guessCardStates',
+        storageArea: 'session'
+      });
+    } catch {
+      // ignore sessionStorage access issues
+    }
+  }
+
+  prunePersistedState();
+
   function hasStructureData(protein) {
     if (!protein) {
       return false;
@@ -2701,13 +2751,12 @@ function markGuessViewersDirty() {
     try {
       const stored = sessionStorage.getItem('guessCardStates');
       if (stored) {
-        let states;
-        try {
-          states = JSON.parse(stored);
-        } catch (err) {
-          console.warn('Geneguessr: invalid guessCardStates in sessionStorage, resetting', err);
-          states = {};
-        }
+        const states = safeJsonParse(stored, {
+          label: 'guessCardStates',
+          storageKey: 'guessCardStates',
+          storageArea: 'session',
+          fallback: {}
+        }) || {};
         if (cardId in states) {
           return states[cardId];
         }
@@ -2724,12 +2773,12 @@ function markGuessViewersDirty() {
       const stored = sessionStorage.getItem('guessCardStates');
       let states = {};
       if (stored) {
-        try {
-          states = JSON.parse(stored) || {};
-        } catch (err) {
-          console.warn('Geneguessr: invalid guessCardStates in sessionStorage, resetting', err);
-          states = {};
-        }
+        states = safeJsonParse(stored, {
+          label: 'guessCardStates',
+          storageKey: 'guessCardStates',
+          storageArea: 'session',
+          fallback: {}
+        }) || {};
       }
       states[cardId] = expanded;
       sessionStorage.setItem('guessCardStates', JSON.stringify(states));
@@ -2949,14 +2998,13 @@ function markGuessViewersDirty() {
   function loadStats() {
     const saved = localStorage.getItem('geneguessr_stats');
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Validate basic shape
-        if (parsed && typeof parsed === 'object') {
-          return parsed;
-        }
-      } catch (err) {
-        console.warn('Geneguessr: corrupt stats in localStorage, resetting', err);
+      const parsed = safeJsonParse(saved, {
+        label: 'stats cache',
+        storageKey: 'geneguessr_stats',
+        storageArea: 'local'
+      });
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
       }
     }
     return {
