@@ -557,13 +557,18 @@ async function handleStructureToken(request, env) {
     if (!meta) {
       return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
     }
+    const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
+    if (!cached) {
+      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+    }
     const token = await createStructureToken(env, meta);
+    const structureUrl = `${url.origin}/api/structure?token=${token}`;
     return Response.json({
       token,
       sourceLabel: meta.shortLabel,
       displayLabel: meta.displayLabel,
       format: meta.format || 'cif',
-      url: meta.upstreamUrl
+      url: structureUrl
     }, { headers: CORS_HEADERS });
   }
 
@@ -578,13 +583,18 @@ async function handleStructureToken(request, env) {
   if (!meta) {
     return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
   }
+  const cached = await ensureStructureCached(env, meta, { proteinId: uniprot });
+  if (!cached) {
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+  }
   const token = await createStructureToken(env, meta);
+  const structureUrl = `${url.origin}/api/structure?token=${token}`;
   return Response.json({
     token,
     sourceLabel: meta.shortLabel,
     displayLabel: meta.displayLabel,
     format: meta.format || 'cif',
-    url: meta.upstreamUrl
+    url: structureUrl
   }, { headers: CORS_HEADERS });
 }
 
@@ -598,52 +608,18 @@ async function handleStructureFetch(request, env) {
   if (!record) {
     return Response.json({ error: 'Invalid or expired token' }, { status: 410, headers: CORS_HEADERS });
   }
-  const { r2Key, upstreamUrl } = record;
+  const { r2Key } = record;
   if (!r2Key) {
     return Response.json({ error: 'Token missing key' }, { status: 500, headers: CORS_HEADERS });
   }
-  let object = await env.STRUCTURES_BUCKET.get(r2Key);
-  if (!object) {
-    let usage = await getStructureBucketUsage(env);
-    if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
-      const targetBytes = Math.floor(STRUCTURE_BUCKET_CAP_BYTES * STRUCTURE_CACHE_TARGET_RATIO);
-      const eviction = await evictStructureCache(env, targetBytes);
-      if (eviction.removed > 0) {
-        console.warn('GeneGuessr: structure cache eviction', eviction);
-      }
-      usage = { bytes: eviction.afterBytes };
-      if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
-        return Response.json({
-          error: 'Structure downloads temporarily paused',
-          detail: 'Storage cap reached. Please try again later.'
-        }, { status: 507, headers: CORS_HEADERS });
-      }
-    }
-    if (!upstreamUrl) {
-      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
-    }
-    const upstreamResp = await fetch(upstreamUrl, {
-      method: 'GET',
-      headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
-    });
-    if (!upstreamResp.ok) {
-      return new Response(upstreamResp.body, { status: upstreamResp.status, headers: CORS_HEADERS });
-    }
-    const arrayBuffer = await upstreamResp.arrayBuffer();
-    await env.STRUCTURES_BUCKET.put(r2Key, arrayBuffer, {
-      httpMetadata: {
-        contentType: upstreamResp.headers.get('Content-Type') || 'application/octet-stream'
-      }
-    });
-    await recordStructureCacheEntry(env, r2Key, arrayBuffer.byteLength);
-    return new Response(arrayBuffer, {
-      headers: {
-        ...CORS_HEADERS,
-        'Content-Type': upstreamResp.headers.get('Content-Type') || 'application/octet-stream'
-      }
-    });
+  const cached = await ensureStructureCached(env, record);
+  if (!cached) {
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
   }
-
+  const object = await env.STRUCTURES_BUCKET.get(r2Key);
+  if (!object) {
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+  }
   await touchStructureCacheEntry(env, r2Key, object.size);
   return new Response(object.body, {
     headers: {
@@ -1221,6 +1197,77 @@ async function getCanonicalStructureMeta(protein, env) {
     await clearStructureFailure(env.DB, protein.uniprot);
   }
   return meta;
+}
+
+async function structureObjectExists(env, key) {
+  if (!env?.STRUCTURES_BUCKET || !key) {
+    return false;
+  }
+  try {
+    if (typeof env.STRUCTURES_BUCKET.head === 'function') {
+      const head = await env.STRUCTURES_BUCKET.head(key);
+      return Boolean(head);
+    }
+    const existing = await env.STRUCTURES_BUCKET.get(key);
+    if (existing?.body && typeof existing.body.cancel === 'function') {
+      try {
+        await existing.body.cancel();
+      } catch {
+        // ignore
+      }
+    }
+    return Boolean(existing);
+  } catch {
+    return false;
+  }
+}
+
+async function ensureStructureCached(env, meta, options = {}) {
+  if (!meta?.r2Key) {
+    return false;
+  }
+  const exists = await structureObjectExists(env, meta.r2Key);
+  if (exists) {
+    return true;
+  }
+  if (!meta.upstreamUrl) {
+    if (options?.proteinId && env?.DB) {
+      await markStructureFailure(env.DB, options.proteinId);
+    }
+    return false;
+  }
+  let usage = await getStructureBucketUsage(env);
+  if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
+    const targetBytes = Math.floor(STRUCTURE_BUCKET_CAP_BYTES * STRUCTURE_CACHE_TARGET_RATIO);
+    const eviction = await evictStructureCache(env, targetBytes);
+    if (eviction.removed > 0) {
+      console.warn('GeneGuessr: structure cache eviction', eviction);
+    }
+    usage = { bytes: eviction.afterBytes };
+    if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
+      console.error('GeneGuessr: structure cache still full after eviction');
+      return false;
+    }
+  }
+  const upstreamResp = await fetch(meta.upstreamUrl, {
+    method: 'GET',
+    headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
+  });
+  if (!upstreamResp.ok) {
+    console.warn('GeneGuessr: upstream structure fetch failed', meta.upstreamUrl, upstreamResp.status);
+    return false;
+  }
+  const arrayBuffer = await upstreamResp.arrayBuffer();
+  await env.STRUCTURES_BUCKET.put(meta.r2Key, arrayBuffer, {
+    httpMetadata: {
+      contentType: upstreamResp.headers.get('Content-Type') || 'application/octet-stream'
+    }
+  });
+  await recordStructureCacheEntry(env, meta.r2Key, arrayBuffer.byteLength);
+  if (options?.proteinId && env?.DB) {
+    await clearStructureFailure(env.DB, options.proteinId);
+  }
+  return true;
 }
 
 async function getStructureBucketUsage(env) {
