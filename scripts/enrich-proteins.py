@@ -12,6 +12,12 @@ Outputs:
     - Updated frontmatter in protein pages
     - image_generation_queue.txt with prompts for missing images
 """
+"""
+Enriches markdown frontmatter and generates image prompts for protein pages.
+
+Note: This script is for local/manual use only. Do not run as part of CI/CD workflows.
+Run locally after updating markdown or metadata. Large files are not tracked in git.
+"""
 
 import sys
 import json
