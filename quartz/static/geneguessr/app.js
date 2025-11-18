@@ -2692,7 +2692,13 @@ function markGuessViewersDirty() {
     try {
       const stored = sessionStorage.getItem('guessCardStates');
       if (stored) {
-        const states = JSON.parse(stored);
+        let states;
+        try {
+          states = JSON.parse(stored);
+        } catch (err) {
+          console.warn('Geneguessr: invalid guessCardStates in sessionStorage, resetting', err);
+          states = {};
+        }
         if (cardId in states) {
           return states[cardId];
         }
@@ -2707,7 +2713,15 @@ function markGuessViewersDirty() {
   function setCardExpansionState(cardId, expanded) {
     try {
       const stored = sessionStorage.getItem('guessCardStates');
-      const states = stored ? JSON.parse(stored) : {};
+      let states = {};
+      if (stored) {
+        try {
+          states = JSON.parse(stored) || {};
+        } catch (err) {
+          console.warn('Geneguessr: invalid guessCardStates in sessionStorage, resetting', err);
+          states = {};
+        }
+      }
       states[cardId] = expanded;
       sessionStorage.setItem('guessCardStates', JSON.stringify(states));
     } catch (e) {
