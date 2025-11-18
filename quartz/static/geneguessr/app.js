@@ -714,7 +714,7 @@
   }
 
   function renderStructureViewer(protein, viewerId, options = {}) {
-    if (!protein || !hasStructureData(protein)) {
+    if (!protein) {
       return '';
     }
     const linkable = Boolean(options.linkable);
@@ -784,7 +784,7 @@
   function setupStructureInteractions() {
     // Auto-load structure viewer for clue card if present
     const clueViewer = document.getElementById('pg-clue-structure');
-    if (clueViewer && hasStructureData(targetProtein) && !renderedViewers.has('pg-clue-structure')) {
+    if (clueViewer && !renderedViewers.has('pg-clue-structure')) {
       loadStructureViewerInContainer(clueViewer, targetProtein).catch((err) => {
         console.error('Geneguessr: failed to load clue structure viewer', err);
       });
@@ -793,7 +793,7 @@
     // Auto-load structure viewer for solution card if present (game over)
     const solutionViewer = document.getElementById('pg-solution-card-structure');
     const solutionTarget = targetReveal || targetProtein;
-    if (solutionViewer && hasStructureData(solutionTarget) && !renderedViewers.has('pg-solution-card-structure')) {
+    if (solutionViewer && !renderedViewers.has('pg-solution-card-structure')) {
       loadStructureViewerInContainer(solutionViewer, solutionTarget).catch((err) => {
         console.error('Geneguessr: failed to load solution structure viewer', err);
       });
@@ -804,7 +804,7 @@
       const viewerId = `guess-card-${guess.guessId}-structure`;
       const container = document.getElementById(viewerId);
       const guessProtein = guess.proteinResolved || guess.protein;
-      if (container && hasStructureData(guessProtein) && !renderedViewers.has(viewerId)) {
+      if (container && !renderedViewers.has(viewerId)) {
         loadStructureViewerInContainer(container, guessProtein).catch((err) => {
           console.error(`Geneguessr: failed to load structure viewer for guess ${guess.guessId}`, err);
         });
@@ -1491,7 +1491,7 @@
   }
 
   async function loadStructureViewerInContainer(container, protein) {
-    if (!container || !protein || !hasStructureData(protein)) {
+    if (!container || !protein) {
       return;
     }
     
