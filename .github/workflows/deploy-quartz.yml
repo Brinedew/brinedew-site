@@ -61,6 +61,10 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: npm install -g wrangler@4
 
+      - name: Build Geneguessr data (main only)
+        if: github.ref == 'refs/heads/main'
+        run: python scripts/build-geneguessr-data.py
+
       - name: Seed D1 protein data (main only)
         if: github.ref == 'refs/heads/main'
         env:
