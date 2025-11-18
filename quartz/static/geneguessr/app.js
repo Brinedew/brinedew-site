@@ -630,12 +630,14 @@
       if (!data || !data.token) {
         throw new Error('Missing token in response');
       }
+      const resolvedUrl = `${API_BASE}/api/structure?token=${encodeURIComponent(data.token)}`;
       targetStructureInfo = {
         token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
         format: data.format || 'cif',
-        url: data.url
+        url: data.url || resolvedUrl,
+        internalUrl: resolvedUrl
       };
       return targetStructureInfo;
     } catch (err) {
@@ -670,13 +672,15 @@
       if (!data || !data.token) {
         throw new Error('Missing token in response');
       }
-      console.log('Geneguessr: token response data:', data);
+      const resolvedUrl = `${API_BASE}/api/structure?token=${encodeURIComponent(data.token)}`;
+      console.debug('Geneguessr: token response data:', data);
       const info = {
         token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
         format: data.format || 'cif',
-        url: data.url
+        url: data.url || resolvedUrl,
+        internalUrl: resolvedUrl
       };
       structureTokenCache.set(key, info);
       return info;
@@ -1503,6 +1507,14 @@
       structureInfo = await resolveStructureInfoForViewer(containerId, protein);
     }
     
+    if (structureInfo && structureInfo.unavailable) {
+      if (errorEl) {
+        errorEl.textContent = 'Structure unavailable.';
+        errorEl.hidden = false;
+      }
+      return;
+    }
+    
     if (!structureInfo || !structureInfo.token) {
       if (errorEl) {
         errorEl.textContent = 'Structure unavailable.';
@@ -1511,7 +1523,8 @@
       return;
     }
     
-    if (!structureInfo.url) {
+    const structureUrl = structureInfo.internalUrl || structureInfo.url;
+    if (!structureUrl) {
       if (errorEl) {
         errorEl.textContent = 'No 3D structure available for this protein.';
         errorEl.hidden = false;
@@ -1535,8 +1548,8 @@
     const options = {
       moleculeId,
       customData: {
-        url: structureInfo.url,
-        format: structureInfo.format || 'cif'
+        url: structureUrl,
+        format: detectStructureFormat(structureUrl, structureInfo.format)
       }
     };
     console.debug('[Geneguessr] Mol* options', options, 'containerId', containerId);
