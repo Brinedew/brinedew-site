@@ -1886,9 +1886,18 @@ function markGuessViewersDirty() {
     if (solvedOrExhausted && targetReveal?.uniprot) {
       tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
     }
-    Promise.allSettled(tokenTasks).catch((err) => {
-      console.warn('Geneguessr: structure token hydration deferred with errors', err);
-    });
+    Promise.allSettled(tokenTasks)
+      .then(() => {
+        try {
+          // Once tokens are hydrated, attempt to load any pending viewers
+          setupStructureInteractions();
+        } catch (err) {
+          console.warn('Geneguessr: error while initializing viewers after token hydration', err);
+        }
+      })
+      .catch((err) => {
+        console.warn('Geneguessr: structure token hydration deferred with errors', err);
+      });
   }
   
   /**
