@@ -248,12 +248,27 @@ export async function getEligibleProteinIds(db) {
   if (eligibleCache.ids && (now - eligibleCache.fetchedAt) < eligibleCache.ttl) {
     return eligibleCache.ids.slice();
   }
+  const fetchIds = async (clause) => {
+    const statement = `
+      SELECT uniprot
+      FROM proteins
+      ${clause}
+    `;
+    const { results } = await db.prepare(statement).all();
+    return (results || []).map((row) => row.uniprot);
+  };
   let ids = [];
   try {
-    const { results } = await db.prepare(
-      `SELECT uniprot FROM proteins WHERE has_structure = 1`
-    ).all();
-    ids = (results || []).map((row) => row.uniprot);
+    ids = await fetchIds(
+      `WHERE has_structure = 1
+         AND json_extract(metadata, '$.gene_summary') IS NOT NULL`
+    );
+    if (!ids.length) {
+      // If no high-confidence structures exist yet, fall back to well-annotated entries (incl. Alphafold).
+      ids = await fetchIds(
+        `WHERE json_extract(metadata, '$.gene_summary') IS NOT NULL`
+      );
+    }
   } catch (err) {
     console.warn('GeneGuessr: D1 getEligibleProteinIds failed', err);
     ids = [];

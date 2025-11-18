@@ -560,7 +560,8 @@ async function handleStructureToken(request, env) {
       token,
       sourceLabel: meta.shortLabel,
       displayLabel: meta.displayLabel,
-      format: meta.format || 'cif'
+      format: meta.format || 'cif',
+      url: meta.upstreamUrl
     }, { headers: CORS_HEADERS });
   }
 
@@ -568,10 +569,9 @@ async function handleStructureToken(request, env) {
   if (!uniprot) {
     return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: CORS_HEADERS });
   }
-  const protein = await fetchProteinByUniprot(env.DB, uniprot);
-  if (!protein) {
-    return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
-  }
+  // For structure tokens, we don't require the protein to be in the database
+  // Structure discovery works from UniProt APIs directly
+  const protein = { uniprot }; // Minimal protein object for structure discovery
   const meta = await getCanonicalStructureMeta(protein);
   if (!meta) {
     return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
@@ -581,7 +581,8 @@ async function handleStructureToken(request, env) {
     token,
     sourceLabel: meta.shortLabel,
     displayLabel: meta.displayLabel,
-    format: meta.format || 'cif'
+    format: meta.format || 'cif',
+    url: meta.upstreamUrl
   }, { headers: CORS_HEADERS });
 }
 
@@ -1044,60 +1045,166 @@ async function safeJson(request) {
 }
 
 async function getCanonicalStructureMeta(protein) {
-  if (!protein || !protein.structure) {
+  if (!protein) {
     return null;
   }
-  const representation = resolveStructureRepresentation(protein.structure, protein.length || 0);
-  if (!representation) {
+  
+  // Selection thresholds (match seeder)
+  const COVERAGE_THRESHOLD = 0.60;
+  const PDB_RESOLUTION_MAX = 4.0;
+  const AF_PLDDT_MIN = 50;
+  
+  // Source preference order: PDB -> SWISS-MODEL -> AlphaFold
+  const SOURCE_PREFERENCE = ['pdb', 'swissmodel', 'alphafold'];
+  
+  // Discover candidates
+  const candidates = [];
+  
+  // PDB candidates
+  try {
+    const pdbUrl = `https://www.ebi.ac.uk/pdbe/api/mappings/best_structures/${protein.uniprot}`;
+    const pdbResp = await fetch(pdbUrl, { timeout: 20000 });
+    if (pdbResp.ok) {
+      const pdbData = await pdbResp.json();
+      const pdbMappings = pdbData[protein.uniprot] || [];
+      for (const m of pdbMappings) {
+        const pdbId = (m.pdb_id || '').toUpperCase();
+        if (!pdbId) continue;
+        const coverage = m.coverage || 0.0;
+        const resolution = m.resolution;
+        // Only include X-ray diffraction structures with reasonable resolution
+        if (m.experimental_method === 'X-ray diffraction' && resolution && resolution <= PDB_RESOLUTION_MAX) {
+          candidates.push({
+            source: 'pdb',
+            id: pdbId,
+            upstreamUrl: `https://files.rcsb.org/download/${pdbId}.cif`,
+            coverage,
+            quality: resolution,  // resolution as quality metric
+            raw: m
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('GeneGuessr: failed to fetch PDB mappings for', protein.uniprot, err);
+  }
+  
+  // AlphaFold candidate
+  try {
+    const afUrl = `https://alphafold.ebi.ac.uk/api/prediction/${protein.uniprot}`;
+    const afResp = await fetch(afUrl, { timeout: 10000 });
+    if (afResp.ok) {
+      const afData = await afResp.json();
+      if (Array.isArray(afData) && afData.length > 0) {
+        // Pick the best model (highest globalMetricValue)
+        const best = afData.reduce((a, b) => (a.globalMetricValue > b.globalMetricValue ? a : b));
+        if (best.cifUrl) {
+          candidates.push({
+            source: 'alphafold',
+            id: protein.uniprot,
+            upstreamUrl: best.cifUrl,
+            coverage: 1.0,
+            quality: best.globalMetricValue
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('GeneGuessr: failed to fetch AlphaFold for', protein.uniprot, err);
+  }
+  
+  // SWISS-MODEL candidates
+  try {
+    const swissUrl = `https://swissmodel.expasy.org/repository/uniprot/${protein.uniprot}.json`;
+    const swissResp = await fetch(swissUrl, { timeout: 20000 });
+    if (swissResp.ok) {
+      const swissData = await swissResp.json();
+      const structures = swissData.result?.structures || [];
+      for (const s of structures) {
+        if (s.provider === 'SWISSMODEL' && s.method === 'HOMOLOGY MODELLING') {
+          const coverage = s.coverage || 0.0;
+          const gmqe = s.gmqe;
+          const cifUrl = s.modelcif;
+          if (cifUrl && coverage >= COVERAGE_THRESHOLD && gmqe && gmqe >= 0.5) {
+            candidates.push({
+              source: 'swissmodel',
+              id: `${protein.uniprot}_swissmodel_${s.template || 'unknown'}`,
+              upstreamUrl: cifUrl,
+              coverage,
+              quality: gmqe,
+              raw: s
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('GeneGuessr: failed to fetch SWISS-MODEL for', protein.uniprot, err);
+  }
+  
+  // Select best candidate following SOURCE_PREFERENCE
+  let selected = null;
+  for (const source of SOURCE_PREFERENCE) {
+    if (source === 'pdb') {
+      const pdbs = candidates.filter(c => c.source === 'pdb' && c.coverage >= COVERAGE_THRESHOLD);
+      if (pdbs.length > 0) {
+        pdbs.sort((a, b) => b.coverage - a.coverage || (a.quality || Infinity) - (b.quality || Infinity));  // Higher coverage, lower resolution better
+        selected = pdbs[0];
+        break;
+      }
+    } else if (source === 'swissmodel') {
+      const swiss = candidates.filter(c => c.source === 'swissmodel' && c.coverage >= COVERAGE_THRESHOLD && (c.quality || 0) >= 0.5);
+      if (swiss.length > 0) {
+        swiss.sort((a, b) => b.coverage - a.coverage || b.quality - a.quality);  // Higher coverage, higher GMQE better
+        selected = swiss[0];
+        break;
+      }
+    } else if (source === 'alphafold') {
+      const af = candidates.filter(c => c.source === 'alphafold');
+      if (af.length > 0) {
+        af.sort((a, b) => (b.quality || 0) - (a.quality || 0));  // Higher pLDDT better
+        selected = af[0];
+        break;
+      }
+    }
+  }
+  
+  if (!selected) {
     return null;
   }
-  if (representation.source === 'pdb' && representation.pdb && representation.pdb.id) {
-    const id = representation.pdb.id.toUpperCase();
+  
+  // Build meta for selected candidate
+  if (selected.source === 'pdb') {
     return {
       source: 'pdb',
-      r2Key: `pdb/${id}.cif`,
-      upstreamUrl: `https://files.rcsb.org/download/${id}.cif`,
+      r2Key: `pdb/${selected.id}.cif`,
+      upstreamUrl: selected.upstreamUrl,
       shortLabel: 'PDB',
-      displayLabel: `PDB (${id})`,
+      displayLabel: `PDB (${selected.id})`,
       format: 'cif'
     };
-  }
-  if (representation.source === 'swissmodel' && representation.swissModel) {
-    const url = representation.swissModel.coordinates_url ||
-      representation.swissModel.coordinatesUrl ||
-      representation.swissModel.model_url ||
-      representation.swissModel.modelcif;
-    if (!url) {
-      return null;
-    }
-    const ext = getFileExtensionFromUrl(url);
-    const structureId = sanitizeKeySegment(
-      representation.structureId ||
-      representation.swissModel.model_id ||
-      representation.swissModel.template ||
-      protein.uniprot
-    );
+  } else if (selected.source === 'swissmodel') {
+    const ext = getFileExtensionFromUrl(selected.upstreamUrl);
     const normalizedFormat = ext === 'pdb' ? 'pdb' : (ext === 'bcif' ? 'bcif' : 'cif');
     return {
       source: 'swissmodel',
-      r2Key: `swissmodel/${structureId}.${ext}`,
-      upstreamUrl: url,
+      r2Key: `swissmodel/${sanitizeKeySegment(selected.id)}.${ext}`,
+      upstreamUrl: selected.upstreamUrl,
       shortLabel: 'SWISS-MODEL',
-      displayLabel: `SWISS-MODEL (${structureId})`,
+      displayLabel: `SWISS-MODEL (${selected.id})`,
       format: normalizedFormat
     };
-  }
-  if (representation.source === 'alphafold' && representation.alphafold && representation.alphafold.model_url) {
-    const id = representation.alphafold.id || protein.uniprot;
+  } else if (selected.source === 'alphafold') {
     return {
       source: 'alphafold',
-      r2Key: `alphafold/${sanitizeKeySegment(id)}.cif`,
-      upstreamUrl: representation.alphafold.model_url,
+      r2Key: `alphafold/${sanitizeKeySegment(selected.id)}.cif`,
+      upstreamUrl: selected.upstreamUrl,
       shortLabel: 'AlphaFold',
-      displayLabel: `AlphaFold (${id})`,
+      displayLabel: `AlphaFold (${selected.id})`,
       format: 'cif'
     };
   }
+  
   return null;
 }
 
