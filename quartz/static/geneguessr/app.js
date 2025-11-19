@@ -2797,6 +2797,7 @@
     const expanded = getCardExpansionState(cardId, isLatestGuess);
     const matchedHintMap = guessEntry.matchedHints || {};
     const protein = guessEntry.proteinResolved || resolveGuessProtein(guessEntry);
+
     if (!protein) {
       return '';
     }
@@ -3493,7 +3494,28 @@
     try {
       const payload = await submitGuessRequest(uniprot);
       hydrateStateFromPayload(payload);
+
+      // B-137 Fix: Ensure data is populated fast.
+      // If the guess payload didn't contain the protein, and hydrateGuessProteins fails,
+      // we force a full bootstrap refresh (which users say works).
+      let newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
+
+      // 1. Try standard hydration
       await hydrateGuessProteins();
+
+      // 2. Check if we still miss data
+      newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
+      if (newGuess && !newGuess.proteinResolved) {
+        console.warn('[Geneguessr] Guess missing protein data, forcing bootstrap refresh...');
+        try {
+          const bootstrapPayload = await fetchGameBootstrap();
+          hydrateStateFromPayload(bootstrapPayload);
+          await hydrateGuessProteins();
+        } catch (err) {
+          console.error('[Geneguessr] Bootstrap fallback failed', err);
+        }
+      }
+
       render();
       const tokenTasks = [ensureStructureTokenForProtein(uniprot)];
       const reachedEndOfRound = gameState.won || gameState.guesses.length >= MAX_GUESSES;
