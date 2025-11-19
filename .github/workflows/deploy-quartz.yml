@@ -60,16 +60,6 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: npm install -g wrangler@4
 
-      - name: Build Geneguessr data (main only — skip if pre-built)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          if [ -f "tools/thoteins/data/geneguessr/proteins.json" ]; then
-            echo "proteins.json already present — skipping build-geneguessr-data.py";
-          else
-            python scripts/build-geneguessr-data.py;
-          fi
-
-
       - name: Install dependencies
         run: npm ci
 

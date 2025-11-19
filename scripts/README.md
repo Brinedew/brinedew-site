@@ -1,15 +1,16 @@
 # Data seeding helpers
 
-`load_proteins_from_embeddings.py` is now the one-button task for B-131 Phase 1 and uses the dataset under `tools/thoteins/data/geneguessr/`.
+`upload_local_database.py` is now the one-button task for B-131 Phase 1 and uses the dataset under `tools/thoteins/data/geneguessr/`.
 
 ## Local dry run
 
 ```bash
-python scripts/load_proteins_from_embeddings.py
+# Default: seeds from tools/thoteins/data/geneguessr/embedding_proteins.json
+python scripts/upload_local_database.py
 ```
 
 - Rebuilds `proteins`, `protein_synonyms`, and `protein_embeddings` inside the local D1 snapshot.
-- Pulls metadata from `tools/thoteins/data/geneguessr/proteins.json` and vectors from `tools/thoteins/data/embeddings/hig2vec_human_200dim.pth`.
+- Pulls metadata from `tools/thoteins/data/geneguessr/embedding_proteins.json` (default) and vectors from `tools/thoteins/data/embeddings/hig2vec_human_200dim.pth`.
 - Rejects entries that don’t have a matching embedding and prints a short warning list.
 - After inserting, runs validation queries to confirm and prints a stats report:
   - `COUNT(*)` for `proteins` and `protein_embeddings` both match the number of inserted rows.
@@ -22,18 +23,39 @@ python scripts/load_proteins_from_embeddings.py
 - `python scripts/map_embedding_tokens.py` joins that roster against our Thoteins mappings (features.csv + existing metadata) and emits `embedding_token_mappings.json` (resolved tokens) plus `embedding_tokens_needing_mapping.json` (unresolved).
 - `python scripts/build_embedding_metadata.py` consumes the resolved mappings, pulls metadata directly from the raw Thoteins datasets (features.csv + UniProt JSON snapshots), and produces `embedding_proteins.json`, which is the new vector-driven metadata payload.
 
-## Remote seeding
+## Remote seeding (manual)
+
+Seeding the D1 database is a manual step and is not run as part of CI by default. If you'd like to seed the *full embedding roster* instead of the curated Geneguessr dataset, follow these steps:
 
 ```bash
-python scripts/load_proteins_from_embeddings.py --remote
-```
+# Export tokens from the embedding file (writes embedding_tokens.json)
+python scripts/export_embedding_tokens.py
 
-- Skips the wrapping transaction (unnecessary for remote D1) but otherwise performs the same logic.
-- Validation still runs against the remote database, so if either count check fails or `P02671` is missing the script exits non-zero.
+# Map those tokens to metadata (writes embedding_token_mappings.json + unresolved list)
+python scripts/map_embedding_tokens.py
+
+# Build a metadata file for the embedded roster (writes embedding_proteins.json)
+python scripts/build_embedding_metadata.py
+
+```bash
+# Build site payload from the full embedding roster (default)
+python scripts/populate_local_database.py
+
+Note: The populate script now builds directly from the embedding roster and does
+not enforce length or domain filters — vectors are the ground truth for the
+Geneguessr payload.
+
+# Seed the remote D1 using the full embedding metadata (defaults to embedding_proteins.json)
+python scripts/upload_local_database.py --metadata-file tools/thoteins/data/geneguessr/embedding_proteins.json --remote
+```
+```
+- Seeding large datasets may be slow and may require network/Cloudflare credentials.
+- The loader will skip entries without a matching embedding; it validates counts and exits non-zero on failure.
+
 
 ## CI integration
 
-- `.github/workflows/deploy-quartz.yml` installs the loader prerequisites and, on `main`, runs `python scripts/load_proteins_from_embeddings.py --remote` before building the static site. It relies on the existing `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets so every production deploy refreshes D1 automatically.
+- CI does not automatically seed D1. The `deploy-quartz.yml` workflow installs the loader prerequisites but *does not* run `upload_local_database.py`. Database seeding is manual to avoid accidental overwrites; see the `Remote seeding (manual)` section above for the safe sequence.
 - After the loader runs, update `tools/thoteins/data/geneguessr/version.json` with the stats it prints (timestamp, embedding hash/size, metadata rows, D1 rows). This manifest is the audit log for Phase 6.
 
 ## Legacy scripts
