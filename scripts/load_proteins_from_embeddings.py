@@ -3,16 +3,14 @@
 Seed the Geneguessr D1 database with proteins + embeddings derived from the
 HiG2Vec dataset so metadata and vectors stay in sync.
 
-Usage:
-    python scripts/load_proteins_from_embeddings.py [--remote]
-"""
-"""
 Loads protein metadata and embeddings, builds SQL, and seeds Cloudflare D1 via Wrangler CLI.
 
 Note: This script is for local/manual use only. Do not run as part of CI/CD workflows.
 Run locally after updating embeddings or metadata. Large files are not tracked in git.
-"""
 
+Usage:
+    python scripts/load_proteins_from_embeddings.py [--remote]
+"""
 from __future__ import annotations
 
 import argparse
