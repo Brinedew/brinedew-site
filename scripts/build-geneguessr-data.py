@@ -286,8 +286,8 @@ def gather_go_annotations(uniprot_id: str, ontology: Dict[str, GOTerm]) -> Dict[
     return result
 
 
-def extract_interpro_domains(uniprot_id: str) -> Set[str]:
-    """Extract InterPro domain IDs from UniProt JSON cross-references."""
+def extract_interpro_domain_ids(uniprot_id: str) -> Set[str]:
+    """Extract InterPro domain IDs (for similarity computation)."""
     entry = load_uniprot_entry(uniprot_id)
     if not entry:
         return set()
@@ -298,6 +298,44 @@ def extract_interpro_domains(uniprot_id: str) -> Set[str]:
             domain_id = ref.get("id")
             if domain_id:
                 domains.add(domain_id)
+    return domains
+
+
+def extract_interpro_domains(uniprot_id: str) -> Set[str]:
+    """Extract InterPro domain IDs from UniProt JSON cross-references (for similarity)."""
+    entry = load_uniprot_entry(uniprot_id)
+    if not entry:
+        return set()
+    
+    domains = set()
+    for ref in entry.get("uniProtKBCrossReferences", []):
+        if ref.get("database") == "InterPro":
+            domain_id = ref.get("id")
+            if domain_id:
+                domains.add(domain_id)
+    return domains
+
+
+def extract_interpro_domain_names(uniprot_id: str) -> List[str]:
+    """Extract human-readable InterPro domain names from UniProt JSON."""
+    entry = load_uniprot_entry(uniprot_id)
+    if not entry:
+        return []
+    
+    domains = []
+    for ref in entry.get("uniProtKBCrossReferences", []):
+        if ref.get("database") == "InterPro":
+            domain_id = ref.get("id")
+            if not domain_id:
+                continue
+            # Extract the human-readable name from properties
+            name = None
+            for prop in ref.get("properties", []):
+                if prop.get("key") == "EntryName":
+                    name = prop.get("value")
+                    break
+            # Use name if available, otherwise fall back to ID
+            domains.append(name if name else domain_id)
     return domains
 
 
@@ -648,14 +686,22 @@ def slug_for_page(md_path: Path) -> str:
 
 
 def normalize_domains(page: frontmatter.Post, feature_row: Dict[str, str]) -> List[str]:
-    """Prefer curated domains from the page; fall back to CSV data."""
+    """Prefer curated domains from the page; fall back to CSV, then UniProt."""
     domains = page.get("domains") or []
     if isinstance(domains, str):
         domains = [domains]
     domains = [d for d in domains if d]
     if domains:
         return domains
-    return parse_domains(feature_row.get("domains_top3"))
+    # Try CSV domains_top3 field
+    csv_domains = parse_domains(feature_row.get("domains_top3"))
+    if csv_domains:
+        return csv_domains
+    # Final fallback: extract from UniProt JSON with human-readable names
+    uniprot_id = page.get("uniprot_id") or feature_row.get("uniprot_id")
+    if uniprot_id:
+        return extract_interpro_domain_names(uniprot_id)
+    return []
 
 
 def ancestors(term_id: str, ontology: Dict[str, GOTerm], cache: Dict[str, Set[str]]) -> Set[str]:
