@@ -250,23 +250,23 @@ export default {
     }
     
     if (url.pathname === '/api/structure-token' && request.method === 'GET') {
-      return handleStructureToken(request, env);
+      return handleStructureToken(request, env, corsHeaders);
     }
 
     if (url.pathname === '/api/structure' && request.method === 'GET') {
-      return handleStructureFetch(request, env);
+      return handleStructureFetch(request, env, corsHeaders);
     }
 
     if (url.pathname === '/api/game/bootstrap' && request.method === 'GET') {
-      return handleGameBootstrap(request, env);
+      return handleGameBootstrap(request, env, corsHeaders);
     }
 
     if (url.pathname === '/api/game/guess' && request.method === 'POST') {
-      return handleGuessSubmission(request, env);
+      return handleGuessSubmission(request, env, corsHeaders);
     }
 
     if (url.pathname === '/api/game/reveal-hint' && request.method === 'POST') {
-      return handleHintReveal(request, env);
+      return handleHintReveal(request, env, corsHeaders);
     }
 
     // Public proteins endpoint for autocomplete
@@ -593,7 +593,7 @@ export class GameSession {
   }
 }
 
-async function handleStructureToken(request, env) {
+async function handleStructureToken(request, env, corsHeaders) {
   const url = new URL(request.url);
   const type = url.searchParams.get('type');
   if (type === 'target') {
@@ -646,7 +646,7 @@ async function handleStructureToken(request, env) {
   }, { headers: corsHeaders });
 }
 
-async function handleStructureFetch(request, env) {
+async function handleStructureFetch(request, env, corsHeaders) {
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
   if (!token) {
@@ -678,7 +678,7 @@ async function handleStructureFetch(request, env) {
   });
 }
 
-async function handleGameBootstrap(request, env) {
+async function handleGameBootstrap(request, env, corsHeaders) {
   try {
     const { sessionId, practiceMode, practiceRestart } = resolveSessionContext(request);
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode });
@@ -701,7 +701,7 @@ async function handleGameBootstrap(request, env) {
   }
 }
 
-async function handleGuessSubmission(request, env) {
+async function handleGuessSubmission(request, env, corsHeaders) {
   try {
     const { sessionId, practiceMode } = resolveSessionContext(request);
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
@@ -763,7 +763,7 @@ async function handleGuessSubmission(request, env) {
   }
 }
 
-async function handleHintReveal(request, env) {
+async function handleHintReveal(request, env, corsHeaders) {
   try {
     const { sessionId, practiceMode } = resolveSessionContext(request);
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
