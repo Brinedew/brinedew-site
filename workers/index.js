@@ -1,10 +1,17 @@
-// CORS headers for frontend access
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': 'https://brinedew.bio',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Credentials': 'true',
-};
+// CORS headers for frontend access - supports both main domain and subdomain
+function getCorsHeaders(origin) {
+  const allowedOrigins = ['https://brinedew.bio', 'https://geneguessr.brinedew.bio'];
+  const corsOrigin = allowedOrigins.includes(origin) ? origin : 'https://brinedew.bio';
+  return {
+    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+}
+
+// Backward compatibility - default CORS headers for main domain
+const CORS_HEADERS = getCorsHeaders('https://brinedew.bio');
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const STRUCTURE_TOKEN_TTL_SECONDS = 300;
 const TOKEN_PREFIX = 'structure_token:';
@@ -58,9 +65,11 @@ import { resolveStructureRepresentation } from './lib/structure-utils.js';
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const origin = request.headers.get('Origin') || '';
+    const corsHeaders = getCorsHeaders(origin);
     
-    // Handle geneguessr subdomain proxy - proxy ALL requests from subdomain to main site
-    if (url.hostname === 'geneguessr.brinedew.bio') {
+    // Handle geneguessr subdomain proxy - proxy NON-API requests from subdomain to main site
+    if (url.hostname === 'geneguessr.brinedew.bio' && !url.pathname.startsWith('/api/')) {
       // For root path, fetch the geneguessr app page
       let targetPath = url.pathname === '/' 
         ? '/apps/geneguessr/index' 
@@ -89,7 +98,7 @@ export default {
     // Handle CORS preflight requests
     if (request.method === 'OPTIONS') {
       return new Response(null, {
-        headers: CORS_HEADERS
+        headers: corsHeaders
       });
     }
     
@@ -102,7 +111,7 @@ export default {
         kv: await checkKVHealth(env.KV),
         durableObjects: 'configured'
       }, {
-        headers: CORS_HEADERS
+        headers: corsHeaders
       });
     }
 
@@ -131,7 +140,7 @@ export default {
       const response = await handleMe(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -144,7 +153,7 @@ export default {
       const response = await handleMigrateStats(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -152,7 +161,7 @@ export default {
       const response = await handleGetStats(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -160,7 +169,7 @@ export default {
       const response = await handleUpdateStats(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
 
@@ -179,7 +188,7 @@ export default {
       const response = await handleOverrideProtein(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -187,7 +196,7 @@ export default {
       const response = await handleDeleteOverride(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -195,7 +204,7 @@ export default {
       const response = await handleFeatureFlags(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -203,7 +212,7 @@ export default {
       const response = await handleGraphicsSettings(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
 
@@ -211,7 +220,7 @@ export default {
       const response = await handleProteinPreview(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -228,7 +237,7 @@ export default {
         }
       }
       return Response.json(graphicsPayload, {
-        headers: CORS_HEADERS
+        headers: corsHeaders
       });
     }
     
@@ -236,7 +245,7 @@ export default {
       const response = await handleAdminStatus(request, env);
       return new Response(response.body, {
         status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
@@ -265,18 +274,18 @@ export default {
       try {
         const uniprot = (url.searchParams.get('uniprot') || '').toUpperCase();
         if (!uniprot) {
-          return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: CORS_HEADERS });
+          return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: corsHeaders });
         }
         const protein = await fetchProteinByUniprot(env.DB, uniprot);
         if (!protein) {
-          return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
+          return Response.json({ error: 'Protein not found' }, { status: 404, headers: corsHeaders });
         }
-        return Response.json(sanitizeTargetProtein(protein, { revealIdentity: true }), { headers: CORS_HEADERS });
+        return Response.json(sanitizeTargetProtein(protein, { revealIdentity: true }), { headers: corsHeaders });
       } catch (error) {
         console.error('Failed to load protein details', error);
         return Response.json({ error: 'Failed to load protein' }, {
           status: 500,
-          headers: CORS_HEADERS
+          headers: corsHeaders
         });
       }
     }
@@ -285,15 +294,15 @@ export default {
       try {
         const query = (url.searchParams.get('query') || '').trim();
         if (!query) {
-          return Response.json([], { headers: CORS_HEADERS });
+          return Response.json([], { headers: corsHeaders });
         }
         const matches = await searchProteins(env.DB, query, 3);
-        return Response.json(matches, { headers: CORS_HEADERS });
+        return Response.json(matches, { headers: corsHeaders });
       } catch (error) {
         console.error('Failed to load protein search results', error);
         return Response.json({ error: 'Failed to load protein database' }, {
           status: 500,
-          headers: CORS_HEADERS
+          headers: corsHeaders
         });
       }
     }
@@ -305,13 +314,13 @@ export default {
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
-        headers: { ...Object.fromEntries(response.headers), ...CORS_HEADERS }
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
     
     return Response.json({ error: 'Not found' }, { 
       status: 404,
-      headers: CORS_HEADERS 
+      headers: corsHeaders 
     });
   }
 };
@@ -590,15 +599,15 @@ async function handleStructureToken(request, env) {
   if (type === 'target') {
     const protein = await getDailyTargetProtein(env);
     if (!protein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
     const meta = await getCanonicalStructureMeta(protein, env);
     if (!meta) {
-      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
     }
     const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
     if (!cached) {
-      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
     }
     const token = await createStructureToken(env, meta);
     const structureUrl = `${url.origin}/api/structure?token=${token}`;
@@ -608,23 +617,23 @@ async function handleStructureToken(request, env) {
       displayLabel: meta.displayLabel,
       format: meta.format || 'cif',
       url: structureUrl
-    }, { headers: CORS_HEADERS });
+    }, { headers: corsHeaders });
   }
 
   const uniprot = (url.searchParams.get('uniprot') || '').toUpperCase();
   if (!uniprot) {
-    return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: CORS_HEADERS });
+    return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: corsHeaders });
   }
   // For structure tokens, we don't require the protein to be in the database
   // Structure discovery works from UniProt APIs directly
   const protein = { uniprot }; // Minimal protein object for structure discovery
   const meta = await getCanonicalStructureMeta(protein, env);
   if (!meta) {
-    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
   }
   const cached = await ensureStructureCached(env, meta, { proteinId: uniprot });
   if (!cached) {
-    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
   }
   const token = await createStructureToken(env, meta);
   const structureUrl = `${url.origin}/api/structure?token=${token}`;
@@ -634,35 +643,35 @@ async function handleStructureToken(request, env) {
     displayLabel: meta.displayLabel,
     format: meta.format || 'cif',
     url: structureUrl
-  }, { headers: CORS_HEADERS });
+  }, { headers: corsHeaders });
 }
 
 async function handleStructureFetch(request, env) {
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
   if (!token) {
-    return Response.json({ error: 'Missing token' }, { status: 400, headers: CORS_HEADERS });
+    return Response.json({ error: 'Missing token' }, { status: 400, headers: corsHeaders });
   }
   const record = await env.STRUCTURE_TOKENS.get(`${TOKEN_PREFIX}${token}`, { type: 'json' });
   if (!record) {
-    return Response.json({ error: 'Invalid or expired token' }, { status: 410, headers: CORS_HEADERS });
+    return Response.json({ error: 'Invalid or expired token' }, { status: 410, headers: corsHeaders });
   }
   const { r2Key } = record;
   if (!r2Key) {
-    return Response.json({ error: 'Token missing key' }, { status: 500, headers: CORS_HEADERS });
+    return Response.json({ error: 'Token missing key' }, { status: 500, headers: corsHeaders });
   }
   const cached = await ensureStructureCached(env, record);
   if (!cached) {
-    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
   }
   const object = await env.STRUCTURES_BUCKET.get(r2Key);
   if (!object) {
-    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: CORS_HEADERS });
+    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
   }
   await touchStructureCacheEntry(env, r2Key, object.size);
   return new Response(object.body, {
     headers: {
-      ...CORS_HEADERS,
+      ...corsHeaders,
       'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
       'Cache-Control': 'public, max-age=3600'
     }
@@ -674,21 +683,21 @@ async function handleGameBootstrap(request, env) {
     const { sessionId, practiceMode, practiceRestart } = resolveSessionContext(request);
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode });
     if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
     const state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode, forceReset: practiceRestart });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     const payload = buildGamePayload(state, targetProtein);
-    return Response.json(payload, { headers: CORS_HEADERS });
+    return Response.json(payload, { headers: corsHeaders });
   } catch (err) {
     console.error('GeneGuessr: bootstrap failed', err);
-    return Response.json({ error: 'Failed to load game state' }, { status: 500, headers: CORS_HEADERS });
+    return Response.json({ error: 'Failed to load game state' }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -697,29 +706,29 @@ async function handleGuessSubmission(request, env) {
     const { sessionId, practiceMode } = resolveSessionContext(request);
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
     if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
     const body = await safeJson(request);
     const uniprot = (body?.uniprot || '').toUpperCase();
     if (!uniprot) {
-      return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: CORS_HEADERS });
+      return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: corsHeaders });
     }
     let state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
     if (state.won || (state.guesses?.length || 0) >= MAX_GUESSES) {
-      return Response.json({ error: 'Round already completed' }, { status: 409, headers: CORS_HEADERS });
+      return Response.json({ error: 'Round already completed' }, { status: 409, headers: corsHeaders });
     }
     if ((state.guesses || []).some((entry) => entry.uniprot === uniprot)) {
-      return Response.json({ error: 'Protein already guessed' }, { status: 409, headers: CORS_HEADERS });
+      return Response.json({ error: 'Protein already guessed' }, { status: 409, headers: corsHeaders });
     }
     const guessProtein = await fetchProteinByUniprot(env.DB, uniprot);
     if (!guessProtein) {
-      return Response.json({ error: 'Protein not found' }, { status: 404, headers: CORS_HEADERS });
+      return Response.json({ error: 'Protein not found' }, { status: 404, headers: corsHeaders });
     }
     const goSimilarity = await getGoSimilarityFromEmbeddings(
       env.DB,
@@ -747,10 +756,10 @@ async function handleGuessSubmission(request, env) {
     }
     await saveGameState(env, sessionId, state);
     const payload = buildGamePayload(state, targetProtein);
-    return Response.json(payload, { headers: CORS_HEADERS });
+    return Response.json(payload, { headers: corsHeaders });
   } catch (err) {
     console.error('GeneGuessr: guess submission failed', err);
-    return Response.json({ error: 'Guess submission failed' }, { status: 500, headers: CORS_HEADERS });
+    return Response.json({ error: 'Guess submission failed' }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -759,29 +768,29 @@ async function handleHintReveal(request, env) {
     const { sessionId, practiceMode } = resolveSessionContext(request);
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
     if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
     const body = await safeJson(request);
     const hintId = body?.hintId || body?.id;
     if (!hintId) {
-      return Response.json({ error: 'Missing hintId' }, { status: 400, headers: CORS_HEADERS });
+      return Response.json({ error: 'Missing hintId' }, { status: 400, headers: corsHeaders });
     }
     const state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
     const clueSections = buildClueSections(targetProtein);
     const hintText = extractHintText(clueSections, hintId);
     if (!hintText) {
-      return Response.json({ error: 'Hint not found' }, { status: 404, headers: CORS_HEADERS });
+      return Response.json({ error: 'Hint not found' }, { status: 404, headers: corsHeaders });
     }
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
-        return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: CORS_HEADERS });
+        return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: corsHeaders });
       }
       state.revealedHints = [...(state.revealedHints || []), hintId];
       state.hintBalance = Math.max(0, (state.hintBalance || 0) - DEFAULT_HINT_COST);
@@ -789,10 +798,10 @@ async function handleHintReveal(request, env) {
     }
     const payload = buildGamePayload(state, targetProtein, { clueSections });
     payload.revealedHint = { id: hintId, text: hintText };
-    return Response.json(payload, { headers: CORS_HEADERS });
+    return Response.json(payload, { headers: corsHeaders });
   } catch (err) {
     console.error('GeneGuessr: hint reveal failed', err);
-    return Response.json({ error: 'Hint reveal failed' }, { status: 500, headers: CORS_HEADERS });
+    return Response.json({ error: 'Hint reveal failed' }, { status: 500, headers: corsHeaders });
   }
 }
 
