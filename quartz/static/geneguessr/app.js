@@ -1177,7 +1177,7 @@
   };
 
   // Fetch graphics settings from API and update DEBUG_STYLIZATION
-  fetch('https://geneguessr-api.decap.workers.dev/api/graphics-settings', {
+  fetch(`${window.location.origin}/api/graphics-settings`, {
     credentials: 'include'
   })
     .then(response => response.ok ? response.json() : null)
@@ -3616,7 +3616,7 @@ https://brinedew.bio/apps/geneguessr/`;
 
   // Auth state
   let currentUser = null;
-  const API_BASE = 'https://geneguessr-api.decap.workers.dev';
+  const API_BASE = window.location.origin;
 
   /**
    * Check auth status
