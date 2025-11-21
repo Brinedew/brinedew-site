@@ -82,6 +82,17 @@ jobs:
             echo "brinedew.com" > public/CNAME
           fi
 
+      - name: Create Geneguessr path redirect
+        run: |
+          mkdir -p public/apps/geneguessr
+          cat > public/apps/geneguessr/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html><head>
+          <meta http-equiv="refresh" content="0; url=/apps/geneguessr.html">
+          <script>window.location.href='/apps/geneguessr.html';</script>
+          </head><body></body></html>
+          EOF
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

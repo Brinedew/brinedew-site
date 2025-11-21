@@ -6,13 +6,8 @@ draft: false
 tags:
 - content/apps
 aliases:
-- /apps/geneguessr/index
-- /apps/geneguessr/index.html
-
-aliases:
 - /apps/geneguessr
 - /apps/geneguessr/
-- /apps/geneguessr.html
 ---
 
 <div id="geneguessr-root" data-static="../static/geneguessr"></div>
