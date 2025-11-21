@@ -82,16 +82,11 @@ jobs:
             echo "brinedew.com" > public/CNAME
           fi
 
-      - name: Create Geneguessr path redirect
+      - name: Clean up geneguessr directory artifacts
         run: |
-          mkdir -p public/apps/geneguessr
-          cat > public/apps/geneguessr/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html><head>
-          <meta http-equiv="refresh" content="0; url=/apps/geneguessr.html">
-          <script>window.location.href='/apps/geneguessr.html';</script>
-          </head><body></body></html>
-          EOF
+          # Remove the /apps/geneguessr/ directory to avoid routing conflicts
+          # GitHub Pages gets confused when both /apps/geneguessr.html and /apps/geneguessr/ exist
+          rm -rf public/apps/geneguessr
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
