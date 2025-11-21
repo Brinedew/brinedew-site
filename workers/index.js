@@ -755,7 +755,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
       state.hintBalance = (state.hintBalance || 0) + HINT_REWARD_ON_INCORRECT;
     }
     await saveGameState(env, sessionId, state);
-    const payload = buildGamePayload(state, targetProtein);
+    const payload = buildGamePayload(state, targetProtein, { includeProteins: true });
     return Response.json(payload, { headers: corsHeaders });
   } catch (err) {
     console.error('GeneGuessr: guess submission failed', err);
