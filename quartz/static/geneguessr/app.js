@@ -1817,7 +1817,9 @@
           return entry;
         }
         if (entry.protein) {
+          console.log('[B-137 DEBUG] hydrateStateFromPayload: entry has protein', entry.uniprot, 'domains:', entry.protein.domains?.length || 0, 'reactome:', entry.protein.reactome_pathways?.length || 0);
           const normalizedProtein = cacheEnrichedProtein(entry.protein) || entry.protein;
+          console.log('[B-137 DEBUG] after normalization:', entry.uniprot, 'domains:', normalizedProtein.domains?.length || 0, 'reactome:', normalizedProtein.reactome_pathways?.length || 0);
           return { ...entry, protein: normalizedProtein };
         }
         const cachedProtein = getEnrichedProteinById(entry.uniprot);
@@ -3500,6 +3502,7 @@
 
     try {
       const payload = await submitGuessRequest(uniprot);
+      console.log('[B-137 DEBUG] submitGuess payload:', JSON.stringify(payload, null, 2));
       hydrateStateFromPayload(payload);
 
       // B-137 Fix: Ensure data is populated fast.
