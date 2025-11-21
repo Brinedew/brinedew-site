@@ -263,7 +263,7 @@
     <div id="offline-notice" class="offline-notice" style="display: none;">
         <h3>🌐 Service Currently Offline</h3>
         <p>The transcription backend is not currently available. This happens when Brinedew's hardware is offline (traveling, maintenance, etc.).</p>
-        <p><strong>Try again later</strong> or contact <a href="mailto:hello@brinedew.com">hello@brinedew.com</a> if you need urgent transcription.</p>
+        <p><strong>Try again later</strong> or contact <a href="mailto:hello@brinedew.bio">hello@brinedew.bio</a> if you need urgent transcription.</p>
     </div>
     
     <div class="config-section">
@@ -281,7 +281,7 @@
 <script>
 (function() {
     // Configuration - update this when you're home with your PC
-    const API_BASE_URL = 'https://api2.brinedew.com'; // Updated to match working tunnel
+    const API_BASE_URL = 'https://api2.brinedew.bio'; // Updated to match working tunnel
     
     let currentJobId = null;
     let statusCheckInterval = null;
@@ -377,7 +377,7 @@
                 
             } else if (data.status === 'error') {
                 // Show error
-                resultText.value = `ERROR: ${data.error || 'Unknown error occurred'}\n\nTroubleshooting:\n1. Check that the YouTube URL is valid and accessible\n2. Try a shorter video (under 30 minutes)\n3. Wait a few minutes and try again\n4. Contact hello@brinedew.com if the problem persists`;
+                resultText.value = `ERROR: ${data.error || 'Unknown error occurred'}\n\nTroubleshooting:\n1. Check that the YouTube URL is valid and accessible\n2. Try a shorter video (under 30 minutes)\n3. Wait a few minutes and try again\n4. Contact hello@brinedew.bio if the problem persists`;
                 resultContainer.style.display = 'block';
                 downloadBtn.style.display = 'none';
                 

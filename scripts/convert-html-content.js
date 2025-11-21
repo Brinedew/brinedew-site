@@ -53,7 +53,7 @@ This page contains an interactive web application for converting YouTube videos 
 
 **Source Code**: Available at [GitHub Repository](https://github.com/brinedew/scriptotic)
 
-For urgent transcription needs, contact [hello@brinedew.com](mailto:hello@brinedew.com).
+For urgent transcription needs, contact [hello@brinedew.bio](mailto:hello@brinedew.bio).
 `;
       
       const newContent = content.substring(0, htmlStartIndex) + replacement + content.substring(endIndex);

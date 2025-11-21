@@ -966,7 +966,7 @@ def get_wikipedia_title(hgnc: str, full_name: str, uniprot_id: str) -> Optional[
     
     url = "https://query.wikidata.org/sparql"
     headers = {
-        "User-Agent": "GeneGuessr/1.0 (https://brinedew.com; contact@brinedew.com) Python-requests",
+        "User-Agent": "GeneGuessr/1.0 (https://brinedew.bio; contact@brinedew.bio) Python-requests",
         "Accept": "application/sparql-results+json"
     }
     params = {
@@ -1079,7 +1079,7 @@ def fetch_wikipedia_pageviews(article_title: str, year: int = 2024) -> int:
     try:
         url = f"https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/{article_title}/monthly/{year}0101/{year}1231"
         headers = {
-            "User-Agent": "GeneGuessr/1.0 (https://brinedew.com; contact@brinedew.com) Python-requests"
+            "User-Agent": "GeneGuessr/1.0 (https://brinedew.bio; contact@brinedew.bio) Python-requests"
         }
         response = requests.get(url, headers=headers, timeout=10)
         
