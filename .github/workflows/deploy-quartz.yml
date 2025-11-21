@@ -82,15 +82,10 @@ jobs:
             echo "brinedew.com" > public/CNAME
           fi
 
-      - name: Move geneguessr.html into directory for proper routing
+      - name: Disable Jekyll processing
         run: |
-          # GitHub Pages has a routing conflict when both file.html and file/ exist
-          # Solution: move the .html file INTO the directory as index.html
-          if [ -f "public/apps/geneguessr.html" ]; then
-            mkdir -p public/apps/geneguessr
-            mv public/apps/geneguessr.html public/apps/geneguessr/index.html
-            echo "Moved geneguessr.html to geneguessr/index.html"
-          fi
+          mkdir -p public
+          touch public/.nojekyll
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

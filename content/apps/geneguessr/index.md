@@ -10,7 +10,7 @@ aliases:
 - /apps/geneguessr/
 ---
 
-<div id="geneguessr-root" data-static="../static/geneguessr"></div>
+<div id="geneguessr-root" data-static="/static/geneguessr"></div>
 
 ---
 
@@ -74,7 +74,3 @@ aliases:
   }
 })();
 </script>
-
-
-
-
