@@ -38,12 +38,21 @@ python scripts/map_embedding_tokens.py
 python scripts/build_embedding_metadata.py
 
 ```bash
-# Build site payload from the full embedding roster (default)
-python scripts/populate_local_database.py
+# Build site payload from the full embedding roster (default, streaming)
+python scripts/populate_local_database.py --batch-size 500
 
 Note: The populate script now builds directly from the embedding roster and does
+Tips:
+- For very large embedding files, install `ijson` to enable streaming with:
+
+```bash
+pip install ijson
+```
+
 not enforce length or domain filters — vectors are the ground truth for the
-Geneguessr payload.
+Geneguessr payload. The script streams entries and writes the output in
+small batches, which reduces memory usage for large embedding rosters. Use
+`--batch-size` to control the buffer size when exporting records (default: 500).
 
 # Seed the remote D1 using the full embedding metadata (defaults to embedding_proteins.json)
 python scripts/upload_local_database.py --metadata-file tools/thoteins/data/geneguessr/embedding_proteins.json --remote

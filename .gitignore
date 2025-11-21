@@ -25,23 +25,20 @@ scripts/uniprot_cache/
 # Auto-generated Excalidraw exports (generated from .md files)
 **/*.excalidraw.png
 **/*.excalidraw.svg
-# Thoteins runtime artifacts (don't commit)
+
+# Thoteins runtime artifacts
 tools/thoteins/logs/
-tools/thoteins/**/__pycache__/
-tools/thoteins/**/*.pyc
-tools/thoteins/**/*.pyo
-tools/thoteins/**/.pytest_cache/
-tools/thoteins/**/node_modules/
-tools/thoteins/**/.DS_Store
 tools/thoteins/nul
 tools/thoteins/test_mapping.py
 tools/thoteins/temp_workflow.json
 
-# Keep the data and scripts
-!tools/thoteins/data/
-!tools/thoteins/scripts/
-!tools/thoteins/apps/
+# Large downloads and caches (fetch on demand)
 tools/thoteins/data/embeddings/
 tools/thoteins/data/proteins/uniprot/
 tools/thoteins/data/ncbi_gene/
-tools/thoteins/data/geneguessr/embedding_token_remote_hits.json
+tools/thoteins/data/ncbi_gene_cache/
+tools/thoteins/data/go/
+
+# Generated geneguessr pipeline artifacts (regenerate via populate_local_database.py)
+tools/thoteins/data/geneguessr/*.json
+!tools/thoteins/data/geneguessr/version.json

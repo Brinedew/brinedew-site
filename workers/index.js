@@ -79,6 +79,18 @@ export default {
       });
     }
 
+    // Normalize directory-style app path to include trailing slash.
+    // This avoids edge/origin mismatches where a non-trailing-slash request
+    // could resolve to an upstream origin that serves a 503/GitHub outage page.
+    if (url.pathname === '/apps/geneguessr' && request.method === 'GET') {
+      return new Response(null, {
+        status: 301,
+        headers: {
+          'Location': `${url.origin}/apps/geneguessr/`
+        }
+      });
+    }
+
     // Auth endpoints
     if (url.pathname === '/api/auth/login' && request.method === 'GET') {
       return handleLogin(request, env);

@@ -227,7 +227,8 @@ export async function handleCallback(request, env) {
   const headers = new Headers();
   headers.set('Set-Cookie', `oauth_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
   headers.append('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}`); // 30 days
-  headers.set('Location', 'https://brinedew.bio/apps/geneguessr');
+  // Normalize to trailing-slash to avoid hitting non-directory origin routes
+  headers.set('Location', 'https://brinedew.bio/apps/geneguessr/');
   
   return new Response(null, {
     status: 302,
@@ -293,7 +294,7 @@ export async function handleLogout(request, env) {
   return new Response(null, {
     status: 302,
     headers: {
-      'Location': 'https://brinedew.bio/apps/geneguessr',
+      'Location': 'https://brinedew.bio/apps/geneguessr/',
       'Set-Cookie': `session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`
     }
   });
