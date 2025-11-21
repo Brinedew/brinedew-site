@@ -59,6 +59,33 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     
+    // Handle geneguessr subdomain proxy
+    if (url.hostname === 'geneguessr.brinedew.bio') {
+      const targetUrl = new URL('https://brinedew.bio/apps/geneguessr/' + url.pathname.slice(1) + url.search);
+      const response = await fetch(targetUrl.toString(), {
+        method: request.method,
+        headers: request.headers,
+        body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined
+      });
+      
+      // Rewrite HTML content to fix asset paths
+      if (response.headers.get('content-type')?.includes('text/html')) {
+        let html = await response.text();
+        // Rewrite absolute paths to work from subdomain root
+        html = html.replace(/href="\/([^"]*?)"/g, 'href="https://brinedew.bio/$1"');
+        html = html.replace(/src="\/([^"]*?)"/g, 'src="https://brinedew.bio/$1"');
+        html = html.replace(/url\(\/([^)]*?)\)/g, 'url(https://brinedew.bio/$1)');
+        
+        return new Response(html, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers
+        });
+      }
+      
+      return response;
+    }
+    
     // Handle CORS preflight requests
     if (request.method === 'OPTIONS') {
       return new Response(null, {
