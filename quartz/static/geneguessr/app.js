@@ -1200,6 +1200,10 @@
 
   // Parse URL params for debug flags (e.g., ?debug_viewer&no_occlusion&no_outline)
   const urlParams = new URLSearchParams(window.location.search);
+  const practiceParam = urlParams.get('practice');
+  const restartParam = urlParams.get('restart');
+  const initialPracticeMode = practiceParam === '1' || (practiceParam || '').toLowerCase() === 'true';
+  const initialPracticeRestart = initialPracticeMode && (restartParam === '1' || (restartParam || '').toLowerCase() === 'true');
   const COLOR_CLAMPING_ENABLED = !urlParams.has('no_color_clamp');
 
   if (urlParams.has('debug_viewer')) {
@@ -1870,6 +1874,9 @@
       domains: safeArray(protein.domains),
       go_slim: safeArray(protein.go_slim),
       go_terms: normalizeGoTerms(protein.go_terms),
+      go_terms_named: protein.go_terms_named || undefined,
+      reactome_pathways: protein.reactome_pathways || undefined,
+      gene_summary: protein.gene_summary || undefined,
       structure: protein && protein.structure ? protein.structure : null,
       structure_id: protein && protein.structure_id ? protein.structure_id : null,
       alphafold_id: protein && protein.alphafold_id ? protein.alphafold_id : null,
@@ -1992,8 +1999,8 @@
     return proteinsById.get(key) || enrichedProteinsById.get(key) || null;
   }
 
-  async function bootstrapGame() {
-    const payload = await fetchGameBootstrap();
+  async function bootstrapGame(options = {}) {
+    const payload = await fetchGameBootstrap(options);
     hydrateStateFromPayload(payload);
     await hydrateGuessProteins();
     const tokenTasks = [];
@@ -3807,8 +3814,12 @@ https://brinedew.bio/apps/geneguessr/`;
 
     setStatus('loading-data');
 
+    const initialBootstrapOptions = initialPracticeMode
+      ? { practice: true, restart: initialPracticeRestart }
+      : undefined;
+
     try {
-      await bootstrapGame();
+      await bootstrapGame(initialBootstrapOptions);
     } catch (err) {
       console.error('Geneguessr: failed to initialise game state', err);
       const detail = err?.stack || err?.message || String(err);
