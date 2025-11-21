@@ -59,23 +59,23 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     
-    // Handle geneguessr subdomain proxy
+    // Handle geneguessr subdomain proxy - proxy ALL requests from subdomain to main site
     if (url.hostname === 'geneguessr.brinedew.bio') {
-      const targetUrl = new URL('https://brinedew.bio/apps/geneguessr/' + url.pathname.slice(1) + url.search);
+      // For root path, fetch the geneguessr app page
+      let targetPath = url.pathname === '/' 
+        ? '/apps/geneguessr/index' 
+        : url.pathname;
+      
+      const targetUrl = new URL('https://brinedew.bio' + targetPath + url.search);
       const response = await fetch(targetUrl.toString(), {
         method: request.method,
         headers: request.headers,
         body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined
       });
       
-      // Rewrite HTML content to fix asset paths
+      // For HTML, keep paths as-is (no rewriting) so subdomain requests go through this proxy
       if (response.headers.get('content-type')?.includes('text/html')) {
-        let html = await response.text();
-        // Rewrite absolute paths to work from subdomain root
-        html = html.replace(/href="\/([^"]*?)"/g, 'href="https://brinedew.bio/$1"');
-        html = html.replace(/src="\/([^"]*?)"/g, 'src="https://brinedew.bio/$1"');
-        html = html.replace(/url\(\/([^)]*?)\)/g, 'url(https://brinedew.bio/$1)');
-        
+        const html = await response.text();
         return new Response(html, {
           status: response.status,
           statusText: response.statusText,
