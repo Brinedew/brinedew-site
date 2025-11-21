@@ -3,11 +3,9 @@ title: "Geneguessr"
 description: "Daily protein guessing game"
 date: 2025-10-08
 draft: false
+folderPage: true
 tags:
 - content/apps
-aliases:
-- /apps/geneguessr
-- /apps/geneguessr/
 ---
 
 <div id="geneguessr-root" data-static="/static/geneguessr"></div>

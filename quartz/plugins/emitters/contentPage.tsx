@@ -83,8 +83,13 @@ export const ContentPage: QuartzEmitterPlugin<Partial<FullPageLayout>> = (userOp
           containsIndex = true
         }
 
-        // only process home page, non-tag pages, and non-index pages
-        if (slug.endsWith("/index") || slug.startsWith("tags/")) continue
+        // Skip tags but allow folder-based pages (ending in /index) unless they're the root index
+        if (slug.startsWith("tags/")) continue
+        if (slug.endsWith("/index") && slug !== "index") {
+          // Allow folder-based pages to emit as directory indexes
+          const isExplicitFolderPage = file.data.frontmatter?.folderPage === true
+          if (!isExplicitFolderPage) continue
+        }
         yield processContent(ctx, tree, file.data, allFiles, opts, resources)
       }
 
