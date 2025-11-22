@@ -363,4 +363,19 @@
       Tutorial.finish();
     }
   };
+
+  // Auto-boot: initialize tutorial independently as soon as DOM is ready
+  // This ensures the tutorial can appear even while the main app is still loading
+  function autoBoot() {
+    if (document.getElementById('geneguessr-root')) {
+      window.GeneGuessrTutorial.boot();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoBoot);
+  } else {
+    // DOM already loaded
+    autoBoot();
+  }
 })();

@@ -166,7 +166,6 @@ export default (() => {
                     src={joinSegments(root, "static", `geneguessr/credits.js?v=${CACHE_BUST}`)}
                   ></script>
                   <script
-                    defer
                     src={joinSegments(root, "static", `geneguessr/tutorial.js?v=${CACHE_BUST}`)}
                   ></script>
                   <script defer src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}></script>
