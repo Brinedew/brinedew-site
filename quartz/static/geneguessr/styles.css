@@ -727,8 +727,20 @@
 }
 
 /* Input */
+#pg-input-slot {
+  position: sticky;
+  bottom: 0;
+  background: var(--light);
+  z-index: 100;
+  padding: 1rem 0;
+  margin: 0 -1rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+}
+
 .pg-input-section {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0;
 }
 
 .pg-input-row {
@@ -1280,5 +1292,25 @@
   
   .pg-stats {
     flex-wrap: wrap;
+  }
+
+  /* Sticky input panel - more aggressive on mobile */
+  #pg-input-slot {
+    margin: 0 -0.5rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* Desktop - less aggressive sticky behavior */
+@media (min-width: 601px) {
+  #pg-input-slot {
+    /* On desktop, reduce shadow and keep it subtle */
+    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.05);
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    border-radius: 8px 8px 0 0;
   }
 }
