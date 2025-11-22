@@ -4,6 +4,23 @@
   max-width: 700px;
   margin: 2rem auto;
   padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 100vh;
+}
+
+#pg-clue-slot,
+#pg-input-slot,
+#pg-guesses,
+#pg-result-slot,
+#pg-footer-slot {
+  flex-shrink: 0;
+}
+
+#pg-guesses {
+  flex-grow: 1;
+  padding-bottom: 6rem; /* prevents footer overlap when input sticks */
 }
 
 /* Sidebar Stats */
@@ -729,13 +746,12 @@
 /* Input */
 #pg-input-slot {
   position: sticky;
+  top: auto;
   bottom: 0;
   background: var(--light);
   z-index: 100;
-  padding: 1rem 0;
+  padding: 1rem;
   margin: 0 -1rem;
-  padding-left: 1rem;
-  padding-right: 1rem;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 

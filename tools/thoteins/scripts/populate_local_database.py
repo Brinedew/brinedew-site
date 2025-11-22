@@ -8,8 +8,8 @@ snapshots where available. It no longer builds from the Markdown wiki pages and
 does not compute GO-based similarity channels.
 
 Outputs:
-- tools/thoteins/data/geneguessr/proteins.json         → normalized protein records
-- tools/thoteins/data/geneguessr/index.json        → eligible IDs + seed salt
+- tools/thoteins/data/geneguessr/proteins.json         - normalized protein records
+- tools/thoteins/data/geneguessr/index.json            - eligible IDs + seed salt
 
 Usage:
     uv run python scripts/populate_local_database.py [--batch-size N]
@@ -19,26 +19,27 @@ Usage:
 
 from __future__ import annotations
 
-import csv
 import argparse
+import csv
 import hashlib
 import json
 import subprocess
-# time import removed: external rate-limiting fallback removed
-from collections import Counter, defaultdict
+import threading
+from collections import Counter, defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-# no NamedTemporaryFile used; keep imports minimal
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import frontmatter
+import requests
+import time
+
 try:
     import ijson
 except Exception:
     raise SystemExit("Missing dependency: ijson is required. Install via `pip install ijson` and retry.")
 
-import requests
-import time
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
@@ -46,14 +47,21 @@ CONTENT_DIR = BASE_DIR / "content" / "wiki"
 FEATURES_CSV = BASE_DIR / "data" / "proteins" / "features.csv"
 UNIPROT_JSON_DIR = BASE_DIR / "data" / "proteins" / "uniprot"
 GO_ONTOLOGY_PATH = BASE_DIR / "data" / "go" / "go-basic.obo"
-# NCBI gene cache no longer used; external NCBI Dataset fetches are removed
 OUTPUT_DIR = BASE_DIR / "data" / "geneguessr"
 DATA_JSON = OUTPUT_DIR / "proteins.json"
 INDEX_JSON = OUTPUT_DIR / "index.json"
-# Cache for NCBI gene fetches
 NCBI_GENE_CACHE = BASE_DIR / "data" / "ncbi_gene_cache"
 HGNC_CACHE_FILE = NCBI_GENE_CACHE / "hgnc_cache.json"
-# similarity.json removed; similarity channels are no longer generated
+INTERPRO_CACHE_DIR = BASE_DIR / "data" / "interpro_cache"
+INTERPRO_CACHE_DB = INTERPRO_CACHE_DIR / "interpro_cache.sqlite"
+INTERPRO_CACHE_VERSION = "3"
+PFAM_API_BASE = "https://www.ebi.ac.uk/interpro/api/protein/uniprot"
+PFAM_CLAN_METADATA_JSON = BASE_DIR / "data" / "pfam_clans_metadata.json"
+DEFAULT_INTERPRO_WORKERS = 4
+DEFAULT_INTERPRO_PREFETCH = 32
+PDB_COVERAGE_THRESHOLD = 0.6
+SWISS_MODEL_COVERAGE_THRESHOLD = 0.6
+SWISS_MODEL_QMEAN_THRESHOLD = 0.7
 
 # Inclusion criteria
 MIN_LENGTH = 100  # aa
@@ -61,7 +69,6 @@ MAX_LENGTH = 5_000  # aa
 MIN_DOMAINS = 1
 ENABLE_WIKIPEDIA_ENRICHMENT = False  # temporary opt-out while Wikipedia pipeline is broken
 
-# Legacy similarity parameters removed
 GO_ASPECTS = ("bp", "mf", "cc")
 DROP_EVIDENCE_CODES = {"IEA"}  # Drop purely electronic GO annotations
 UNIPROT_CACHE: Dict[str, Optional[Dict[str, object]]] = {}
@@ -474,6 +481,265 @@ def extract_interpro_domain_names(uniprot_id: str) -> List[str]:
     return domains
 
 
+_INTERPRO_DB_READY = False
+
+
+def _ensure_interpro_cache_db() -> None:
+    global _INTERPRO_DB_READY
+    if _INTERPRO_DB_READY:
+        return
+    import sqlite3
+
+    INTERPRO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(INTERPRO_CACHE_DB))
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS interpro_domains (
+            uniprot TEXT PRIMARY KEY,
+            json_data TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+    _INTERPRO_DB_READY = True
+
+
+def _read_cached_interpro_payload(uniprot_id: str) -> Optional[Dict[str, object]]:
+    if not uniprot_id:
+        return None
+    _ensure_interpro_cache_db()
+    import sqlite3
+
+    conn = sqlite3.connect(str(INTERPRO_CACHE_DB))
+    cursor = conn.cursor()
+    cursor.execute("SELECT json_data FROM interpro_domains WHERE uniprot = ?", (uniprot_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    try:
+        data = json.loads(row[0])
+    except Exception as exc:
+        print(f"[warn] Failed to decode cached InterPro payload for {uniprot_id}: {exc}")
+        return None
+
+    if isinstance(data, dict):
+        version = data.get("version")
+        # Accept prior caches that already stored "results" even without version tag
+        if (version == INTERPRO_CACHE_VERSION or version is None) and "results" in data:
+            if version == INTERPRO_CACHE_VERSION:
+                return data
+            # Promote legacy dict w/out version
+            return {"version": INTERPRO_CACHE_VERSION, "results": data.get("results", [])}
+    # Older caches stored just representative domain strings; treat as miss so we refetch once
+    return None
+
+
+def _write_cached_interpro_payload(uniprot_id: str, payload: Dict[str, object]) -> None:
+    if not uniprot_id:
+        return
+    _ensure_interpro_cache_db()
+    import sqlite3
+
+    record = dict(payload)
+    record["version"] = INTERPRO_CACHE_VERSION
+    record.setdefault("cached_at", datetime.now(timezone.utc).isoformat())
+
+    try:
+        conn = sqlite3.connect(str(INTERPRO_CACHE_DB))
+        conn.execute(
+            "INSERT OR REPLACE INTO interpro_domains (uniprot, json_data) VALUES (?, ?)",
+            (uniprot_id, json.dumps(record, ensure_ascii=False)),
+        )
+        conn.commit()
+    except Exception as exc:
+        print(f"[warn] Failed to cache InterPro payload for {uniprot_id}: {exc}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def fetch_interpro_domains_and_clans(uniprot_id: str) -> Tuple[List[str], List[str], bool]:
+    """Fetch ALL Pfam domains and clans for a UniProt accession (no representative filter).
+
+    Returns (domain_names, clan_names, error_flag).
+    """
+    if not uniprot_id:
+        return [], [], True
+
+    clan_map = _load_pfam_clan_map()
+
+    payload = _read_cached_interpro_payload(uniprot_id)
+    results: Optional[List[Dict[str, object]]] = None
+    if payload:
+        results = payload.get("results")  # type: ignore[arg-type]
+
+    if results is None:
+        results, fetch_failed = _fetch_pfam_entries(uniprot_id)
+        if fetch_failed:
+            return [], [], True
+        _write_cached_interpro_payload(uniprot_id, {"results": results})
+
+    domain_names, pfam_accs = _derive_interpro_features(results, uniprot_id)
+
+    clans: List[str] = []
+    if clan_map:
+        for pfam_acc in pfam_accs:
+            clan_name = clan_map.get(pfam_acc)
+            if clan_name:
+                clans.append(clan_name)
+        clans = sorted(list(dict.fromkeys(clans)))[:3]
+
+    return domain_names, clans, False
+
+
+# Global clan map cache
+_PFAM_CLAN_MAP: Optional[Dict[str, str]] = None
+_PFAM_CLAN_LOCK = threading.Lock()
+_CLAN_ACC_BY_ID: Dict[str, str] = {}
+_CLAN_METADATA_CACHE: Optional[Dict[str, Dict[str, str]]] = None
+
+
+def _load_pfam_clan_map() -> Dict[str, str]:
+    """Load Pfam accession → clan name mapping from TSV.
+    
+    Returns dict of {PF#####: clan_name}.
+    """
+    global _PFAM_CLAN_MAP
+    if _PFAM_CLAN_MAP is not None:
+        return _PFAM_CLAN_MAP
+
+    with _PFAM_CLAN_LOCK:
+        if _PFAM_CLAN_MAP is not None:
+            return _PFAM_CLAN_MAP
+
+        import gzip
+        clan_file = Path(__file__).parent.parent / "data" / "Pfam-A.clans.tsv.gz"
+        tmp_map: Dict[str, str] = {}
+
+        if not clan_file.exists():
+            print(f"[warn] Pfam clan mapping file not found: {clan_file}")
+            _PFAM_CLAN_MAP = tmp_map
+            return _PFAM_CLAN_MAP
+
+        try:
+            with gzip.open(clan_file, "rt") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.split("\t")
+                    if len(parts) >= 4:
+                        pfam_acc = parts[0]
+                        clan_acc = parts[2]
+                        clan_id = parts[3]
+                        if pfam_acc and clan_id:
+                            tmp_map[pfam_acc] = clan_id
+                            if clan_acc:
+                                _CLAN_ACC_BY_ID[clan_id] = clan_acc
+            print(f"[info] Loaded {len(tmp_map)} Pfam→clan mappings")
+        except Exception as exc:
+            print(f"[warn] Failed to load Pfam clan map: {exc}")
+
+        _PFAM_CLAN_MAP = tmp_map
+        _ensure_clan_metadata_cache()
+        return _PFAM_CLAN_MAP
+
+
+def _ensure_clan_metadata_cache() -> Dict[str, Dict[str, str]]:
+    """Ensure clan metadata JSON exists (clan_id -> {clan_acc, name, description})."""
+    global _CLAN_METADATA_CACHE
+    if _CLAN_METADATA_CACHE is not None:
+        return _CLAN_METADATA_CACHE
+    if PFAM_CLAN_METADATA_JSON.exists():
+        try:
+            _CLAN_METADATA_CACHE = json.loads(PFAM_CLAN_METADATA_JSON.read_text(encoding="utf-8"))
+            return _CLAN_METADATA_CACHE
+        except Exception:
+            print(f"[warn] Failed to read clan metadata file: {PFAM_CLAN_METADATA_JSON}")
+            _CLAN_METADATA_CACHE = {}
+            return _CLAN_METADATA_CACHE
+
+    print(f"[warn] Clan metadata file missing: {PFAM_CLAN_METADATA_JSON}")
+    _CLAN_METADATA_CACHE = {}
+    return _CLAN_METADATA_CACHE
+
+
+def _fetch_pfam_entries(uniprot_id: str) -> Tuple[List[Dict[str, object]], bool]:
+    """Fetch all Pfam entries for a UniProt accession (no representative filter)."""
+    results: List[Dict[str, object]] = []
+    headers = {"Accept": "application/json"}
+
+    try:
+        # First call to get entries_url
+        seed_url = f"{PFAM_API_BASE}/{uniprot_id}/entry/pfam?page_size=1"
+        resp = requests.get(seed_url, headers=headers, timeout=20)
+        if resp.status_code != 200:
+            print(f"[warn] InterPro Pfam seed returned {resp.status_code} for {uniprot_id}")
+            return [], True
+        payload = resp.json()
+        entries_url = payload.get("entries_url")
+        if not entries_url:
+            print(f"[warn] InterPro Pfam response missing entries_url for {uniprot_id}")
+            return [], True
+
+        next_url = f"{entries_url}?page_size=200"
+        while next_url:
+            resp = requests.get(next_url, headers=headers, timeout=20)
+            if resp.status_code != 200:
+                print(f"[warn] InterPro Pfam entries returned {resp.status_code} for {uniprot_id}")
+                return [], True
+            page = resp.json()
+            results.extend(page.get("results", []))
+            next_url = page.get("next")
+    except Exception as exc:
+        print(f"[warn] InterPro fetch failed for {uniprot_id}: {exc}")
+        return [], True
+
+    return results, False
+
+
+def _derive_interpro_features(
+    results: List[Dict[str, object]], uniprot_id: str
+) -> Tuple[List[str], List[str]]:
+    """Derive domain labels and raw Pfam accessions from Pfam results (no rep filter)."""
+    names: List[str] = []
+    pfam_accs: List[str] = []
+
+    for entry in results:
+        meta = entry.get("metadata", {}) if isinstance(entry, dict) else {}
+
+        name_field = meta.get("name") if isinstance(meta, dict) else None
+        if isinstance(name_field, dict):
+            label = name_field.get("name") or name_field.get("short")
+        else:
+            label = name_field
+        if not label:
+            label = meta.get("accession") if isinstance(meta, dict) else None
+
+        source_db = str(meta.get("source_database", "")) if isinstance(meta, dict) else ""
+        source_db = source_db.lower()
+
+        if source_db == "cathgene3d" and isinstance(label, str) and label.startswith("G3DSA:"):
+            continue
+
+        if label:
+            names.append(str(label))
+
+        if source_db == "pfam":
+            pfam_acc = meta.get("accession") if isinstance(meta, dict) else None
+            if pfam_acc:
+                pfam_accs.append(str(pfam_acc))
+
+    # Deduplicate but preserve order
+    names = list(dict.fromkeys([n for n in names if n]))
+    pfam_accs = list(dict.fromkeys([a for a in pfam_accs if a]))
+    return names, pfam_accs
+
+
 def extract_reactome_pathways(uniprot_id: str) -> List[Dict[str, str]]:
     """Extract Reactome pathway IDs + names from UniProt JSON cross-references."""
     entry = load_uniprot_entry(uniprot_id)
@@ -561,6 +827,91 @@ def build_alphafold_info(uniprot_id: str, alphafold_ref: Optional[Dict[str, obje
         "thumbnail_url": f"{base_url}/{model_id}-thumbnail.png",
         "viewer_url": f"https://alphafold.ebi.ac.uk/entry/{uniprot_id}",
     }
+
+
+def parse_chain_segments(spec: Optional[str]) -> List[Dict[str, object]]:
+    """Parse chain coverage spec like 'A/B=1-100,C=101-200' into segments."""
+    if not spec or not isinstance(spec, str):
+        return []
+    segments: List[Dict[str, object]] = []
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            continue
+        chain_token, range_token = part.split("=", 1)
+        chains = [c.strip() for c in chain_token.split("/") if c.strip()]
+        if not chains:
+            continue
+        if "-" not in range_token:
+            continue
+        start_token, end_token = range_token.split("-", 1)
+        try:
+            start = int(start_token)
+            end = int(end_token)
+        except Exception:
+            continue
+        normalized_start = min(start, end)
+        normalized_end = max(start, end)
+        segments.append(
+            {
+                "chains": chains,
+                "start": normalized_start,
+                "end": normalized_end,
+                "length": normalized_end - normalized_start + 1,
+            }
+        )
+    return segments
+
+
+def compute_pdb_coverage(pdb_info: Optional[Dict[str, object]], protein_length: Optional[int]) -> float:
+    """Compute fractional coverage from parsed PDB chain ranges."""
+    if not pdb_info or not pdb_info.get("chains"):
+        return 0.0
+    if not protein_length or protein_length <= 0:
+        return 1.0
+    segments = parse_chain_segments(pdb_info.get("chains"))
+    if not segments:
+        return 0.0
+    covered = sum(max(0, int(seg.get("length", 0))) for seg in segments)
+    if covered <= 0:
+        return 0.0
+    return max(0.0, min(1.0, covered / float(protein_length)))
+
+
+def extract_swiss_quality(model: Optional[Dict[str, object]]) -> Optional[float]:
+    if not model:
+        return None
+    candidates = [
+        model.get("qmean"),
+        model.get("qmeanDisCo_global"),
+        model.get("qmean_dis_co_global"),
+    ]
+    for cand in candidates:
+        try:
+            num = float(cand)
+            if math.isfinite(num):
+                return num
+        except Exception:
+            continue
+    return None
+
+
+def compute_swiss_coverage(model: Optional[Dict[str, object]], protein_length: Optional[int]) -> float:
+    """Compute SwissModel coverage; mirrors frontend logic."""
+    if not model:
+        return 0.0
+    if isinstance(model.get("coverage"), (int, float)) and math.isfinite(model["coverage"]):
+        return float(model["coverage"])
+    if not protein_length or protein_length <= 0:
+        return 0.0
+    start = to_finite_number(model.get("uniprot_start") or model.get("uniprot_from") or model.get("start") or model.get("from"))
+    end = to_finite_number(model.get("uniprot_end") or model.get("uniprot_to") or model.get("end") or model.get("to"))
+    if start is None or end is None:
+        return 0.0
+    span = max(0, abs(int(end) - int(start)) + 1)
+    return max(0.0, min(1.0, span / float(protein_length)))
 
 
 def extract_ncbi_gene_id(uniprot_entry: Optional[Dict[str, object]]) -> Optional[str]:
@@ -892,7 +1243,7 @@ def get_gene_summary(uniprot_id: str, gene_id: Optional[str], ncbi_summaries: Di
     return extract_uniprot_function(uniprot_entry)
 
 
-def extract_structure_info(uniprot_id: str) -> Dict[str, Optional[object]]:
+def extract_structure_info(uniprot_id: str, protein_length: Optional[int]) -> Dict[str, Optional[object]]:
     entry = load_uniprot_entry(uniprot_id)
     if not entry:
         return {
@@ -900,6 +1251,10 @@ def extract_structure_info(uniprot_id: str) -> Dict[str, Optional[object]]:
             "primary_source": None,
             "pdb": None,
             "alphafold": None,
+            "coverage": None,
+            "swiss_model": None,
+            "swiss_coverage": None,
+            "swiss_qmean": None,
         }
 
     cross_refs = entry.get("uniProtKBCrossReferences", [])
@@ -909,11 +1264,19 @@ def extract_structure_info(uniprot_id: str) -> Dict[str, Optional[object]]:
     pdb_info = select_best_pdb_entry(pdb_refs)
     alphafold_info = build_alphafold_info(uniprot_id, alphafold_ref)
 
+    coverage = compute_pdb_coverage(pdb_info, protein_length)
+    swiss_model = entry.get("swiss_model") if isinstance(entry, dict) else None
+    swiss_coverage = compute_swiss_coverage(swiss_model, protein_length) if swiss_model else 0.0
+    swiss_qmean = extract_swiss_quality(swiss_model) if swiss_model else None
     primary_source = None
     structure_id = None
-    if pdb_info and pdb_info.get("id"):
+    if pdb_info and pdb_info.get("id") and coverage >= PDB_COVERAGE_THRESHOLD:
         primary_source = "pdb"
         structure_id = pdb_info["id"]
+    elif swiss_model and swiss_coverage >= SWISS_MODEL_COVERAGE_THRESHOLD:
+        if swiss_qmean is None or swiss_qmean >= SWISS_MODEL_QMEAN_THRESHOLD:
+            primary_source = "swissmodel"
+            structure_id = swiss_model.get("model_id") or swiss_model.get("template") or swiss_model.get("pdb_id")
     elif alphafold_info and alphafold_info.get("id"):
         primary_source = "alphafold"
         structure_id = alphafold_info["id"]
@@ -923,6 +1286,10 @@ def extract_structure_info(uniprot_id: str) -> Dict[str, Optional[object]]:
         "primary_source": primary_source,
         "pdb": pdb_info,
         "alphafold": alphafold_info,
+        "coverage": coverage if pdb_info else None,
+        "swiss_model": swiss_model,
+        "swiss_coverage": swiss_coverage if swiss_model else None,
+        "swiss_qmean": swiss_qmean if swiss_model else None,
     }
 
 
@@ -1234,7 +1601,7 @@ def build_protein_record(
         "wiki": slug_for_page(md_path),
     }
 
-    structure_info = extract_structure_info(uniprot_id)
+    structure_info = extract_structure_info(uniprot_id, length)
 
     def go_term_names(go_ids: Set[str]) -> List[str]:
         names: List[str] = []
@@ -1253,6 +1620,9 @@ def build_protein_record(
     if not domain_names:
         domain_names = extract_interpro_domain_names(uniprot_id)
 
+    clans_str = feature_row.get("clans", "")
+    clans = [c.strip() for c in clans_str.split(",") if c.strip()] if clans_str else []
+    
     record = {
         "uniprot": uniprot_id,
         "hgnc": gene_symbol,
@@ -1263,6 +1633,7 @@ def build_protein_record(
         "secreted": secreted,
         "domains": domain_ids or domain_names,
         "domain_names": domain_names,
+        "clans": clans,
         "tissue": tissue,
         "subcell": subcell,
         "links": links,
@@ -1353,6 +1724,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", type=int, default=500, help="Number of records to buffer before flushing")
     parser.add_argument("--test", action="store_true", help="Test mode: process only top 200 highest quality proteins")
+    parser.add_argument(
+        "--interpro-workers",
+        type=int,
+        default=DEFAULT_INTERPRO_WORKERS,
+        help="Concurrent InterPro fetch workers (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--interpro-prefetch",
+        type=int,
+        default=DEFAULT_INTERPRO_PREFETCH,
+        help="Max queued InterPro requests before blocking (default: %(default)s)",
+    )
     args = parser.parse_args()
 
     print("==> Loading GO ontology")
@@ -1471,6 +1854,10 @@ def main() -> None:
     skipped_long = 0
     skipped_no_domains = 0
     missing_uniprot_json = 0
+    interpro_fetch_attempts = 0
+    interpro_fetch_failures = 0
+    interpro_zero_domains = 0
+    observed_clans: Set[str] = set()
     
     # Empty-field counters (incremented for records that are written)
     from collections import defaultdict as _dd
@@ -1497,100 +1884,98 @@ def main() -> None:
         "go_terms.cc",
         "go_terms_named.bp",
         "domain_names",
+        "clans",
         "reactome_pathways",
         "gene_summary",
         "uniprot_quality",
         "wikipedia_pageviews",
     ]
 
-    print(f"==> Building dataset (streaming, batch_size={args.batch_size})")
+    interpro_workers = max(1, args.interpro_workers)
+    prefetch_target = max(1, args.interpro_prefetch, interpro_workers)
+    expected_total = len(uniprot_ids) if args.test else total_entries
+
+    print(f"==> Building dataset (streaming, batch_size={args.batch_size}, interpro_workers={interpro_workers})")
     with temp.open("w", encoding="utf-8") as out_handle:
         out_handle.write("[\n")
-        for entry in stream_embedding_entries(EMBED_FILE):
-            processed_count += 1
-            if processed_count % 100 == 0:
-                print(f"[progress] {processed_count}/{total_entries} ({processed_count*100//total_entries}%)")
+        executor = ThreadPoolExecutor(max_workers=interpro_workers)
+        pending: deque = deque()
 
-            uniprot_id = entry.get("uniprot")
+        def process_record(entry_obj: Dict[str, object], fetch_result: Tuple[List[str], List[str], bool]) -> None:
+            nonlocal missing_uniprot_json, interpro_fetch_failures, interpro_zero_domains
+            nonlocal skipped_short, skipped_long, skipped_no_domains
+            nonlocal batch, eligible_ids, first_written, written_count
+
+            domain_names, clans, rep_failed = fetch_result
+            uniprot_id = entry_obj.get("uniprot")
             if not uniprot_id:
                 missing_uniprot_json += 1
-                continue
-            
-            # In test mode, skip proteins not in our test list
-            if args.test and uniprot_id not in uniprot_ids:
-                continue
+                return
 
             md_path = BASE_DIR / "content" / "wiki" / f"{uniprot_id}.md"
-            # Load UniProt snapshot early so we can fill synonyms/reactome fallbacks
             uniprot_entry = load_uniprot_entry(uniprot_id)
             if uniprot_entry is None:
-                # count missing snapshots but continue — some records are still useful
                 missing_uniprot_json += 1
-            # Populate a small feature_row from the embedding entry so
-            # build_protein_record gets length/domains information when the
-            # CSV/wiki data is not available.
-            feature_row: Dict[str, str] = {}
-            # length may be numeric in the embedding entry
-            if "length" in entry and entry.get("length") is not None:
-                feature_row["length"] = str(entry.get("length"))
-            # domains may be provided in the embedding entry as names or InterPro IDs.
-            # We prefer English names. If the embedding provides InterPro IDs,
-            # try to resolve them to names from the UniProt JSON snapshot.
-            domains_list = entry.get("domains") or entry.get("interpro_domains") or entry.get("interpro") or []
-            domain_names: List[str] = []
-            if isinstance(domains_list, list) and domains_list:
-                # detect InterPro-like IDs (e.g. IPRxxxxx)
-                looks_like_ipr = any(isinstance(d, str) and d.upper().startswith("IPR") for d in domains_list)
-                if looks_like_ipr:
-                    names = extract_interpro_domain_names(uniprot_id)
-                    if names:
-                        domain_names = names
-                    else:
-                        domain_names = [str(d) for d in domains_list]
-                else:
-                    domain_names = [str(d) for d in domains_list]
-            elif domains_list:
-                domain_names = [str(domains_list)]
-            else:
-                # No domain info in embedding entry; try UniProt JSON
-                domain_names = extract_interpro_domain_names(uniprot_id) or []
 
+            feature_row: Dict[str, str] = {}
+            if "length" in entry_obj and entry_obj.get("length") is not None:
+                feature_row["length"] = str(entry_obj.get("length"))
+
+            if rep_failed:
+                interpro_fetch_failures += 1
+                domain_names = []
+                clans = []
+            elif not domain_names:
+                # Keep clans even if representative domains are empty; fall back to all domain names.
+                interpro_zero_domains += 1
+                domain_names = extract_interpro_domain_names(uniprot_id) or []
             if domain_names:
-                # Store as semicolon-delimited string so `normalize_domains` can parse it
                 feature_row["domains_top3"] = ";".join(domain_names)
-            page_post = entry
-            raw_go = entry.get("go_terms", {}) or {}
+            if clans:
+                feature_row["clans"] = ", ".join(clans)
+                observed_clans.update(clans)
+
+            raw_go = entry_obj.get("go_terms", {}) or {}
             go_annotations = {
                 "bp": set(raw_go.get("bp", [])),
                 "mf": set(raw_go.get("mf", [])),
                 "cc": set(raw_go.get("cc", [])),
             }
 
-            reactome_paths = entry.get("reactome_pathways", []) or []
-            # If embedding didn't include reactome pathways, try UniProt JSON
+            reactome_paths = entry_obj.get("reactome_pathways", []) or []
             if not reactome_paths:
                 reactome_paths = extract_reactome_pathways(uniprot_id)
 
-            gene_summary = entry.get("gene_summary")
-
-            # If embedding metadata lacks a gene_summary, try fallback chain
+            gene_summary = entry_obj.get("gene_summary")
             if not gene_summary:
                 gene_id = extract_ncbi_gene_id(uniprot_entry) if uniprot_entry else None
                 gene_summary = get_gene_summary(uniprot_id, gene_id, ncbi_summaries)
 
-            record = build_protein_record(
-                md_path,
-                page_post,
-                feature_row,
-                go_annotations,
-                ontology,
-                gene_summary,
-                reactome_paths,
+            page = frontmatter.Post(
+                content="",
+                **{
+                    "uniprot": uniprot_id,
+                    "uniprot_id": uniprot_id,
+                    "gene_symbol": entry_obj.get("symbol"),
+                    "hgnc": entry_obj.get("hgnc"),
+                    "aliases": entry_obj.get("synonyms"),
+                    "synonyms": entry_obj.get("synonyms"),
+                    "title": entry_obj.get("symbol") or entry_obj.get("hgnc") or uniprot_id,
+                },
             )
-            
-            # Enrich synonyms with every reliable source so short tokens survive downstream matching.
+
+            record = build_protein_record(
+                md_path=md_path,
+                page=page,
+                feature_row=feature_row,
+                go_annotations=go_annotations,
+                ontology=ontology,
+                gene_summary=gene_summary,
+                reactome_paths=reactome_paths,
+            )
+
             try:
-                synonym_pool: Set[str] = set()
+                synonym_pool: Set[str] = set(record.get("synonyms", []))
 
                 def _ingest(values) -> None:
                     if not values:
@@ -1606,7 +1991,7 @@ def main() -> None:
                         synonym_pool.add(text)
 
                 _ingest(record.get("synonyms"))
-                _ingest(entry.get("synonyms"))
+                _ingest(entry_obj.get("synonyms"))
                 _ingest(record.get("hgnc"))
                 _ingest(record.get("uniprot"))
 
@@ -1619,19 +2004,13 @@ def main() -> None:
 
                 record["synonyms"] = sorted(synonym_pool)
             except Exception:
-                # never fail the whole run for enrichment errors
                 pass
 
-            # Apply simple inclusion criteria
             rec_length = int(record.get("length", 0) or 0)
-            if rec_length < MIN_LENGTH:
-                skipped_short += 1
-                continue
             if len(record.get("domains", [])) < MIN_DOMAINS:
                 skipped_no_domains += 1
-                continue
+                return
 
-            # Update empty-field counters for this accepted record
             def _is_empty(v) -> bool:
                 if v is None:
                     return True
@@ -1648,7 +2027,6 @@ def main() -> None:
                     if outer_val is None:
                         empty_counts[fld] += 1
                     else:
-                        # nested access for known shapes
                         if isinstance(outer_val, dict):
                             nested = outer_val.get(inner)
                             if _is_empty(nested):
@@ -1672,6 +2050,42 @@ def main() -> None:
                     first_written = True
                     written_count += 1
                 batch = []
+
+        def drain_pending(force: bool = False) -> None:
+            while pending and (force or len(pending) >= prefetch_target):
+                entry_obj, fut = pending.popleft()
+                try:
+                    fetch_result = fut.result()
+                except Exception as exc:
+                    print(f"[warn] InterPro worker crashed for {entry_obj.get('uniprot')}: {exc}")
+                    fetch_result = ([], [], True)
+                process_record(entry_obj, fetch_result)
+
+        try:
+            for entry in stream_embedding_entries(EMBED_FILE):
+                uniprot_id = entry.get("uniprot")
+                if not uniprot_id:
+                    missing_uniprot_json += 1
+                    continue
+
+                if args.test and uniprot_id not in uniprot_ids:
+                    continue
+
+                processed_count += 1
+                if processed_count % 100 == 0 or processed_count == expected_total:
+                    pct = (processed_count * 100) // max(1, expected_total)
+                    print(f"[progress] {processed_count}/{expected_total} ({pct}%)")
+
+                future = executor.submit(fetch_interpro_domains_and_clans, uniprot_id)
+                pending.append((entry, future))
+                interpro_fetch_attempts += 1
+                drain_pending()
+
+                if args.test and processed_count >= expected_total:
+                    break
+        finally:
+            drain_pending(force=True)
+            executor.shutdown(wait=True)
 
         # flush remaining batch
         if batch:
@@ -1709,10 +2123,21 @@ def main() -> None:
     print("\nDiagnostics summary:")
     print(f"  processed entries: {processed_count}")
     print(f"  written records:   {written_count}")
+    if interpro_fetch_attempts:
+        zero_pct = (interpro_zero_domains / interpro_fetch_attempts) * 100
+        fail_pct = (interpro_fetch_failures / interpro_fetch_attempts) * 100
+    else:
+        zero_pct = 0.0
+        fail_pct = 0.0
+    print(f"  InterPro fetch attempts: {interpro_fetch_attempts}")
+    print(f"    zero-domain entries: {interpro_zero_domains} ({zero_pct:.2f}%)")
+    print(f"    fetch failures:      {interpro_fetch_failures} ({fail_pct:.2f}%)")
     print(f"  skipped (too short): {skipped_short}")
     # removed 'too long' restriction so all long proteins are included
     print(f"  skipped (no domains): {skipped_no_domains}")
     print(f"  entries missing UniProt JSON or uniprot id: {missing_uniprot_json}")
+    if observed_clans:
+        print(f"  unique clans observed: {len(observed_clans)}")
     # Print empty-field percentages for written records
     if written_count > 0:
         print("\nEmpty-field percentages (on written records):")

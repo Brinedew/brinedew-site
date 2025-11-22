@@ -40,6 +40,7 @@ export function sanitizeTargetProtein(protein, options = {}) {
     secreted: Boolean(protein?.secreted),
     tissue: protein?.tissue ? { ...protein.tissue } : { label: 'unknown', score: null },
     domains: Array.isArray(protein?.domains) ? [...protein.domains] : [],
+    domain_names: Array.isArray(protein?.domain_names) ? [...protein.domain_names] : [],
     go_terms: cloneGoTerms(protein?.go_terms),
     go_terms_named: cloneGoTerms(protein?.go_terms_named),
     reactome_pathways: Array.isArray(protein?.reactome_pathways) ? [...protein.reactome_pathways] : [],
