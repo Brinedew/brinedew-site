@@ -1696,7 +1696,22 @@ def build_protein_record(
         or page.get("title")
         or uniprot_id
     )
-    full_name = page.get("full_name") or feature_row.get("full_name") or gene_symbol
+    # Prefer UniProt recommended name; if missing, fall back to page/CSV; final fallback is empty.
+    uniprot_entry = load_uniprot_entry(uniprot_id) if uniprot_id else None
+    recommended_full_name = None
+    if isinstance(uniprot_entry, dict):
+        recommended_full_name = (
+            uniprot_entry.get("proteinDescription", {})
+            .get("recommendedName", {})
+            .get("fullName", {})
+            .get("value")
+        )
+    full_name = (
+        recommended_full_name
+        or page.get("full_name")
+        or feature_row.get("full_name")
+        or ""
+    )
     short_name = feature_row.get("short_name") or gene_symbol
 
     try:
@@ -1808,17 +1823,28 @@ def load_embedding_metadata(path: Path) -> List[dict]:
 
 
 def stream_embedding_entries(path: Path):
-    """Yield embedding entries one-at-a-time using ijson.
+    """Yield embedding entries one-at-a-time.
 
-    This avoids allocating the entire embedding file in memory. ijson is optional
-    but recommended for large files; if unavailable we fall back to loading the
-    whole file (not ideal for very large payloads).
+    Supports both embedding_proteins.json (array) and the legacy
+    embedding_token_mappings.json shape ({"mappings": [...]}).
     """
     if not path.exists():
         raise FileNotFoundError(f"Missing embedding metadata at {path}")
+
+    # Special-case legacy token mapping roster (wrapped dict with "mappings")
+    if path.name == "embedding_token_mappings.json":
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        mappings = payload.get("mappings", [])
+        for item in mappings:
+            yield item
+        return
+
     if ijson is None:
         # Fallback: load entire file and iterate (less memory-efficient)
         payload = json.loads(path.read_text(encoding="utf-8"))
+        # Some legacy formats may wrap the array under a key like "embedding"
+        if isinstance(payload, dict):
+            payload = payload.get("embedding", payload.get("items", []))
         if not isinstance(payload, list):
             raise RuntimeError("embed file must contain an array of records")
         for item in payload:
@@ -1864,9 +1890,13 @@ def main() -> None:
     build_uniprot_sqlite_index()
     
     EMBED_FILE = OUTPUT_DIR / "embedding_proteins.json"
-
+    # Fallback for older datasets: use token→uniprot mapping roster
     if not EMBED_FILE.exists():
-        raise FileNotFoundError(f"Embedding metadata not found: {EMBED_FILE}")
+        alt_embed = OUTPUT_DIR / "embedding_token_mappings.json"
+        if alt_embed.exists():
+            EMBED_FILE = alt_embed
+        else:
+            raise FileNotFoundError(f"Embedding metadata not found: {EMBED_FILE}")
 
     # First pass: collect unique UniProt IDs from embedding roster (streamed)
     print("==> Collecting UniProt IDs from embedding roster")
