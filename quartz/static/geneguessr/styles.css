@@ -744,6 +744,10 @@
   background: var(--light);
   border-radius: 8px;
   margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
   overflow: visible;
   isolation: isolate;
   /* Sticky positioning */
@@ -751,6 +755,7 @@
   top: 1rem;
   z-index: 100;
   padding: 0.75rem 1rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
 }
 
 #pg-input-slot::after {
@@ -981,15 +986,22 @@
 
 @media (max-width: 600px) {
   .pg-input-row {
-    flex-wrap: wrap;
+    gap: 0.5rem;
+    min-inline-size: 0;
   }
 
   .pg-autocomplete-wrapper {
     width: 100%;
   }
 
+  .pg-guesses-badge,
   .pg-hints-badge {
-    margin-left: auto;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .pg-practice-badge {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
   }
 }
 
@@ -1391,23 +1403,8 @@
     flex-wrap: wrap;
   }
 
-  /* Sticky input panel - more aggressive on mobile */
   #pg-input-slot {
-    margin: 0 -0.5rem;
     padding-left: 0.5rem;
     padding-right: 0.5rem;
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
-  }
-}
-
-/* Desktop - less aggressive sticky behavior */
-@media (min-width: 601px) {
-  #pg-input-slot {
-    /* On desktop, reduce shadow and keep it subtle */
-    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.05);
-    max-width: 900px;
-    margin-left: auto;
-    margin-right: auto;
-    border-radius: 8px 8px 0 0;
   }
 }
