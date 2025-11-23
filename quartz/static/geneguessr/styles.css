@@ -772,10 +772,11 @@
 }
 
 #pg-input {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   padding: 0.65rem 0.75rem;
   font-size: 1rem;
-  border: 1px solid var(--ui-border);
+  border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--dark);
