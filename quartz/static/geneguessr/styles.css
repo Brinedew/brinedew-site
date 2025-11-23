@@ -758,7 +758,7 @@
   background: var(--light);
   border-radius: 8px;
   margin-bottom: 1.5rem;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
   /* Sticky positioning */
   position: sticky;
@@ -794,13 +794,14 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .pg-autocomplete-wrapper {
   position: relative;
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   background: var(--light);
@@ -954,8 +955,10 @@
   background: var(--light);
   border: 1px solid var(--ui-border);
   border-radius: 8px;
-  z-index: 10;
+  z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .pg-suggestions.pg-suggestions-above {
