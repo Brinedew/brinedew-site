@@ -754,21 +754,32 @@
 
 /* Input */
 #pg-input-slot {
+  position: relative;
+  background: var(--light);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+  isolation: isolate;
+  /* Sticky positioning */
   position: sticky;
   top: 1rem;
-  bottom: 1rem;
-  left: 0;
-  right: 0;
-  background: var(--light);
   z-index: 100;
   padding: 0.75rem 1rem;
+}
+
+#pg-input-slot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   border-radius: 8px;
-  /* Match card styling - use inset box-shadow like cards */
-  box-shadow: inset 0 0 0 1px var(--ui-border), 0 4px 12px rgba(0, 0, 0, 0.08);
-  border: none;
-  transition: none;
-  margin-bottom: 1.5rem;
-  isolation: isolate;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--ui-border);
+  z-index: 1;
+}
+
+#pg-input-slot > * {
+  position: relative;
+  z-index: 2;
 }
 
 #pg-input-placeholder {
@@ -790,29 +801,33 @@
   position: relative;
   flex: 1;
   min-width: 0;
-}
-
-#pg-input {
-  width: 100%;
-  padding: 0.65rem 0.75rem;
-  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  background: var(--light);
   border: 1px solid var(--ui-border);
   border-radius: 8px;
-  background: var(--lightgray);
-  color: var(--dark);
   transition: all 0.2s ease;
 }
 
-#pg-input:focus {
-  outline: none;
+.pg-autocomplete-wrapper:focus-within {
   border-color: var(--tertiary);
-  background: var(--light);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tertiary) 15%, transparent);
 }
 
+#pg-input {
+  flex: 1;
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px 0 0 8px;
+  background: transparent;
+  color: var(--dark);
+  outline: none;
+}
+
 .pg-input:disabled {
-  background: var(--lightgray);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 #pg-submit {
@@ -825,10 +840,11 @@
   background: var(--secondary);
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 0 8px 8px 0;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  margin: -1px -1px -1px 0;
 }
 
 #pg-submit:hover:not(:disabled) {

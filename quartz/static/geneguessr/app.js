@@ -2635,13 +2635,13 @@
         <div class="pg-input-row">
           <div class="pg-autocomplete-wrapper">
             <input type="text" id="pg-input" placeholder="Type gene name (e.g., TERT, TP53)" autocomplete="off" spellcheck="false">
+            <button id="pg-submit" class="pg-btn" disabled>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
             <div id="pg-suggestions" class="pg-suggestions"></div>
           </div>
-          <button id="pg-submit" class="pg-btn" disabled>
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
           <div class="${hintsClass}">
             <span class="pg-hints-label">Hints</span>
             <span class="pg-hints-value">${hints}</span>
