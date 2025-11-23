@@ -1744,11 +1744,22 @@
     if (options.restart) {
       params.push('restart=1');
     }
+    if (options.sameTarget) {
+      params.push('same_target=1');
+    }
+    if (options.targetId) {
+      params.push(`target_id=${encodeURIComponent(options.targetId)}`);
+    }
     return `?${params.join('&')}`;
   }
 
   async function fetchGameBootstrap(options = {}) {
-    const response = await fetch(`${API_BASE}/api/game/bootstrap${buildPracticeQuery({ practice: options.practice, restart: options.restart })}`, {
+    const response = await fetch(`${API_BASE}/api/game/bootstrap${buildPracticeQuery({
+      practice: options.practice,
+      restart: options.restart,
+      sameTarget: options.sameTarget,
+      targetId: options.targetId,
+    })}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -2004,6 +2015,9 @@
   async function bootstrapGame(options = {}) {
     const payload = await fetchGameBootstrap(options);
     hydrateStateFromPayload(payload);
+    if (options.practice === true) {
+      gameState.practiceMode = true; // ensure client-side practice flag for off-record runs
+    }
     await hydrateGuessProteins();
     const tokenTasks = [];
     tokenTasks.push(ensureStructureTokenForTarget());
@@ -2526,13 +2540,14 @@
   function renderResult() {
     const title = gameState.won ? 'You Win!' : 'Game Over';
     const className = gameState.won ? '' : 'failed';
-    const practiceMessage = gameState.practiceMode
-      ? 'Practice mode active — stats paused.'
-      : 'Practice runs do not update your stats.';
+    const practiceMessage = 'Off the record: Try Again replays today’s gene; Practice picks a random gene.';
     const practiceCta = `
       <div class="pg-result-actions">
-        <button class="pg-play-again" type="button" onclick="window.geneguessrPlayAgain()">
-          ${gameState.practiceMode ? 'Restart Practice' : 'Play Again (Practice)'}
+        <button class="pg-play-again" type="button" onclick="window.geneguessrTryAgain()">
+          Try Again (same gene)
+        </button>
+        <button class="pg-practice-btn" type="button" onclick="window.geneguessrPracticeRandom()">
+          Practice (random)
         </button>
         <div class="pg-practice-tag">${practiceMessage}</div>
       </div>
@@ -3823,16 +3838,29 @@ https://brinedew.bio/apps/geneguessr/`;
     }
   };
 
-  window.geneguessrPlayAgain = async function () {
+  window.geneguessrTryAgain = async function () {
     try {
       setStatus('loading-data');
-      const payload = await fetchGameBootstrap({ practice: true, restart: true });
-      hydrateStateFromPayload(payload);
+      await bootstrapGame({ practice: true, restart: true, sameTarget: true, targetId: gameState.targetId });
       await hydrateGuessProteins();
       render();
       setStatus('rendered');
     } catch (err) {
-      console.error('Practice restart failed', err);
+      console.error('Try again failed', err);
+      alert('Failed to start a try-again round. Please try again.');
+      setStatus('errored');
+    }
+  };
+
+  window.geneguessrPracticeRandom = async function () {
+    try {
+      setStatus('loading-data');
+      await bootstrapGame({ practice: true, restart: true });
+      await hydrateGuessProteins();
+      render();
+      setStatus('rendered');
+    } catch (err) {
+      console.error('Practice round failed', err);
       alert('Failed to start a practice round. Please try again.');
       setStatus('errored');
     }
