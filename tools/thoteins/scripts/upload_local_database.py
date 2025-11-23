@@ -21,7 +21,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -94,9 +94,21 @@ def collect_candidate_tokens(entry: dict) -> Iterable[str]:
             yield token
 
 
-def build_vector_lookup() -> Tuple[Dict[str, str], int, Dict[str, object]]:
+def collect_needed_tokens(metadata: Optional[Sequence[dict]]) -> Set[str]:
+    if not metadata:
+        return set()
+    tokens: Set[str] = set()
+    for entry in metadata:
+        for token in collect_candidate_tokens(entry):
+            tokens.add(token)
+    return tokens
+
+
+def build_vector_lookup(metadata: Optional[Sequence[dict]] = None) -> Tuple[Dict[str, str], int, Dict[str, object]]:
     if not EMBEDDING_PATH.exists():
         raise SystemExit(f"Missing embedding file at {EMBEDDING_PATH}")
+    needed = collect_needed_tokens(metadata)
+
     model = torch.load(EMBEDDING_PATH, map_location="cpu")
     objects = model.get("objects")
     embeddings = model.get("embeddings")
@@ -116,6 +128,7 @@ def build_vector_lookup() -> Tuple[Dict[str, str], int, Dict[str, object]]:
         "file_sha256": hash_file(EMBEDDING_PATH),
         "file_size": EMBEDDING_PATH.stat().st_size,
     }
+    needed_hits = 0
     for idx, raw_name in enumerate(objects):
         if not isinstance(raw_name, str):
             stats["skipped_nonstring"] += 1
@@ -131,7 +144,13 @@ def build_vector_lookup() -> Tuple[Dict[str, str], int, Dict[str, object]]:
             stats["deduped"] += 1
             continue
         lookup[token] = tensor_to_hex(embeddings[idx])
+        needed_hits += 1
+        if needed and needed_hits % 2000 == 0:
+            print(f"[loader] Embedded {needed_hits}/{len(needed)} needed tokens (tracking only).")
     stats["vectors"] = len(lookup)
+    # Release tensor memory promptly
+    del embeddings
+    del model
     return lookup, dim, stats
 
 
@@ -139,6 +158,7 @@ def build_records(metadata: Sequence[dict], lookup: Dict[str, str], dim: int) ->
     records: List[dict] = []
     missing: List[str] = []
     seen_uniprot = set()
+    used_tokens = set()
     for entry in metadata:
         uniprot = entry.get("uniprot")
         if not uniprot:
@@ -150,6 +170,7 @@ def build_records(metadata: Sequence[dict], lookup: Dict[str, str], dim: int) ->
         for token in collect_candidate_tokens(entry):
             vector_hex = lookup.get(token)
             if vector_hex:
+                used_tokens.add(token)
                 break
         if not vector_hex:
             missing.append(uniprot)
@@ -172,55 +193,102 @@ def build_records(metadata: Sequence[dict], lookup: Dict[str, str], dim: int) ->
                 "dim": dim,
             }
         )
+    # Add placeholder entries for embedding tokens that lack metadata to keep embeddings the source of truth
+    unused_tokens = set(lookup.keys()) - used_tokens
+    for token in sorted(unused_tokens):
+        records.append(
+            {
+                "entry": {},
+                "uniprot": token,
+                "hgnc": None,
+                "full_name": None,
+                "length": None,
+                "has_structure": False,
+                "structure_source": None,
+                "metadata": "{}",
+                "vector_hex": lookup[token],
+                "dim": dim,
+            }
+        )
     return records, missing
 
 
-def build_sql(records: Sequence[dict], transactional: bool = True) -> List[str]:
-    statements: List[str] = []
-    if transactional:
-        statements.append("BEGIN TRANSACTION;")
-    statements.extend(
-        [
-            "DELETE FROM protein_embeddings;",
-            "DELETE FROM protein_synonyms;",
-            "DELETE FROM proteins;",
-        ]
-    )
-    for record in records:
-        columns = [
-            "uniprot",
-            "hgnc",
-            "full_name",
-            "length",
-            "has_structure",
-            "structure_source",
-            "metadata",
-        ]
-        values = [
-            sql_literal(record["uniprot"]),
-            sql_literal(record["hgnc"]),
-            sql_literal(record["full_name"]),
-            sql_literal(record["length"]),
-            sql_literal(record["has_structure"]),
-            sql_literal(record["structure_source"]),
-            sql_literal(record["metadata"]),
-        ]
-        statements.append(f"INSERT INTO proteins ({', '.join(columns)}) VALUES ({', '.join(values)});")
-        for synonym, normalized in iter_synonyms(record["entry"]):
-            statements.append(
-                "INSERT INTO protein_synonyms (protein_id, synonym, normalized) "
-                f"SELECT id, {sql_literal(synonym)}, {sql_literal(normalized)} "
-                f"FROM proteins WHERE uniprot = {sql_literal(record['uniprot'])};"
+def _write_sql_chunk(
+    records: Sequence[dict],
+    *,
+    include_delete: bool,
+    transactional: bool,
+    chunk_label: str,
+    total: int,
+) -> Path:
+    """
+    Write a chunk of SQL statements to a temp file.
+    """
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, suffix=".sql") as tmp:
+        if transactional:
+            tmp.write("BEGIN TRANSACTION;\n")
+        if include_delete:
+            tmp.write("DELETE FROM protein_embeddings;\nDELETE FROM protein_synonyms;\nDELETE FROM proteins;\n")
+        for idx, record in enumerate(records, start=1):
+            columns = [
+                "uniprot",
+                "hgnc",
+                "full_name",
+                "length",
+                "has_structure",
+                "structure_source",
+                "metadata",
+            ]
+            values = [
+                sql_literal(record["uniprot"]),
+                sql_literal(record["hgnc"]),
+                sql_literal(record["full_name"]),
+                sql_literal(record["length"]),
+                sql_literal(record["has_structure"]),
+                sql_literal(record["structure_source"]),
+                sql_literal(record["metadata"]),
+            ]
+            tmp.write(f"INSERT INTO proteins ({', '.join(columns)}) VALUES ({', '.join(values)});\n")
+            for synonym, normalized in iter_synonyms(record["entry"]):
+                tmp.write(
+                    "INSERT INTO protein_synonyms (protein_id, synonym, normalized) "
+                    f"SELECT id, {sql_literal(synonym)}, {sql_literal(normalized)} "
+                    f"FROM proteins WHERE uniprot = {sql_literal(record['uniprot'])};\n"
+                )
+            tmp.write(
+                "INSERT INTO protein_embeddings (protein_id, dim, vector) "
+                f"SELECT id, {record['dim']}, x'{record['vector_hex']}' "
+                f"FROM proteins WHERE uniprot = {sql_literal(record['uniprot'])};\n"
             )
-        statements.append(
-            "INSERT INTO protein_embeddings (protein_id, dim, vector) "
-            f"SELECT id, {record['dim']}, x'{record['vector_hex']}' "
-            f"FROM proteins WHERE uniprot = {sql_literal(record['uniprot'])};"
+            if (idx % 500) == 0:
+                tmp.flush()
+                print(f"[loader] Wrote SQL for chunk {chunk_label}: {idx}/{len(records)} in chunk (total {total})")
+        if transactional:
+            tmp.write("COMMIT;\n")
+        tmp.write(f"-- Loaded {len(records)} proteins in chunk {chunk_label}\n")
+        return Path(tmp.name)
+
+
+def write_sql_chunks(records: Sequence[dict], transactional: bool = True, chunk_size: int = 1000) -> List[Path]:
+    """
+    Stream SQL in smaller chunks to avoid local D1 hash index issues.
+    """
+    paths: List[Path] = []
+    total = len(records)
+    for start in range(0, total, chunk_size):
+        end = min(start + chunk_size, total)
+        chunk = records[start:end]
+        label = f"{start+1}-{end}"
+        include_delete = start == 0
+        path = _write_sql_chunk(
+            chunk,
+            include_delete=include_delete,
+            transactional=transactional,
+            chunk_label=label,
+            total=total,
         )
-    if transactional:
-        statements.append("COMMIT;")
-    statements.append(f"-- Loaded {len(records)} proteins with embeddings")
-    return statements
+        paths.append(path)
+    return paths
 
 
 def resolve_wrangler() -> str:
@@ -230,29 +298,28 @@ def resolve_wrangler() -> str:
     return wrangler
 
 
-def execute_sql(statements: Sequence[str], remote: bool) -> None:
+def execute_sql(sql_paths: Sequence[Path], remote: bool) -> None:
     wrangler = resolve_wrangler()
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, suffix=".sql") as tmp:
-        tmp.write("\n".join(statements))
-        tmp_path = Path(tmp.name)
     try:
-        command = [wrangler, "d1", "execute", "geneguessr"]
-        if remote:
-            command.append("--remote")
-        command.extend(["--file", str(tmp_path)])
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            cwd=str(ROOT),
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(result.stderr)
-            raise SystemExit(f"wrangler exited with {result.returncode}")
+        for path in sql_paths:
+            command = [wrangler, "d1", "execute", "geneguessr"]
+            if remote:
+                command.append("--remote")
+            command.extend(["--file", str(path)])
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                cwd=str(ROOT),
+            )
+            print(result.stdout)
+            if result.returncode != 0:
+                print(result.stderr)
+                raise SystemExit(f"wrangler exited with {result.returncode}")
     finally:
-        tmp_path.unlink(missing_ok=True)
+        for path in sql_paths:
+            path.unlink(missing_ok=True)
 
 
 def run_query(sql: str, remote: bool) -> List[dict]:
@@ -372,24 +439,38 @@ def main() -> None:
         "--metadata-file",
         dest="metadata_file",
         type=str,
-        default=str(ROOT / "tools" / "thoteins" / "data" / "geneguessr" / "embedding_proteins.json"),
-        help="Optional path to a metadata JSON file (defaults to geneguessr/embedding_proteins.json).",
+        default=None,
+        help=(
+            "Optional path to a metadata JSON file. "
+            "Defaults to geneguessr/proteins.json if present (includes clans), "
+            "otherwise falls back to geneguessr/embedding_proteins.json."
+        ),
     )
     args = parser.parse_args()
 
-    metadata = collect_metadata(path=args.metadata_file)
+    default_with_clans = ROOT / "tools" / "thoteins" / "data" / "geneguessr" / "proteins.json"
+    default_embedding = ROOT / "tools" / "thoteins" / "data" / "geneguessr" / "embedding_proteins.json"
+    metadata_path = (
+        Path(args.metadata_file)
+        if args.metadata_file
+        else (default_with_clans if default_with_clans.exists() else default_embedding)
+    )
+    if not metadata_path.exists():
+        raise SystemExit(f"Metadata file not found: {metadata_path}")
+
+    metadata = collect_metadata(path=metadata_path)
     metadata_total = len(metadata)
-    lookup, dim, embedding_stats = build_vector_lookup()
+    lookup, dim, embedding_stats = build_vector_lookup(metadata)
     records, missing = build_records(metadata, lookup, dim)
     if not records:
         raise SystemExit("No proteins had matching embeddings; aborting")
-    statements = build_sql(records, transactional=not args.remote)
+    sql_paths = write_sql_chunks(records, transactional=not args.remote, chunk_size=1000)
 
     print(f"[loader] Preparing to write {len(records)} proteins with dim={dim}")
     if missing:
         print(f"[loader] Warning: {len(missing)} proteins lacked embeddings ({', '.join(missing[:5])} ...)")
 
-    execute_sql(statements, remote=args.remote)
+    execute_sql(sql_paths, remote=args.remote)
     counts_row = validate_counts(len(records), remote=args.remote)
     sample_row = validate_sample(remote=args.remote)
     print_validation_report(metadata_total, len(records), missing, embedding_stats, counts_row, sample_row)
