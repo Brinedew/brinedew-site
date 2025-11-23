@@ -2545,11 +2545,9 @@
       ? `${solution.hgnc} (${solution.full_name})`
       : 'Protein identity hidden';
     const uniprotLink = hasIdentity && solution.links?.uniprot ? solution.links.uniprot : null;
-    const wikiLink = hasIdentity && solution.links?.wiki ? solution.links.wiki : null;
     const guessesText = `${gameState.guesses.length}/${MAX_GUESSES} guesses`;
-    const practiceMessage = 'Off the record: Try Again replays today’s gene; Practice picks a random gene.';
 
-    // Render into the floating bar instead of a separate card; caller injects this markup directly.
+    // Render into the floating bar instead of a separate card; no extra helper text.
     return `
       <div class="pg-gameover-bar" role="status" aria-live="polite">
         <div class="pg-gameover-left">
@@ -2563,15 +2561,13 @@
         </div>
         <div class="pg-gameover-right">
           <button class="pg-play-again" type="button" onclick="window.geneguessrTryAgain()">
-            Try Again (same gene)
+            Try Again
           </button>
           <button class="pg-practice-btn" type="button" onclick="window.geneguessrPracticeRandom()">
-            Practice (random)
+            Practice
           </button>
         </div>
       </div>
-      <div class="pg-practice-tag">${practiceMessage}</div>
-      ${wikiLink ? `<div class="pg-gameover-links"><a class="pg-link-btn" href="${wikiLink}" target="_blank" rel="noopener noreferrer">Protein Page</a></div>` : ''}
     `;
   }
 
@@ -2634,10 +2630,8 @@
     }
     if (gameOver) {
       slot.innerHTML = renderResult();
-      slot.classList.add('pg-input-gameover');
       return;
     }
-    slot.classList.remove('pg-input-gameover');
     const hints = getHintsBalance();
     const hintsCount = typeof hints === 'number' ? hints : 0;
     const hintsClass = hintsCount > 0 ? 'pg-hints-badge has-hints' : 'pg-hints-badge';

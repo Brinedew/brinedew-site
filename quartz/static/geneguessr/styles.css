@@ -1162,16 +1162,10 @@
 }
 
 /* Failed card in light mode: cream bg with dark text on medium brown card */
-.pg-practice-tag,
 .pg-practice-badge {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--secondary);
-}
-
-.pg-practice-tag {
-  text-align: center;
-  color: inherit;
 }
 
 .pg-practice-btn {
@@ -1197,10 +1191,6 @@
   border-radius: 999px;
   border: 1px solid var(--ui-border);
   background: var(--ui-bg);
-}
-
-.pg-input-gameover {
-  /* Shares the floating bar shell; this class only tweaks spacing for game-over content. */
 }
 
 .pg-gameover-bar {
