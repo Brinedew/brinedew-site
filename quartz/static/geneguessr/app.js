@@ -2567,10 +2567,10 @@
     }
     rootEl.innerHTML = `
       <div id="pg-clue-slot"></div>
+      <div id="pg-input-slot"></div>
       <div id="pg-guesses-container">
         <div id="pg-guesses"></div>
       </div>
-      <div id="pg-input-slot"></div>
       <div id="pg-result-slot"></div>
       <div id="pg-footer-slot"></div>
     `;
@@ -3364,6 +3364,19 @@
         return;
       }
       const currentToken = ++requestToken;
+      
+      // Dynamic positioning logic
+      const rect = inputEl.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const SUGGESTIONS_HEIGHT_ESTIMATE = 300;
+      
+      if (spaceBelow < SUGGESTIONS_HEIGHT_ESTIMATE && spaceAbove > spaceBelow) {
+        suggestionsEl.classList.add('pg-suggestions-above');
+      } else {
+        suggestionsEl.classList.remove('pg-suggestions-above');
+      }
+
       debounceHandle = setTimeout(async () => {
         suggestionsEl.innerHTML = '<div class="pg-suggestion">Searching...</div>';
         suggestionsEl.style.display = 'block';

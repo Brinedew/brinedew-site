@@ -760,7 +760,7 @@
   left: 0;
   width: 100%;
   max-width: 700px;
-  margin: 0 auto;
+  margin: 0 auto 1.5rem auto;
   background: var(--light);
   z-index: 100;
   padding: 1rem;
@@ -874,14 +874,24 @@
 
 .pg-suggestions {
   position: absolute;
-  bottom: 100%;
+  top: calc(100% + 4px);
+  bottom: auto;
   left: 0;
   right: 0;
-  margin-bottom: 8px;
+  margin-top: 4px;
+  margin-bottom: 0;
   background: var(--light);
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.pg-suggestions.pg-suggestions-above {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 8px;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
 }
 
