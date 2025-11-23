@@ -797,24 +797,23 @@
   display: flex;
   align-items: center;
   background: var(--light);
-  border: 1px solid var(--ui-border);
   border-radius: 8px;
-}
-
-.pg-autocomplete-wrapper:focus-within {
-  border-color: var(--tertiary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tertiary) 15%, transparent);
 }
 
 #pg-input {
   flex: 1;
   padding: 0.65rem 0.75rem;
   font-size: 1rem;
-  border: none;
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
   background: transparent;
   color: var(--dark);
   outline: none;
+}
+
+#pg-input:focus {
+  border-color: var(--tertiary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tertiary) 15%, transparent);
 }
 
 .pg-input:disabled {
@@ -873,7 +872,7 @@
 .pg-how-to-play {
   background: var(--lightgray);
   border: 1px solid var(--ui-border);
-  color: var(--darkgray);
+  color: var(--dark);
   font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
@@ -891,7 +890,6 @@
   background: var(--light);
   color: var(--accent);
   border-color: var(--accent);
-  transform: scale(1.05);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 

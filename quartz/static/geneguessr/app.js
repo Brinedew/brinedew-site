@@ -2634,7 +2634,7 @@
       <div class="pg-input-section">
         <div class="pg-input-row">
           <div class="pg-autocomplete-wrapper">
-            <input type="text" id="pg-input" placeholder="Type gene name (e.g., TERT, TP53)" autocomplete="off" spellcheck="false">
+            <input type="text" id="pg-input" placeholder="Type gene name here" autocomplete="off" spellcheck="false">
             <div id="pg-suggestions" class="pg-suggestions"></div>
           </div>
           <div class="${hintsClass}">
