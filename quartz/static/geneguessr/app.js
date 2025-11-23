@@ -2368,7 +2368,6 @@
         highlightMatches: true
       });
       return `
-        ${renderResult()}
         ${revealCard}
       `;
     }
