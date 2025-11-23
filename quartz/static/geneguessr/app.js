@@ -3456,38 +3456,29 @@
     }
   }
 
-  async function renderInputSection() {
+  async function renderInputSection(gameOver) {
     const inputSlot = document.getElementById('pg-input-slot');
     const placeholderEl = document.getElementById('pg-input-placeholder');
+    const inputEl = document.getElementById('pg-input');
+    const submitBtn = document.getElementById('pg-submit');
 
     if (!inputSlot) return;
 
-    // Setup IntersectionObserver for bottom docking
-    if (placeholderEl && 'IntersectionObserver' in window) {
-      const observer = new IntersectionObserver((entries) => {
-        const entry = entries[0];
-        const suggestionsEl = document.getElementById('pg-suggestions');
-
-        // Robust check for "below viewport"
-        // If the placeholder's top is greater than the viewport height (or close to it), it's below.
-        // We also check if it's NOT intersecting.
-        const viewportHeight = window.innerHeight;
-        const isBelow = entry.boundingClientRect.top > (viewportHeight * 0.5) && !entry.isIntersecting;
-
-        if (isBelow) {
-          inputSlot.classList.add('pg-input-fixed-bottom');
-          placeholderEl.style.height = `${inputSlot.offsetHeight}px`;
-          if (suggestionsEl) suggestionsEl.classList.add('pg-suggestions-above');
-        } else {
-          inputSlot.classList.remove('pg-input-fixed-bottom');
-          placeholderEl.style.height = '0px';
-          if (suggestionsEl) suggestionsEl.classList.remove('pg-suggestions-above');
-        }
-      }, {
-        threshold: 0
-      });
-
-      observer.observe(placeholderEl);
+    if (gameOver) {
+      inputSlot.innerHTML = ''; // Clear input section content
+      inputSlot.classList.remove('pg-input-fixed-bottom');
+      if (placeholderEl) placeholderEl.style.height = '0px';
+    } else {
+      // Re-render the input elements if they were cleared
+      if (!inputEl) {
+        inputSlot.innerHTML = `
+          <input type="text" id="pg-input" placeholder="Guess a protein..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button id="pg-submit" disabled>Guess</button>
+          <div id="pg-suggestions" class="pg-suggestions"></div>
+        `;
+        setupAutocomplete(document.getElementById('pg-input'), document.getElementById('pg-suggestions'));
+        document.getElementById('pg-submit').addEventListener('click', submitGuess);
+      }
     }
   }
 
