@@ -375,15 +375,10 @@
   width: min(540px, 100%);
   padding: 2rem 2rem 1.5rem;
   border-radius: 18px;
-  background: var(--ui-bg);
+  background: var(--light);
   color: var(--dark);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.5);
   z-index: 1;
-}
-
-:root[data-theme="dark"] .pg-tutorial-card {
-  background: rgba(15, 23, 42, 0.95);
-  color: var(--light, #f8f1e7);
 }
 
 .pg-tutorial-skip {
@@ -446,11 +441,6 @@
   cursor: not-allowed;
 }
 
-:root[data-theme="dark"] .pg-tutorial-nav-btn {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--light, #f8f1e7);
-}
-
 .pg-tutorial-forward.is-play {
   border-radius: 999px;
   width: auto;
@@ -478,10 +468,6 @@
 .pg-tutorial-dot.is-active {
   transform: scale(1.2);
   background: var(--dark);
-}
-
-:root[data-theme="dark"] .pg-tutorial-dot.is-active {
-  background: var(--light, #f8f1e7);
 }
 
 .pg-tutorial-footer {
@@ -918,7 +904,7 @@
 .pg-how-to-play {
   background: var(--lightgray);
   border: 1px solid var(--ui-border);
-  color: var(--secondary);
+  color: var(--darkgray);
   font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
@@ -934,8 +920,8 @@
 
 .pg-how-to-play:hover {
   background: var(--light);
-  color: var(--dark);
-  border-color: var(--secondary);
+  color: var(--accent);
+  border-color: var(--accent);
   transform: scale(1.05);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
