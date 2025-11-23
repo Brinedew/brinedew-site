@@ -2624,9 +2624,6 @@
       return;
     }
     const hints = getHintsBalance();
-    const practiceBadge = gameState.practiceMode
-      ? `<div class="pg-practice-badge" aria-live="polite">Practice mode</div>`
-      : '';
     const hintsCount = typeof hints === 'number' ? hints : 0;
     const hintsClass = hintsCount > 0 ? 'pg-hints-badge has-hints' : 'pg-hints-badge';
 
@@ -2645,7 +2642,6 @@
             <span class="pg-guesses-label">Guesses</span>
             <span class="pg-guesses-value">${gameState.guesses.length}/${MAX_GUESSES}</span>
           </div>
-          ${practiceBadge}
           <button type="button" class="pg-how-to-play" id="pg-how-to-play" title="How to Play">?</button>
         </div>
       </div>
@@ -3736,8 +3732,8 @@ https://brinedew.bio/apps/geneguessr/`;
     sidebarStats.id = 'pg-sidebar-stats';
     sidebarStats.className = 'pg-sidebar-stats';
 
-    const hints = getHintsBalance();
     const stats = loadStats();
+    const practiceMode = !!gameState?.practiceMode;
 
     const formatTierLabel = (tier) => {
       if (!tier) {
@@ -3781,11 +3777,15 @@ https://brinedew.bio/apps/geneguessr/`;
       </div>
     `;
 
+    const practiceLabel = practiceMode ? 'On (practice)' : 'Off (daily)';
+
     sidebarStats.innerHTML = `
       ${authSection}
       <div class="pg-sidebar-section">
-        <div class="pg-sidebar-label">Hints</div>
-        <div class="pg-sidebar-value pg-sidebar-hints">${hints}</div>
+        <div class="pg-sidebar-label">Practice Mode</div>
+        <div class="pg-sidebar-practice-value ${practiceMode ? 'is-active' : ''}">
+          ${practiceLabel}
+        </div>
       </div>
       <div class="pg-sidebar-section">
         <div class="pg-sidebar-label">Stats</div>
@@ -3839,15 +3839,17 @@ https://brinedew.bio/apps/geneguessr/`;
   };
 
   function updateSidebarStats() {
-    const sidebarHints = document.querySelector('.pg-sidebar-hints');
-    if (sidebarHints) {
-      sidebarHints.textContent = getHintsBalance();
-    }
-
     // Update inline hints badge
     const inlineHints = document.querySelector('.pg-hints-value');
     if (inlineHints) {
       inlineHints.textContent = getHintsBalance();
+    }
+
+    const sidebarPractice = document.querySelector('.pg-sidebar-practice-value');
+    if (sidebarPractice) {
+      const practiceMode = !!gameState?.practiceMode;
+      sidebarPractice.textContent = practiceMode ? 'On (practice)' : 'Off (daily)';
+      sidebarPractice.classList.toggle('is-active', practiceMode);
     }
 
     const statsGrid = document.querySelector('.pg-sidebar-stats-grid');

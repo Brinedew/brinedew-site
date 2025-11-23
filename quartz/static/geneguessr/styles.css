@@ -77,6 +77,25 @@
   font-size: 0.85rem;
 }
 
+.pg-sidebar-practice-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--secondary);
+}
+
+.pg-sidebar-practice-value.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 /* Auth section */
 .pg-auth-section {
   border-bottom: 1px solid var(--ui-border);
@@ -711,6 +730,9 @@
 
 /* Input */
 #pg-input-slot {
+  /* DO NOT TOUCH THIS BLOCK. Sticky top+bottom was the only setup that survived many regressions. */
+  /* STICKY GUTTERS (top/bottom) MUST MATCH: altering them breaks docking in either direction. */
+  /* NO helper classes, NO JS observers: pure CSS sticky is intentional and battle-tested. */
   position: relative;
   background: var(--light);
   border-radius: 8px;
