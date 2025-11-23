@@ -8,19 +8,29 @@
   flex-direction: column;
   gap: 1.5rem;
   min-height: 100vh;
+  /* Ensure root itself doesn't create scroll context */
+  position: relative;
 }
 
+/* Fixed sections that don't scroll */
 #pg-clue-slot,
-#pg-input-slot,
-#pg-guesses,
 #pg-result-slot,
 #pg-footer-slot {
   flex-shrink: 0;
 }
 
+/* Scrollable middle section containing guesses */
+#pg-guesses-container {
+  flex: 1 1 0;
+  overflow-y: auto;
+  overflow-x: visible;
+  /* Create scroll context here, not on parent */
+  min-height: 0;
+}
+
 #pg-guesses {
-  flex-grow: 1;
-  padding-bottom: 6rem; /* prevents footer overlap when input sticks */
+  /* No flex properties - just content inside scrollable container */
+  padding-bottom: 1.5rem;
 }
 
 /* Sidebar Stats */
@@ -745,13 +755,15 @@
 
 /* Input */
 #pg-input-slot {
-  position: sticky;
-  top: auto;
+  position: fixed;
   bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 700px;
   background: var(--light);
   z-index: 100;
   padding: 1rem;
-  margin: 0 -1rem;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 
