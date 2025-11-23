@@ -811,7 +811,7 @@
   padding: 0.65rem 0.75rem;
   font-size: 1rem;
   border: none;
-  border-radius: 8px 0 0 8px;
+  border-radius: 8px;
   background: transparent;
   color: var(--dark);
   outline: none;
@@ -820,43 +820,6 @@
 .pg-input:disabled {
   cursor: not-allowed;
   opacity: 0.6;
-}
-
-#pg-submit {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--secondary);
-  color: white;
-  border: none;
-  border-radius: 0 8px 8px 0;
-  cursor: pointer;
-  flex-shrink: 0;
-  margin: -1px -1px -1px 0;
-}
-
-#pg-submit:hover:not(:disabled) {
-  background: var(--tertiary);
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-#pg-submit:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-#pg-submit:disabled {
-  background: var(--gray);
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-#pg-submit svg {
-  width: 24px;
-  height: 24px;
 }
 
 .pg-guesses-badge,

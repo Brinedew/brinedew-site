@@ -2635,11 +2635,6 @@
         <div class="pg-input-row">
           <div class="pg-autocomplete-wrapper">
             <input type="text" id="pg-input" placeholder="Type gene name (e.g., TERT, TP53)" autocomplete="off" spellcheck="false">
-            <button id="pg-submit" class="pg-btn" disabled>
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </button>
             <div id="pg-suggestions" class="pg-suggestions"></div>
           </div>
           <div class="${hintsClass}">
@@ -2658,17 +2653,9 @@
 
     const inputEl = document.getElementById('pg-input');
     const suggestionsEl = document.getElementById('pg-suggestions');
-    const submitBtn = document.getElementById('pg-submit');
 
-    if (inputEl && suggestionsEl && submitBtn) {
+    if (inputEl && suggestionsEl) {
       setupAutocomplete(inputEl, suggestionsEl);
-
-      submitBtn.addEventListener('click', submitGuess);
-
-      inputEl.addEventListener('input', () => {
-        submitBtn.disabled = true;
-        delete submitBtn.dataset.uniprot;
-      });
     }
 
     const howToPlayButton = document.getElementById('pg-how-to-play');
@@ -3351,7 +3338,9 @@
       suggestionsEl.querySelectorAll('.pg-suggestion').forEach((el) => {
         el.addEventListener('click', () => {
           const uniprot = el.dataset.uniprot;
-          selectProtein(uniprot);
+          if (uniprot) {
+            selectProteinAndSubmit(uniprot);
+          }
         });
       });
     };
@@ -3419,7 +3408,9 @@
         e.preventDefault();
         if (selectedIndex >= 0 && suggestions[selectedIndex]) {
           const uniprot = suggestions[selectedIndex].dataset.uniprot;
-          selectProtein(uniprot);
+          if (uniprot) {
+            selectProteinAndSubmit(uniprot);
+          }
         }
       } else if (e.key === 'Escape') {
         hideSuggestions();
@@ -3453,6 +3444,70 @@
     if (submitBtn) {
       submitBtn.disabled = false;
       submitBtn.dataset.uniprot = normalizedId;
+    }
+  }
+
+  function selectProteinAndSubmit(uniprot) {
+    if (!uniprot) return;
+    const normalizedId = normalizeUniprotId(uniprot);
+    const protein = getProteinById(normalizedId) || getEnrichedProteinById(normalizedId);
+    const label = protein?.hgnc || normalizedId;
+
+    const inputEl = document.getElementById('pg-input');
+    const suggestionsEl = document.getElementById('pg-suggestions');
+    if (inputEl) {
+      inputEl.value = label;
+    }
+    if (suggestionsEl) {
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.style.display = 'none';
+    }
+
+    submitGuessWithUniprot(normalizedId);
+  }
+
+  async function submitGuessWithUniprot(uniprot) {
+    if (!uniprot) {
+      alert('Please select a protein from the suggestions.');
+      return;
+    }
+
+    const guessProtein = getProteinById(uniprot) || getEnrichedProteinById(uniprot);
+    if (!guessProtein) {
+      alert('Please select a protein from the suggestions.');
+      return;
+    }
+
+    try {
+      const payload = await submitGuessRequest(uniprot);
+      console.log('[B-137 DEBUG] submitGuess payload:', JSON.stringify(payload, null, 2));
+      hydrateStateFromPayload(payload);
+
+      let newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
+      await hydrateGuessProteins();
+
+      newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
+      if (newGuess && !newGuess.proteinResolved) {
+        console.warn('[Geneguessr] Guess missing protein data, forcing bootstrap refresh...');
+        try {
+          const bootstrapPayload = await fetchGameBootstrap();
+          hydrateStateFromPayload(bootstrapPayload);
+          await hydrateGuessProteins();
+        } catch (err) {
+          console.error('[Geneguessr] Bootstrap fallback failed', err);
+        }
+      }
+
+      await hydrateClueData();
+      render();
+
+      const inputEl = document.getElementById('pg-input');
+      if (inputEl) {
+        inputEl.value = '';
+      }
+    } catch (err) {
+      console.error('[Geneguessr] Guess submission failed', err);
+      alert('Failed to submit guess. Please try again.');
     }
   }
 
