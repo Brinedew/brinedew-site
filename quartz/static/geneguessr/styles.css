@@ -763,11 +763,12 @@
   z-index: 100;
   padding: 0.75rem 1rem;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--ui-border);
+  /* Match card styling - use inset box-shadow like cards */
+  box-shadow: inset 0 0 0 1px var(--ui-border), 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: none;
   transition: none;
-  /* Match card styling exactly */
   margin-bottom: 1.5rem;
+  isolation: isolate;
 }
 
 #pg-input-placeholder {
@@ -858,8 +859,9 @@
   justify-content: center;
   gap: 0.4rem;
   padding: 0.5rem 0.9rem;
-  background: var(--lightgray);
-  border: 1px solid var(--ui-border);
+  background: var(--light);
+  box-shadow: inset 0 0 0 1px var(--ui-border);
+  border: none;
   border-radius: 999px;
   white-space: nowrap;
   height: 44px;
@@ -869,32 +871,34 @@
 
 .pg-guesses-label,
 .pg-hints-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   color: var(--secondary);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .pg-guesses-value,
 .pg-hints-value {
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--dark);
+  letter-spacing: -0.01em;
 }
 
 .pg-hints-badge.has-hints {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--lightgray));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--light));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .pg-hints-badge.has-hints .pg-hints-value {
   color: var(--accent);
+  font-weight: 700;
 }
 
 .pg-hints-badge.has-hints .pg-hints-label {
-  color: color-mix(in srgb, var(--accent) 80%, var(--secondary));
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .pg-how-to-play {

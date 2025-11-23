@@ -2642,13 +2642,13 @@
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </button>
-          <div class="pg-guesses-badge">
-            <span class="pg-guesses-label">Guesses</span>
-            <span class="pg-guesses-value">${gameState.guesses.length}/${MAX_GUESSES}</span>
-          </div>
           <div class="${hintsClass}">
             <span class="pg-hints-label">Hints</span>
             <span class="pg-hints-value">${hints}</span>
+          </div>
+          <div class="pg-guesses-badge">
+            <span class="pg-guesses-label">Guesses</span>
+            <span class="pg-guesses-value">${gameState.guesses.length}/${MAX_GUESSES}</span>
           </div>
           ${practiceBadge}
           <button type="button" class="pg-how-to-play" id="pg-how-to-play" title="How to Play">?</button>
