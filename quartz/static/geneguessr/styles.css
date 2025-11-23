@@ -754,24 +754,32 @@
 
 /* Input */
 #pg-input-slot {
-  position: relative;
+  position: sticky;
+  top: 1rem;
   bottom: auto;
   left: 0;
   width: 100%;
   max-width: 700px;
-  margin: 0 auto 1.5rem auto;
+  margin: 0 auto;
   background: var(--light);
   z-index: 100;
   padding: 1rem;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   border: 1px solid var(--ui-border);
-  transition: box-shadow 0.3s ease;
+  transition: none;
 }
 
-#pg-input-slot.pg-input-fixed {
-  position: fixed;
+#pg-input-wrapper {
+  min-height: 80px;
+  /* Prevent layout shift */
+  margin-bottom: 1.5rem;
+}
+
+#pg-input-slot.pg-input-fixed-bottom {
+  position: fixed !important;
   bottom: 1rem;
+  top: auto !important;
   left: 50%;
   transform: translateX(-50%);
   margin-bottom: 0;

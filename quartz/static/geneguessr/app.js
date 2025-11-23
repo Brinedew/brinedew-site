@@ -2567,8 +2567,9 @@
     }
     rootEl.innerHTML = `
       <div id="pg-clue-slot"></div>
-      <div id="pg-input-anchor"></div>
-      <div id="pg-input-slot"></div>
+      <div id="pg-input-wrapper">
+        <div id="pg-input-slot"></div>
+      </div>
       <div id="pg-guesses-container">
         <div id="pg-guesses"></div>
       </div>
