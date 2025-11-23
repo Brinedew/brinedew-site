@@ -39,10 +39,11 @@ const config: QuartzConfig = {
           gray: "#b8b8b8",
           darkgray: "#4e4e4e",
           dark: "#2b2b2b",
-          secondary: "#0050a0",
+          secondary: "#3d7d7d", // Teal accent per brand guide: oklch(50% 0.08 185)
           tertiary: "#84a59d",
           highlight: "rgba(143, 159, 169, 0.15)",
-          textHighlight: "rgba(255, 234, 0, 0.35)", // new
+          textHighlight: "rgba(255, 234, 0, 0.35)",
+          accent: "#3d7d7d", // Brand teal: oklch(50% 0.08 185)
         },
         darkMode: {
           light: "#1a1a1a",
@@ -50,10 +51,11 @@ const config: QuartzConfig = {
           gray: "#646464",
           darkgray: "#d4d4d4",
           dark: "#ebebec",
-          secondary: "#7aa2f7",
+          secondary: "#6eb8b8", // Brighter teal for dark mode: oklch(68% 0.08 185)
           tertiary: "#84a59d",
           highlight: "rgba(143, 159, 169, 0.15)",
-          textHighlight: "rgba(125, 211, 252, 0.25)", // new
+          textHighlight: "rgba(125, 211, 252, 0.25)",
+          accent: "#6eb8b8", // Brand teal dark mode: oklch(68% 0.08 185)
         },
       },
     },
