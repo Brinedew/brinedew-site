@@ -25,6 +25,7 @@ import hashlib
 import json
 import subprocess
 import threading
+import math
 from collections import Counter, defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -39,6 +40,15 @@ try:
     import ijson
 except Exception:
     raise SystemExit("Missing dependency: ijson is required. Install via `pip install ijson` and retry.")
+
+
+def to_finite_number(value) -> Optional[float]:
+    """Convert to float if finite, else None."""
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    return num if math.isfinite(num) else None
 
 
 # Paths
@@ -632,10 +642,11 @@ def _load_pfam_clan_map() -> Dict[str, str]:
                     if not line or line.startswith("#"):
                         continue
                     parts = line.split("\t")
-                    if len(parts) >= 4:
+                    if len(parts) >= 3:
+                        # Pfam-A.clans.tsv.gz columns: pfam_acc, clan_acc, clan_id, pfam_id
                         pfam_acc = parts[0]
-                        clan_acc = parts[2]
-                        clan_id = parts[3]
+                        clan_acc = parts[1]
+                        clan_id = parts[2]
                         if pfam_acc and clan_id:
                             tmp_map[pfam_acc] = clan_id
                             if clan_acc:
@@ -887,6 +898,7 @@ def extract_swiss_quality(model: Optional[Dict[str, object]]) -> Optional[float]
         model.get("qmean"),
         model.get("qmeanDisCo_global"),
         model.get("qmean_dis_co_global"),
+        model.get("quality", {}).get("qmeanDisCo_global") if isinstance(model.get("quality"), dict) else None,
     ]
     for cand in candidates:
         try:
@@ -912,6 +924,111 @@ def compute_swiss_coverage(model: Optional[Dict[str, object]], protein_length: O
         return 0.0
     span = max(0, abs(int(end) - int(start)) + 1)
     return max(0.0, min(1.0, span / float(protein_length)))
+
+
+def fetch_swiss_model(uniprot_id: str) -> Optional[Dict[str, object]]:
+    """Fetch SwissModel JSON for a UniProt accession."""
+    try:
+        url = f"https://swissmodel.expasy.org/repository/uniprot/{uniprot_id}.json?provider=swissmodel"
+        resp = requests.get(url, headers={"user-agent": "GeneGuessr SwissModel fetcher"}, timeout=20)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except Exception:
+        return None
+
+
+def derive_swiss_residue_range(model: Dict[str, object]) -> Tuple[Optional[int], Optional[int]]:
+    """Derive min/max uniprot positions from SwissModel record."""
+    min_pos = to_finite_number(model.get("uniprot_from") or model.get("from"))
+    max_pos = to_finite_number(model.get("uniprot_to") or model.get("to"))
+    chains = model.get("chains")
+    if isinstance(chains, list):
+        for chain in chains:
+            segments = chain.get("segments") if isinstance(chain, dict) else None
+            if not isinstance(segments, list):
+                continue
+            for seg in segments:
+                uniprot = seg.get("uniprot") if isinstance(seg, dict) else None
+                if not isinstance(uniprot, dict):
+                    continue
+                start = to_finite_number(uniprot.get("from"))
+                end = to_finite_number(uniprot.get("to"))
+                if start is not None:
+                    min_pos = min(min_pos, start) if min_pos is not None else start
+                if end is not None:
+                    max_pos = max(max_pos, end) if max_pos is not None else end
+    return min_pos, max_pos
+
+
+def normalize_swiss_record(model: Dict[str, object], protein_length: Optional[int]) -> Optional[Dict[str, object]]:
+    coords_url = model.get("coordinates") or model.get("modelcif") or model.get("coordinates_url")
+    if not coords_url:
+        return None
+    start, end = derive_swiss_residue_range(model)
+    coverage = compute_swiss_coverage(
+        {
+            **model,
+            "uniprot_start": start,
+            "uniprot_end": end,
+        },
+        protein_length,
+    )
+    qmean = extract_swiss_quality(model)
+    chain_ids: List[str] = []
+    if isinstance(model.get("chain_ids"), list):
+        chain_ids = [c for c in model["chain_ids"] if c]
+    elif isinstance(model.get("chains"), list):
+        chain_ids = [c.get("id") for c in model["chains"] if isinstance(c, dict) and c.get("id")]
+    elif model.get("chain_id"):
+        chain_ids = [model["chain_id"]]
+
+    def detect_format(url: str) -> str:
+        lower = url.lower()
+        if ".cif" in lower or ".bcif" in lower:
+            return "cif"
+        return "pdb"
+
+    return {
+        "provider": model.get("provider") or "swissmodel",
+        "model_id": model.get("md5") or model.get("template") or model.get("coordinates") or model.get("model_id"),
+        "template": model.get("template"),
+        "coordinates_url": coords_url,
+        "format": detect_format(coords_url),
+        "gmqe": to_finite_number(model.get("gmqe")),
+        "identity": to_finite_number(model.get("identity")),
+        "method": model.get("method"),
+        "qmean": qmean,
+        "coverage": coverage,
+        "chain_ids": chain_ids,
+        "uniprot_start": start,
+        "uniprot_end": end,
+        "template_qsqe": to_finite_number(model.get("template_qsqe")),
+        "updated_at": model.get("created_date") or model.get("updated"),
+    }
+
+
+def pick_best_swiss_model(uniprot_id: str, protein_length: Optional[int]) -> Optional[Dict[str, object]]:
+    swiss_json = fetch_swiss_model(uniprot_id)
+    if not swiss_json:
+        return None
+    structures = swiss_json.get("result", {}).get("structures", [])
+    if not isinstance(structures, list) or not structures:
+        return None
+    fallback = None
+    for candidate in structures:
+        rec = normalize_swiss_record(candidate, protein_length)
+        if not rec:
+            continue
+        acceptable = rec["coverage"] >= SWISS_MODEL_COVERAGE_THRESHOLD and (
+            rec["qmean"] is None or rec["qmean"] >= SWISS_MODEL_QMEAN_THRESHOLD
+        )
+        if acceptable:
+            rec["recommended"] = True
+            return rec
+        if fallback is None:
+            fallback = rec
+    return fallback
 
 
 def extract_ncbi_gene_id(uniprot_entry: Optional[Dict[str, object]]) -> Optional[str]:
@@ -1266,6 +1383,8 @@ def extract_structure_info(uniprot_id: str, protein_length: Optional[int]) -> Di
 
     coverage = compute_pdb_coverage(pdb_info, protein_length)
     swiss_model = entry.get("swiss_model") if isinstance(entry, dict) else None
+    if not swiss_model:
+        swiss_model = pick_best_swiss_model(uniprot_id, protein_length)
     swiss_coverage = compute_swiss_coverage(swiss_model, protein_length) if swiss_model else 0.0
     swiss_qmean = extract_swiss_quality(swiss_model) if swiss_model else None
     primary_source = None

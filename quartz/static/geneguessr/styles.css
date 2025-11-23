@@ -214,7 +214,7 @@
   padding: 1rem;
   color: var(--secondary);
   gap: 0.5rem;
-  background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(245,245,245,0.9));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 245, 0.9));
 }
 
 .pg-structure-source {
@@ -531,7 +531,7 @@
   .pg-structure-viewer {
     height: 260px;
   }
-  
+
   /* Card viewer maintains 16:9 ratio on mobile */
   .pg-card-structure-viewer {
     aspect-ratio: 16 / 9;
@@ -561,8 +561,8 @@
   z-index: 1;
 }
 
-.pg-clue-card > *,
-.pg-feedback-card > * {
+.pg-clue-card>*,
+.pg-feedback-card>* {
   position: relative;
   z-index: 2;
 }
@@ -755,16 +755,18 @@
 
 /* Input */
 #pg-input-slot {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  position: sticky;
+  bottom: 1rem;
+  left: 0;
   width: 100%;
   max-width: 700px;
+  margin: 0 auto;
   background: var(--light);
   z-index: 100;
   padding: 1rem;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--ui-border);
 }
 
 .pg-input-section {
@@ -872,14 +874,15 @@
 
 .pg-suggestions {
   position: absolute;
-  top: calc(100% + 4px);
+  bottom: 100%;
   left: 0;
   right: 0;
+  margin-bottom: 8px;
   background: var(--light);
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .pg-suggestion {
@@ -914,11 +917,11 @@
   .pg-input-row {
     flex-wrap: wrap;
   }
-  
+
   .pg-autocomplete-wrapper {
     width: 100%;
   }
-  
+
   .pg-hints-badge {
     margin-left: auto;
   }
@@ -1108,7 +1111,7 @@
   .pg-result {
     background: oklch(68% 0.08 185);
   }
-  
+
   .pg-result.failed {
     background: var(--darkgray);
     color: var(--lightgray);
@@ -1219,17 +1222,17 @@
     background: white;
     color: var(--dark);
   }
-  
+
   .pg-result:not(.failed) .pg-link-btn:hover {
     background: rgba(255, 255, 255, 0.9);
   }
-  
+
   /* Failed card in dark mode: cream bg with dark text on light brown card */
   .pg-result.failed .pg-link-btn {
     background: var(--light);
     color: var(--dark);
   }
-  
+
   .pg-result.failed .pg-link-btn:hover {
     background: var(--ui-bg);
   }
@@ -1313,11 +1316,11 @@
   #geneguessr-root {
     padding: 0 0.5rem;
   }
-  
+
   .pg-result-links {
     flex-direction: column;
   }
-  
+
   .pg-stats {
     flex-wrap: wrap;
   }
