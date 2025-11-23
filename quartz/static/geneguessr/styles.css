@@ -872,7 +872,7 @@
 .pg-how-to-play {
   background: var(--lightgray);
   border: 1px solid var(--ui-border);
-  color: var(--dark);
+  color: var(--darkgray);
   font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
@@ -891,6 +891,10 @@
   color: var(--accent);
   border-color: var(--accent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="dark"] .pg-how-to-play {
+  color: var(--darkgray);
 }
 
 .pg-suggestions {
