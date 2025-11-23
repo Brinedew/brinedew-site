@@ -750,6 +750,7 @@
   margin-right: 0;
   overflow: visible;
   isolation: isolate;
+  box-sizing: border-box;
   /* Sticky positioning */
   position: sticky;
   top: 1rem;
@@ -790,7 +791,7 @@
 
 .pg-autocomplete-wrapper {
   position: relative;
-  flex: 1 1 100%;
+  flex: 1 1 0;
   min-width: 0;
   width: 100%;
   display: flex;
