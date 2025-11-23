@@ -773,12 +773,8 @@
 #pg-input-placeholder {
   width: 100%;
   height: 0;
-}
-
-#pg-input-wrapper {
-  min-height: 80px;
-  /* Prevent layout shift */
-  margin-bottom: 1.5rem;
+  min-height: 1px;
+  /* Ensure observer can detect it */
 }
 
 #pg-input-slot.pg-input-fixed-bottom {
@@ -808,7 +804,7 @@
   min-width: 0;
 }
 
-.pg-input {
+#pg-input {
   width: 100%;
   padding: 0.5rem 0;
   font-size: 1rem;
@@ -820,7 +816,7 @@
   transition: border-color 0.2s;
 }
 
-.pg-input:focus {
+#pg-input:focus {
   outline: none;
   border-color: var(--tertiary);
 }
@@ -869,28 +865,72 @@
   height: 20px;
 }
 
+.pg-guesses-badge,
 .pg-hints-badge {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: var(--light);
-  border: 2px solid var(--ui-border);
-  border-radius: 8px;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.75rem;
+  background: var(--lightgray);
+  background-color: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  /* Pill shape */
   white-space: nowrap;
-  font-size: 0.95rem;
+  height: 32px;
+  /* Match button height */
+  box-sizing: border-box;
 }
 
+.pg-guesses-label,
 .pg-hints-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--secondary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
+.pg-guesses-value,
 .pg-hints-value {
-  color: var(--accent);
+  font-size: 0.95rem;
   font-weight: 700;
-  font-size: 1.25rem;
-  line-height: 1;
+  color: var(--dark);
+}
+
+.pg-hints-badge.has-hints {
+  border-color: var(--tertiary);
+  background-color: color-mix(in srgb, var(--tertiary) 10%, transparent);
+}
+
+.pg-hints-badge.has-hints .pg-hints-value {
+  color: var(--tertiary);
+}
+
+.pg-how-to-play {
+  background: none;
+  border: 1px solid var(--ui-border);
+  color: var(--secondary);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.5rem;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.pg-how-to-play:hover {
+  background: var(--ui-bg-hover);
+  color: var(--dark);
+  border-color: var(--secondary);
 }
 
 .pg-suggestions {
