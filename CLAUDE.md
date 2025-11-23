@@ -64,6 +64,47 @@ Using Quartz's default theme with custom CSS in `quartz/static/custom.css`. Dark
 
 Use `content/posts/dark-mode-test-page.md` to test that all content types render properly.
 
+### Site Color System (CSS Custom Properties)
+
+**CRITICAL: Always use CSS variables for colors** - never hardcode hex values. The site defines 9 theme-aware color variables that automatically switch between light and dark modes.
+
+**Available color variables:**
+```css
+--light       /* Page background (light: #faf8f8, dark: #1a1a1a) */
+--lightgray   /* Secondary backgrounds, input fields (light: #e5e5e5, dark: #393639) */
+--gray        /* Borders, disabled elements (light: #b8b8b8, dark: #646464) */
+--darkgray    /* Body text, default button/icon color (light: #4e4e4e, dark: #d4d4d4) */
+--dark        /* Headings, emphasized text (light: #2b2b2b, dark: #ebebec) */
+--secondary   /* Links default state (light: #0050a0, dark: #7aa2f7) */
+--tertiary    /* Links hover state, accents (light: #84a59d, dark: #84a59d) */
+--highlight   /* Subtle backgrounds (light/dark: rgba(143, 159, 169, 0.15)) */
+--textHighlight /* Text selection (light: yellow-ish, dark: cyan-ish) */
+```
+
+**Standard UI color patterns (from base.scss):**
+- **Default text**: `color: var(--darkgray)`
+- **Headings**: `color: var(--dark)`
+- **Links**: `color: var(--secondary)` with `hover: var(--accent)` *[Note: --accent is an alias, use --tertiary]*
+- **Interactive elements (buttons)**: `color: var(--darkgray)` with `hover: var(--tertiary)`
+- **Borders**: `border-color: var(--ui-border)` *(alias for --gray)*
+- **Backgrounds**: `background: var(--light)` for cards/surfaces, `var(--lightgray)` for input fields
+
+**Common mistakes to avoid:**
+- ❌ `color: var(--secondary)` for buttons → Should be `var(--darkgray)`
+- ❌ `color: var(--dark)` on hover → Should be `var(--tertiary)` or `var(--accent)`
+- ❌ Hardcoding hex values → Always use variables
+- ❌ Using `--ui-bg` → Not defined, use `var(--light)` for card backgrounds
+
+**Where colors are defined:**
+- Values: `quartz.config.ts` lines 36-57 (lightMode and darkMode objects)
+- Variables: `quartz/util/theme.ts` lines 147-176 (CSS custom property generation)
+- Switch trigger: `:root[saved-theme="dark"]` selector applies dark mode values
+
+**Testing color changes:**
+1. Check both light and dark modes (toggle in top-right)
+2. Verify text remains readable (contrast ratios)
+3. Ensure interactive states are visible (hover, focus, disabled)
+
 ## when things break
 
 **Site not updating?** Check GitHub Actions first: https://github.com/Brinedew/brinedew-site/actions
