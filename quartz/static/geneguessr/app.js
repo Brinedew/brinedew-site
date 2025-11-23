@@ -2539,40 +2539,39 @@
 
   function renderResult() {
     const title = gameState.won ? 'You Win!' : 'Game Over';
-    const className = gameState.won ? '' : 'failed';
-    const practiceMessage = 'Off the record: Try Again replays today’s gene; Practice picks a random gene.';
-    const practiceCta = `
-      <div class="pg-result-actions">
-        <button class="pg-play-again" type="button" onclick="window.geneguessrTryAgain()">
-          Try Again (same gene)
-        </button>
-        <button class="pg-practice-btn" type="button" onclick="window.geneguessrPracticeRandom()">
-          Practice (random)
-        </button>
-        <div class="pg-practice-tag">${practiceMessage}</div>
-      </div>
-    `;
-
     const solution = targetReveal || targetProtein || {};
     const hasIdentity = Boolean(solution.hgnc);
     const proteinLabel = hasIdentity
       ? `${solution.hgnc} (${solution.full_name})`
       : 'Protein identity hidden';
-    const wikiLink = hasIdentity && solution.links?.wiki ? `<a href="${solution.links.wiki}" class="pg-link-btn">View Protein Page</a>` : '';
-    const uniprotLink = hasIdentity && solution.links?.uniprot ? `<a href="${solution.links.uniprot}" target="_blank" class="pg-link-btn">UniProt</a>` : '';
+    const uniprotLink = hasIdentity && solution.links?.uniprot ? solution.links.uniprot : null;
+    const wikiLink = hasIdentity && solution.links?.wiki ? solution.links.wiki : null;
+    const guessesText = `${gameState.guesses.length}/${MAX_GUESSES} guesses`;
+    const practiceMessage = 'Off the record: Try Again replays today’s gene; Practice picks a random gene.';
+
+    // Render into the floating bar instead of a separate card; caller injects this markup directly.
     return `
-      <div class="pg-result ${className}">
-        <div class="pg-result-title">${title}</div>
-        <div class="pg-result-protein">
-          ${proteinLabel}
+      <div class="pg-gameover-bar" role="status" aria-live="polite">
+        <div class="pg-gameover-left">
+          <div class="pg-gameover-title">${title}</div>
+          <div class="pg-gameover-protein">
+            ${hasIdentity && uniprotLink
+              ? `<a href="${uniprotLink}" target="_blank" rel="noopener noreferrer">${proteinLabel}</a>`
+              : proteinLabel}
+          </div>
+          <div class="pg-gameover-guesses">${guessesText}</div>
         </div>
-        <div>Guesses: ${gameState.guesses.length}/${MAX_GUESSES}</div>
-        <div class="pg-result-links">
-          ${wikiLink}
-          ${uniprotLink}
+        <div class="pg-gameover-right">
+          <button class="pg-play-again" type="button" onclick="window.geneguessrTryAgain()">
+            Try Again (same gene)
+          </button>
+          <button class="pg-practice-btn" type="button" onclick="window.geneguessrPracticeRandom()">
+            Practice (random)
+          </button>
         </div>
-        ${practiceCta}
       </div>
+      <div class="pg-practice-tag">${practiceMessage}</div>
+      ${wikiLink ? `<div class="pg-gameover-links"><a class="pg-link-btn" href="${wikiLink}" target="_blank" rel="noopener noreferrer">Protein Page</a></div>` : ''}
     `;
   }
 
@@ -2587,7 +2586,6 @@
       <div id="pg-guesses-container">
         <div id="pg-guesses"></div>
       </div>
-      <div id="pg-result-slot"></div>
       <div id="pg-footer-slot"></div>
     `;
     layoutHydrated = true;
@@ -2635,9 +2633,11 @@
       return;
     }
     if (gameOver) {
-      slot.innerHTML = '';
+      slot.innerHTML = renderResult();
+      slot.classList.add('pg-input-gameover');
       return;
     }
+    slot.classList.remove('pg-input-gameover');
     const hints = getHintsBalance();
     const hintsCount = typeof hints === 'number' ? hints : 0;
     const hintsClass = hintsCount > 0 ? 'pg-hints-badge has-hints' : 'pg-hints-badge';
@@ -3007,15 +3007,6 @@
       syncFeedbackContentHeights();
     }, 200);
   });
-
-  function renderResultSection(gameOver) {
-    const slot = document.getElementById('pg-result-slot');
-    if (!slot) {
-      return;
-    }
-    // Result messaging is now rendered above the clue/feedback card
-    slot.innerHTML = '';
-  }
 
   function renderFooterSection(gameOver) {
     const slot = document.getElementById('pg-footer-slot');
@@ -3694,7 +3685,6 @@ https://brinedew.bio/apps/geneguessr/`;
       renderClueSectionsIntoDom(gameOver);
       renderInputSection(gameOver);
       renderGuessesSection();
-      renderResultSection(gameOver);
       renderFooterSection(gameOver);
 
       ensureSpoilerDelegation();

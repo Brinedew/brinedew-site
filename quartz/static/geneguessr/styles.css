@@ -14,7 +14,6 @@
 
 /* Fixed sections that don't scroll */
 #pg-clue-slot,
-#pg-result-slot,
 #pg-footer-slot {
   flex-shrink: 0;
 }
@@ -1130,68 +1129,6 @@
   overflow: visible;
 }
 
-/* Result */
-.pg-result {
-  background: oklch(50% 0.08 185);
-  color: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  text-align: center;
-  margin-bottom: 1.5rem;
-}
-
-.pg-result.failed {
-  background: var(--gray);
-  color: var(--darkgray);
-}
-
-/* Dark mode overrides for results */
-@media (prefers-color-scheme: dark) {
-  .pg-result {
-    background: oklch(68% 0.08 185);
-  }
-
-  .pg-result.failed {
-    background: var(--darkgray);
-    color: var(--lightgray);
-  }
-}
-
-:root[data-theme="dark"] .pg-result {
-  background: oklch(68% 0.08 185);
-}
-
-:root[data-theme="dark"] .pg-result.failed {
-  background: var(--darkgray);
-  color: var(--lightgray);
-}
-
-.pg-result-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-
-.pg-result-protein {
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
-}
-
-.pg-result-links {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  margin-top: 1rem;
-}
-
-.pg-result-actions {
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-}
-
 .pg-play-again {
   border: 1px solid var(--ui-border);
   background: var(--light);
@@ -1225,15 +1162,6 @@
 }
 
 /* Failed card in light mode: cream bg with dark text on medium brown card */
-.pg-result.failed .pg-link-btn {
-  background: var(--light);
-  color: var(--dark);
-}
-
-.pg-result.failed .pg-link-btn:hover {
-  background: var(--ui-bg);
-}
-
 .pg-practice-tag,
 .pg-practice-badge {
   font-size: 0.85rem;
@@ -1271,44 +1199,63 @@
   background: var(--ui-bg);
 }
 
-/* Dark mode win card: white bg with dark text on light teal card */
-@media (prefers-color-scheme: dark) {
-  .pg-result:not(.failed) .pg-link-btn {
-    background: white;
-    color: var(--dark);
-  }
-
-  .pg-result:not(.failed) .pg-link-btn:hover {
-    background: rgba(255, 255, 255, 0.9);
-  }
-
-  /* Failed card in dark mode: cream bg with dark text on light brown card */
-  .pg-result.failed .pg-link-btn {
-    background: var(--light);
-    color: var(--dark);
-  }
-
-  .pg-result.failed .pg-link-btn:hover {
-    background: var(--ui-bg);
-  }
+.pg-input-gameover {
+  /* Shares the floating bar shell; this class only tweaks spacing for game-over content. */
 }
 
-:root[data-theme="dark"] .pg-result:not(.failed) .pg-link-btn {
-  background: white;
+.pg-gameover-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.pg-gameover-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.pg-gameover-title {
+  font-weight: 800;
+  font-size: 1.1rem;
   color: var(--dark);
 }
 
-:root[data-theme="dark"] .pg-result:not(.failed) .pg-link-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
+.pg-gameover-protein {
+  font-weight: 600;
+  color: var(--secondary);
+  overflow-wrap: anywhere;
 }
 
-:root[data-theme="dark"] .pg-result.failed .pg-link-btn {
-  background: var(--light);
-  color: var(--dark);
+.pg-gameover-protein a {
+  color: var(--secondary);
+  text-decoration: none;
 }
 
-:root[data-theme="dark"] .pg-result.failed .pg-link-btn:hover {
-  background: var(--ui-bg);
+.pg-gameover-protein a:hover {
+  text-decoration: underline;
+}
+
+.pg-gameover-guesses {
+  font-size: 0.95rem;
+  color: var(--secondary);
+}
+
+.pg-gameover-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pg-gameover-links {
+  margin-top: 0.35rem;
+}
+
+.pg-gameover-links .pg-link-btn {
+  display: inline-block;
 }
 
 /* Share */
@@ -1370,10 +1317,6 @@
 @media (max-width: 600px) {
   #geneguessr-root {
     padding: 0 0.5rem;
-  }
-
-  .pg-result-links {
-    flex-direction: column;
   }
 
   .pg-stats {
