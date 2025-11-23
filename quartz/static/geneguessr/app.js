@@ -113,58 +113,6 @@
 
   prunePersistedState();
 
-  // Manages dual docking (sticky top, fixed bottom) for the input bar
-  let inputDockObserver = null;
-
-  function resetInputDockingState() {
-    const inputSlot = document.getElementById('pg-input-slot');
-    const placeholderEl = document.getElementById('pg-input-placeholder');
-    const suggestionsEl = document.getElementById('pg-suggestions');
-    if (inputSlot) {
-      inputSlot.classList.remove('pg-input-fixed-bottom');
-    }
-    if (placeholderEl) {
-      placeholderEl.style.height = '0px';
-    }
-    if (suggestionsEl) {
-      suggestionsEl.classList.remove('pg-suggestions-above');
-    }
-  }
-
-  function setupInputDocking() {
-    const inputSlot = document.getElementById('pg-input-slot');
-    const placeholderEl = document.getElementById('pg-input-placeholder');
-    if (!inputSlot || !placeholderEl || !('IntersectionObserver' in window)) {
-      return;
-    }
-
-    if (inputDockObserver) {
-      inputDockObserver.disconnect();
-    }
-
-    // Dock to bottom only when the placeholder has left the viewport (mirrors sticky’s "about to leave" behavior).
-    inputDockObserver = new IntersectionObserver(([entry]) => {
-      const suggestionsEl = document.getElementById('pg-suggestions');
-      const shouldDockBottom = !entry.isIntersecting && entry.boundingClientRect.top > 0;
-
-      if (shouldDockBottom) {
-        inputSlot.classList.add('pg-input-fixed-bottom');
-        placeholderEl.style.height = `${inputSlot.offsetHeight}px`; // Reserve space to avoid jump when docking
-        if (suggestionsEl) {
-          suggestionsEl.classList.add('pg-suggestions-above');
-        }
-      } else {
-        inputSlot.classList.remove('pg-input-fixed-bottom');
-        placeholderEl.style.height = '0px';
-        if (suggestionsEl) {
-          suggestionsEl.classList.remove('pg-suggestions-above');
-        }
-      }
-    }, { threshold: 0 });
-
-    inputDockObserver.observe(placeholderEl);
-  }
-
   async function parseJsonResponse(resp, context) {
     if (!resp) {
       throw new Error(`No response for ${context}`);
@@ -2672,7 +2620,6 @@
       return;
     }
     if (gameOver) {
-      resetInputDockingState();
       slot.innerHTML = '';
       return;
     }
@@ -2717,8 +2664,6 @@
         window.GeneGuessrTutorial.open();
       });
     }
-
-    setupInputDocking();
   }
 
   function renderGuessesSection() {
