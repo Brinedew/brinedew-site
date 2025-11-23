@@ -2628,13 +2628,13 @@
     const practiceBadge = gameState.practiceMode
       ? `<div class="pg-practice-badge" aria-live="polite">Practice mode</div>`
       : '';
+    const hintsCount = typeof hints === 'number' ? hints : 0;
+    const hintsClass = hintsCount > 0 ? 'pg-hints-badge has-hints' : 'pg-hints-badge';
+
     slot.innerHTML = `
       <div class="pg-input-section">
         <div class="pg-input-row">
           <div class="pg-autocomplete-wrapper">
-            <input 
-              type="text" 
-              id="pg-input" 
             <input type="text" id="pg-input" placeholder="Type gene name (e.g., TERT, TP53)" autocomplete="off" spellcheck="false">
             <div id="pg-suggestions" class="pg-suggestions"></div>
           </div>
@@ -2643,12 +2643,16 @@
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </button>
-          <div class="pg-hints-badge">
+          <div class="pg-guesses-badge">
+            <span class="pg-guesses-label">Guesses</span>
+            <span class="pg-guesses-value">${gameState.guesses.length}/${MAX_GUESSES}</span>
+          </div>
+          <div class="${hintsClass}">
             <span class="pg-hints-label">Hints</span>
             <span class="pg-hints-value">${hints}</span>
           </div>
           ${practiceBadge}
-          <button type="button" class="pg-how-to-play" id="pg-how-to-play">How to Play</button>
+          <button type="button" class="pg-how-to-play" id="pg-how-to-play" title="How to Play">?</button>
         </div>
       </div>
     `;
