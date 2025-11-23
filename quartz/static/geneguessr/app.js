@@ -2567,6 +2567,7 @@
     }
     rootEl.innerHTML = `
       <div id="pg-clue-slot"></div>
+      <div id="pg-input-anchor"></div>
       <div id="pg-input-slot"></div>
       <div id="pg-guesses-container">
         <div id="pg-guesses"></div>
@@ -2633,17 +2634,14 @@
             <input 
               type="text" 
               id="pg-input" 
-              class="pg-input" 
-              placeholder="Type gene name (e.g., TERT, TP53)"
-              autocomplete="off"
-            />
-            <button id="pg-submit" class="pg-submit-inline" disabled>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </button>
+            <input type="text" id="pg-input" placeholder="Type gene name (e.g., TERT, TP53)" autocomplete="off" spellcheck="false">
             <div id="pg-suggestions" class="pg-suggestions"></div>
           </div>
+          <button id="pg-submit" class="pg-btn" disabled>
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
           <div class="pg-hints-badge">
             <span class="pg-hints-label">Hints</span>
             <span class="pg-hints-value">${hints}</span>
@@ -3364,13 +3362,13 @@
         return;
       }
       const currentToken = ++requestToken;
-      
+
       // Dynamic positioning logic
       const rect = inputEl.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
       const SUGGESTIONS_HEIGHT_ESTIMATE = 300;
-      
+
       if (spaceBelow < SUGGESTIONS_HEIGHT_ESTIMATE && spaceAbove > spaceBelow) {
         suggestionsEl.classList.add('pg-suggestions-above');
       } else {

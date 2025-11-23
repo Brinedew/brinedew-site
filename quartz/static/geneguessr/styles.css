@@ -21,9 +21,8 @@
 
 /* Scrollable middle section containing guesses */
 #pg-guesses-container {
-  flex: 1 1 0;
-  overflow-y: auto;
-  overflow-x: visible;
+  flex: 1 1 auto;
+  overflow: visible;
   /* Create scroll context here, not on parent */
   min-height: 0;
 }
@@ -755,8 +754,8 @@
 
 /* Input */
 #pg-input-slot {
-  position: sticky;
-  bottom: 1rem;
+  position: relative;
+  bottom: auto;
   left: 0;
   width: 100%;
   max-width: 700px;
@@ -767,6 +766,16 @@
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   border: 1px solid var(--ui-border);
+  transition: box-shadow 0.3s ease;
+}
+
+#pg-input-slot.pg-input-fixed {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .pg-input-section {
