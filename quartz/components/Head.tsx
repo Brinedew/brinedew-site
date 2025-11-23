@@ -6,8 +6,11 @@ import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } fro
 import { unescapeHTML } from "../util/escape"
 import { CustomOgImagesEmitterName } from "../plugins/emitters/ogImage"
 
-// Build-time cache buster - set once when module loads
-const CACHE_BUST = Date.now()
+// Build-time cache buster - prefer explicit env override, fall back to commit or timestamp
+const CACHE_BUST =
+  (typeof process !== "undefined" && process.env?.CACHE_BUST) ||
+  (typeof process !== "undefined" && process.env?.VERCEL_GIT_COMMIT_SHA) ||
+  `${Date.now()}`
 
 export default (() => {
   const Head: QuartzComponent = ({
@@ -193,4 +196,3 @@ export default (() => {
 
   return Head
 }) satisfies QuartzComponentConstructor
-
