@@ -1,7 +1,7 @@
 ---
 title: "Geneguessr"
 description: "Daily protein guessing game"
-date: 2025-10-08
+date: 2025-11-23
 draft: false
 folderPage: true
 tags:
