@@ -758,16 +758,16 @@
   top: 1rem;
   bottom: 1rem;
   left: 0;
-  width: 100%;
-  max-width: 700px;
-  margin: 0 auto;
+  right: 0;
   background: var(--light);
   z-index: 100;
   padding: 0.75rem 1rem;
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   border: 1px solid var(--ui-border);
   transition: none;
+  /* Match card styling exactly */
+  margin-bottom: 1.5rem;
 }
 
 #pg-input-placeholder {
@@ -793,19 +793,20 @@
 
 #pg-input {
   width: 100%;
-  padding: 0.5rem 0;
+  padding: 0.65rem 0.75rem;
   font-size: 1rem;
-  border: none;
-  border-bottom: 2px solid var(--ui-border);
-  border-radius: 0;
-  background: transparent;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--lightgray);
   color: var(--dark);
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 #pg-input:focus {
   outline: none;
   border-color: var(--tertiary);
+  background: var(--light);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tertiary) 15%, transparent);
 }
 
 .pg-input:disabled {
@@ -813,13 +814,9 @@
   cursor: not-allowed;
 }
 
-.pg-submit-inline {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 40px;
-  height: 40px;
+#pg-submit {
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -827,29 +824,31 @@
   background: var(--secondary);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.pg-submit-inline:hover:not(:disabled) {
-  transform: translateY(-50%) scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+#pg-submit:hover:not(:disabled) {
+  background: var(--tertiary);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.pg-submit-inline:active:not(:disabled) {
-  transform: translateY(-50%) scale(0.98);
+#pg-submit:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
-.pg-submit-inline:disabled {
+#pg-submit:disabled {
   background: var(--gray);
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
-.pg-submit-inline svg {
-  width: 20px;
-  height: 20px;
+#pg-submit svg {
+  width: 24px;
+  height: 24px;
 }
 
 .pg-guesses-badge,
@@ -858,16 +857,14 @@
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 0.25rem 0.75rem;
+  padding: 0.5rem 0.9rem;
   background: var(--lightgray);
-  background-color: rgba(0, 0, 0, 0.05);
   border: 1px solid var(--ui-border);
   border-radius: 999px;
-  /* Pill shape */
   white-space: nowrap;
-  height: 32px;
-  /* Match button height */
+  height: 44px;
   box-sizing: border-box;
+  transition: all 0.2s ease;
 }
 
 .pg-guesses-label,
@@ -887,26 +884,30 @@
 }
 
 .pg-hints-badge.has-hints {
-  border-color: var(--tertiary);
-  background-color: color-mix(in srgb, var(--tertiary) 10%, transparent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--lightgray));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .pg-hints-badge.has-hints .pg-hints-value {
-  color: var(--tertiary);
+  color: var(--accent);
+}
+
+.pg-hints-badge.has-hints .pg-hints-label {
+  color: color-mix(in srgb, var(--accent) 80%, var(--secondary));
 }
 
 .pg-how-to-play {
-  background: none;
+  background: var(--lightgray);
   border: 1px solid var(--ui-border);
   color: var(--secondary);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.1rem;
+  font-weight: 700;
   cursor: pointer;
   padding: 0;
-  margin-left: 0.5rem;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -915,9 +916,11 @@
 }
 
 .pg-how-to-play:hover {
-  background: var(--ui-bg-hover);
+  background: var(--light);
   color: var(--dark);
   border-color: var(--secondary);
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .pg-suggestions {
