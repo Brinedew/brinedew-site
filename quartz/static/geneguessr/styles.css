@@ -585,14 +585,15 @@
   max-width: 100%;
 }
 
-/* Hide commas between redacted entries - only show when content is revealed */
+/* Show commas between revealed entries, spaces between redacted entries */
 .pg-section-entry:not(:last-child)::after {
   content: ", ";
 }
 
-/* When entry contains only a redaction (unrevealed), hide the comma */
+/* When entry contains only a redaction (unrevealed), use space instead of comma */
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
-  content: " ";
+  content: "  ";
+  white-space: pre;
 }
 
 .pg-section-entry.matched-highlight {
