@@ -3018,11 +3018,8 @@
         shareBtn.addEventListener('click', shareResult);
       }
     } else {
-      slot.innerHTML = `
-        <div style="text-align: center; margin-top: 1rem; color: var(--gray);">
-          ${gameState.guesses.length}/${MAX_GUESSES} guesses
-        </div>
-      `;
+      // No redundant guesses counter - already shown in input bar badge
+      slot.innerHTML = '';
     }
   }
 
@@ -3953,11 +3950,12 @@ https://brinedew.bio/apps/geneguessr/`;
     const attributionBtn = buttons.find(btn => btn.textContent && btn.textContent.includes('Attribution & Data Sources'));
     if (!attributionBtn) return;
 
-    // Find or create the chevron (assume first child span or create one)
-    let chevron = attributionBtn.querySelector('span');
+    // Find or create the chevron SVG icon
+    let chevron = attributionBtn.querySelector('.pg-chevron-icon');
     if (!chevron) {
       chevron = document.createElement('span');
-      chevron.textContent = '▶';
+      chevron.className = 'pg-chevron-icon';
+      chevron.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
       attributionBtn.insertBefore(chevron, attributionBtn.firstChild);
     }
 
@@ -3968,12 +3966,15 @@ https://brinedew.bio/apps/geneguessr/`;
       attributionContent.className = 'pg-attribution-content';
       attributionContent.style.display = 'none';
       attributionContent.innerHTML = `
-      <div style="padding: 1em; background: #f9f9f9; border-radius: 6px; margin-top: 0.5em;">
-        <b>Attribution & Data Sources</b><br>
-        <ul style="margin: 0.5em 0 0 1em;">
-          <li>Protein/gene data: <a href='https://www.uniprot.org/' target='_blank'>UniProt</a></li>
-          <li>Structure viewer: <a href='https://www.ebi.ac.uk/pdbe/' target='_blank'>PDBe Molstar</a></li>
-          <li>Pathways: <a href='https://reactome.org/' target='_blank'>Reactome</a></li>
+      <div class="pg-attribution-panel">
+        <ul>
+          <li>Protein data: <a href='https://www.uniprot.org/' target='_blank' rel='noopener'>UniProt</a></li>
+          <li>Gene Ontology: <a href='http://geneontology.org/' target='_blank' rel='noopener'>GO Consortium</a></li>
+          <li>Domain annotations: <a href='https://www.ebi.ac.uk/interpro/' target='_blank' rel='noopener'>InterPro</a></li>
+          <li>Pathway data: <a href='https://reactome.org/' target='_blank' rel='noopener'>Reactome</a></li>
+          <li>3D structures: <a href='https://alphafold.ebi.ac.uk/' target='_blank' rel='noopener'>AlphaFold DB</a>, <a href='https://swissmodel.expasy.org/' target='_blank' rel='noopener'>SWISS-MODEL</a></li>
+          <li>Structure viewer: <a href='https://www.ebi.ac.uk/pdbe/molstar/' target='_blank' rel='noopener'>PDBe Mol*</a></li>
+          <li>Similarity embeddings: <a href='https://github.com/kansil/HiG2Vec' target='_blank' rel='noopener'>HiG2Vec</a></li>
         </ul>
       </div>
     `;
@@ -3984,7 +3985,7 @@ https://brinedew.bio/apps/geneguessr/`;
     attributionBtn.addEventListener('click', function () {
       const expanded = attributionContent.style.display !== 'none';
       attributionContent.style.display = expanded ? 'none' : 'block';
-      chevron.textContent = expanded ? '▶' : '▼';
+      chevron.classList.toggle('is-expanded', !expanded);
     });
   }
 

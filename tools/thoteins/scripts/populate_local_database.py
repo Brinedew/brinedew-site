@@ -26,6 +26,7 @@ import json
 import subprocess
 import threading
 import math
+import shutil
 from collections import Counter, defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -572,7 +573,9 @@ def _write_cached_interpro_payload(uniprot_id: str, payload: Dict[str, object]) 
             pass
 
 
-def fetch_interpro_domains_and_clans(uniprot_id: str) -> Tuple[List[str], List[str], bool]:
+def fetch_interpro_domains_and_clans(
+    uniprot_id: str, allow_network: bool = True, force_refresh: bool = False
+) -> Tuple[List[str], List[str], bool]:
     """Fetch ALL Pfam domains and clans for a UniProt accession (no representative filter).
 
     Returns (domain_names, clan_names, error_flag).
@@ -582,12 +585,16 @@ def fetch_interpro_domains_and_clans(uniprot_id: str) -> Tuple[List[str], List[s
 
     clan_map = _load_pfam_clan_map()
 
-    payload = _read_cached_interpro_payload(uniprot_id)
+    payload = None
+    if not force_refresh:
+        payload = _read_cached_interpro_payload(uniprot_id)
     results: Optional[List[Dict[str, object]]] = None
     if payload:
         results = payload.get("results")  # type: ignore[arg-type]
 
     if results is None:
+        if not allow_network:
+            return [], [], True
         results, fetch_failed = _fetch_pfam_entries(uniprot_id)
         if fetch_failed:
             return [], [], True
@@ -1141,6 +1148,31 @@ def extract_uniprot_synonyms(uniprot_entry: Optional[Dict[str, object]]) -> List
     return out
 
 
+def extract_uniprot_subcellular_locations(uniprot_entry: Dict[str, object]) -> List[str]:
+    """Extract subcellular locations from UniProt comments (SUBCELLULAR LOCATION)."""
+    locations: List[str] = []
+    if not uniprot_entry:
+        return locations
+    for comment in uniprot_entry.get("comments", []):
+        if comment.get("commentType") != "SUBCELLULAR LOCATION":
+            continue
+        locs = comment.get("locations", [])
+        if not isinstance(locs, list):
+            continue
+        for loc in locs:
+            value = None
+            if isinstance(loc, dict):
+                val_obj = loc.get("location")
+                if isinstance(val_obj, dict):
+                    value = val_obj.get("value")
+                if not value:
+                    value = loc.get("value")
+            if value:
+                locations.append(str(value))
+    # Deduplicate, keep order, cap
+    return list(dict.fromkeys(locations))[:3]
+
+
 def fetch_hgnc_aliases(symbol: str) -> Tuple[Optional[List[str]], Optional[str]]:
     """Fetch HGNC alias_symbol and prev_symbol for a gene symbol, with local caching.
 
@@ -1229,7 +1261,7 @@ def extract_uniprot_function(uniprot_entry: Optional[Dict[str, object]]) -> Opti
     return None
 
 
-def build_ncbi_gene_summaries(gene_ids: List[str]) -> Dict[str, Dict[str, object]]:
+def build_ncbi_gene_summaries(gene_ids: List[str], refresh: bool = False) -> Dict[str, Dict[str, object]]:
     """
     Bulk-fetch gene summaries from NCBI Datasets CLI.
     Returns dict mapping GeneID → summary object.
@@ -1240,14 +1272,34 @@ def build_ncbi_gene_summaries(gene_ids: List[str]) -> Dict[str, Dict[str, object
     # Create cache directory
     NCBI_GENE_CACHE.mkdir(parents=True, exist_ok=True)
     
-    # Check for existing cache
+    # Check for existing cache keyed to roster (hash is deterministic)
+    roster = "\n".join(sorted(set(gene_ids)))
+    roster_hash = hashlib.sha256(roster.encode("utf-8")).hexdigest()[:12]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    cache_file = NCBI_GENE_CACHE / f"gene_summaries_{today}.json"
+    cache_file = NCBI_GENE_CACHE / f"gene_summaries_{roster_hash}.json"
     
-    if cache_file.exists():
-        print(f"[info] Loading cached NCBI gene summaries from {cache_file}")
+    if cache_file.exists() and not refresh:
+        print(f"[info] Loading cached NCBI gene summaries for roster {roster_hash} from {cache_file}")
         return json.loads(cache_file.read_text(encoding="utf-8"))
-    
+
+    def _resolve_datasets_cli() -> Optional[str]:
+        here = Path(__file__).resolve()
+        # Probe predictable spots relative to this file, then PATH.
+        candidates = [
+            here.parents[2] / "scripts" / "datasets.exe",  # repo root / scripts
+            here.parents[1] / "scripts" / "datasets.exe",  # tools/thoteins/scripts
+            here.parents[2] / "tools" / "scripts" / "datasets.exe",  # tools/scripts
+        ]
+        for cand in candidates:
+            if cand.exists():
+                return str(cand)
+        return shutil.which("datasets")
+
+    datasets_cmd = _resolve_datasets_cli()
+    if datasets_cmd is None:
+        print("[warn] 'datasets' CLI not found. Install from: https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/")
+        return {}
+
     print(f"[info] Fetching {len(gene_ids)} gene summaries from NCBI Datasets...")
     
     # Write gene IDs to temp file
@@ -1256,11 +1308,6 @@ def build_ncbi_gene_summaries(gene_ids: List[str]) -> Dict[str, Dict[str, object
     
     # Download via datasets CLI (use local binary if available)
     zip_path = NCBI_GENE_CACHE / "ncbi_gene_pkg.zip"
-    
-    # Try local datasets.exe first, then system PATH
-    datasets_cmd = BASE_DIR / "scripts" / "datasets.exe"
-    if not datasets_cmd.exists():
-        datasets_cmd = "datasets"
     
     try:
         subprocess.run(
@@ -1688,8 +1735,25 @@ def build_protein_record(
 ) -> Dict[str, object]:
     """Merge wiki frontmatter + features + GO annotations + gene summary into a JSON-ready dict."""
     uniprot_id = (page.get("uniprot_id") or page.get("uniprot") or "").strip()
+    # Prefer UniProt gene name if available; fall back to page/frontmatter.
+    uniprot_entry = load_uniprot_entry(uniprot_id) if uniprot_id else None
+    gene_symbol = None
+    if isinstance(uniprot_entry, dict):
+        genes = uniprot_entry.get("genes") or []
+        if genes and isinstance(genes, list):
+            primary = genes[0] or {}
+            if isinstance(primary, dict):
+                gn = primary.get("geneName") or {}
+                gene_symbol = gn.get("value") if isinstance(gn, dict) else None
+        # HGNC cross-ref fallback
+        if not gene_symbol:
+            for ref in uniprot_entry.get("uniProtKBCrossReferences", []):
+                if ref.get("database") == "HGNC":
+                    gene_symbol = ref.get("id")
+                    break
     gene_symbol = (
-        page.get("gene_symbol")
+        gene_symbol
+        or page.get("gene_symbol")
         or page.get("hgnc")
         or feature_row.get("gene_symbol")
         or page.get("symbol")
@@ -1697,7 +1761,6 @@ def build_protein_record(
         or uniprot_id
     )
     # Prefer UniProt recommended name; if missing, fall back to page/CSV; final fallback is empty.
-    uniprot_entry = load_uniprot_entry(uniprot_id) if uniprot_id else None
     recommended_full_name = None
     if isinstance(uniprot_entry, dict):
         recommended_full_name = (
@@ -1714,10 +1777,18 @@ def build_protein_record(
     )
     short_name = feature_row.get("short_name") or gene_symbol
 
-    try:
-        length = int(float(feature_row.get("length", 0)))
-    except (TypeError, ValueError):
-        length = 0
+    # Prefer UniProt sequence length; fall back to feature_row if present.
+    length = None
+    if isinstance(uniprot_entry, dict):
+        try:
+            length = int(uniprot_entry.get("sequence", {}).get("length", 0) or 0)
+        except Exception:
+            length = None
+    if length is None:
+        try:
+            length = int(float(feature_row.get("length", 0)))
+        except (TypeError, ValueError):
+            length = 0
 
     tm_flag = feature_row.get("Has transmembrane domains", "").strip().lower()
     tmh = tm_flag in {"yes", "true", "1"}
@@ -1728,6 +1799,9 @@ def build_protein_record(
 
     locations_str = feature_row.get("locations", "")
     subcell = [loc.strip() for loc in locations_str.split(";") if loc.strip()]
+    # If no subcell data from features, try UniProt subcellular location comments.
+    if not subcell and isinstance(uniprot_entry, dict):
+        subcell = extract_uniprot_subcellular_locations(uniprot_entry)
     subcell = subcell[:3]
 
     links = {
@@ -1869,6 +1943,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", type=int, default=500, help="Number of records to buffer before flushing")
     parser.add_argument("--test", action="store_true", help="Test mode: process only top 200 highest quality proteins")
+    parser.add_argument("--resume", action="store_true", help="Resume from existing proteins.json (process only missing IDs)")
     parser.add_argument(
         "--interpro-workers",
         type=int,
@@ -1881,7 +1956,25 @@ def main() -> None:
         default=DEFAULT_INTERPRO_PREFETCH,
         help="Max queued InterPro requests before blocking (default: %(default)s)",
     )
+    parser.add_argument(
+        "--interpro-cache-only",
+        action="store_true",
+        help="Never hit InterPro API; fail fast on cache miss (Carmack-approved builds)",
+    )
+    parser.add_argument(
+        "--force-interpro-refresh",
+        action="store_true",
+        help="Ignore cached InterPro payloads and refetch (overrides cache-only)",
+    )
+    parser.add_argument(
+        "--refresh-gene-summaries",
+        action="store_true",
+        help="Force refetch of NCBI gene summaries even if roster-hash cache exists",
+    )
     args = parser.parse_args()
+
+    if args.interpro_cache_only and args.force_interpro_refresh:
+        raise SystemExit("Choose either cache-only or force-refresh for InterPro, not both.")
 
     print("==> Loading GO ontology")
     ontology, go_meta = parse_go_obo(GO_ONTOLOGY_PATH)
@@ -1898,11 +1991,54 @@ def main() -> None:
         else:
             raise FileNotFoundError(f"Embedding metadata not found: {EMBED_FILE}")
 
+    # Early, explicit cache audit to avoid surprises; channel your inner Carmack.
+    go_ok = GO_ONTOLOGY_PATH.exists()
+    uniprot_sqlite_ok = BULK_UNIPROT_DB_PATH.exists()
+    interpro_dir = INTERPRO_CACHE_DIR
+    interpro_sqlite = interpro_dir / "interpro_cache.sqlite"
+    interpro_rep = interpro_dir / "representative_domains.db"
+    interpro_ok = interpro_sqlite.exists() or interpro_rep.exists()
+    embed_ok = EMBED_FILE.exists()
+
+    print("==> Cache check:")
+    print(f"    GO ontology:              {'OK' if go_ok else 'MISSING'} ({GO_ONTOLOGY_PATH})")
+    print(f"    UniProt SQLite index:     {'OK' if uniprot_sqlite_ok else 'MISSING'} ({BULK_UNIPROT_DB_PATH})")
+    print(f"    InterPro cache dir:       {'OK' if interpro_ok else 'MISSING'} ({interpro_dir})")
+    print(f"    InterPro cache sqlite:    {'OK' if interpro_sqlite.exists() else 'MISSING'} ({interpro_sqlite})")
+    print(f"    InterPro rep domains db:  {'OK' if interpro_rep.exists() else 'MISSING'} ({interpro_rep})")
+    print(f"    Embedding roster:         {'OK' if embed_ok else 'MISSING'} ({EMBED_FILE})")
+    interpro_mode = "cache-only" if args.interpro_cache_only else ("force-refresh" if args.force_interpro_refresh else "prefer-cache")
+    print(f"    InterPro fetch mode:      {interpro_mode}")
+
+    proceed = input("Proceed with populate_local_database run? [y/N]: ").strip().lower()
+    if proceed not in {"y", "yes"}:
+        print("Aborting at user request.")
+        return
+
+    # Load already-built dataset to enable deterministic resume/skip of processed IDs (opt-in via --resume).
+    existing_records: Dict[str, Dict[str, object]] = {}
+    processed_ids: Set[str] = set()
+    if args.resume and DATA_JSON.exists():
+        try:
+            existing_payload = json.loads(DATA_JSON.read_text(encoding="utf-8"))
+            if isinstance(existing_payload, list):
+                for rec in existing_payload:
+                    if not isinstance(rec, dict):
+                        continue
+                    uid = rec.get("uniprot")
+                    if uid:
+                        existing_records[uid] = rec
+                        processed_ids.add(uid)
+            print(f"[info] Resume cache: {len(existing_records)} records loaded from {DATA_JSON}")
+        except Exception as e:
+            print(f"[warn] Failed to load existing dataset for resume ({DATA_JSON}): {e}")
+
     # First pass: collect unique UniProt IDs from embedding roster (streamed)
     print("==> Collecting UniProt IDs from embedding roster")
     uniprot_ids: Set[str] = set()
     total_entries = 0
     
+    embedding_entries: List[Dict[str, object]] = []
     # Test mode: use hardcoded list of famous proteins with known Wikipedia articles
     if args.test:
         print("==> TEST MODE: Using 10 famous proteins with known Wikipedia articles")
@@ -1920,6 +2056,7 @@ def main() -> None:
         ]
         uniprot_ids = set(test_proteins)
         total_entries = len(test_proteins)
+        embedding_entries = [{"uniprot": uid} for uid in sorted(test_proteins)]
         print(f"==> Selected {total_entries} test proteins")
     else:
         for entry in stream_embedding_entries(EMBED_FILE):
@@ -1928,7 +2065,13 @@ def main() -> None:
             if not uniprot_id:
                 continue
             uniprot_ids.add(uniprot_id)
+            embedding_entries.append(entry)
 
+    # Deterministic processing order
+    embedding_entries = sorted(embedding_entries, key=lambda e: e.get("uniprot", ""))
+    uniprot_ids = set(uniprot_ids)
+    uniprot_order = sorted(uniprot_ids)
+    
     print(f"==> Found {len(uniprot_ids)} unique UniProt IDs across {total_entries} entries")
 
     # Prefill per-file UniProt snapshots for those IDs: prefer per-file JSONs.
@@ -1978,7 +2121,8 @@ def main() -> None:
     # Build gene_ids set from the cached UniProt entries (for NCBI bulk fetch)
     gene_ids: Set[str] = set()
     for uid in uniprot_ids:
-        entry = UNIPROT_CACHE.get(uid)
+        # Hit per-file cache or SQLite so gene IDs are available even when individual JSON files are absent.
+        entry = load_uniprot_entry(uid)
         if entry:
             gid = extract_ncbi_gene_id(entry)
             if gid:
@@ -1987,14 +2131,14 @@ def main() -> None:
     print(f"==> Found {len(gene_ids)} unique gene IDs from cached UniProt entries")
 
     # Bulk fetch NCBI gene summaries (cached)
-    ncbi_summaries = build_ncbi_gene_summaries(list(gene_ids))
+    ncbi_summaries = build_ncbi_gene_summaries(list(gene_ids), refresh=args.refresh_gene_summaries)
 
     # Prepare output
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     temp = DATA_JSON.with_suffix(".tmp")
 
     batch: List[Dict[str, object]] = []
-    eligible_ids: List[str] = []
+    eligible_ids: List[str] = sorted(existing_records.keys())
     written_count = 0
     first_written = False
     processed_count = 0
@@ -2004,6 +2148,8 @@ def main() -> None:
     skipped_no_domains = 0
     missing_uniprot_json = 0
     interpro_fetch_attempts = 0
+    interpro_cache_hits = 0
+    interpro_cache_misses = 0
     interpro_fetch_failures = 0
     interpro_zero_domains = 0
     observed_clans: Set[str] = set()
@@ -2042,11 +2188,20 @@ def main() -> None:
 
     interpro_workers = max(1, args.interpro_workers)
     prefetch_target = max(1, args.interpro_prefetch, interpro_workers)
-    expected_total = len(uniprot_ids) if args.test else total_entries
+    remaining_ids = [uid for uid in uniprot_order if uid not in processed_ids]
+    expected_total = len(remaining_ids) if not args.test else len(uniprot_ids)
 
     print(f"==> Building dataset (streaming, batch_size={args.batch_size}, interpro_workers={interpro_workers})")
     with temp.open("w", encoding="utf-8") as out_handle:
         out_handle.write("[\n")
+        # If resuming, write existing records first in deterministic order
+        if existing_records:
+            for rec in sorted(existing_records.values(), key=lambda r: r.get("uniprot", "")):
+                if first_written:
+                    out_handle.write(",\n")
+                out_handle.write(json.dumps(rec, ensure_ascii=False))
+                first_written = True
+                written_count += 1
         executor = ThreadPoolExecutor(max_workers=interpro_workers)
         pending: deque = deque()
 
@@ -2084,12 +2239,7 @@ def main() -> None:
                 feature_row["clans"] = ", ".join(clans)
                 observed_clans.update(clans)
 
-            raw_go = entry_obj.get("go_terms", {}) or {}
-            go_annotations = {
-                "bp": set(raw_go.get("bp", [])),
-                "mf": set(raw_go.get("mf", [])),
-                "cc": set(raw_go.get("cc", [])),
-            }
+            go_annotations = gather_go_annotations(uniprot_id, ontology)
 
             reactome_paths = entry_obj.get("reactome_pathways", []) or []
             if not reactome_paths:
@@ -2211,7 +2361,7 @@ def main() -> None:
                 process_record(entry_obj, fetch_result)
 
         try:
-            for entry in stream_embedding_entries(EMBED_FILE):
+            for entry in embedding_entries:
                 uniprot_id = entry.get("uniprot")
                 if not uniprot_id:
                     missing_uniprot_json += 1
@@ -2220,14 +2370,37 @@ def main() -> None:
                 if args.test and uniprot_id not in uniprot_ids:
                     continue
 
+                if uniprot_id in processed_ids:
+                    eligible_ids.append(uniprot_id)
+                    continue
+
                 processed_count += 1
                 if processed_count % 100 == 0 or processed_count == expected_total:
-                    pct = (processed_count * 100) // max(1, expected_total)
+                    pct = (processed_count * 100) // max(1, expected_total or 1)
                     print(f"[progress] {processed_count}/{expected_total} ({pct}%)")
 
-                future = executor.submit(fetch_interpro_domains_and_clans, uniprot_id)
+                cached_domains, cached_clans, cache_error = fetch_interpro_domains_and_clans(
+                    uniprot_id,
+                    allow_network=False,
+                    force_refresh=args.force_interpro_refresh,
+                )
+                if not cache_error:
+                    interpro_cache_hits += 1
+                    process_record(entry, (cached_domains, cached_clans, False))
+                    continue
+
+                if args.interpro_cache_only:
+                    interpro_fetch_failures += 1
+                    interpro_cache_misses += 1
+                    print(f"[warn] InterPro cache miss for {uniprot_id} in cache-only mode; skipping.")
+                    continue
+
+                future = executor.submit(
+                    fetch_interpro_domains_and_clans, uniprot_id, True, args.force_interpro_refresh
+                )
                 pending.append((entry, future))
                 interpro_fetch_attempts += 1
+                interpro_cache_misses += 1
                 drain_pending()
 
                 if args.test and processed_count >= expected_total:
@@ -2278,6 +2451,8 @@ def main() -> None:
     else:
         zero_pct = 0.0
         fail_pct = 0.0
+    print(f"  InterPro cache hits:     {interpro_cache_hits}")
+    print(f"  InterPro cache misses:   {interpro_cache_misses}")
     print(f"  InterPro fetch attempts: {interpro_fetch_attempts}")
     print(f"    zero-domain entries: {interpro_zero_domains} ({zero_pct:.2f}%)")
     print(f"    fetch failures:      {interpro_fetch_failures} ({fail_pct:.2f}%)")

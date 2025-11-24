@@ -3,6 +3,10 @@
   const TUTORIAL_VERSION = '1.0';
   const STORAGE_KEY = 'geneguessr_tutorial';
   const OPEN_DELAY_MS = 500;
+  
+  // Session-level flag to prevent re-opening after user dismissal
+  let closedThisSession = false;
+  
   const STEP_CONTENT = [
     {
       title: 'Step 1 - Welcome to GeneGuessr!',
@@ -264,6 +268,8 @@
       if (markComplete || skipFuture) {
         markSeen({ skipFuture });
       }
+      // Mark as closed this session to prevent re-opening on theme toggle
+      closedThisSession = true;
     },
     finish() {
       this.close(true);
@@ -339,7 +345,8 @@
         return;
       }
       booted = true;
-      if (shouldShowTutorial()) {
+      // Only show tutorial if not already closed this session and should show
+      if (!closedThisSession && shouldShowTutorial()) {
         setTimeout(() => Tutorial.open(), OPEN_DELAY_MS);
       }
     },

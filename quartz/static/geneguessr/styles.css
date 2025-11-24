@@ -37,7 +37,7 @@
   padding: 1rem;
   background: var(--light);
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.9rem;
 }
 
@@ -85,7 +85,7 @@
   border: 1px solid var(--ui-border);
   background: var(--ui-bg);
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--secondary);
 }
 
@@ -108,7 +108,7 @@
   padding: 0.5rem 1rem;
   background: #5865f2;
   color: white;
-  border-radius: 4px;
+  border-radius: 8px;
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
@@ -152,8 +152,9 @@
   gap: 0.35rem;
   padding: 0.4rem 0.9rem;
   border-radius: 999px;
-  background: #5865f2;
-  color: #fff;
+  background: transparent;
+  border: 1.5px solid #5865f2;
+  color: var(--dark);
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
@@ -161,9 +162,15 @@
 }
 
 .pg-auth-discord:hover {
-  background: #4752c4;
-  color: #fff;
+  background: color-mix(in srgb, #5865f2 10%, transparent);
+  color: var(--dark);
   transform: translateY(-1px);
+}
+
+.pg-auth-discord svg,
+.pg-auth-discord img {
+  /* Keep Discord icon colored */
+  color: #5865f2;
 }
 
 .pg-auth-logout {
@@ -175,7 +182,7 @@
   border: 1px solid var(--ui-border);
   border-radius: 999px;
   color: var(--dark);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease;
@@ -235,7 +242,7 @@
 }
 
 .pg-structure-source {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   text-align: right;
   color: var(--secondary);
   letter-spacing: 0.02em;
@@ -266,7 +273,7 @@
 }
 
 .pg-structure-tip {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--gray);
 }
 
@@ -363,7 +370,7 @@
   position: relative;
   width: min(540px, 100%);
   padding: 2rem 2rem 1.5rem;
-  border-radius: 18px;
+  border-radius: 16px;
   background: var(--light);
   color: var(--dark);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.5);
@@ -549,7 +556,7 @@
 .pg-section {
   margin-bottom: 0.4rem;
   line-height: 1.5;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--dark);
   overflow-wrap: anywhere;
   word-break: normal;
@@ -578,8 +585,14 @@
   max-width: 100%;
 }
 
+/* Hide commas between redacted entries - only show when content is revealed */
 .pg-section-entry:not(:last-child)::after {
   content: ", ";
+}
+
+/* When entry contains only a redaction (unrevealed), hide the comma */
+.pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
+  content: " ";
 }
 
 .pg-section-entry.matched-highlight {
@@ -600,7 +613,7 @@
 
 .pg-gene-summary-source {
   opacity: 0.7;
-  font-size: 0.8em;
+  font-size: 0.85rem;
   margin-left: 0.35rem;
   font-style: normal;
   text-decoration: none;
@@ -616,7 +629,7 @@
 .pg-clue-section {
   margin-bottom: 0.4rem;
   line-height: 1.5;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--dark);
   overflow-wrap: break-word;
   word-break: break-word;
@@ -674,7 +687,7 @@
   background: var(--light);
   border: 1px solid var(--darkgray);
   padding: 0.35rem 0.75rem;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 0.9rem;
   color: var(--dark);
 }
@@ -849,17 +862,20 @@
 }
 
 .pg-hints-badge.has-hints {
-  background: color-mix(in srgb, var(--accent) 10%, var(--light));
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+  /* No background change - keep it neutral */
+  background: var(--light);
+  box-shadow: inset 0 0 0 1px var(--ui-border);
 }
 
 .pg-hints-badge.has-hints .pg-hints-value {
-  color: var(--accent);
+  /* Only the numeral gets accent color to draw attention */
+  color: oklch(55% 0.14 185);
   font-weight: 700;
 }
 
 .pg-hints-badge.has-hints .pg-hints-label {
-  color: var(--accent);
+  /* Label stays muted */
+  color: var(--secondary);
   font-weight: 700;
 }
 
@@ -867,7 +883,7 @@
   background: var(--lightgray);
   border: 1px solid var(--ui-border);
   color: var(--darkgray);
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
   padding: 0;
@@ -969,7 +985,7 @@
 .pg-feedback {
   background: var(--light);
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1rem;
 }
@@ -984,8 +1000,8 @@
 }
 
 .pg-feedback-protein {
-  font-weight: 700;
-  font-size: 1.1rem;
+  font-weight: 800;
+  font-size: 1rem;
   color: var(--dark);
 }
 
@@ -1097,7 +1113,7 @@
 }
 
 .pg-feedback-protein-name {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--secondary);
   margin-bottom: 0.75rem;
   line-height: 1.4;
@@ -1151,9 +1167,9 @@
   background: white;
   color: oklch(50% 0.08 185);
   text-decoration: none;
-  border-radius: 4px;
+  border-radius: 8px;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   transition: all 0.2s;
 }
 
@@ -1170,7 +1186,7 @@
 
 .pg-practice-btn {
   padding: 0.5rem 1.25rem;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--ui-border);
   background: var(--ui-bg);
   color: var(--dark);
@@ -1210,7 +1226,7 @@
 
 .pg-gameover-title {
   font-weight: 800;
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: var(--dark);
 }
 
@@ -1230,7 +1246,7 @@
 }
 
 .pg-gameover-guesses {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--secondary);
 }
 
@@ -1259,7 +1275,7 @@
   background: var(--dark);
   color: var(--light);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -1283,7 +1299,7 @@
   padding: 1rem;
   background: var(--light);
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: 8px;
   margin-bottom: 1rem;
 }
 
@@ -1301,6 +1317,67 @@
   font-size: 0.85rem;
   color: var(--secondary);
   text-transform: uppercase;
+}
+
+/* Hide wiki Tags section when GeneGuessr is active */
+#geneguessr-root ~ .right .tags,
+article:has(#geneguessr-root) ~ .right .tags,
+.right:has(~ article #geneguessr-root) .tags {
+  display: none;
+}
+
+/* Also hide via sidebar class when game root exists */
+body:has(#geneguessr-root) .sidebar.right > .tags {
+  display: none;
+}
+
+/* Attribution panel styling */
+.pg-attribution-panel {
+  padding: 1rem;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  margin-top: 0.5rem;
+}
+
+.pg-attribution-panel ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pg-attribution-panel li {
+  font-size: 0.9rem;
+  color: var(--dark);
+}
+
+.pg-attribution-panel a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.pg-attribution-panel a:hover {
+  text-decoration: underline;
+}
+
+/* Chevron icon for attribution toggle */
+.pg-chevron-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.5rem;
+  transition: transform 0.2s ease;
+}
+
+.pg-chevron-icon.is-expanded {
+  transform: rotate(90deg);
+}
+
+.pg-chevron-icon svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Mobile */
