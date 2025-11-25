@@ -10,6 +10,28 @@ Run locally after updating embeddings or metadata. Large files are not tracked i
 
 Usage:
     python scripts/upload_local_database.py [--remote] [--metadata-file PATH]
+
+DATA FLOW (so future-you doesn't get confused):
+------------------------------------------------
+1. Source file: tools/thoteins/data/geneguessr/proteins.json
+   - Contains all protein metadata (clans, domain_names, domains, pathways, etc.)
+   - This is the source of truth for GeneGuessr protein data
+
+2. This script:
+   - Reads proteins.json
+   - Serializes each protein's FULL JSON into the `metadata` column
+   - Uploads to Cloudflare D1 database via wrangler CLI
+   - Without --remote: local D1 only
+   - With --remote: production D1 database
+
+3. Downstream:
+   - workers/index.js serves /api/protein from D1
+   - Frontend (quartz/static/geneguessr/app.js) fetches and renders
+
+If you update proteins.json with new fields (e.g., clans, domain_names):
+    python tools/thoteins/scripts/upload_local_database.py --remote
+
+This is REQUIRED - the normal GitHub Pages deploy does NOT update protein data!
 """
 from __future__ import annotations
 

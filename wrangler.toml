@@ -1,3 +1,16 @@
+# GeneGuessr API Worker
+#
+# DATA FLOW (so future-you doesn't get confused):
+# ------------------------------------------------
+# 1. Protein data source: tools/thoteins/data/geneguessr/proteins.json
+# 2. Upload to D1: python tools/thoteins/scripts/upload_local_database.py --remote
+# 3. This worker serves data from D1 via /api/protein, /api/game/bootstrap, etc.
+# 4. Frontend (quartz/static/geneguessr/app.js) consumes the API
+#
+# Worker deployment: GitHub Actions runs `wrangler deploy` on push to main
+# D1 database update: Manual - run upload_local_database.py --remote after
+#                     updating proteins.json
+
 name = "geneguessr-api"
 main = "workers/index.js"
 compatibility_date = "2025-11-12"
