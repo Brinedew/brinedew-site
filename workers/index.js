@@ -597,7 +597,27 @@ async function handleStructureToken(request, env, corsHeaders) {
   const url = new URL(request.url);
   const type = url.searchParams.get('type');
   if (type === 'target') {
-    const protein = await getDailyTargetProtein(env);
+    // Use session state to get the actual target protein, not getDailyTargetProtein.
+    // This is critical for practice mode where the target is a random protein stored
+    // in the session, not the daily target.
+    const { sessionId, practiceMode } = resolveSessionContext(request);
+    let protein = null;
+    
+    // Try to get target from session state first
+    try {
+      const state = await getGameState(env, sessionId);
+      if (state?.targetId) {
+        protein = await fetchProteinByUniprot(env.DB, state.targetId);
+      }
+    } catch (err) {
+      console.warn('GeneGuessr: failed to get target from session, falling back to daily', err);
+    }
+    
+    // Fall back to daily target if session lookup failed
+    if (!protein) {
+      protein = await getDailyTargetProtein(env, { practice: practiceMode });
+    }
+    
     if (!protein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
     }
