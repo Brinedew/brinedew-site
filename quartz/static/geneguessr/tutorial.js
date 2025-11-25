@@ -11,25 +11,25 @@
     {
       title: 'Step 1 - Welcome to GeneGuessr!',
       body: [
-        '- Each day, GeneGuessr shows you one mystery gene',
-        '- You have 6 attempts to guess the gene name',
-        '- Type your guess and tap the arrow to submit it'
+        { img: 1, text: 'Each day, GeneGuessr shows you one mystery gene' },
+        { img: 2, text: 'You have 6 attempts to guess the gene name' },
+        { img: 3, text: 'Type your guess and tap the gene to submit it' }
       ]
     },
     {
       title: 'Step 2 - Spoilers & Hints',
       body: [
-        '- Start each day with 1 hint',
-        '- Tap a spoiler bar to spend a hint and reveal information',
-        '- Get +1 hint each time you submit your guess'
+        { img: 4, text: 'Start each day with 1 hint' },
+        { img: 5, text: 'Tap a spoiler bar to spend a hint and reveal information' },
+        { img: 6, text: 'Get +1 hint each time you submit your guess' }
       ]
     },
     {
       title: 'Step 3 - Feedback',
       body: [
-        '- Each incorrect guess shows up as a feedback card',
-        '- The similarity bar shows how close you were',
-        '- Properties are highlighted when they match the mystery gene'
+        { img: 7, text: 'Each incorrect guess shows up as a feedback card' },
+        { img: 8, text: 'The similarity bar shows how close you were' },
+        { img: 9, text: 'Properties are highlighted when they match the mystery gene' }
       ]
     }
   ];
@@ -77,10 +77,27 @@
   function buildList(items) {
     const list = document.createElement('ul');
     list.className = 'pg-tutorial-list';
-    items.forEach((text) => {
-      const item = document.createElement('li');
-      item.textContent = text;
-      list.appendChild(item);
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      
+      // Add placeholder image above the text
+      const imgWrapper = document.createElement('div');
+      imgWrapper.className = 'pg-tutorial-img-wrapper';
+      const img = document.createElement('img');
+      img.src = `/static/geneguessr/tutorial/placeholder-${item.img}.png`;
+      img.alt = `Tutorial illustration ${item.img}`;
+      img.className = 'pg-tutorial-img';
+      img.loading = 'lazy';
+      imgWrapper.appendChild(img);
+      li.appendChild(imgWrapper);
+      
+      // Add the text
+      const textSpan = document.createElement('span');
+      textSpan.className = 'pg-tutorial-item-text';
+      textSpan.textContent = item.text;
+      li.appendChild(textSpan);
+      
+      list.appendChild(li);
     });
     return list;
   }
