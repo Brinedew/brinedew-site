@@ -2347,27 +2347,7 @@
 
   function renderClueSectionsHtml() {
     const sections = Array.isArray(clueData?.sections) ? clueData.sections : [];
-    return sections.map(section => renderServerManagedSection(section)).join('');
-  }
-
-  function renderServerManagedSection(section) {
-    const labelHtml = section.label
-      ? `<span class="pg-section-label">${escapeHtml(section.label)}:</span> `
-      : '';
-    const itemsHtml = (section.items || []).map(item => {
-      const text = typeof item.text === 'string' ? item.text : null;
-      const entryClass = item?.highlighted
-        ? 'pg-section-entry matched-highlight'
-        : 'pg-section-entry';
-      if (!item.id || item.revealed) {
-        if (text) {
-          return `<span class="${entryClass}">${escapeHtml(text)}</span>`;
-        }
-        return `<span class="${entryClass}"></span>`;
-      }
-      return renderLockedHintPlaceholder(item, entryClass);
-    }).join('');
-    return `<div class="pg-section">${labelHtml}${itemsHtml}</div>`;
+    return sections.map(section => renderSpoilerSection(section)).join('');
   }
 
   function normalizeMatchText(value) {
