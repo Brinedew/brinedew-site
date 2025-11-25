@@ -1137,8 +1137,9 @@ async function getCanonicalStructureMeta(protein, env) {
         }
       }
     }
-    // Fallback: if API returned empty/invalid but metadata says AlphaFold exists, construct URL directly
-    if (!afAdded && protein.structures?.alphafold) {
+    // Fallback: if API returned empty/invalid, construct v6 URL directly
+    // AlphaFold has predictions for virtually all human proteins, so worth trying
+    if (!afAdded) {
       const fallbackCifUrl = `https://alphafold.ebi.ac.uk/files/AF-${protein.uniprot}-F1-model_v6.cif`;
       candidates.push({
         source: 'alphafold',
@@ -1150,17 +1151,15 @@ async function getCanonicalStructureMeta(protein, env) {
     }
   } catch (err) {
     console.warn('GeneGuessr: failed to fetch AlphaFold for', protein.uniprot, err);
-    // Fallback on error: if metadata says AlphaFold exists, try constructed URL
-    if (protein.structures?.alphafold) {
-      const fallbackCifUrl = `https://alphafold.ebi.ac.uk/files/AF-${protein.uniprot}-F1-model_v6.cif`;
-      candidates.push({
-        source: 'alphafold',
-        id: protein.uniprot,
-        upstreamUrl: fallbackCifUrl,
-        coverage: 1.0,
-        quality: 70
-      });
-    }
+    // Fallback on error: try constructed v6 URL anyway
+    const fallbackCifUrl = `https://alphafold.ebi.ac.uk/files/AF-${protein.uniprot}-F1-model_v6.cif`;
+    candidates.push({
+      source: 'alphafold',
+      id: protein.uniprot,
+      upstreamUrl: fallbackCifUrl,
+      coverage: 1.0,
+      quality: 70
+    });
   }
   
   // SWISS-MODEL candidates
