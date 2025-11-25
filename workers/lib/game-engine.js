@@ -256,6 +256,8 @@ function buildProteinSections(protein, options = {}) {
   const goTermsByAspect = protein?.go_terms || {};
   const goTermNamesByAspect = protein?.go_terms_named || {};
   const domains = Array.isArray(protein?.domains) ? protein.domains : [];
+  const domainNames = Array.isArray(protein?.domain_names) ? protein.domain_names : [];
+  const clans = Array.isArray(protein?.clans) ? protein.clans : [];
   const reactomePaths = Array.isArray(protein?.reactome_pathways) ? protein.reactome_pathways : [];
   
   const sections = [];
@@ -330,12 +332,26 @@ function buildProteinSections(protein, options = {}) {
     label: 'Tissue specificity',
     items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein?.tissue?.label }],
   });
-  
-  if (domains.length) {
+
+  // Clans (protein family classifications)
+  if (clans.length) {
+    pushSection({
+      id: 'clans',
+      label: 'Clans',
+      items: clans.map((clan, idx) => ({
+        id: forClue ? `hint-clan-${idx}` : undefined,
+        text: clan,
+      })),
+    });
+  }
+
+  // Domains - prefer human-readable names, fall back to IPR IDs
+  const displayDomains = domainNames.length ? domainNames : domains;
+  if (displayDomains.length) {
     pushSection({
       id: 'domains',
       label: 'Domains',
-      items: domains.map((domain, idx) => ({
+      items: displayDomains.map((domain, idx) => ({
         id: forClue ? `hint-domain-${idx}` : undefined,
         text: domain,
       })),
