@@ -12,7 +12,7 @@
       title: 'Step 1 - Welcome to GeneGuessr!',
       body: [
         { img: 1, text: 'Each day, GeneGuessr shows you one mystery gene' },
-        { img: 2, text: 'You have 6 attempts to guess the gene name' },
+        { img: 2, text: 'You have 10 attempts to guess the gene name' },
         { img: 3, text: 'Type your guess and tap the gene to submit it' }
       ]
     },
