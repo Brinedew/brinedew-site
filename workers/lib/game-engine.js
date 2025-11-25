@@ -354,7 +354,7 @@ function buildProteinSections(protein, options = {}) {
       label: 'Clans',
       items: clans.map((clan, idx) => ({
         id: forClue ? `hint-clan-${idx}` : undefined,
-        text: clan,
+        text: clan.replace(/_/g, ' '),
       })),
     });
   }
