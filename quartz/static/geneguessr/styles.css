@@ -583,10 +583,13 @@
 }
 
 /* Unified Section Styling - used by both clue and feedback cards */
+/* Monospace ensures redaction bars reflow identically to revealed text,
+   since both use the same character count (maskLength = text.length). */
 .pg-section {
   margin-bottom: 0.4rem;
   line-height: 1.5;
   font-size: 0.9rem;
+  font-family: var(--codeFont);
   color: var(--dark);
   overflow-wrap: anywhere;
   word-break: normal;
@@ -696,6 +699,10 @@
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   transition: opacity 0.15s ease;
+  /* Monospace ensures consistent width per character, preventing reflow when revealed */
+  font-family: var(--codeFont);
+  /* letter-spacing: 0 ensures redaction bar width matches revealed text width */
+  letter-spacing: 0;
 }
 
 .pg-redaction:hover,
@@ -720,6 +727,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: 8px;
   font-size: 0.9rem;
+  font-family: var(--codeFont);
   color: var(--dark);
 }
 

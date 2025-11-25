@@ -4037,4 +4037,19 @@ https://brinedew.bio/apps/geneguessr/`;
     return '█'.repeat(cap);
   }
 
+  /**
+   * Build redaction mask from word lengths array.
+   * Each word becomes a span of █ characters, separated by spaces.
+   * This reflows identically to the underlying text on window resize.
+   */
+  function buildWordMask(wordLengths) {
+    if (!Array.isArray(wordLengths) || wordLengths.length === 0) {
+      return null;
+    }
+    return wordLengths.map(len => {
+      const capped = Math.min(Math.max(Number(len) || 1, 1), 64);
+      return '█'.repeat(capped);
+    }).join(' ');
+  }
+
 })();

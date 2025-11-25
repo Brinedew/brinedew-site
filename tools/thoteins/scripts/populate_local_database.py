@@ -55,8 +55,8 @@ def to_finite_number(value) -> Optional[float]:
 # Paths
 BASE_DIR = Path(__file__).parent.parent
 CONTENT_DIR = BASE_DIR / "content" / "wiki"
-FEATURES_CSV = BASE_DIR / "data" / "proteins" / "features.csv"
 UNIPROT_JSON_DIR = BASE_DIR / "data" / "proteins" / "uniprot"
+HPA_CACHE_DIR = BASE_DIR / "data" / "proteins" / "hpa"
 GO_ONTOLOGY_PATH = BASE_DIR / "data" / "go" / "go-basic.obo"
 OUTPUT_DIR = BASE_DIR / "data" / "geneguessr"
 DATA_JSON = OUTPUT_DIR / "proteins.json"
@@ -103,19 +103,6 @@ class GOTerm:
         self.name = name
         self.namespace = namespace
         self.parents: Set[str] = set(parents)
-
-
-def load_features() -> Dict[str, Dict[str, str]]:
-    """Load Thoteins features.csv keyed by UniProt ID."""
-    if not FEATURES_CSV.exists():
-        raise FileNotFoundError(f"Missing features CSV at {FEATURES_CSV}")
-
-    features: Dict[str, Dict[str, str]] = {}
-    with FEATURES_CSV.open("r", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            features[row["uniprot_id"]] = row
-    return features
 
 
 def load_protein_pages() -> List[Tuple[Path, frontmatter.Post]]:
@@ -215,9 +202,9 @@ def parse_go_obo(path: Path) -> Tuple[Dict[str, GOTerm], Dict[str, str]]:
     return ontology, metadata
 
 
-def infer_tissue_specificity(tissue_tau: Optional[str]) -> Dict[str, Optional[float]]:
+def infer_tissue_specificity(tissue_tau: Optional[float]) -> Dict[str, Optional[float]]:
     """Derive qualitative tissue specificity labels from tau values."""
-    if not tissue_tau or str(tissue_tau).strip() == "":
+    if tissue_tau is None:
         return {"label": "unknown", "score": None}
     try:
         tau = float(tissue_tau)
@@ -233,15 +220,59 @@ def infer_tissue_specificity(tissue_tau: Optional[str]) -> Dict[str, Optional[fl
     return {"label": label, "score": round(tau, 3)}
 
 
-def is_secreted(locations: str | None) -> bool:
-    """Simple keyword inference for secretion."""
-    if not locations:
-        return False
-    text = locations.lower()
-    for keyword in ("extracellular", "secreted", "exosome"):
-        if keyword in text:
-            return True
-    return False
+# --------------- HPA Tissue Tau fetching ---------------
+
+HPA_API_URL = "https://www.proteinatlas.org/api/search_download.php"
+HPA_RATE_LIMIT_DELAY = 0.1  # seconds between requests
+
+def fetch_hpa_tissue_tau(gene_symbol: str) -> Optional[float]:
+    """Fetch tissue tau from Human Protein Atlas API. Returns tau float or None."""
+    if not gene_symbol:
+        return None
+    
+    cache_path = HPA_CACHE_DIR / f"{gene_symbol}.json"
+    
+    # Check cache first
+    if cache_path.exists():
+        try:
+            with cache_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+                tau = data.get("TAU score - Tissue")
+                if tau is not None:
+                    return float(tau) if 0 <= float(tau) <= 1 else None
+                return None
+        except Exception:
+            pass
+    
+    # Fetch from API
+    try:
+        HPA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        url = f"{HPA_API_URL}?search={gene_symbol.strip().upper()}&format=json&columns=g,t_RNA__tau&compress=no"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        results = resp.json()
+        
+        if isinstance(results, list) and len(results) > 0:
+            entry = results[0]
+            # Cache the result
+            with cache_path.open("w", encoding="utf-8") as f:
+                json.dump(entry, f)
+            
+            tau = entry.get("TAU score - Tissue")
+            if tau is not None:
+                tau_float = float(tau)
+                if 0 <= tau_float <= 1:
+                    return tau_float
+        else:
+            # Cache empty result to avoid re-fetching
+            with cache_path.open("w", encoding="utf-8") as f:
+                json.dump({}, f)
+        
+        time.sleep(HPA_RATE_LIMIT_DELAY)
+        return None
+    except Exception as e:
+        # Don't cache errors - allow retry
+        return None
 
 
 def parse_domains(raw: str | None) -> List[str]:
@@ -611,6 +642,14 @@ def fetch_interpro_domains_and_clans(
         clans = sorted(list(dict.fromkeys(clans)))[:3]
 
     return domain_names, clans, False
+
+
+def extract_interpro_clans(uniprot_id: str) -> List[str]:
+    """Extract clan names for a UniProt accession. Returns empty list on error."""
+    if not uniprot_id:
+        return []
+    _, clans, error = fetch_interpro_domains_and_clans(uniprot_id, allow_network=False)
+    return clans if not error else []
 
 
 # Global clan map cache
@@ -1173,6 +1212,52 @@ def extract_uniprot_subcellular_locations(uniprot_entry: Dict[str, object]) -> L
     return list(dict.fromkeys(locations))[:3]
 
 
+def extract_uniprot_transmembrane(uniprot_entry: Optional[Dict[str, object]]) -> bool:
+    """Check if protein has transmembrane regions from UniProt features or keywords."""
+    if not uniprot_entry:
+        return False
+    
+    # Check features for transmembrane regions
+    for feature in uniprot_entry.get("features", []):
+        ftype = (feature.get("type") or "").lower()
+        if "transmembrane" in ftype or "intramembrane" in ftype:
+            return True
+    
+    # Check keywords
+    for keyword in uniprot_entry.get("keywords", []):
+        kname = (keyword.get("name") or "").lower()
+        if "transmembrane" in kname:
+            return True
+    
+    return False
+
+
+def extract_uniprot_secreted(uniprot_entry: Optional[Dict[str, object]]) -> bool:
+    """Check if protein is secreted from UniProt keywords or subcellular locations."""
+    if not uniprot_entry:
+        return False
+    
+    # Check keywords
+    for keyword in uniprot_entry.get("keywords", []):
+        kname = (keyword.get("name") or "").lower()
+        if "secreted" in kname or "extracellular" in kname:
+            return True
+    
+    # Check subcellular location comments
+    for comment in uniprot_entry.get("comments", []):
+        if comment.get("commentType") != "SUBCELLULAR LOCATION":
+            continue
+        for loc in comment.get("locations", []):
+            if isinstance(loc, dict):
+                val_obj = loc.get("location")
+                if isinstance(val_obj, dict):
+                    value = (val_obj.get("value") or "").lower()
+                    if "secreted" in value or "extracellular" in value:
+                        return True
+    
+    return False
+
+
 def fetch_hgnc_aliases(symbol: str) -> Tuple[Optional[List[str]], Optional[str]]:
     """Fetch HGNC alias_symbol and prev_symbol for a gene symbol, with local caching.
 
@@ -1655,7 +1740,7 @@ def fetch_wikipedia_pageviews(article_title: str, year: int = 2024) -> int:
         return 0
 
 
-def build_synonyms(page: frontmatter.Post, feature_row: Dict[str, str]) -> List[str]:
+def build_synonyms(page: frontmatter.Post) -> List[str]:
     """Combine aliases and short names into a small synonym list."""
 
     def _add_many(bucket: Set[str], values) -> None:
@@ -1676,8 +1761,6 @@ def build_synonyms(page: frontmatter.Post, feature_row: Dict[str, str]) -> List[
         page.get("gene_symbol"),
         page.get("symbol"),
         page.get("title"),
-        feature_row.get("gene_symbol"),
-        feature_row.get("short_name"),
     ):
         _add_many(synonyms, candidate)
 
@@ -1698,20 +1781,16 @@ def slug_for_page(md_path: Path) -> str:
     return f"/{slug}"
 
 
-def normalize_domains(page: frontmatter.Post, feature_row: Dict[str, str]) -> List[str]:
-    """Prefer curated domains from the page; fall back to CSV, then UniProt."""
+def normalize_domains(page: frontmatter.Post) -> List[str]:
+    """Prefer curated domains from the page; fall back to UniProt InterPro."""
     domains = page.get("domains") or []
     if isinstance(domains, str):
         domains = [domains]
     domains = [d for d in domains if d]
     if domains:
         return domains
-    # Try CSV domains_top3 field
-    csv_domains = parse_domains(feature_row.get("domains_top3"))
-    if csv_domains:
-        return csv_domains
     # Final fallback: extract from UniProt JSON with human-readable names
-    uniprot_id = page.get("uniprot_id") or feature_row.get("uniprot_id")
+    uniprot_id = page.get("uniprot_id")
     if uniprot_id:
         return extract_interpro_domain_names(uniprot_id)
     return []
@@ -1727,13 +1806,12 @@ def normalize_domains(page: frontmatter.Post, feature_row: Dict[str, str]) -> Li
 def build_protein_record(
     md_path: Path,
     page: frontmatter.Post,
-    feature_row: Dict[str, str],
     go_annotations: Dict[str, Set[str]],
     ontology: Dict[str, GOTerm],
     gene_summary: Optional[Dict[str, object]] = None,
     reactome_paths: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, object]:
-    """Merge wiki frontmatter + features + GO annotations + gene summary into a JSON-ready dict."""
+    """Merge wiki frontmatter + UniProt data + GO annotations + gene summary into a JSON-ready dict."""
     uniprot_id = (page.get("uniprot_id") or page.get("uniprot") or "").strip()
     # Prefer UniProt gene name if available; fall back to page/frontmatter.
     uniprot_entry = load_uniprot_entry(uniprot_id) if uniprot_id else None
@@ -1755,12 +1833,11 @@ def build_protein_record(
         gene_symbol
         or page.get("gene_symbol")
         or page.get("hgnc")
-        or feature_row.get("gene_symbol")
         or page.get("symbol")
         or page.get("title")
         or uniprot_id
     )
-    # Prefer UniProt recommended name; if missing, fall back to page/CSV; final fallback is empty.
+    # Prefer UniProt recommended name; if missing, fall back to page; final fallback is empty.
     recommended_full_name = None
     if isinstance(uniprot_entry, dict):
         recommended_full_name = (
@@ -1772,36 +1849,27 @@ def build_protein_record(
     full_name = (
         recommended_full_name
         or page.get("full_name")
-        or feature_row.get("full_name")
         or ""
     )
-    short_name = feature_row.get("short_name") or gene_symbol
 
-    # Prefer UniProt sequence length; fall back to feature_row if present.
-    length = None
+    # Get sequence length from UniProt
+    length = 0
     if isinstance(uniprot_entry, dict):
         try:
             length = int(uniprot_entry.get("sequence", {}).get("length", 0) or 0)
         except Exception:
-            length = None
-    if length is None:
-        try:
-            length = int(float(feature_row.get("length", 0)))
-        except (TypeError, ValueError):
             length = 0
 
-    tm_flag = feature_row.get("Has transmembrane domains", "").strip().lower()
-    tmh = tm_flag in {"yes", "true", "1"}
+    # Extract transmembrane and secreted from UniProt
+    tmh = extract_uniprot_transmembrane(uniprot_entry)
+    secreted = extract_uniprot_secreted(uniprot_entry)
 
-    secreted = is_secreted(feature_row.get("locations", ""))
+    # Fetch tissue tau from HPA API
+    tissue_tau = fetch_hpa_tissue_tau(gene_symbol)
+    tissue = infer_tissue_specificity(tissue_tau)
 
-    tissue = infer_tissue_specificity(feature_row.get("tissue_tau"))
-
-    locations_str = feature_row.get("locations", "")
-    subcell = [loc.strip() for loc in locations_str.split(";") if loc.strip()]
-    # If no subcell data from features, try UniProt subcellular location comments.
-    if not subcell and isinstance(uniprot_entry, dict):
-        subcell = extract_uniprot_subcellular_locations(uniprot_entry)
+    # Extract subcellular locations from UniProt
+    subcell = extract_uniprot_subcellular_locations(uniprot_entry) if uniprot_entry else []
     subcell = subcell[:3]
 
     links = {
@@ -1820,7 +1888,7 @@ def build_protein_record(
 
     # Build domain metadata: keep IDs for backwards compatibility, add names for UI use.
     domain_ids = sorted(extract_interpro_domain_ids(uniprot_id))
-    domain_names = normalize_domains(page, feature_row)
+    domain_names = normalize_domains(page)
     if domain_names and all(isinstance(d, str) and d.upper().startswith("IPR") for d in domain_names):
         fallback_names = extract_interpro_domain_names(uniprot_id)
         if fallback_names:
@@ -1828,13 +1896,13 @@ def build_protein_record(
     if not domain_names:
         domain_names = extract_interpro_domain_names(uniprot_id)
 
-    clans_str = feature_row.get("clans", "")
-    clans = [c.strip() for c in clans_str.split(",") if c.strip()] if clans_str else []
+    # Extract clans from InterPro data
+    clans = extract_interpro_clans(uniprot_id)
     
     record = {
         "uniprot": uniprot_id,
         "hgnc": gene_symbol,
-        "synonyms": build_synonyms(page, feature_row),
+        "synonyms": build_synonyms(page),
         "full_name": full_name,
         "length": length,
         "tmh": tmh,
@@ -2221,22 +2289,12 @@ def main() -> None:
             if uniprot_entry is None:
                 missing_uniprot_json += 1
 
-            feature_row: Dict[str, str] = {}
-            if "length" in entry_obj and entry_obj.get("length") is not None:
-                feature_row["length"] = str(entry_obj.get("length"))
-
             if rep_failed:
                 interpro_fetch_failures += 1
-                domain_names = []
-                clans = []
             elif not domain_names:
                 # Keep clans even if representative domains are empty; fall back to all domain names.
                 interpro_zero_domains += 1
-                domain_names = extract_interpro_domain_names(uniprot_id) or []
-            if domain_names:
-                feature_row["domains_top3"] = ";".join(domain_names)
             if clans:
-                feature_row["clans"] = ", ".join(clans)
                 observed_clans.update(clans)
 
             go_annotations = gather_go_annotations(uniprot_id, ontology)
@@ -2266,7 +2324,6 @@ def main() -> None:
             record = build_protein_record(
                 md_path=md_path,
                 page=page,
-                feature_row=feature_row,
                 go_annotations=go_annotations,
                 ontology=ontology,
                 gene_summary=gene_summary,

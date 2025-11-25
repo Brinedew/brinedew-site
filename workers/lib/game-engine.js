@@ -67,6 +67,17 @@ export function buildFeedbackSections(protein) {
   return buildProteinSections(protein, { forClue: false });
 }
 
+/**
+ * Extract word lengths from text for redaction rendering.
+ * Sends word boundaries without revealing content, so redaction bars
+ * reflow identically to the underlying text on window resize.
+ */
+function getWordLengths(text) {
+  if (!text) return [];
+  // Split on whitespace, get length of each word
+  return text.split(/\s+/).filter(w => w.length > 0).map(w => w.length);
+}
+
 export function maskClueSections(sections, revealedHints = new Set()) {
   return sections.map((section) => ({
     ...section,
@@ -82,6 +93,9 @@ export function maskClueSections(sections, revealedHints = new Set()) {
         highlighted: Boolean(item.highlighted),
         revealed,
         text: revealed ? textValue : null,
+        // Send word lengths instead of total length - enables correct word-wrap reflow
+        // without revealing actual content
+        wordLengths: revealed ? undefined : getWordLengths(textValue),
         maskLength: revealed ? undefined : Math.max(textValue.length, LOCKED_HINT_PLACEHOLDER.length),
         placeholder: item.placeholder || LOCKED_HINT_PLACEHOLDER,
       };
