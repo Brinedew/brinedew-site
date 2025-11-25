@@ -1119,6 +1119,7 @@ async function getCanonicalStructureMeta(protein, env) {
   try {
     const afUrl = `https://alphafold.ebi.ac.uk/api/prediction/${protein.uniprot}`;
     const afResp = await fetch(afUrl, { timeout: 10000 });
+    let afAdded = false;
     if (afResp.ok) {
       const afData = await afResp.json();
       if (Array.isArray(afData) && afData.length > 0) {
@@ -1132,11 +1133,34 @@ async function getCanonicalStructureMeta(protein, env) {
             coverage: 1.0,
             quality: best.globalMetricValue
           });
+          afAdded = true;
         }
       }
     }
+    // Fallback: if API returned empty/invalid but metadata says AlphaFold exists, construct URL directly
+    if (!afAdded && protein.structures?.alphafold) {
+      const fallbackCifUrl = `https://alphafold.ebi.ac.uk/files/AF-${protein.uniprot}-F1-model_v6.cif`;
+      candidates.push({
+        source: 'alphafold',
+        id: protein.uniprot,
+        upstreamUrl: fallbackCifUrl,
+        coverage: 1.0,
+        quality: 70  // Default reasonable pLDDT assumption
+      });
+    }
   } catch (err) {
     console.warn('GeneGuessr: failed to fetch AlphaFold for', protein.uniprot, err);
+    // Fallback on error: if metadata says AlphaFold exists, try constructed URL
+    if (protein.structures?.alphafold) {
+      const fallbackCifUrl = `https://alphafold.ebi.ac.uk/files/AF-${protein.uniprot}-F1-model_v6.cif`;
+      candidates.push({
+        source: 'alphafold',
+        id: protein.uniprot,
+        upstreamUrl: fallbackCifUrl,
+        coverage: 1.0,
+        quality: 70
+      });
+    }
   }
   
   // SWISS-MODEL candidates

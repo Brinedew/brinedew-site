@@ -840,8 +840,8 @@ def build_alphafold_info(uniprot_id: str, alphafold_ref: Optional[Dict[str, obje
     base_url = "https://alphafold.ebi.ac.uk/files"
     return {
         "id": model_id,
-        "model_url": f"{base_url}/{model_id}-model_v4.cif",
-        "pae_url": f"{base_url}/{model_id}-predicted_aligned_error_v4.json",
+        "model_url": f"{base_url}/{model_id}-model_v6.cif",
+        "pae_url": f"{base_url}/{model_id}-predicted_aligned_error_v6.json",
         "thumbnail_url": f"{base_url}/{model_id}-thumbnail.png",
         "viewer_url": f"https://alphafold.ebi.ac.uk/entry/{uniprot_id}",
     }
