@@ -2516,7 +2516,7 @@
         const revealed = isEntryUnlocked(item);
         const forceReveal = removeSpoilers && shouldReveal;
         if ((revealed || forceReveal) && text) {
-          const cls = isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry';
+          const cls = isMatched ? 'pg-section-entry pg-revealed-text matched-highlight' : 'pg-section-entry pg-revealed-text';
           return `<span class="${cls}">${escapeHtml(text)}</span>`;
         }
         return renderLockedHintPlaceholder(item, isMatched ? 'pg-section-entry matched-highlight' : 'pg-section-entry');
