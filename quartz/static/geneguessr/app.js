@@ -3490,7 +3490,6 @@
         }
       }
 
-      await hydrateClueData();
       render();
 
       const inputEl = document.getElementById('pg-input');
