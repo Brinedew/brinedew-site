@@ -681,12 +681,16 @@
     const key = String(uniprot).toUpperCase();
     const cached = structureTokenCache.get(key);
     if (cached && cached.token) {
+      console.log(`[TIMING] token for ${key} | cache hit`);
       return cached;
     }
+    const t0 = performance.now();
     try {
+      console.log(`[TIMING] token for ${key} | fetching from API...`);
       const resp = await fetch(`${API_BASE}/api/structure-token?uniprot=${encodeURIComponent(key)}`, {
         credentials: 'include'
       });
+      console.log(`[TIMING] token for ${key} | API responded | ${(performance.now() - t0).toFixed(0)}ms`);
       if (!resp.ok) {
         if (resp.status === 404) {
           console.warn('Geneguessr: structure unavailable for', key);
@@ -1547,6 +1551,10 @@
     }
 
     const containerId = container.id;
+    const t0 = performance.now();
+    const timing = (label) => console.log(`[TIMING] ${containerId} | ${label} | ${(performance.now() - t0).toFixed(0)}ms`);
+    timing('start');
+    
     if (renderedViewers.has(containerId)) {
       console.debug('[Geneguessr] loadStructureViewerInContainer: already rendered', containerId);
       return;
@@ -1557,10 +1565,15 @@
     const loadingEl = document.getElementById(`${containerId}-loading`);
     const errorEl = document.getElementById(`${containerId}-error`);
     let structureInfo = viewerStructureInfo.get(containerId);
+    timing('got DOM elements');
     console.debug('[Geneguessr] loadStructureViewerInContainer: initial structureInfo', containerId, structureInfo);
     if (!structureInfo || !structureInfo.token) {
+      timing('resolving structureInfo (API call)...');
       structureInfo = await resolveStructureInfoForViewer(containerId, protein);
+      timing('structureInfo resolved');
       console.debug('[Geneguessr] loadStructureViewerInContainer: resolved structureInfo', containerId, structureInfo);
+    } else {
+      timing('structureInfo was cached');
     }
 
     if (structureInfo && structureInfo.unavailable) {
@@ -1629,14 +1642,18 @@
     if (loadingEl) loadingEl.hidden = false;
     if (placeholder) placeholder.hidden = true;
     if (errorEl) errorEl.hidden = true;
+    timing('UI updated, loading Mol* assets...');
 
     try {
       await ensureMolstarAssets();
+      timing('Mol* assets loaded');
       if (!window.PDBeMolstarPlugin) {
         throw new Error('PDBeMolstarPlugin missing after script load');
       }
       container.innerHTML = '';
+      timing('container cleared, creating viewer...');
       const viewer = new window.PDBeMolstarPlugin();
+      timing('viewer instance created, calling render...');
       viewer.render(container, {
         ...options,
         hideControls: true,
@@ -1649,14 +1666,20 @@
         lowPrecisionCoords: false,
         hideStructureSourceTooltip: true,
       });
+      timing('render() called (async fetch starts)');
 
       const finalizeViewerStyling = () => {
+        timing('loadComplete fired - structure fully rendered');
         applyViewerStylizationProfile(viewer, container);
+        timing('styling applied - DONE');
       };
       if (viewer.events?.loadComplete) {
         viewer.events.loadComplete.subscribe(finalizeViewerStyling);
       } else {
-        setTimeout(finalizeViewerStyling, 500);
+        setTimeout(() => {
+          timing('fallback timeout fired');
+          finalizeViewerStyling();
+        }, 500);
       }
 
       const metadata = {
