@@ -656,9 +656,12 @@ async function handleStructureToken(request, env, corsHeaders) {
   if (!uniprot) {
     return Response.json({ error: 'Missing uniprot parameter' }, { status: 400, headers: corsHeaders });
   }
-  // For structure tokens, we don't require the protein to be in the database
-  // Structure discovery works from UniProt APIs directly
-  const protein = { uniprot }; // Minimal protein object for structure discovery
+  // Try to fetch full protein from database first (has pre-seeded structure metadata)
+  // Falls back to minimal object for API discovery if not in database
+  let protein = await fetchProteinByUniprot(env.DB, uniprot);
+  if (!protein) {
+    protein = { uniprot }; // Minimal object - will trigger slow API discovery path
+  }
   const meta = await getCanonicalStructureMeta(protein, env);
   if (!meta) {
     return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
@@ -1102,10 +1105,131 @@ async function safeJson(request) {
   }
 }
 
+/**
+ * Build structure metadata from pre-seeded protein.structure data.
+ * Returns null if structure data is missing or incomplete.
+ */
+function buildMetaFromStoredStructure(protein) {
+  const structure = protein?.structure;
+  if (!structure) {
+    return null;
+  }
+  
+  const primarySource = structure.primary_source || protein.structure_source;
+  if (!primarySource) {
+    return null;
+  }
+  
+  // Build meta based on the preferred source
+  if (primarySource === 'pdb' && structure.pdb?.id) {
+    const pdbId = structure.pdb.id.toUpperCase();
+    return {
+      source: 'pdb',
+      r2Key: `pdb/${pdbId}.cif`,
+      upstreamUrl: `https://files.rcsb.org/download/${pdbId}.cif`,
+      shortLabel: 'PDB',
+      displayLabel: `PDB (${pdbId})`,
+      format: 'cif'
+    };
+  }
+  
+  if (primarySource === 'swissmodel' && structure.swiss_model?.coordinates_url) {
+    const sm = structure.swiss_model;
+    const modelId = sm.model_id || `${protein.uniprot}_${sm.template || 'model'}`;
+    const url = sm.coordinates_url;
+    const ext = url.endsWith('.pdb') ? 'pdb' : (url.endsWith('.bcif') ? 'bcif' : 'cif');
+    return {
+      source: 'swissmodel',
+      r2Key: `swissmodel/${sanitizeKeySegment(modelId)}.${ext}`,
+      upstreamUrl: url,
+      shortLabel: 'SWISS-MODEL',
+      displayLabel: `SWISS-MODEL (${modelId})`,
+      format: ext
+    };
+  }
+  
+  if (primarySource === 'alphafold' && structure.alphafold?.model_url) {
+    return {
+      source: 'alphafold',
+      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.cif`,
+      upstreamUrl: structure.alphafold.model_url,
+      shortLabel: 'AlphaFold',
+      displayLabel: `AlphaFold (${protein.uniprot})`,
+      format: 'cif'
+    };
+  }
+  
+  // Fallback: try any available source
+  if (structure.swiss_model?.coordinates_url) {
+    const sm = structure.swiss_model;
+    const modelId = sm.model_id || `${protein.uniprot}_${sm.template || 'model'}`;
+    const url = sm.coordinates_url;
+    const ext = url.endsWith('.pdb') ? 'pdb' : 'cif';
+    return {
+      source: 'swissmodel',
+      r2Key: `swissmodel/${sanitizeKeySegment(modelId)}.${ext}`,
+      upstreamUrl: url,
+      shortLabel: 'SWISS-MODEL',
+      displayLabel: `SWISS-MODEL (${modelId})`,
+      format: ext
+    };
+  }
+  
+  if (structure.alphafold?.model_url) {
+    return {
+      source: 'alphafold',
+      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.cif`,
+      upstreamUrl: structure.alphafold.model_url,
+      shortLabel: 'AlphaFold',
+      displayLabel: `AlphaFold (${protein.uniprot})`,
+      format: 'cif'
+    };
+  }
+  
+  if (structure.pdb?.id) {
+    const pdbId = structure.pdb.id.toUpperCase();
+    return {
+      source: 'pdb',
+      r2Key: `pdb/${pdbId}.cif`,
+      upstreamUrl: `https://files.rcsb.org/download/${pdbId}.cif`,
+      shortLabel: 'PDB',
+      displayLabel: `PDB (${pdbId})`,
+      format: 'cif'
+    };
+  }
+  
+  return null;
+}
+
+const STRUCTURE_SOURCE_CACHE_PREFIX = 'structure_source:';
+const STRUCTURE_SOURCE_CACHE_TTL = 60 * 60 * 24; // 24 hours
+
 async function getCanonicalStructureMeta(protein, env) {
   if (!protein) {
     return null;
   }
+  
+  // FAST PATH: Use pre-seeded structure metadata from database
+  // This avoids 3 slow external API calls (PDB, AlphaFold, SWISS-MODEL)
+  const storedMeta = buildMetaFromStoredStructure(protein);
+  if (storedMeta) {
+    console.log(`GeneGuessr: using stored structure metadata for ${protein.uniprot}`);
+    return storedMeta;
+  }
+  
+  // SLOW PATH: Discover structure from external APIs (for proteins not in our database)
+  // Check KV cache first to avoid re-discovering
+  const cacheKey = `${STRUCTURE_SOURCE_CACHE_PREFIX}${protein.uniprot}`;
+  try {
+    const cached = await env.KV?.get(cacheKey, { type: 'json' });
+    if (cached) {
+      console.log(`GeneGuessr: structure source cache hit for ${protein.uniprot}`);
+      return cached;
+    }
+  } catch (err) {
+    console.warn('GeneGuessr: failed to read structure source cache', err);
+  }
+  console.log(`GeneGuessr: structure source cache miss for ${protein.uniprot}, discovering from APIs...`);
   
   // Selection thresholds (match seeder)
   const COVERAGE_THRESHOLD = 0.60;
@@ -1299,6 +1423,15 @@ async function getCanonicalStructureMeta(protein, env) {
   if (env?.DB && protein?.uniprot) {
     await clearStructureFailure(env.DB, protein.uniprot);
   }
+  
+  // Cache the discovered structure source
+  try {
+    await env.KV?.put(cacheKey, JSON.stringify(meta), { expirationTtl: STRUCTURE_SOURCE_CACHE_TTL });
+    console.log(`GeneGuessr: cached structure source for ${protein.uniprot}`);
+  } catch (err) {
+    console.warn('GeneGuessr: failed to cache structure source', err);
+  }
+  
   return meta;
 }
 
