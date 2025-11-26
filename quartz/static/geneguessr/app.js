@@ -773,10 +773,21 @@
       ? (hasRealData ? longLabel : 'Loading...')
       : shortLabel;
     const linkUrl = linkable && hasRealData ? structureSource?.url : null;
-    const escapedLabel = escapeAttribute(displayLabel);
-    const sourceText = linkable && linkUrl
-      ? `Source: <a href="${escapeAttribute(linkUrl)}" target="_blank" rel="noopener" class="pg-structure-source-link">${escapedLabel}</a>`
-      : `Source: ${escapedLabel}`;
+    // Build source text: only link the ID portion (parenthetical), not the whole label
+    let sourceText;
+    if (linkable && linkUrl && displayLabel.includes('(')) {
+      // Extract the ID from parentheses and link only that part
+      const match = displayLabel.match(/^(.+?)\s*\(([^)]+)\)$/);
+      if (match) {
+        const prefix = escapeAttribute(match[1]);
+        const id = escapeAttribute(match[2]);
+        sourceText = `Source: ${prefix} (<a href="${escapeAttribute(linkUrl)}" target="_blank" rel="noopener" class="pg-structure-source-link">${id}</a>)`;
+      } else {
+        sourceText = `Source: ${escapeAttribute(displayLabel)}`;
+      }
+    } else {
+      sourceText = `Source: ${escapeAttribute(displayLabel)}`;
+    }
 
     return `
       <div class="pg-card-structure">
@@ -806,11 +817,21 @@
     const shortLabel = metadata?.shortLabel || stripIdFromLabel(rawFallbackLabel);
     const longLabel = metadata?.longLabel || rawFallbackLabel;
     const label = linkable ? (longLabel || shortLabel) : shortLabel;
-    const safeLabel = escapeAttribute(label);
     const safeUrl = linkable && metadata?.linkUrl ? escapeAttribute(metadata.linkUrl) : null;
-    const inner = linkable && safeUrl
-      ? `Source: <a href="${safeUrl}" target="_blank" rel="noopener" class="pg-structure-source-link">${safeLabel}</a>`
-      : `Source: ${safeLabel}`;
+    // Build source text: only link the ID portion (parenthetical), not the whole label
+    let inner;
+    if (linkable && safeUrl && label.includes('(')) {
+      const match = label.match(/^(.+?)\s*\(([^)]+)\)$/);
+      if (match) {
+        const prefix = escapeAttribute(match[1]);
+        const id = escapeAttribute(match[2]);
+        inner = `Source: ${prefix} (<a href="${safeUrl}" target="_blank" rel="noopener" class="pg-structure-source-link">${id}</a>)`;
+      } else {
+        inner = `Source: ${escapeAttribute(label)}`;
+      }
+    } else {
+      inner = `Source: ${escapeAttribute(label)}`;
+    }
     sourceEl.innerHTML = inner;
   }
 

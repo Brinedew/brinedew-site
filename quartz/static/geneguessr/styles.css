@@ -253,13 +253,14 @@
   font-weight: 600;
 }
 
-:root[data-theme="dark"] .pg-structure-source-link {
-  color: #9fd5ff;
+.pg-structure-source-link {
+  color: var(--secondary);
+  text-decoration: none;
+  font-weight: 600;
 }
 
-.pg-structure-source-link {
-  color: var(--accent);
-  text-decoration: underline;
+.pg-structure-source-link:hover {
+  color: var(--tertiary);
 }
 
 :root[data-theme="dark"] .pg-structure-source:not([data-structure-source="alphafold"]) {

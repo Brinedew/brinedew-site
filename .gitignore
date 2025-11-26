@@ -42,3 +42,4 @@ tools/thoteins/data/go/
 # Generated geneguessr pipeline artifacts (regenerate via populate_local_database.py)
 tools/thoteins/data/geneguessr/*.json
 !tools/thoteins/data/geneguessr/version.json
+.wrangler/
