@@ -315,19 +315,16 @@
     }
     if (representation.source === 'pdb' && representation.pdb) {
       const id = representation.pdb.id;
-      const label = id ? `PDB (${id})` : 'PDB';
       const url = representation.pdb.url || (id ? `https://www.rcsb.org/structure/${id}` : null);
-      return { label, url };
+      return { shortLabel: 'PDB', longLabel: id ? `PDB (${id})` : 'PDB', url };
     }
     if (representation.source === 'swissmodel' && representation.swissModel) {
-      const label = 'SWISS-MODEL';
       const url = representation.swissModel.model_url || representation.swissModel.coordinates_url || null;
-      return { label, url };
+      return { shortLabel: 'SWISS-MODEL', longLabel: 'SWISS-MODEL', url };
     }
     if (representation.source === 'alphafold' && representation.alphafold) {
-      const label = 'AlphaFold';
       const url = representation.alphafold.viewer_url || representation.alphafold.model_url || null;
-      return { label, url };
+      return { shortLabel: 'AlphaFold', longLabel: 'AlphaFold', url };
     }
     return null;
   }
@@ -409,9 +406,9 @@
     }
     const meta = getStructureSourceMetadataFromRepresentation(representation);
     if (meta) {
-      return { source: representation.source, label: meta.label, url: meta.url, representation };
+      return { source: representation.source, shortLabel: meta.shortLabel, longLabel: meta.longLabel, url: meta.url, representation };
     }
-    return { source: representation.source, label: representation.source, representation };
+    return { source: representation.source, shortLabel: representation.source, longLabel: representation.source, representation };
   }
 
   function isAlphaFoldOnlyProtein(protein) {
@@ -763,8 +760,9 @@
       viewerStructureInfo.delete(viewerId);
     }
     const linkableAttr = ` data-source-linkable="${linkable ? 'true' : 'false'}"`;
-    const shortLabel = structureInfo?.sourceLabel || structureSource?.label || 'Source unavailable';
-    const longLabel = structureInfo?.displayLabel || structureSource?.label || shortLabel;
+    // Quiz cards: shortLabel (no ID). Feedback cards: longLabel (with ID, linkable).
+    const shortLabel = structureInfo?.sourceLabel || structureSource?.shortLabel || 'Source unavailable';
+    const longLabel = structureInfo?.displayLabel || structureSource?.longLabel || shortLabel;
     const displayLabel = linkable ? longLabel : shortLabel;
     const linkUrl = linkable ? structureSource?.url : null;
     const escapedLabel = escapeAttribute(displayLabel);
@@ -1547,6 +1545,8 @@
       console.debug('[Geneguessr] loadStructureViewerInContainer: already rendered', containerId);
       return;
     }
+    // Mark immediately to prevent duplicate async calls
+    renderedViewers.add(containerId);
     const placeholder = document.getElementById(`${containerId}-placeholder`);
     const loadingEl = document.getElementById(`${containerId}-loading`);
     const errorEl = document.getElementById(`${containerId}-error`);
