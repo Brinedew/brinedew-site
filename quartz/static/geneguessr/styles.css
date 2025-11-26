@@ -610,6 +610,12 @@
   color: var(--secondary);
 }
 
+/* Clue card: use monospace font for category labels to match redacted text */
+.pg-clue-card .pg-section-label {
+  font-family: var(--codeFont);
+  font-size: 0.85em;
+}
+
 .pg-section-entry {
   display: inline;
   vertical-align: baseline;
