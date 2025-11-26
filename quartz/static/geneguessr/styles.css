@@ -587,7 +587,7 @@
 .pg-section {
   margin-bottom: 0.4rem;
   line-height: 1.5;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: var(--dark);
   overflow-wrap: anywhere;
   word-break: normal;
@@ -613,6 +613,11 @@
 /* Clue card: use monospace font for category labels to match redacted text */
 .pg-clue-card .pg-section-label {
   font-family: var(--codeFont);
+}
+
+/* Clue card sections: slightly smaller to balance monospace appearance */
+.pg-clue-card .pg-section {
+  font-size: 0.9rem;
 }
 
 .pg-section-entry {
