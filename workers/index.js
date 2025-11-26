@@ -248,6 +248,18 @@ export default {
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
+
+    // Debug endpoint for cache stats (no sensitive data)
+    if (url.pathname === '/api/debug/cache-stats' && request.method === 'GET') {
+      const usage = await getStructureBucketUsage(env);
+      return Response.json({
+        structures: usage.objects,
+        bytes: usage.bytes,
+        megabytes: Math.round(usage.bytes / 1024 / 1024),
+        capMegabytes: Math.round(STRUCTURE_BUCKET_CAP_BYTES / 1024 / 1024),
+        percentFull: Math.round((usage.bytes / STRUCTURE_BUCKET_CAP_BYTES) * 100)
+      }, { headers: corsHeaders });
+    }
     
     if (url.pathname === '/api/structure-token' && request.method === 'GET') {
       return handleStructureToken(request, env, corsHeaders);
