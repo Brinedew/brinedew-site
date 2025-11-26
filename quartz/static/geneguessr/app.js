@@ -644,7 +644,8 @@
       return targetStructureInfo;
     }
     try {
-      const resp = await fetch(`${API_BASE}/api/structure-token?type=target`, {
+      const practiceQuery = gameState.practiceMode ? '&practice=1' : '';
+      const resp = await fetch(`${API_BASE}/api/structure-token?type=target${practiceQuery}`, {
         credentials: 'include'
       });
       if (!resp.ok) {
@@ -1605,7 +1606,8 @@
         format: detectStructureFormat(structureUrl, structureInfo.format)
       }
     };
-    console.debug('[Geneguessr] Mol* options', options, 'containerId', containerId);
+    // Note: Intentionally not logging options to avoid leaking moleculeId (protein identity)
+    console.debug('[Geneguessr] Mol* viewer loading', containerId, 'format:', options.customData?.format);
     if (!options) {
       if (errorEl) {
         errorEl.textContent = 'Could not build viewer options.';
