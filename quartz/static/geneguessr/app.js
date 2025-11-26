@@ -763,8 +763,11 @@
       viewerStructureInfo.delete(viewerId);
     }
     const linkableAttr = ` data-source-linkable="${linkable ? 'true' : 'false'}"`;
-    const shortLabel = structureInfo?.sourceLabel || structureSource?.label || 'Source unavailable';
-    const longLabel = structureInfo?.displayLabel || structureSource?.label || shortLabel;
+    // Strip parenthetical ID (e.g., "PDB (5NFO)" -> "PDB") to avoid spoiling the answer
+    const stripIdFromLabel = (label) => label ? label.replace(/\s*\([^)]*\)$/, '') : label;
+    const rawFallbackLabel = structureSource?.label || 'Source unavailable';
+    const shortLabel = structureInfo?.sourceLabel || stripIdFromLabel(rawFallbackLabel);
+    const longLabel = structureInfo?.displayLabel || rawFallbackLabel;
     const displayLabel = linkable ? longLabel : shortLabel;
     const linkUrl = linkable ? structureSource?.url : null;
     const escapedLabel = escapeAttribute(displayLabel);
@@ -794,9 +797,11 @@
       return;
     }
     const linkable = sourceEl.dataset.sourceLinkable === 'true';
-    const fallbackLabel = metadata?.label || 'Source unavailable';
-    const shortLabel = metadata?.shortLabel || fallbackLabel;
-    const longLabel = metadata?.longLabel || fallbackLabel;
+    // Strip parenthetical ID from fallback to avoid spoiling the answer
+    const stripIdFromLabel = (label) => label ? label.replace(/\s*\([^)]*\)$/, '') : label;
+    const rawFallbackLabel = metadata?.label || 'Source unavailable';
+    const shortLabel = metadata?.shortLabel || stripIdFromLabel(rawFallbackLabel);
+    const longLabel = metadata?.longLabel || rawFallbackLabel;
     const label = linkable ? (longLabel || shortLabel) : shortLabel;
     const safeLabel = escapeAttribute(label);
     const safeUrl = linkable && metadata?.linkUrl ? escapeAttribute(metadata.linkUrl) : null;
@@ -1547,6 +1552,9 @@
       console.debug('[Geneguessr] loadStructureViewerInContainer: already rendered', containerId);
       return;
     }
+    // Mark as rendering immediately to prevent duplicate async loads
+    renderedViewers.add(containerId);
+
     const placeholder = document.getElementById(`${containerId}-placeholder`);
     const loadingEl = document.getElementById(`${containerId}-loading`);
     const errorEl = document.getElementById(`${containerId}-error`);
@@ -1563,6 +1571,7 @@
         errorEl.textContent = 'Structure unavailable.';
         errorEl.hidden = false;
       }
+      renderedViewers.delete(containerId); // Allow retry on next render
       return;
     }
 
@@ -1572,6 +1581,7 @@
         errorEl.textContent = 'Structure unavailable.';
         errorEl.hidden = false;
       }
+      renderedViewers.delete(containerId); // Allow retry on next render
       return;
     }
 
@@ -1583,6 +1593,7 @@
         errorEl.textContent = 'No 3D structure available for this protein.';
         errorEl.hidden = false;
       }
+      renderedViewers.delete(containerId); // Allow retry on next render
       return;
     }
 
@@ -1613,6 +1624,7 @@
         errorEl.textContent = 'Could not build viewer options.';
         errorEl.hidden = false;
       }
+      renderedViewers.delete(containerId); // Allow retry on next render
       return;
     }
 
@@ -1657,7 +1669,7 @@
       updateStructureSourceDisplay(containerId, metadata);
       container.dataset.viewerLoaded = 'true';
       structureViewerLoaded = true;
-      renderedViewers.add(containerId);
+      // renderedViewers.add already called at function start
     } catch (err) {
       console.error('Geneguessr: Mol* render failed', err);
       if (errorEl) {
