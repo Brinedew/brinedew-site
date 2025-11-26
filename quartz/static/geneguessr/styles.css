@@ -256,11 +256,11 @@
 .pg-structure-source-link {
   color: var(--secondary);
   text-decoration: none;
-  font-weight: 600;
 }
 
 .pg-structure-source-link:hover {
   color: var(--tertiary);
+  text-decoration: underline;
 }
 
 :root[data-theme="dark"] .pg-structure-source:not([data-structure-source="alphafold"]) {
