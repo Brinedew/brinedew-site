@@ -761,10 +761,14 @@
     }
     const linkableAttr = ` data-source-linkable="${linkable ? 'true' : 'false'}"`;
     // Quiz cards: shortLabel (no ID). Feedback cards: longLabel (with ID, linkable).
+    // For feedback cards without structureInfo yet, show loading placeholder instead of guessing wrong source.
     const shortLabel = structureInfo?.sourceLabel || structureSource?.shortLabel || 'Source unavailable';
     const longLabel = structureInfo?.displayLabel || structureSource?.longLabel || shortLabel;
-    const displayLabel = linkable ? longLabel : shortLabel;
-    const linkUrl = linkable ? structureSource?.url : null;
+    const hasRealData = Boolean(structureInfo?.sourceLabel || structureInfo?.displayLabel);
+    const displayLabel = linkable 
+      ? (hasRealData ? longLabel : 'Loading...')
+      : shortLabel;
+    const linkUrl = linkable && hasRealData ? structureSource?.url : null;
     const escapedLabel = escapeAttribute(displayLabel);
     const sourceText = linkable && linkUrl
       ? `Source: <a href="${escapeAttribute(linkUrl)}" target="_blank" rel="noopener" class="pg-structure-source-link">${escapedLabel}</a>`
