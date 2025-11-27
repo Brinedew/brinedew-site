@@ -427,6 +427,28 @@
   margin-top: 0.1rem;
 }
 
+.pg-tutorial-img-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pg-tutorial-img {
+  display: block;
+  max-width: 120px;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--ui-border);
+}
+
+.pg-tutorial-finger {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+}
+
 .pg-tutorial-item-text {
   font-size: 0.95rem;
   color: var(--dark);
@@ -527,6 +549,10 @@
   .pg-tutorial-icon {
     width: 20px;
     height: 20px;
+  }
+  
+  .pg-tutorial-img {
+    max-width: 100px;
   }
 }
 
