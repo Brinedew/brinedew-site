@@ -9,25 +9,27 @@
   
   const STEP_CONTENT = [
     {
-      title: 'Welcome to GeneGuessr!',
+      title: 'Step 1 - Welcome to GeneGuessr!',
       body: [
-        { img: '3.png', text: 'Type a gene name and submit your guess', clickable: true },
-        { img: '4.png', text: 'You have 10 attempts to find the gene' },
-        { img: '1.png', text: 'Spend hints to reveal hidden clues', clickable: true }
+        { img: 1, text: 'This is a protein. Can you figure out which gene made it?' },
+        { img: 2, text: 'Type your best guess into the search bar' },
+        { img: 3, text: 'As you play, you will uncover info about your target' }
       ]
     },
     {
-      title: 'Hints & Spoilers',
+      title: 'Step 2 - Feedback',
       body: [
-        { img: '1.png', text: 'Your hint tokens — tap to spend one', clickable: true },
-        { img: '2.png', text: 'Spoiler bars hide info — tap to reveal', clickable: true }
+        { img: 4, text: 'You'll see each of your guesses as a feedback card' },
+        { img: 5, text: 'On top of the card, the bar shows how close you got' },
+        { img: 6, text: 'And look, these parts match your target gene!' }
       ]
     },
     {
-      title: 'Feedback',
+      title: 'Step 3 - Spoilers & Hints',
       body: [
-        { img: '5.png', text: 'Wrong guesses show similarity scores', clickable: true },
-        { img: '6.png', text: 'Matching properties light up in teal' }
+        { img: 7, text: 'After each guess, you get +1 hint' },
+        { img: 8, text: 'Tap a spoiler bar to spend a hint and reveal info' },
+        { img: 9, text: 'You begin with 1 hint - try spending it right now!' }
       ]
     }
   ];
@@ -78,22 +80,15 @@
     items.forEach((item) => {
       const li = document.createElement('li');
       
-      // Create image wrapper for the screenshot
+      // Add placeholder image above the text
       const imgWrapper = document.createElement('div');
       imgWrapper.className = 'pg-tutorial-img-wrapper';
-      
       const img = document.createElement('img');
-      img.src = '/static/geneguessr/tutorial/' + item.img;
-      img.alt = item.text;
+      img.src = `/static/geneguessr/tutorial/placeholder-${item.img}.png`;
+      img.alt = `Tutorial illustration ${item.img}`;
       img.className = 'pg-tutorial-img';
+      img.loading = 'lazy';
       imgWrapper.appendChild(img);
-      
-      // Add pointing finger overlay for clickable elements
-      if (item.clickable) {
-        const finger = buildFingerIcon();
-        imgWrapper.appendChild(finger);
-      }
-      
       li.appendChild(imgWrapper);
       
       // Add the text
@@ -105,22 +100,6 @@
       list.appendChild(li);
     });
     return list;
-  }
-
-  function buildFingerIcon() {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('width', '20');
-    svg.setAttribute('height', '20');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'var(--light)');
-    svg.setAttribute('stroke-width', '2');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    svg.classList.add('pg-tutorial-finger');
-    // Index finger pointing icon (hand pointer)
-    svg.innerHTML = '<path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>';
-    return svg;
   }
 
   function buildArrowIcon(direction) {
