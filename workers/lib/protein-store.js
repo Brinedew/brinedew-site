@@ -210,20 +210,16 @@ export async function fetchProteinSummaries(db, limit = 100) {
   return (results || []).map((row) => sanitizeProteinSummary(row));
 }
 
-export async function fetchProteinEmbedding(db, uniprot) {
-  const key = normalizeKey(uniprot);
-  if (!key) {
+export async function fetchProteinEmbedding(db, geneSymbol) {
+  if (!geneSymbol) {
     return null;
   }
+  const key = geneSymbol.toUpperCase();
   if (embeddingCache.has(key)) {
     return embeddingCache.get(key);
   }
   const row = await db.prepare(
-    `SELECT e.vector, e.dim
-     FROM proteins p
-     JOIN protein_embeddings e ON e.protein_id = p.id
-     WHERE upper(p.uniprot) = ?
-     LIMIT 1`
+    `SELECT vector, dim FROM protein_embeddings WHERE upper(gene_symbol) = ? LIMIT 1`
   ).bind(key).first();
   const vector = toFloat32Vector(row);
   rememberEmbedding(key, vector);

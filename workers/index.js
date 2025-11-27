@@ -767,8 +767,8 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     }
     const goSimilarity = await getGoSimilarityFromEmbeddings(
       env.DB,
-      guessProtein.uniprot,
-      targetProtein.uniprot
+      guessProtein.gene,
+      targetProtein.gene
     );
     const score = scoreGuess(guessProtein, targetProtein, { goSimilarity });
     const correct = guessProtein.uniprot === targetProtein.uniprot;
@@ -931,8 +931,8 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
     if (entry.protein && targetProtein) {
       const goSimilarity = await getGoSimilarityFromEmbeddings(
         env.DB,
-        entry.uniprot,
-        targetProtein.uniprot
+        entry.protein.gene || entry.protein.hgnc,
+        targetProtein.gene
       );
       const nextScore = scoreGuess(entry.protein, targetProtein, { goSimilarity });
       const prevGoPercent = entry.score?.goPercent ?? null;
@@ -1148,13 +1148,15 @@ function buildMetaFromStoredStructure(protein) {
   }
   
   if (primarySource === 'alphafold' && protein.alphafold_url) {
+    const url = protein.alphafold_url;
+    const format = url.endsWith('.pdb') ? 'pdb' : 'cif';
     return {
       source: 'alphafold',
-      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.cif`,
-      upstreamUrl: protein.alphafold_url,
+      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.${format}`,
+      upstreamUrl: url,
       shortLabel: 'AlphaFold',
       displayLabel: `AlphaFold (${protein.uniprot})`,
-      format: 'cif'
+      format
     };
   }
   
@@ -1175,13 +1177,15 @@ function buildMetaFromStoredStructure(protein) {
   }
   
   if (protein.alphafold_url) {
+    const url = protein.alphafold_url;
+    const format = url.endsWith('.pdb') ? 'pdb' : 'cif';
     return {
       source: 'alphafold',
-      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.cif`,
-      upstreamUrl: protein.alphafold_url,
+      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.${format}`,
+      upstreamUrl: url,
       shortLabel: 'AlphaFold',
       displayLabel: `AlphaFold (${protein.uniprot})`,
-      format: 'cif'
+      format
     };
   }
   

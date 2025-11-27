@@ -713,6 +713,16 @@
   letter-spacing: 0;
 }
 
+/* Dark mode: use lightgray (1 step brighter than background) for spoiler bars */
+@media (prefers-color-scheme: dark) {
+  .pg-redaction {
+    background: var(--lightgray);
+  }
+}
+:root[data-theme="dark"] .pg-redaction {
+  background: var(--lightgray);
+}
+
 /* Text revealed from redaction - must match redaction font for consistent reflow */
 .pg-revealed-text {
   font-family: var(--codeFont);
