@@ -17,10 +17,10 @@
       ]
     },
     {
-      title: 'Step 2 - Feedback',
+      title: 'Step 2 - Feedback cards',
       body: [
-        { img: 4, text: 'You'll see each of your guesses as a feedback card' },
-        { img: 5, text: 'On top of the card, the bar shows how close you got' },
+        { img: 4, text: 'Each of your guesses will be saved as a feedback card' },
+        { img: 5, text: 'The top bar shows how close you got' },
         { img: 6, text: 'And look, these parts match your target gene!' }
       ]
     },
