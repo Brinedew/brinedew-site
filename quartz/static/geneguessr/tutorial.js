@@ -9,27 +9,27 @@
   
   const STEP_CONTENT = [
     {
-      title: 'Step 1 - Welcome to GeneGuessr!',
+      title: 'Welcome to GeneGuessr!',
       body: [
-        { img: 1, text: 'Each day, GeneGuessr shows you one mystery gene' },
-        { img: 2, text: 'You have 10 attempts to guess the gene name' },
-        { img: 3, text: 'Type your guess and tap the gene to submit it' }
+        { icon: 'dna', text: 'Each day, a new mystery gene awaits you' },
+        { icon: 'target', text: 'You have 10 attempts to guess the gene name' },
+        { icon: 'search', text: 'Type your guess and tap to submit' }
       ]
     },
     {
-      title: 'Step 2 - Spoilers & Hints',
+      title: 'Hints & Spoilers',
       body: [
-        { img: 4, text: 'Start each day with 1 hint' },
-        { img: 5, text: 'Tap a spoiler bar to spend a hint and reveal information' },
-        { img: 6, text: 'Get +1 hint each time you submit your guess' }
+        { icon: 'lightbulb', text: 'Start with 1 hint token' },
+        { icon: 'eye', text: 'Tap spoiler bars to reveal hidden info' },
+        { icon: 'plus', text: 'Each guess earns you +1 hint' }
       ]
     },
     {
-      title: 'Step 3 - Feedback',
+      title: 'Feedback',
       body: [
-        { img: 7, text: 'Each incorrect guess shows up as a feedback card' },
-        { img: 8, text: 'The similarity bar shows how close you were' },
-        { img: 9, text: 'Properties are highlighted when they match the mystery gene' }
+        { icon: 'card', text: 'Wrong guesses appear as feedback cards' },
+        { icon: 'bar', text: 'Similarity scores show how close you are' },
+        { icon: 'check', text: 'Matching properties light up in teal' }
       ]
     }
   ];
@@ -80,16 +80,9 @@
     items.forEach((item) => {
       const li = document.createElement('li');
       
-      // Add placeholder image above the text
-      const imgWrapper = document.createElement('div');
-      imgWrapper.className = 'pg-tutorial-img-wrapper';
-      const img = document.createElement('img');
-      img.src = `/static/geneguessr/tutorial/placeholder-${item.img}.png`;
-      img.alt = `Tutorial illustration ${item.img}`;
-      img.className = 'pg-tutorial-img';
-      img.loading = 'lazy';
-      imgWrapper.appendChild(img);
-      li.appendChild(imgWrapper);
+      // Add inline SVG icon
+      const iconEl = buildTutorialIcon(item.icon);
+      li.appendChild(iconEl);
       
       // Add the text
       const textSpan = document.createElement('span');
@@ -100,6 +93,34 @@
       list.appendChild(li);
     });
     return list;
+  }
+
+  function buildTutorialIcon(name) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('width', '24');
+    svg.setAttribute('height', '24');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.classList.add('pg-tutorial-icon');
+    
+    const paths = {
+      dna: '<path d="M2 15c6.667-6 13.333 0 20-6"/><path d="M9 22c1.798-1.998 2.518-3.995 2.807-5.993"/><path d="M15 2c-1.798 1.998-2.518 3.995-2.807 5.993"/><path d="m17 6-2.5-2.5"/><path d="m14 8-1-1"/><path d="m7 18 2.5 2.5"/><path d="m3.5 14.5.5.5"/><path d="m20 9 .5.5"/><path d="m6.5 12.5 1 1"/><path d="m16.5 10.5 1 1"/><path d="m10 16 1.5 1.5"/>',
+      target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+      search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+      lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+      eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+      plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+      card: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M3 10h18"/>',
+      bar: '<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
+      check: '<path d="M20 6 9 17l-5-5"/>'
+    };
+    
+    svg.innerHTML = paths[name] || paths.check;
+    return svg;
   }
 
   function buildArrowIcon(direction) {
