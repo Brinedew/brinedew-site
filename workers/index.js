@@ -1106,23 +1106,22 @@ async function safeJson(request) {
 }
 
 /**
- * Build structure metadata from pre-seeded protein.structure data.
+ * Build structure metadata from flat protein columns.
  * Returns null if structure data is missing or incomplete.
  */
 function buildMetaFromStoredStructure(protein) {
-  const structure = protein?.structure;
-  if (!structure) {
+  if (!protein) {
     return null;
   }
   
-  const primarySource = structure.primary_source || protein.structure_source;
+  const primarySource = protein.structure_source;
   if (!primarySource) {
     return null;
   }
   
   // Build meta based on the preferred source
-  if (primarySource === 'pdb' && structure.pdb?.id) {
-    const pdbId = structure.pdb.id.toUpperCase();
+  if (primarySource === 'pdb' && protein.pdb_id) {
+    const pdbId = protein.pdb_id.toUpperCase();
     return {
       source: 'pdb',
       r2Key: `pdb/${pdbId}.cif`,
@@ -1133,10 +1132,10 @@ function buildMetaFromStoredStructure(protein) {
     };
   }
   
-  if (primarySource === 'swissmodel' && structure.swiss_model?.coordinates_url) {
-    const sm = structure.swiss_model;
-    const modelId = sm.model_id || `${protein.uniprot}_${sm.template || 'model'}`;
-    const url = sm.coordinates_url;
+  if (primarySource === 'swissmodel' && protein.swissmodel_url) {
+    const template = protein.swissmodel_template || 'model';
+    const modelId = `${protein.uniprot}_${template}`;
+    const url = protein.swissmodel_url;
     const ext = url.endsWith('.pdb') ? 'pdb' : (url.endsWith('.bcif') ? 'bcif' : 'cif');
     return {
       source: 'swissmodel',
@@ -1148,11 +1147,11 @@ function buildMetaFromStoredStructure(protein) {
     };
   }
   
-  if (primarySource === 'alphafold' && structure.alphafold?.model_url) {
+  if (primarySource === 'alphafold' && protein.alphafold_url) {
     return {
       source: 'alphafold',
       r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.cif`,
-      upstreamUrl: structure.alphafold.model_url,
+      upstreamUrl: protein.alphafold_url,
       shortLabel: 'AlphaFold',
       displayLabel: `AlphaFold (${protein.uniprot})`,
       format: 'cif'
@@ -1160,10 +1159,10 @@ function buildMetaFromStoredStructure(protein) {
   }
   
   // Fallback: try any available source
-  if (structure.swiss_model?.coordinates_url) {
-    const sm = structure.swiss_model;
-    const modelId = sm.model_id || `${protein.uniprot}_${sm.template || 'model'}`;
-    const url = sm.coordinates_url;
+  if (protein.swissmodel_url) {
+    const template = protein.swissmodel_template || 'model';
+    const modelId = `${protein.uniprot}_${template}`;
+    const url = protein.swissmodel_url;
     const ext = url.endsWith('.pdb') ? 'pdb' : 'cif';
     return {
       source: 'swissmodel',
@@ -1175,19 +1174,19 @@ function buildMetaFromStoredStructure(protein) {
     };
   }
   
-  if (structure.alphafold?.model_url) {
+  if (protein.alphafold_url) {
     return {
       source: 'alphafold',
       r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.cif`,
-      upstreamUrl: structure.alphafold.model_url,
+      upstreamUrl: protein.alphafold_url,
       shortLabel: 'AlphaFold',
       displayLabel: `AlphaFold (${protein.uniprot})`,
       format: 'cif'
     };
   }
   
-  if (structure.pdb?.id) {
-    const pdbId = structure.pdb.id.toUpperCase();
+  if (protein.pdb_id) {
+    const pdbId = protein.pdb_id.toUpperCase();
     return {
       source: 'pdb',
       r2Key: `pdb/${pdbId}.cif`,
@@ -1626,9 +1625,9 @@ function getFileExtensionFromUrl(url) {
 }
 
 function isAlphaFoldOnlyProtein(protein) {
-  if (!protein || !protein.structure) {
+  if (!protein) {
     return false;
   }
-  const representation = resolveStructureRepresentation(protein.structure, protein.length || 0);
-  return Boolean(representation && representation.source === 'alphafold');
+  // With flat schema, just check if structure_source is alphafold
+  return protein.structure_source === 'alphafold';
 }

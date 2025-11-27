@@ -116,23 +116,55 @@ function toProteinObject(row) {
   if (!row) {
     return null;
   }
-  let metadata = {};
-  if (row.metadata) {
-    try {
-      metadata = JSON.parse(row.metadata);
-    } catch {
-      metadata = {};
-    }
-  }
+  // Parse JSON array columns
+  const parseJson = (str) => {
+    if (!str) return [];
+    try { return JSON.parse(str); } catch { return []; }
+  };
+  
   return {
-    ...metadata,
     id: row.id,
     uniprot: row.uniprot,
-    hgnc: row.hgnc || metadata.hgnc,
-    full_name: row.full_name || metadata.full_name,
-    length: row.length || metadata.length,
+    gene: row.gene,
+    hgnc: row.gene,  // alias for game engine compatibility
+    full_name: row.full_name,
+    length: row.length,
+    mass: row.mass,
+    tmh: Boolean(row.tmh),
+    secreted: Boolean(row.secreted),
+    tissue: { label: row.tissue_label, score: null },
     has_structure: Boolean(row.has_structure),
-    structure_source: row.structure_source || metadata.structure?.primary_source || null
+    structure_source: row.structure_source,
+    pdb_id: row.pdb_id,
+    pdb_coverage: row.pdb_coverage,
+    pdb_resolution: row.pdb_resolution,
+    pdb_method: row.pdb_method,
+    swissmodel_coverage: row.swissmodel_coverage,
+    swissmodel_qmean: row.swissmodel_qmean,
+    swissmodel_template: row.swissmodel_template,
+    swissmodel_url: row.swissmodel_url,
+    alphafold_plddt: row.alphafold_plddt,
+    alphafold_url: row.alphafold_url,
+    gene_summary: row.gene_summary,
+    // JSON arrays
+    synonyms: parseJson(row.synonyms),
+    domains: parseJson(row.domains),
+    domain_names: parseJson(row.domains),  // same as domains (already names)
+    clans: parseJson(row.clans),
+    subcell: parseJson(row.locations),
+    // GO terms in expected structure
+    go_terms: {
+      bp: parseJson(row.go_bp),
+      mf: parseJson(row.go_mf),
+      cc: parseJson(row.go_cc)
+    },
+    go_terms_named: {
+      bp: parseJson(row.go_bp),
+      mf: parseJson(row.go_mf),
+      cc: parseJson(row.go_cc)
+    },
+    // Pathways as expected structure
+    reactome_pathways: parseJson(row.pathways)
   };
 }
 
@@ -147,7 +179,13 @@ export async function fetchProteinByUniprot(db, uniprot) {
   let protein = null;
   try {
     const row = await db.prepare(
-      `SELECT id, uniprot, hgnc, full_name, length, has_structure, structure_source, metadata
+      `SELECT id, uniprot, gene, full_name, length, mass, tmh, secreted, tissue_label,
+              has_structure, structure_source,
+              pdb_id, pdb_coverage, pdb_resolution, pdb_method,
+              swissmodel_coverage, swissmodel_qmean, swissmodel_template, swissmodel_url,
+              alphafold_plddt, alphafold_url,
+              gene_summary,
+              synonyms, domains, clans, go_bp, go_mf, go_cc, pathways, locations
        FROM proteins
        WHERE upper(uniprot) = ?
        LIMIT 1`
@@ -164,9 +202,9 @@ export async function fetchProteinByUniprot(db, uniprot) {
 
 export async function fetchProteinSummaries(db, limit = 100) {
   const { results } = await db.prepare(
-    `SELECT uniprot, hgnc, full_name, length
+    `SELECT uniprot, gene, full_name, length
      FROM proteins
-     ORDER BY hgnc
+     ORDER BY gene
      LIMIT ?`
   ).bind(limit).all();
   return (results || []).map((row) => sanitizeProteinSummary(row));
@@ -237,15 +275,15 @@ export async function searchProteins(db, query, limit = 20) {
   const prefix = `${needle}%`;
   try {
     const statement = `
-      SELECT p.uniprot, p.hgnc, p.full_name, p.length,
+      SELECT p.uniprot, p.gene, p.full_name, p.length,
         MIN(
           CASE
-            WHEN lower(p.hgnc) = ? THEN 0
+            WHEN lower(p.gene) = ? THEN 0
             WHEN s.normalized = ? THEN 1
-            WHEN lower(p.hgnc) LIKE ? ESCAPE '\\' THEN 2
+            WHEN lower(p.gene) LIKE ? ESCAPE '\\' THEN 2
             WHEN s.normalized LIKE ? ESCAPE '\\' THEN 3
             WHEN lower(p.full_name) LIKE ? ESCAPE '\\' THEN 4
-            WHEN lower(p.hgnc) LIKE ? ESCAPE '\\' THEN 5
+            WHEN lower(p.gene) LIKE ? ESCAPE '\\' THEN 5
             WHEN s.normalized LIKE ? ESCAPE '\\' THEN 6
             WHEN lower(p.full_name) LIKE ? ESCAPE '\\' THEN 7
             ELSE 8
@@ -254,11 +292,11 @@ export async function searchProteins(db, query, limit = 20) {
       FROM proteins p
       LEFT JOIN protein_synonyms s ON s.protein_id = p.id
       LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
-      WHERE (lower(p.hgnc) LIKE ? OR lower(p.full_name) LIKE ? OR s.normalized LIKE ?)
-        AND json_extract(p.metadata, '$.structure.primary_source') IS NOT NULL
+      WHERE (lower(p.gene) LIKE ? OR lower(p.full_name) LIKE ? OR s.normalized LIKE ?)
+        AND p.structure_source IS NOT NULL
         AND sf.uniprot IS NULL
       GROUP BY p.id
-      ORDER BY match_rank ASC, lower(p.hgnc) ASC
+      ORDER BY match_rank ASC, lower(p.gene) ASC
       LIMIT ?`;
     const { results } = await db.prepare(statement)
       .bind(
@@ -302,8 +340,8 @@ export async function getEligibleProteinIds(db) {
   let ids = [];
   try {
     ids = await fetchIds(
-      `WHERE json_extract(p.metadata, '$.structure.primary_source') IS NOT NULL
-         AND json_extract(p.metadata, '$.gene_summary') IS NOT NULL
+      `WHERE p.structure_source IS NOT NULL
+         AND p.gene_summary IS NOT NULL
          AND sf.uniprot IS NULL`
     );
   } catch (err) {
