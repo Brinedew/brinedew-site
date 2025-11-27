@@ -2416,7 +2416,15 @@
 
   function renderClueSectionsHtml() {
     const sections = Array.isArray(clueData?.sections) ? clueData.sections : [];
-    return sections.map(section => renderSpoilerSection(section)).join('');
+    const allMatches = clueData?.allMatches || {};
+    return sections.map(section => {
+      // Get matched items for this section from allMatches
+      const sectionMatches = allMatches[section.id] || [];
+      return renderSpoilerSection(section, {
+        matchedItems: sectionMatches,
+        highlightMatches: sectionMatches.length > 0
+      });
+    }).join('');
   }
 
   function normalizeMatchText(value) {
