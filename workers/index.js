@@ -1122,10 +1122,24 @@ function buildMetaFromStoredStructure(protein) {
   // Build meta based on the preferred source
   if (primarySource === 'pdb' && protein.pdb_id) {
     const pdbId = protein.pdb_id.toUpperCase();
+    const chainId = protein.pdb_chain_id;
+    
+    // If we have a chain ID, use PDBe Model Server to extract just that chain
+    // This avoids showing massive protein complexes when we only want one protein
+    let upstreamUrl;
+    let r2Key;
+    if (chainId) {
+      upstreamUrl = `https://www.ebi.ac.uk/pdbe/model-server/v1/${pdbId.toLowerCase()}/atoms?auth_asym_id=${chainId}&encoding=cif`;
+      r2Key = `pdb/${pdbId}_${chainId}.cif`;  // Store chain-specific file
+    } else {
+      upstreamUrl = `https://files.rcsb.org/download/${pdbId}.cif`;
+      r2Key = `pdb/${pdbId}.cif`;
+    }
+    
     return {
       source: 'pdb',
-      r2Key: `pdb/${pdbId}.cif`,
-      upstreamUrl: `https://files.rcsb.org/download/${pdbId}.cif`,
+      r2Key,
+      upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${pdbId})`,
       format: 'cif'
@@ -1191,10 +1205,22 @@ function buildMetaFromStoredStructure(protein) {
   
   if (protein.pdb_id) {
     const pdbId = protein.pdb_id.toUpperCase();
+    const chainId = protein.pdb_chain_id;
+    
+    let upstreamUrl;
+    let r2Key;
+    if (chainId) {
+      upstreamUrl = `https://www.ebi.ac.uk/pdbe/model-server/v1/${pdbId.toLowerCase()}/atoms?auth_asym_id=${chainId}&encoding=cif`;
+      r2Key = `pdb/${pdbId}_${chainId}.cif`;
+    } else {
+      upstreamUrl = `https://files.rcsb.org/download/${pdbId}.cif`;
+      r2Key = `pdb/${pdbId}.cif`;
+    }
+    
     return {
       source: 'pdb',
-      r2Key: `pdb/${pdbId}.cif`,
-      upstreamUrl: `https://files.rcsb.org/download/${pdbId}.cif`,
+      r2Key,
+      upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${pdbId})`,
       format: 'cif'

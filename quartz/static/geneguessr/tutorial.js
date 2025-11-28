@@ -34,6 +34,23 @@
     }
   ];
 
+  const ILLUSTRATION_FILES = {
+    1: '1.png',
+    2: '2.png',
+    3: '3.png',
+    4: '4.png',
+    5: '5.png',
+    6: '6.png',
+    7: '7.png',
+    8: '8.png',
+    9: '9.png'
+  };
+
+  function resolveIllustrationPath(slot) {
+    const file = ILLUSTRATION_FILES[slot];
+    return file ? `/static/geneguessr/tutorial/${file}` : null;
+  }
+
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   function readState() {
@@ -83,12 +100,20 @@
       // Add placeholder image above the text
       const imgWrapper = document.createElement('div');
       imgWrapper.className = 'pg-tutorial-img-wrapper';
-      const img = document.createElement('img');
-      img.src = `/static/geneguessr/tutorial/placeholder-${item.img}.png`;
-      img.alt = `Tutorial illustration ${item.img}`;
-      img.className = 'pg-tutorial-img';
-      img.loading = 'lazy';
-      imgWrapper.appendChild(img);
+      const imgPath = resolveIllustrationPath(item.img);
+      if (imgPath) {
+        const img = document.createElement('img');
+        img.src = imgPath;
+        img.alt = `Tutorial illustration ${item.img}`;
+        img.className = 'pg-tutorial-img';
+        img.loading = 'lazy';
+        imgWrapper.appendChild(img);
+      } else {
+        const fallback = document.createElement('span');
+        fallback.className = 'pg-tutorial-img-fallback';
+        fallback.textContent = 'Illustration unavailable';
+        imgWrapper.appendChild(fallback);
+      }
       li.appendChild(imgWrapper);
       
       // Add the text

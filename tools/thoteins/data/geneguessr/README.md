@@ -2,16 +2,17 @@
 
 ## Data Flow (so future-you doesn't get confused)
 
-This directory contains the source data for GeneGuessr:
+This directory contains metadata and indexes for GeneGuessr. The actual protein database is too large for GitHub.
 
-### `proteins.json` - THE source of truth
-- Contains all protein metadata: clans, domain_names, domains, pathways, tissue, etc.
-- **NOT** deployed via normal GitHub Pages / Quartz build
-- Must be uploaded to Cloudflare D1 manually
+### Where's `proteins.json`?
+
+**NOT HERE.** Large data files live at `D:\Coding\Datasets\geneguessr\proteins.json` — we don't put giant databases in a GitHub repo.
+
+The file contains all protein metadata: clans, domain_names, domains, pathways, tissue, structure info, etc.
 
 ### How to deploy protein data changes
 
-After updating `proteins.json`:
+After updating the proteins.json in `D:\Coding\Datasets\geneguessr\`:
 
 ```bash
 cd Website

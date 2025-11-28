@@ -567,11 +567,24 @@
       return null;
     }
     if (representation.source === 'pdb' && representation.pdb && representation.pdb.id) {
+      // If we have a chain ID, use PDBe Model Server to extract just that chain
+      // This avoids showing massive complexes when we only want the target protein
+      const pdbId = representation.pdb.id.toLowerCase();
+      const chainId = representation.pdb.chain_id;
+      
+      let url;
+      if (chainId) {
+        // PDBe Model Server can filter to specific chain
+        url = `https://www.ebi.ac.uk/pdbe/model-server/v1/${pdbId}/atoms?auth_asym_id=${chainId}&encoding=cif`;
+      } else {
+        // Fall back to full structure
+        url = `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`;
+      }
+      
       const obj = {
         moleculeId: representation.pdb.id,
-        assemblyId: '1',
         customData: {
-          url: `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`,
+          url: url,
           format: 'cif'
         }
       };
