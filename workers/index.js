@@ -1150,7 +1150,8 @@ function buildMetaFromStoredStructure(protein) {
     const template = protein.swissmodel_template || 'model';
     const modelId = `${protein.uniprot}_${template}`;
     const url = protein.swissmodel_url;
-    const ext = url.endsWith('.pdb') ? 'pdb' : (url.endsWith('.bcif') ? 'bcif' : 'cif');
+    // Check for format in URL (handles query strings like .pdb?range=...)
+    const ext = url.includes('.pdb') ? 'pdb' : (url.includes('.bcif') ? 'bcif' : 'cif');
     return {
       source: 'swissmodel',
       r2Key: `swissmodel/${sanitizeKeySegment(modelId)}.${ext}`,
@@ -1163,7 +1164,8 @@ function buildMetaFromStoredStructure(protein) {
   
   if (primarySource === 'alphafold' && protein.alphafold_url) {
     const url = protein.alphafold_url;
-    const format = url.endsWith('.pdb') ? 'pdb' : 'cif';
+    // Check for format in URL (handles query strings)
+    const format = url.includes('.pdb') ? 'pdb' : 'cif';
     return {
       source: 'alphafold',
       r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.${format}`,
@@ -1179,7 +1181,8 @@ function buildMetaFromStoredStructure(protein) {
     const template = protein.swissmodel_template || 'model';
     const modelId = `${protein.uniprot}_${template}`;
     const url = protein.swissmodel_url;
-    const ext = url.endsWith('.pdb') ? 'pdb' : 'cif';
+    // Check for format in URL (handles query strings like .pdb?range=...)
+    const ext = url.includes('.pdb') ? 'pdb' : 'cif';
     return {
       source: 'swissmodel',
       r2Key: `swissmodel/${sanitizeKeySegment(modelId)}.${ext}`,
@@ -1192,7 +1195,8 @@ function buildMetaFromStoredStructure(protein) {
   
   if (protein.alphafold_url) {
     const url = protein.alphafold_url;
-    const format = url.endsWith('.pdb') ? 'pdb' : 'cif';
+    // Check for format in URL (handles query strings)
+    const format = url.includes('.pdb') ? 'pdb' : 'cif';
     return {
       source: 'alphafold',
       r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.${format}`,
