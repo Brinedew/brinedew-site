@@ -677,7 +677,8 @@
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
         format: data.format || 'cif',
         url: data.url || resolvedUrl,
-        internalUrl: resolvedUrl
+        internalUrl: resolvedUrl,
+        chainLabels: data.chainLabels || null
       };
       return targetStructureInfo;
     } catch (err) {
@@ -724,7 +725,8 @@
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
         format: data.format || 'cif',
         url: data.url || resolvedUrl,
-        internalUrl: resolvedUrl
+        internalUrl: resolvedUrl,
+        chainLabels: data.chainLabels || null
       };
       structureTokenCache.set(key, info);
       return info;
@@ -1332,6 +1334,58 @@
     themeSyncInitialized = true;
   }
 
+  /**
+   * Render chain label callouts as an overlay on the 3D viewer.
+   * Shows which proteins are in the complex, highlighting the target.
+   */
+  function renderChainLabelCallouts(container, chainLabels) {
+    if (!container || !chainLabels || chainLabels.length <= 1) {
+      return;
+    }
+
+    // Remove any existing callout overlay
+    const existing = container.querySelector('.pg-chain-callouts');
+    if (existing) {
+      existing.remove();
+    }
+
+    // Create overlay container
+    const overlay = document.createElement('div');
+    overlay.className = 'pg-chain-callouts';
+
+    // Group labels: target first, then others
+    const targetLabels = chainLabels.filter(l => l.is_target);
+    const otherLabels = chainLabels.filter(l => !l.is_target);
+    
+    // Limit to reasonable number of labels (target + up to 4 others)
+    const displayLabels = [...targetLabels, ...otherLabels.slice(0, 4)];
+    const moreCount = chainLabels.length - displayLabels.length;
+
+    displayLabels.forEach((label) => {
+      const callout = document.createElement('div');
+      callout.className = 'pg-chain-callout' + (label.is_target ? ' pg-chain-callout-target' : '');
+      
+      const chainIds = label.chains.join(', ');
+      const displayName = label.gene || label.name || 'Unknown';
+      
+      callout.innerHTML = `
+        <span class="pg-chain-id">${escapeAttribute(chainIds)}</span>
+        <span class="pg-chain-name">${escapeAttribute(displayName)}</span>
+      `;
+      overlay.appendChild(callout);
+    });
+
+    // Add "and X more" if truncated
+    if (moreCount > 0) {
+      const more = document.createElement('div');
+      more.className = 'pg-chain-callout pg-chain-more';
+      more.textContent = `+${moreCount} more`;
+      overlay.appendChild(more);
+    }
+
+    container.appendChild(overlay);
+  }
+
   async function applyViewerStylizationProfile(viewer, container) {
     ensureThemeSync();
     activeViewerInstance = viewer;
@@ -1705,6 +1759,10 @@
       const finalizeViewerStyling = () => {
         timing('loadComplete fired - structure fully rendered');
         applyViewerStylizationProfile(viewer, container);
+        // Render chain label callouts if available
+        if (structureInfo.chainLabels && structureInfo.chainLabels.length > 1) {
+          renderChainLabelCallouts(container, structureInfo.chainLabels);
+        }
         timing('styling applied - DONE');
       };
       if (viewer.events?.loadComplete) {

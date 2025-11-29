@@ -643,12 +643,24 @@ async function handleStructureToken(request, env, corsHeaders) {
     }
     const token = await createStructureToken(env, meta);
     const structureUrl = `${url.origin}/api/structure?token=${token}`;
+    // Parse chain labels if present (stored as JSON string in D1)
+    let chainLabels = null;
+    if (protein.pdb_chain_labels) {
+      try {
+        chainLabels = typeof protein.pdb_chain_labels === 'string'
+          ? JSON.parse(protein.pdb_chain_labels)
+          : protein.pdb_chain_labels;
+      } catch (e) {
+        console.warn('Failed to parse pdb_chain_labels', e);
+      }
+    }
     return Response.json({
       token,
       sourceLabel: meta.shortLabel,
       displayLabel: meta.displayLabel,
       format: meta.format || 'cif',
-      url: structureUrl
+      url: structureUrl,
+      chainLabels
     }, { headers: corsHeaders });
   }
 
@@ -672,12 +684,24 @@ async function handleStructureToken(request, env, corsHeaders) {
   }
   const token = await createStructureToken(env, meta);
   const structureUrl = `${url.origin}/api/structure?token=${token}`;
+  // Parse chain labels if present (stored as JSON string in D1)
+  let chainLabels = null;
+  if (protein.pdb_chain_labels) {
+    try {
+      chainLabels = typeof protein.pdb_chain_labels === 'string'
+        ? JSON.parse(protein.pdb_chain_labels)
+        : protein.pdb_chain_labels;
+    } catch (e) {
+      console.warn('Failed to parse pdb_chain_labels', e);
+    }
+  }
   return Response.json({
     token,
     sourceLabel: meta.shortLabel,
     displayLabel: meta.displayLabel,
     format: meta.format || 'cif',
-    url: structureUrl
+    url: structureUrl,
+    chainLabels
   }, { headers: corsHeaders });
 }
 
