@@ -1467,9 +1467,8 @@
    * When OFF (default): Only target chain visible, callouts hidden
    * When ON: All chains visible with coloring, callouts shown
    * 
-   * Uses visual.select() API:
-   * - data: array of QueryParam objects with auth_asym_id and color
-   * - nonSelectedColor: color for chains not in data array
+   * Uses Mol* component visibility system for true hide/show behavior.
+   * Accesses the structure hierarchy to find components and toggle their visibility.
    */
   async function applyChainVisibility(viewerId, showComplex) {
     const viewer = activeViewers.get(viewerId);
@@ -1487,14 +1486,21 @@
       return;
     }
     
-    // Find target chain(s)
+    // Find target chain(s) and non-target chains
     const targetLabel = chainLabels.find(l => l.is_target);
-    const targetChains = targetLabel ? targetLabel.chains : [];
-    const nonTargetChains = chainLabels
-      .filter(l => !l.is_target)
-      .flatMap(l => l.chains);
+    const targetChains = new Set(targetLabel ? targetLabel.chains : []);
+    const nonTargetChains = new Set(
+      chainLabels
+        .filter(l => !l.is_target)
+        .flatMap(l => l.chains)
+    );
     
-    console.log('[Geneguessr] applyChainVisibility:', viewerId, { showComplex, targetChains, nonTargetChains, pdbId });
+    console.log('[Geneguessr] applyChainVisibility:', viewerId, { 
+      showComplex, 
+      targetChains: [...targetChains], 
+      nonTargetChains: [...nonTargetChains], 
+      pdbId 
+    });
     
     // Toggle callout visibility
     const callouts = container.querySelector('.pg-chain-callouts');
@@ -1502,77 +1508,113 @@
       callouts.style.display = showComplex ? 'flex' : 'none';
     }
     
-    const accentColor = getAccentColorRgb();
-    const neutralColor = getNeutralChainColor(container) || hexToRgb(DARK_NEUTRAL_GRAY_HEX);
-    
     try {
-      if (showComplex) {
-        // Show all chains: target in accent, others in neutral gray
-        const selectData = [];
-        
-        // Target chains in accent color
-        for (const chainId of targetChains) {
-          selectData.push({
-            auth_asym_id: chainId,
-            color: {
-              r: Math.round(accentColor.r || 0),
-              g: Math.round(accentColor.g || 0),
-              b: Math.round(accentColor.b || 0)
-            }
-          });
-        }
-        
-        // Non-target chains in neutral color (visible)
-        for (const chainId of nonTargetChains) {
-          selectData.push({
-            auth_asym_id: chainId,
-            color: {
-              r: Math.round(neutralColor.r || 0),
-              g: Math.round(neutralColor.g || 0),
-              b: Math.round(neutralColor.b || 0)
-            }
-          });
-        }
-        
-        console.log('[Geneguessr] visual.select data (showComplex=true):', selectData);
-        await viewer.visual.select({
-          data: selectData,
-          structureNumber: 1
-        });
-        console.log('[Geneguessr] visual.select completed (showComplex=true)');
-      } else {
-        // Hide non-target chains: only show target in accent
-        // Use visual.select with only target chains colored; non-targets get transparent nonSelectedColor
-        const selectData = [];
-        
-        for (const chainId of targetChains) {
-          selectData.push({
-            auth_asym_id: chainId,
-            color: {
-              r: Math.round(accentColor.r || 0),
-              g: Math.round(accentColor.g || 0),
-              b: Math.round(accentColor.b || 0)
-            }
-          });
-        }
-        
-        // Set nonSelectedColor to background color (effectively hiding non-target chains)
-        // This makes them blend with background instead of truly hiding
-        const bgColors = resolveViewerColors(container);
-        const bgColor = bgColors.background || { r: 0, g: 0, b: 0 };
-        
-        console.log('[Geneguessr] visual.select data (showComplex=false):', selectData, 'nonSelectedColor:', bgColor);
-        await viewer.visual.select({
-          data: selectData,
-          nonSelectedColor: {
-            r: Math.round(bgColor.r || 0),
-            g: Math.round(bgColor.g || 0),
-            b: Math.round(bgColor.b || 0)
-          },
-          structureNumber: 1
-        });
-        console.log('[Geneguessr] visual.select completed (showComplex=false)');
+      // Access Mol* plugin internals for component visibility control
+      const plugin = viewer.plugin;
+      if (!plugin) {
+        console.warn('[Geneguessr] applyChainVisibility: no plugin context available');
+        return;
       }
+      
+      const state = plugin.state.data;
+      const hierarchy = plugin.managers?.structure?.hierarchy;
+      
+      if (!hierarchy || !hierarchy.current || !hierarchy.current.structures) {
+        console.warn('[Geneguessr] applyChainVisibility: structure hierarchy not available');
+        return;
+      }
+      
+      // Get all structures (usually just one)
+      const structures = hierarchy.current.structures;
+      console.log('[Geneguessr] Found', structures.length, 'structure(s) in hierarchy');
+      
+      for (const structRef of structures) {
+        const components = structRef.components || [];
+        console.log('[Geneguessr] Structure has', components.length, 'component(s)');
+        
+        for (const comp of components) {
+          // Get component label/key to determine which chain it represents
+          const cell = comp.cell;
+          if (!cell || !cell.obj) continue;
+          
+          const label = cell.obj.label || '';
+          const ref = cell.transform.ref;
+          
+          // Try to determine which chain this component represents
+          // Component labels often contain chain info like "Chain A" or just "A"
+          let componentChains = [];
+          
+          // Check the component's structure data for chain info
+          const data = cell.obj.data;
+          if (data && data.units) {
+            // Extract unique chain IDs from the component's units
+            const chainSet = new Set();
+            for (const unit of data.units) {
+              if (unit.model && unit.model.atomicHierarchy) {
+                const chains = unit.model.atomicHierarchy.chains;
+                if (chains && chains.auth_asym_id) {
+                  // Get auth_asym_id values for this unit
+                  const offsets = unit.elements;
+                  if (offsets && chains.offsets) {
+                    // Sample first element to get chain
+                    const firstElement = offsets[0] || 0;
+                    for (let i = 0; i < chains.offsets.length - 1; i++) {
+                      if (firstElement >= chains.offsets[i] && firstElement < chains.offsets[i + 1]) {
+                        const authChain = chains.auth_asym_id.value(i);
+                        if (authChain) chainSet.add(authChain);
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            componentChains = [...chainSet];
+          }
+          
+          // Fallback: parse label for chain info
+          if (componentChains.length === 0) {
+            const chainMatch = label.match(/Chain\s+([A-Za-z0-9]+)/i) || label.match(/^([A-Za-z])$/);
+            if (chainMatch) {
+              componentChains = [chainMatch[1]];
+            }
+          }
+          
+          console.log('[Geneguessr] Component:', { label, ref, chains: componentChains });
+          
+          // Determine if this component should be visible
+          let shouldBeVisible = showComplex; // Default: show all when toggle is ON
+          
+          if (componentChains.length > 0) {
+            const hasTargetChain = componentChains.some(c => targetChains.has(c));
+            const hasNonTargetChain = componentChains.some(c => nonTargetChains.has(c));
+            
+            if (hasTargetChain && !hasNonTargetChain) {
+              // Pure target chain component - always visible
+              shouldBeVisible = true;
+            } else if (hasNonTargetChain && !hasTargetChain) {
+              // Pure non-target chain component - visible only when showComplex
+              shouldBeVisible = showComplex;
+            } else {
+              // Mixed or unknown - follow showComplex toggle
+              shouldBeVisible = showComplex;
+            }
+          }
+          
+          // Apply visibility using Mol* state system
+          const currentlyHidden = cell.state.isHidden;
+          const shouldBeHidden = !shouldBeVisible;
+          
+          if (currentlyHidden !== shouldBeHidden) {
+            console.log('[Geneguessr] Toggling visibility for', label, ':', currentlyHidden, '->', shouldBeHidden);
+            // Use state.updateCellState to toggle visibility
+            state.updateCellState(ref, { isHidden: shouldBeHidden });
+          }
+        }
+      }
+      
+      console.log('[Geneguessr] applyChainVisibility completed (showComplex=' + showComplex + ')');
+      
     } catch (err) {
       console.warn('[Geneguessr] applyChainVisibility failed:', err);
     }
