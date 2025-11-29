@@ -2253,7 +2253,7 @@
     viewerStructureInfo.delete(containerId);
     viewerStructureSources.delete(containerId);
     viewerChainData.delete(containerId);
-    perChainComponentRefs.delete(containerId);
+    viewerChainComponentRefs.delete(containerId);
   }
 
   function markGuessViewersDirty() {
