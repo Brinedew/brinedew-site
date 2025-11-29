@@ -804,18 +804,7 @@
       sourceText = `Source: ${escapeAttribute(displayLabel)}`;
     }
 
-    // Check if this viewer should show chain toggle (linkable = feedback card, has chainLabels with >1 entry)
-    const chainLabels = structureInfo?.chainLabels || [];
-    const hasMultipleChains = chainLabels.length > 1;
-    const showChainToggle = linkable && hasMultipleChains;
-    
-    const toggleMarkup = showChainToggle ? `
-      <label class="pg-chain-toggle" title="Show all chains in complex">
-        <input type="checkbox" id="${viewerId}-chain-toggle" class="pg-chain-toggle-input">
-        <span class="pg-chain-toggle-track"><span class="pg-chain-toggle-thumb"></span></span>
-        <span class="pg-chain-toggle-label">Complex</span>
-      </label>
-    ` : '';
+    // Toggle is now injected dynamically after viewer loads (see injectChainToggle)
 
     return `
       <div class="pg-card-structure">
@@ -827,7 +816,6 @@
           <div class="pg-structure-error" id="${viewerId}-error" hidden></div>
         </div>
         <div class="pg-structure-footer">
-          ${toggleMarkup}
           <div class="pg-structure-source" id="${viewerId}-source"${linkableAttr}>
             ${sourceText}
           </div>
@@ -1406,6 +1394,50 @@
   }
 
   /**
+   * Dynamically inject chain visibility toggle into the structure footer.
+   * Only adds toggle if this is a linkable viewer (feedback card) with multiple chains.
+   */
+  function injectChainToggle(container, chainLabels) {
+    if (!container || !chainLabels || chainLabels.length <= 1) {
+      return;
+    }
+    
+    // Find the structure footer (sibling of the viewer container)
+    const structureCard = container.closest('.pg-card-structure');
+    if (!structureCard) {
+      return;
+    }
+    
+    const footer = structureCard.querySelector('.pg-structure-footer');
+    if (!footer) {
+      return;
+    }
+    
+    // Check if this is a linkable source (feedback card, not clue card)
+    const sourceEl = footer.querySelector('.pg-structure-source');
+    if (!sourceEl || sourceEl.dataset.sourceLinkable !== 'true') {
+      return;
+    }
+    
+    // Don't add toggle if already present
+    if (footer.querySelector('.pg-chain-toggle')) {
+      return;
+    }
+    
+    const viewerId = container.id;
+    const toggleHtml = `
+      <label class="pg-chain-toggle" title="Show all chains in complex">
+        <input type="checkbox" id="${viewerId}-chain-toggle" class="pg-chain-toggle-input">
+        <span class="pg-chain-toggle-track"><span class="pg-chain-toggle-thumb"></span></span>
+        <span class="pg-chain-toggle-label">Complex</span>
+      </label>
+    `;
+    
+    // Insert toggle at the start of footer (before source)
+    footer.insertAdjacentHTML('afterbegin', toggleHtml);
+  }
+
+  /**
    * Set up event delegation for chain visibility toggles.
    * Toggle controls whether non-target chains are visible in the 3D viewer.
    */
@@ -1925,6 +1957,8 @@
         // Render chain label callouts if available
         if (structureInfo.chainLabels && structureInfo.chainLabels.length > 1) {
           renderChainLabelCallouts(container, structureInfo.chainLabels);
+          // Inject toggle for feedback cards (linkable viewers)
+          injectChainToggle(container, structureInfo.chainLabels);
           // Store chain data for toggle functionality
           viewerChainData.set(containerId, {
             chainLabels: structureInfo.chainLabels,
