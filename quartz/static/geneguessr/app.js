@@ -1356,9 +1356,10 @@
       existing.remove();
     }
 
-    // Create overlay container
+    // Create overlay container - hidden by default, toggle shows it
     const overlay = document.createElement('div');
     overlay.className = 'pg-chain-callouts';
+    overlay.style.display = 'none';
 
     // Group labels: target first, then others
     const targetLabels = chainLabels.filter(l => l.is_target);
@@ -1426,10 +1427,10 @@
     
     const viewerId = container.id;
     const toggleHtml = `
-      <label class="pg-chain-toggle" title="Show all chains in complex">
+      <label class="pg-chain-toggle" title="Show chain callouts">
         <input type="checkbox" id="${viewerId}-chain-toggle" class="pg-chain-toggle-input">
         <span class="pg-chain-toggle-track"><span class="pg-chain-toggle-thumb"></span></span>
-        <span class="pg-chain-toggle-label">Complex</span>
+        <span class="pg-chain-toggle-label">Show complex</span>
       </label>
     `;
     
@@ -1482,6 +1483,7 @@
     
     const { chainLabels, pdbId } = chainData;
     if (!chainLabels || chainLabels.length <= 1) {
+      console.log('[Geneguessr] applyChainVisibility: skipping (single chain or no labels)', viewerId);
       return;
     }
     
@@ -1491,6 +1493,8 @@
     const nonTargetChains = chainLabels
       .filter(l => !l.is_target)
       .flatMap(l => l.chains);
+    
+    console.log('[Geneguessr] applyChainVisibility:', viewerId, { showComplex, targetChains, nonTargetChains, pdbId });
     
     // Toggle callout visibility
     const callouts = container.querySelector('.pg-chain-callouts');
@@ -1530,10 +1534,12 @@
           });
         }
         
+        console.log('[Geneguessr] visual.select data (showComplex=true):', selectData);
         await viewer.visual.select({
           data: selectData,
-          structureId: pdbId
+          structureNumber: 1
         });
+        console.log('[Geneguessr] visual.select completed (showComplex=true)');
       } else {
         // Hide non-target chains: only show target in accent
         // Use visual.select with only target chains colored; non-targets get transparent nonSelectedColor
@@ -1555,6 +1561,7 @@
         const bgColors = resolveViewerColors(container);
         const bgColor = bgColors.background || { r: 0, g: 0, b: 0 };
         
+        console.log('[Geneguessr] visual.select data (showComplex=false):', selectData, 'nonSelectedColor:', bgColor);
         await viewer.visual.select({
           data: selectData,
           nonSelectedColor: {
@@ -1562,8 +1569,9 @@
             g: Math.round(bgColor.g || 0),
             b: Math.round(bgColor.b || 0)
           },
-          structureId: pdbId
+          structureNumber: 1
         });
+        console.log('[Geneguessr] visual.select completed (showComplex=false)');
       }
     } catch (err) {
       console.warn('[Geneguessr] applyChainVisibility failed:', err);
