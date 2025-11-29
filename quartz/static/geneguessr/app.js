@@ -1473,6 +1473,10 @@
    * and stores refs in viewerChainComponentRefs for later visibility control.
    */
   async function createPerChainComponents(viewerId, chainLabels) {
+    if (viewerChainComponentRefs.get(viewerId)?.size) {
+      return true;
+    }
+
     const viewer = activeViewers.get(viewerId);
     if (!viewer || !viewer.plugin) {
       console.warn('[Geneguessr] createPerChainComponents: no viewer/plugin for', viewerId);
@@ -1480,16 +1484,8 @@
     }
 
     const plugin = viewer.plugin;
-    const hierarchy = plugin.managers?.structure?.hierarchy;
-    
-    if (!hierarchy || !hierarchy.current || !hierarchy.current.structures || hierarchy.current.structures.length === 0) {
-      console.warn('[Geneguessr] createPerChainComponents: no structure loaded');
-      return false;
-    }
-
-    // Get the first structure ref
-    const structRef = hierarchy.current.structures[0];
-    const structureCell = structRef.cell;
+    const structRef = typeof viewer.getStructure === 'function' ? viewer.getStructure(1) : null;
+    const structureCell = structRef?.cell;
     
     if (!structureCell || !structureCell.obj) {
       console.warn('[Geneguessr] createPerChainComponents: no structure cell');
@@ -1515,46 +1511,33 @@
     console.log('[Geneguessr] createPerChainComponents: creating components for chains:', allChains.map(c => c.chainId));
 
     try {
-      // Access MolScriptBuilder from Mol* (it's exposed on the plugin)
-      // The builder is at molstar.mol-script.language.builder
-      const MS = plugin.MolScriptBuilder || window.molstar?.MolScriptBuilder;
-      
-      // If MolScriptBuilder is not directly available, try to build expressions manually
-      // using the plugin's query/selection system
-      
       const chainRefs = new Map();
-      const builder = plugin.build();
+      const builder = plugin.builders?.structure;
+      if (!builder || typeof builder.tryCreateComponentFromSelection !== 'function') {
+        console.warn('[Geneguessr] createPerChainComponents: builder unavailable');
+        return false;
+      }
 
       for (const { chainId, isTarget, labelName } of allChains) {
         try {
-          // Create a chain selection expression
-          // MolScript: MS.struct.generator.atomGroups({ 'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]) })
-          
-          console.log('[Geneguessr] Attempting to create component for chain', chainId);
-          console.log('[Geneguessr] structureCell:', structureCell);
-          console.log('[Geneguessr] structureCell.obj:', structureCell.obj);
-          console.log('[Geneguessr] plugin.builders.structure:', plugin.builders?.structure);
-          console.log('[Geneguessr] tryCreateComponentFromExpression:', typeof plugin.builders?.structure?.tryCreateComponentFromExpression);
+          const selections = typeof viewer.getSelections === 'function'
+            ? viewer.getSelections([{ auth_asym_id: chainId }], 1)
+            : [];
+          const selection = selections && selections.length > 0 ? selections[0] : null;
 
-          // Use the plugin's component creation with a selection query
-          const chainComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+          if (!selection || !selection.loci || !selection.loci.elements || selection.loci.elements.length === 0) {
+            console.warn('[Geneguessr] No loci for chain', chainId);
+            continue;
+          }
+
+          const chainComponent = await builder.tryCreateComponentFromSelection(
             structureCell,
-            createChainExpression(chainId),
+            selection,
             `chain-${chainId}`,
-            { label: `Chain ${chainId} (${labelName || 'unknown'})` }
+            { label: `Chain ${chainId}${labelName ? ` (${labelName})` : ''}` }
           );
 
-          console.log('[Geneguessr] chainComponent result:', chainComponent);
-
           if (chainComponent) {
-            console.log('[Geneguessr] Created component for chain', chainId, '- ref:', chainComponent.ref);
-            chainRefs.set(chainId, {
-              ref: chainComponent.ref,
-              isTarget,
-              labelName
-            });
-
-            // Add a representation to the chain component
             await plugin.builders.structure.representation.addRepresentation(
               chainComponent,
               {
@@ -1563,6 +1546,11 @@
                 size: 'uniform'
               }
             );
+            chainRefs.set(chainId, {
+              ref: chainComponent.ref,
+              isTarget,
+              labelName
+            });
           } else {
             console.warn('[Geneguessr] Failed to create component for chain', chainId);
           }
@@ -1573,6 +1561,19 @@
 
       if (chainRefs.size > 0) {
         viewerChainComponentRefs.set(viewerId, chainRefs);
+
+        const polymerComponent = (structRef?.components || []).find(component => {
+          const tags = component.cell?.transform?.tags || [];
+          return tags.includes('structure-component-static-polymer');
+        });
+        if (polymerComponent) {
+          const polymerRef = polymerComponent.cell.transform.ref;
+          const polymerCell = plugin.state?.data?.cells.get(polymerRef);
+          if (polymerCell && !polymerCell.state?.isHidden) {
+            plugin.state.data.updateCellState(polymerRef, { isHidden: true });
+          }
+        }
+
         console.log('[Geneguessr] Stored', chainRefs.size, 'chain component refs for', viewerId);
         return true;
       }
@@ -1582,21 +1583,6 @@
     }
 
     return false;
-  }
-
-  /**
-   * Create a MolScript expression to select a specific chain by auth_asym_id
-   */
-  function createChainExpression(chainId) {
-    // This creates a query expression that selects all atoms in a specific chain
-    // Equivalent to MolScript: 
-    //   MS.struct.generator.atomGroups({ 
-    //     'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]) 
-    //   })
-    return {
-      language: 'mol-script',
-      expression: `(sel.atom.atom-groups :chain-test (= atom.auth_asym_id "${chainId}"))`
-    };
   }
 
   /**
@@ -1653,78 +1639,36 @@
       }
       
       const state = plugin.state.data;
-      
-      // Check if we have per-chain component refs
-      const chainRefs = viewerChainComponentRefs.get(viewerId);
-      
-      if (chainRefs && chainRefs.size > 0) {
-        // Use per-chain components for visibility control
-        console.log('[Geneguessr] Using per-chain component refs:', chainRefs.size, 'chains');
-        
-        for (const [chainId, refData] of chainRefs) {
-          const { ref, isTarget } = refData;
-          const shouldBeVisible = isTarget || showComplex;
-          const shouldBeHidden = !shouldBeVisible;
-          
-          const cell = state.cells.get(ref);
-          if (cell) {
-            const currentlyHidden = cell.state?.isHidden || false;
-            if (currentlyHidden !== shouldBeHidden) {
-              console.log('[Geneguessr] Toggling chain', chainId, ':', currentlyHidden, '->', shouldBeHidden);
-              state.updateCellState(ref, { isHidden: shouldBeHidden });
-            }
-          }
-        }
-        
-        console.log('[Geneguessr] applyChainVisibility completed with per-chain refs (showComplex=' + showComplex + ')');
+      let chainRefs = viewerChainComponentRefs.get(viewerId);
+
+      if (!chainRefs || chainRefs.size === 0) {
+        const created = await createPerChainComponents(viewerId, chainLabels);
+        chainRefs = created ? viewerChainComponentRefs.get(viewerId) : null;
+      }
+
+      if (!chainRefs || chainRefs.size === 0) {
+        console.warn('[Geneguessr] applyChainVisibility: no chain components available');
         return;
       }
-      
-      // Fallback: Use pdbe-molstar visual.select API with transparency for non-target chains
-      console.log('[Geneguessr] No per-chain refs, using visual.select with color/transparency');
-      
-      const accentColor = getAccentColorRgb();
-      const bgColors = resolveViewerColors(container);
-      const bgColor = bgColors.background || { r: 0, g: 0, b: 0 };
-      
-      if (showComplex) {
-        // Show all chains with distinct colors
-        const selectData = [];
-        const neutralColor = getNeutralChainColor(container) || hexToRgb(DARK_NEUTRAL_GRAY_HEX);
-        
-        for (const chainId of targetChains) {
-          selectData.push({
-            auth_asym_id: chainId,
-            color: { r: Math.round(accentColor.r), g: Math.round(accentColor.g), b: Math.round(accentColor.b) }
-          });
+
+      console.log('[Geneguessr] Using per-chain component refs:', chainRefs.size, 'chains');
+
+      for (const [chainId, refData] of chainRefs) {
+        const { ref, isTarget } = refData;
+        const shouldBeVisible = isTarget || showComplex;
+        const shouldBeHidden = !shouldBeVisible;
+
+        const cell = state.cells.get(ref);
+        if (cell) {
+          const currentlyHidden = Boolean(cell.state?.isHidden);
+          if (currentlyHidden !== shouldBeHidden) {
+            console.log('[Geneguessr] Toggling chain', chainId, ':', currentlyHidden, '->', shouldBeHidden);
+            state.updateCellState(ref, { isHidden: shouldBeHidden });
+          }
         }
-        for (const chainId of nonTargetChains) {
-          selectData.push({
-            auth_asym_id: chainId,
-            color: { r: Math.round(neutralColor.r), g: Math.round(neutralColor.g), b: Math.round(neutralColor.b) }
-          });
-        }
-        
-        await viewer.visual.select({ data: selectData, structureNumber: 1 });
-      } else {
-        // Hide non-target chains by making them match background
-        const selectData = [];
-        
-        for (const chainId of targetChains) {
-          selectData.push({
-            auth_asym_id: chainId,
-            color: { r: Math.round(accentColor.r), g: Math.round(accentColor.g), b: Math.round(accentColor.b) }
-          });
-        }
-        
-        await viewer.visual.select({
-          data: selectData,
-          nonSelectedColor: { r: Math.round(bgColor.r), g: Math.round(bgColor.g), b: Math.round(bgColor.b) },
-          structureNumber: 1
-        });
       }
-      
-      console.log('[Geneguessr] applyChainVisibility completed with visual.select fallback (showComplex=' + showComplex + ')');
+
+      console.log('[Geneguessr] applyChainVisibility completed with per-chain refs (showComplex=' + showComplex + ')');
       
     } catch (err) {
       console.warn('[Geneguessr] applyChainVisibility failed:', err);
