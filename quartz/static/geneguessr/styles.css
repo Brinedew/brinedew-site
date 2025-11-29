@@ -265,16 +265,14 @@
 /* 3D-positioned callout styling (B-170): no background, colored text */
 .pg-chain-callout.pg-chain-callout-3d {
   position: absolute;
-  background: transparent;
-  backdrop-filter: none;
-  box-shadow: none;
+  background: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+  border: none !important;
   padding: 0;
   font-size: 0.85rem;
   font-weight: 700;
-  text-shadow: 
-    0 0 3px rgba(0, 0, 0, 0.8),
-    0 0 6px rgba(0, 0, 0, 0.5),
-    1px 1px 2px rgba(0, 0, 0, 0.6);
+  text-shadow: none;
   transition: opacity 0.15s ease-out;
   pointer-events: auto;
   cursor: default;
@@ -282,10 +280,7 @@
 }
 
 :root[data-theme="dark"] .pg-chain-callout.pg-chain-callout-3d {
-  text-shadow: 
-    0 0 3px rgba(0, 0, 0, 0.9),
-    0 0 8px rgba(0, 0, 0, 0.7),
-    1px 1px 3px rgba(0, 0, 0, 0.8);
+  text-shadow: none;
 }
 
 /* Gene name: always visible */
@@ -333,13 +328,14 @@
   color: #e0e0e0;
 }
 
-.pg-chain-callout-target {
+/* Target styling for non-3D callouts only */
+.pg-chain-callout-target:not(.pg-chain-callout-3d) {
   background: rgba(76, 175, 80, 0.9);
   color: white;
   font-weight: 600;
 }
 
-:root[data-theme="dark"] .pg-chain-callout-target {
+:root[data-theme="dark"] .pg-chain-callout-target:not(.pg-chain-callout-3d) {
   background: rgba(56, 142, 60, 0.9);
 }
 
