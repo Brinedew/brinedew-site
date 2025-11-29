@@ -302,11 +302,76 @@
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 245, 0.9));
 }
 
+/* Footer row: toggle on left, source on right */
+.pg-structure-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* iOS-style toggle for showing complex chains */
+.pg-chain-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pg-chain-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.pg-chain-toggle-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--ui-border);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.pg-chain-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.pg-chain-toggle-input:checked + .pg-chain-toggle-track {
+  background: var(--accent);
+}
+
+.pg-chain-toggle-input:checked + .pg-chain-toggle-track .pg-chain-toggle-thumb {
+  transform: translateX(16px);
+}
+
+.pg-chain-toggle-input:focus-visible + .pg-chain-toggle-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pg-chain-toggle-label {
+  font-size: 0.8rem;
+  color: var(--secondary);
+  font-weight: 500;
+}
+
 .pg-structure-source {
   font-size: 0.85rem;
   text-align: right;
   color: var(--secondary);
   letter-spacing: 0.02em;
+  flex: 1;
 }
 
 .pg-structure-source[data-structure-source="alphafold"] {

@@ -804,6 +804,19 @@
       sourceText = `Source: ${escapeAttribute(displayLabel)}`;
     }
 
+    // Check if this viewer should show chain toggle (linkable = feedback card, has chainLabels with >1 entry)
+    const chainLabels = structureInfo?.chainLabels || [];
+    const hasMultipleChains = chainLabels.length > 1;
+    const showChainToggle = linkable && hasMultipleChains;
+    
+    const toggleMarkup = showChainToggle ? `
+      <label class="pg-chain-toggle" title="Show all chains in complex">
+        <input type="checkbox" id="${viewerId}-chain-toggle" class="pg-chain-toggle-input">
+        <span class="pg-chain-toggle-track"><span class="pg-chain-toggle-thumb"></span></span>
+        <span class="pg-chain-toggle-label">Complex</span>
+      </label>
+    ` : '';
+
     return `
       <div class="pg-card-structure">
         <div class="pg-card-structure-viewer" id="${viewerId}" role="region" aria-label="3D structure viewer">
@@ -813,8 +826,11 @@
           <div class="pg-structure-loading" id="${viewerId}-loading" hidden>Loading viewer.</div>
           <div class="pg-structure-error" id="${viewerId}-error" hidden></div>
         </div>
-        <div class="pg-structure-source" id="${viewerId}-source"${linkableAttr}>
-          ${sourceText}
+        <div class="pg-structure-footer">
+          ${toggleMarkup}
+          <div class="pg-structure-source" id="${viewerId}-source"${linkableAttr}>
+            ${sourceText}
+          </div>
         </div>
       </div>
     `;
@@ -856,6 +872,9 @@
   }
 
   function setupStructureInteractions() {
+    // Ensure chain toggle event delegation is set up
+    ensureChainToggleDelegation();
+
     // Auto-load structure viewer for clue card if present
     const clueViewer = document.getElementById('pg-clue-structure');
     if (clueViewer && !renderedViewers.has('pg-clue-structure')) {
@@ -1386,6 +1405,150 @@
     container.appendChild(overlay);
   }
 
+  /**
+   * Set up event delegation for chain visibility toggles.
+   * Toggle controls whether non-target chains are visible in the 3D viewer.
+   */
+  function ensureChainToggleDelegation() {
+    if (chainToggleDelegationBound) {
+      return;
+    }
+    
+    document.addEventListener('change', async (event) => {
+      const toggle = event.target.closest('.pg-chain-toggle-input');
+      if (!toggle) {
+        return;
+      }
+      
+      const viewerId = toggle.id.replace('-chain-toggle', '');
+      const showComplex = toggle.checked;
+      
+      await applyChainVisibility(viewerId, showComplex);
+    });
+    
+    chainToggleDelegationBound = true;
+  }
+
+  /**
+   * Apply chain visibility based on toggle state.
+   * When OFF (default): Only target chain visible, callouts hidden
+   * When ON: All chains visible with coloring, callouts shown
+   */
+  async function applyChainVisibility(viewerId, showComplex) {
+    const viewer = activeViewers.get(viewerId);
+    const chainData = viewerChainData.get(viewerId);
+    const container = document.getElementById(viewerId);
+    
+    if (!viewer || !chainData || !container) {
+      console.warn('[Geneguessr] applyChainVisibility: missing viewer or chain data for', viewerId);
+      return;
+    }
+    
+    const { chainLabels, pdbId } = chainData;
+    if (!chainLabels || chainLabels.length <= 1) {
+      return;
+    }
+    
+    // Find target chain(s)
+    const targetLabel = chainLabels.find(l => l.is_target);
+    const targetChains = targetLabel ? targetLabel.chains : [];
+    
+    // Toggle callout visibility
+    const callouts = container.querySelector('.pg-chain-callouts');
+    if (callouts) {
+      callouts.style.display = showComplex ? 'flex' : 'none';
+    }
+    
+    try {
+      if (showComplex) {
+        // Show all chains with coloring: target in accent, others in neutral gray
+        const accentColor = getAccentColorRgb();
+        const neutralColor = getNeutralChainColor(container) || hexToRgb(DARK_NEUTRAL_GRAY_HEX);
+        
+        // Build selection data for target chains only (will be colored in accent)
+        const targetData = [];
+        for (const chainId of targetChains) {
+          targetData.push({
+            auth_asym_id: chainId,
+            color: {
+              r: Math.round(accentColor.r || 0),
+              g: Math.round(accentColor.g || 0),
+              b: Math.round(accentColor.b || 0)
+            }
+          });
+        }
+        
+        // Apply coloring: target chains in accent, everything else in neutral
+        await viewer.visual.select({
+          data: targetData,
+          nonSelectedColor: {
+            r: Math.round(neutralColor.r || 0),
+            g: Math.round(neutralColor.g || 0),
+            b: Math.round(neutralColor.b || 0)
+          },
+          structureId: pdbId
+        });
+      } else {
+        // Hide non-target chains by making them invisible (opacity 0)
+        // Show only target chains
+        const hideData = [];
+        for (const label of chainLabels) {
+          if (label.is_target) {
+            continue; // Keep target visible
+          }
+          for (const chainId of label.chains) {
+            hideData.push({
+              auth_asym_id: chainId,
+              representation: 'cartoon',
+              opacity: 0
+            });
+          }
+        }
+        
+        // First reset to default coloring, then hide non-target chains
+        const accentColor = getAccentColorRgb();
+        const targetData = [];
+        for (const chainId of targetChains) {
+          targetData.push({
+            auth_asym_id: chainId,
+            color: {
+              r: Math.round(accentColor.r || 0),
+              g: Math.round(accentColor.g || 0),
+              b: Math.round(accentColor.b || 0)
+            }
+          });
+        }
+        
+        // Make non-target chains transparent
+        await viewer.visual.select({
+          data: targetData,
+          nonSelectedColor: { r: 0, g: 0, b: 0 }, // Will be hidden anyway
+          structureId: pdbId
+        });
+        
+        // Use visibility API if available, otherwise use transparency
+        if (viewer.visual.visibility) {
+          const hideChainIds = chainLabels
+            .filter(l => !l.is_target)
+            .flatMap(l => l.chains);
+          
+          for (const chainId of hideChainIds) {
+            try {
+              await viewer.visual.visibility({
+                polymer: false,
+                auth_asym_id: chainId
+              });
+            } catch {
+              // Visibility API may not be available in all versions
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Geneguessr] applyChainVisibility failed:', err);
+    }
+  }
+
   async function applyViewerStylizationProfile(viewer, container) {
     ensureThemeSync();
     activeViewerInstance = viewer;
@@ -1762,6 +1925,13 @@
         // Render chain label callouts if available
         if (structureInfo.chainLabels && structureInfo.chainLabels.length > 1) {
           renderChainLabelCallouts(container, structureInfo.chainLabels);
+          // Store chain data for toggle functionality
+          viewerChainData.set(containerId, {
+            chainLabels: structureInfo.chainLabels,
+            pdbId: moleculeId
+          });
+          // Apply initial visibility (hide non-target chains by default)
+          applyChainVisibility(containerId, false);
         }
         timing('styling applied - DONE');
       };
@@ -1880,7 +2050,9 @@
   let targetStructureInfo = null;
   const viewerStructureInfo = new Map();
   const viewerStructureSources = new Map();
+  const viewerChainData = new Map(); // Track chain labels and state per viewer
   const renderedViewers = new Set();
+  let chainToggleDelegationBound = false;
   let gamePayload = null;
   let collapseDelegationBound = false;
   let spoilerDelegationBound = false;
@@ -1893,6 +2065,7 @@
     renderedViewers.delete(containerId);
     viewerStructureInfo.delete(containerId);
     viewerStructureSources.delete(containerId);
+    viewerChainData.delete(containerId);
   }
 
   function markGuessViewersDirty() {
