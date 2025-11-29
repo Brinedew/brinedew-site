@@ -1462,13 +1462,142 @@
     chainToggleDelegationBound = true;
   }
 
+  // Store per-chain component refs for each viewer
+  const viewerChainComponentRefs = new Map();
+
+  /**
+   * Create per-chain components using MolScript expressions.
+   * This allows us to toggle visibility of individual chains.
+   * 
+   * Called after structure loads, creates a component for each chain
+   * and stores refs in viewerChainComponentRefs for later visibility control.
+   */
+  async function createPerChainComponents(viewerId, chainLabels) {
+    const viewer = activeViewers.get(viewerId);
+    if (!viewer || !viewer.plugin) {
+      console.warn('[Geneguessr] createPerChainComponents: no viewer/plugin for', viewerId);
+      return false;
+    }
+
+    const plugin = viewer.plugin;
+    const hierarchy = plugin.managers?.structure?.hierarchy;
+    
+    if (!hierarchy || !hierarchy.current || !hierarchy.current.structures || hierarchy.current.structures.length === 0) {
+      console.warn('[Geneguessr] createPerChainComponents: no structure loaded');
+      return false;
+    }
+
+    // Get the first structure ref
+    const structRef = hierarchy.current.structures[0];
+    const structureCell = structRef.cell;
+    
+    if (!structureCell || !structureCell.obj) {
+      console.warn('[Geneguessr] createPerChainComponents: no structure cell');
+      return false;
+    }
+
+    // Collect all chain IDs from chainLabels
+    const allChains = [];
+    const targetChainSet = new Set();
+    const nonTargetChainSet = new Set();
+    
+    for (const label of chainLabels) {
+      for (const chainId of label.chains) {
+        allChains.push({ chainId, isTarget: label.is_target, labelName: label.name });
+        if (label.is_target) {
+          targetChainSet.add(chainId);
+        } else {
+          nonTargetChainSet.add(chainId);
+        }
+      }
+    }
+
+    console.log('[Geneguessr] createPerChainComponents: creating components for chains:', allChains.map(c => c.chainId));
+
+    try {
+      // Access MolScriptBuilder from Mol* (it's exposed on the plugin)
+      // The builder is at molstar.mol-script.language.builder
+      const MS = plugin.MolScriptBuilder || window.molstar?.MolScriptBuilder;
+      
+      // If MolScriptBuilder is not directly available, try to build expressions manually
+      // using the plugin's query/selection system
+      
+      const chainRefs = new Map();
+      const builder = plugin.build();
+
+      for (const { chainId, isTarget, labelName } of allChains) {
+        try {
+          // Create a chain selection expression
+          // MolScript: MS.struct.generator.atomGroups({ 'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]) })
+          
+          // Use the plugin's component creation with a selection query
+          const chainComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+            structureCell,
+            createChainExpression(chainId),
+            `chain-${chainId}`,
+            { label: `Chain ${chainId} (${labelName || 'unknown'})` }
+          );
+
+          if (chainComponent) {
+            console.log('[Geneguessr] Created component for chain', chainId, '- ref:', chainComponent.ref);
+            chainRefs.set(chainId, {
+              ref: chainComponent.ref,
+              isTarget,
+              labelName
+            });
+
+            // Add a representation to the chain component
+            await plugin.builders.structure.representation.addRepresentation(
+              chainComponent,
+              {
+                type: 'cartoon',
+                color: 'chain-id',
+                size: 'uniform'
+              }
+            );
+          } else {
+            console.warn('[Geneguessr] Failed to create component for chain', chainId);
+          }
+        } catch (chainErr) {
+          console.warn('[Geneguessr] Error creating component for chain', chainId, chainErr);
+        }
+      }
+
+      if (chainRefs.size > 0) {
+        viewerChainComponentRefs.set(viewerId, chainRefs);
+        console.log('[Geneguessr] Stored', chainRefs.size, 'chain component refs for', viewerId);
+        return true;
+      }
+
+    } catch (err) {
+      console.warn('[Geneguessr] createPerChainComponents failed:', err);
+    }
+
+    return false;
+  }
+
+  /**
+   * Create a MolScript expression to select a specific chain by auth_asym_id
+   */
+  function createChainExpression(chainId) {
+    // This creates a query expression that selects all atoms in a specific chain
+    // Equivalent to MolScript: 
+    //   MS.struct.generator.atomGroups({ 
+    //     'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]) 
+    //   })
+    return {
+      language: 'mol-script',
+      expression: `(sel.atom.atom-groups :chain-test (= atom.auth_asym_id "${chainId}"))`
+    };
+  }
+
   /**
    * Apply chain visibility based on toggle state.
    * When OFF (default): Only target chain visible, callouts hidden
    * When ON: All chains visible with coloring, callouts shown
    * 
-   * Uses Mol* component visibility system for true hide/show behavior.
-   * Accesses the structure hierarchy to find components and toggle their visibility.
+   * Uses per-chain components created by createPerChainComponents() for granular control.
+   * Falls back to hiding the entire default "Polymer" component if per-chain components exist.
    */
   async function applyChainVisibility(viewerId, showComplex) {
     const viewer = activeViewers.get(viewerId);
@@ -1509,7 +1638,6 @@
     }
     
     try {
-      // Access Mol* plugin internals for component visibility control
       const plugin = viewer.plugin;
       if (!plugin) {
         console.warn('[Geneguessr] applyChainVisibility: no plugin context available');
@@ -1517,103 +1645,78 @@
       }
       
       const state = plugin.state.data;
-      const hierarchy = plugin.managers?.structure?.hierarchy;
       
-      if (!hierarchy || !hierarchy.current || !hierarchy.current.structures) {
-        console.warn('[Geneguessr] applyChainVisibility: structure hierarchy not available');
+      // Check if we have per-chain component refs
+      const chainRefs = viewerChainComponentRefs.get(viewerId);
+      
+      if (chainRefs && chainRefs.size > 0) {
+        // Use per-chain components for visibility control
+        console.log('[Geneguessr] Using per-chain component refs:', chainRefs.size, 'chains');
+        
+        for (const [chainId, refData] of chainRefs) {
+          const { ref, isTarget } = refData;
+          const shouldBeVisible = isTarget || showComplex;
+          const shouldBeHidden = !shouldBeVisible;
+          
+          const cell = state.cells.get(ref);
+          if (cell) {
+            const currentlyHidden = cell.state?.isHidden || false;
+            if (currentlyHidden !== shouldBeHidden) {
+              console.log('[Geneguessr] Toggling chain', chainId, ':', currentlyHidden, '->', shouldBeHidden);
+              state.updateCellState(ref, { isHidden: shouldBeHidden });
+            }
+          }
+        }
+        
+        console.log('[Geneguessr] applyChainVisibility completed with per-chain refs (showComplex=' + showComplex + ')');
         return;
       }
       
-      // Get all structures (usually just one)
-      const structures = hierarchy.current.structures;
-      console.log('[Geneguessr] Found', structures.length, 'structure(s) in hierarchy');
+      // Fallback: Use pdbe-molstar visual.select API with transparency for non-target chains
+      console.log('[Geneguessr] No per-chain refs, using visual.select with color/transparency');
       
-      for (const structRef of structures) {
-        const components = structRef.components || [];
-        console.log('[Geneguessr] Structure has', components.length, 'component(s)');
+      const accentColor = getAccentColorRgb();
+      const bgColors = resolveViewerColors(container);
+      const bgColor = bgColors.background || { r: 0, g: 0, b: 0 };
+      
+      if (showComplex) {
+        // Show all chains with distinct colors
+        const selectData = [];
+        const neutralColor = getNeutralChainColor(container) || hexToRgb(DARK_NEUTRAL_GRAY_HEX);
         
-        for (const comp of components) {
-          // Get component label/key to determine which chain it represents
-          const cell = comp.cell;
-          if (!cell || !cell.obj) continue;
-          
-          const label = cell.obj.label || '';
-          const ref = cell.transform.ref;
-          
-          // Try to determine which chain this component represents
-          // Component labels often contain chain info like "Chain A" or just "A"
-          let componentChains = [];
-          
-          // Check the component's structure data for chain info
-          const data = cell.obj.data;
-          if (data && data.units) {
-            // Extract unique chain IDs from the component's units
-            const chainSet = new Set();
-            for (const unit of data.units) {
-              if (unit.model && unit.model.atomicHierarchy) {
-                const chains = unit.model.atomicHierarchy.chains;
-                if (chains && chains.auth_asym_id) {
-                  // Get auth_asym_id values for this unit
-                  const offsets = unit.elements;
-                  if (offsets && chains.offsets) {
-                    // Sample first element to get chain
-                    const firstElement = offsets[0] || 0;
-                    for (let i = 0; i < chains.offsets.length - 1; i++) {
-                      if (firstElement >= chains.offsets[i] && firstElement < chains.offsets[i + 1]) {
-                        const authChain = chains.auth_asym_id.value(i);
-                        if (authChain) chainSet.add(authChain);
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            componentChains = [...chainSet];
-          }
-          
-          // Fallback: parse label for chain info
-          if (componentChains.length === 0) {
-            const chainMatch = label.match(/Chain\s+([A-Za-z0-9]+)/i) || label.match(/^([A-Za-z])$/);
-            if (chainMatch) {
-              componentChains = [chainMatch[1]];
-            }
-          }
-          
-          console.log('[Geneguessr] Component:', { label, ref, chains: componentChains });
-          
-          // Determine if this component should be visible
-          let shouldBeVisible = showComplex; // Default: show all when toggle is ON
-          
-          if (componentChains.length > 0) {
-            const hasTargetChain = componentChains.some(c => targetChains.has(c));
-            const hasNonTargetChain = componentChains.some(c => nonTargetChains.has(c));
-            
-            if (hasTargetChain && !hasNonTargetChain) {
-              // Pure target chain component - always visible
-              shouldBeVisible = true;
-            } else if (hasNonTargetChain && !hasTargetChain) {
-              // Pure non-target chain component - visible only when showComplex
-              shouldBeVisible = showComplex;
-            } else {
-              // Mixed or unknown - follow showComplex toggle
-              shouldBeVisible = showComplex;
-            }
-          }
-          
-          // Apply visibility using Mol* state system
-          const currentlyHidden = cell.state.isHidden;
-          const shouldBeHidden = !shouldBeVisible;
-          
-          if (currentlyHidden !== shouldBeHidden) {
-            console.log('[Geneguessr] Toggling visibility for', label, ':', currentlyHidden, '->', shouldBeHidden);
-            // Use state.updateCellState to toggle visibility
-            state.updateCellState(ref, { isHidden: shouldBeHidden });
-          }
+        for (const chainId of targetChains) {
+          selectData.push({
+            auth_asym_id: chainId,
+            color: { r: Math.round(accentColor.r), g: Math.round(accentColor.g), b: Math.round(accentColor.b) }
+          });
         }
+        for (const chainId of nonTargetChains) {
+          selectData.push({
+            auth_asym_id: chainId,
+            color: { r: Math.round(neutralColor.r), g: Math.round(neutralColor.g), b: Math.round(neutralColor.b) }
+          });
+        }
+        
+        await viewer.visual.select({ data: selectData, structureNumber: 1 });
+      } else {
+        // Hide non-target chains by making them match background
+        const selectData = [];
+        
+        for (const chainId of targetChains) {
+          selectData.push({
+            auth_asym_id: chainId,
+            color: { r: Math.round(accentColor.r), g: Math.round(accentColor.g), b: Math.round(accentColor.b) }
+          });
+        }
+        
+        await viewer.visual.select({
+          data: selectData,
+          nonSelectedColor: { r: Math.round(bgColor.r), g: Math.round(bgColor.g), b: Math.round(bgColor.b) },
+          structureNumber: 1
+        });
       }
       
-      console.log('[Geneguessr] applyChainVisibility completed (showComplex=' + showComplex + ')');
+      console.log('[Geneguessr] applyChainVisibility completed with visual.select fallback (showComplex=' + showComplex + ')');
       
     } catch (err) {
       console.warn('[Geneguessr] applyChainVisibility failed:', err);
@@ -2003,6 +2106,17 @@
             chainLabels: structureInfo.chainLabels,
             pdbId: moleculeId
           });
+          
+          // Try to create per-chain components for granular visibility control
+          // This is async but we don't need to wait - visibility will use fallback if not ready
+          createPerChainComponents(containerId, structureInfo.chainLabels).then(success => {
+            if (success) {
+              console.log('[Geneguessr] Per-chain components created successfully');
+            } else {
+              console.log('[Geneguessr] Using visual.select fallback for chain visibility');
+            }
+          });
+          
           // Apply initial visibility (hide non-target chains by default)
           applyChainVisibility(containerId, false);
         }
@@ -2139,6 +2253,7 @@
     viewerStructureInfo.delete(containerId);
     viewerStructureSources.delete(containerId);
     viewerChainData.delete(containerId);
+    perChainComponentRefs.delete(containerId);
   }
 
   function markGuessViewersDirty() {
