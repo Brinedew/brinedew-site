@@ -1530,6 +1530,12 @@
           // Create a chain selection expression
           // MolScript: MS.struct.generator.atomGroups({ 'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]) })
           
+          console.log('[Geneguessr] Attempting to create component for chain', chainId);
+          console.log('[Geneguessr] structureCell:', structureCell);
+          console.log('[Geneguessr] structureCell.obj:', structureCell.obj);
+          console.log('[Geneguessr] plugin.builders.structure:', plugin.builders?.structure);
+          console.log('[Geneguessr] tryCreateComponentFromExpression:', typeof plugin.builders?.structure?.tryCreateComponentFromExpression);
+
           // Use the plugin's component creation with a selection query
           const chainComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
             structureCell,
@@ -1537,6 +1543,8 @@
             `chain-${chainId}`,
             { label: `Chain ${chainId} (${labelName || 'unknown'})` }
           );
+
+          console.log('[Geneguessr] chainComponent result:', chainComponent);
 
           if (chainComponent) {
             console.log('[Geneguessr] Created component for chain', chainId, '- ref:', chainComponent.ref);
