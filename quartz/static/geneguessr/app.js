@@ -1465,7 +1465,7 @@
     container.querySelector('.pg-chain-callouts')?.remove();
 
     const overlay = document.createElement('div');
-    overlay.className = 'pg-chain-callouts';
+    overlay.className = 'pg-chain-callouts pg-chain-callouts-3d';
     overlay.style.display = 'none';
 
     // Target chains first, then up to 4 others
@@ -1482,7 +1482,7 @@
       if (!chainId) return;
       
       const el = document.createElement('div');
-      el.className = 'pg-chain-callout' + (label.is_target ? ' pg-chain-callout-target' : '');
+      el.className = 'pg-chain-callout pg-chain-callout-3d' + (label.is_target ? ' pg-chain-callout-target' : '');
       el.dataset.chainId = chainId;
       
       const gene = label.gene || label.name?.split(' ')[0] || '?';
