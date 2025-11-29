@@ -1465,6 +1465,10 @@
    * Apply chain visibility based on toggle state.
    * When OFF (default): Only target chain visible, callouts hidden
    * When ON: All chains visible with coloring, callouts shown
+   * 
+   * Uses visual.select() API:
+   * - data: array of QueryParam objects with auth_asym_id and color
+   * - nonSelectedColor: color for chains not in data array
    */
   async function applyChainVisibility(viewerId, showComplex) {
     const viewer = activeViewers.get(viewerId);
@@ -1484,6 +1488,9 @@
     // Find target chain(s)
     const targetLabel = chainLabels.find(l => l.is_target);
     const targetChains = targetLabel ? targetLabel.chains : [];
+    const nonTargetChains = chainLabels
+      .filter(l => !l.is_target)
+      .flatMap(l => l.chains);
     
     // Toggle callout visibility
     const callouts = container.querySelector('.pg-chain-callouts');
@@ -1491,16 +1498,17 @@
       callouts.style.display = showComplex ? 'flex' : 'none';
     }
     
+    const accentColor = getAccentColorRgb();
+    const neutralColor = getNeutralChainColor(container) || hexToRgb(DARK_NEUTRAL_GRAY_HEX);
+    
     try {
       if (showComplex) {
-        // Show all chains with coloring: target in accent, others in neutral gray
-        const accentColor = getAccentColorRgb();
-        const neutralColor = getNeutralChainColor(container) || hexToRgb(DARK_NEUTRAL_GRAY_HEX);
+        // Show all chains: target in accent, others in neutral gray
+        const selectData = [];
         
-        // Build selection data for target chains only (will be colored in accent)
-        const targetData = [];
+        // Target chains in accent color
         for (const chainId of targetChains) {
-          targetData.push({
+          selectData.push({
             auth_asym_id: chainId,
             color: {
               r: Math.round(accentColor.r || 0),
@@ -1510,38 +1518,29 @@
           });
         }
         
-        // Apply coloring: target chains in accent, everything else in neutral
+        // Non-target chains in neutral color (visible)
+        for (const chainId of nonTargetChains) {
+          selectData.push({
+            auth_asym_id: chainId,
+            color: {
+              r: Math.round(neutralColor.r || 0),
+              g: Math.round(neutralColor.g || 0),
+              b: Math.round(neutralColor.b || 0)
+            }
+          });
+        }
+        
         await viewer.visual.select({
-          data: targetData,
-          nonSelectedColor: {
-            r: Math.round(neutralColor.r || 0),
-            g: Math.round(neutralColor.g || 0),
-            b: Math.round(neutralColor.b || 0)
-          },
+          data: selectData,
           structureId: pdbId
         });
       } else {
-        // Hide non-target chains by making them invisible (opacity 0)
-        // Show only target chains
-        const hideData = [];
-        for (const label of chainLabels) {
-          if (label.is_target) {
-            continue; // Keep target visible
-          }
-          for (const chainId of label.chains) {
-            hideData.push({
-              auth_asym_id: chainId,
-              representation: 'cartoon',
-              opacity: 0
-            });
-          }
-        }
+        // Hide non-target chains: only show target in accent
+        // Use visual.select with only target chains colored; non-targets get transparent nonSelectedColor
+        const selectData = [];
         
-        // First reset to default coloring, then hide non-target chains
-        const accentColor = getAccentColorRgb();
-        const targetData = [];
         for (const chainId of targetChains) {
-          targetData.push({
+          selectData.push({
             auth_asym_id: chainId,
             color: {
               r: Math.round(accentColor.r || 0),
@@ -1551,30 +1550,20 @@
           });
         }
         
-        // Make non-target chains transparent
+        // Set nonSelectedColor to background color (effectively hiding non-target chains)
+        // This makes them blend with background instead of truly hiding
+        const bgColors = resolveViewerColors(container);
+        const bgColor = bgColors.background || { r: 0, g: 0, b: 0 };
+        
         await viewer.visual.select({
-          data: targetData,
-          nonSelectedColor: { r: 0, g: 0, b: 0 }, // Will be hidden anyway
+          data: selectData,
+          nonSelectedColor: {
+            r: Math.round(bgColor.r || 0),
+            g: Math.round(bgColor.g || 0),
+            b: Math.round(bgColor.b || 0)
+          },
           structureId: pdbId
         });
-        
-        // Use visibility API if available, otherwise use transparency
-        if (viewer.visual.visibility) {
-          const hideChainIds = chainLabels
-            .filter(l => !l.is_target)
-            .flatMap(l => l.chains);
-          
-          for (const chainId of hideChainIds) {
-            try {
-              await viewer.visual.visibility({
-                polymer: false,
-                auth_asym_id: chainId
-              });
-            } catch {
-              // Visibility API may not be available in all versions
-            }
-          }
-        }
       }
     } catch (err) {
       console.warn('[Geneguessr] applyChainVisibility failed:', err);
