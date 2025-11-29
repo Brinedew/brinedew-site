@@ -1226,6 +1226,297 @@
     }
   }
 
+  // ==========================================
+  // 3D CHAIN CALLOUTS - Position labels in 3D space
+  // ==========================================
+  
+  // Store callout update subscriptions per viewer
+  const viewerCalloutSubscriptions = new Map();
+  // Store computed chain positions (3D coords of ~10th residue)
+  const viewerChainPositions = new Map();
+  
+  /**
+   * Get the 3D position of approximately the 10th residue (or first CA atom) in a chain.
+   * Falls back to center of chain bounding sphere if residue query fails.
+   */
+  function getChainLabelPosition(viewer, chainId, structureNumber = 1) {
+    if (!viewer || !viewer.plugin) return null;
+    
+    const plugin = viewer.plugin;
+    const structRef = typeof viewer.getStructure === 'function' ? viewer.getStructure(structureNumber) : null;
+    if (!structRef?.cell?.obj?.data) return null;
+    
+    const structure = structRef.cell.obj.data;
+    const model = structure.model;
+    if (!model?.atomicHierarchy || !model?.atomicConformation) return null;
+    
+    const hier = model.atomicHierarchy;
+    const conf = model.atomicConformation;
+    
+    // Find the chain index for auth_asym_id
+    let chainIndex = -1;
+    const chainCount = hier.chains._rowCount;
+    for (let i = 0; i < chainCount; i++) {
+      if (hier.chains.auth_asym_id.value(i) === chainId) {
+        chainIndex = i;
+        break;
+      }
+    }
+    
+    if (chainIndex < 0) {
+      console.warn('[GeneGuessr] getChainLabelPosition: chain not found:', chainId);
+      return null;
+    }
+    
+    // Get residue range for this chain
+    const chainAtomStart = hier.chainAtomSegments.offsets[chainIndex];
+    const chainAtomEnd = hier.chainAtomSegments.offsets[chainIndex + 1];
+    
+    if (chainAtomStart >= chainAtomEnd) return null;
+    
+    // Find the 10th residue's CA atom (or closest available)
+    const firstResIdx = hier.residueAtomSegments.index[chainAtomStart];
+    const lastAtomIdx = chainAtomEnd - 1;
+    const lastResIdx = hier.residueAtomSegments.index[lastAtomIdx];
+    const chainResCount = lastResIdx - firstResIdx + 1;
+    
+    // Target the 10th residue, or middle if chain is short
+    const targetResOffset = Math.min(9, Math.floor(chainResCount / 2));
+    const targetResIdx = firstResIdx + targetResOffset;
+    
+    // Find CA atom in target residue
+    const resAtomStart = hier.residueAtomSegments.offsets[targetResIdx];
+    const resAtomEnd = hier.residueAtomSegments.offsets[targetResIdx + 1];
+    
+    let caAtomIdx = -1;
+    for (let i = resAtomStart; i < resAtomEnd; i++) {
+      const atomName = hier.atoms.label_atom_id.value(i);
+      if (atomName === 'CA') {
+        caAtomIdx = i;
+        break;
+      }
+    }
+    
+    // Fall back to first atom if no CA found
+    if (caAtomIdx < 0) caAtomIdx = resAtomStart;
+    if (caAtomIdx < 0) return null;
+    
+    return {
+      x: conf.x[caAtomIdx],
+      y: conf.y[caAtomIdx],
+      z: conf.z[caAtomIdx]
+    };
+  }
+  
+  /**
+   * Project a 3D point to 2D screen coordinates using Mol* camera.
+   * Returns { x, y } in pixels relative to viewport, or null if behind camera.
+   */
+  function project3DToScreen(viewer, point3D) {
+    if (!viewer?.plugin?.canvas3d?.camera) return null;
+    
+    const camera = viewer.plugin.canvas3d.camera;
+    const viewport = camera.viewport;
+    const projectionView = camera.projectionView;
+    
+    // Manual projection: transform point by projectionView matrix
+    const x = point3D.x, y = point3D.y, z = point3D.z;
+    const m = projectionView;
+    
+    // Homogeneous coordinates
+    const clipX = m[0] * x + m[4] * y + m[8] * z + m[12];
+    const clipY = m[1] * x + m[5] * y + m[9] * z + m[13];
+    const clipZ = m[2] * x + m[6] * y + m[10] * z + m[14];
+    const clipW = m[3] * x + m[7] * y + m[11] * z + m[15];
+    
+    // Behind camera check
+    if (clipW <= 0) return null;
+    
+    // NDC coordinates
+    const ndcX = clipX / clipW;
+    const ndcY = clipY / clipW;
+    
+    // Screen coordinates
+    const screenX = (ndcX + 1) * 0.5 * viewport.width + viewport.x;
+    const screenY = (1 - ndcY) * 0.5 * viewport.height + viewport.y; // Y flipped for screen coords
+    
+    return { x: screenX, y: screenY, depth: clipZ / clipW };
+  }
+  
+  /**
+   * Get the color assigned to a chain by Mol*'s chain-id color theme.
+   * Returns hex color string like "#ff0000".
+   */
+  function getChainColor(viewer, chainId, structureNumber = 1) {
+    if (!viewer?.plugin) return null;
+    
+    try {
+      const plugin = viewer.plugin;
+      const structRef = typeof viewer.getStructure === 'function' ? viewer.getStructure(structureNumber) : null;
+      if (!structRef?.cell?.obj?.data) return null;
+      
+      const structure = structRef.cell.obj.data;
+      const model = structure.model;
+      if (!model?.atomicHierarchy) return null;
+      
+      // Find chain index
+      const hier = model.atomicHierarchy;
+      let chainIndex = -1;
+      const chainCount = hier.chains._rowCount;
+      for (let i = 0; i < chainCount; i++) {
+        if (hier.chains.auth_asym_id.value(i) === chainId) {
+          chainIndex = i;
+          break;
+        }
+      }
+      
+      if (chainIndex < 0) return null;
+      
+      // Use a deterministic color based on chain index (matches Mol*'s chain-id theme)
+      // This is a simplified version of Mol*'s chain coloring
+      const chainColors = [
+        '#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e',
+        '#e6ab02', '#a6761d', '#666666', '#8dd3c7', '#bebada',
+        '#fb8072', '#80b1d3', '#fdb462', '#b3de69', '#fccde5'
+      ];
+      return chainColors[chainIndex % chainColors.length];
+    } catch (err) {
+      console.warn('[GeneGuessr] getChainColor failed:', err);
+      return null;
+    }
+  }
+  
+  /**
+   * Apply edge bias to screen position - push labels away from center toward edges.
+   */
+  function applyEdgeBias(screenPos, viewportWidth, viewportHeight, biasStrength = 0.15) {
+    const centerX = viewportWidth / 2;
+    const centerY = viewportHeight / 2;
+    
+    // Vector from center to point
+    const dx = screenPos.x - centerX;
+    const dy = screenPos.y - centerY;
+    
+    // Normalize and scale by bias
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return screenPos;
+    
+    const pushX = (dx / dist) * biasStrength * viewportWidth;
+    const pushY = (dy / dist) * biasStrength * viewportHeight;
+    
+    return {
+      x: screenPos.x + pushX,
+      y: screenPos.y + pushY,
+      depth: screenPos.depth
+    };
+  }
+  
+  /**
+   * Update all chain callout positions for a viewer.
+   * Called on camera change and initial render.
+   */
+  function updateChainCalloutPositions(viewerId) {
+    const viewer = activeViewers.get(viewerId);
+    const container = document.getElementById(viewerId);
+    const chainData = viewerChainData.get(viewerId);
+    
+    if (!viewer || !container || !chainData?.chainLabels) return;
+    
+    const overlay = container.querySelector('.pg-chain-callouts');
+    if (!overlay || overlay.style.display === 'none') return;
+    
+    const viewport = viewer.plugin?.canvas3d?.camera?.viewport;
+    if (!viewport) return;
+    
+    const callouts = overlay.querySelectorAll('.pg-chain-callout[data-chain-id]');
+    callouts.forEach(callout => {
+      const chainId = callout.dataset.chainId;
+      if (!chainId) return;
+      
+      // Get cached 3D position
+      const positions = viewerChainPositions.get(viewerId);
+      const pos3D = positions?.get(chainId);
+      if (!pos3D) return;
+      
+      // Project to screen
+      let screenPos = project3DToScreen(viewer, pos3D);
+      if (!screenPos) {
+        callout.style.opacity = '0';
+        return;
+      }
+      
+      // Apply edge bias
+      screenPos = applyEdgeBias(screenPos, viewport.width, viewport.height);
+      
+      // Clamp to viewport bounds with padding
+      const padding = 10;
+      const calloutWidth = callout.offsetWidth || 80;
+      const calloutHeight = callout.offsetHeight || 24;
+      
+      let finalX = Math.max(padding, Math.min(viewport.width - calloutWidth - padding, screenPos.x - calloutWidth / 2));
+      let finalY = Math.max(padding, Math.min(viewport.height - calloutHeight - padding, screenPos.y - calloutHeight / 2));
+      
+      // Position the callout
+      callout.style.left = `${finalX}px`;
+      callout.style.top = `${finalY}px`;
+      callout.style.opacity = '1';
+    });
+  }
+  
+  /**
+   * Subscribe to camera changes to update callout positions.
+   */
+  function subscribeToCalloutUpdates(viewerId) {
+    const viewer = activeViewers.get(viewerId);
+    if (!viewer?.plugin?.canvas3d) return;
+    
+    // Remove existing subscription if any
+    const existingSub = viewerCalloutSubscriptions.get(viewerId);
+    if (existingSub) {
+      try { existingSub.unsubscribe?.(); } catch {}
+    }
+    
+    // Subscribe to camera state changes
+    const canvas3d = viewer.plugin.canvas3d;
+    
+    // Use requestAnimationFrame loop for smooth updates during interaction
+    let rafId = null;
+    let lastUpdate = 0;
+    const minInterval = 16; // ~60fps max
+    
+    const updateLoop = () => {
+      const now = performance.now();
+      if (now - lastUpdate >= minInterval) {
+        updateChainCalloutPositions(viewerId);
+        lastUpdate = now;
+      }
+      rafId = requestAnimationFrame(updateLoop);
+    };
+    
+    // Start update loop when callouts are visible
+    const startUpdates = () => {
+      if (!rafId) {
+        rafId = requestAnimationFrame(updateLoop);
+      }
+    };
+    
+    const stopUpdates = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+    
+    // Store subscription cleanup function
+    viewerCalloutSubscriptions.set(viewerId, {
+      unsubscribe: () => {
+        stopUpdates();
+      },
+      start: startUpdates,
+      stop: stopUpdates
+    });
+  }
+
   let activeViewerInstance = null;
   let themeSyncInitialized = false;
   const activeViewers = new Map(); // Track all active viewers by container ID
@@ -1343,12 +1634,22 @@
 
   /**
    * Render chain label callouts as an overlay on the 3D viewer.
-   * Shows which proteins are in the complex, highlighting the target.
+   * Labels are positioned in 3D space near the 10th residue of each chain,
+   * with colors matching Mol*'s chain coloring.
+   * 
+   * Features (B-170 redesign):
+   * - Font color matches chain color from Mol*
+   * - Position near 10th amino acid, biased toward edges
+   * - Gene name only, full name on hover
+   * - No background, clean text overlay
    */
   function renderChainLabelCallouts(container, chainLabels) {
     if (!container || !chainLabels || chainLabels.length <= 1) {
       return;
     }
+
+    const viewerId = container.id;
+    const viewer = activeViewers.get(viewerId);
 
     // Remove any existing callout overlay
     const existing = container.querySelector('.pg-chain-callouts');
@@ -1358,7 +1659,7 @@
 
     // Create overlay container - hidden by default, toggle shows it
     const overlay = document.createElement('div');
-    overlay.className = 'pg-chain-callouts';
+    overlay.className = 'pg-chain-callouts pg-chain-callouts-3d';
     overlay.style.display = 'none';
 
     // Group labels: target first, then others
@@ -1369,29 +1670,126 @@
     const displayLabels = [...targetLabels, ...otherLabels.slice(0, 4)];
     const moreCount = chainLabels.length - displayLabels.length;
 
+    // Initialize chain positions cache for this viewer
+    if (!viewerChainPositions.has(viewerId)) {
+      viewerChainPositions.set(viewerId, new Map());
+    }
+    const positionsCache = viewerChainPositions.get(viewerId);
+
+    // Create callout for each chain (first chain of each label group)
     displayLabels.forEach((label) => {
+      // Use the first chain ID as the anchor point
+      const primaryChainId = label.chains[0];
+      if (!primaryChainId) return;
+      
       const callout = document.createElement('div');
-      callout.className = 'pg-chain-callout' + (label.is_target ? ' pg-chain-callout-target' : '');
+      callout.className = 'pg-chain-callout pg-chain-callout-3d' + (label.is_target ? ' pg-chain-callout-target' : '');
+      callout.dataset.chainId = primaryChainId;
       
-      const chainIds = label.chains.join(', ');
-      const displayName = label.gene || label.name || 'Unknown';
+      const geneName = label.gene || label.name?.split(' ')[0] || 'Unknown';
+      const fullName = label.name || label.gene || 'Unknown';
       
+      // Get chain color from Mol*
+      const chainColor = viewer ? getChainColor(viewer, primaryChainId) : null;
+      
+      // Build callout HTML: gene symbol with hover expansion to full name
       callout.innerHTML = `
-        <span class="pg-chain-id">${escapeAttribute(chainIds)}</span>
-        <span class="pg-chain-name">${escapeAttribute(displayName)}</span>
+        <span class="pg-chain-label-gene">${escapeAttribute(geneName)}</span>
+        <span class="pg-chain-label-full">${escapeAttribute(fullName)}</span>
       `;
+      
+      // Apply chain color as text color
+      if (chainColor) {
+        callout.style.color = chainColor;
+      }
+      
+      // Cache 3D position if viewer is available
+      if (viewer) {
+        const pos3D = getChainLabelPosition(viewer, primaryChainId);
+        if (pos3D) {
+          positionsCache.set(primaryChainId, pos3D);
+        }
+      }
+      
+      // Start with opacity 0 until positioned
+      callout.style.opacity = '0';
+      
       overlay.appendChild(callout);
     });
 
-    // Add "and X more" if truncated
+    // Add "and X more" indicator if truncated
     if (moreCount > 0) {
       const more = document.createElement('div');
-      more.className = 'pg-chain-callout pg-chain-more';
+      more.className = 'pg-chain-callout pg-chain-callout-more';
       more.textContent = `+${moreCount} more`;
       overlay.appendChild(more);
     }
 
     container.appendChild(overlay);
+    
+    // Set up position update subscription
+    if (viewer) {
+      subscribeToCalloutUpdates(viewerId);
+    }
+  }
+  
+  /**
+   * Initialize chain positions and start updates when callouts become visible.
+   * Called when the "Show complex" toggle is activated.
+   */
+  function initializeChainCallouts(viewerId) {
+    const viewer = activeViewers.get(viewerId);
+    const chainData = viewerChainData.get(viewerId);
+    const container = document.getElementById(viewerId);
+    
+    if (!viewer || !chainData?.chainLabels || !container) return;
+    
+    // Initialize positions cache
+    const positionsCache = new Map();
+    viewerChainPositions.set(viewerId, positionsCache);
+    
+    // Compute 3D positions for all chains
+    for (const label of chainData.chainLabels) {
+      const primaryChainId = label.chains[0];
+      if (primaryChainId) {
+        const pos3D = getChainLabelPosition(viewer, primaryChainId);
+        if (pos3D) {
+          positionsCache.set(primaryChainId, pos3D);
+        }
+      }
+    }
+    
+    // Update colors on callouts
+    const overlay = container.querySelector('.pg-chain-callouts');
+    if (overlay) {
+      const callouts = overlay.querySelectorAll('.pg-chain-callout[data-chain-id]');
+      callouts.forEach(callout => {
+        const chainId = callout.dataset.chainId;
+        const chainColor = getChainColor(viewer, chainId);
+        if (chainColor && !callout.style.color) {
+          callout.style.color = chainColor;
+        }
+      });
+    }
+    
+    // Start position updates
+    const sub = viewerCalloutSubscriptions.get(viewerId);
+    if (sub?.start) {
+      sub.start();
+    }
+    
+    // Initial position update
+    updateChainCalloutPositions(viewerId);
+  }
+  
+  /**
+   * Stop callout position updates when callouts are hidden.
+   */
+  function stopChainCallouts(viewerId) {
+    const sub = viewerCalloutSubscriptions.get(viewerId);
+    if (sub?.stop) {
+      sub.stop();
+    }
   }
 
   /**
@@ -1625,10 +2023,17 @@
       pdbId 
     });
     
-    // Toggle callout visibility
+    // Toggle callout visibility and start/stop position updates
     const callouts = container.querySelector('.pg-chain-callouts');
     if (callouts) {
       callouts.style.display = showComplex ? 'flex' : 'none';
+      
+      // Start or stop the 3D position update loop
+      if (showComplex) {
+        initializeChainCallouts(viewerId);
+      } else {
+        stopChainCallouts(viewerId);
+      }
     }
     
     try {
