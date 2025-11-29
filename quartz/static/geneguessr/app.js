@@ -1227,293 +1227,63 @@
   }
 
   // ==========================================
-  // 3D CHAIN CALLOUTS - Position labels in 3D space
+  // 3D CHAIN CALLOUTS
   // ==========================================
+  // One map holds everything: { rafId, positions, lastCamera }
+  const calloutState = new Map();
   
-  // Store callout update subscriptions per viewer
-  const viewerCalloutSubscriptions = new Map();
-  // Store computed chain positions (3D coords of ~10th residue)
-  const viewerChainPositions = new Map();
+  // Mol*'s chain-id palette (deterministic by index)
+  const CHAIN_COLORS = [
+    '#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e',
+    '#e6ab02', '#a6761d', '#666666', '#8dd3c7', '#bebada',
+    '#fb8072', '#80b1d3', '#fdb462', '#b3de69', '#fccde5'
+  ];
   
-  /**
-   * Get the 3D position of approximately the 10th residue (or first CA atom) in a chain.
-   * Falls back to center of chain bounding sphere if residue query fails.
-   */
-  function getChainLabelPosition(viewer, chainId, structureNumber = 1) {
-    if (!viewer || !viewer.plugin) return null;
-    
-    const plugin = viewer.plugin;
-    const structRef = typeof viewer.getStructure === 'function' ? viewer.getStructure(structureNumber) : null;
-    if (!structRef?.cell?.obj?.data) return null;
-    
-    const structure = structRef.cell.obj.data;
-    const model = structure.model;
-    if (!model?.atomicHierarchy || !model?.atomicConformation) return null;
-    
-    const hier = model.atomicHierarchy;
-    const conf = model.atomicConformation;
-    
-    // Find the chain index for auth_asym_id
-    let chainIndex = -1;
-    const chainCount = hier.chains._rowCount;
-    for (let i = 0; i < chainCount; i++) {
-      if (hier.chains.auth_asym_id.value(i) === chainId) {
-        chainIndex = i;
-        break;
-      }
-    }
-    
-    if (chainIndex < 0) {
-      console.warn('[GeneGuessr] getChainLabelPosition: chain not found:', chainId);
-      return null;
-    }
-    
-    // Get residue range for this chain
-    const chainAtomStart = hier.chainAtomSegments.offsets[chainIndex];
-    const chainAtomEnd = hier.chainAtomSegments.offsets[chainIndex + 1];
-    
-    if (chainAtomStart >= chainAtomEnd) return null;
-    
-    // Find the 10th residue's CA atom (or closest available)
-    const firstResIdx = hier.residueAtomSegments.index[chainAtomStart];
-    const lastAtomIdx = chainAtomEnd - 1;
-    const lastResIdx = hier.residueAtomSegments.index[lastAtomIdx];
-    const chainResCount = lastResIdx - firstResIdx + 1;
-    
-    // Target the 10th residue, or middle if chain is short
-    const targetResOffset = Math.min(9, Math.floor(chainResCount / 2));
-    const targetResIdx = firstResIdx + targetResOffset;
-    
-    // Find CA atom in target residue
-    const resAtomStart = hier.residueAtomSegments.offsets[targetResIdx];
-    const resAtomEnd = hier.residueAtomSegments.offsets[targetResIdx + 1];
-    
-    let caAtomIdx = -1;
-    for (let i = resAtomStart; i < resAtomEnd; i++) {
-      const atomName = hier.atoms.label_atom_id.value(i);
-      if (atomName === 'CA') {
-        caAtomIdx = i;
-        break;
-      }
-    }
-    
-    // Fall back to first atom if no CA found
-    if (caAtomIdx < 0) caAtomIdx = resAtomStart;
-    if (caAtomIdx < 0) return null;
-    
-    return {
-      x: conf.x[caAtomIdx],
-      y: conf.y[caAtomIdx],
-      z: conf.z[caAtomIdx]
-    };
-  }
-  
-  /**
-   * Project a 3D point to 2D screen coordinates using Mol* camera.
-   * Returns { x, y } in pixels relative to viewport, or null if behind camera.
-   */
-  function project3DToScreen(viewer, point3D) {
-    if (!viewer?.plugin?.canvas3d?.camera) return null;
-    
-    const camera = viewer.plugin.canvas3d.camera;
-    const viewport = camera.viewport;
-    const projectionView = camera.projectionView;
-    
-    // Manual projection: transform point by projectionView matrix
-    const x = point3D.x, y = point3D.y, z = point3D.z;
-    const m = projectionView;
-    
-    // Homogeneous coordinates
-    const clipX = m[0] * x + m[4] * y + m[8] * z + m[12];
-    const clipY = m[1] * x + m[5] * y + m[9] * z + m[13];
-    const clipZ = m[2] * x + m[6] * y + m[10] * z + m[14];
-    const clipW = m[3] * x + m[7] * y + m[11] * z + m[15];
-    
-    // Behind camera check
-    if (clipW <= 0) return null;
-    
-    // NDC coordinates
-    const ndcX = clipX / clipW;
-    const ndcY = clipY / clipW;
-    
-    // Screen coordinates
-    const screenX = (ndcX + 1) * 0.5 * viewport.width + viewport.x;
-    const screenY = (1 - ndcY) * 0.5 * viewport.height + viewport.y; // Y flipped for screen coords
-    
-    return { x: screenX, y: screenY, depth: clipZ / clipW };
-  }
-  
-  /**
-   * Get the color assigned to a chain by Mol*'s chain-id color theme.
-   * Returns hex color string like "#ff0000".
-   */
-  function getChainColor(viewer, chainId, structureNumber = 1) {
-    if (!viewer?.plugin) return null;
-    
-    try {
-      const plugin = viewer.plugin;
-      const structRef = typeof viewer.getStructure === 'function' ? viewer.getStructure(structureNumber) : null;
-      if (!structRef?.cell?.obj?.data) return null;
-      
-      const structure = structRef.cell.obj.data;
-      const model = structure.model;
-      if (!model?.atomicHierarchy) return null;
-      
-      // Find chain index
-      const hier = model.atomicHierarchy;
-      let chainIndex = -1;
-      const chainCount = hier.chains._rowCount;
-      for (let i = 0; i < chainCount; i++) {
-        if (hier.chains.auth_asym_id.value(i) === chainId) {
-          chainIndex = i;
-          break;
-        }
-      }
-      
-      if (chainIndex < 0) return null;
-      
-      // Use a deterministic color based on chain index (matches Mol*'s chain-id theme)
-      // This is a simplified version of Mol*'s chain coloring
-      const chainColors = [
-        '#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e',
-        '#e6ab02', '#a6761d', '#666666', '#8dd3c7', '#bebada',
-        '#fb8072', '#80b1d3', '#fdb462', '#b3de69', '#fccde5'
-      ];
-      return chainColors[chainIndex % chainColors.length];
-    } catch (err) {
-      console.warn('[GeneGuessr] getChainColor failed:', err);
-      return null;
-    }
-  }
-  
-  /**
-   * Apply edge bias to screen position - push labels away from center toward edges.
-   */
-  function applyEdgeBias(screenPos, viewportWidth, viewportHeight, biasStrength = 0.15) {
-    const centerX = viewportWidth / 2;
-    const centerY = viewportHeight / 2;
-    
-    // Vector from center to point
-    const dx = screenPos.x - centerX;
-    const dy = screenPos.y - centerY;
-    
-    // Normalize and scale by bias
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 1) return screenPos;
-    
-    const pushX = (dx / dist) * biasStrength * viewportWidth;
-    const pushY = (dy / dist) * biasStrength * viewportHeight;
-    
-    return {
-      x: screenPos.x + pushX,
-      y: screenPos.y + pushY,
-      depth: screenPos.depth
-    };
-  }
-  
-  /**
-   * Update all chain callout positions for a viewer.
-   * Called on camera change and initial render.
-   */
-  function updateChainCalloutPositions(viewerId) {
+  function updateCallouts(viewerId) {
     const viewer = activeViewers.get(viewerId);
     const container = document.getElementById(viewerId);
-    const chainData = viewerChainData.get(viewerId);
+    if (!viewer?.plugin?.canvas3d?.camera) return;
     
-    if (!viewer || !container || !chainData?.chainLabels) return;
-    
-    const overlay = container.querySelector('.pg-chain-callouts');
+    const overlay = container?.querySelector('.pg-chain-callouts');
     if (!overlay || overlay.style.display === 'none') return;
     
-    const viewport = viewer.plugin?.canvas3d?.camera?.viewport;
-    if (!viewport) return;
+    const state = calloutState.get(viewerId);
+    if (!state?.positions) return;
     
-    const callouts = overlay.querySelectorAll('.pg-chain-callout[data-chain-id]');
-    callouts.forEach(callout => {
-      const chainId = callout.dataset.chainId;
-      if (!chainId) return;
+    const cam = viewer.plugin.canvas3d.camera;
+    
+    // Skip if camera hasn't moved (check projectionView matrix)
+    const m = cam.projectionView;
+    const camKey = m[0] + m[5] + m[10] + m[12] + m[13] + m[14]; // cheap hash
+    if (state.lastCamera === camKey) return;
+    state.lastCamera = camKey;
+    
+    const vp = cam.viewport;
+    
+    overlay.querySelectorAll('.pg-chain-callout[data-chain-id]').forEach(el => {
+      const p = state.positions.get(el.dataset.chainId);
+      if (!p) { el.style.opacity = '0'; return; }
       
-      // Get cached 3D position
-      const positions = viewerChainPositions.get(viewerId);
-      const pos3D = positions?.get(chainId);
-      if (!pos3D) return;
+      // Project: homogeneous transform + perspective divide + viewport map
+      const w = m[3]*p.x + m[7]*p.y + m[11]*p.z + m[15];
+      if (w <= 0) { el.style.opacity = '0'; return; }
       
-      // Project to screen
-      let screenPos = project3DToScreen(viewer, pos3D);
-      if (!screenPos) {
-        callout.style.opacity = '0';
-        return;
-      }
+      const ndcX = (m[0]*p.x + m[4]*p.y + m[8]*p.z + m[12]) / w;
+      const ndcY = (m[1]*p.x + m[5]*p.y + m[9]*p.z + m[13]) / w;
+      let sx = (ndcX + 1) * 0.5 * vp.width + vp.x;
+      let sy = (1 - ndcY) * 0.5 * vp.height + vp.y;
       
-      // Apply edge bias
-      screenPos = applyEdgeBias(screenPos, viewport.width, viewport.height);
+      // Edge bias: push 15% of viewport away from center
+      const dx = sx - vp.width/2, dy = sy - vp.height/2;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      sx += (dx/d) * vp.width * 0.15;
+      sy += (dy/d) * vp.height * 0.15;
       
-      // Clamp to viewport bounds with padding
-      const padding = 10;
-      const calloutWidth = callout.offsetWidth || 80;
-      const calloutHeight = callout.offsetHeight || 24;
-      
-      let finalX = Math.max(padding, Math.min(viewport.width - calloutWidth - padding, screenPos.x - calloutWidth / 2));
-      let finalY = Math.max(padding, Math.min(viewport.height - calloutHeight - padding, screenPos.y - calloutHeight / 2));
-      
-      // Position the callout
-      callout.style.left = `${finalX}px`;
-      callout.style.top = `${finalY}px`;
-      callout.style.opacity = '1';
-    });
-  }
-  
-  /**
-   * Subscribe to camera changes to update callout positions.
-   */
-  function subscribeToCalloutUpdates(viewerId) {
-    const viewer = activeViewers.get(viewerId);
-    if (!viewer?.plugin?.canvas3d) return;
-    
-    // Remove existing subscription if any
-    const existingSub = viewerCalloutSubscriptions.get(viewerId);
-    if (existingSub) {
-      try { existingSub.unsubscribe?.(); } catch {}
-    }
-    
-    // Subscribe to camera state changes
-    const canvas3d = viewer.plugin.canvas3d;
-    
-    // Use requestAnimationFrame loop for smooth updates during interaction
-    let rafId = null;
-    let lastUpdate = 0;
-    const minInterval = 16; // ~60fps max
-    
-    const updateLoop = () => {
-      const now = performance.now();
-      if (now - lastUpdate >= minInterval) {
-        updateChainCalloutPositions(viewerId);
-        lastUpdate = now;
-      }
-      rafId = requestAnimationFrame(updateLoop);
-    };
-    
-    // Start update loop when callouts are visible
-    const startUpdates = () => {
-      if (!rafId) {
-        rafId = requestAnimationFrame(updateLoop);
-      }
-    };
-    
-    const stopUpdates = () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-    };
-    
-    // Store subscription cleanup function
-    viewerCalloutSubscriptions.set(viewerId, {
-      unsubscribe: () => {
-        stopUpdates();
-      },
-      start: startUpdates,
-      stop: stopUpdates
+      // Clamp to viewport
+      const pad = 10, ew = el.offsetWidth || 80, eh = el.offsetHeight || 24;
+      el.style.left = Math.max(pad, Math.min(vp.width - ew - pad, sx - ew/2)) + 'px';
+      el.style.top = Math.max(pad, Math.min(vp.height - eh - pad, sy - eh/2)) + 'px';
+      el.style.opacity = '1';
     });
   }
 
@@ -1633,91 +1403,106 @@
   }
 
   /**
-   * Render chain label callouts as an overlay on the 3D viewer.
-   * Labels are positioned in 3D space near the 10th residue of each chain,
-   * with colors matching Mol*'s chain coloring.
-   * 
-   * Features (B-170 redesign):
-   * - Font color matches chain color from Mol*
-   * - Position near 10th amino acid, biased toward edges
-   * - Gene name only, full name on hover
-   * - No background, clean text overlay
+   * Get 3D position for chain label (10th residue CA, or middle if short).
+   */
+  function getChainPos(viewer, chainId) {
+    const struct = viewer.getStructure?.(1)?.cell?.obj?.data;
+    if (!struct?.model?.atomicHierarchy) return null;
+    
+    const hier = struct.model.atomicHierarchy;
+    const conf = struct.model.atomicConformation;
+    
+    // Find chain by auth_asym_id
+    let ci = -1;
+    for (let i = 0; i < hier.chains._rowCount; i++) {
+      if (hier.chains.auth_asym_id.value(i) === chainId) { ci = i; break; }
+    }
+    if (ci < 0) return null;
+    
+    const atomStart = hier.chainAtomSegments.offsets[ci];
+    const atomEnd = hier.chainAtomSegments.offsets[ci + 1];
+    if (atomStart >= atomEnd) return null;
+    
+    // Target 10th residue or middle
+    const firstRes = hier.residueAtomSegments.index[atomStart];
+    const lastRes = hier.residueAtomSegments.index[atomEnd - 1];
+    const resCount = lastRes - firstRes + 1;
+    const targetRes = firstRes + Math.min(9, Math.floor(resCount / 2));
+    
+    // Find CA in target residue
+    const resStart = hier.residueAtomSegments.offsets[targetRes];
+    const resEnd = hier.residueAtomSegments.offsets[targetRes + 1];
+    let ai = resStart;
+    for (let i = resStart; i < resEnd; i++) {
+      if (hier.atoms.label_atom_id.value(i) === 'CA') { ai = i; break; }
+    }
+    
+    return { x: conf.x[ai], y: conf.y[ai], z: conf.z[ai] };
+  }
+  
+  /**
+   * Get chain index for color lookup.
+   */
+  function getChainIndex(viewer, chainId) {
+    const struct = viewer.getStructure?.(1)?.cell?.obj?.data;
+    if (!struct?.model?.atomicHierarchy) return -1;
+    const hier = struct.model.atomicHierarchy;
+    for (let i = 0; i < hier.chains._rowCount; i++) {
+      if (hier.chains.auth_asym_id.value(i) === chainId) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Render chain callouts. Creates DOM, computes positions, sets up RAF loop.
    */
   function renderChainLabelCallouts(container, chainLabels) {
-    if (!container || !chainLabels || chainLabels.length <= 1) {
-      return;
-    }
+    if (!container || !chainLabels || chainLabels.length <= 1) return;
 
     const viewerId = container.id;
     const viewer = activeViewers.get(viewerId);
+    
+    container.querySelector('.pg-chain-callouts')?.remove();
 
-    // Remove any existing callout overlay
-    const existing = container.querySelector('.pg-chain-callouts');
-    if (existing) {
-      existing.remove();
-    }
-
-    // Create overlay container - hidden by default, toggle shows it
     const overlay = document.createElement('div');
-    overlay.className = 'pg-chain-callouts pg-chain-callouts-3d';
+    overlay.className = 'pg-chain-callouts';
     overlay.style.display = 'none';
 
-    // Group labels: target first, then others
-    const targetLabels = chainLabels.filter(l => l.is_target);
-    const otherLabels = chainLabels.filter(l => !l.is_target);
+    // Target chains first, then up to 4 others
+    const targets = chainLabels.filter(l => l.is_target);
+    const others = chainLabels.filter(l => !l.is_target).slice(0, 4);
+    const display = [...targets, ...others];
+    const moreCount = chainLabels.length - display.length;
+
+    // Build state for this viewer
+    const positions = new Map();
     
-    // Limit to reasonable number of labels (target + up to 4 others)
-    const displayLabels = [...targetLabels, ...otherLabels.slice(0, 4)];
-    const moreCount = chainLabels.length - displayLabels.length;
-
-    // Initialize chain positions cache for this viewer
-    if (!viewerChainPositions.has(viewerId)) {
-      viewerChainPositions.set(viewerId, new Map());
-    }
-    const positionsCache = viewerChainPositions.get(viewerId);
-
-    // Create callout for each chain (first chain of each label group)
-    displayLabels.forEach((label) => {
-      // Use the first chain ID as the anchor point
-      const primaryChainId = label.chains[0];
-      if (!primaryChainId) return;
+    display.forEach((label, idx) => {
+      const chainId = label.chains[0];
+      if (!chainId) return;
       
-      const callout = document.createElement('div');
-      callout.className = 'pg-chain-callout pg-chain-callout-3d' + (label.is_target ? ' pg-chain-callout-target' : '');
-      callout.dataset.chainId = primaryChainId;
+      const el = document.createElement('div');
+      el.className = 'pg-chain-callout' + (label.is_target ? ' pg-chain-callout-target' : '');
+      el.dataset.chainId = chainId;
       
-      const geneName = label.gene || label.name?.split(' ')[0] || 'Unknown';
-      const fullName = label.name || label.gene || 'Unknown';
+      const gene = label.gene || label.name?.split(' ')[0] || '?';
+      const full = label.name || label.gene || '?';
+      el.innerHTML = `<span class="pg-chain-label-gene">${escapeAttribute(gene)}</span>` +
+                     `<span class="pg-chain-label-full">${escapeAttribute(full)}</span>`;
       
-      // Get chain color from Mol*
-      const chainColor = viewer ? getChainColor(viewer, primaryChainId) : null;
-      
-      // Build callout HTML: gene symbol with hover expansion to full name
-      callout.innerHTML = `
-        <span class="pg-chain-label-gene">${escapeAttribute(geneName)}</span>
-        <span class="pg-chain-label-full">${escapeAttribute(fullName)}</span>
-      `;
-      
-      // Apply chain color as text color
-      if (chainColor) {
-        callout.style.color = chainColor;
-      }
-      
-      // Cache 3D position if viewer is available
+      // Color from chain index
       if (viewer) {
-        const pos3D = getChainLabelPosition(viewer, primaryChainId);
-        if (pos3D) {
-          positionsCache.set(primaryChainId, pos3D);
-        }
+        const ci = getChainIndex(viewer, chainId);
+        if (ci >= 0) el.style.color = CHAIN_COLORS[ci % CHAIN_COLORS.length];
+        
+        const pos = getChainPos(viewer, chainId);
+        if (pos) positions.set(chainId, pos);
       }
       
-      // Start with opacity 0 until positioned
-      callout.style.opacity = '0';
-      
-      overlay.appendChild(callout);
+      el.style.opacity = '0';
+      overlay.appendChild(el);
     });
 
-    // Add "and X more" indicator if truncated
     if (moreCount > 0) {
       const more = document.createElement('div');
       more.className = 'pg-chain-callout pg-chain-callout-more';
@@ -1726,69 +1511,32 @@
     }
 
     container.appendChild(overlay);
-    
-    // Set up position update subscription
-    if (viewer) {
-      subscribeToCalloutUpdates(viewerId);
-    }
+    calloutState.set(viewerId, { rafId: null, positions });
   }
   
   /**
-   * Initialize chain positions and start updates when callouts become visible.
-   * Called when the "Show complex" toggle is activated.
+   * Start callout position updates (RAF loop).
    */
   function initializeChainCallouts(viewerId) {
-    const viewer = activeViewers.get(viewerId);
-    const chainData = viewerChainData.get(viewerId);
-    const container = document.getElementById(viewerId);
+    const state = calloutState.get(viewerId);
+    if (!state || state.rafId) return;
     
-    if (!viewer || !chainData?.chainLabels || !container) return;
-    
-    // Initialize positions cache
-    const positionsCache = new Map();
-    viewerChainPositions.set(viewerId, positionsCache);
-    
-    // Compute 3D positions for all chains
-    for (const label of chainData.chainLabels) {
-      const primaryChainId = label.chains[0];
-      if (primaryChainId) {
-        const pos3D = getChainLabelPosition(viewer, primaryChainId);
-        if (pos3D) {
-          positionsCache.set(primaryChainId, pos3D);
-        }
-      }
-    }
-    
-    // Update colors on callouts
-    const overlay = container.querySelector('.pg-chain-callouts');
-    if (overlay) {
-      const callouts = overlay.querySelectorAll('.pg-chain-callout[data-chain-id]');
-      callouts.forEach(callout => {
-        const chainId = callout.dataset.chainId;
-        const chainColor = getChainColor(viewer, chainId);
-        if (chainColor && !callout.style.color) {
-          callout.style.color = chainColor;
-        }
-      });
-    }
-    
-    // Start position updates
-    const sub = viewerCalloutSubscriptions.get(viewerId);
-    if (sub?.start) {
-      sub.start();
-    }
-    
-    // Initial position update
-    updateChainCalloutPositions(viewerId);
+    const loop = () => {
+      updateCallouts(viewerId);
+      state.rafId = requestAnimationFrame(loop);
+    };
+    state.rafId = requestAnimationFrame(loop);
+    updateCallouts(viewerId); // immediate first frame
   }
   
   /**
-   * Stop callout position updates when callouts are hidden.
+   * Stop callout updates.
    */
   function stopChainCallouts(viewerId) {
-    const sub = viewerCalloutSubscriptions.get(viewerId);
-    if (sub?.stop) {
-      sub.stop();
+    const state = calloutState.get(viewerId);
+    if (state?.rafId) {
+      cancelAnimationFrame(state.rafId);
+      state.rafId = null;
     }
   }
 
