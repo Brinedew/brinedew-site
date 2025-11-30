@@ -114,9 +114,42 @@ export default ((opts?: Partial<TagContentOptions>) => {
         allFiles: pages,
       }
 
+      // Find child tags (tags that start with this tag + "/")
+      const allTags = [
+        ...new Set(
+          allFiles.flatMap((data) => data.frontmatter?.tags ?? []).flatMap(getAllSegmentPrefixes),
+        ),
+      ]
+      const childTags = allTags
+        .filter((t) => t.startsWith(tag + "/") && t.split("/").length === tag.split("/").length + 1)
+        .sort((a, b) => a.localeCompare(b))
+
       return (
         <div class="popover-hint">
           <article class={classes}>{content}</article>
+          
+          {/* Show child tags if any exist */}
+          {childTags.length > 0 && (
+            <div class="child-tags">
+              <h3>Sub-tags</h3>
+              <ul class="tag-list">
+                {childTags.map((childTag) => {
+                  const childPages = allPagesWithTag(childTag)
+                  const displayName = childTag.slice(tag.length + 1) // Remove parent prefix
+                  const href = resolveRelative(fileData.slug!, `tags/${childTag}` as FullSlug)
+                  return (
+                    <li>
+                      <a class="internal tag-link" href={href}>
+                        {displayName}
+                      </a>
+                      <span class="tag-count">({childPages.length})</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
           <div class="page-listing">
             <p>{i18n(cfg.locale).pages.tagContent.itemsUnderTag({ count: pages.length })}</p>
             <div>
