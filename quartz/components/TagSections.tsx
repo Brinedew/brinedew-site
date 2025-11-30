@@ -3,107 +3,85 @@ import { FullSlug, resolveRelative } from "../util/path"
 import { classNames } from "../util/lang"
 import style from "./styles/tagSections.scss"
 
-type Options = {
-  minCount?: number
-  showCounts?: boolean
-}
-
-const defaultOpts: Options = {
-  minCount: 1,
-  showCounts: true,
-}
-
 // Section display names for top-level tag prefixes
-const SECTION_NAMES: Record<string, string> = {
-  content: "Content",
-  topic: "Topics", 
-  protein: "Proteins",
-  meta: "Meta",
+const SECTION_CONFIG: Record<string, { displayName: string }> = {
+  content: { displayName: "Content" },
+  topic: { displayName: "Topics" },
+  protein: { displayName: "Proteins" },
+  meta: { displayName: "Meta" },
 }
 
 type TagInfo = {
   fullPath: string
   displayName: string
-  count: number
 }
 
 type Section = {
-  name: string
+  key: string
+  displayName: string
   tags: TagInfo[]
 }
 
-export default ((opts?: Options) => {
-  const options = { ...defaultOpts, ...opts }
-
-  function TagSections({ allFiles, fileData, displayClass }: QuartzComponentProps) {
-    // Count all tags across all files
-    const tagCounts = new Map<string, number>()
-    
-    for (const file of allFiles) {
-      const tags = file.frontmatter?.tags
-      if (!Array.isArray(tags)) continue
-      
-      for (const tag of tags) {
-        if (typeof tag !== "string") continue
-        const normalized = tag.trim().toLowerCase()
-        if (!normalized) continue
-        tagCounts.set(normalized, (tagCounts.get(normalized) || 0) + 1)
-      }
+export default (() => {
+  function TagSections({ fileData, displayClass }: QuartzComponentProps) {
+    // Get tags from current page only
+    const pageTags = fileData.frontmatter?.tags
+    if (!pageTags || !Array.isArray(pageTags) || pageTags.length === 0) {
+      return null
     }
 
-    // Group tags by top-level prefix
+    // Group current page's tags by top-level prefix
     const sections = new Map<string, TagInfo[]>()
-    
-    for (const [fullPath, count] of tagCounts) {
-      if (count < options.minCount) continue
-      
-      const parts = fullPath.split("/")
+
+    for (const tag of pageTags) {
+      if (typeof tag !== "string") continue
+      const normalized = tag.trim().toLowerCase()
+      if (!normalized) continue
+
+      const parts = normalized.split("/")
       const prefix = parts[0]
-      const displayName = parts.length > 1 ? parts.slice(1).join("/") : fullPath
       
-      // Determine section
-      let sectionKey: string
-      if (parts.length > 1 && SECTION_NAMES[prefix]) {
-        sectionKey = prefix
-      } else {
-        sectionKey = "general"
-      }
-      
+      // Display name is the part after the prefix (or full tag if no prefix)
+      const displayName = parts.length > 1 ? parts.slice(1).join("/") : normalized
+
+      // Determine section key
+      const sectionKey = (parts.length > 1 && SECTION_CONFIG[prefix]) ? prefix : "general"
+
       if (!sections.has(sectionKey)) {
         sections.set(sectionKey, [])
       }
-      
+
       sections.get(sectionKey)!.push({
-        fullPath,
+        fullPath: normalized,
         displayName,
-        count,
       })
     }
 
-    // Sort tags within each section by count (descending)
+    // Sort tags within each section alphabetically
     for (const tags of sections.values()) {
-      tags.sort((a, b) => b.count - a.count)
+      tags.sort((a, b) => a.displayName.localeCompare(b.displayName))
     }
 
-    // Order sections: known sections first (in SECTION_NAMES order), then general
+    // Order sections: known sections first, then general
     const orderedSections: Section[] = []
-    
-    // Add known sections in order
-    for (const key of Object.keys(SECTION_NAMES)) {
+
+    for (const key of Object.keys(SECTION_CONFIG)) {
       const tags = sections.get(key)
       if (tags && tags.length > 0) {
         orderedSections.push({
-          name: SECTION_NAMES[key],
+          key,
+          displayName: SECTION_CONFIG[key].displayName,
           tags,
         })
       }
     }
-    
-    // Add general section last
+
+    // Add general section last (tags without known prefix)
     const generalTags = sections.get("general")
     if (generalTags && generalTags.length > 0) {
       orderedSections.push({
-        name: "General",
+        key: "general",
+        displayName: "General",
         tags: generalTags,
       })
     }
@@ -114,26 +92,38 @@ export default ((opts?: Options) => {
 
     return (
       <nav class={classNames(displayClass, "tag-sections")}>
-        {orderedSections.map((section) => (
-          <div key={section.name}>
-            <h4>{section.name}</h4>
-            <ul>
-              {section.tags.map((tag) => {
-                const href = resolveRelative(fileData.slug!, `tags/${tag.fullPath}` as FullSlug)
-                return (
-                  <li key={tag.fullPath}>
-                    <a href={href} class="internal">
-                      {tag.displayName}
-                    </a>
-                    {options.showCounts && (
-                      <span class="tag-count">{tag.count}</span>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
+        {orderedSections.map((section) => {
+          // Section header links to the parent tag (e.g., /tags/content)
+          const sectionHref = section.key !== "general" 
+            ? resolveRelative(fileData.slug!, `tags/${section.key}` as FullSlug)
+            : null
+
+          return (
+            <div key={section.key} class="tag-section">
+              <h4>
+                {sectionHref ? (
+                  <a href={sectionHref} class="internal section-link">
+                    {section.displayName}
+                  </a>
+                ) : (
+                  section.displayName
+                )}
+              </h4>
+              <ul>
+                {section.tags.map((tag) => {
+                  const href = resolveRelative(fileData.slug!, `tags/${tag.fullPath}` as FullSlug)
+                  return (
+                    <li key={tag.fullPath}>
+                      <a href={href} class="internal tag-link">
+                        {tag.displayName}
+                      </a>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )
+        })}
       </nav>
     )
   }

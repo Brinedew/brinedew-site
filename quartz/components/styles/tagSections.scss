@@ -1,47 +1,46 @@
 @use "../../styles/variables.scss" as *;
 
 .tag-sections {
+  .tag-section {
+    margin-bottom: 0.75rem;
+  }
+
   h4 {
     font-size: 0.85rem;
     font-weight: $semiBoldWeight;
     color: var(--secondary);
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    margin: 0.75rem 0 0.25rem 0;
+    margin: 0 0 0.25rem 0;
     padding: 0;
-    
-    &:first-child {
-      margin-top: 0;
+
+    a.section-link {
+      color: var(--secondary);
+      text-decoration: none;
+
+      &:hover {
+        color: var(--tertiary);
+      }
     }
   }
-  
+
   ul {
     list-style: none;
     margin: 0;
     padding: 0;
   }
-  
+
   li {
-    padding: 0.15rem 0;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
+    padding: 0.1rem 0;
   }
-  
-  a {
+
+  a.tag-link {
     color: var(--dark);
     font-size: 0.9rem;
     text-decoration: none;
-    
+
     &:hover {
       color: var(--tertiary);
     }
-  }
-  
-  .tag-count {
-    color: var(--secondary);
-    font-size: 0.8rem;
-    opacity: 0.6;
-    margin-left: 0.3rem;
   }
 }
