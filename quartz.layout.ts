@@ -46,26 +46,14 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    // Hide tag explorer on homepage only
+    // Hide tag sections on homepage only
     Component.ConditionalRender({
-      component: Component.TagExplorer({ 
-        title: "Tags", 
-        minCount: 1, 
-        sort: "count",
-        hierarchical: true,
-        aggregateCounts: true,
-        defaultOpenDepth: 1
-      }),
+      component: Component.TagSections(),
       condition: (page) => page.fileData.slug !== "index",
     }),
   ],
   right: [
     Component.DesktopOnly(Component.TableOfContents()),
-    // Page tags section above backlinks
-    Component.ConditionalRender({
-      component: Component.PageTags(),
-      condition: (page) => page.fileData.slug !== "index",
-    }),
     // MINIMALISM: Backlinks commented out for cleaner design
     // Component.ConditionalRender({
     //   component: Component.Backlinks(),
@@ -99,7 +87,7 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.TagExplorer({ title: "Tags", minCount: 1, sort: "count" }),
+    Component.TagSections(),
   ],
   right: [],
 }

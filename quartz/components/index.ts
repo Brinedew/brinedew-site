@@ -26,6 +26,7 @@ import ConditionalRender from "./ConditionalRender"
 import ViewTransitions from "./ViewTransitions"
 import TagExplorer from "./TagExplorer"
 import PageTags from "./PageTags"
+import TagSections from "./TagSections"
 import MobileMenu from "./MobileMenu"
 import ProteinInfobox from "./ProteinInfobox"
 import ProteinGallery from "./ProteinGallery"
@@ -59,6 +60,7 @@ export {
   ViewTransitions,
   TagExplorer,
   PageTags,
+  TagSections,
   MobileMenu,
   ProteinInfobox,
   ProteinGallery,
