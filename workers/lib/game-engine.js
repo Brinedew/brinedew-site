@@ -1,6 +1,6 @@
 import { resolveStructureRepresentation } from './structure-utils.js';
 
-const MAX_GUESSES = 6;
+const MAX_GUESSES = 10;
 const DEFAULT_HINT_COST = 1;
 const HINT_REWARD_ON_INCORRECT = 1;
 

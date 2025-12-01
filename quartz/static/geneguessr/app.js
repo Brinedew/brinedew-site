@@ -718,7 +718,7 @@
         throw new Error('Missing token in response');
       }
       const resolvedUrl = `${API_BASE}/api/structure?token=${encodeURIComponent(data.token)}`;
-      console.debug('Geneguessr: token response data:', data);
+      // Security: don't log data - it may contain chainLabels with gene names
       const info = {
         token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
@@ -1262,7 +1262,11 @@
     if (state.lastCamera === camKey) return;
     state.lastCamera = camKey;
     
-    const vp = cam.viewport;
+    // B-177 fix: Use DOM container size instead of canvas viewport.
+    // Canvas viewport is in WebGL pixels, but CSS positioning uses browser-zoomed pixels.
+    // This ensures callouts stay aligned regardless of browser zoom level.
+    const rect = container.getBoundingClientRect();
+    const vp = { x: 0, y: 0, width: rect.width, height: rect.height };
     
     overlay.querySelectorAll('.pg-chain-callout[data-chain-id]').forEach(el => {
       const p = state.positions.get(el.dataset.chainId);
@@ -2350,7 +2354,7 @@
   const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
   const DEFAULT_HINT_COST = 1;
   const HINT_REWARD_ON_INCORRECT = 1;
-  const MAX_GUESSES = 10;
+  // MAX_GUESSES: read from gameStatus.maxGuesses (server is single source of truth)
   const LOCKED_HINT_PLACEHOLDER = 'Hint locked';
 
   // State
@@ -2371,6 +2375,7 @@
     won: false,
     targetId: null,
     practiceMode: false,
+    maxGuesses: 10, // Default, overwritten by server on bootstrap
     statsRecorded: false,
     revealedHints: []
   };
@@ -2499,9 +2504,7 @@
           return entry;
         }
         if (entry.protein) {
-          console.log('[B-137 DEBUG] hydrateStateFromPayload: entry has protein', entry.uniprot, 'domains:', entry.protein.domains?.length || 0, 'reactome:', entry.protein.reactome_pathways?.length || 0);
           const normalizedProtein = cacheEnrichedProtein(entry.protein) || entry.protein;
-          console.log('[B-137 DEBUG] after normalization:', entry.uniprot, 'domains:', normalizedProtein.domains?.length || 0, 'reactome:', normalizedProtein.reactome_pathways?.length || 0);
           return { ...entry, protein: normalizedProtein };
         }
         const cachedProtein = getEnrichedProteinById(entry.uniprot);
@@ -2519,6 +2522,7 @@
     gameState.won = Boolean(gameStatus.won);
     gameState.targetId = gameStatus.targetId || targetReveal?.uniprot || targetProtein?.uniprot || null;
     gameState.practiceMode = Boolean(gameStatus.practiceMode);
+    gameState.maxGuesses = gameStatus.maxGuesses || 10; // Server is single source of truth
     gameState.statsRecorded = false;
     gameState.revealedHints = Array.isArray(gameStatus.revealedHints) ? [...gameStatus.revealedHints] : [];
     updateHintDisplays();
@@ -2693,7 +2697,7 @@
     const tokenTasks = [];
     tokenTasks.push(ensureStructureTokenForTarget());
     tokenTasks.push(hydrateStructureTokensForGuesses(gameState.guesses));
-    const solvedOrExhausted = gameState.won || gameState.guesses.length >= MAX_GUESSES;
+    const solvedOrExhausted = gameState.won || gameState.guesses.length >= gameState.maxGuesses;
     if (solvedOrExhausted && targetReveal?.uniprot) {
       tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
     }
@@ -3219,7 +3223,7 @@
       ? `${solution.hgnc} (${solution.full_name})`
       : 'Protein identity hidden';
     const uniprotLink = hasIdentity && solution.links?.uniprot ? solution.links.uniprot : null;
-    const guessesText = `${gameState.guesses.length}/${MAX_GUESSES} guesses`;
+    const guessesText = `${gameState.guesses.length}/${gameState.maxGuesses} guesses`;
 
     // Render into the floating bar instead of a separate card; no extra helper text.
     return `
@@ -3323,7 +3327,7 @@
           </div>
           <div class="pg-guesses-badge">
             <span class="pg-guesses-label">Guesses</span>
-            <span class="pg-guesses-value">${gameState.guesses.length}/${MAX_GUESSES}</span>
+            <span class="pg-guesses-value">${gameState.guesses.length}/${gameState.maxGuesses}</span>
           </div>
           <button type="button" class="pg-how-to-play" id="pg-how-to-play" title="How to Play">?</button>
         </div>
@@ -4265,7 +4269,7 @@
 
       render();
       const tokenTasks = [ensureStructureTokenForProtein(uniprot)];
-      const reachedEndOfRound = gameState.won || gameState.guesses.length >= MAX_GUESSES;
+      const reachedEndOfRound = gameState.won || gameState.guesses.length >= gameState.maxGuesses;
       if (reachedEndOfRound && targetReveal?.uniprot) {
         tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
       }
@@ -4311,7 +4315,7 @@
     }).join('');
 
     return `Geneguessr ${today}
-${emoji} ${guessCount}/${MAX_GUESSES}
+${emoji} ${guessCount}/${gameState.maxGuesses}
 
 ${grid}
 
@@ -4343,7 +4347,7 @@ https://brinedew.bio/apps/geneguessr/`;
    */
   function render() {
     try {
-      const gameOver = Boolean(gameState.won || (gameStatus && gameStatus.lost) || gameState.guesses.length >= MAX_GUESSES);
+      const gameOver = Boolean(gameState.won || (gameStatus && gameStatus.lost) || gameState.guesses.length >= gameState.maxGuesses);
 
       hydrateLayoutOnce();
       renderClueSectionsIntoDom(gameOver);
