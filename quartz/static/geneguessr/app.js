@@ -1189,19 +1189,11 @@
 
   async function requestHintReveal(hintId) {
     if (!hintId) {
-      return true;
+      return null;
     }
-    try {
-      const payload = await revealHintRequest(hintId);
-      hydrateStateFromPayload(payload);
-      updateHintDisplays();
-      render();
-      return true;
-    } catch (err) {
-      console.warn('Geneguessr: hint reveal failed', err);
-      flashHintsWarning();
-      return false;
-    }
+    // Just fetch and return payload - caller handles state hydration and rendering
+    // This avoids double render() calls that cause 3D viewer flash (B-179)
+    return revealHintRequest(hintId);
   }
 
   function flashHintsWarning() {
@@ -3634,10 +3626,12 @@
     try {
       const payload = await requestHintReveal(hintId);
       hydrateStateFromPayload(payload);
+      updateHintDisplays();
       await hydrateGuessProteins();
       render();
     } catch (err) {
-      console.error('Geneguessr: failed to reveal hint', err);
+      console.warn('Geneguessr: hint reveal failed', err);
+      flashHintsWarning();
     } finally {
       redaction.dataset.loading = 'false';
       redaction.classList.remove('pg-redaction-loading');
