@@ -676,14 +676,18 @@ async function handleStructureToken(request, env, corsHeaders) {
   const token = await createStructureToken(env, meta);
   const structureUrl = `${url.origin}/api/structure?token=${token}`;
   // Parse chain labels if present (stored as JSON string in D1)
+  // Use the right chain labels based on structure source
   let chainLabels = null;
-  if (protein.pdb_chain_labels) {
+  const chainLabelsRaw = meta.source === 'swissmodel' 
+    ? protein.swissmodel_chain_labels 
+    : protein.pdb_chain_labels;
+  if (chainLabelsRaw) {
     try {
-      chainLabels = typeof protein.pdb_chain_labels === 'string'
-        ? JSON.parse(protein.pdb_chain_labels)
-        : protein.pdb_chain_labels;
+      chainLabels = typeof chainLabelsRaw === 'string'
+        ? JSON.parse(chainLabelsRaw)
+        : chainLabelsRaw;
     } catch (e) {
-      console.warn('Failed to parse pdb_chain_labels', e);
+      console.warn('Failed to parse chain_labels', e);
     }
   }
   return Response.json({

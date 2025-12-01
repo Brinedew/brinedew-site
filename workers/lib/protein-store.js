@@ -145,6 +145,7 @@ function toProteinObject(row) {
     swissmodel_qmean: row.swissmodel_qmean,
     swissmodel_template: row.swissmodel_template,
     swissmodel_url: row.swissmodel_url,
+    swissmodel_chain_labels: row.swissmodel_chain_labels,
     alphafold_plddt: row.alphafold_plddt,
     alphafold_url: row.alphafold_url,
     gene_summary: row.gene_summary,
@@ -181,16 +182,7 @@ export async function fetchProteinByUniprot(db, uniprot) {
   let protein = null;
   try {
     const row = await db.prepare(
-      `SELECT id, uniprot, gene, full_name, length, mass, tmh, secreted, tissue_label,
-              has_structure, structure_source,
-              pdb_id, pdb_chain_id, pdb_coverage, pdb_resolution, pdb_method, pdb_chain_labels,
-              swissmodel_coverage, swissmodel_qmean, swissmodel_template, swissmodel_url,
-              alphafold_plddt, alphafold_url,
-              gene_summary,
-              synonyms, domains, clans, go_bp, go_mf, go_cc, pathways, locations
-       FROM proteins
-       WHERE upper(uniprot) = ?
-       LIMIT 1`
+      `SELECT * FROM proteins WHERE upper(uniprot) = ? LIMIT 1`
     ).bind(key).first();
     protein = toProteinObject(row);
   } catch (err) {
