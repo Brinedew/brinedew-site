@@ -66,6 +66,19 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: wrangler deploy
 
+      - name: Verify D1 embeddings exist (main only)
+        if: github.ref == 'refs/heads/main'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          COUNT=$(wrangler d1 execute geneguessr --remote --command "SELECT COUNT(*) as cnt FROM protein_embeddings" --json | jq '.[0].results[0].cnt')
+          echo "Embedding count: $COUNT"
+          if [ "$COUNT" -lt 19000 ]; then
+            echo "ERROR: protein_embeddings table has $COUNT rows (expected ~19622)"
+            echo "Run 'python Datasets/GeneGuessr/upload_embeddings.py --remote' to populate"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
