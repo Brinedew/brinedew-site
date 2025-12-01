@@ -1232,11 +1232,15 @@
   // One map holds everything: { rafId, positions, lastCamera }
   const calloutState = new Map();
   
-  // Mol*'s chain-id palette (deterministic by index)
+  // Mol*'s 'many-distinct' palette (chain-id default)
+  // Combines dark-2, set-1, and set-2 from ColorBrewer
   const CHAIN_COLORS = [
-    '#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e',
-    '#e6ab02', '#a6761d', '#666666', '#8dd3c7', '#bebada',
-    '#fb8072', '#80b1d3', '#fdb462', '#b3de69', '#fccde5'
+    // dark-2 (8 colors)
+    '#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666',
+    // set-1 (9 colors)
+    '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999',
+    // set-2 (8 colors)
+    '#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3', '#a6d854', '#ffd92f', '#e5c494', '#b3b3b3'
   ];
   
   function updateCallouts(viewerId) {
@@ -1441,14 +1445,29 @@
   }
   
   /**
-   * Get chain index for color lookup.
+   * Get polymer chain index for color lookup.
+   * Only counts polymer chains (not water, ligands, etc.) to match Mol*'s polymer-index coloring.
    */
   function getChainIndex(viewer, chainId) {
     const struct = viewer.getStructure?.(1)?.cell?.obj?.data;
     if (!struct?.model?.atomicHierarchy) return -1;
     const hier = struct.model.atomicHierarchy;
+    const entities = struct.model.entities;
+    
+    // Build a map of polymer chains in order (Mol* uses label_asym_id for polymer-index)
+    let polymerIndex = 0;
     for (let i = 0; i < hier.chains._rowCount; i++) {
-      if (hier.chains.auth_asym_id.value(i) === chainId) return i;
+      // Check if this chain belongs to a polymer entity
+      const entityId = hier.chains.label_entity_id.value(i);
+      const entityIndex = entities.getEntityIndex(entityId);
+      const entityType = entities.data.type.value(entityIndex);
+      
+      const authAsymId = hier.chains.auth_asym_id.value(i);
+      
+      if (entityType === 'polymer') {
+        if (authAsymId === chainId) return polymerIndex;
+        polymerIndex++;
+      }
     }
     return -1;
   }
