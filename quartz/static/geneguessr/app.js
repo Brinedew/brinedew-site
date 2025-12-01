@@ -1473,11 +1473,20 @@
   }
 
   /**
+   * Count total chains across all labels.
+   * Needed because homomers have 1 label with multiple chains.
+   */
+  function countTotalChains(chainLabels) {
+    if (!chainLabels) return 0;
+    return chainLabels.reduce((sum, l) => sum + (l.chains?.length || 0), 0);
+  }
+
+  /**
    * Render chain callouts. Creates DOM, computes positions, sets up RAF loop.
    * Creates one callout per chain (not per label), so multi-chain genes get multiple labels.
    */
   function renderChainLabelCallouts(container, chainLabels) {
-    if (!container || !chainLabels || chainLabels.length <= 1) return;
+    if (!container || !chainLabels || countTotalChains(chainLabels) <= 1) return;
 
     const viewerId = container.id;
     const viewer = activeViewers.get(viewerId);
@@ -1571,9 +1580,11 @@
    * Only adds toggle if this is a linkable viewer (feedback card) with multiple chains.
    */
   function injectChainToggle(container, chainLabels) {
-    if (!container || !chainLabels || chainLabels.length <= 1) {
-      return;
-    }
+    // MOTHBALLED: Toggle disabled, always show complex (B-171)
+    // if (!container || !chainLabels || countTotalChains(chainLabels) <= 1) {
+    //   return;
+    // }
+    return; // Skip toggle injection entirely for now
     
     // Find the structure footer (sibling of the viewer container)
     const structureCard = container.closest('.pg-card-structure');
@@ -1776,7 +1787,7 @@
     }
     
     const { chainLabels, pdbId } = chainData;
-    if (!chainLabels || chainLabels.length <= 1) {
+    if (!chainLabels || countTotalChains(chainLabels) <= 1) {
       console.log('[Geneguessr] applyChainVisibility: skipping (single chain or no labels)', viewerId);
       return;
     }
@@ -2228,10 +2239,10 @@
         timing('loadComplete fired - structure fully rendered');
         applyViewerStylizationProfile(viewer, container);
         // Render chain label callouts if available
-        if (structureInfo.chainLabels && structureInfo.chainLabels.length > 1) {
+        if (structureInfo.chainLabels && countTotalChains(structureInfo.chainLabels) > 1) {
           renderChainLabelCallouts(container, structureInfo.chainLabels);
-          // Inject toggle for feedback cards (linkable viewers)
-          injectChainToggle(container, structureInfo.chainLabels);
+          // Toggle injection disabled (B-171) - always show complex
+          // injectChainToggle(container, structureInfo.chainLabels);
           // Store chain data for toggle functionality
           viewerChainData.set(containerId, {
             chainLabels: structureInfo.chainLabels,
@@ -2248,8 +2259,8 @@
             }
           });
           
-          // Apply initial visibility (hide non-target chains by default)
-          applyChainVisibility(containerId, false);
+          // Always show complex (B-171 - toggle mothballed)
+          applyChainVisibility(containerId, true);
         }
         timing('styling applied - DONE');
       };
