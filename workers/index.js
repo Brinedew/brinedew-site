@@ -1361,7 +1361,7 @@ async function getCanonicalStructureMeta(protein, env) {
           const coverage = s.coverage || 0.0;
           const gmqe = s.gmqe;
           const cifUrl = s.modelcif;
-          if (cifUrl && coverage >= COVERAGE_THRESHOLD && gmqe && gmqe >= 0.5) {
+          if (cifUrl && coverage >= COVERAGE_THRESHOLD && gmqe && gmqe >= 0.6) {
             candidates.push({
               source: 'swissmodel',
               id: `${protein.uniprot}_swissmodel_${s.template || 'unknown'}`,
@@ -1389,7 +1389,7 @@ async function getCanonicalStructureMeta(protein, env) {
         break;
       }
     } else if (source === 'swissmodel') {
-      const swiss = candidates.filter(c => c.source === 'swissmodel' && c.coverage >= COVERAGE_THRESHOLD && (c.quality || 0) >= 0.5);
+      const swiss = candidates.filter(c => c.source === 'swissmodel' && c.coverage >= COVERAGE_THRESHOLD && (c.quality || 0) >= 0.6);
       if (swiss.length > 0) {
         swiss.sort((a, b) => b.coverage - a.coverage || b.quality - a.quality);  // Higher coverage, higher GMQE better
         selected = swiss[0];

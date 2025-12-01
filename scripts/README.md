@@ -1,5 +1,11 @@
 # Data seeding helpers
 
+> **Note:** The primary GeneGuessr data pipeline lives in `D:\Coding\Datasets\GeneGuessr\`. 
+> That pipeline has numbered steps (`step_0_build_index.py` through `step_4_upload_to_d1.py`)
+> and generates the `proteins.json` that seeds production D1.
+>
+> The scripts below are supplementary helpers for local testing and embedding work.
+
 `upload_local_database.py` is now the one-button task for B-131 Phase 1 and uses the dataset under `tools/thoteins/data/geneguessr/`.
 
 ## Local dry run

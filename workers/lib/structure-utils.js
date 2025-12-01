@@ -1,6 +1,6 @@
 const PDB_COVERAGE_THRESHOLD = 0.6;
 const SWISS_MODEL_COVERAGE_THRESHOLD = 0.6;
-const SWISS_MODEL_QMEAN_THRESHOLD = 0.7;
+const SWISS_MODEL_QMEAN_THRESHOLD = 0.6;
 
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
 
