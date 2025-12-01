@@ -1455,6 +1455,7 @@
 
   /**
    * Render chain callouts. Creates DOM, computes positions, sets up RAF loop.
+   * Creates one callout per chain (not per label), so multi-chain genes get multiple labels.
    */
   function renderChainLabelCallouts(container, chainLabels) {
     if (!container || !chainLabels || chainLabels.length <= 1) return;
@@ -1468,25 +1469,38 @@
     overlay.className = 'pg-chain-callouts pg-chain-callouts-3d';
     overlay.style.display = 'none';
 
-    // Target chains first, then up to 4 others
-    const targets = chainLabels.filter(l => l.is_target);
-    const others = chainLabels.filter(l => !l.is_target).slice(0, 4);
+    // Expand labels to individual chain entries (one callout per chain)
+    const expandedChains = [];
+    chainLabels.forEach(label => {
+      if (!label.chains || !label.chains.length) return;
+      label.chains.forEach(chainId => {
+        expandedChains.push({
+          chainId,
+          gene: label.gene,
+          name: label.name,
+          is_target: label.is_target
+        });
+      });
+    });
+
+    // Target chains first, then all others (no limit)
+    const targets = expandedChains.filter(c => c.is_target);
+    const others = expandedChains.filter(c => !c.is_target);
     const display = [...targets, ...others];
-    const moreCount = chainLabels.length - display.length;
 
     // Build state for this viewer
     const positions = new Map();
     
-    display.forEach((label, idx) => {
-      const chainId = label.chains[0];
+    display.forEach((entry) => {
+      const chainId = entry.chainId;
       if (!chainId) return;
       
       const el = document.createElement('div');
-      el.className = 'pg-chain-callout pg-chain-callout-3d' + (label.is_target ? ' pg-chain-callout-target' : '');
+      el.className = 'pg-chain-callout pg-chain-callout-3d' + (entry.is_target ? ' pg-chain-callout-target' : '');
       el.dataset.chainId = chainId;
       
-      const gene = label.gene || label.name?.split(' ')[0] || '?';
-      const full = label.name || label.gene || '?';
+      const gene = entry.gene || entry.name?.split(' ')[0] || '?';
+      const full = entry.name || entry.gene || '?';
       el.innerHTML = `<span class="pg-chain-label-gene">${escapeAttribute(gene)}</span>` +
                      `<span class="pg-chain-label-full">${escapeAttribute(full)}</span>`;
       
@@ -1502,13 +1516,6 @@
       el.style.opacity = '0';
       overlay.appendChild(el);
     });
-
-    if (moreCount > 0) {
-      const more = document.createElement('div');
-      more.className = 'pg-chain-callout pg-chain-callout-more';
-      more.textContent = `+${moreCount} more`;
-      overlay.appendChild(more);
-    }
 
     container.appendChild(overlay);
     calloutState.set(viewerId, { rafId: null, positions });
