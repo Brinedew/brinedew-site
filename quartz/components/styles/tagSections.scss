@@ -56,8 +56,39 @@
     }
   }
 
-  // Hide in header on mobile - the sidebar becomes a row and this breaks layout
+  // Dropdown on mobile - hidden by default, shown when .mobile-open
   @media all and #{$mobile} {
     display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--light);
+    border-bottom: 1px solid var(--lightgray);
+    padding: 0.75rem 1rem;
+    z-index: 100;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    
+    // Show as flex row when open
+    &.mobile-open {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    
+    .tag-section {
+      margin-bottom: 0;
+    }
+    
+    ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem 0.5rem;
+      padding-left: 0;
+    }
+    
+    li {
+      padding: 0;
+    }
   }
 }

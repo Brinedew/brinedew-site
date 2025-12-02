@@ -34,6 +34,8 @@ export const defaultContentPageLayout: PageLayout = {
     Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
+        // Mobile tags dropdown button
+        { Component: Component.MobileOnly(Component.MobileMenu()) },
         // Desktop & Tablet: inline logo inside the row
         { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
@@ -44,7 +46,7 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    // TagSections: visible on desktop sidebar, hidden on mobile via CSS
+    // TagSections: visible on desktop sidebar, dropdown on mobile
     Component.ConditionalRender({
       component: Component.TagSections(),
       condition: (page) => page.fileData.slug !== "index",
@@ -75,6 +77,8 @@ export const defaultListPageLayout: PageLayout = {
     Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
+        // Mobile tags dropdown button
+        { Component: Component.MobileOnly(Component.MobileMenu()) },
         { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
           Component: Component.Search(),
@@ -83,7 +87,7 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    // TagSections hidden on mobile via CSS
+    // TagSections: visible on desktop sidebar, dropdown on mobile
     Component.TagSections(),
   ],
   right: [],
