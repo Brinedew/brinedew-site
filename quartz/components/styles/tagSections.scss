@@ -57,7 +57,7 @@
   }
 
   // Hide in header on mobile - the sidebar becomes a row and this breaks layout
-  @media all and (max-width: $mobileBreakpoint) {
+  @media all and #{$mobile} {
     display: none;
   }
 }
