@@ -30,14 +30,10 @@ export const defaultContentPageLayout: PageLayout = {
     Component.ProteinGallery(),
   ],
   left: [
-    Component.MobileOnly(Component.PageTitle()),
-    Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
-        // Mobile hamburger menu button
+        { Component: Component.PageTitle() },
         { Component: Component.MobileOnly(Component.MobileMenu()) },
-        // Desktop & Tablet: inline logo inside the row
-        { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
           Component: Component.Search(),
           grow: true,
@@ -73,13 +69,10 @@ export const defaultListPageLayout: PageLayout = {
     Component.ProteinGallery(),
   ],
   left: [
-    Component.MobileOnly(Component.PageTitle()),
-    Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
-        // Mobile hamburger menu button
+        { Component: Component.PageTitle() },
         { Component: Component.MobileOnly(Component.MobileMenu()) },
-        { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
           Component: Component.Search(),
           grow: true,

@@ -28,6 +28,11 @@ PageTitle.css = `
   display: inline-flex;
   align-items: center;
   text-decoration: none;
+  color: var(--darkgray); /* Override global link color */
+}
+
+.page-title .site-brand:hover {
+  color: var(--tertiary);
 }
 
 .page-title .site-logo {
