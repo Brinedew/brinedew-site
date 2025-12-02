@@ -271,7 +271,7 @@ a {
       @media all and ($mobile) {
         gap: 0;
         align-items: center;
-        position: initial;
+        position: relative; // For absolute positioned tag-sections dropdown (B-180)
         display: flex;
         height: unset;
         flex-direction: row;

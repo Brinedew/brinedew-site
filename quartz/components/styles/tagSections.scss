@@ -4,11 +4,14 @@
   // Mobile: hidden by default, expands below header when toggled (B-180)
   @media all and ($mobile) {
     display: none;
-    order: 999; // Push to end of flex container
-    flex-basis: 100%; // Force onto its own row
+    position: absolute;
+    top: 100%; // Position below the header
+    left: 0;
+    right: 0;
     padding: 0.75rem 1rem;
     background-color: var(--light);
     border-bottom: 1px solid var(--lightgray);
+    z-index: 50;
 
     &.mobile-open {
       display: block;
