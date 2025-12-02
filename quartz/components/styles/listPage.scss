@@ -43,13 +43,15 @@ li.section-li {
 .child-tags {
   margin: 1rem 0 1.5rem 0;
   padding: 0;
+  background: none !important;
+  border: none !important;
 
   h3 {
     font-size: 0.85rem;
     font-weight: $semiBoldWeight;
     color: var(--secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    text-transform: none;
+    letter-spacing: normal;
     margin: 0 0 0.5rem 0;
   }
 
@@ -68,17 +70,17 @@ li.section-li {
     gap: 0.25rem;
   }
 
-  a.tag-link {
+  a.internal.tag-link {
     color: var(--dark);
     text-decoration: none;
     font-size: 0.9rem;
-    background: none;
-    padding: 0;
+    background: none !important;
+    padding: 0 !important;
     border-radius: 0;
 
     // No hashtag prefix in this context
     &::before {
-      content: none;
+      content: none !important;
     }
 
     &:hover {
