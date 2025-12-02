@@ -59,8 +59,8 @@
   // Dropdown on mobile - hidden by default, shown when .mobile-open
   @media all and #{$mobile} {
     display: none;
-    position: absolute;
-    top: 100%;
+    position: fixed;
+    top: 4rem; // Below the header
     left: 0;
     right: 0;
     background: var(--light);
