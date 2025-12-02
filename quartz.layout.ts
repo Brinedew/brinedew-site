@@ -77,8 +77,7 @@ export const defaultListPageLayout: PageLayout = {
     Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
-        // Mobile tags dropdown button
-        { Component: Component.MobileOnly(Component.MobileMenu()) },
+        // No MobileMenu on list pages - TagSections doesn't render here
         { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
           Component: Component.Search(),
@@ -87,8 +86,6 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    // TagSections: visible on desktop sidebar, dropdown on mobile
-    Component.TagSections(),
   ],
   right: [],
 }
