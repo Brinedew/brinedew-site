@@ -1,6 +1,19 @@
 @use "../../styles/variables.scss" as *;
 
 .tag-sections {
+  // Mobile: hidden by default, expands below header when toggled (B-180)
+  @media all and ($mobile) {
+    display: none;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background-color: var(--light);
+    border-bottom: 1px solid var(--lightgray);
+
+    &.mobile-open {
+      display: block;
+    }
+  }
+
   .tag-section {
     margin-bottom: 0.75rem;
   }
