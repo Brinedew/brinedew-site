@@ -75,8 +75,6 @@ export const defaultListPageLayout: PageLayout = {
     Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
-        // Mobile hamburger menu button
-        { Component: Component.MobileOnly(Component.MobileMenu()) },
         { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
           Component: Component.Search(),
@@ -85,6 +83,7 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
+    // TagSections hidden on mobile via CSS
     Component.TagSections(),
   ],
   right: [],
