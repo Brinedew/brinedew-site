@@ -271,11 +271,10 @@ a {
       @media all and ($mobile) {
         gap: 0;
         align-items: center;
-        position: relative; // For absolute positioned tag-sections dropdown (B-180)
+        position: initial;
         display: flex;
         height: unset;
         flex-direction: row;
-        flex-wrap: wrap; // Allow tag-sections to wrap below header (B-180)
         padding: 0;
         padding-top: 2rem;
       }

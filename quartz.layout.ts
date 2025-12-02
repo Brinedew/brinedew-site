@@ -30,10 +30,12 @@ export const defaultContentPageLayout: PageLayout = {
     Component.ProteinGallery(),
   ],
   left: [
+    Component.MobileOnly(Component.PageTitle()),
+    Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
-        { Component: Component.PageTitle() },
-        { Component: Component.MobileOnly(Component.MobileMenu()) },
+        // Desktop & Tablet: inline logo inside the row
+        { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
           Component: Component.Search(),
           grow: true,
@@ -42,7 +44,7 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    // Hide tag sections on homepage only
+    // TagSections: visible on desktop sidebar, hidden on mobile via CSS
     Component.ConditionalRender({
       component: Component.TagSections(),
       condition: (page) => page.fileData.slug !== "index",
@@ -69,10 +71,13 @@ export const defaultListPageLayout: PageLayout = {
     Component.ProteinGallery(),
   ],
   left: [
+    Component.MobileOnly(Component.PageTitle()),
+    Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
-        { Component: Component.PageTitle() },
+        // Mobile hamburger menu button
         { Component: Component.MobileOnly(Component.MobileMenu()) },
+        { Component: Component.DesktopOnly(Component.PageTitle()) },
         {
           Component: Component.Search(),
           grow: true,

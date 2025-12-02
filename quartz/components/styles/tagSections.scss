@@ -1,23 +1,6 @@
 @use "../../styles/variables.scss" as *;
 
 .tag-sections {
-  // Mobile: hidden by default, expands below header when toggled (B-180)
-  @media all and ($mobile) {
-    display: none;
-    position: absolute;
-    top: 100%; // Position below the header
-    left: 0;
-    right: 0;
-    padding: 0.75rem 1rem;
-    background-color: var(--light);
-    border-bottom: 1px solid var(--lightgray);
-    z-index: 50;
-
-    &.mobile-open {
-      display: block;
-    }
-  }
-
   .tag-section {
     margin-bottom: 0.75rem;
   }
@@ -71,5 +54,10 @@
     &:hover {
       color: var(--tertiary);
     }
+  }
+
+  // Hide in header on mobile - the sidebar becomes a row and this breaks layout
+  @media all and (max-width: $mobileBreakpoint) {
+    display: none;
   }
 }
