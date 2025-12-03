@@ -812,8 +812,8 @@
 
 /* Unified Section Styling - used by both clue and feedback cards */
 .pg-section {
-  margin-bottom: 0.4rem;
-  line-height: 1.5;
+  margin-bottom: 0;
+  line-height: 1.8;
   font-size: 1rem;
   color: var(--dark);
   overflow-wrap: anywhere;
@@ -826,10 +826,6 @@
   .pg-section {
     overflow-wrap: break-word;
   }
-}
-
-.pg-section:last-child {
-  margin-bottom: 0;
 }
 
 .pg-section-label {
