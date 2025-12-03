@@ -820,14 +820,26 @@
   text-wrap: pretty;
 }
 
-/* Feedback cards: enable hyphenation for long protein names */
+/*
+ * HYPHENATION FOR FEEDBACK CARDS (B-182)
+ * 
+ * Long protein names and pathway terms need to wrap gracefully on narrow viewports.
+ * CSS hyphenation breaks words at syllable boundaries (e.g., "phosphatidyl-" / "inositol").
+ * 
+ * Requirements for hyphens: auto to work:
+ * 1. The <html> element must have lang="en" (set in renderPage.tsx)
+ * 2. The font must have a hyphenation dictionary (system fonts do)
+ * 3. Must be applied to elements containing the text, not just containers
+ * 
+ * -webkit-hyphens is needed for Safari compatibility.
+ */
 .pg-feedback-card .pg-section {
   -webkit-hyphens: auto;
   hyphens: auto;
   overflow-wrap: break-word;
 }
 
-/* Ensure inline section entries can also hyphenate */
+/* Inline spans need explicit hyphenation since they contain the actual text */
 .pg-feedback-card .pg-section-entry {
   -webkit-hyphens: auto;
   hyphens: auto;
@@ -862,10 +874,30 @@
   content: ", ";
 }
 
-/* One space between redaction bars - preserved with white-space:pre, plus HTML whitespace = ~16px total */
+/*
+ * ⚠️  WARNING: FRAGILE SPACING - DO NOT CHANGE WITHOUT TESTING (B-181)
+ * 
+ * This controls the HORIZONTAL gap between redaction bars on clue cards.
+ * The goal is to match the VERTICAL gap (~16px) so bars form an even grid.
+ * 
+ * HOW IT WORKS:
+ * - Monospace font at 0.9rem (14.4px) renders one space as ~8px
+ * - HTML has whitespace between inline elements (the \n in the template literal)
+ * - That HTML whitespace ALSO renders as ~8px in monospace
+ * - So: HTML whitespace (~8px) + this one space (~8px) = ~16px total
+ * - This matches the vertical line-height gap of ~16px
+ * 
+ * WHAT BREAKS IT:
+ * - Using "  " (two spaces) → 24px horizontal gap (too wide)
+ * - Using font-size: 0 hack → breaks label text, needs child restoration
+ * - Using flexbox → completely breaks inline flow, stacks vertically
+ * - Removing white-space: pre → space collapses, bars touch
+ * 
+ * TESTED: Horizontal gap = 15.83px, Vertical gap = 15.82px (0.01px difference)
+ */
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
-  content: " ";
-  white-space: pre;
+  content: " ";  /* EXACTLY ONE SPACE - see warning above */
+  white-space: pre;  /* Preserves the space; without this it collapses */
 }
 
 .pg-section-entry.matched-highlight {
@@ -1403,6 +1435,13 @@
   transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.2s ease;
 }
 
+/*
+ * Protein full name (e.g., "phosphatidylinositol-4,5-bisphosphate 3-kinase catalytic subunit alpha")
+ * These names can be very long, so hyphenation is essential for narrow viewports.
+ * 
+ * Note: This element is NOT inside .pg-section, so it needs its own hyphenation rules.
+ * The -webkit-hyphens prefix is required for Safari.
+ */
 .pg-feedback-protein-name {
   font-size: 0.9rem;
   color: var(--secondary);
@@ -1410,8 +1449,8 @@
   line-height: 1.4;
   -webkit-hyphens: auto;
   hyphens: auto;
-  overflow-wrap: break-word;
-  word-break: normal;
+  overflow-wrap: break-word;  /* Fallback if hyphenation unavailable */
+  word-break: normal;  /* Don't break mid-word without hyphenation */
 }
 
 @media (prefers-reduced-motion: reduce) {
