@@ -3281,7 +3281,8 @@
       gameOver,
       existingViewer: !!existingViewer,
       lastRenderedTargetStructureId,
-      nextStructureId
+      nextStructureId,
+      areEqual: lastRenderedTargetStructureId === nextStructureId
     });
     if (!structureChanged && !gameOver && existingViewer) {
       const sectionsContainer = slot.querySelector('.pg-clue-sections');
