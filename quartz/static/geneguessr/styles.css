@@ -841,6 +841,7 @@
   font-size: 0.9rem;
   line-height: 2.257;
   hyphens: none;
+  font-family: var(--codeFont);
 }
 
 .pg-section-entry {
