@@ -850,20 +850,6 @@
   max-width: 100%;
 }
 
-/* Show commas between revealed entries, spaces between redacted entries */
-.pg-section-entry:not(:last-child)::after {
-  content: ", ";
-}
-
-/* When entry contains only a redaction (unrevealed), use margin instead of text space */
-.pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
-  content: "";
-}
-
-.pg-section-entry:has(.pg-redaction:only-child):not(:last-child) {
-  margin-right: 1.1em;  /* ~two monospace spaces at 0.9rem */
-}
-
 .pg-section-entry.matched-highlight {
   color: var(--accent);
   font-weight: 600;
