@@ -855,10 +855,9 @@
   content: ", ";
 }
 
-/* Two spaces between redaction bars - selectable like commas, similar width for minimal reflow */
+/* One space between redaction bars - HTML whitespace adds ~8px, so one space (~8px) gives us ~16px total = vertical gap */
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
-  content: "  ";
-  white-space: pre;
+  content: " ";
 }
 
 .pg-section-entry.matched-highlight {
