@@ -20,14 +20,14 @@
  *
  * 4. Frontend (this file):
  *    - Fetches from API_BASE/api/protein?uniprot=...
- *    - Receives full protein object with clans, domain_names, etc.
- *    - Renders data in buildProteinSections()
+ *    - Receives pre-built sections from server in guess entries
+ *    - Renders sections directly (server is single source of truth)
  *
  * If new fields aren't showing up:
  *   1. Check proteins.json has the field
  *   2. Run upload_local_database.py --remote
  *   3. Verify worker returns the field in /api/protein response
- *   4. Check buildProteinSections() uses the field
+ *   4. Check buildProteinSections() in workers/lib/game-engine.js uses the field
  * =============================================================
  *
  * Features:
@@ -884,9 +884,8 @@
     gameState.guesses.forEach((guess) => {
       const viewerId = `guess-card-${guess.guessId}-structure`;
       const container = document.getElementById(viewerId);
-      const guessProtein = guess.proteinResolved || guess.protein;
       if (container && !renderedViewers.has(viewerId)) {
-        loadStructureViewerInContainer(container, guessProtein).catch((err) => {
+        loadStructureViewerInContainer(container, { uniprot: guess.uniprot }).catch((err) => {
           console.error(`Geneguessr: failed to load structure viewer for guess ${guess.guessId}`, err);
         });
       }
@@ -2354,6 +2353,7 @@
   let clueData = null;
   let guessEntries = [];
   let targetReveal = null;
+  let targetRevealSections = null;
   let shareText = '';
   let targetProtein = null;
   let molstarLoaderPromise = null;
@@ -2490,27 +2490,13 @@
     gamePayload = payload;
     gameStatus = payload.status;
     clueData = payload.clue || { sections: [], allMatches: {}, latestMatches: {} };
-    guessEntries = Array.isArray(payload.guesses)
-      ? payload.guesses.map((entry) => {
-        if (!entry) {
-          return entry;
-        }
-        if (entry.protein) {
-          const normalizedProtein = cacheEnrichedProtein(entry.protein) || entry.protein;
-          return { ...entry, protein: normalizedProtein };
-        }
-        const cachedProtein = getEnrichedProteinById(entry.uniprot);
-        return cachedProtein ? { ...entry, protein: cachedProtein } : entry;
-      })
-      : [];
+    guessEntries = Array.isArray(payload.guesses) ? payload.guesses : [];
     targetProtein = payload.clueTarget ? (cacheEnrichedProtein(payload.clueTarget) || payload.clueTarget) : null;
     targetReveal = payload.targetReveal ? (cacheEnrichedProtein(payload.targetReveal) || payload.targetReveal) : null;
+    targetRevealSections = payload.targetRevealSections || null;
     shareText = payload.shareText || '';
     gameState.date = gameStatus.date;
-    gameState.guesses = guessEntries.map((entry) => ({
-      ...entry,
-      proteinResolved: resolveGuessProtein(entry)
-    }));
+    gameState.guesses = guessEntries;
     gameState.won = Boolean(gameStatus.won);
     gameState.targetId = gameStatus.targetId || targetReveal?.uniprot || targetProtein?.uniprot || null;
     gameState.practiceMode = Boolean(gameStatus.practiceMode);
@@ -2621,56 +2607,6 @@
     };
   }
 
-  function resolveGuessProtein(entry) {
-    if (!entry || !entry.uniprot) {
-      return null;
-    }
-    const payloadProtein = entry.protein ? cacheEnrichedProtein(entry.protein) : null;
-    const enrichedProtein = payloadProtein || getEnrichedProteinById(entry.uniprot);
-    const datasetProtein = getProteinById(entry.uniprot);
-    if (enrichedProtein && datasetProtein) {
-      return mergeProteinRecords(datasetProtein, enrichedProtein);
-    }
-    return enrichedProtein || datasetProtein || null;
-  }
-
-  async function hydrateGuessProteins() {
-    if (!Array.isArray(gameState.guesses) || gameState.guesses.length === 0) {
-      return;
-    }
-    const pending = [];
-    gameState.guesses = gameState.guesses.map((entry) => {
-      const resolved = resolveGuessProtein(entry);
-      if (resolved) {
-        return { ...entry, proteinResolved: resolved };
-      }
-      pending.push(entry);
-      return entry;
-    });
-    if (!pending.length) {
-      return;
-    }
-    await Promise.all(
-      pending.map(async (entry) => {
-        try {
-          const details = await fetchProteinDetails(entry.uniprot);
-          entry.protein = details;
-          cacheEnrichedProtein(details);
-          entry.proteinResolved = resolveGuessProtein(entry);
-        } catch (err) {
-          console.warn('Geneguessr: failed to load protein details', entry.uniprot, err);
-        }
-      })
-    );
-    gameState.guesses = gameState.guesses.map((entry) => {
-      if (entry.proteinResolved) {
-        return entry;
-      }
-      const resolved = resolveGuessProtein(entry);
-      return resolved ? { ...entry, proteinResolved: resolved } : entry;
-    });
-  }
-
   function getProteinById(id) {
     if (!id) {
       return null;
@@ -2685,7 +2621,6 @@
     if (options.practice === true) {
       gameState.practiceMode = true; // ensure client-side practice flag for off-record runs
     }
-    await hydrateGuessProteins();
     const tokenTasks = [];
     tokenTasks.push(ensureStructureTokenForTarget());
     tokenTasks.push(hydrateStructureTokensForGuesses(gameState.guesses));
@@ -2790,199 +2725,6 @@
    * Render functions
    */
   // Unified card section builder - generates sections for both clue and guess cards
-  function formatGoTerms(protein, aspect) {
-    const names = protein.go_terms_named?.[aspect];
-    if (Array.isArray(names) && names.length) {
-      return names;
-    }
-    const raw = protein.go_terms?.[aspect];
-    return Array.isArray(raw) ? raw : [];
-  }
-
-  function formatReactomeList(protein) {
-    return (protein.reactome_pathways || [])
-      .map((entry) => {
-        if (!entry) return '';
-        if (typeof entry === 'string') return entry;
-        const trimmed = entry.name && entry.name.trim();
-        return trimmed || entry.id || '';
-      })
-      .filter(Boolean);
-  }
-
-  function buildProteinSections(protein, options = {}) {
-    const { forClue = false } = options;
-    const goTermsByAspect = protein.go_terms || {};
-    const goTermNamesByAspect = protein.go_terms_named || {};
-    const domains = Array.isArray(protein.domains) ? protein.domains : [];
-    const domainNames = Array.isArray(protein.domain_names) ? protein.domain_names : [];
-    const clans = Array.isArray(protein.clans) ? protein.clans : [];
-    const reactomePaths = Array.isArray(protein.reactome_pathways) ? protein.reactome_pathways : [];
-
-    const sections = [];
-    const filterTokens = [
-      protein.hgnc,
-      ...(Array.isArray(protein.synonyms) ? protein.synonyms : []),
-    ]
-      .filter(Boolean)
-      .map(token => token.toLowerCase());
-
-    const shouldFilterText = (text) => {
-      if (!forClue || !filterTokens.length || typeof text !== 'string') {
-        return false;
-      }
-      const normalized = text.toLowerCase();
-      return filterTokens.some(token => token && normalized.includes(token));
-    };
-
-    const pushSection = (section, { skipFilter = false } = {}) => {
-      const items = skipFilter ? section.items : section.items.filter(item => !shouldFilterText(item.text));
-      if (!items.length) {
-        return;
-      }
-      sections.push({
-        ...section,
-        items,
-      });
-    };
-
-    // Gene summary section - only show on feedback cards, never on clue cards
-    if (protein.gene_summary && !forClue) {
-      const summary = protein.gene_summary;
-      const summaryText = typeof summary === 'string' ? summary : summary.text;
-      const summaryMeta = typeof summary === 'object' && summary.text ? {
-        source: summary.source,
-        url: summary.url,
-      } : null;
-
-      pushSection({
-        id: 'summary',
-        label: '', // No label for summary
-        type: 'summary',
-        items: [{
-          text: summaryText,
-          meta: summaryMeta,
-        }],
-      }, { skipFilter: true });
-    }
-
-    // Length first
-    pushSection({
-      id: 'length',
-      label: 'Length',
-      items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein.length} aa` }],
-    });
-
-    // Properties (Transmembrane/Secreted)
-    pushSection({
-      id: 'properties',
-      label: 'Properties',
-      items: [
-        {
-          id: forClue ? 'hint-properties-tm' : undefined,
-          text: protein.tmh ? 'Transmembrane' : 'Soluble',
-        },
-        {
-          id: forClue ? 'hint-properties-secreted' : undefined,
-          text: protein.secreted ? 'Secreted' : 'Intracellular',
-        },
-      ],
-    });
-
-    // Tissue specificity
-    pushSection({
-      id: 'tissue',
-      label: 'Tissue specificity',
-      items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue?.label || 'unknown' }],
-    });
-
-    // Clans (protein family classifications)
-    if (clans.length) {
-      pushSection({
-        id: 'clans',
-        label: 'Clans',
-        items: clans.map((clan, idx) => ({
-          id: forClue ? `hint-clan-${idx}` : undefined,
-          text: clan.replace(/_/g, ' '),
-        })),
-      });
-    }
-
-    // Domains - prefer human-readable names, fall back to IPR IDs
-    const displayDomains = domainNames.length ? domainNames : domains;
-    if (displayDomains.length) {
-      pushSection({
-        id: 'domains',
-        label: 'Domains',
-        items: displayDomains.map((domain, idx) => ({
-          id: forClue ? `hint-domain-${idx}` : undefined,
-          text: domain,
-        })),
-      });
-    } else {
-      pushSection({
-        id: 'domains',
-        label: 'Domains',
-        items: [{ text: 'No structured domains', id: forClue ? 'hint-domain-0' : undefined }],
-      });
-    }
-
-    // Pathways (Reactome)
-    const formatReactomeEntry = (entry) => {
-      if (!entry) return '';
-      if (typeof entry === 'string') return entry;
-      const name = entry.name && entry.name.trim() ? entry.name.trim() : '';
-      const id = entry.id || '';
-      return name || id;
-    };
-    const formattedReactome = reactomePaths
-      .map(formatReactomeEntry)
-      .filter(Boolean);
-
-    if (formattedReactome.length) {
-      pushSection({
-        id: 'reactome',
-        label: 'Pathways',
-        items: forClue
-          ? formattedReactome.map((path, idx) => ({ id: `hint-reactome-${idx}`, text: path }))
-          : formattedReactome.map(path => ({ text: path })),
-      });
-    }
-
-    // GO sections last
-    const goSectionMeta = [
-      { aspect: 'mf', label: 'Molecular function' },
-      { aspect: 'cc', label: 'Cellular component' },
-      { aspect: 'bp', label: 'Biological process' },
-    ];
-    let goSectionAdded = false;
-    goSectionMeta.forEach(({ aspect, label }) => {
-      const namedTerms = Array.isArray(goTermNamesByAspect[aspect]) ? goTermNamesByAspect[aspect] : null;
-      const rawTerms = Array.isArray(goTermsByAspect[aspect]) ? goTermsByAspect[aspect] : [];
-      const terms = namedTerms && namedTerms.length ? namedTerms : rawTerms;
-      if (!terms.length) {
-        return;
-      }
-      goSectionAdded = true;
-      pushSection({
-        id: `function-${aspect}`,
-        label,
-        items: forClue
-          ? terms.map((term, idx) => ({ id: `hint-${aspect}-${idx}`, text: term }))
-          : terms.map(term => ({ text: term })),
-      });
-    });
-    if (!goSectionAdded) {
-      pushSection({
-        id: 'function-bp',
-        label: 'Biological process',
-        items: [{ text: forClue ? 'Not available' : 'Not available', id: forClue ? 'hint-bp-0' : undefined }],
-      });
-    }
-
-    return sections;
-  }
-
   function renderClueSectionsHtml() {
     const sections = Array.isArray(clueData?.sections) ? clueData.sections : [];
     // B-186: Use latestMatches (most recent guess only), not allMatches (cumulative)
@@ -3032,6 +2774,9 @@
         collapsible: false,
         expanded: true,
         showSimilarity: false,
+        headerLabel: solutionTarget?.hgnc || solutionTarget?.uniprot || '',
+        fullName: solutionTarget?.full_name || '',
+        sections: targetRevealSections || [],
         structureInfo: revealStructureInfo,
         linkable: true,
         structureSource: solutionStructureSource,
@@ -3397,11 +3142,13 @@
   function buildFeedbackCardMarkup(protein, options = {}) {
     const {
       score = null,
-      cardId = `feedback-card-${protein.uniprot}`,
+      cardId = `feedback-card-${protein?.uniprot || 'unknown'}`,
       collapsible = false,
       expanded = true,
       showSimilarity = Boolean(score),
-      headerLabel = protein.hgnc,
+      headerLabel = protein?.hgnc || protein?.uniprot || '',
+      fullName = protein?.full_name || '',
+      sections = [],
       matchedHintMap = {},
       structureInfo = null,
       linkable = false,
@@ -3414,7 +3161,6 @@
     const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
     const goWidth = goPercent === null ? 0 : goPercent;
 
-    const sections = buildProteinSections(protein, { forClue: false });
     const sectionMarkup = sections
       .map(section => renderFeedbackSection(
         section,
@@ -3440,7 +3186,7 @@
     const contentMarkup = `
       <div class="pg-feedback-content" id="${cardId}-content">
         ${structureMarkup}
-        <div class="pg-feedback-protein-name">${protein.full_name}</div>
+        <div class="pg-feedback-protein-name">${fullName}</div>
         ${sectionMarkup}
       </div>
     `;
@@ -3476,18 +3222,20 @@
     const isLatestGuess = typeof guessEntry.isLatest === 'boolean' ? guessEntry.isLatest : Boolean(isLatest);
     const expanded = getCardExpansionState(cardId, isLatestGuess);
     const matchedHintMap = guessEntry.matchedHints || {};
-    const protein = guessEntry.proteinResolved || resolveGuessProtein(guessEntry);
 
-    if (!protein) {
+    if (!guessEntry.sections) {
       return '';
     }
 
-    return buildFeedbackCardMarkup(protein, {
+    return buildFeedbackCardMarkup(null, {
       score: guessEntry.score,
       cardId,
       collapsible: true,
       expanded,
       showSimilarity: true,
+      headerLabel: guessEntry.headerLabel,
+      fullName: guessEntry.fullName,
+      sections: guessEntry.sections,
       matchedHintMap,
       structureInfo: getStructureInfoForProtein(guessEntry.uniprot),
       linkable: true,
@@ -3632,7 +3380,6 @@
       const payload = await requestHintReveal(hintId);
       hydrateStateFromPayload(payload);
       updateHintDisplays();
-      await hydrateGuessProteins();
       render();
     } catch (err) {
       console.warn('Geneguessr: hint reveal failed', err);
@@ -4153,21 +3900,6 @@
       console.log('[B-137 DEBUG] submitGuess payload:', JSON.stringify(payload, null, 2));
       hydrateStateFromPayload(payload);
 
-      let newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
-      await hydrateGuessProteins();
-
-      newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
-      if (newGuess && !newGuess.proteinResolved) {
-        console.warn('[Geneguessr] Guess missing protein data, forcing bootstrap refresh...');
-        try {
-          const bootstrapPayload = await fetchGameBootstrap();
-          hydrateStateFromPayload(bootstrapPayload);
-          await hydrateGuessProteins();
-        } catch (err) {
-          console.error('[Geneguessr] Bootstrap fallback failed', err);
-        }
-      }
-
       render();
 
       const inputEl = document.getElementById('pg-input');
@@ -4246,21 +3978,16 @@
       hydrateStateFromPayload(payload);
 
       // B-137 Fix: Ensure data is populated fast.
-      // If the guess payload didn't contain the protein, and hydrateGuessProteins fails,
-      // we force a full bootstrap refresh (which users say works).
+      // If the guess payload didn't contain sections,
+      // we force a full bootstrap refresh.
       let newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
 
-      // 1. Try standard hydration
-      await hydrateGuessProteins();
-
-      // 2. Check if we still miss data
-      newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
-      if (newGuess && !newGuess.proteinResolved) {
-        console.warn('[Geneguessr] Guess missing protein data, forcing bootstrap refresh...');
+      // Sections come from server now, no need for protein hydration
+      if (!newGuess?.sections) {
+        console.warn('[Geneguessr] Guess missing sections, forcing bootstrap refresh...');
         try {
           const bootstrapPayload = await fetchGameBootstrap();
           hydrateStateFromPayload(bootstrapPayload);
-          await hydrateGuessProteins();
         } catch (err) {
           console.error('[Geneguessr] Bootstrap fallback failed', err);
         }
@@ -4499,7 +4226,6 @@ https://brinedew.bio/apps/geneguessr/`;
     try {
       setStatus('loading-data');
       await bootstrapGame({ practice: true, restart: true, sameTarget: true, targetId: gameState.targetId });
-      await hydrateGuessProteins();
       render();
       setStatus('rendered');
     } catch (err) {
@@ -4513,7 +4239,6 @@ https://brinedew.bio/apps/geneguessr/`;
     try {
       setStatus('loading-data');
       await bootstrapGame({ practice: true, restart: true });
-      await hydrateGuessProteins();
       render();
       setStatus('rendered');
     } catch (err) {

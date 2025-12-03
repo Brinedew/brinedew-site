@@ -45,6 +45,7 @@ import {
   MAX_GUESSES,
   cleanGeneSummary,
   buildClueSections,
+  buildFeedbackSections,
   collectMatchedHintTexts,
   extractHintText,
   maskClueSections,
@@ -973,7 +974,6 @@ function buildGamePayload(state, targetProtein, options = {}) {
   const clueTarget = sanitizeTargetProtein(targetProtein, {
     revealIdentity: state.won || (state.guesses?.length || 0) >= MAX_GUESSES
   });
-  const includeProteins = Boolean(options.includeProteins);
   const guessEntries = [];
   const aggregatedMatches = {};
   let latestMatches = {};
@@ -1002,7 +1002,9 @@ function buildGamePayload(state, targetProtein, options = {}) {
       createdAt: entry.createdAt,
       score: resolvedScore,
       matchedHints: matches,
-      ...(includeProteins ? { protein: guessProteinCleaned } : {}),
+      sections: buildFeedbackSections(guessProteinCleaned),
+      headerLabel: guessProtein.hgnc || guessProtein.uniprot,
+      fullName: guessProtein.full_name || '',
       isLatest
     });
   });
@@ -1010,6 +1012,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
   const targetReveal = (state.won || lost)
     ? sanitizeTargetProtein(targetProtein, { revealIdentity: true })
     : null;
+  const targetRevealSections = targetReveal ? buildFeedbackSections(targetProtein) : null;
   const shareText = targetReveal ? buildShareText(state, guessEntries) : null;
   applyMatchReveals(maskedSections, aggregatedMatches);
   applyLatestHighlights(maskedSections, latestMatches);
@@ -1033,6 +1036,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
     },
     guesses: guessEntries,
     targetReveal,
+    targetRevealSections,
     shareText
   };
 }
