@@ -3273,17 +3273,17 @@
       || null;
     const structureChanged = !lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId;
     
-    // B-184 FIX: If structure hasn't changed and not game over, surgically update
-    // only the sections container. This avoids removing the 3D viewer from DOM
-    // which causes a black flash even when "preserving" it.
-    console.log('[B-184 DEBUG] renderClueSectionsIntoDom called', {
+    // B-184 DEBUG: Store debug state globally for inspection
+    window.__pgB184 = {
       structureChanged,
       gameOver,
       existingViewer: !!existingViewer,
       lastRenderedTargetStructureId,
       nextStructureId,
-      areEqual: lastRenderedTargetStructureId === nextStructureId
-    });
+      areEqual: lastRenderedTargetStructureId === nextStructureId,
+      timestamp: Date.now()
+    };
+    console.log('[B-184 DEBUG] renderClueSectionsIntoDom called, see window.__pgB184 for full values');
     if (!structureChanged && !gameOver && existingViewer) {
       const sectionsContainer = slot.querySelector('.pg-clue-sections');
       console.log('[B-184 DEBUG] Trying surgical update, sectionsContainer:', !!sectionsContainer);
