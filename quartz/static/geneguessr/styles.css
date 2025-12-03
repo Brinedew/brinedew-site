@@ -855,9 +855,10 @@
   content: ", ";
 }
 
-/* One space between redaction bars - HTML whitespace adds ~8px, so one space (~8px) gives us ~16px total = vertical gap */
+/* One space between redaction bars - preserved with white-space:pre, plus HTML whitespace = ~16px total */
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
   content: " ";
+  white-space: pre;
 }
 
 .pg-section-entry.matched-highlight {
