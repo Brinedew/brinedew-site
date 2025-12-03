@@ -813,7 +813,7 @@
 /* Unified Section Styling - used by both clue and feedback cards */
 .pg-section {
   margin-bottom: 0;
-  line-height: 1.8;
+  line-height: 2.1;
   font-size: 1rem;
   color: var(--dark);
   overflow-wrap: anywhere;
