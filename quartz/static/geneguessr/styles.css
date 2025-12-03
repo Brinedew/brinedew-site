@@ -850,6 +850,17 @@
   max-width: 100%;
 }
 
+/* Commas between revealed entries */
+.pg-section-entry:not(:last-child)::after {
+  content: ", ";
+}
+
+/* Two spaces between redaction bars - selectable like commas, similar width for minimal reflow */
+.pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
+  content: "  ";
+  white-space: pre;
+}
+
 .pg-section-entry.matched-highlight {
   color: var(--accent);
   font-weight: 600;
