@@ -836,16 +836,20 @@
   font-family: var(--codeFont);
 }
 
-/* Clue card sections: smaller font, line-height = bar height (1.157em) + gap (1.0995em) */
+/* Clue card sections: use flexbox to eliminate whitespace between entries */
 .pg-clue-card .pg-section {
-  font-size: 0;  /* Collapse whitespace between inline elements */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 0.9rem;
   line-height: 2.257;
   hyphens: none;
   font-family: var(--codeFont);
 }
 
 .pg-clue-card .pg-section-entry {
-  font-size: 0.9rem;  /* Restore font size on children */
+  display: inline-flex;
+  align-items: baseline;
 }
 
 .pg-section-entry {
@@ -863,7 +867,6 @@
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
   content: "  ";
   white-space: pre;
-  font-size: 0.9rem;  /* Restore font size for the ::after content */
 }
 
 .pg-section-entry.matched-highlight {
