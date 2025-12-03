@@ -3267,28 +3267,32 @@
     }
 
     const existingViewer = document.getElementById('pg-clue-structure');
-    let preservedViewer = null;
     const nextStructureId = targetProtein?.structure?.structure_id
       || targetProtein?.structure_id
       || targetProtein?.uniprot
       || null;
     const structureChanged = !lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId;
+    
+    // B-184 FIX: If structure hasn't changed and not game over, surgically update
+    // only the sections container. This avoids removing the 3D viewer from DOM
+    // which causes a black flash even when "preserving" it.
+    if (!structureChanged && !gameOver && existingViewer) {
+      const sectionsContainer = slot.querySelector('.pg-clue-sections');
+      if (sectionsContainer) {
+        sectionsContainer.innerHTML = renderClueSectionsHtml();
+        ensureSpoilerDelegation();
+        return;
+      }
+    }
+    
+    // Full re-render needed: structure changed, game over, or no existing viewer
     if (structureChanged) {
       markViewerDirty('pg-clue-structure');
-    } else if (existingViewer && !gameOver) {
-      preservedViewer = existingViewer;
-      preservedViewer.remove();
     }
     if (gameOver) {
       markViewerDirty('pg-solution-card-structure');
     }
     slot.innerHTML = renderClueCard(gameOver);
-    if (preservedViewer) {
-      const newViewerShell = document.getElementById('pg-clue-structure');
-      if (newViewerShell && newViewerShell.parentElement) {
-        newViewerShell.replaceWith(preservedViewer);
-      }
-    }
     lastRenderedTargetStructureId = nextStructureId;
     ensureSpoilerDelegation();
   }
