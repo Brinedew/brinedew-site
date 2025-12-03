@@ -816,16 +816,14 @@
   line-height: 1.5;
   font-size: 1rem;
   color: var(--dark);
-  overflow-wrap: anywhere;
   word-break: normal;
-  hyphens: auto;
   text-wrap: pretty;
 }
 
-@supports not (overflow-wrap: anywhere) {
-  .pg-section {
-    overflow-wrap: break-word;
-  }
+/* Feedback cards: enable hyphenation for long protein names */
+.pg-feedback-card .pg-section {
+  hyphens: auto;
+  overflow-wrap: break-word;
 }
 
 .pg-section-label {
@@ -838,10 +836,11 @@
   font-family: var(--codeFont);
 }
 
-/* Clue card sections: smaller font, line-height matches 2-space horizontal gap (measured: 1.0995em) */
+/* Clue card sections: smaller font, line-height = bar height (1.157em) + gap (1.0995em) */
 .pg-clue-card .pg-section {
   font-size: 0.9rem;
-  line-height: 2.1;
+  line-height: 2.257;
+  hyphens: none;
 }
 
 .pg-section-entry {
