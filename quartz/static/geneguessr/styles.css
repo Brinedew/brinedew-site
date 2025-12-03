@@ -813,7 +813,7 @@
 /* Unified Section Styling - used by both clue and feedback cards */
 .pg-section {
   margin-bottom: 0;
-  line-height: 2.1;
+  line-height: 1.5;
   font-size: 1rem;
   color: var(--dark);
   overflow-wrap: anywhere;
@@ -838,9 +838,10 @@
   font-family: var(--codeFont);
 }
 
-/* Clue card sections: slightly smaller to balance monospace appearance */
+/* Clue card sections: smaller font, line-height matches 2-space horizontal gap (measured: 1.0995em) */
 .pg-clue-card .pg-section {
   font-size: 0.9rem;
+  line-height: 2.1;
 }
 
 .pg-section-entry {
