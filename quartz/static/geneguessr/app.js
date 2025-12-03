@@ -2986,10 +2986,11 @@
 
   function renderClueSectionsHtml() {
     const sections = Array.isArray(clueData?.sections) ? clueData.sections : [];
-    const allMatches = clueData?.allMatches || {};
+    // B-186: Use latestMatches (most recent guess only), not allMatches (cumulative)
+    const latestMatches = clueData?.latestMatches || {};
     return sections.map(section => {
-      // Get matched items for this section from allMatches
-      const sectionMatches = allMatches[section.id] || [];
+      // Get matched items for this section from latestMatches
+      const sectionMatches = latestMatches[section.id] || [];
       return renderSpoilerSection(section, {
         matchedItems: sectionMatches,
         highlightMatches: sectionMatches.length > 0
@@ -3276,26 +3277,12 @@
       || null;
     const structureChanged = !lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId;
     
-    // B-184 DEBUG: Store debug state globally for inspection
-    window.__pgB184 = {
-      structureChanged,
-      gameOver,
-      existingViewer: !!existingViewer,
-      lastRenderedTargetStructureId,
-      nextStructureId,
-      areEqual: lastRenderedTargetStructureId === nextStructureId,
-      timestamp: Date.now(),
-      gameStateTargetId: gameState.targetId || null,
-      targetProteinExists: !!targetProtein
-    };
-    console.log('[B-184 DEBUG] renderClueSectionsIntoDom called, see window.__pgB184 for full values');
+    // B-184 FIX: Surgical update - only replace sections container, don't touch viewer
     if (!structureChanged && !gameOver && existingViewer) {
       const sectionsContainer = slot.querySelector('.pg-clue-sections');
-      console.log('[B-184 DEBUG] Trying surgical update, sectionsContainer:', !!sectionsContainer);
       if (sectionsContainer) {
         sectionsContainer.innerHTML = renderClueSectionsHtml();
         ensureSpoilerDelegation();
-        console.log('[B-184 DEBUG] Surgical update SUCCESS - early return');
         return;
       }
     }
