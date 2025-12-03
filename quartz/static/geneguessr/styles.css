@@ -836,20 +836,12 @@
   font-family: var(--codeFont);
 }
 
-/* Clue card sections: font-size:0 collapses HTML whitespace, restore on children */
+/* Clue card sections */
 .pg-clue-card .pg-section {
-  font-size: 0;
+  font-size: 0.9rem;
   line-height: 2.257;
   hyphens: none;
   font-family: var(--codeFont);
-}
-
-.pg-clue-card .pg-section-entry {
-  font-size: 0.9rem;
-}
-
-.pg-clue-card .pg-section-entry::after {
-  font-size: 0.9rem;
 }
 
 .pg-section-entry {
@@ -863,10 +855,13 @@
   content: ", ";
 }
 
-/* When entry contains only a redaction (unrevealed), use space instead of comma */
+/* When entry contains only a redaction (unrevealed), use margin instead of text space */
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
-  content: "  ";
-  white-space: pre;
+  content: "";
+}
+
+.pg-section-entry:has(.pg-redaction:only-child):not(:last-child) {
+  margin-right: 1.1em;  /* ~two monospace spaces at 0.9rem */
 }
 
 .pg-section-entry.matched-highlight {
