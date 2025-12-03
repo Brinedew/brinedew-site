@@ -3227,7 +3227,7 @@
       return '';
     }
 
-    return buildFeedbackCardMarkup(null, {
+    return buildFeedbackCardMarkup({ uniprot: guessEntry.uniprot }, {
       score: guessEntry.score,
       cardId,
       collapsible: true,
