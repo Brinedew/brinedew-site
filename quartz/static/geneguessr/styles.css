@@ -875,7 +875,7 @@
 }
 
 /*
- * ⚠️  WARNING: FRAGILE SPACING - DO NOT CHANGE WITHOUT TESTING (B-181)
+ * WARNING: FRAGILE SPACING - DO NOT CHANGE WITHOUT TESTING (B-181)
  * 
  * This controls the HORIZONTAL gap between redaction bars on clue cards.
  * The goal is to match the VERTICAL gap (~16px) so bars form an even grid.
