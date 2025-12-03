@@ -347,6 +347,15 @@ function buildProteinSections(protein, options = {}) {
     items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein?.tissue?.label }],
   });
 
+  // Origin age (when this gene first appeared in evolution)
+  if (protein?.origin_age) {
+    pushSection({
+      id: 'origin',
+      label: 'Origin',
+      items: [{ id: forClue ? 'hint-origin' : undefined, text: protein.origin_age }],
+    });
+  }
+
   // Clans (protein family classifications)
   if (clans.length) {
     pushSection({

@@ -149,6 +149,7 @@ function toProteinObject(row) {
     alphafold_plddt: row.alphafold_plddt,
     alphafold_url: row.alphafold_url,
     gene_summary: row.gene_summary,
+    origin_age: row.origin_age,
     // JSON arrays
     synonyms: parseJson(row.synonyms),
     domains: parseJson(row.domains),
