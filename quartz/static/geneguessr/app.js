@@ -3281,7 +3281,11 @@
       lastRenderedTargetStructureId,
       nextStructureId,
       areEqual: lastRenderedTargetStructureId === nextStructureId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      targetProteinExists: !!targetProtein,
+      targetProteinUniprot: targetProtein?.uniprot || null,
+      targetProteinStructureId: targetProtein?.structure_id || null,
+      targetProteinStructureStructureId: targetProtein?.structure?.structure_id || null
     };
     console.log('[B-184 DEBUG] renderClueSectionsIntoDom called, see window.__pgB184 for full values');
     if (!structureChanged && !gameOver && existingViewer) {
