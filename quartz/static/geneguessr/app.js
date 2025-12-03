@@ -3267,9 +3267,12 @@
     }
 
     const existingViewer = document.getElementById('pg-clue-structure');
-    const nextStructureId = targetProtein?.structure?.structure_id
+    // B-184 FIX: Use gameState.targetId instead of targetProtein.uniprot
+    // targetProtein doesn't have uniprot because it's the clue target with hidden identity
+    // gameState.targetId comes from gameStatus.targetId which is always set by server
+    const nextStructureId = gameState.targetId
+      || targetProtein?.structure?.structure_id
       || targetProtein?.structure_id
-      || targetProtein?.uniprot
       || null;
     const structureChanged = !lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId;
     
@@ -3282,10 +3285,8 @@
       nextStructureId,
       areEqual: lastRenderedTargetStructureId === nextStructureId,
       timestamp: Date.now(),
-      targetProteinExists: !!targetProtein,
-      targetProteinUniprot: targetProtein?.uniprot || null,
-      targetProteinStructureId: targetProtein?.structure_id || null,
-      targetProteinStructureStructureId: targetProtein?.structure?.structure_id || null
+      gameStateTargetId: gameState.targetId || null,
+      targetProteinExists: !!targetProtein
     };
     console.log('[B-184 DEBUG] renderClueSectionsIntoDom called, see window.__pgB184 for full values');
     if (!structureChanged && !gameOver && existingViewer) {
