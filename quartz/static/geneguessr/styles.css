@@ -836,20 +836,20 @@
   font-family: var(--codeFont);
 }
 
-/* Clue card sections: use flexbox to eliminate whitespace between entries */
+/* Clue card sections: font-size:0 collapses HTML whitespace, restore on children */
 .pg-clue-card .pg-section {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  font-size: 0.9rem;
+  font-size: 0;
   line-height: 2.257;
   hyphens: none;
   font-family: var(--codeFont);
 }
 
 .pg-clue-card .pg-section-entry {
-  display: inline-flex;
-  align-items: baseline;
+  font-size: 0.9rem;
+}
+
+.pg-clue-card .pg-section-entry::after {
+  font-size: 0.9rem;
 }
 
 .pg-section-entry {
