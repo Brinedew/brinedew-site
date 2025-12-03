@@ -2889,13 +2889,12 @@
       ],
     });
 
-    // Tissue specificity - DISABLED until tissue data is populated in proteins.json
-    // All proteins currently have tissue: { label: "unknown", score: null }
-    // pushSection({
-    //   id: 'tissue',
-    //   label: 'Tissue specificity',
-    //   items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue.label }],
-    // });
+    // Tissue specificity
+    pushSection({
+      id: 'tissue',
+      label: 'Tissue specificity',
+      items: [{ id: forClue ? 'hint-tissue' : undefined, text: protein.tissue?.label || 'unknown' }],
+    });
 
     // Clans (protein family classifications)
     if (clans.length) {
