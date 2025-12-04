@@ -441,8 +441,8 @@ function buildProteinSections(protein, options = {}) {
 }
 
 function isAlphaFoldOnlyProtein(protein) {
-  const representation = resolveStructureRepresentation(protein?.structure, protein?.length || 0);
-  return Boolean(representation && representation.source === 'alphafold');
+  // After D1 refactor, structure_source is a flat field, not nested under protein.structure
+  return protein?.structure_source === 'alphafold';
 }
 
 export {
