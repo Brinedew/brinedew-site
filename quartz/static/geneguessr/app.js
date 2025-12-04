@@ -3674,15 +3674,16 @@
     if (!cleanedQuery) {
       return [];
     }
-    const guessedSet = new Set((gameState.guesses || []).map((g) => normalizeUniprotId(g.uniprot)));
-    const requestLimit = SEARCH_MAX_RESULTS + guessedSet.size;
+    const guessedIds = (gameState.guesses || []).map((g) => normalizeUniprotId(g.uniprot)).filter(Boolean);
+    const guessedSet = new Set(guessedIds);
     if (autocompleteAbortController) {
       autocompleteAbortController.abort();
     }
     const controller = new AbortController();
     autocompleteAbortController = controller;
     try {
-      const response = await fetch(`${API_BASE}/api/proteins?query=${encodeURIComponent(cleanedQuery)}&limit=${requestLimit}`, {
+      const excludeParam = guessedIds.length ? `&exclude=${guessedIds.join(',')}` : '';
+      const response = await fetch(`${API_BASE}/api/proteins?query=${encodeURIComponent(cleanedQuery)}&limit=${SEARCH_MAX_RESULTS}${excludeParam}`, {
         credentials: 'include',
         signal: controller.signal
       });
@@ -3695,8 +3696,8 @@
           .map((protein) => rememberProteinRecord(protein))
           .filter(Boolean)
         : [];
+      // Server already excludes guessed proteins and limits results
       const matches = normalizedResults
-        .filter((protein) => protein && !guessedSet.has(normalizeUniprotId(protein.uniprot)))
         .map((protein) => ({
           protein,
           score: getSearchScore(protein, cleanedQuery.toLowerCase()),
@@ -3706,7 +3707,6 @@
           if (a.score !== b.score) return a.score - b.score;
           return a.protein.hgnc.localeCompare(b.protein.hgnc);
         })
-        .slice(0, SEARCH_MAX_RESULTS)
         .map((entry) => entry.protein);
       if (autocompleteAbortController === controller) {
         autocompleteAbortController = null;

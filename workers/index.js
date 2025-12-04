@@ -310,7 +310,9 @@ export default {
           return Response.json([], { headers: corsHeaders });
         }
         const limit = Math.min(parseInt(url.searchParams.get('limit')) || 20, 100);
-        const matches = await searchProteins(env.DB, query, limit);
+        const excludeRaw = url.searchParams.get('exclude') || '';
+        const exclude = excludeRaw ? excludeRaw.split(',').map(id => id.trim().toUpperCase()).filter(Boolean) : [];
+        const matches = await searchProteins(env.DB, query, limit, exclude);
         return Response.json(matches, { headers: corsHeaders });
       } catch (error) {
         console.error('Failed to load protein search results', error);

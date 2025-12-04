@@ -256,7 +256,7 @@ export async function clearStructureFailure(db, uniprot) {
   ).bind(uniprot).run();
 }
 
-export async function searchProteins(db, query, limit = 20) {
+export async function searchProteins(db, query, limit = 20, exclude = []) {
   if (!query || !query.trim()) {
     return [];
   }
@@ -264,6 +264,16 @@ export async function searchProteins(db, query, limit = 20) {
   const needle = query.trim().toLowerCase();
   const wildcard = `%${needle}%`;
   const prefix = `${needle}%`;
+  
+  // Build exclusion clause if needed
+  let excludeClause = '';
+  const excludeBindings = [];
+  if (exclude.length > 0) {
+    const placeholders = exclude.map(() => '?').join(',');
+    excludeClause = `AND upper(p.uniprot) NOT IN (${placeholders})`;
+    excludeBindings.push(...exclude);
+  }
+  
   try {
     const statement = `
       SELECT p.uniprot, p.gene, p.full_name, p.length,
@@ -286,6 +296,7 @@ export async function searchProteins(db, query, limit = 20) {
       WHERE (lower(p.gene) LIKE ? OR lower(p.full_name) LIKE ? OR s.normalized LIKE ?)
         AND p.structure_source IS NOT NULL
         AND sf.uniprot IS NULL
+        ${excludeClause}
       GROUP BY p.id
       ORDER BY match_rank ASC, lower(p.gene) ASC
       LIMIT ?`;
@@ -302,6 +313,7 @@ export async function searchProteins(db, query, limit = 20) {
         wildcard,
         wildcard,
         wildcard,
+        ...excludeBindings,
         limit
       )
       .all();
