@@ -2239,6 +2239,8 @@
         // Render chain label callouts if available (B-189: includes Target labels for quiz cards)
         if (structureInfo.chainLabels && countTotalChains(structureInfo.chainLabels) > 1) {
           renderChainLabelCallouts(container, structureInfo.chainLabels);
+          // Start the position update loop for 3D callouts
+          initializeChainCallouts(containerId);
         }
         timing('styling applied - DONE');
       };
