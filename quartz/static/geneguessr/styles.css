@@ -1137,11 +1137,18 @@
   min-width: 0;
   padding: 0.65rem 0.75rem;
   font-size: 1rem;
+  font-family: "Crimson Pro", serif;
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   background: transparent;
   color: var(--dark);
   outline: none;
+}
+
+#pg-input::placeholder {
+  font-family: "Crimson Pro", serif;
+  color: var(--gray);
+  opacity: 1;
 }
 
 #pg-input:focus {
