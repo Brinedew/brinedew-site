@@ -647,15 +647,35 @@ async function handleStructureToken(request, env, corsHeaders) {
     }
     const token = await createStructureToken(env, meta);
     const structureUrl = `${url.origin}/api/structure?token=${token}`;
-    // SECURITY: Do NOT return chainLabels for target - it reveals the answer!
-    // Chain labels include gene names and is_target flags that leak target identity.
+    
+    // Parse chain labels to create redacted version for target
+    // SECURITY: Only send chain IDs + is_target flag, never gene names
+    let targetChainHints = null;
+    const chainLabelsRaw = meta.source === 'swissmodel' 
+      ? protein.swissmodel_chain_labels 
+      : protein.pdb_chain_labels;
+    if (chainLabelsRaw) {
+      try {
+        const chainLabels = typeof chainLabelsRaw === 'string'
+          ? JSON.parse(chainLabelsRaw)
+          : chainLabelsRaw;
+        // Redact: only keep chains array for target entries, no gene/name
+        targetChainHints = chainLabels
+          ?.filter(l => l.is_target)
+          ?.map(l => ({ chains: l.chains }));
+        if (targetChainHints?.length === 0) targetChainHints = null;
+      } catch (e) {
+        console.warn('Failed to parse chain_labels for target hints', e);
+      }
+    }
+    
     return Response.json({
       token,
       sourceLabel: meta.shortLabel,
       displayLabel: meta.displayLabel,
       format: meta.format || 'cif',
-      url: structureUrl
-      // chainLabels intentionally omitted for target
+      url: structureUrl,
+      targetChainHints // Redacted: just chain IDs, no gene names
     }, { headers: corsHeaders });
   }
 

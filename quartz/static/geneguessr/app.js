@@ -678,7 +678,9 @@
         format: data.format || 'cif',
         url: data.url || resolvedUrl,
         internalUrl: resolvedUrl,
-        chainLabels: data.chainLabels || null
+        // Convert targetChainHints to chainLabels format for rendering
+        // Server sends redacted hints (just chains array), we add is_target=true
+        chainLabels: data.targetChainHints?.map(h => ({ ...h, is_target: true })) || null
       };
       return targetStructureInfo;
     } catch (err) {
@@ -1522,8 +1524,9 @@
       el.className = 'pg-chain-callout pg-chain-callout-3d' + (entry.is_target ? ' pg-chain-callout-target' : '');
       el.dataset.chainId = chainId;
       
-      const gene = entry.gene || entry.name?.split(' ')[0] || '?';
-      const full = entry.name || entry.gene || '?';
+      // For target hints (no gene name), show "Target"; otherwise show gene name
+      const gene = entry.gene || entry.name?.split(' ')[0] || (entry.is_target ? 'Target' : '?');
+      const full = entry.name || entry.gene || (entry.is_target ? 'Target' : '?');
       el.innerHTML = `<span class="pg-chain-label-gene">${escapeAttribute(gene)}</span>` +
                      `<span class="pg-chain-label-full">${escapeAttribute(full)}</span>`;
       
