@@ -4340,10 +4340,11 @@ https://brinedew.bio/apps/geneguessr/`;
       card.dataset.expanded = String(next);
       toggle.setAttribute('aria-expanded', next);
       if (chevron) chevron.textContent = next ? '▼' : '▶';
-      // Set max-height for smooth CSS animation
-      // When expanding, temporarily remove max-height to measure true scrollHeight
+      // Set display and max-height for smooth CSS animation
       if (content) {
         if (next) {
+          // First show the content so we can measure it
+          content.style.display = 'block';
           content.style.maxHeight = 'none';
           const height = content.scrollHeight;
           content.style.maxHeight = '0px';
@@ -4352,6 +4353,12 @@ https://brinedew.bio/apps/geneguessr/`;
           content.style.maxHeight = height + 'px';
         } else {
           content.style.maxHeight = '0px';
+          // Hide after transition completes (matches CSS transition duration)
+          setTimeout(() => {
+            if (card.dataset.expanded !== 'true') {
+              content.style.display = 'none';
+            }
+          }, 300);
         }
       }
     });
