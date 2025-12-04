@@ -379,12 +379,6 @@ function buildProteinSections(protein, options = {}) {
         text: domain,
       })),
     });
-  } else {
-    pushSection({
-      id: 'domains',
-      label: 'Domains',
-      items: [{ text: 'No structured domains', id: forClue ? 'hint-domain-0' : undefined }],
-    });
   }
   
   const formattedReactome = reactomePaths
@@ -412,7 +406,6 @@ function buildProteinSections(protein, options = {}) {
     { aspect: 'cc', label: 'Cellular component' },
     { aspect: 'bp', label: 'Biological process' },
   ];
-  let goSectionAdded = false;
   goSectionMeta.forEach(({ aspect, label }) => {
     const namedTerms = Array.isArray(goTermNamesByAspect[aspect]) ? goTermNamesByAspect[aspect] : null;
     const rawTerms = Array.isArray(goTermsByAspect[aspect]) ? goTermsByAspect[aspect] : [];
@@ -420,7 +413,6 @@ function buildProteinSections(protein, options = {}) {
     if (!terms.length) {
       return;
     }
-    goSectionAdded = true;
     pushSection({
       id: `function-${aspect}`,
       label,
@@ -429,13 +421,6 @@ function buildProteinSections(protein, options = {}) {
         : terms.map((term) => ({ text: term })),
     });
   });
-  if (!goSectionAdded) {
-    pushSection({
-      id: 'function-bp',
-      label: 'Biological process',
-      items: [{ text: forClue ? 'Not available' : 'Not available', id: forClue ? 'hint-bp-0' : undefined }],
-    });
-  }
 
   return sections;
 }
