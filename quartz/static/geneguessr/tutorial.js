@@ -12,24 +12,24 @@
       title: 'Step 1 - Welcome to GeneGuessr!',
       body: [
         { img: 1, text: 'This is a protein. Can you figure out which gene made it?' },
-        { img: 2, text: 'Type your best guess into the search bar' },
-        { img: 3, text: 'As you play, you will uncover info about your target' }
+        { img: 2, text: 'All hints are hidden at the start, but they will reveal as you play' },
+        { img: 3, text: 'Take a guess and type it into the search bar' }
       ]
     },
     {
       title: 'Step 2 - Feedback cards',
       body: [
-        { img: 4, text: 'Each of your guesses will be saved as a feedback card' },
-        { img: 5, text: 'The top bar shows how close you got' },
-        { img: 6, text: 'And look, these parts match your target gene!' }
+        { img: 4, text: 'Each of your guesses will appear as a feedback card' },
+        { img: 5, text: 'The feedback bar shows how close you got' },
+        { img: 6, text: 'Look for highlighted properties - they match your target' }
       ]
     },
     {
-      title: 'Step 3 - Spoilers & Hints',
+      title: 'Step 3 - Hints',
       body: [
-        { img: 7, text: 'After each guess, you get +1 hint' },
-        { img: 8, text: 'Tap a spoiler bar to spend a hint and reveal info' },
-        { img: 9, text: 'You begin with 1 hint - try spending it right now!' }
+        { img: 7, text: 'Tap a hint bar to reveal info' },
+        { img: 8, text: 'Each guess gives you +1 hint' },
+        { img: 9, text: 'You've got 10 total guesses - feel free to experiment' }
       ]
     }
   ];
