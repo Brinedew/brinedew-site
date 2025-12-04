@@ -2236,29 +2236,9 @@
       const finalizeViewerStyling = () => {
         timing('loadComplete fired - structure fully rendered');
         applyViewerStylizationProfile(viewer, container);
-        // Render chain label callouts if available
+        // Render chain label callouts if available (B-189: includes Target labels for quiz cards)
         if (structureInfo.chainLabels && countTotalChains(structureInfo.chainLabels) > 1) {
           renderChainLabelCallouts(container, structureInfo.chainLabels);
-          // Toggle injection disabled (B-171) - always show complex
-          // injectChainToggle(container, structureInfo.chainLabels);
-          // Store chain data for toggle functionality
-          viewerChainData.set(containerId, {
-            chainLabels: structureInfo.chainLabels,
-            pdbId: moleculeId
-          });
-          
-          // Try to create per-chain components for granular visibility control
-          // This is async but we don't need to wait - visibility will use fallback if not ready
-          createPerChainComponents(containerId, structureInfo.chainLabels).then(success => {
-            if (success) {
-              console.log('[Geneguessr] Per-chain components created successfully');
-            } else {
-              console.log('[Geneguessr] Using visual.select fallback for chain visibility');
-            }
-          });
-          
-          // Always show complex (B-171 - toggle mothballed)
-          applyChainVisibility(containerId, true);
         }
         timing('styling applied - DONE');
       };
