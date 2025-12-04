@@ -29,7 +29,7 @@
       body: [
         { img: 7, text: 'Tap a hint bar to reveal info' },
         { img: 8, text: 'Each guess gives you +1 hint' },
-        { img: 9, text: 'You've got 10 total guesses - feel free to experiment' }
+        { img: 9, text: "You've got 10 total guesses - feel free to experiment" }
       ]
     }
   ];
