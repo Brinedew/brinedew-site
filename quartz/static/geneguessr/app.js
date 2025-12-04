@@ -1492,7 +1492,8 @@
 
     const overlay = document.createElement('div');
     overlay.className = 'pg-chain-callouts pg-chain-callouts-3d';
-    overlay.style.display = 'none';
+    // B-171: Toggle removed, labels always visible by default
+    overlay.style.display = 'flex';
 
     // Expand labels to individual chain entries (one callout per chain)
     const expandedChains = [];
