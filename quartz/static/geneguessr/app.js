@@ -4340,7 +4340,10 @@ https://brinedew.bio/apps/geneguessr/`;
       card.dataset.expanded = String(next);
       toggle.setAttribute('aria-expanded', next);
       if (chevron) chevron.textContent = next ? '▼' : '▶';
-      if (content) content.style.display = next ? 'block' : 'none';
+      // Set max-height for smooth CSS animation (same pattern as guess cards)
+      if (content) {
+        content.style.maxHeight = next ? content.scrollHeight + 'px' : '0px';
+      }
     });
   }
 
