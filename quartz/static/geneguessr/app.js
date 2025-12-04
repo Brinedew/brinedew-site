@@ -680,7 +680,9 @@
         internalUrl: resolvedUrl,
         // Convert targetChainHints to chainLabels format for rendering
         // Server sends redacted hints (just chains array), we add is_target=true
-        chainLabels: data.targetChainHints?.map(h => ({ ...h, is_target: true })) || null
+        chainLabels: data.targetChainHints?.map(h => ({ ...h, is_target: true })) || null,
+        // Total chain count from original structure (for deciding whether to show labels)
+        totalChainCount: data.totalChainCount || 0
       };
       return targetStructureInfo;
     } catch (err) {
@@ -1481,9 +1483,15 @@
   /**
    * Render chain callouts. Creates DOM, computes positions, sets up RAF loop.
    * Creates one callout per chain (not per label), so multi-chain genes get multiple labels.
+   * @param {HTMLElement} container - The viewer container
+   * @param {Array} chainLabels - Chain label data
+   * @param {number} [totalChainCount] - Optional override for total chain count (for target structures)
    */
-  function renderChainLabelCallouts(container, chainLabels) {
-    if (!container || !chainLabels || countTotalChains(chainLabels) <= 1) return;
+  function renderChainLabelCallouts(container, chainLabels, totalChainCount) {
+    // Use totalChainCount if provided (for target structures where we only have target chains)
+    // Otherwise count from chainLabels
+    const effectiveCount = totalChainCount != null ? totalChainCount : countTotalChains(chainLabels);
+    if (!container || !chainLabels || effectiveCount <= 1) return;
 
     const viewerId = container.id;
     const viewer = activeViewers.get(viewerId);
@@ -2238,8 +2246,10 @@
         timing('loadComplete fired - structure fully rendered');
         applyViewerStylizationProfile(viewer, container);
         // Render chain label callouts if available (B-189: includes Target labels for quiz cards)
-        if (structureInfo.chainLabels && countTotalChains(structureInfo.chainLabels) > 1) {
-          renderChainLabelCallouts(container, structureInfo.chainLabels);
+        // Use totalChainCount for target structures (where chainLabels only has target chains)
+        const effectiveCount = structureInfo.totalChainCount || countTotalChains(structureInfo.chainLabels);
+        if (structureInfo.chainLabels && effectiveCount > 1) {
+          renderChainLabelCallouts(container, structureInfo.chainLabels, structureInfo.totalChainCount);
           // Start the position update loop for 3D callouts
           initializeChainCallouts(containerId);
         }

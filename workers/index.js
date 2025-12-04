@@ -651,6 +651,7 @@ async function handleStructureToken(request, env, corsHeaders) {
     // Parse chain labels to create redacted version for target
     // SECURITY: Only send chain IDs + is_target flag, never gene names
     let targetChainHints = null;
+    let totalChainCount = 0;
     const chainLabelsRaw = meta.source === 'swissmodel' 
       ? protein.swissmodel_chain_labels 
       : protein.pdb_chain_labels;
@@ -659,6 +660,8 @@ async function handleStructureToken(request, env, corsHeaders) {
         const chainLabels = typeof chainLabelsRaw === 'string'
           ? JSON.parse(chainLabelsRaw)
           : chainLabelsRaw;
+        // Count ALL chains in the structure (for deciding whether to show labels)
+        totalChainCount = chainLabels?.reduce((sum, l) => sum + (l.chains?.length || 0), 0) || 0;
         // Redact: only keep chains array for target entries, no gene/name
         targetChainHints = chainLabels
           ?.filter(l => l.is_target)
@@ -675,7 +678,8 @@ async function handleStructureToken(request, env, corsHeaders) {
       displayLabel: meta.displayLabel,
       format: meta.format || 'cif',
       url: structureUrl,
-      targetChainHints // Redacted: just chain IDs, no gene names
+      targetChainHints, // Redacted: just chain IDs, no gene names
+      totalChainCount   // Total chains in structure (for multi-chain label decision)
     }, { headers: corsHeaders });
   }
 
