@@ -3675,13 +3675,14 @@
       return [];
     }
     const guessedSet = new Set((gameState.guesses || []).map((g) => normalizeUniprotId(g.uniprot)));
+    const requestLimit = SEARCH_MAX_RESULTS + guessedSet.size;
     if (autocompleteAbortController) {
       autocompleteAbortController.abort();
     }
     const controller = new AbortController();
     autocompleteAbortController = controller;
     try {
-      const response = await fetch(`${API_BASE}/api/proteins?query=${encodeURIComponent(cleanedQuery)}`, {
+      const response = await fetch(`${API_BASE}/api/proteins?query=${encodeURIComponent(cleanedQuery)}&limit=${requestLimit}`, {
         credentials: 'include',
         signal: controller.signal
       });

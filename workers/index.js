@@ -309,7 +309,8 @@ export default {
         if (!query) {
           return Response.json([], { headers: corsHeaders });
         }
-        const matches = await searchProteins(env.DB, query, 3);
+        const limit = Math.min(parseInt(url.searchParams.get('limit')) || 20, 100);
+        const matches = await searchProteins(env.DB, query, limit);
         return Response.json(matches, { headers: corsHeaders });
       } catch (error) {
         console.error('Failed to load protein search results', error);
