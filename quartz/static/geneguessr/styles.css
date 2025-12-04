@@ -1672,50 +1672,7 @@ body:has(#geneguessr-root) .sidebar.right > .tags {
   display: none;
 }
 
-/* Attribution panel styling */
-.pg-attribution-panel {
-  padding: 1rem;
-  background: var(--ui-bg);
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  margin-top: 0.5rem;
-}
-
-.pg-attribution-panel ul {
-  margin: 0;
-  padding-left: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.pg-attribution-panel li {
-  font-size: 0.9rem;
-  color: var(--dark);
-}
-
-.pg-attribution-panel a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.pg-attribution-panel a:hover {
-  text-decoration: underline;
-}
-
-/* Chevron icon for attribution toggle */
-.pg-chevron-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 0.5rem;
-  transition: transform 0.2s ease;
-}
-
-.pg-chevron-icon.is-expanded {
-  transform: rotate(90deg);
-}
-
+/* Chevron icon svg sizing (used by collapse toggles) */
 .pg-chevron-icon svg {
   width: 12px;
   height: 12px;

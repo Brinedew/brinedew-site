@@ -4318,9 +4318,6 @@ https://brinedew.bio/apps/geneguessr/`;
       tutorialBootRequested = true;
       window.GeneGuessrTutorial.boot();
     }
-
-    // Attach collapse logic for Attribution & Data Sources card
-    attachAttributionCollapseLogic();
   }
 
   // Start when DOM ready (but only if root element exists)
@@ -4339,53 +4336,6 @@ https://brinedew.bio/apps/geneguessr/`;
     document.addEventListener('DOMContentLoaded', boot);
   } else {
     boot();
-  }
-
-
-  // Collapse logic for Attribution & Data Sources card
-  function attachAttributionCollapseLogic() {
-    // Find the attribution button by its text content
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const attributionBtn = buttons.find(btn => btn.textContent && btn.textContent.includes('Attribution & Data Sources'));
-    if (!attributionBtn) return;
-
-    // Find or create the chevron SVG icon
-    let chevron = attributionBtn.querySelector('.pg-chevron-icon');
-    if (!chevron) {
-      chevron = document.createElement('span');
-      chevron.className = 'pg-chevron-icon';
-      chevron.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-      attributionBtn.insertBefore(chevron, attributionBtn.firstChild);
-    }
-
-    // Find or create the content region after the button
-    let attributionContent = attributionBtn.nextElementSibling;
-    if (!attributionContent || !attributionContent.classList.contains('pg-attribution-content')) {
-      attributionContent = document.createElement('div');
-      attributionContent.className = 'pg-attribution-content';
-      attributionContent.style.display = 'none';
-      attributionContent.innerHTML = `
-      <div class="pg-attribution-panel">
-        <ul>
-          <li>Protein data: <a href='https://www.uniprot.org/' target='_blank' rel='noopener'>UniProt</a></li>
-          <li>Gene Ontology: <a href='http://geneontology.org/' target='_blank' rel='noopener'>GO Consortium</a></li>
-          <li>Domain annotations: <a href='https://www.ebi.ac.uk/interpro/' target='_blank' rel='noopener'>InterPro</a></li>
-          <li>Pathway data: <a href='https://reactome.org/' target='_blank' rel='noopener'>Reactome</a></li>
-          <li>3D structures: <a href='https://alphafold.ebi.ac.uk/' target='_blank' rel='noopener'>AlphaFold DB</a>, <a href='https://swissmodel.expasy.org/' target='_blank' rel='noopener'>SWISS-MODEL</a></li>
-          <li>Structure viewer: <a href='https://www.ebi.ac.uk/pdbe/molstar/' target='_blank' rel='noopener'>PDBe Mol*</a></li>
-          <li>Similarity embeddings: <a href='https://github.com/kansil/HiG2Vec' target='_blank' rel='noopener'>HiG2Vec</a></li>
-        </ul>
-      </div>
-    `;
-      attributionBtn.parentNode.insertBefore(attributionContent, attributionBtn.nextSibling);
-    }
-
-    // Attach click handler to toggle
-    attributionBtn.addEventListener('click', function () {
-      const expanded = attributionContent.style.display !== 'none';
-      attributionContent.style.display = expanded ? 'none' : 'block';
-      chevron.classList.toggle('is-expanded', !expanded);
-    });
   }
 
   function buildMaskCharacters(length) {
