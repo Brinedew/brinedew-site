@@ -966,7 +966,7 @@
   cursor: pointer;
   user-select: none;
   color: transparent;
-  background: var(--dark);
+  background: var(--gray);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   transition: opacity 0.15s ease;
