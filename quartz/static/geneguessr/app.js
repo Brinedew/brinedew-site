@@ -4314,10 +4314,34 @@ https://brinedew.bio/apps/geneguessr/`;
     render();
     setStatus('rendered');
 
+    // Attach collapse handler for attribution card (outside geneguessr-root)
+    attachAttributionToggle();
+
     if (!tutorialBootRequested && window.GeneGuessrTutorial && typeof window.GeneGuessrTutorial.boot === 'function') {
       tutorialBootRequested = true;
       window.GeneGuessrTutorial.boot();
     }
+  }
+
+  // Handle attribution card collapse (card is in markdown, outside geneguessr-root)
+  function attachAttributionToggle() {
+    const card = document.getElementById('attribution-card');
+    if (!card) return;
+    const toggle = card.querySelector('.pg-collapse-toggle');
+    if (!toggle || toggle.dataset.listenerAttached) return;
+    toggle.dataset.listenerAttached = 'true';
+    toggle.addEventListener('click', function() {
+      const content = document.getElementById('attribution-content');
+      const chevron = card.querySelector('.pg-collapse-chevron');
+      const expanded = card.dataset.expanded === 'true';
+      const next = !expanded;
+      card.classList.toggle('expanded', next);
+      card.classList.toggle('collapsed', !next);
+      card.dataset.expanded = String(next);
+      toggle.setAttribute('aria-expanded', next);
+      if (chevron) chevron.textContent = next ? '▼' : '▶';
+      if (content) content.style.display = next ? 'block' : 'none';
+    });
   }
 
   // Start when DOM ready (but only if root element exists)
