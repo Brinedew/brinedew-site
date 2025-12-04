@@ -351,7 +351,7 @@ function buildProteinSections(protein, options = {}) {
   if (protein?.origin_age) {
     pushSection({
       id: 'origin',
-      label: 'Origin',
+      label: 'Epoch of origin',
       items: [{ id: forClue ? 'hint-origin' : undefined, text: protein.origin_age }],
     });
   }
