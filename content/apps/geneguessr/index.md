@@ -28,7 +28,7 @@ tags:
       <span class="pg-section-label">Gene Ontology:</span> <span class="pg-section-entry"><a href="http://geneontology.org/">GO Consortium</a></span>
     </div>
     <div class="pg-section">
-      <span class="pg-section-label">Domain annotations:</span> <span class="pg-section-entry"><a href="https://www.ebi.ac.uk/interpro/">InterPro</a></span>
+      <span class="pg-section-label">Domains & clans:</span> <span class="pg-section-entry"><a href="https://www.ebi.ac.uk/interpro/">InterPro</a> / <a href="https://www.ebi.ac.uk/interpro/entry/pfam/">Pfam</a></span>
     </div>
     <div class="pg-section">
       <span class="pg-section-label">Pathway data:</span> <span class="pg-section-entry"><a href="https://reactome.org/">Reactome</a></span>
