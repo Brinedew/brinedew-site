@@ -3377,6 +3377,11 @@
       hydrateStateFromPayload(payload);
       updateHintDisplays();
       render();
+      
+      // Show tutorial step 3 after first hint reveal
+      if (window.GeneGuessrTutorial && window.GeneGuessrTutorial.maybeShowStep) {
+        window.GeneGuessrTutorial.maybeShowStep(3);
+      }
     } catch (err) {
       console.warn('Geneguessr: hint reveal failed', err);
       flashHintsWarning();
@@ -3902,6 +3907,11 @@
       const inputEl = document.getElementById('pg-input');
       if (inputEl) {
         inputEl.value = '';
+      }
+      
+      // Show tutorial step 2 after first guess
+      if (window.GeneGuessrTutorial && window.GeneGuessrTutorial.maybeShowStep) {
+        window.GeneGuessrTutorial.maybeShowStep(2);
       }
     } catch (err) {
       console.error('[Geneguessr] Guess submission failed', err);
