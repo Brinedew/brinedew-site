@@ -28,6 +28,19 @@
   font-display: swap;
 }
 
+/* Screen-reader only utility - visually hidden but accessible to screen readers and crawlers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Apply fonts directly - no variables, no fights */
 html, body, article { font-family: "Crimson Pro", serif; }
 /* Ensure all headings use Crimson Pro regardless of theme defaults */

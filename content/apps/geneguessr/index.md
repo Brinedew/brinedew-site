@@ -1,12 +1,14 @@
 ---
-title: "Geneguessr"
-description: "Daily protein guessing game"
+title: "GeneGuessr - Daily Protein Guessing Game"
+description: "Can you identify the protein from its 3D structure? A daily guessing game where you use clues about domains, pathways, and molecular functions to figure out which gene made the protein."
 date: 2025-11-23
 draft: false
 folderPage: true
 tags:
 - content/apps
 ---
+
+<h1 class="sr-only">GeneGuessr - Daily Protein Guessing Game</h1>
 
 <div id="geneguessr-root" data-static="/static/geneguessr"></div>
 
