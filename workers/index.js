@@ -270,6 +270,13 @@ export default {
       return handleStructureFetch(request, env, corsHeaders);
     }
 
+    // Direct structure access by cacheKey - for client-side cache hits
+    // Returns structure from R2 with long cache headers
+    // Safe because cacheKey (e.g., "pdb/8J07.bcif") doesn't reveal protein identity
+    if (url.pathname === '/api/structure-cached' && request.method === 'GET') {
+      return handleCachedStructureFetch(request, env, corsHeaders);
+    }
+
     if (url.pathname === '/api/game/bootstrap' && request.method === 'GET') {
       return handleGameBootstrap(request, env, corsHeaders);
     }
@@ -652,6 +659,14 @@ async function handleStructureToken(request, env, corsHeaders) {
         return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
       }
       console.log('GeneGuessr: handleStructureToken - structure cached');
+      
+      // Get file size for client-side cache decisions
+      let sizeBytes = 0;
+      try {
+        const head = await env.STRUCTURES_BUCKET.head(meta.r2Key);
+        sizeBytes = head?.size || 0;
+      } catch { /* ignore */ }
+      
       const token = await createStructureToken(env, meta);
     const structureUrl = `${url.origin}/api/structure?token=${token}`;
     
@@ -685,6 +700,8 @@ async function handleStructureToken(request, env, corsHeaders) {
       displayLabel: meta.displayLabel,
       format: meta.format || 'cif',
       url: structureUrl,
+      cacheKey: meta.r2Key, // For client-side IndexedDB caching (doesn't reveal protein identity)
+      sizeBytes, // File size for client-side cache decisions (skip caching giant structures)
       targetChainHints, // Redacted: just chain IDs, no gene names
       totalChainCount   // Total chains in structure (for multi-chain label decision)
     }, { headers: corsHeaders });
@@ -708,6 +725,14 @@ async function handleStructureToken(request, env, corsHeaders) {
   if (!cached) {
     return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
   }
+  
+  // Get file size for client-side cache decisions
+  let sizeBytes = 0;
+  try {
+    const head = await env.STRUCTURES_BUCKET.head(meta.r2Key);
+    sizeBytes = head?.size || 0;
+  } catch { /* ignore */ }
+  
   const token = await createStructureToken(env, meta);
   const structureUrl = `${url.origin}/api/structure?token=${token}`;
   // Parse chain labels if present (stored as JSON string in D1)
@@ -731,6 +756,8 @@ async function handleStructureToken(request, env, corsHeaders) {
     displayLabel: meta.displayLabel,
     format: meta.format || 'cif',
     url: structureUrl,
+    cacheKey: meta.r2Key, // For client-side IndexedDB caching
+    sizeBytes, // File size for client-side cache decisions
     chainLabels
   }, { headers: corsHeaders });
   } catch (err) {
@@ -767,6 +794,43 @@ async function handleStructureFetch(request, env, corsHeaders) {
       ...corsHeaders,
       'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
       'Cache-Control': 'public, max-age=3600'
+    }
+  });
+}
+
+/**
+ * Direct structure fetch by cacheKey (r2Key).
+ * Used for client-side cache validation - if client has this key cached,
+ * it can skip the download entirely.
+ * Returns structure with long cache headers since the URL is stable.
+ */
+async function handleCachedStructureFetch(request, env, corsHeaders) {
+  const url = new URL(request.url);
+  const cacheKey = url.searchParams.get('key');
+  if (!cacheKey) {
+    return Response.json({ error: 'Missing key parameter' }, { status: 400, headers: corsHeaders });
+  }
+  
+  // Validate cacheKey format to prevent path traversal
+  // Valid formats: "pdb/XXXX.bcif", "alphafold/XXXXX.cif", "swissmodel/XXXXX.pdb"
+  const validKeyPattern = /^(pdb|alphafold|swissmodel)\/[A-Za-z0-9_-]+\.(bcif|cif|pdb)$/;
+  if (!validKeyPattern.test(cacheKey)) {
+    return Response.json({ error: 'Invalid key format' }, { status: 400, headers: corsHeaders });
+  }
+  
+  const object = await env.STRUCTURES_BUCKET.get(cacheKey);
+  if (!object) {
+    return Response.json({ error: 'Structure not cached' }, { status: 404, headers: corsHeaders });
+  }
+  
+  await touchStructureCacheEntry(env, cacheKey, object.size);
+  
+  // Long cache - 7 days. Structure files don't change.
+  return new Response(object.body, {
+    headers: {
+      ...corsHeaders,
+      'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=604800, immutable'
     }
   });
 }

@@ -142,6 +142,160 @@
 
   prunePersistedState();
 
+  // =========================================================================
+  // Structure Cache (IndexedDB)
+  // =========================================================================
+  // Caches structure files locally to avoid re-downloading on repeat visits.
+  // Uses cacheKey (r2Key) as the key - e.g., "pdb/8J07.bcif"
+  // This doesn't reveal protein identity (PDB IDs don't map to gene names).
+  // =========================================================================
+  const STRUCTURE_CACHE_DB = 'geneguessr-structures';
+  const STRUCTURE_CACHE_STORE = 'structures';
+  const STRUCTURE_CACHE_META_STORE = 'meta';
+  const STRUCTURE_CACHE_VERSION = 1;
+  const STRUCTURE_CACHE_MAX_BYTES = 150 * 1024 * 1024; // 150 MB max cache
+  const STRUCTURE_CACHE_MAX_FILE_SIZE = 15 * 1024 * 1024; // Don't cache files > 15 MB
+  
+  let structureCacheDb = null;
+  
+  async function openStructureCache() {
+    if (structureCacheDb) return structureCacheDb;
+    
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(STRUCTURE_CACHE_DB, STRUCTURE_CACHE_VERSION);
+      
+      request.onerror = () => {
+        console.warn('[Geneguessr] IndexedDB open failed:', request.error);
+        resolve(null);
+      };
+      
+      request.onsuccess = () => {
+        structureCacheDb = request.result;
+        resolve(structureCacheDb);
+      };
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(STRUCTURE_CACHE_STORE)) {
+          db.createObjectStore(STRUCTURE_CACHE_STORE); // key = cacheKey
+        }
+        if (!db.objectStoreNames.contains(STRUCTURE_CACHE_META_STORE)) {
+          const metaStore = db.createObjectStore(STRUCTURE_CACHE_META_STORE); // key = cacheKey
+          metaStore.createIndex('lastAccess', 'lastAccess');
+        }
+      };
+    });
+  }
+  
+  async function getStructureFromCache(cacheKey) {
+    try {
+      const db = await openStructureCache();
+      if (!db) return null;
+      
+      return new Promise((resolve) => {
+        const tx = db.transaction([STRUCTURE_CACHE_STORE, STRUCTURE_CACHE_META_STORE], 'readwrite');
+        const store = tx.objectStore(STRUCTURE_CACHE_STORE);
+        const metaStore = tx.objectStore(STRUCTURE_CACHE_META_STORE);
+        
+        const getReq = store.get(cacheKey);
+        getReq.onsuccess = () => {
+          const data = getReq.result;
+          if (data) {
+            // Update last access time (LRU)
+            metaStore.put({ lastAccess: Date.now(), size: data.byteLength || data.size || 0 }, cacheKey);
+            resolve(data);
+          } else {
+            resolve(null);
+          }
+        };
+        getReq.onerror = () => resolve(null);
+      });
+    } catch (err) {
+      console.warn('[Geneguessr] Cache read error:', err);
+      return null;
+    }
+  }
+  
+  async function putStructureInCache(cacheKey, data, sizeBytes) {
+    try {
+      // Don't cache files that are too large
+      if (sizeBytes > STRUCTURE_CACHE_MAX_FILE_SIZE) {
+        console.log(`[Geneguessr] Skipping cache for ${cacheKey} (${Math.round(sizeBytes/1024/1024)}MB > ${STRUCTURE_CACHE_MAX_FILE_SIZE/1024/1024}MB limit)`);
+        return;
+      }
+      
+      const db = await openStructureCache();
+      if (!db) return;
+      
+      // Check cache size and evict if needed
+      await evictIfNeeded(db, sizeBytes);
+      
+      return new Promise((resolve) => {
+        const tx = db.transaction([STRUCTURE_CACHE_STORE, STRUCTURE_CACHE_META_STORE], 'readwrite');
+        const store = tx.objectStore(STRUCTURE_CACHE_STORE);
+        const metaStore = tx.objectStore(STRUCTURE_CACHE_META_STORE);
+        
+        store.put(data, cacheKey);
+        metaStore.put({ lastAccess: Date.now(), size: sizeBytes }, cacheKey);
+        
+        tx.oncomplete = () => {
+          console.log(`[Geneguessr] Cached structure ${cacheKey} (${Math.round(sizeBytes/1024)}KB)`);
+          resolve();
+        };
+        tx.onerror = () => resolve();
+      });
+    } catch (err) {
+      console.warn('[Geneguessr] Cache write error:', err);
+    }
+  }
+  
+  async function evictIfNeeded(db, incomingSize) {
+    try {
+      const tx = db.transaction(STRUCTURE_CACHE_META_STORE, 'readonly');
+      const metaStore = tx.objectStore(STRUCTURE_CACHE_META_STORE);
+      const index = metaStore.index('lastAccess');
+      
+      // Calculate current cache size
+      let totalSize = 0;
+      const entries = [];
+      
+      await new Promise((resolve) => {
+        const cursor = index.openCursor();
+        cursor.onsuccess = (event) => {
+          const c = event.target.result;
+          if (c) {
+            entries.push({ key: c.primaryKey, ...c.value });
+            totalSize += c.value.size || 0;
+            c.continue();
+          } else {
+            resolve();
+          }
+        };
+        cursor.onerror = () => resolve();
+      });
+      
+      // Evict oldest entries until we have room
+      if (totalSize + incomingSize > STRUCTURE_CACHE_MAX_BYTES) {
+        const evictTx = db.transaction([STRUCTURE_CACHE_STORE, STRUCTURE_CACHE_META_STORE], 'readwrite');
+        const evictStore = evictTx.objectStore(STRUCTURE_CACHE_STORE);
+        const evictMetaStore = evictTx.objectStore(STRUCTURE_CACHE_META_STORE);
+        
+        // entries are already sorted by lastAccess (oldest first)
+        let freed = 0;
+        for (const entry of entries) {
+          if (totalSize - freed + incomingSize <= STRUCTURE_CACHE_MAX_BYTES * 0.8) break; // Target 80% after eviction
+          evictStore.delete(entry.key);
+          evictMetaStore.delete(entry.key);
+          freed += entry.size || 0;
+          console.log(`[Geneguessr] Evicted ${entry.key} from cache (freed ${Math.round(entry.size/1024)}KB)`);
+        }
+      }
+    } catch (err) {
+      console.warn('[Geneguessr] Cache eviction error:', err);
+    }
+  }
+  // =========================================================================
+
   async function parseJsonResponse(resp, context) {
     if (!resp) {
       throw new Error(`No response for ${context}`);
@@ -2195,19 +2349,62 @@
       moleculeId = 'unknown';
     }
 
+    // Check IndexedDB cache first (uses cacheKey which is the r2Key, e.g., "pdb/8J07.bcif")
+    const cacheKey = structureInfo.cacheKey;
+    const sizeBytes = structureInfo.sizeBytes || 0;
+    let finalStructureUrl = structureUrl;
+    let blobUrlToRevoke = null;
+    
+    if (cacheKey) {
+      timing('checking IndexedDB cache...');
+      const cachedData = await getStructureFromCache(cacheKey);
+      if (cachedData) {
+        // Cache hit - use blob URL
+        timing('cache HIT - using cached structure');
+        const blob = new Blob([cachedData], { type: 'application/octet-stream' });
+        finalStructureUrl = URL.createObjectURL(blob);
+        blobUrlToRevoke = finalStructureUrl;
+        console.log(`[Geneguessr] Using cached structure for ${cacheKey}`);
+      } else if (sizeBytes > 0 && sizeBytes <= STRUCTURE_CACHE_MAX_FILE_SIZE) {
+        // Cache miss but file is small enough to cache - fetch and cache first
+        timing('cache MISS - fetching to cache...');
+        try {
+          const resp = await fetch(structureUrl);
+          if (resp.ok) {
+            const arrayBuffer = await resp.arrayBuffer();
+            timing('fetched structure, caching...');
+            await putStructureInCache(cacheKey, arrayBuffer, arrayBuffer.byteLength);
+            const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+            finalStructureUrl = URL.createObjectURL(blob);
+            blobUrlToRevoke = finalStructureUrl;
+            timing('cached and ready');
+          }
+        } catch (err) {
+          console.warn('[Geneguessr] Failed to fetch for caching, will use direct URL:', err);
+          // Fall through to use original URL
+        }
+      } else {
+        timing('cache MISS - file too large to cache, using direct URL');
+      }
+    }
+
     // PDBe Molstar requires format: 'cif' with binary: true for BCIF files
     const detectedFormat = detectStructureFormat(structureUrl, structureInfo.format);
     const isBinary = detectedFormat === 'bcif';
     const options = {
       moleculeId,
       customData: {
-        url: structureUrl,
+        url: finalStructureUrl,
         format: isBinary ? 'cif' : detectedFormat,
         binary: isBinary
       }
     };
+    
+    // If we didn't have a cache hit but the file is small enough, we'll cache it after loading
+    const usedCache = blobUrlToRevoke !== null;
+    
     // Note: Intentionally not logging options to avoid leaking moleculeId (protein identity)
-    console.debug('[Geneguessr] Mol* viewer loading', containerId, 'format:', detectedFormat, 'binary:', isBinary);
+    console.debug('[Geneguessr] Mol* viewer loading', containerId, 'format:', detectedFormat, 'binary:', isBinary, 'cached:', usedCache);
     if (!options) {
       if (errorEl) {
         errorEl.textContent = 'Could not build viewer options.';
@@ -2248,6 +2445,12 @@
 
       const finalizeViewerStyling = () => {
         timing('loadComplete fired - structure fully rendered');
+        
+        // Clean up blob URL if we created one (memory cleanup)
+        if (blobUrlToRevoke) {
+          URL.revokeObjectURL(blobUrlToRevoke);
+        }
+        
         applyViewerStylizationProfile(viewer, container);
         // Render chain label callouts if available (B-189: includes Target labels for quiz cards)
         // Use totalChainCount for target structures (where chainLabels only has target chains)
