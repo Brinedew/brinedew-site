@@ -37,6 +37,7 @@ import {
 } from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
+import { ADMIN_V2_HTML } from './admin-v2-html.js';
 import {
   DEFAULT_HINT_COST,
   HINT_REWARD_ON_INCORRECT,
@@ -182,6 +183,15 @@ export default {
       });
     }
 
+    // Admin panel v2 - auto-generated controls from Mol* runtime
+    if (url.pathname === '/admin-v2' && request.method === 'GET') {
+      return new Response(ADMIN_V2_HTML, {
+        headers: {
+          'Content-Type': 'text/html;charset=UTF-8',
+        }
+      });
+    }
+
     // Admin endpoints (protected by Cloudflare Access)
     if (url.pathname === '/api/admin/override-protein' && request.method === 'POST') {
       const response = await handleOverrideProtein(request, env);
@@ -213,6 +223,23 @@ export default {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
+    }
+
+    // Graphics profiles for v2 admin panel - full Mol* props snapshots
+    if (url.pathname === '/api/admin/graphics-profiles' && request.method === 'GET') {
+      const stored = await env.KV.get('graphics_profiles_v2');
+      const profiles = stored ? JSON.parse(stored) : {};
+      return Response.json({ profiles }, { headers: corsHeaders });
+    }
+    
+    if (url.pathname === '/api/admin/graphics-profiles' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        await env.KV.put('graphics_profiles_v2', JSON.stringify(body.profiles || {}));
+        return Response.json({ success: true }, { headers: corsHeaders });
+      } catch (err) {
+        return Response.json({ error: err.message }, { status: 400, headers: corsHeaders });
+      }
     }
 
     if (url.pathname === '/api/admin/protein-preview' && request.method === 'GET') {
@@ -928,6 +955,17 @@ async function getDailyTargetProtein(env, options = {}) {
     const randomId = eligibleIds[randomIndex];
     return await fetchProteinByUniprot(env.DB, randomId);
   }
+
+  // Check for manual override
+  const today = new Date().toISOString().slice(0, 10);
+  const overrideId = await env.KV.get(`puzzle_override:${today}`);
+  if (overrideId) {
+    const overrideProtein = await fetchProteinByUniprot(env.DB, overrideId);
+    if (overrideProtein) {
+      return overrideProtein;
+    }
+  }
+
   const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
   const selection = await pickDailyTarget(env.DB, eligibleIds, salt);
   return selection?.protein || null;

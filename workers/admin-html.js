@@ -524,6 +524,107 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       margin-bottom: 0.5rem;
       font-size: 0.95rem;
     }
+
+    /* Calendar Styles */
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.5rem;
+    }
+    .calendar-day-header {
+      text-align: center;
+      font-weight: bold;
+      padding: 0.5rem;
+      color: #94a3b8;
+    }
+    .calendar-day {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      min-height: 80px;
+      padding: 0.5rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      position: relative;
+    }
+    .calendar-day:hover {
+      border-color: #38bdf8;
+    }
+    .calendar-day.empty {
+      background: transparent;
+      border: none;
+      cursor: default;
+    }
+    .calendar-day.today {
+      border-color: #38bdf8;
+      background: #1e293b;
+    }
+    .calendar-day.has-override {
+      background: #1e3a8a;
+      border-color: #60a5fa;
+    }
+    .day-number {
+      font-weight: bold;
+      margin-bottom: 0.25rem;
+    }
+    .day-content {
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      word-break: break-all;
+    }
+    
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 2rem;
+      width: 400px;
+      max-width: 90%;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1.5rem;
+      padding: 0;
+    }
+    .modal-close:hover {
+      color: #ffffff;
+    }
   </style>
 </head>
 <body>
@@ -540,6 +641,41 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       </div>
     </div>
     
+    <!-- Calendar Section -->
+    <div class="section">
+      <h2>Calendar & Overrides</h2>
+      <div class="calendar-header">
+        <button id="prev-month">&lt; Prev</button>
+        <h3 id="current-month-label"></h3>
+        <button id="next-month">Next &gt;</button>
+      </div>
+      <div class="calendar-grid" id="calendar-grid">
+        <!-- Days will be injected here -->
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="override-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modal-date-title">Edit Override</h3>
+          <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <form id="modal-form">
+          <input type="hidden" id="modal-date">
+          <div class="form-group">
+            <label for="modal-uniprot">UniProt ID</label>
+            <input type="text" id="modal-uniprot" placeholder="e.g., P04637" required>
+          </div>
+          <div class="form-actions">
+            <button type="button" id="modal-preview">Preview</button>
+            <button type="submit">Save</button>
+            <button type="button" class="btn-delete" id="modal-delete" style="display: none;">Delete</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Protein Override -->
     <div class="section">
       <h2>Protein Override</h2>
@@ -1165,6 +1301,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const data = await response.json();
         displayStatus(data);
         displayOverrides(data.all_overrides);
+        updateCalendarOverrides(data.all_overrides);
         updateFlagCheckboxes(data.feature_flags || {});
         syncGraphicsSettings(data.graphics_settings);
       } catch (err) {
@@ -2384,6 +2521,162 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         showMessage('override-message', err.message || 'Failed to delete override', 'error');
       }
     };
+
+    // Calendar Logic
+    let currentDate = new Date();
+    let currentOverrides = [];
+
+    function initCalendar() {
+      renderCalendar(currentDate);
+      
+      document.getElementById('prev-month').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar(currentDate);
+      });
+      
+      document.getElementById('next-month').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar(currentDate);
+      });
+      
+      // Modal events
+      document.getElementById('modal-close').addEventListener('click', closeModal);
+      document.getElementById('modal-form').addEventListener('submit', handleModalSubmit);
+      document.getElementById('modal-delete').addEventListener('click', handleModalDelete);
+      document.getElementById('modal-preview').addEventListener('click', handleModalPreview);
+      document.querySelector('.modal-overlay').addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) closeModal();
+      });
+    }
+
+    function renderCalendar(date) {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const daysInMonth = lastDay.getDate();
+      const startingDay = firstDay.getDay(); // 0 = Sunday
+      
+      const monthNames = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      
+      document.getElementById('current-month-label').textContent = monthNames[month] + ' ' + year;
+      
+      const grid = document.getElementById('calendar-grid');
+      grid.innerHTML = '';
+      
+      // Day headers
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      dayNames.forEach(day => {
+        const el = document.createElement('div');
+        el.className = 'calendar-day-header';
+        el.textContent = day;
+        grid.appendChild(el);
+      });
+      
+      // Empty slots before first day
+      for (let i = 0; i < startingDay; i++) {
+        const el = document.createElement('div');
+        el.className = 'calendar-day empty';
+        grid.appendChild(el);
+      }
+      
+      // Days
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      for (let i = 1; i <= daysInMonth; i++) {
+        const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0');
+        const el = document.createElement('div');
+        el.className = 'calendar-day';
+        if (dateStr === todayStr) el.classList.add('today');
+        
+        const override = currentOverrides.find(o => o.date === dateStr);
+        if (override) {
+          el.classList.add('has-override');
+        }
+        
+        el.innerHTML = '<div class="day-number">' + i + '</div><div class="day-content">' + (override ? override.uniprot_id : '') + '</div>';
+        
+        el.addEventListener('click', () => openModal(dateStr, override));
+        grid.appendChild(el);
+      }
+    }
+
+    function updateCalendarOverrides(overrides) {
+      currentOverrides = overrides || [];
+      renderCalendar(currentDate);
+    }
+
+    function openModal(date, override) {
+      document.getElementById('modal-date').value = date;
+      document.getElementById('modal-date-title').textContent = 'Edit Override: ' + date;
+      document.getElementById('modal-uniprot').value = override ? override.uniprot_id : '';
+      
+      const deleteBtn = document.getElementById('modal-delete');
+      deleteBtn.style.display = override ? 'inline-block' : 'none';
+      deleteBtn.dataset.date = date;
+      
+      document.getElementById('override-modal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('override-modal').classList.remove('active');
+    }
+
+    async function handleModalSubmit(e) {
+      e.preventDefault();
+      const date = document.getElementById('modal-date').value;
+      const uniprot = document.getElementById('modal-uniprot').value;
+      
+      try {
+        const response = await fetch(API_BASE + '/api/admin/override-protein', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ date, uniprot_id: uniprot })
+        });
+        
+        if (!response.ok) throw new Error('Failed to set override');
+        
+        closeModal();
+        await loadStatus();
+        showMessage('override-message', 'Override saved', 'success');
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function handleModalDelete() {
+      const date = this.dataset.date;
+      if (!confirm('Delete override for ' + date + '?')) return;
+      
+      try {
+        const response = await fetch(API_BASE + '/api/admin/override-protein?date=' + date, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete override');
+        
+        closeModal();
+        await loadStatus();
+        showMessage('override-message', 'Override deleted', 'success');
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function handleModalPreview() {
+      const uniprot = document.getElementById('modal-uniprot').value;
+      if (!uniprot) return;
+      
+      closeModal();
+      loadProteinInPreview(uniprot);
+    }
+
+    // Initialize calendar
+    initCalendar();
   </script>
 
 </body>
