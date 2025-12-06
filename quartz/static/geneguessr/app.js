@@ -145,14 +145,21 @@
   // =========================================================================
   // Structure Cache (IndexedDB)
   // =========================================================================
-  // Caches structure files locally to avoid re-downloading on repeat visits.
-  // Uses cacheKey (r2Key) as the key - e.g., "pdb/8J07.bcif"
-  // This doesn't reveal protein identity (PDB IDs don't map to gene names).
+  // Caches structure files and metadata locally to avoid re-downloading.
+  // 
+  // Stores:
+  // - 'structures': cacheKey → ArrayBuffer (the actual structure data)
+  // - 'meta': cacheKey → { lastAccess, size } (for LRU eviction)
+  // - 'structureInfo': uniprot → { cacheKey, format, sourceLabel, ... } (skip API calls)
+  //
+  // For guessed proteins, we store by UniProt ID so repeat guesses across
+  // days/months skip the API call entirely.
   // =========================================================================
   const STRUCTURE_CACHE_DB = 'geneguessr-structures';
   const STRUCTURE_CACHE_STORE = 'structures';
   const STRUCTURE_CACHE_META_STORE = 'meta';
-  const STRUCTURE_CACHE_VERSION = 1;
+  const STRUCTURE_INFO_STORE = 'structureInfo'; // NEW: UniProt → structureInfo mapping
+  const STRUCTURE_CACHE_VERSION = 2; // Bumped for new store
   const STRUCTURE_CACHE_MAX_BYTES = 150 * 1024 * 1024; // 150 MB max cache
   const STRUCTURE_CACHE_MAX_FILE_SIZE = 15 * 1024 * 1024; // Don't cache files > 15 MB
   
@@ -183,8 +190,48 @@
           const metaStore = db.createObjectStore(STRUCTURE_CACHE_META_STORE); // key = cacheKey
           metaStore.createIndex('lastAccess', 'lastAccess');
         }
+        if (!db.objectStoreNames.contains(STRUCTURE_INFO_STORE)) {
+          db.createObjectStore(STRUCTURE_INFO_STORE); // key = uniprot
+        }
       };
     });
+  }
+  
+  // Get cached structureInfo by UniProt ID (skips API call for repeat guesses)
+  async function getCachedStructureInfo(uniprot) {
+    try {
+      const db = await openStructureCache();
+      if (!db) return null;
+      
+      return new Promise((resolve) => {
+        const tx = db.transaction(STRUCTURE_INFO_STORE, 'readonly');
+        const store = tx.objectStore(STRUCTURE_INFO_STORE);
+        const getReq = store.get(uniprot.toUpperCase());
+        getReq.onsuccess = () => resolve(getReq.result || null);
+        getReq.onerror = () => resolve(null);
+      });
+    } catch (err) {
+      console.warn('[Geneguessr] StructureInfo cache read error:', err);
+      return null;
+    }
+  }
+  
+  // Store structureInfo by UniProt ID
+  async function putCachedStructureInfo(uniprot, info) {
+    try {
+      const db = await openStructureCache();
+      if (!db) return;
+      
+      return new Promise((resolve) => {
+        const tx = db.transaction(STRUCTURE_INFO_STORE, 'readwrite');
+        const store = tx.objectStore(STRUCTURE_INFO_STORE);
+        store.put(info, uniprot.toUpperCase());
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      });
+    } catch (err) {
+      console.warn('[Geneguessr] StructureInfo cache write error:', err);
+    }
   }
   
   async function getStructureFromCache(cacheKey) {
@@ -333,10 +380,10 @@
       )) {
       return true;
     }
-    // Check for cached structure token
+    // Check for cached structure info
     if (protein.uniprot) {
       const cached = structureTokenCache.get(String(protein.uniprot).toUpperCase());
-      if (cached && cached.token && cached.url) {
+      if (cached && cached.url) {
         return true;
       }
     }
@@ -804,7 +851,7 @@
   }
 
   async function ensureStructureTokenForTarget() {
-    if (targetStructureInfo && targetStructureInfo.token) {
+    if (targetStructureInfo && targetStructureInfo.url) {
       return targetStructureInfo;
     }
     try {
@@ -821,17 +868,14 @@
         throw new Error(`Token request failed: ${resp.status}`);
       }
       const data = await parseJsonResponse(resp, 'target structure token');
-      if (!data || !data.token) {
-        throw new Error('Missing token in response');
+      if (!data || !data.url) {
+        throw new Error('Missing url in response');
       }
-      const resolvedUrl = `${API_BASE}/api/structure?token=${encodeURIComponent(data.token)}`;
       targetStructureInfo = {
-        token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
         format: data.format || 'cif',
-        url: data.url || resolvedUrl,
-        internalUrl: resolvedUrl,
+        url: data.url,
         // For client-side IndexedDB caching
         cacheKey: data.cacheKey || null,
         sizeBytes: data.sizeBytes || 0,
@@ -854,12 +898,37 @@
       return null;
     }
     const key = String(uniprot).toUpperCase();
-    const cached = structureTokenCache.get(key);
-    if (cached && cached.token) {
-      console.log(`[TIMING] token for ${key} | cache hit`);
-      return cached;
+    
+    // 1. Check in-memory cache (same session)
+    const memCached = structureTokenCache.get(key);
+    if (memCached && memCached.url) {
+      console.log(`[TIMING] structureInfo for ${key} | memory cache hit`);
+      return memCached;
     }
+    
+    // 2. Check IndexedDB structureInfo cache (persists across sessions)
+    //    If we have structureInfo AND the structure blob is cached, skip API entirely
     const t0 = performance.now();
+    try {
+      const cachedInfo = await getCachedStructureInfo(key);
+      if (cachedInfo && cachedInfo.cacheKey) {
+        // Verify the structure blob still exists in cache
+        const structureBlob = await getStructureFromCache(cachedInfo.cacheKey);
+        if (structureBlob) {
+          console.log(`[TIMING] token for ${key} | IndexedDB cache hit | ${(performance.now() - t0).toFixed(0)}ms | SKIPPED API`);
+          // Store in memory cache too for fast subsequent access
+          structureTokenCache.set(key, cachedInfo);
+          return cachedInfo;
+        }
+        // Structure blob evicted, need fresh token - fall through to API
+        console.log(`[TIMING] token for ${key} | IndexedDB info found but blob evicted, fetching...`);
+      }
+    } catch (err) {
+      console.warn('[Geneguessr] IndexedDB cache check failed:', err);
+      // Fall through to API
+    }
+    
+    // 3. Fetch from API
     try {
       console.log(`[TIMING] token for ${key} | fetching from API...`);
       const resp = await fetch(`${API_BASE}/api/structure-token?uniprot=${encodeURIComponent(key)}`, {
@@ -875,24 +944,36 @@
         throw new Error(`Token request failed: ${resp.status}`);
       }
       const data = await parseJsonResponse(resp, `structure token ${key}`);
-      if (!data || !data.token) {
-        throw new Error('Missing token in response');
+      if (!data || !data.url) {
+        throw new Error('Missing url in response');
       }
-      const resolvedUrl = `${API_BASE}/api/structure?token=${encodeURIComponent(data.token)}`;
       // Security: don't log data - it may contain chainLabels with gene names
       const info = {
-        token: data.token,
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
         format: data.format || 'cif',
-        url: data.url || resolvedUrl,
-        internalUrl: resolvedUrl,
+        url: data.url,
         // For client-side IndexedDB caching
         cacheKey: data.cacheKey || null,
         sizeBytes: data.sizeBytes || 0,
         chainLabels: data.chainLabels || null
       };
       structureTokenCache.set(key, info);
+      
+      // 4. Store structureInfo in IndexedDB for future sessions (token-independent fields only)
+      //    When retrieved from cache, we use the blob directly - never need token/url
+      if (info.cacheKey) {
+        const cacheableInfo = {
+          sourceLabel: info.sourceLabel,
+          displayLabel: info.displayLabel,
+          format: info.format,
+          cacheKey: info.cacheKey,
+          sizeBytes: info.sizeBytes,
+          chainLabels: info.chainLabels
+        };
+        putCachedStructureInfo(key, cacheableInfo).catch(() => {});
+      }
+      
       return info;
     } catch (err) {
       console.warn('Geneguessr: failed to fetch structure token for', key, err);
@@ -2254,7 +2335,7 @@
     try {
       if (sourceSpec?.type === 'target') {
         const info = await ensureStructureTokenForTarget();
-        if (info?.token) {
+        if (info?.url) {
           viewerStructureInfo.set(containerId, info);
           return info;
         }
@@ -2264,7 +2345,7 @@
         const uniprot = sourceSpec?.id || protein?.uniprot;
         if (uniprot) {
           const info = await ensureStructureTokenForProtein(uniprot);
-          if (info?.token) {
+          if (info?.url) {
             viewerStructureInfo.set(containerId, info);
             return info;
           }
@@ -2273,7 +2354,7 @@
         }
       }
     } catch (err) {
-      console.warn('Geneguessr: failed to resolve structure token for viewer', containerId, err);
+      console.warn('Geneguessr: failed to resolve structure info for viewer', containerId, err);
     }
     return viewerStructureInfo.get(containerId) || null;
   }
@@ -2301,7 +2382,7 @@
     let structureInfo = viewerStructureInfo.get(containerId);
     timing('got DOM elements');
     console.debug('[Geneguessr] loadStructureViewerInContainer: initial structureInfo', containerId, structureInfo);
-    if (!structureInfo || !structureInfo.token) {
+    if (!structureInfo || !structureInfo.url) {
       timing('resolving structureInfo (API call)...');
       structureInfo = await resolveStructureInfoForViewer(containerId, protein);
       timing('structureInfo resolved');
@@ -2320,8 +2401,8 @@
       return;
     }
 
-    if (!structureInfo || !structureInfo.token) {
-      console.warn('[Geneguessr] loadStructureViewerInContainer: no structureInfo or token', containerId, structureInfo);
+    if (!structureInfo || !structureInfo.url) {
+      console.warn('[Geneguessr] loadStructureViewerInContainer: no structureInfo or url', containerId, structureInfo);
       if (errorEl) {
         errorEl.textContent = 'Structure unavailable.';
         errorEl.hidden = false;
@@ -2330,7 +2411,7 @@
       return;
     }
 
-    const structureUrl = structureInfo.internalUrl || structureInfo.url;
+    const structureUrl = structureInfo.url;
     console.debug('[Geneguessr] loadStructureViewerInContainer: structureUrl resolved', containerId, structureUrl);
     if (!structureUrl) {
       console.warn('[Geneguessr] loadStructureViewerInContainer: no structureUrl', containerId, structureInfo);

@@ -13,8 +13,6 @@ function getCorsHeaders(origin) {
 // Backward compatibility - default CORS headers for main domain
 const CORS_HEADERS = getCorsHeaders('https://brinedew.bio');
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-const STRUCTURE_TOKEN_TTL_SECONDS = 300;
-const TOKEN_PREFIX = 'structure_token:';
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB);
 const STRUCTURE_CACHE_META_PREFIX = 'structure_meta:';
@@ -266,12 +264,7 @@ export default {
       return handleStructureToken(request, env, corsHeaders);
     }
 
-    if (url.pathname === '/api/structure' && request.method === 'GET') {
-      return handleStructureFetch(request, env, corsHeaders);
-    }
-
-    // Direct structure access by cacheKey - for client-side cache hits
-    // Returns structure from R2 with long cache headers
+    // Direct structure access by cacheKey - stable URLs for client-side caching
     // Safe because cacheKey (e.g., "pdb/8J07.bcif") doesn't reveal protein identity
     if (url.pathname === '/api/structure-cached' && request.method === 'GET') {
       return handleCachedStructureFetch(request, env, corsHeaders);
@@ -667,8 +660,7 @@ async function handleStructureToken(request, env, corsHeaders) {
         sizeBytes = head?.size || 0;
       } catch { /* ignore */ }
       
-      const token = await createStructureToken(env, meta);
-    const structureUrl = `${url.origin}/api/structure?token=${token}`;
+      const structureUrl = `${url.origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
     
     // Parse chain labels to create redacted version for target
     // SECURITY: Only send chain IDs + is_target flag, never gene names
@@ -695,15 +687,14 @@ async function handleStructureToken(request, env, corsHeaders) {
     }
     
     return Response.json({
-      token,
       sourceLabel: meta.shortLabel,
       displayLabel: meta.displayLabel,
       format: meta.format || 'cif',
       url: structureUrl,
-      cacheKey: meta.r2Key, // For client-side IndexedDB caching (doesn't reveal protein identity)
-      sizeBytes, // File size for client-side cache decisions (skip caching giant structures)
-      targetChainHints, // Redacted: just chain IDs, no gene names
-      totalChainCount   // Total chains in structure (for multi-chain label decision)
+      cacheKey: meta.r2Key,
+      sizeBytes,
+      targetChainHints,
+      totalChainCount
     }, { headers: corsHeaders });
   }
 
@@ -733,8 +724,7 @@ async function handleStructureToken(request, env, corsHeaders) {
     sizeBytes = head?.size || 0;
   } catch { /* ignore */ }
   
-  const token = await createStructureToken(env, meta);
-  const structureUrl = `${url.origin}/api/structure?token=${token}`;
+  const structureUrl = `${url.origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
   // Parse chain labels if present (stored as JSON string in D1)
   // Use the right chain labels based on structure source
   let chainLabels = null;
@@ -751,13 +741,12 @@ async function handleStructureToken(request, env, corsHeaders) {
     }
   }
   return Response.json({
-    token,
     sourceLabel: meta.shortLabel,
     displayLabel: meta.displayLabel,
     format: meta.format || 'cif',
     url: structureUrl,
-    cacheKey: meta.r2Key, // For client-side IndexedDB caching
-    sizeBytes, // File size for client-side cache decisions
+    cacheKey: meta.r2Key,
+    sizeBytes,
     chainLabels
   }, { headers: corsHeaders });
   } catch (err) {
@@ -766,42 +755,8 @@ async function handleStructureToken(request, env, corsHeaders) {
   }
 }
 
-async function handleStructureFetch(request, env, corsHeaders) {
-  const url = new URL(request.url);
-  const token = url.searchParams.get('token');
-  if (!token) {
-    return Response.json({ error: 'Missing token' }, { status: 400, headers: corsHeaders });
-  }
-  const record = await env.STRUCTURE_TOKENS.get(`${TOKEN_PREFIX}${token}`, { type: 'json' });
-  if (!record) {
-    return Response.json({ error: 'Invalid or expired token' }, { status: 410, headers: corsHeaders });
-  }
-  const { r2Key } = record;
-  if (!r2Key) {
-    return Response.json({ error: 'Token missing key' }, { status: 500, headers: corsHeaders });
-  }
-  const cached = await ensureStructureCached(env, record);
-  if (!cached) {
-    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
-  }
-  const object = await env.STRUCTURES_BUCKET.get(r2Key);
-  if (!object) {
-    return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
-  }
-  await touchStructureCacheEntry(env, r2Key, object.size);
-  return new Response(object.body, {
-    headers: {
-      ...corsHeaders,
-      'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=3600'
-    }
-  });
-}
-
 /**
  * Direct structure fetch by cacheKey (r2Key).
- * Used for client-side cache validation - if client has this key cached,
- * it can skip the download entirely.
  * Returns structure with long cache headers since the URL is stable.
  */
 async function handleCachedStructureFetch(request, env, corsHeaders) {
@@ -962,14 +917,6 @@ async function handleHintReveal(request, env, corsHeaders) {
   }
 }
 
-
-async function createStructureToken(env, meta) {
-  const token = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-  await env.STRUCTURE_TOKENS.put(`${TOKEN_PREFIX}${token}`, JSON.stringify(meta), {
-    expirationTtl: STRUCTURE_TOKEN_TTL_SECONDS
-  });
-  return token;
-}
 
 async function getDailyTargetProtein(env, options = {}) {
   const eligibleIds = await getEligibleProteinIds(env.DB);
