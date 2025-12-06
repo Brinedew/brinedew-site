@@ -610,42 +610,49 @@ export class GameSession {
 }
 
 async function handleStructureToken(request, env, corsHeaders) {
-  const url = new URL(request.url);
-  const type = url.searchParams.get('type');
-  if (type === 'target') {
-    // Use session state to get the actual target protein, not getDailyTargetProtein.
-    // This is critical for practice mode where the target is a random protein stored
-    // in the session, not the daily target.
-    const { sessionId, practiceMode } = resolveSessionContext(request);
-    let protein = null;
-    
-    // Try to get target from session state first
-    try {
-      const state = await getGameState(env, sessionId);
-      if (state?.targetId) {
-        protein = await fetchProteinByUniprot(env.DB, state.targetId);
+  try {
+    const url = new URL(request.url);
+    const type = url.searchParams.get('type');
+    if (type === 'target') {
+      // Use session state to get the actual target protein, not getDailyTargetProtein.
+      // This is critical for practice mode where the target is a random protein stored
+      // in the session, not the daily target.
+      const { sessionId, practiceMode } = resolveSessionContext(request);
+      let protein = null;
+      
+      // Try to get target from session state first
+      try {
+        const state = await getGameState(env, sessionId);
+        if (state?.targetId) {
+          protein = await fetchProteinByUniprot(env.DB, state.targetId);
+        }
+      } catch (err) {
+        console.warn('GeneGuessr: failed to get target from session, falling back to daily', err);
       }
-    } catch (err) {
-      console.warn('GeneGuessr: failed to get target from session, falling back to daily', err);
-    }
-    
-    // Fall back to daily target if session lookup failed
-    if (!protein) {
-      protein = await getDailyTargetProtein(env, { practice: practiceMode });
-    }
-    
-    if (!protein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
-    }
-    const meta = await getCanonicalStructureMeta(protein, env);
-    if (!meta) {
-      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
-    }
-    const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
-    if (!cached) {
-      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
-    }
-    const token = await createStructureToken(env, meta);
+      
+      // Fall back to daily target if session lookup failed
+      if (!protein) {
+        protein = await getDailyTargetProtein(env, { practice: practiceMode });
+      }
+      
+      if (!protein) {
+        console.error('GeneGuessr: handleStructureToken - no target protein found');
+        return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
+      }
+      console.log('GeneGuessr: handleStructureToken - got protein', protein.uniprot);
+      const meta = await getCanonicalStructureMeta(protein, env);
+      if (!meta) {
+        console.warn('GeneGuessr: handleStructureToken - no structure meta for', protein.uniprot);
+        return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
+      }
+      console.log('GeneGuessr: handleStructureToken - got meta', meta.source, meta.id);
+      const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
+      if (!cached) {
+        console.warn('GeneGuessr: handleStructureToken - failed to cache structure for', protein.uniprot);
+        return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
+      }
+      console.log('GeneGuessr: handleStructureToken - structure cached');
+      const token = await createStructureToken(env, meta);
     const structureUrl = `${url.origin}/api/structure?token=${token}`;
     
     // Parse chain labels to create redacted version for target
@@ -726,6 +733,10 @@ async function handleStructureToken(request, env, corsHeaders) {
     url: structureUrl,
     chainLabels
   }, { headers: corsHeaders });
+  } catch (err) {
+    console.error('GeneGuessr: handleStructureToken unhandled error', err);
+    return Response.json({ error: 'Internal server error', details: String(err) }, { status: 500, headers: corsHeaders });
+  }
 }
 
 async function handleStructureFetch(request, env, corsHeaders) {
@@ -1172,10 +1183,11 @@ function buildMetaFromStoredStructure(protein) {
   // Build meta based on the preferred source
   if (primarySource === 'pdb' && protein.pdb_id) {
     const pdbId = protein.pdb_id.toUpperCase();
-    // Always fetch full structure - we want to show complex mates with chain labels
-    // UI toggle allows user to show/hide non-target chains
-    const upstreamUrl = `https://files.rcsb.org/download/${pdbId}.cif`;
-    const r2Key = `pdb/${pdbId}.cif`;
+    // Use RCSB ModelServer with BCIF encoding - much smaller than raw CIF
+    // e.g. 8J07: 337MB as CIF vs 42MB as BCIF (8x reduction)
+    // copy_all_categories=false strips metadata we don't need for visualization
+    const upstreamUrl = `https://models.rcsb.org/v1/${pdbId}/full?encoding=bcif&copy_all_categories=false`;
+    const r2Key = `pdb/${pdbId}.bcif`;
     
     return {
       source: 'pdb',
@@ -1183,7 +1195,7 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${pdbId})`,
-      format: 'cif'
+      format: 'bcif'
     };
   }
   
@@ -1250,9 +1262,9 @@ function buildMetaFromStoredStructure(protein) {
   
   if (protein.pdb_id) {
     const pdbId = protein.pdb_id.toUpperCase();
-    // Always fetch full structure for complex visualization
-    const upstreamUrl = `https://files.rcsb.org/download/${pdbId}.cif`;
-    const r2Key = `pdb/${pdbId}.cif`;
+    // Use RCSB ModelServer with BCIF encoding for smaller file size
+    const upstreamUrl = `https://models.rcsb.org/v1/${pdbId}/full?encoding=bcif&copy_all_categories=false`;
+    const r2Key = `pdb/${pdbId}.bcif`;
     
     return {
       source: 'pdb',
@@ -1260,7 +1272,7 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${pdbId})`,
-      format: 'cif'
+      format: 'bcif'
     };
   }
   
@@ -1325,7 +1337,9 @@ async function getCanonicalStructureMeta(protein, env) {
           candidates.push({
             source: 'pdb',
             id: pdbId,
-            upstreamUrl: `https://files.rcsb.org/download/${pdbId}.cif`,
+            // Use RCSB ModelServer with BCIF encoding - much smaller than raw CIF
+            upstreamUrl: `https://models.rcsb.org/v1/${pdbId}/full?encoding=bcif&copy_all_categories=false`,
+            format: 'bcif',
             coverage,
             quality: resolution,  // resolution as quality metric
             raw: m
@@ -1450,13 +1464,15 @@ async function getCanonicalStructureMeta(protein, env) {
   // Build meta for selected candidate
   let meta = null;
   if (selected.source === 'pdb') {
+    // Use BCIF format from ModelServer
+    const ext = selected.format === 'bcif' ? 'bcif' : 'cif';
     meta = {
       source: 'pdb',
-      r2Key: `pdb/${selected.id}.cif`,
+      r2Key: `pdb/${selected.id}.${ext}`,
       upstreamUrl: selected.upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${selected.id})`,
-      format: 'cif'
+      format: ext
     };
   } else if (selected.source === 'swissmodel') {
     const ext = getFileExtensionFromUrl(selected.upstreamUrl);
@@ -1524,6 +1540,11 @@ async function structureObjectExists(env, key) {
   }
 }
 
+// Threshold for switching to multipart upload (10MB)
+// Worker memory limit is 128MB, multipart keeps memory bounded to ~8MB chunks
+const MULTIPART_THRESHOLD_BYTES = 10 * 1024 * 1024;
+const MULTIPART_PART_SIZE = 8 * 1024 * 1024; // 8MB parts (minimum is 5MB)
+
 async function ensureStructureCached(env, meta, options = {}) {
   if (!meta?.r2Key) {
     return false;
@@ -1555,21 +1576,103 @@ async function ensureStructureCached(env, meta, options = {}) {
     method: 'GET',
     headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
   });
-  if (!upstreamResp.ok) {
+  if (!upstreamResp.ok || !upstreamResp.body) {
     console.warn('GeneGuessr: upstream structure fetch failed', meta.upstreamUrl, upstreamResp.status);
     return false;
   }
-  const arrayBuffer = await upstreamResp.arrayBuffer();
-  await env.STRUCTURES_BUCKET.put(meta.r2Key, arrayBuffer, {
-    httpMetadata: {
-      contentType: upstreamResp.headers.get('Content-Type') || 'application/octet-stream'
-    }
-  });
-  await recordStructureCacheEntry(env, meta.r2Key, arrayBuffer.byteLength);
+  
+  // Determine content type based on format
+  const contentType = meta.format === 'bcif' 
+    ? 'application/octet-stream' 
+    : (upstreamResp.headers.get('Content-Type') || 'chemical/x-cif');
+  
+  // Check if we need multipart upload (Content-Length may be missing for chunked responses)
+  const contentLength = upstreamResp.headers.get('Content-Length');
+  const estimatedSize = contentLength ? parseInt(contentLength, 10) : MULTIPART_THRESHOLD_BYTES + 1;
+  
+  if (estimatedSize <= MULTIPART_THRESHOLD_BYTES) {
+    // Small file: simple put (streams directly, low memory)
+    await env.STRUCTURES_BUCKET.put(meta.r2Key, upstreamResp.body, {
+      httpMetadata: { contentType }
+    });
+  } else {
+    // Large file: use multipart upload to keep memory bounded
+    // This handles files up to 5TB in ~8MB chunks without exceeding Worker memory
+    console.log(`GeneGuessr: using multipart upload for ${meta.r2Key} (estimated ${Math.round(estimatedSize/1024/1024)}MB)`);
+    await multipartUploadFromStream(env, meta.r2Key, upstreamResp.body, contentType);
+  }
+  
+  // Get actual size from R2 object (Content-Length may be missing from upstream)
+  const uploaded = await env.STRUCTURES_BUCKET.head(meta.r2Key);
+  const uploadedSize = uploaded?.size || 0;
+  await recordStructureCacheEntry(env, meta.r2Key, uploadedSize);
   if (options?.proteinId && env?.DB) {
     await clearStructureFailure(env.DB, options.proteinId);
   }
   return true;
+}
+
+/**
+ * Upload a stream to R2 using multipart upload.
+ * Keeps memory bounded by processing in MULTIPART_PART_SIZE chunks.
+ * See: https://developers.cloudflare.com/r2/api/workers/workers-multipart-usage/
+ */
+async function multipartUploadFromStream(env, r2Key, stream, contentType) {
+  const mpu = await env.STRUCTURES_BUCKET.createMultipartUpload(r2Key, {
+    httpMetadata: { contentType }
+  });
+  
+  const reader = stream.getReader();
+  const uploadedParts = [];
+  let partNumber = 1;
+  let buffer = new Uint8Array(MULTIPART_PART_SIZE);
+  let filled = 0;
+  
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      
+      if (done) {
+        // Upload remaining data as final part
+        if (filled > 0) {
+          const chunk = buffer.subarray(0, filled);
+          const part = await mpu.uploadPart(partNumber, chunk);
+          uploadedParts.push(part);
+        }
+        break;
+      }
+      
+      // Copy incoming data into buffer, uploading when full
+      let offset = 0;
+      while (offset < value.length) {
+        const toCopy = Math.min(MULTIPART_PART_SIZE - filled, value.length - offset);
+        buffer.set(value.subarray(offset, offset + toCopy), filled);
+        filled += toCopy;
+        offset += toCopy;
+        
+        if (filled === MULTIPART_PART_SIZE) {
+          const part = await mpu.uploadPart(partNumber, buffer);
+          uploadedParts.push(part);
+          partNumber++;
+          buffer = new Uint8Array(MULTIPART_PART_SIZE);
+          filled = 0;
+        }
+      }
+    }
+    
+    // Complete the multipart upload
+    await mpu.complete(uploadedParts);
+    console.log(`GeneGuessr: multipart upload complete for ${r2Key}, ${uploadedParts.length} parts`);
+  } catch (err) {
+    // Abort on failure to clean up partial upload
+    console.error(`GeneGuessr: multipart upload failed for ${r2Key}`, err);
+    try {
+      await mpu.abort();
+    } catch (abortErr) {
+      console.warn('GeneGuessr: failed to abort multipart upload', abortErr);
+    }
+    throw err;
+  }
 }
 
 async function getStructureBucketUsage(env) {

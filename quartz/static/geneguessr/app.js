@@ -2195,15 +2195,19 @@
       moleculeId = 'unknown';
     }
 
+    // PDBe Molstar requires format: 'cif' with binary: true for BCIF files
+    const detectedFormat = detectStructureFormat(structureUrl, structureInfo.format);
+    const isBinary = detectedFormat === 'bcif';
     const options = {
       moleculeId,
       customData: {
         url: structureUrl,
-        format: detectStructureFormat(structureUrl, structureInfo.format)
+        format: isBinary ? 'cif' : detectedFormat,
+        binary: isBinary
       }
     };
     // Note: Intentionally not logging options to avoid leaking moleculeId (protein identity)
-    console.debug('[Geneguessr] Mol* viewer loading', containerId, 'format:', options.customData?.format);
+    console.debug('[Geneguessr] Mol* viewer loading', containerId, 'format:', detectedFormat, 'binary:', isBinary);
     if (!options) {
       if (errorEl) {
         errorEl.textContent = 'Could not build viewer options.';
