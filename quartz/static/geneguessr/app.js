@@ -832,6 +832,9 @@
         format: data.format || 'cif',
         url: data.url || resolvedUrl,
         internalUrl: resolvedUrl,
+        // For client-side IndexedDB caching
+        cacheKey: data.cacheKey || null,
+        sizeBytes: data.sizeBytes || 0,
         // Convert targetChainHints to chainLabels format for rendering
         // Server sends redacted hints (just chains array), we add is_target=true
         chainLabels: data.targetChainHints?.map(h => ({ ...h, is_target: true })) || null,
@@ -884,6 +887,9 @@
         format: data.format || 'cif',
         url: data.url || resolvedUrl,
         internalUrl: resolvedUrl,
+        // For client-side IndexedDB caching
+        cacheKey: data.cacheKey || null,
+        sizeBytes: data.sizeBytes || 0,
         chainLabels: data.chainLabels || null
       };
       structureTokenCache.set(key, info);
