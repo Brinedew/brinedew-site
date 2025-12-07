@@ -387,24 +387,78 @@ async function handleSession(request, env) {
 
 /**
  * Get session identifier from request
- * Uses user ID if authenticated, otherwise IP hash for guests
+ * Uses user ID if authenticated, session cookie for guests, IP hash as fallback
  */
 function getSessionId(request) {
   // TODO: Extract from auth cookie when B-94 (Discord OAuth) is implemented
-  // For now, use IP address for guest sessions
+  
+  // Check for existing session cookie
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const sessionMatch = cookieHeader.match(/geneguessr_session=([a-zA-Z0-9_-]+)/);
+  if (sessionMatch) {
+    return `guest_${sessionMatch[1]}`;
+  }
+  
+  // Fallback to IP hash (for clients without cookies, like some bots)
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   return `guest_${hashIP(ip)}`;
+}
+
+/**
+ * Check if request has a session cookie, if not generate one
+ * Returns { sessionToken, isNew } where isNew indicates we need to set the cookie
+ */
+function resolveSessionCookie(request) {
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const sessionMatch = cookieHeader.match(/geneguessr_session=([a-zA-Z0-9_-]+)/);
+  
+  if (sessionMatch) {
+    return { sessionToken: sessionMatch[1], isNew: false };
+  }
+  
+  // Generate a new random session token (URL-safe base64-ish)
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const sessionToken = Array.from(bytes)
+    .map(b => b.toString(36).padStart(2, '0'))
+    .join('')
+    .slice(0, 32);
+  
+  return { sessionToken, isNew: true };
 }
 
 function resolveSessionContext(request) {
   const url = new URL(request.url);
   const practiceMode = url.searchParams.get('practice') === '1';
   const practiceRestart = practiceMode && url.searchParams.get('restart') === '1';
-  const baseSessionId = getSessionId(request);
+  
+  const { sessionToken, isNew } = resolveSessionCookie(request);
+  const baseSessionId = `guest_${sessionToken}`;
+  
   return {
     practiceMode,
     practiceRestart,
-    sessionId: practiceMode ? `practice_${baseSessionId}` : baseSessionId
+    sessionId: practiceMode ? `practice_${baseSessionId}` : baseSessionId,
+    sessionToken,
+    needsSessionCookie: isNew
+  };
+}
+
+/**
+ * Build response headers, optionally adding Set-Cookie for new sessions
+ * Cookie is HttpOnly, SameSite=Lax, 1 year expiry - "strictly necessary" for game function
+ */
+function buildResponseHeaders(corsHeaders, sessionContext) {
+  if (!sessionContext?.needsSessionCookie) {
+    return corsHeaders;
+  }
+  
+  const maxAge = 365 * 24 * 60 * 60; // 1 year in seconds
+  const cookie = `geneguessr_session=${sessionContext.sessionToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax; HttpOnly; Secure`;
+  
+  return {
+    ...corsHeaders,
+    'Set-Cookie': cookie
   };
 }
 
@@ -819,21 +873,24 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
 
 async function handleGameBootstrap(request, env, corsHeaders) {
   try {
-    const { sessionId, practiceMode, practiceRestart } = resolveSessionContext(request);
+    const sessionContext = resolveSessionContext(request);
+    const { sessionId, practiceMode, practiceRestart } = sessionContext;
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode });
     if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
     const state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode, forceReset: practiceRestart });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     const payload = buildGamePayload(state, targetProtein);
-    return Response.json(payload, { headers: corsHeaders });
+    return Response.json(payload, { headers: responseHeaders });
   } catch (err) {
     console.error('GeneGuessr: bootstrap failed', err);
     return Response.json({ error: 'Failed to load game state' }, { status: 500, headers: corsHeaders });
@@ -842,32 +899,35 @@ async function handleGameBootstrap(request, env, corsHeaders) {
 
 async function handleGuessSubmission(request, env, corsHeaders) {
   try {
-    const { sessionId, practiceMode } = resolveSessionContext(request);
+    const sessionContext = resolveSessionContext(request);
+    const { sessionId, practiceMode } = sessionContext;
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
     if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
     const body = await safeJson(request);
     const uniprot = (body?.uniprot || '').toUpperCase();
     if (!uniprot) {
-      return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: corsHeaders });
+      return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: responseHeaders });
     }
     let state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
     if (state.won || (state.guesses?.length || 0) >= MAX_GUESSES) {
-      return Response.json({ error: 'Round already completed' }, { status: 409, headers: corsHeaders });
+      return Response.json({ error: 'Round already completed' }, { status: 409, headers: responseHeaders });
     }
     if ((state.guesses || []).some((entry) => entry.uniprot === uniprot)) {
-      return Response.json({ error: 'Protein already guessed' }, { status: 409, headers: corsHeaders });
+      return Response.json({ error: 'Protein already guessed' }, { status: 409, headers: responseHeaders });
     }
     const guessProtein = await fetchProteinByUniprot(env.DB, uniprot);
     if (!guessProtein) {
-      return Response.json({ error: 'Protein not found' }, { status: 404, headers: corsHeaders });
+      return Response.json({ error: 'Protein not found' }, { status: 404, headers: responseHeaders });
     }
     const goSimilarity = await getGoSimilarityFromEmbeddings(
       env.DB,
@@ -895,7 +955,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     }
     await saveGameState(env, sessionId, state);
     const payload = buildGamePayload(state, targetProtein, { includeProteins: true });
-    return Response.json(payload, { headers: corsHeaders });
+    return Response.json(payload, { headers: responseHeaders });
   } catch (err) {
     console.error('GeneGuessr: guess submission failed', err);
     return Response.json({ error: 'Guess submission failed' }, { status: 500, headers: corsHeaders });
@@ -904,32 +964,35 @@ async function handleGuessSubmission(request, env, corsHeaders) {
 
 async function handleHintReveal(request, env, corsHeaders) {
   try {
-    const { sessionId, practiceMode } = resolveSessionContext(request);
+    const sessionContext = resolveSessionContext(request);
+    const { sessionId, practiceMode } = sessionContext;
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    
     const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
     if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
     const body = await safeJson(request);
     const hintId = body?.hintId || body?.id;
     if (!hintId) {
-      return Response.json({ error: 'Missing hintId' }, { status: 400, headers: corsHeaders });
+      return Response.json({ error: 'Missing hintId' }, { status: 400, headers: responseHeaders });
     }
     const state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
     const clueSections = buildClueSections(targetProtein);
     const hintText = extractHintText(clueSections, hintId);
     if (!hintText) {
-      return Response.json({ error: 'Hint not found' }, { status: 404, headers: corsHeaders });
+      return Response.json({ error: 'Hint not found' }, { status: 404, headers: responseHeaders });
     }
     await hydrateGuessProteins(env, sessionId, state, targetProtein);
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
-        return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: corsHeaders });
+        return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: responseHeaders });
       }
       state.revealedHints = [...(state.revealedHints || []), hintId];
       state.hintBalance = Math.max(0, (state.hintBalance || 0) - DEFAULT_HINT_COST);
@@ -937,7 +1000,7 @@ async function handleHintReveal(request, env, corsHeaders) {
     }
     const payload = buildGamePayload(state, targetProtein, { clueSections });
     payload.revealedHint = { id: hintId, text: hintText };
-    return Response.json(payload, { headers: corsHeaders });
+    return Response.json(payload, { headers: responseHeaders });
   } catch (err) {
     console.error('GeneGuessr: hint reveal failed', err);
     return Response.json({ error: 'Hint reveal failed' }, { status: 500, headers: corsHeaders });
