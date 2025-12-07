@@ -46,7 +46,10 @@ tags:
       <span class="pg-section-label">Similarity embeddings:</span> <span class="pg-section-entry"><a href="https://github.com/JaesikKim/HiG2Vec">HiG2Vec</a></span>
     </div>
     <div class="pg-section">
-      <span class="pg-section-label">Origin age:</span> <span class="pg-section-entry">Litman T & Stein WD (2019). <a href="https://doi.org/10.1053/j.seminoncol.2018.11.002">Obtaining estimates for the ages of all the protein-coding genes...</a> <i>Semin Oncol</i> 46(1):3-9</span>
+      <span class="pg-section-label">Origin age:</span> <span class="pg-section-entry">Litman T & Stein WD (2019). <a href="https://doi.org/10.1053/j.seminoncol.2018.11.002">Obtaining estimates for the ages of all the protein-coding genes and most of the ontology-identified noncoding genes of the human genome, assigned to 19 phylostrata</a> <i>Semin Oncol</i> 46(1):3-9</span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">First publication year:</span> <span class="pg-section-entry">Zwick ME, Kraemer SA & Carter GW (2019). <a href="https://doi.org/10.1016/j.dib.2019.104770">Dataset of frequency patterns of publications for human protein-coding genes</a>. <i>Data Brief</i> 28:104770</span>
     </div>
   </div>
 </div>

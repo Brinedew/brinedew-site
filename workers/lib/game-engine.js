@@ -320,6 +320,15 @@ function buildProteinSections(protein, options = {}) {
     }, { skipFilter: true });
   }
   
+  // First publication year
+  if (protein?.first_pub_year) {
+    pushSection({
+      id: 'first-pub',
+      label: 'First publication',
+      items: [{ id: forClue ? 'hint-first-pub' : undefined, text: `${protein.first_pub_year}` }],
+    });
+  }
+  
   pushSection({
     id: 'length',
     label: 'Length',
