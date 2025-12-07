@@ -974,6 +974,10 @@
   font-family: var(--codeFont);
   /* letter-spacing: 0 ensures redaction bar width matches revealed text width */
   letter-spacing: 0;
+  /* Normalize word-spacing and kerning to prevent sub-character reflow */
+  word-spacing: 0;
+  font-kerning: none;
+  -webkit-font-kerning: none;
 }
 
 /* Dark mode: use lightgray (1 step brighter than background) for spoiler bars */
@@ -990,6 +994,9 @@
 .pg-revealed-text {
   font-family: var(--codeFont);
   letter-spacing: 0;
+  word-spacing: 0;
+  font-kerning: none;
+  -webkit-font-kerning: none;
 }
 
 .pg-redaction:hover,
