@@ -3051,11 +3051,13 @@
     const wordMask = item?.wordLengths ? buildWordMask(item.wordLengths) : null;
     const mask = wordMask || buildMaskCharacters(width);
     
-    return `<span class="${entryClass}">
-      <span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}" role="button" tabindex="0" aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint" style="min-width:${width}ch">
-        <span class="pg-redaction-cover" aria-hidden="true">${mask}</span>
-      </span>
-    </span>`;
+    return (
+      `<span class="${entryClass}">` +
+      `<span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}" role="button" tabindex="0" aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint" style="min-width:${width}ch">` +
+      `<span class="pg-redaction-cover" aria-hidden="true">${mask}</span>` +
+      `</span>` +
+      `</span>`
+    );
   }
 
   function renderClueCard(gameOver = false) {

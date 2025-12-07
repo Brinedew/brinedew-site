@@ -874,30 +874,9 @@
   content: ", ";
 }
 
-/*
- * WARNING: FRAGILE SPACING - DO NOT CHANGE WITHOUT TESTING (B-181)
- * 
- * This controls the HORIZONTAL gap between redaction bars on clue cards.
- * The goal is to match the VERTICAL gap (~16px) so bars form an even grid.
- * 
- * HOW IT WORKS:
- * - Monospace font at 0.9rem (14.4px) renders one space as ~8px
- * - HTML has whitespace between inline elements (the \n in the template literal)
- * - That HTML whitespace ALSO renders as ~8px in monospace
- * - So: HTML whitespace (~8px) + this one space (~8px) = ~16px total
- * - This matches the vertical line-height gap of ~16px
- * 
- * WHAT BREAKS IT:
- * - Using "  " (two spaces) → 24px horizontal gap (too wide)
- * - Using font-size: 0 hack → breaks label text, needs child restoration
- * - Using flexbox → completely breaks inline flow, stacks vertically
- * - Removing white-space: pre → space collapses, bars touch
- * 
- * TESTED: Horizontal gap = 15.83px, Vertical gap = 15.82px (0.01px difference)
- */
+/* Keep redacted and revealed separators identical so unlocking hints doesn't reflow lines. */
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
-  content: " ";  /* EXACTLY ONE SPACE - see warning above */
-  white-space: pre;  /* Preserves the space; without this it collapses */
+  content: ", ";
 }
 
 .pg-section-entry.matched-highlight {
