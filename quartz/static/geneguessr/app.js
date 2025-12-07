@@ -916,9 +916,14 @@
         const structureBlob = await getStructureFromCache(cachedInfo.cacheKey);
         if (structureBlob) {
           console.log(`[TIMING] token for ${key} | IndexedDB cache hit | ${(performance.now() - t0).toFixed(0)}ms | SKIPPED API`);
+          // Reconstruct the URL from cacheKey (IndexedDB doesn't store URLs)
+          const hydratedInfo = {
+            ...cachedInfo,
+            url: `${API_BASE}/api/structure-cached?key=${encodeURIComponent(cachedInfo.cacheKey)}`
+          };
           // Store in memory cache too for fast subsequent access
-          structureTokenCache.set(key, cachedInfo);
-          return cachedInfo;
+          structureTokenCache.set(key, hydratedInfo);
+          return hydratedInfo;
         }
         // Structure blob evicted, need fresh token - fall through to API
         console.log(`[TIMING] token for ${key} | IndexedDB info found but blob evicted, fetching...`);
