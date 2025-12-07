@@ -1444,6 +1444,7 @@ async function getCanonicalStructureMeta(protein, env) {
         if (!pdbId) continue;
         const coverage = m.coverage || 0.0;
         const resolution = m.resolution;
+        const chainCount = m.chain_id ? m.chain_id.split(',').length : 1;  // Count chains in structure
         // Only include X-ray diffraction structures with reasonable resolution
         if (m.experimental_method === 'X-ray diffraction' && resolution && resolution <= PDB_RESOLUTION_MAX) {
           candidates.push({
@@ -1453,7 +1454,7 @@ async function getCanonicalStructureMeta(protein, env) {
             upstreamUrl: `https://models.rcsb.org/v1/${pdbId}/full?encoding=bcif&copy_all_categories=false`,
             format: 'bcif',
             coverage,
-            quality: resolution,  // resolution as quality metric
+            chainCount,  // Number of chains (prefer fewer for simpler structures)
             raw: m
           });
         }
@@ -1545,7 +1546,7 @@ async function getCanonicalStructureMeta(protein, env) {
     if (source === 'pdb') {
       const pdbs = candidates.filter(c => c.source === 'pdb' && c.coverage >= COVERAGE_THRESHOLD);
       if (pdbs.length > 0) {
-        pdbs.sort((a, b) => b.coverage - a.coverage || (a.quality || Infinity) - (b.quality || Infinity));  // Higher coverage, lower resolution better
+        pdbs.sort((a, b) => b.coverage - a.coverage || (a.chainCount || Infinity) - (b.chainCount || Infinity));  // Higher coverage, fewer chains better
         selected = pdbs[0];
         break;
       }

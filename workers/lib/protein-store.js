@@ -150,6 +150,7 @@ function toProteinObject(row) {
     alphafold_url: row.alphafold_url,
     gene_summary: row.gene_summary,
     origin_age: row.origin_age,
+    first_pub_year: row.first_pub_year,
     // JSON arrays
     synonyms: parseJson(row.synonyms),
     domains: parseJson(row.domains),
