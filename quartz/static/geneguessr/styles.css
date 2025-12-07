@@ -877,6 +877,7 @@
 /* Keep redacted and revealed separators identical so unlocking hints doesn't reflow lines. */
 .pg-section-entry:has(.pg-redaction:only-child):not(:last-child)::after {
   content: ", ";
+  color: transparent; /* Keep width identical to revealed comma+space but hide visually */
 }
 
 .pg-section-entry.matched-highlight {
