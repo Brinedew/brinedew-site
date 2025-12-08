@@ -19,6 +19,12 @@ const STRUCTURE_CACHE_META_PREFIX = 'structure_meta:';
 const STRUCTURE_CACHE_TARGET_RATIO = 0.9;
 const DAILY_TARGET_SALT = 'geneguessr-v2-939b5a0b';
 
+// Similarity configuration
+// SIMILARITY_MODE: 'legacy' (HiG2Vec only), 'blended' (HiG2Vec + ESM2)
+// ESM2_WEIGHT: 0-1, how much to weight ESM2 structural similarity (0.5 = equal blend)
+const SIMILARITY_MODE = 'blended';
+const ESM2_WEIGHT = 0.5;
+
 
 // Import auth handlers
 import { handleLogin, handleCallback, handleMe, handleLogout } from './auth.js';
@@ -57,6 +63,7 @@ import {
   getEligibleProteinIds,
   pickDailyTarget,
   getGoSimilarityFromEmbeddings,
+  getBlendedSimilarity,
   markStructureFailure,
   clearStructureFailure
 } from './lib/protein-store.js';
@@ -965,11 +972,23 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     if (!guessProtein) {
       return Response.json({ error: 'Protein not found' }, { status: 404, headers: responseHeaders });
     }
-    const goSimilarity = await getGoSimilarityFromEmbeddings(
-      env.DB,
-      guessProtein.gene,
-      targetProtein.gene
-    );
+    // Calculate similarity - use blended (HiG2Vec + ESM2) or legacy (HiG2Vec only)
+    let goSimilarity;
+    if (SIMILARITY_MODE === 'blended') {
+      const simResult = await getBlendedSimilarity(
+        env.DB,
+        guessProtein.gene,
+        targetProtein.gene,
+        { esm2Weight: ESM2_WEIGHT }
+      );
+      goSimilarity = simResult.blended;
+    } else {
+      goSimilarity = await getGoSimilarityFromEmbeddings(
+        env.DB,
+        guessProtein.gene,
+        targetProtein.gene
+      );
+    }
     const score = scoreGuess(guessProtein, targetProtein, { goSimilarity });
     const correct = guessProtein.uniprot === targetProtein.uniprot;
     const guessEntry = {
@@ -1135,11 +1154,23 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
       }
     }
     if (entry.protein && targetProtein) {
-      const goSimilarity = await getGoSimilarityFromEmbeddings(
-        env.DB,
-        entry.protein.gene || entry.protein.hgnc,
-        targetProtein.gene
-      );
+      // Calculate similarity - use blended (HiG2Vec + ESM2) or legacy (HiG2Vec only)
+      let goSimilarity;
+      if (SIMILARITY_MODE === 'blended') {
+        const simResult = await getBlendedSimilarity(
+          env.DB,
+          entry.protein.gene || entry.protein.hgnc,
+          targetProtein.gene,
+          { esm2Weight: ESM2_WEIGHT }
+        );
+        goSimilarity = simResult.blended;
+      } else {
+        goSimilarity = await getGoSimilarityFromEmbeddings(
+          env.DB,
+          entry.protein.gene || entry.protein.hgnc,
+          targetProtein.gene
+        );
+      }
       const nextScore = scoreGuess(entry.protein, targetProtein, { goSimilarity });
       const prevGoPercent = entry.score?.goPercent ?? null;
       entry.score = nextScore;
@@ -1202,6 +1233,8 @@ function buildGamePayload(state, targetProtein, options = {}) {
   const shareText = targetReveal ? buildShareText(state, guessEntries) : null;
   applyMatchReveals(maskedSections, aggregatedMatches);
   applyLatestHighlights(maskedSections, latestMatches);
+  // Only reveal targetId after game ends (won or lost) to prevent cheating
+  const gameOver = Boolean(state.won) || lost;
   return {
     status: {
       date: state.date,
@@ -1212,7 +1245,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       hintBalance: state.hintBalance,
       revealedHints: state.revealedHints || [],
       practiceMode: Boolean(state.practiceMode),
-      targetId: state.targetId
+      ...(gameOver && { targetId: state.targetId })
     },
     clueTarget,
     clue: {

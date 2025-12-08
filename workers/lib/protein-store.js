@@ -112,6 +112,69 @@ function toFloat32Vector(row) {
   return vector;
 }
 
+/**
+ * Convert a float16 blob to Float32Array.
+ * ESM2 embeddings are stored as float16 to save space.
+ */
+function float16ToFloat32(uint16) {
+  const sign = (uint16 >> 15) & 0x1;
+  const exp = (uint16 >> 10) & 0x1f;
+  const frac = uint16 & 0x3ff;
+
+  if (exp === 0) {
+    // Subnormal or zero
+    if (frac === 0) return sign ? -0 : 0;
+    // Subnormal: value = (-1)^sign * 2^-14 * (frac/1024)
+    return (sign ? -1 : 1) * Math.pow(2, -14) * (frac / 1024);
+  } else if (exp === 31) {
+    // Infinity or NaN
+    return frac === 0 ? (sign ? -Infinity : Infinity) : NaN;
+  }
+  // Normal: value = (-1)^sign * 2^(exp-15) * (1 + frac/1024)
+  return (sign ? -1 : 1) * Math.pow(2, exp - 15) * (1 + frac / 1024);
+}
+
+function toFloat16ToFloat32Vector(blobData, expectedDim) {
+  if (!blobData) {
+    return null;
+  }
+  let buffer = cloneArrayBuffer(blobData);
+  // Handle hex or base64 strings
+  if (!buffer && typeof blobData === 'string') {
+    const s = blobData.trim();
+    if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0) {
+      const len = s.length / 2;
+      const u8 = new Uint8Array(len);
+      for (let i = 0; i < len; i += 1) {
+        u8[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+      }
+      buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+    } else {
+      try {
+        const bin = atob(s);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) {
+          u8[i] = bin.charCodeAt(i);
+        }
+        buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      } catch (e) {
+        buffer = null;
+      }
+    }
+  }
+  if (!buffer || buffer.byteLength === 0) {
+    return null;
+  }
+  // Read as Uint16Array (float16 is 2 bytes per value)
+  const uint16View = new Uint16Array(buffer);
+  const dim = expectedDim || uint16View.length;
+  const float32 = new Float32Array(dim);
+  for (let i = 0; i < dim && i < uint16View.length; i += 1) {
+    float32[i] = float16ToFloat32(uint16View[i]);
+  }
+  return float32;
+}
+
 function toProteinObject(row) {
   if (!row) {
     return null;
@@ -220,6 +283,48 @@ export async function fetchProteinEmbedding(db, geneSymbol) {
   const vector = toFloat32Vector(row);
   rememberEmbedding(key, vector);
   return vector;
+}
+
+// Cache for dual embeddings (HiG2Vec + ESM2)
+const dualEmbeddingCache = new Map();
+const MAX_DUAL_CACHE_SIZE = 256;
+
+function rememberDualEmbedding(key, value) {
+  if (!key) return;
+  if (!value) {
+    dualEmbeddingCache.delete(key);
+    return;
+  }
+  dualEmbeddingCache.set(key, value);
+  if (dualEmbeddingCache.size > MAX_DUAL_CACHE_SIZE) {
+    const oldestKey = dualEmbeddingCache.keys().next().value;
+    dualEmbeddingCache.delete(oldestKey);
+  }
+}
+
+/**
+ * Fetch both HiG2Vec and ESM2 embeddings for a gene.
+ * Returns { hig2vec: Float32Array|null, esm2: Float32Array|null }
+ */
+export async function fetchDualEmbeddings(db, geneSymbol) {
+  if (!geneSymbol) {
+    return { hig2vec: null, esm2: null };
+  }
+  const key = geneSymbol.toUpperCase();
+  if (dualEmbeddingCache.has(key)) {
+    return dualEmbeddingCache.get(key);
+  }
+  const row = await db.prepare(
+    `SELECT vector, dim, esm2_vector, esm2_dim 
+     FROM protein_embeddings WHERE upper(gene_symbol) = ? LIMIT 1`
+  ).bind(key).first();
+
+  const result = {
+    hig2vec: toFloat32Vector(row),
+    esm2: row?.esm2_vector ? toFloat16ToFloat32Vector(row.esm2_vector, row.esm2_dim) : null
+  };
+  rememberDualEmbedding(key, result);
+  return result;
 }
 
 async function ensureStructureFailureTable(db) {
@@ -443,4 +548,51 @@ export async function getGoSimilarityFromEmbeddings(db, guessId, targetId) {
   }
   const cosine = cosineSimilarity(guessVec, targetVec);
   return normalizeCosine(cosine);
+}
+
+/**
+ * Compute blended similarity using both HiG2Vec (functional) and ESM2 (structural) embeddings.
+ * 
+ * @param {D1Database} db - The D1 database binding
+ * @param {string} guessId - Gene symbol or UniProt ID of the guess
+ * @param {string} targetId - Gene symbol or UniProt ID of the target
+ * @param {object} options - Configuration options
+ * @param {number} options.esm2Weight - Weight for ESM2 similarity (0-1, default 0.5)
+ * @returns {Promise<{blended: number|null, hig2vec: number|null, esm2: number|null}>}
+ */
+export async function getBlendedSimilarity(db, guessId, targetId, options = {}) {
+  const esm2Weight = typeof options.esm2Weight === 'number' ? options.esm2Weight : 0.5;
+  const guessKey = normalizeKey(guessId);
+  const targetKey = normalizeKey(targetId);
+
+  if (!guessKey || !targetKey) {
+    return { blended: null, hig2vec: null, esm2: null };
+  }
+
+  const [guessEmb, targetEmb] = await Promise.all([
+    fetchDualEmbeddings(db, guessKey),
+    fetchDualEmbeddings(db, targetKey)
+  ]);
+
+  // Calculate individual similarities
+  const hig2vecCosine = cosineSimilarity(guessEmb.hig2vec, targetEmb.hig2vec);
+  const esm2Cosine = cosineSimilarity(guessEmb.esm2, targetEmb.esm2);
+
+  const hig2vecSim = normalizeCosine(hig2vecCosine);
+  const esm2Sim = normalizeCosine(esm2Cosine);
+
+  // Calculate blended similarity
+  let blended = null;
+  if (hig2vecSim !== null && esm2Sim !== null) {
+    // Both available: blend them
+    blended = esm2Weight * esm2Sim + (1 - esm2Weight) * hig2vecSim;
+  } else if (hig2vecSim !== null) {
+    // Only HiG2Vec available: use it
+    blended = hig2vecSim;
+  } else if (esm2Sim !== null) {
+    // Only ESM2 available: use it
+    blended = esm2Sim;
+  }
+
+  return { blended, hig2vec: hig2vecSim, esm2: esm2Sim };
 }
