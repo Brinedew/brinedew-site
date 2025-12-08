@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -37,14 +37,14 @@ jobs:
 
       - name: Upload image generation queue 
         if: always() 
-        uses: actions/upload-artifact@v4 
+        uses: actions/upload-artifact@v5 
         with: 
           name: image-generation-queue 
           path: image_generation_queue.txt 
           if-no-files-found: ignore 
 
       - name: Setup Node.js (22.x) with npm cache
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -107,7 +107,7 @@ jobs:
           touch public/.nojekyll
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: public
 
