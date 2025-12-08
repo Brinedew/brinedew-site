@@ -123,11 +123,11 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   if (!guessProtein || !targetProtein) {
     return null;
   }
-  const goSimilarity = (typeof options.goSimilarity === 'number')
-    ? options.goSimilarity
+  const similarity = (typeof options.similarity === 'number')
+    ? options.similarity
     : null;
-  const goPercent = typeof goSimilarity === 'number'
-    ? Math.round(((goSimilarity + 1) / 2) * 100)
+  const percent = typeof similarity === 'number'
+    ? Math.round(similarity * 100)
     : null;
   const domainIntersection = guessProtein.domains.filter((domain) => targetProtein.domains.includes(domain));
   const lengthBinMatch = determineLengthBin(guessProtein.length) === determineLengthBin(targetProtein.length);
@@ -135,8 +135,8 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   const secretedMatch = Boolean(guessProtein.secreted) === Boolean(targetProtein.secreted);
   const tissueMatch = Boolean(guessProtein.tissue?.label) && guessProtein.tissue.label === targetProtein.tissue.label;
   return {
-    goPercent,
-    goSimilarity,
+    percent,
+    similarity,
     domainMatches: domainIntersection,
     lengthBinMatch,
     tmMatch,

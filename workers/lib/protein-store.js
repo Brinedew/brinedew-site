@@ -533,7 +533,78 @@ function normalizeCosine(value) {
   return normalized;
 }
 
-export async function getGoSimilarityFromEmbeddings(db, guessId, targetId) {
+// Global statistics for z-score normalization (from 10k random pair analysis)
+// These transform each embedding's similarities to comparable scales before blending
+const EMBEDDING_STATS = {
+  // ESM2 cosine similarities: mean≈0.953, std≈0.032 (very narrow, high range)
+  esm2: { mean: 0.953, std: 0.032 },
+  // HiG2Vec cosine similarities: mean≈0.010, std≈0.385 (wide range centered near 0)
+  hig2vec: { mean: 0.010, std: 0.385 }
+};
+
+// Beta calibration constants (Kull et al. 2017)
+// Fitted offline to satisfy: median≈50%, HBB→HBD≈97%, BRCA1 spread maximized
+// Formula: p_cal = σ(A*log(s) + B*log(1-s) + C)
+// Note: BRCA1 spread limited by embedding resolution, not transform
+const BETA_CAL = { A: 3.415631, B: -3.366470, C: 0.005369 };
+
+/**
+ * Stage 1: Compute metric similarity (internal, preserves discrimination).
+ * Uses LINEAR z-score mapping instead of logistic to preserve tail resolution.
+ * Maps z-scores to [0, 1] via: 0.5 + z/8
+ * 
+ * This is the "ranking" score - preserves fine distinctions in high-similarity pairs.
+ * Logistic was removed because it caps derivative at 0.25, killing tail discrimination.
+ * No clipping needed - blended metric naturally stays in [0,1] bounds.
+ */
+function getMetricSimilarity(cosine, embeddingType) {
+  if (!Number.isFinite(cosine)) {
+    return null;
+  }
+  const stats = EMBEDDING_STATS[embeddingType];
+  if (!stats) {
+    // Fallback to simple normalization if unknown type
+    return normalizeCosine(cosine);
+  }
+  // Z-score: how many std devs above/below mean
+  const z = (cosine - stats.mean) / stats.std;
+  // Linear map: z → [0, 1], with z=0 → 0.5
+  return 0.5 + z / 8.0;
+}
+
+/**
+ * Stage 2: Beta calibration for display score.
+ * Uses beta calibration (Kull et al. 2017) which has much larger slope in the tail
+ * than power-law, because derivative includes terms like A/p + B/(1-p).
+ * 
+ * Formula: p_cal = σ(A*log(s) + B*log(1-s) + C)
+ * 
+ * This can curve differently in mid-range vs tail, unlike simple power laws.
+ * Calibrated so HBB→HBD displays as ~97-99% while BRCA1 neighbors have ≥1% spread.
+ */
+function toDisplayScore(pMetric) {
+  if (pMetric === null || !Number.isFinite(pMetric)) {
+    return null;
+  }
+  // Clamp to avoid log(0) or log(1)
+  const eps = 1e-9;
+  const s = Math.max(eps, Math.min(1 - eps, pMetric));
+  // Beta calibration: logit-like transform with asymmetric coefficients
+  const x = BETA_CAL.A * Math.log(s) + BETA_CAL.B * Math.log(1 - s) + BETA_CAL.C;
+  const pCal = 1 / (1 + Math.exp(-x));
+  return pCal;
+}
+
+/**
+ * Legacy name kept for compatibility.
+ * Now returns display score (metric → display pipeline).
+ */
+function normalizeWithZScore(cosine, embeddingType) {
+  const pMetric = getMetricSimilarity(cosine, embeddingType);
+  return toDisplayScore(pMetric);
+}
+
+export async function getHig2vecSimilarity(db, guessId, targetId) {
   const guessKey = normalizeKey(guessId);
   const targetKey = normalizeKey(targetId);
   if (!guessKey || !targetKey) {
@@ -547,7 +618,7 @@ export async function getGoSimilarityFromEmbeddings(db, guessId, targetId) {
     return null;
   }
   const cosine = cosineSimilarity(guessVec, targetVec);
-  return normalizeCosine(cosine);
+  return normalizeWithZScore(cosine, 'hig2vec');
 }
 
 /**
@@ -578,8 +649,8 @@ export async function getBlendedSimilarity(db, guessId, targetId, options = {}) 
   const hig2vecCosine = cosineSimilarity(guessEmb.hig2vec, targetEmb.hig2vec);
   const esm2Cosine = cosineSimilarity(guessEmb.esm2, targetEmb.esm2);
 
-  const hig2vecSim = normalizeCosine(hig2vecCosine);
-  const esm2Sim = normalizeCosine(esm2Cosine);
+  const hig2vecSim = normalizeWithZScore(hig2vecCosine, 'hig2vec');
+  const esm2Sim = normalizeWithZScore(esm2Cosine, 'esm2');
 
   // Calculate blended similarity
   let blended = null;

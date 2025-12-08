@@ -973,7 +973,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
       return Response.json({ error: 'Protein not found' }, { status: 404, headers: responseHeaders });
     }
     // Calculate similarity - use blended (HiG2Vec + ESM2) or legacy (HiG2Vec only)
-    let goSimilarity;
+    let similarity;
     if (SIMILARITY_MODE === 'blended') {
       const simResult = await getBlendedSimilarity(
         env.DB,
@@ -981,15 +981,15 @@ async function handleGuessSubmission(request, env, corsHeaders) {
         targetProtein.gene,
         { esm2Weight: ESM2_WEIGHT }
       );
-      goSimilarity = simResult.blended;
+      similarity = simResult.blended;
     } else {
-      goSimilarity = await getGoSimilarityFromEmbeddings(
+      similarity = await getHig2vecSimilarity(
         env.DB,
         guessProtein.gene,
         targetProtein.gene
       );
     }
-    const score = scoreGuess(guessProtein, targetProtein, { goSimilarity });
+    const score = scoreGuess(guessProtein, targetProtein, { similarity });
     const correct = guessProtein.uniprot === targetProtein.uniprot;
     const guessEntry = {
       guessId: crypto.randomUUID(),
@@ -1155,7 +1155,7 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
     }
     if (entry.protein && targetProtein) {
       // Calculate similarity - use blended (HiG2Vec + ESM2) or legacy (HiG2Vec only)
-      let goSimilarity;
+      let similarity;
       if (SIMILARITY_MODE === 'blended') {
         const simResult = await getBlendedSimilarity(
           env.DB,
@@ -1163,15 +1163,15 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
           targetProtein.gene,
           { esm2Weight: ESM2_WEIGHT }
         );
-        goSimilarity = simResult.blended;
+        similarity = simResult.blended;
       } else {
-        goSimilarity = await getGoSimilarityFromEmbeddings(
+        similarity = await getHig2vecSimilarity(
           env.DB,
           entry.protein.gene || entry.protein.hgnc,
           targetProtein.gene
         );
       }
-      const nextScore = scoreGuess(entry.protein, targetProtein, { goSimilarity });
+      const nextScore = scoreGuess(entry.protein, targetProtein, { similarity });
       const prevGoPercent = entry.score?.goPercent ?? null;
       entry.score = nextScore;
       if (nextScore?.goPercent !== prevGoPercent) {
@@ -1204,7 +1204,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       gene_summary: cleanGeneSummary(guessProtein.gene_summary)
     };
     const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein, {
-      goSimilarity: entry.score?.goSimilarity
+      similarity: entry.score?.similarity
     });
     const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore);
     aggregateMatches(aggregatedMatches, matches);
@@ -1281,7 +1281,7 @@ function buildShareText(state, guesses) {
     if (entry.correct) {
       return '??';
     }
-    const simScore = typeof entry.score?.goSimilarity === 'number' ? entry.score.goSimilarity : 0;
+    const simScore = typeof entry.score?.similarity === 'number' ? entry.score.similarity : 0;
     return simScore >= 0.35 ? '??' : '?';
   }).join('');
   return `Geneguessr ${today}
