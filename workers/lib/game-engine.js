@@ -45,7 +45,8 @@ export function sanitizeTargetProtein(protein, options = {}) {
     go_terms: cloneGoTerms(protein?.go_terms),
     go_terms_named: cloneGoTerms(protein?.go_terms_named),
     reactome_pathways: Array.isArray(protein?.reactome_pathways) ? [...protein.reactome_pathways] : [],
-    structure: protein?.structure || null,
+    // Security: Don't send structure details (PDB ID, etc) for clue target unless game is won
+    structure: options.revealIdentity && protein?.structure ? protein.structure : null,
     links: protein?.links || {},
     gene_summary: geneSummary || null,
     subcell: Array.isArray(protein?.subcell) ? [...protein.subcell] : [],

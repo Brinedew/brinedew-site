@@ -741,7 +741,8 @@ async function handleStructureToken(request, env, corsHeaders) {
         sizeBytes = head?.size || 0;
       } catch { /* ignore */ }
       
-      const structureUrl = `${url.origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
+      // SECURITY: Use opaque URL for target - no key visible to client
+      const structureUrl = `${url.origin}/api/structure-cached?type=target`;
     
     // Parse chain labels to create redacted version for target
     // SECURITY: Only send chain IDs + is_target flag, never gene names
@@ -767,12 +768,15 @@ async function handleStructureToken(request, env, corsHeaders) {
       }
     }
     
+    // SECURITY: For target structures, redact identifying info (PDB ID, etc)
+    // The URL still works (server-side routing), but client can't extract the ID
     return Response.json({
-      sourceLabel: meta.shortLabel,
-      displayLabel: meta.displayLabel,
+      sourceLabel: meta.shortLabel,  // "PDB" / "AlphaFold" / "SWISS-MODEL" - ok to reveal source type
+      displayLabel: `Source: ${meta.shortLabel}`,  // Redact structure ID (was "PDB (3BDW)")
       format: meta.format || 'cif',
-      url: structureUrl,
-      cacheKey: meta.r2Key,
+      url: structureUrl,  // URL is opaque enough - key is encoded, not human-readable at a glance
+      // SECURITY: Don't send cacheKey to client for target - it contains the structure ID
+      // cacheKey: meta.r2Key,  // REMOVED - was "pdb/3BDW.bcif"
       sizeBytes,
       targetChainHints,
       totalChainCount
@@ -842,7 +846,39 @@ async function handleStructureToken(request, env, corsHeaders) {
  */
 async function handleCachedStructureFetch(request, env, corsHeaders) {
   const url = new URL(request.url);
-  const cacheKey = url.searchParams.get('key');
+  let cacheKey = url.searchParams.get('key');
+  
+  // SECURITY: Support type=target to fetch target structure without exposing the key
+  // This prevents cheating by inspecting the URL to see the PDB ID
+  const type = url.searchParams.get('type');
+  if (type === 'target') {
+    const { sessionId, practiceMode } = resolveSessionContext(request);
+    let protein = null;
+    
+    try {
+      const state = await getGameState(env, sessionId);
+      if (state?.targetId) {
+        protein = await fetchProteinByUniprot(env.DB, state.targetId);
+      }
+    } catch (err) {
+      console.warn('GeneGuessr: structure-cached target lookup failed', err);
+    }
+    
+    if (!protein) {
+      protein = await getDailyTargetProtein(env, { practice: practiceMode });
+    }
+    
+    if (!protein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 404, headers: corsHeaders });
+    }
+    
+    const meta = await getCanonicalStructureMeta(protein, env);
+    if (!meta?.r2Key) {
+      return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
+    }
+    cacheKey = meta.r2Key;
+  }
+  
   if (!cacheKey) {
     return Response.json({ error: 'Missing key parameter' }, { status: 400, headers: corsHeaders });
   }
