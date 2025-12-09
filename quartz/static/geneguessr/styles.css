@@ -1363,6 +1363,20 @@
   transition: width 0.3s ease;
 }
 
+/* Ladder match styling - accent color for top-9 similar proteins */
+.pg-bar.pg-ladder {
+  background: color-mix(in srgb, var(--tertiary) 30%, var(--lightgray) 70%);
+}
+
+.pg-bar-fill.pg-ladder {
+  background: var(--tertiary);
+}
+
+.pg-feedback-score.pg-ladder {
+  color: var(--tertiary);
+  font-weight: 600;
+}
+
 /* Collapsible Feedback Cards - now using unified card styling above */
 
 .pg-collapse-toggle {

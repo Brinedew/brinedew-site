@@ -232,7 +232,9 @@ function toProteinObject(row) {
       cc: parseJson(row.go_cc)
     },
     // Pathways as expected structure
-    reactome_pathways: parseJson(row.pathways)
+    reactome_pathways: parseJson(row.pathways),
+    // Top-9 similar neighbors for ladder display
+    neighbors: parseJson(row.neighbors)
   };
 }
 
@@ -533,13 +535,15 @@ function normalizeCosine(value) {
   return normalized;
 }
 
-// Global statistics for z-score normalization (from 10k random pair analysis)
-// These transform each embedding's similarities to comparable scales before blending
+// Mode-aligned normalization (from 10k random pair analysis)
+// Linear transform: norm = scale * raw + offset
+// Calibrated so: mode → 0.50, right-tail p99 → 0.90
+// This aligns the peaks and right-side falloff slopes
 const EMBEDDING_STATS = {
-  // ESM2 cosine similarities: mean≈0.953, std≈0.032 (very narrow, high range)
-  esm2: { mean: 0.953, std: 0.032 },
-  // HiG2Vec cosine similarities: mean≈0.010, std≈0.385 (wide range centered near 0)
-  hig2vec: { mean: 0.010, std: 0.385 }
+  // ESM2 cosine: mode=0.976, right spread=0.017 → very narrow peak
+  esm2: { scale: 23.0569, offset: -21.9954 },
+  // HiG2Vec cosine: mode=-0.030, right spread=0.975 → wide symmetric
+  hig2vec: { scale: 0.4101, offset: 0.5123 }
 };
 
 // Beta calibration constants (Kull et al. 2017)
@@ -550,12 +554,12 @@ const BETA_CAL = { A: 3.415631, B: -3.366470, C: 0.005369 };
 
 /**
  * Stage 1: Compute metric similarity (internal, preserves discrimination).
- * Uses LINEAR z-score mapping instead of logistic to preserve tail resolution.
- * Maps z-scores to [0, 1] via: 0.5 + z/8
+ * Uses percentile-aligned linear transform: norm = scale * raw + offset.
+ * Calibrated so median → 0.50, p99 → 0.90 for both embedding types.
  * 
- * This is the "ranking" score - preserves fine distinctions in high-similarity pairs.
- * Logistic was removed because it caps derivative at 0.25, killing tail discrimination.
- * No clipping needed - blended metric naturally stays in [0,1] bounds.
+ * This ensures equal contribution from ESM2 and HiG2Vec in the 89-90% bracket,
+ * where the ladder boundary sits. No clipping needed - blended metric naturally
+ * stays in reasonable bounds (both inputs calibrated to [0, 1] at p0→p100).
  */
 function getMetricSimilarity(cosine, embeddingType) {
   if (!Number.isFinite(cosine)) {
@@ -566,23 +570,18 @@ function getMetricSimilarity(cosine, embeddingType) {
     // Fallback to simple normalization if unknown type
     return normalizeCosine(cosine);
   }
-  // Z-score: how many std devs above/below mean
-  const z = (cosine - stats.mean) / stats.std;
-  // Linear map: z → [0, 1], with z=0 → 0.5
-  return 0.5 + z / 8.0;
+  // Linear transform: scale * raw + offset
+  return stats.scale * cosine + stats.offset;
 }
 
 /**
- * Stage 2: Beta calibration for display score.
- * Uses beta calibration (Kull et al. 2017) which has much larger slope in the tail
- * than power-law, because derivative includes terms like A/p + B/(1-p).
+ * Stage 2A: Beta calibration for display score (global fallback).
+ * Used when guess is NOT in target's precomputed top-K neighbors.
+ * Maps metric [0, 1] → display [0, ~90%].
  * 
  * Formula: p_cal = σ(A*log(s) + B*log(1-s) + C)
- * 
- * This can curve differently in mid-range vs tail, unlike simple power laws.
- * Calibrated so HBB→HBD displays as ~97-99% while BRCA1 neighbors have ≥1% spread.
  */
-function toDisplayScore(pMetric) {
+function toDisplayScoreGlobal(pMetric) {
   if (pMetric === null || !Number.isFinite(pMetric)) {
     return null;
   }
@@ -591,17 +590,29 @@ function toDisplayScore(pMetric) {
   const s = Math.max(eps, Math.min(1 - eps, pMetric));
   // Beta calibration: logit-like transform with asymmetric coefficients
   const x = BETA_CAL.A * Math.log(s) + BETA_CAL.B * Math.log(1 - s) + BETA_CAL.C;
-  const pCal = 1 / (1 + Math.exp(-x));
-  return pCal;
+  let pCal = 1 / (1 + Math.exp(-x));
+  // Cap at 0.90 - top 10% reserved for ladder neighbors
+  return Math.min(pCal, 0.90);
 }
 
 /**
- * Legacy name kept for compatibility.
- * Now returns display score (metric → display pipeline).
+ * Stage 2B: Rank-based display score for ladder neighbors.
+ * If guess is in target's top-K neighbors, use discrete rank mapping:
+ *   rank 1 → 99%, rank 2 → 98%, ..., rank K → (100-K)%
+ * 
+ * This guarantees distinct integer percentages regardless of metric compression.
+ */
+function toDisplayScoreLadder(rank) {
+  // rank 1 → 0.99, rank 2 → 0.98, etc.
+  return (100 - rank) / 100;
+}
+
+/**
+ * Legacy name - now just returns metric score (no display transform).
+ * Display transform happens in getBlendedSimilarity with ladder support.
  */
 function normalizeWithZScore(cosine, embeddingType) {
-  const pMetric = getMetricSimilarity(cosine, embeddingType);
-  return toDisplayScore(pMetric);
+  return getMetricSimilarity(cosine, embeddingType);
 }
 
 export async function getHig2vecSimilarity(db, guessId, targetId) {
@@ -618,52 +629,88 @@ export async function getHig2vecSimilarity(db, guessId, targetId) {
     return null;
   }
   const cosine = cosineSimilarity(guessVec, targetVec);
-  return normalizeWithZScore(cosine, 'hig2vec');
+  const metric = normalizeWithZScore(cosine, 'hig2vec');
+  // No ladder for legacy single-embedding, use global transform
+  return toDisplayScoreGlobal(metric);
+}
+
+/**
+ * Find the rank of a guess in the target's neighbor list (1-indexed).
+ * Returns null if guess is not in neighbors.
+ */
+function getLadderRank(neighbors, guessKey) {
+  if (!neighbors || !Array.isArray(neighbors)) return null;
+  for (let i = 0; i < neighbors.length; i++) {
+    if (neighbors[i].gene?.toUpperCase() === guessKey) {
+      return i + 1; // 1-indexed rank
+    }
+  }
+  return null;
 }
 
 /**
  * Compute blended similarity using both HiG2Vec (functional) and ESM2 (structural) embeddings.
+ * Uses ladder-based display scoring: if guess is in target's top-K neighbors, use rank-based display.
+ * 
+ * NEW: Reads neighbors from target protein object (from D1) instead of KV lookup.
  * 
  * @param {D1Database} db - The D1 database binding
  * @param {string} guessId - Gene symbol or UniProt ID of the guess
  * @param {string} targetId - Gene symbol or UniProt ID of the target
  * @param {object} options - Configuration options
- * @param {number} options.esm2Weight - Weight for ESM2 similarity (0-1, default 0.5)
- * @returns {Promise<{blended: number|null, hig2vec: number|null, esm2: number|null}>}
+ * @param {number} options.esm2Weight - Weight for ESM2 similarity (0-1, default 0.25)
+ * @param {Array} options.targetNeighbors - Pre-fetched neighbors array from target protein
+ * @returns {Promise<{blended: number|null, isLadder: boolean, ladderRank: number|null}>}
  */
 export async function getBlendedSimilarity(db, guessId, targetId, options = {}) {
-  const esm2Weight = typeof options.esm2Weight === 'number' ? options.esm2Weight : 0.5;
+  const esm2Weight = typeof options.esm2Weight === 'number' ? options.esm2Weight : 0.25;
+  const targetNeighbors = options.targetNeighbors || null;
   const guessKey = normalizeKey(guessId);
   const targetKey = normalizeKey(targetId);
 
   if (!guessKey || !targetKey) {
-    return { blended: null, hig2vec: null, esm2: null };
+    return { blended: null, isLadder: false, ladderRank: null };
   }
 
+  // Check if guess is in target's precomputed neighbors
+  const ladderRank = getLadderRank(targetNeighbors, guessKey);
+  const isLadder = ladderRank !== null;
+
+  // If in ladder, use the precomputed similarity from neighbors array
+  if (isLadder && targetNeighbors[ladderRank - 1]?.similarity != null) {
+    const precomputedSim = targetNeighbors[ladderRank - 1].similarity;
+    // Use rank-based display score for ladder proteins (91-99%)
+    const blendedDisplay = toDisplayScoreLadder(ladderRank);
+    return { blended: blendedDisplay, isLadder: true, ladderRank };
+  }
+
+  // Not in ladder: compute similarity from embeddings
   const [guessEmb, targetEmb] = await Promise.all([
     fetchDualEmbeddings(db, guessKey),
     fetchDualEmbeddings(db, targetKey)
   ]);
 
-  // Calculate individual similarities
+  // Calculate individual METRIC similarities (before display transform)
   const hig2vecCosine = cosineSimilarity(guessEmb.hig2vec, targetEmb.hig2vec);
   const esm2Cosine = cosineSimilarity(guessEmb.esm2, targetEmb.esm2);
 
-  const hig2vecSim = normalizeWithZScore(hig2vecCosine, 'hig2vec');
-  const esm2Sim = normalizeWithZScore(esm2Cosine, 'esm2');
+  const hig2vecMetric = getMetricSimilarity(hig2vecCosine, 'hig2vec');
+  const esm2Metric = getMetricSimilarity(esm2Cosine, 'esm2');
 
-  // Calculate blended similarity
-  let blended = null;
-  if (hig2vecSim !== null && esm2Sim !== null) {
-    // Both available: blend them
-    blended = esm2Weight * esm2Sim + (1 - esm2Weight) * hig2vecSim;
-  } else if (hig2vecSim !== null) {
-    // Only HiG2Vec available: use it
-    blended = hig2vecSim;
-  } else if (esm2Sim !== null) {
-    // Only ESM2 available: use it
-    blended = esm2Sim;
+  // Calculate blended METRIC score (25% ESM2 + 75% HiG2Vec)
+  let blendedMetric = null;
+  if (hig2vecMetric !== null && esm2Metric !== null) {
+    blendedMetric = esm2Weight * esm2Metric + (1 - esm2Weight) * hig2vecMetric;
+  } else if (hig2vecMetric !== null) {
+    blendedMetric = hig2vecMetric;
+  } else if (esm2Metric !== null) {
+    blendedMetric = esm2Metric;
   }
 
-  return { blended, hig2vec: hig2vecSim, esm2: esm2Sim };
+  // Clamp blended metric to [0, 0.9] - values above 90% reserved for ladder
+  const clampedMetric = blendedMetric !== null 
+    ? Math.max(0, Math.min(0.9, blendedMetric))
+    : null;
+
+  return { blended: clampedMetric, isLadder: false, ladderRank: null };
 }

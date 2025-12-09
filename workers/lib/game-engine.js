@@ -129,6 +129,7 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   const percent = typeof similarity === 'number'
     ? Math.round(similarity * 100)
     : null;
+  const isLadder = Boolean(options.isLadder);
   const domainIntersection = guessProtein.domains.filter((domain) => targetProtein.domains.includes(domain));
   const lengthBinMatch = determineLengthBin(guessProtein.length) === determineLengthBin(targetProtein.length);
   const tmMatch = Boolean(guessProtein.tmh) === Boolean(targetProtein.tmh);
@@ -137,6 +138,7 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   return {
     percent,
     similarity,
+    isLadder,
     domainMatches: domainIntersection,
     lengthBinMatch,
     tmMatch,

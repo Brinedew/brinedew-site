@@ -3457,11 +3457,13 @@
       highlightMatches = false,
     } = options;
 
-    const goPercent = showSimilarity && score && typeof score.goPercent === 'number'
-      ? score.goPercent
+    const similarityPercent = showSimilarity && score && typeof score.percent === 'number'
+      ? score.percent
       : null;
-    const goValue = goPercent === null ? 'N/A' : `${goPercent}%`;
-    const goWidth = goPercent === null ? 0 : goPercent;
+    const isLadder = score?.isLadder || false;
+    const similarityValue = similarityPercent === null ? 'N/A' : `${similarityPercent}%`;
+    const similarityWidth = similarityPercent === null ? 0 : similarityPercent;
+    const ladderClass = isLadder ? ' pg-ladder' : '';
 
     const sectionMarkup = sections
       .map(section => renderFeedbackSection(
@@ -3474,10 +3476,10 @@
 
     const similarityMarkup = showSimilarity
       ? `
-        <div class="pg-bar">
-          <div class="pg-bar-fill" style="width: ${goWidth}%"></div>
+        <div class="pg-bar${ladderClass}">
+          <div class="pg-bar-fill${ladderClass}" style="width: ${similarityWidth}%"></div>
         </div>
-        <span class="pg-feedback-score">${goValue}</span>
+        <span class="pg-feedback-score${ladderClass}">${similarityValue}</span>
       `
       : '';
 
@@ -4349,7 +4351,7 @@
       if (g.correct) {
         return '🟩';
       }
-      const simScore = typeof g.score.goSimilarity === 'number' ? g.score.goSimilarity : 0;
+      const simScore = typeof g.score?.similarity === 'number' ? g.score.similarity : 0;
       return simScore >= 0.35 ? '🟨' : '⬜';
     }).join('');
 
