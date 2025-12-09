@@ -2695,7 +2695,10 @@
   let gamePayload = null;
   let collapseDelegationBound = false;
   let spoilerDelegationBound = false;
-  let lastRenderedTargetStructureId = null;
+  // B-199: Track game session to detect when we need to recreate the clue viewer
+  // (NOT based on targetId which is null during active gameplay)
+  let lastRenderedGameDate = null;
+  let lastRenderedWasGameOver = false;
 
   function markViewerDirty(containerId) {
     if (!containerId) {
@@ -2797,9 +2800,8 @@
       return;
     }
     targetStructureInfo = null;
-    if (!payload?.clueTarget && lastRenderedTargetStructureId) {
-      lastRenderedTargetStructureId = null;
-    }
+    // B-199: Removed lastRenderedTargetStructureId reset - we now track by date/gameOver state
+    // The clue viewer persists for the entire game session, not based on targetId
     gamePayload = payload;
     gameStatus = payload.status;
     clueData = payload.clue || { sections: [], allMatches: {}, latestMatches: {} };
@@ -3332,22 +3334,28 @@
     }
 
     const existingViewer = document.getElementById('pg-clue-structure');
-    // B-199 FIX: CRITICAL - Only use gameState.targetId for structure identity
-    // DO NOT add fallbacks to targetProtein properties - they can change during hint reveals
-    // causing false positives for structureChanged, which destroys and recreates the 3D viewer
-    // 
-    // Why this matters:
-    // - targetProtein can be null or change when hints are revealed (see hydrateStateFromPayload)
-    // - gameState.targetId is set once from gameStatus.targetId and remains stable
-    // - Any fallback to targetProtein.structure_id breaks the surgical update optimization
-    // - Result: 3D viewer flashes/reloads on every hint reveal (bad UX)
+    // B-199 FOREVER FIX: The clue structure shows the SAME protein for the entire game session.
+    // We should NEVER destroy and recreate the 3D viewer mid-game. The only valid reasons to
+    // recreate it are:
+    //   1. Initial page load (no existing viewer)
+    //   2. Transition to/from game over (different card layout)
+    //   3. New game session (different date)
     //
-    // Related fixes: B-184 (initial), B-179 (double render), B-199 (this fix)
-    const nextStructureId = gameState.targetId || null;
-    const structureChanged = !lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId;
+    // CRITICAL: Do NOT use gameState.targetId here - it's intentionally null during active
+    // gameplay to prevent answer spoofing. Previous attempts to use it caused the bug where
+    // the viewer reloaded on every guess/hint reveal.
+    //
+    // The correct approach: If the viewer DOM exists AND is in our renderedViewers set,
+    // it's already showing the correct structure. Just update the hint sections surgically.
+    //
+    // Related bugs: B-184, B-179, B-199
     
-    // B-184 FIX: Surgical update - only replace sections container, don't touch viewer
-    if (!structureChanged && !gameOver && existingViewer) {
+    const viewerAlreadyLoaded = existingViewer && renderedViewers.has('pg-clue-structure');
+    const dateChanged = lastRenderedGameDate !== gameState.date;
+    const transitioningToGameOver = gameOver && !lastRenderedWasGameOver;
+    
+    // Surgical update: viewer exists and loaded, same game session, not transitioning to game over
+    if (viewerAlreadyLoaded && !dateChanged && !transitioningToGameOver) {
       const sectionsContainer = slot.querySelector('.pg-clue-sections');
       if (sectionsContainer) {
         sectionsContainer.innerHTML = renderClueSectionsHtml();
@@ -3356,15 +3364,16 @@
       }
     }
     
-    // Full re-render needed: structure changed, game over, or no existing viewer
-    if (structureChanged) {
+    // Full re-render needed: new session, game over transition, or no existing viewer
+    if (viewerAlreadyLoaded && (dateChanged || transitioningToGameOver)) {
       markViewerDirty('pg-clue-structure');
     }
     if (gameOver) {
       markViewerDirty('pg-solution-card-structure');
     }
     slot.innerHTML = renderClueCard(gameOver);
-    lastRenderedTargetStructureId = nextStructureId;
+    lastRenderedGameDate = gameState.date;
+    lastRenderedWasGameOver = gameOver;
     ensureSpoilerDelegation();
   }
 
