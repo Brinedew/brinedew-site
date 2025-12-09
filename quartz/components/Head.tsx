@@ -123,7 +123,7 @@ export default (() => {
         <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
 
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
-        <link href="/static/custom.css?v=bio3" rel="stylesheet" type="text/css" />
+        <link href="/static/custom.css?v=bio4" rel="stylesheet" type="text/css" />
         
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {
