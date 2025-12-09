@@ -11,7 +11,7 @@ This page tests whether the `█` (FULL BLOCK U+2588) character renders at the s
 
 Each section shows 10 block characters on one line and 10 regular letters on the next. In a true monospace font with consistent glyph widths, both lines should be exactly the same length.
 
-**Site's actual font chain:** `"ui-monospace", ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace`
+**Site's actual font chain:** `"SFMono-Regular", SFMono-Regular, SF Mono, Menlo, monospace`
 
 **What `monospace` resolves to on different devices:**
 - iOS/macOS: Menlo or Courier
@@ -23,24 +23,9 @@ Each section shows 10 block characters on one line and 10 regular letters on the
 
 ## Site Default: `var(--codeFont)`
 
-Uses the CSS variable from the site theme: `ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace`
+Uses the CSS variable from the site theme: `SFMono-Regular, SF Mono, Menlo, monospace`
 
 <div style="font-family: var(--codeFont); font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-<div>██████████</div>
-<div>MMMMMMMMMM</div>
-<div style="margin-top: 0.5rem;">██████████</div>
-<div>aaaaaaaaaa</div>
-<div style="margin-top: 0.5rem;">██████████</div>
-<div>0000000000</div>
-</div>
-
----
-
-## `ui-monospace`
-
-The modern CSS generic monospace keyword.
-
-<div style="font-family: ui-monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
 <div>MMMMMMMMMM</div>
 <div style="margin-top: 0.5rem;">██████████</div>
