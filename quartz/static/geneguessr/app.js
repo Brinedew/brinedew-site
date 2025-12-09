@@ -2479,6 +2479,23 @@
       } else {
         timing('cache MISS - file too large to cache, using direct URL');
       }
+    } else {
+      // No cacheKey (e.g., target structures) - fetch with cache bypass to get fresh data
+      // This is critical for SWISS-MODEL PDB files which get HEADER prepended at serve time
+      timing('no cacheKey - fetching with cache bypass...');
+      try {
+        const resp = await fetch(structureUrl, { cache: 'no-store' });
+        if (resp.ok) {
+          const arrayBuffer = await resp.arrayBuffer();
+          const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+          finalStructureUrl = URL.createObjectURL(blob);
+          blobUrlToRevoke = finalStructureUrl;
+          timing('fetched fresh structure data');
+        }
+      } catch (err) {
+        console.warn('[Geneguessr] Failed to fetch structure with cache bypass:', err);
+        // Fall through to use original URL (will be cached by browser)
+      }
     }
 
     // PDBe Molstar requires format: 'cif' with binary: true for BCIF files
