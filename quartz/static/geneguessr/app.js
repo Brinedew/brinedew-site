@@ -1039,7 +1039,8 @@
     const displayLabel = linkable 
       ? (hasRealData ? longLabel : 'Loading...')
       : shortLabel;
-    const linkUrl = linkable && hasRealData ? structureSource?.url : null;
+    // Prefer linkUrl from structureInfo (API), fall back to structureSource (protein object)
+    const linkUrl = linkable && hasRealData ? (structureInfo?.linkUrl || structureSource?.url) : null;
     // Build source text: only link the ID portion (parenthetical), not the whole label
     let sourceText;
     if (linkable && linkUrl && displayLabel.includes('(')) {
