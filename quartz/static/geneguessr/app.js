@@ -2461,7 +2461,8 @@
         // Cache miss but file is small enough to cache - fetch and cache first
         timing('cache MISS - fetching to cache...');
         try {
-          const resp = await fetch(structureUrl);
+          // Use cache: 'no-store' to bypass browser HTTP cache and always get fresh data from worker
+          const resp = await fetch(structureUrl, { cache: 'no-store' });
           if (resp.ok) {
             const arrayBuffer = await resp.arrayBuffer();
             timing('fetched structure, caching...');
