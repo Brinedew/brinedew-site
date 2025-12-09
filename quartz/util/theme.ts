@@ -40,7 +40,7 @@ export type ThemeKey = keyof Colors
 
 const DEFAULT_SANS_SERIF =
   'system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
-const DEFAULT_MONO = "'Monaspace Xenon'"
+const DEFAULT_MONO = "'Monaspace Xenon Web'"
 
 export function getFontSpecificationName(spec: FontSpecification): string {
   if (typeof spec === "string") {
