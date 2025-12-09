@@ -864,8 +864,10 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
     
     try {
       const state = await getGameState(env, sessionId);
+      console.log('GeneGuessr: structure-cached targetId from session:', state?.targetId);
       if (state?.targetId) {
         protein = await fetchProteinByUniprot(env.DB, state.targetId);
+        console.log('GeneGuessr: structure-cached protein from DB:', protein?.uniprot, protein?.gene, protein?.structure_source);
       }
     } catch (err) {
       console.warn('GeneGuessr: structure-cached target lookup failed', err);
@@ -873,6 +875,7 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
     
     if (!protein) {
       protein = await getDailyTargetProtein(env, { practice: practiceMode });
+      console.log('GeneGuessr: structure-cached fallback to daily:', protein?.uniprot, protein?.gene);
     }
     
     if (!protein) {
@@ -880,6 +883,7 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
     }
     
     const meta = await getCanonicalStructureMeta(protein, env);
+    console.log('GeneGuessr: structure-cached meta:', meta?.source, meta?.r2Key);
     if (!meta?.r2Key) {
       return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
     }
@@ -904,12 +908,41 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
   
   await touchStructureCacheEntry(env, cacheKey, object.size);
   
-  // Long cache - 7 days. Structure files don't change.
+  // For type=target, don't cache at edge - the "target" changes daily but URL is static
+  // For key-based requests, cache 7 days - the key includes the structure ID so it's stable
+  const cacheControl = type === 'target' 
+    ? 'private, no-store, must-revalidate'
+    : 'public, max-age=604800, immutable';
+  
+  // SWISS-MODEL PDB files lack the HEADER record that Mol* requires for parsing.
+  // Mol*'s PDB parser needs a HEADER to create an "entry" object; without it,
+  // we get "Cannot read properties of undefined (reading 'entry')" errors.
+  // We prepend a minimal anonymous HEADER that doesn't leak protein identity.
+  const isSwissModelPdb = cacheKey.startsWith('swissmodel/') && cacheKey.endsWith('.pdb');
+  if (isSwissModelPdb) {
+    // PDB HEADER format: cols 11-50=classification, 51-59=date, 63-66=id_code
+    // Using completely anonymous values that satisfy Mol* without revealing protein identity
+    const syntheticHeader = 'HEADER    MODEL                                   01-JAN-00   0000\n';
+    const originalData = await object.arrayBuffer();
+    const headerBytes = new TextEncoder().encode(syntheticHeader);
+    const combinedBuffer = new Uint8Array(headerBytes.length + originalData.byteLength);
+    combinedBuffer.set(headerBytes, 0);
+    combinedBuffer.set(new Uint8Array(originalData), headerBytes.length);
+    
+    return new Response(combinedBuffer, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'chemical/x-pdb',
+        'Cache-Control': cacheControl
+      }
+    });
+  }
+  
   return new Response(object.body, {
     headers: {
       ...corsHeaders,
       'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=604800, immutable'
+      'Cache-Control': cacheControl
     }
   });
 }
