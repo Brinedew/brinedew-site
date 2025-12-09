@@ -961,7 +961,8 @@
         // For client-side IndexedDB caching
         cacheKey: data.cacheKey || null,
         sizeBytes: data.sizeBytes || 0,
-        chainLabels: data.chainLabels || null
+        chainLabels: data.chainLabels || null,
+        linkUrl: data.linkUrl || null
       };
       structureTokenCache.set(key, info);
       
@@ -974,7 +975,8 @@
           format: info.format,
           cacheKey: info.cacheKey,
           sizeBytes: info.sizeBytes,
-          chainLabels: info.chainLabels
+          chainLabels: info.chainLabels,
+          linkUrl: info.linkUrl
         };
         putCachedStructureInfo(key, cacheableInfo).catch(() => {});
       }
@@ -2581,22 +2583,10 @@
         }, 500);
       }
 
-      // Build the source URL from the label (e.g., "PDB (5K89)" → https://www.rcsb.org/structure/5K89)
-      const buildSourceUrlFromLabel = (sourceLabel, displayLabel) => {
-        if (!displayLabel) return null;
-        const match = displayLabel.match(/\(([^)]+)\)$/);
-        const id = match ? match[1] : null;
-        if (sourceLabel === 'PDB' && id) {
-          return `https://www.rcsb.org/structure/${id}`;
-        }
-        // SWISS-MODEL and AlphaFold don't have simple ID-to-URL mappings
-        return null;
-      };
-
       const metadata = {
         shortLabel: structureInfo.sourceLabel,
         longLabel: structureInfo.displayLabel,
-        linkUrl: buildSourceUrlFromLabel(structureInfo.sourceLabel, structureInfo.displayLabel)
+        linkUrl: structureInfo.linkUrl
       };
       updateStructureSourceDisplay(containerId, metadata);
       container.dataset.viewerLoaded = 'true';

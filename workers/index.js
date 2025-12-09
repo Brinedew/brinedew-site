@@ -839,7 +839,8 @@ async function handleStructureToken(request, env, corsHeaders) {
     url: structureUrl,
     cacheKey: meta.r2Key,
     sizeBytes,
-    chainLabels
+    chainLabels,
+    linkUrl: meta.linkUrl
   }, { headers: corsHeaders });
   } catch (err) {
     console.error('GeneGuessr: handleStructureToken unhandled error', err);
@@ -1429,7 +1430,8 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl: url,
       shortLabel: 'SWISS-MODEL',
       displayLabel: `SWISS-MODEL (${modelId})`,
-      format: ext
+      format: ext,
+      linkUrl: url
     };
   }
   
@@ -1443,7 +1445,8 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl: url,
       shortLabel: 'AlphaFold',
       displayLabel: `AlphaFold (${protein.uniprot})`,
-      format
+      format,
+      linkUrl: `https://alphafold.ebi.ac.uk/entry/${protein.uniprot}`
     };
   }
   
@@ -1460,7 +1463,8 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl: url,
       shortLabel: 'SWISS-MODEL',
       displayLabel: `SWISS-MODEL (${modelId})`,
-      format: ext
+      format: ext,
+      linkUrl: url
     };
   }
   
@@ -1474,7 +1478,8 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl: url,
       shortLabel: 'AlphaFold',
       displayLabel: `AlphaFold (${protein.uniprot})`,
-      format
+      format,
+      linkUrl: `https://alphafold.ebi.ac.uk/entry/${protein.uniprot}`
     };
   }
   
@@ -1490,7 +1495,8 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${pdbId})`,
-      format: 'bcif'
+      format: 'bcif',
+      linkUrl: `https://www.rcsb.org/structure/${pdbId}`
     };
   }
   
@@ -1691,7 +1697,8 @@ async function getCanonicalStructureMeta(protein, env) {
       upstreamUrl: selected.upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${selected.id})`,
-      format: ext
+      format: ext,
+      linkUrl: `https://www.rcsb.org/structure/${selected.id}`
     };
   } else if (selected.source === 'swissmodel') {
     const ext = getFileExtensionFromUrl(selected.upstreamUrl);
@@ -1702,7 +1709,8 @@ async function getCanonicalStructureMeta(protein, env) {
       upstreamUrl: selected.upstreamUrl,
       shortLabel: 'SWISS-MODEL',
       displayLabel: `SWISS-MODEL (${selected.id})`,
-      format: normalizedFormat
+      format: normalizedFormat,
+      linkUrl: selected.upstreamUrl
     };
   } else if (selected.source === 'alphafold') {
     meta = {
