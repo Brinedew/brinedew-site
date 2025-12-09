@@ -857,7 +857,7 @@
 
 /* Clue card sections */
 .pg-clue-card .pg-section {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   line-height: 2.257;
   hyphens: none;
   font-family: var(--codeFont);
