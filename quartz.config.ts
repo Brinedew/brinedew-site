@@ -31,7 +31,7 @@ const config: QuartzConfig = {
     theme: {
       cdnCaching: false,
       fontOrigin: "local",
-      typography: { header: "system-ui", body: "system-ui", code: "SFMono-Regular" },
+      typography: { header: "system-ui", body: "system-ui", code: "Monaspace Xenon" },
       colors: {
         lightMode: {
           light: "#faf8f8",
