@@ -11,6 +11,14 @@ This page tests whether the `█` (FULL BLOCK U+2588) character renders at the s
 
 Each section shows 10 block characters on one line and 10 regular letters on the next. In a true monospace font with consistent glyph widths, both lines should be exactly the same length.
 
+**Site's actual font chain:** `"ui-monospace", ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace`
+
+**What `monospace` resolves to on different devices:**
+- iOS/macOS: Menlo or Courier
+- Android: Roboto Mono or Droid Sans Mono
+- Windows: Consolas or Courier New
+- Linux: DejaVu Sans Mono or Liberation Mono
+
 ---
 
 ## Site Default: `var(--codeFont)`
@@ -88,9 +96,9 @@ macOS default monospace font.
 
 ---
 
-## `monospace`
+## Generic `monospace` keyword
 
-Generic monospace fallback.
+The CSS `monospace` keyword - what it resolves to depends on your device/browser.
 
 <div style="font-family: monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
@@ -103,9 +111,11 @@ Generic monospace fallback.
 
 ---
 
-## `Roboto Mono`
+## Common fallback fonts (NOT in site chain, but what `monospace` resolves to)
 
-Android's default monospace font.
+These fonts are not explicitly in the site's font chain, but they're what the generic `monospace` keyword resolves to on different devices.
+
+### `Roboto Mono` (Android default)
 
 <div style="font-family: 'Roboto Mono', monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
@@ -116,11 +126,7 @@ Android's default monospace font.
 <div>0000000000</div>
 </div>
 
----
-
-## `Droid Sans Mono`
-
-Older Android monospace font.
+### `Droid Sans Mono` (older Android)
 
 <div style="font-family: 'Droid Sans Mono', monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
@@ -131,11 +137,7 @@ Older Android monospace font.
 <div>0000000000</div>
 </div>
 
----
-
-## `Consolas`
-
-Windows default monospace font.
+### `Consolas` (Windows default)
 
 <div style="font-family: Consolas, monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
@@ -146,11 +148,7 @@ Windows default monospace font.
 <div>0000000000</div>
 </div>
 
----
-
-## `Courier New`
-
-Classic cross-platform monospace font.
+### `Courier New` (cross-platform fallback)
 
 <div style="font-family: 'Courier New', monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
@@ -161,11 +159,7 @@ Classic cross-platform monospace font.
 <div>0000000000</div>
 </div>
 
----
-
-## `Liberation Mono`
-
-Linux common monospace font.
+### `Liberation Mono` (Linux common)
 
 <div style="font-family: 'Liberation Mono', monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
@@ -176,11 +170,7 @@ Linux common monospace font.
 <div>0000000000</div>
 </div>
 
----
-
-## `DejaVu Sans Mono`
-
-Linux common monospace font.
+### `DejaVu Sans Mono` (Linux common)
 
 <div style="font-family: 'DejaVu Sans Mono', monospace; font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
 <div>██████████</div>
