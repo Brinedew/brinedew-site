@@ -159,7 +159,7 @@
   const STRUCTURE_CACHE_STORE = 'structures';
   const STRUCTURE_CACHE_META_STORE = 'meta';
   const STRUCTURE_INFO_STORE = 'structureInfo'; // NEW: UniProt → structureInfo mapping
-  const STRUCTURE_CACHE_VERSION = 3; // Bumped for linkUrl field in cached metadata
+  const STRUCTURE_CACHE_VERSION = 4; // v4: force cache clear for linkUrl field
   const STRUCTURE_CACHE_MAX_BYTES = 150 * 1024 * 1024; // 150 MB max cache
   const STRUCTURE_CACHE_MAX_FILE_SIZE = 15 * 1024 * 1024; // Don't cache files > 15 MB
   
@@ -196,12 +196,12 @@
           db.createObjectStore(STRUCTURE_INFO_STORE); // key = uniprot
         }
         
-        // Clear STRUCTURE_INFO_STORE when upgrading to v3 (added linkUrl field)
-        if (oldVersion < 3 && db.objectStoreNames.contains(STRUCTURE_INFO_STORE)) {
+        // Clear STRUCTURE_INFO_STORE when upgrading to v3+ (added linkUrl field)
+        if (oldVersion < 4 && db.objectStoreNames.contains(STRUCTURE_INFO_STORE)) {
           const tx = event.target.transaction;
           const store = tx.objectStore(STRUCTURE_INFO_STORE);
           store.clear();
-          console.log('[GeneGuessr] Cleared structure info cache for v3 upgrade (added linkUrl)');
+          console.log('[GeneGuessr] Cleared structure info cache for v4 upgrade (added linkUrl)');
         }
       };
     });
