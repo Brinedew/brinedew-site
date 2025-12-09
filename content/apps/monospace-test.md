@@ -21,6 +21,19 @@ Each section shows 10 block characters on one line and 10 regular letters on the
 
 ---
 
+## Inline code style (same as backticks in text)
+`monospace`
+`█████████`
+`         `
+
+This uses the inline `<code>` element styling, which should match what you see when text is wrapped in backticks like `monospace`.
+
+<pre style="font-family: var(--codeFont); font-size: 16px; letter-spacing: 0; word-spacing: 0; font-kerning: none; -webkit-font-kerning: none; line-height: 1.5; background: var(--lightgray); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; white-space: pre;"><code>MMMMMMMMMM
+██████████
+          </code></pre>
+
+---
+
 ## Site Default: `var(--codeFont)`
 
 Uses the CSS variable from the site theme: `SFMono-Regular, SF Mono, Menlo, monospace`
