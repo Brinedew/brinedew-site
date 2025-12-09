@@ -183,6 +183,8 @@
       
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        const oldVersion = event.oldVersion;
+        
         if (!db.objectStoreNames.contains(STRUCTURE_CACHE_STORE)) {
           db.createObjectStore(STRUCTURE_CACHE_STORE); // key = cacheKey
         }
@@ -192,6 +194,14 @@
         }
         if (!db.objectStoreNames.contains(STRUCTURE_INFO_STORE)) {
           db.createObjectStore(STRUCTURE_INFO_STORE); // key = uniprot
+        }
+        
+        // Clear STRUCTURE_INFO_STORE when upgrading to v3 (added linkUrl field)
+        if (oldVersion < 3 && db.objectStoreNames.contains(STRUCTURE_INFO_STORE)) {
+          const tx = event.target.transaction;
+          const store = tx.objectStore(STRUCTURE_INFO_STORE);
+          store.clear();
+          console.log('[GeneGuessr] Cleared structure info cache for v3 upgrade (added linkUrl)');
         }
       };
     });
