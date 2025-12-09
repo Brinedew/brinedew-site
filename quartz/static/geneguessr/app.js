@@ -3332,13 +3332,18 @@
     }
 
     const existingViewer = document.getElementById('pg-clue-structure');
-    // B-184 FIX: Use gameState.targetId instead of targetProtein.uniprot
-    // targetProtein doesn't have uniprot because it's the clue target with hidden identity
-    // gameState.targetId comes from gameStatus.targetId which is always set by server
-    const nextStructureId = gameState.targetId
-      || targetProtein?.structure?.structure_id
-      || targetProtein?.structure_id
-      || null;
+    // B-199 FIX: CRITICAL - Only use gameState.targetId for structure identity
+    // DO NOT add fallbacks to targetProtein properties - they can change during hint reveals
+    // causing false positives for structureChanged, which destroys and recreates the 3D viewer
+    // 
+    // Why this matters:
+    // - targetProtein can be null or change when hints are revealed (see hydrateStateFromPayload)
+    // - gameState.targetId is set once from gameStatus.targetId and remains stable
+    // - Any fallback to targetProtein.structure_id breaks the surgical update optimization
+    // - Result: 3D viewer flashes/reloads on every hint reveal (bad UX)
+    //
+    // Related fixes: B-184 (initial), B-179 (double render), B-199 (this fix)
+    const nextStructureId = gameState.targetId || null;
     const structureChanged = !lastRenderedTargetStructureId || lastRenderedTargetStructureId !== nextStructureId;
     
     // B-184 FIX: Surgical update - only replace sections container, don't touch viewer
