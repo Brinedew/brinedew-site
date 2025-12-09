@@ -159,7 +159,7 @@
   const STRUCTURE_CACHE_STORE = 'structures';
   const STRUCTURE_CACHE_META_STORE = 'meta';
   const STRUCTURE_INFO_STORE = 'structureInfo'; // NEW: UniProt → structureInfo mapping
-  const STRUCTURE_CACHE_VERSION = 2; // Bumped for new store
+  const STRUCTURE_CACHE_VERSION = 3; // Bumped for linkUrl field in cached metadata
   const STRUCTURE_CACHE_MAX_BYTES = 150 * 1024 * 1024; // 150 MB max cache
   const STRUCTURE_CACHE_MAX_FILE_SIZE = 15 * 1024 * 1024; // Don't cache files > 15 MB
   
