@@ -7,17 +7,17 @@ date: 2025-12-09
 
 # Monospace Font Block Character Test
 
-This page tests whether the `█` (FULL BLOCK U+2588) character renders at the same width as regular letters in various monospace fonts. If the blocks extend further than the letters below them, there's a width mismatch.
+**✨ UPDATE: Site now uses Monaspace Xenon web font (no fallbacks)**
+
+This site now loads **Monaspace Xenon** as a web font for all code/monospace text. Every device should render the exact same font with consistent `█` character widths, regardless of what fonts are installed locally.
+
+This page tests whether the `█` (FULL BLOCK U+2588) character renders at the same width as regular letters. If the blocks extend further than the letters below them, there's a width mismatch.
 
 Each section shows 10 block characters on one line and 10 regular letters on the next. In a true monospace font with consistent glyph widths, both lines should be exactly the same length.
 
-**Site's actual font chain:** `"SFMono-Regular", SFMono-Regular, SF Mono, Menlo, monospace`
+**Expected result:** All tests below should now show blocks matching letter width on ALL devices (PC, mobile, tablet) because everyone gets the same Monaspace Xenon web font.
 
-**What `monospace` resolves to on different devices:**
-- iOS/macOS: Menlo or Courier
-- Android: Roboto Mono or Droid Sans Mono
-- Windows: Consolas or Courier New
-- Linux: DejaVu Sans Mono or Liberation Mono
+**Current font:** `'Monaspace Xenon'` (loaded via @font-face, 287KB woff2 variable font)
 
 ---
 
