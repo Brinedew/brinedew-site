@@ -31,6 +31,10 @@ function cleanGeneSummary(summary) {
 
 export function sanitizeTargetProtein(protein, options = {}) {
   const geneSummary = cleanGeneSummary(protein?.gene_summary);
+
+  // When identity is not revealed, don't send ANY hint-source fields.
+  // The client gets hints via clue.sections which are properly masked server-side.
+  // Sending raw arrays (synonyms, domains, clans, GO terms, pathways, etc.) leaks the answer.
   const sanitized = {
     uniprot: null,
     hgnc: null,
@@ -39,18 +43,18 @@ export function sanitizeTargetProtein(protein, options = {}) {
     tmh: Boolean(protein?.tmh),
     secreted: Boolean(protein?.secreted),
     tissue: protein?.tissue ? { ...protein.tissue } : { label: 'unknown', score: null },
-    domains: Array.isArray(protein?.domains) ? [...protein.domains] : [],
-    domain_names: Array.isArray(protein?.domain_names) ? [...protein.domain_names] : [],
-    clans: Array.isArray(protein?.clans) ? [...protein.clans] : [],
-    go_terms: cloneGoTerms(protein?.go_terms),
-    go_terms_named: cloneGoTerms(protein?.go_terms_named),
-    reactome_pathways: Array.isArray(protein?.reactome_pathways) ? [...protein.reactome_pathways] : [],
-    // Security: Don't send structure details (PDB ID, etc) for clue target unless game is won
+    // All hint-source fields: only send when revealing identity
+    domains: options.revealIdentity && Array.isArray(protein?.domains) ? [...protein.domains] : [],
+    domain_names: options.revealIdentity && Array.isArray(protein?.domain_names) ? [...protein.domain_names] : [],
+    clans: options.revealIdentity && Array.isArray(protein?.clans) ? [...protein.clans] : [],
+    go_terms: options.revealIdentity ? cloneGoTerms(protein?.go_terms) : {},
+    go_terms_named: options.revealIdentity ? cloneGoTerms(protein?.go_terms_named) : {},
+    reactome_pathways: options.revealIdentity && Array.isArray(protein?.reactome_pathways) ? [...protein.reactome_pathways] : [],
     structure: options.revealIdentity && protein?.structure ? protein.structure : null,
-    links: protein?.links || {},
-    gene_summary: geneSummary || null,
-    subcell: Array.isArray(protein?.subcell) ? [...protein.subcell] : [],
-    synonyms: Array.isArray(protein?.synonyms) ? [...protein.synonyms] : [],
+    links: options.revealIdentity ? (protein?.links || {}) : {},
+    gene_summary: options.revealIdentity ? (geneSummary || null) : null,
+    subcell: options.revealIdentity && Array.isArray(protein?.subcell) ? [...protein.subcell] : [],
+    synonyms: options.revealIdentity && Array.isArray(protein?.synonyms) ? [...protein.synonyms] : [],
   };
   if (options.revealIdentity) {
     sanitized.uniprot = protein?.uniprot || null;
