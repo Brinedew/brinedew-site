@@ -39,10 +39,34 @@ const defaultOptions: Options = {
   includeEmptyFiles: true,
 }
 
+// Map of path prefixes to their subdomain equivalents
+// URLs starting with these prefixes will use the subdomain instead
+const subdomainMappings: Record<string, string> = {
+  "apps/geneguessr": "geneguessr.brinedew.bio",
+}
+
 function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
   const base = cfg.baseUrl ?? ""
+  
+  const getUrlForSlug = (slug: SimpleSlug): string => {
+    // Check if this slug should be mapped to a subdomain
+    for (const [pathPrefix, subdomain] of Object.entries(subdomainMappings)) {
+      if (slug === pathPrefix || slug.startsWith(pathPrefix + "/")) {
+        // For exact match (apps/geneguessr), use subdomain root
+        if (slug === pathPrefix) {
+          return `https://${subdomain}/`
+        }
+        // For nested paths, append the remainder after the prefix
+        const remainder = slug.slice(pathPrefix.length)
+        return `https://${subdomain}${remainder}`
+      }
+    }
+    // Default: use base URL
+    return `https://${joinSegments(base, encodeURI(slug))}`
+  }
+  
   const createURLEntry = (slug: SimpleSlug, content: ContentDetails): string => `<url>
-    <loc>https://${joinSegments(base, encodeURI(slug))}</loc>
+    <loc>${getUrlForSlug(slug)}</loc>
     ${content.date && `<lastmod>${content.date.toISOString()}</lastmod>`}
   </url>`
   const urls = Array.from(idx)
