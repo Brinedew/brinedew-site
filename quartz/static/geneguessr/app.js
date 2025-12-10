@@ -2353,6 +2353,32 @@
     }
   }
 
+  function stopAutoRotationOnInteraction(viewer, containerId) {
+    // Only set up once per viewer
+    if (viewerInteractionState.get(containerId)) {
+      return;
+    }
+
+    try {
+      // Stop rotation on first drag (rotate/pan gesture)
+      const dragSub = viewer.plugin?.canvas3d?.input?.drag?.subscribe(() => {
+        if (!viewerInteractionState.get(containerId)) {
+          viewerInteractionState.set(containerId, true);
+          viewer.visual?.toggleSpin?.(false);
+          // Unsubscribe to avoid wasted cycles
+          dragSub?.unsubscribe?.();
+        }
+      });
+
+      // Store subscription for cleanup
+      if (!viewer._autoRotateGuards) {
+        viewer._autoRotateGuards = { dragSub };
+      }
+    } catch (err) {
+      console.warn('Geneguessr: failed to set up auto-rotation interaction handler', err);
+    }
+  }
+
   async function resolveStructureInfoForViewer(containerId, protein) {
     const sourceSpec = viewerStructureSources.get(containerId);
     try {
@@ -2588,6 +2614,11 @@
           // Start the position update loop for 3D callouts
           initializeChainCallouts(containerId);
         }
+        // B-201: Start auto-rotation (stops on first user interaction)
+        if (viewer.visual?.toggleSpin) {
+          viewer.visual.toggleSpin(true);
+          stopAutoRotationOnInteraction(viewer, containerId);
+        }
         timing('styling applied - DONE');
       };
       if (viewer.events?.loadComplete) {
@@ -2696,6 +2727,7 @@
   const viewerStructureInfo = new Map();
   const viewerStructureSources = new Map();
   const viewerChainData = new Map(); // Track chain labels and state per viewer
+  const viewerInteractionState = new Map(); // Track whether user has interacted with each viewer
   const renderedViewers = new Set();
   let chainToggleDelegationBound = false;
   let gamePayload = null;
