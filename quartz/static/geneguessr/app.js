@@ -2615,8 +2615,15 @@
           initializeChainCallouts(containerId);
         }
         // B-201: Start auto-rotation (stops on first user interaction)
-        if (viewer.visual?.toggleSpin) {
-          viewer.visual.toggleSpin(true);
+        // Use slow spin speed (0.1 = 10x slower than default)
+        if (viewer.plugin?.canvas3d) {
+          const trackball = viewer.plugin.canvas3d.props.trackball;
+          viewer.plugin.canvas3d.setProps({
+            trackball: {
+              ...trackball,
+              animate: { name: 'spin', params: { speed: 0.1 } }
+            }
+          });
           stopAutoRotationOnInteraction(viewer, containerId);
         }
         timing('styling applied - DONE');
