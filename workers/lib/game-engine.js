@@ -339,7 +339,7 @@ function buildProteinSections(protein, options = {}) {
   pushSection({
     id: 'length',
     label: 'Length',
-    items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein?.length} aa` }],
+    items: [{ id: forClue ? 'hint-length' : undefined, text: `${protein?.length} amino acid residues` }],
   });
   
   pushSection({
