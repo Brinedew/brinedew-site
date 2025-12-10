@@ -15,6 +15,11 @@ name = "geneguessr-api"
 main = "workers/index.js"
 compatibility_date = "2025-11-12"
 
+# Custom domain routes
+routes = [
+  { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" }
+]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "geneguessr"
