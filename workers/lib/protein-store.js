@@ -214,6 +214,11 @@ function toProteinObject(row) {
     gene_summary: row.gene_summary,
     origin_age: row.origin_age,
     first_pub_year: row.first_pub_year,
+    // CATH classification
+    cath_class: row.cath_class,
+    cath_architecture: row.cath_architecture,
+    cath_topology: row.cath_topology,
+    cath_homologous_superfamily: row.cath_homologous_superfamily,
     // JSON arrays
     synonyms: parseJson(row.synonyms),
     domains: parseJson(row.domains),
