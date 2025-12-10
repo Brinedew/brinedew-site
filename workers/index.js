@@ -1414,7 +1414,8 @@ function buildMetaFromStoredStructure(protein) {
       upstreamUrl,
       shortLabel: 'PDB',
       displayLabel: `PDB (${pdbId})`,
-      format: 'bcif'
+      format: 'bcif',
+      linkUrl: `https://www.rcsb.org/structure/${pdbId}`
     };
   }
   
