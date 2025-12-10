@@ -1432,7 +1432,7 @@ function buildMetaFromStoredStructure(protein) {
       shortLabel: 'SWISS-MODEL',
       displayLabel: `SWISS-MODEL (${modelId})`,
       format: ext,
-      linkUrl: url
+      linkUrl: null  // SWISS-MODEL URLs are direct downloads, not webpages
     };
   }
   
@@ -1465,7 +1465,7 @@ function buildMetaFromStoredStructure(protein) {
       shortLabel: 'SWISS-MODEL',
       displayLabel: `SWISS-MODEL (${modelId})`,
       format: ext,
-      linkUrl: url
+      linkUrl: null  // SWISS-MODEL URLs are direct downloads, not webpages
     };
   }
   
@@ -1711,7 +1711,7 @@ async function getCanonicalStructureMeta(protein, env) {
       shortLabel: 'SWISS-MODEL',
       displayLabel: `SWISS-MODEL (${selected.id})`,
       format: normalizedFormat,
-      linkUrl: selected.upstreamUrl
+      linkUrl: null  // SWISS-MODEL URLs are direct downloads, not webpages
     };
   } else if (selected.source === 'alphafold') {
     meta = {
