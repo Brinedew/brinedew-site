@@ -1412,8 +1412,8 @@ function buildMetaFromStoredStructure(protein) {
       source: 'pdb',
       r2Key,
       upstreamUrl,
-      shortLabel: 'PDB',
-      displayLabel: `PDB (${pdbId})`,
+      shortLabel: 'RCSB PDB',
+      displayLabel: `RCSB PDB (${pdbId})`,
       format: 'bcif',
       linkUrl: `https://www.rcsb.org/structure/${pdbId}`
     };
@@ -1451,56 +1451,8 @@ function buildMetaFromStoredStructure(protein) {
     };
   }
   
-  // Fallback: try any available source
-  if (protein.swissmodel_url) {
-    const template = protein.swissmodel_template || 'model';
-    const modelId = `${protein.uniprot}_${template}`;
-    const url = protein.swissmodel_url;
-    // Check for format in URL (handles query strings like .pdb?range=...)
-    const ext = url.includes('.pdb') ? 'pdb' : 'cif';
-    return {
-      source: 'swissmodel',
-      r2Key: `swissmodel/${sanitizeKeySegment(modelId)}.${ext}`,
-      upstreamUrl: url,
-      shortLabel: 'SWISS-MODEL',
-      displayLabel: `SWISS-MODEL (${modelId})`,
-      format: ext,
-      linkUrl: null  // SWISS-MODEL URLs are direct downloads, not webpages
-    };
-  }
-  
-  if (protein.alphafold_url) {
-    const url = protein.alphafold_url;
-    // Check for format in URL (handles query strings)
-    const format = url.includes('.pdb') ? 'pdb' : 'cif';
-    return {
-      source: 'alphafold',
-      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.${format}`,
-      upstreamUrl: url,
-      shortLabel: 'AlphaFold',
-      displayLabel: `AlphaFold (${protein.uniprot})`,
-      format,
-      linkUrl: `https://alphafold.ebi.ac.uk/entry/${protein.uniprot}`
-    };
-  }
-  
-  if (protein.pdb_id) {
-    const pdbId = protein.pdb_id.toUpperCase();
-    // Use RCSB ModelServer with BCIF encoding for smaller file size
-    const upstreamUrl = `https://models.rcsb.org/v1/${pdbId}/full?encoding=bcif&copy_all_categories=false`;
-    const r2Key = `pdb/${pdbId}.bcif`;
-    
-    return {
-      source: 'pdb',
-      r2Key,
-      upstreamUrl,
-      shortLabel: 'RCSB PDB',
-      displayLabel: `RCSB PDB (${pdbId})`,
-      format: 'bcif',
-      linkUrl: `https://www.rcsb.org/structure/${pdbId}`
-    };
-  }
-  
+  // All proteins with structure data have structure_source set
+  // No fallback paths needed (verified via database query 2025-12-10)
   return null;
 }
 
