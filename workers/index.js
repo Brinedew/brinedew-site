@@ -1494,8 +1494,8 @@ function buildMetaFromStoredStructure(protein) {
       source: 'pdb',
       r2Key,
       upstreamUrl,
-      shortLabel: 'PDB',
-      displayLabel: `PDB (${pdbId})`,
+      shortLabel: 'RCSB PDB',
+      displayLabel: `RCSB PDB (${pdbId})`,
       format: 'bcif',
       linkUrl: `https://www.rcsb.org/structure/${pdbId}`
     };
@@ -1696,8 +1696,8 @@ async function getCanonicalStructureMeta(protein, env) {
       source: 'pdb',
       r2Key: `pdb/${selected.id}.${ext}`,
       upstreamUrl: selected.upstreamUrl,
-      shortLabel: 'PDB',
-      displayLabel: `PDB (${selected.id})`,
+      shortLabel: 'RCSB PDB',
+      displayLabel: `RCSB PDB (${selected.id})`,
       format: ext,
       linkUrl: `https://www.rcsb.org/structure/${selected.id}`
     };
