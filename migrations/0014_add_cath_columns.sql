@@ -1,8 +1,7 @@
--- Migration: 0014 - Add CATH classification columns
--- CATH = Class, Architecture, Topology, Homologous Superfamily
--- These describe the structural fold classification from CATH database
+-- Migration: 0014 - Add CATH architecture column
+-- CATH architecture describes the structural fold classification (e.g., "Sandwich", "Barrel")
+-- Stored as JSON array since multi-domain proteins can have multiple architectures
 
-ALTER TABLE proteins ADD COLUMN cath_class TEXT;
+-- Drop unused columns from earlier migration (if they exist)
+-- SQLite doesn't support DROP COLUMN easily, so we just add the new one
 ALTER TABLE proteins ADD COLUMN cath_architecture TEXT;
-ALTER TABLE proteins ADD COLUMN cath_topology TEXT;
-ALTER TABLE proteins ADD COLUMN cath_homologous_superfamily TEXT;

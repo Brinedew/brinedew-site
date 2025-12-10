@@ -55,11 +55,8 @@ export function sanitizeTargetProtein(protein, options = {}) {
     gene_summary: options.revealIdentity ? (geneSummary || null) : null,
     subcell: options.revealIdentity && Array.isArray(protein?.subcell) ? [...protein.subcell] : [],
     synonyms: options.revealIdentity && Array.isArray(protein?.synonyms) ? [...protein.synonyms] : [],
-    // CATH classification (always visible as it's a clue, not an answer)
-    cath_class: protein?.cath_class || null,
-    cath_architecture: protein?.cath_architecture || null,
-    cath_topology: protein?.cath_topology || null,
-    cath_homologous_superfamily: protein?.cath_homologous_superfamily || null,
+    // CATH architecture (always visible as it's a clue, not an answer)
+    cath_architecture: Array.isArray(protein?.cath_architecture) ? [...protein.cath_architecture] : [],
   };
   if (options.revealIdentity) {
     sanitized.uniprot = protein?.uniprot || null;
@@ -197,22 +194,12 @@ export function collectMatchedHintTexts(target, guessProtein, score) {
   if (isLengthWithinTolerance(target?.length, guessProtein?.length)) {
     matches.length = [`${target.length} amino acid residues`];
   }
-  // CATH fold classification matches
-  const cathMatches = [];
-  if (target?.cath_class && target.cath_class === guessProtein?.cath_class) {
-    cathMatches.push(`Class: ${target.cath_class}`);
-  }
-  if (target?.cath_architecture && target.cath_architecture === guessProtein?.cath_architecture) {
-    cathMatches.push(`Architecture: ${target.cath_architecture}`);
-  }
-  if (target?.cath_topology && target.cath_topology === guessProtein?.cath_topology) {
-    cathMatches.push(`Topology: ${target.cath_topology}`);
-  }
-  if (target?.cath_homologous_superfamily && target.cath_homologous_superfamily === guessProtein?.cath_homologous_superfamily) {
-    cathMatches.push(`Superfamily: ${target.cath_homologous_superfamily}`);
-  }
-  if (cathMatches.length) {
-    matches.cath = cathMatches;
+  // CATH architecture matches (intersection of arrays)
+  const targetArchs = Array.isArray(target?.cath_architecture) ? target.cath_architecture : [];
+  const guessArchs = Array.isArray(guessProtein?.cath_architecture) ? guessProtein.cath_architecture : [];
+  const archIntersection = targetArchs.filter(arch => guessArchs.includes(arch));
+  if (archIntersection.length) {
+    matches.cath = archIntersection;
   }
   return matches;
 }
@@ -419,37 +406,16 @@ function buildProteinSections(protein, options = {}) {
     });
   }
 
-  // CATH classification (Class, Architecture, Topology, Homologous Superfamily)
-  const cathItems = [];
-  if (protein?.cath_class) {
-    cathItems.push({ 
-      id: forClue ? 'hint-cath-class' : undefined, 
-      text: `Class: ${protein.cath_class}` 
-    });
-  }
-  if (protein?.cath_architecture) {
-    cathItems.push({ 
-      id: forClue ? 'hint-cath-arch' : undefined, 
-      text: `Architecture: ${protein.cath_architecture}` 
-    });
-  }
-  if (protein?.cath_topology) {
-    cathItems.push({ 
-      id: forClue ? 'hint-cath-topo' : undefined, 
-      text: `Topology: ${protein.cath_topology}` 
-    });
-  }
-  if (protein?.cath_homologous_superfamily) {
-    cathItems.push({ 
-      id: forClue ? 'hint-cath-hsf' : undefined, 
-      text: `Superfamily: ${protein.cath_homologous_superfamily}` 
-    });
-  }
-  if (cathItems.length) {
+  // CATH architecture (structural fold classification)
+  const cathArchitectures = Array.isArray(protein?.cath_architecture) ? protein.cath_architecture : [];
+  if (cathArchitectures.length) {
     pushSection({
       id: 'cath',
-      label: 'Structure fold',
-      items: cathItems,
+      label: 'Architecture',
+      items: cathArchitectures.map((arch, idx) => ({
+        id: forClue ? `hint-cath-arch-${idx}` : undefined,
+        text: arch,
+      })),
     });
   }
   
