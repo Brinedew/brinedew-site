@@ -2621,7 +2621,7 @@
           viewer.plugin.canvas3d.setProps({
             trackball: {
               ...trackball,
-              animate: { name: 'spin', params: { speed: 0.05 } }
+              animate: { name: 'spin', params: { speed: 0.025 } }
             }
           });
           stopAutoRotationOnInteraction(viewer, containerId);
