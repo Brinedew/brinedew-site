@@ -921,8 +921,9 @@
     const t0 = performance.now();
     try {
       const cachedInfo = await getCachedStructureInfo(key);
-      // Validate cache has linkUrl field (added in v4) - refetch if missing
-      if (cachedInfo && cachedInfo.cacheKey && cachedInfo.linkUrl !== undefined) {
+      // Validate cache has linkUrl field (added in v4) - refetch if null/missing
+      // Old cache entries may have linkUrl: null, so check for truthy value
+      if (cachedInfo && cachedInfo.cacheKey && cachedInfo.linkUrl) {
         // Verify the structure blob still exists in cache
         const structureBlob = await getStructureFromCache(cachedInfo.cacheKey);
         if (structureBlob) {
@@ -939,7 +940,8 @@
         // Structure blob evicted, need fresh token - fall through to API
         console.log(`[TIMING] token for ${key} | IndexedDB info found but blob evicted, fetching...`);
       } else if (cachedInfo && !cachedInfo.linkUrl) {
-        console.log(`[TIMING] token for ${key} | stale cache (missing linkUrl), fetching fresh...`);
+        // Old cache entries with linkUrl: null need to be refreshed
+        console.log(`[TIMING] token for ${key} | stale cache (linkUrl missing/null), fetching fresh...`);
       }
     } catch (err) {
       console.warn('[Geneguessr] IndexedDB cache check failed:', err);
