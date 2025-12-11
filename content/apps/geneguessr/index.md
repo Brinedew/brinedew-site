@@ -43,7 +43,7 @@ tags:
       <span class="pg-section-label">Structure viewer:</span> <span class="pg-section-entry"><a href="https://molstar.org/">Mol*</a> (via <a href="https://github.com/molstar/pdbe-molstar">PDBe integration</a>)</span>
     </div>
     <div class="pg-section">
-      <span class="pg-section-label">Similarity embeddings:</span> <span class="pg-section-entry"><a href="https://github.com/JaesikKim/HiG2Vec">HiG2Vec</a></span>
+      <span class="pg-section-label">Similarity:</span> <span class="pg-section-entry"><a href="https://github.com/JaesikKim/HiG2Vec">HiG2Vec</a>, <a href="https://doi.org/10.6084/m9.figshare.25270126">ESM2</a></span>
     </div>
     <div class="pg-section">
       <span class="pg-section-label">Origin age:</span> <span class="pg-section-entry">Litman T & Stein WD (2019). <a href="https://doi.org/10.1053/j.seminoncol.2018.11.002">Obtaining estimates for the ages of all the protein-coding genes and most of the ontology-identified noncoding genes of the human genome, assigned to 19 phylostrata</a> <i>Semin Oncol</i> 46(1):3-9</span>
