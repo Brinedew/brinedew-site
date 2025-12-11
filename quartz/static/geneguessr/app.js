@@ -939,10 +939,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         if (structureBlob) {
           console.log(`[TIMING] token for ${key} | IndexedDB cache hit | ${(performance.now() - t0).toFixed(0)}ms | SKIPPED API`);
           // Reconstruct the URL from cacheKey (IndexedDB doesn't store URLs)
-          // CRITICAL: Include upstream URL for SWISS-MODEL structures.
-          // SWISS-MODEL URLs are custom per-protein (stored in DB), unlike PDB/AlphaFold
-          // which have predictable URL patterns. The worker needs this to lazy-fetch
-          // from SWISS-MODEL's server if not already cached in R2.
+          // CRITICAL: Include upstream URL for SWISS-MODEL and AlphaFold structures.
+          // SWISS-MODEL URLs are custom per-protein (with template/range params).
+          // AlphaFold URLs include isoform numbers (e.g., AF-P11532-3-F1 not AF-P11532-F1).
+          // Only PDB has truly predictable URLs. The worker needs this to lazy-fetch
+          // from upstream servers if not already cached in R2.
           let reconstructedUrl = `${API_BASE}/api/structure-cached?key=${encodeURIComponent(cachedInfo.cacheKey)}`;
           if (cachedInfo.upstreamUrl) {
             reconstructedUrl += `&upstream=${encodeURIComponent(cachedInfo.upstreamUrl)}`;
@@ -996,9 +997,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         sizeBytes: data.sizeBytes || 0,
         chainLabels: data.chainLabels || null,
         linkUrl: data.linkUrl || null,
-        // CRITICAL: Store upstreamUrl for SWISS-MODEL lazy loading.
-        // SWISS-MODEL URLs are custom per-protein and cannot be derived from r2Key.
-        // This gets stored in IndexedDB so returning users can still lazy-fetch.
+        // CRITICAL: Store upstreamUrl for SWISS-MODEL and AlphaFold lazy loading.
+        // SWISS-MODEL URLs have custom template/range params.
+        // AlphaFold URLs include isoform numbers (e.g., AF-P11532-3-F1).
+        // Only PDB URLs can be derived from r2Key. This gets stored in IndexedDB.
         upstreamUrl: data.upstreamUrl || null
       };
       structureTokenCache.set(key, info);
@@ -1014,8 +1016,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           sizeBytes: info.sizeBytes,
           chainLabels: info.chainLabels,
           linkUrl: info.linkUrl,
-          // CRITICAL: Persist upstreamUrl so SWISS-MODEL works across sessions.
-          // Without this, returning users would get 404 for SWISS-MODEL guess cards.
+          // CRITICAL: Persist upstreamUrl so SWISS-MODEL and AlphaFold work across sessions.
+          // Without this, returning users would get 404 for non-PDB guess cards.
           upstreamUrl: info.upstreamUrl
         };
         putCachedStructureInfo(key, cacheableInfo).catch(() => {});

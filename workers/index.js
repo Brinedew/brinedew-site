@@ -795,12 +795,13 @@ async function buildGuessStructureToken(protein, env, { origin }) {
   } catch { /* ignore */ }
   
   let structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
-  // CRITICAL: For SWISS-MODEL, we MUST include the upstream URL in the request.
-  // Unlike PDB/AlphaFold, SWISS-MODEL URLs are custom per-protein and stored in the DB.
-  // The worker cannot derive them from the r2Key pattern alone.
-  // Without this, guess cards with SWISS-MODEL structures return 404.
+  // CRITICAL: For SWISS-MODEL and AlphaFold, we MUST include the upstream URL in the request.
+  // SWISS-MODEL URLs are custom per-protein (e.g., with template/range params).
+  // AlphaFold URLs include isoform numbers (e.g., AF-P11532-3-F1 not AF-P11532-F1).
+  // The worker cannot derive these from the r2Key pattern alone.
+  // Without this, guess cards for multi-isoform proteins return 404/502.
   // Only needed when not cached - if already in R2, worker serves directly.
-  if (!cached && meta.source === 'swissmodel' && meta.upstreamUrl) {
+  if (!cached && (meta.source === 'swissmodel' || meta.source === 'alphafold') && meta.upstreamUrl) {
     structureUrl += `&upstream=${encodeURIComponent(meta.upstreamUrl)}`;
   }
   
@@ -1029,19 +1030,21 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       
       // Build upstream URL based on source
       // CRITICAL: Check for client-provided upstream URL FIRST.
-      // SWISS-MODEL URLs cannot be derived from r2Key - they're custom per-protein
-      // (e.g., https://swissmodel.expasy.org/repository/uniprot/Q8N2G8.pdb?template=7vka.1.A)
-      // The client gets this URL from buildGuessStructureToken which reads it from the database.
-      // PDB and AlphaFold have predictable URL patterns, so we can derive them from the key.
+      // SWISS-MODEL and AlphaFold URLs cannot be derived from r2Key:
+      // - SWISS-MODEL: custom per-protein with template/range params
+      // - AlphaFold: includes isoform number (AF-P11532-3-F1 not AF-P11532-F1)
+      // The client gets these URLs from buildGuessStructureToken which reads from the database.
+      // Only PDB has a truly predictable URL pattern (RCSB ModelServer).
       let upstreamUrl = url.searchParams.get('upstream');
       if (!upstreamUrl) {
         if (source === 'pdb') {
           // PDB: predictable pattern from RCSB ModelServer
           upstreamUrl = `https://models.rcsb.org/${id}.bcif`;
         } else if (source === 'alphafold') {
-          // AlphaFold: format is AF-{UNIPROT}-F1-model_v6.{ext}
-          // But the key is alphafold/{UNIPROT}.{ext}, so we need to construct the full URL
-          upstreamUrl = `https://alphafold.ebi.ac.uk/files/AF-${id}-F1-model_v6.${format === 'pdb' ? 'pdb' : 'cif'}`;
+          // AlphaFold: NO predictable pattern - URL must come from client
+          // Multi-isoform proteins like DMD (P11532) have URLs like AF-P11532-3-F1
+          // We can't derive the isoform number from the key alone.
+          return Response.json({ error: 'AlphaFold structure requires upstream URL parameter' }, { status: 400, headers: corsHeaders });
         } else if (source === 'swissmodel') {
           // SWISS-MODEL: NO predictable pattern - URL must come from client
           // If we get here, the client didn't pass upstream param (old client code)
