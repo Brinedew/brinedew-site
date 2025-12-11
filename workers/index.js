@@ -18,6 +18,8 @@ const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB);
 const STRUCTURE_CACHE_META_PREFIX = 'structure_meta:';
 const STRUCTURE_CACHE_TARGET_RATIO = 0.9;
 const DAILY_TARGET_SALT = 'geneguessr-v2-939b5a0b';
+const DAILY_BOOTSTRAP_CACHE_PREFIX = 'daily_bootstrap:';
+const DAILY_BOOTSTRAP_CACHE_TTL = 86400; // 24 hours
 
 // Similarity configuration
 // SIMILARITY_MODE: 'legacy' (HiG2Vec only), 'blended' (HiG2Vec + ESM2)
@@ -966,15 +968,60 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
 }
 
 /**
+ * ⚠️ DAILY BOOTSTRAP CACHE ⚠️
+ * 
+ * Caches the expensive-to-compute parts of daily mode bootstrap:
+ * - Target protein metadata
+ * - Structure token (source, URL, chain hints, etc.)
+ * 
+ * This eliminates D1 queries + R2 head calls for repeat visitors on the same day.
+ * KV lookup: ~1-5ms vs full computation: ~500-2000ms
+ */
+async function getDailyBootstrapCache(env, date, origin) {
+  const cacheKey = `${DAILY_BOOTSTRAP_CACHE_PREFIX}${date}`;
+  try {
+    const cached = await env.KV.get(cacheKey, { type: 'json' });
+    if (cached && cached.origin === origin) {
+      console.log(`[PERF] Daily bootstrap cache HIT for ${date}`);
+      return cached;
+    }
+  } catch (e) {
+    console.warn('Daily bootstrap cache read failed:', e);
+  }
+  return null;
+}
+
+async function setDailyBootstrapCache(env, date, origin, targetProtein, structureToken) {
+  const cacheKey = `${DAILY_BOOTSTRAP_CACHE_PREFIX}${date}`;
+  const payload = {
+    origin,
+    targetProtein,
+    structureToken,
+    cachedAt: Date.now()
+  };
+  try {
+    // Calculate TTL to expire at end of day (UTC)
+    const now = new Date();
+    const endOfDay = new Date(date + 'T23:59:59.999Z');
+    const ttlSeconds = Math.max(60, Math.floor((endOfDay - now) / 1000));
+    await env.KV.put(cacheKey, JSON.stringify(payload), { expirationTtl: ttlSeconds });
+    console.log(`[PERF] Daily bootstrap cache SET for ${date} (TTL: ${ttlSeconds}s)`);
+  } catch (e) {
+    console.warn('Daily bootstrap cache write failed:', e);
+  }
+}
+
+/**
  * ⚠️ PERFORMANCE CRITICAL - BOOTSTRAP LATENCY DIRECTLY AFFECTS TTFP ⚠️
  * 
  * This handler is the main bottleneck for initial page load.
  * Every millisecond here = millisecond of blank screen for users.
  * 
  * OPTIMIZATIONS APPLIED:
- * 1. Parallel fetch: getDailyTargetProtein runs concurrently with session load
- * 2. Batched hydration: hydrateGuessProteins uses Promise.all, not sequential loop
- * 3. Skip redundant work: similarity scores not recalculated if already stored
+ * 1. DAILY CACHE: KV lookup for target + structure token (~1-5ms vs ~500-2000ms)
+ * 2. Parallel fetch: getDailyTargetProtein runs concurrently with session load
+ * 3. Batched hydration: hydrateGuessProteins uses Promise.all, not sequential loop
+ * 4. Skip redundant work: similarity scores not recalculated if already stored
  * 
  * DO NOT add sequential awaits here without measuring impact.
  * DO NOT call hydrateGuessProteins with sequential DB calls.
@@ -984,12 +1031,23 @@ async function handleGameBootstrap(request, env, corsHeaders) {
     const sessionContext = resolveSessionContext(request);
     const { sessionId, practiceMode, practiceRestart } = sessionContext;
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    const url = new URL(request.url);
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // ⚠️ DAILY MODE: CHECK KV CACHE FIRST ⚠️
+    // Eliminates D1 + R2 queries for repeat visitors (~500-2000ms savings)
+    let cachedDaily = null;
+    if (!practiceMode) {
+      cachedDaily = await getDailyBootstrapCache(env, today, url.origin);
+    }
     
     // ⚠️ PARALLEL FETCH - DO NOT SERIALIZE ⚠️
     // Target protein lookup and session state load are independent
     // Running in parallel saves 50-150ms per request
     const [targetSeed, existingState] = await Promise.all([
-      getDailyTargetProtein(env, { practice: practiceMode }),
+      cachedDaily?.targetProtein 
+        ? Promise.resolve(cachedDaily.targetProtein)  // Use cached target
+        : getDailyTargetProtein(env, { practice: practiceMode }),
       getGameState(env, sessionId).catch(() => null)  // Graceful fallback if session doesn't exist
     ]);
     
@@ -1009,17 +1067,33 @@ async function handleGameBootstrap(request, env, corsHeaders) {
     
     // ⚠️ PARALLEL EXECUTION - structure token + guess hydration run concurrently
     // This eliminates client-side /api/structure-token round-trip (~3s savings)
-    const url = new URL(request.url);
-    const [_, structureToken] = await Promise.all([
+    let structureToken = cachedDaily?.structureToken || null;
+    const needsStructureToken = !structureToken;
+    
+    const [_, freshStructureToken] = await Promise.all([
       hydrateGuessProteins(env, sessionId, state, targetProtein),
-      buildTargetStructureToken(targetProtein, env, {
-        practiceMode,
-        origin: url.origin
-      }).catch(err => {
-        console.warn('GeneGuessr: bootstrap structure token failed (non-fatal)', err);
-        return null;  // Client falls back to /api/structure-token if null
-      })
+      needsStructureToken
+        ? buildTargetStructureToken(targetProtein, env, {
+            practiceMode,
+            origin: url.origin
+          }).catch(err => {
+            console.warn('GeneGuessr: bootstrap structure token failed (non-fatal)', err);
+            return null;  // Client falls back to /api/structure-token if null
+          })
+        : Promise.resolve(null)  // Already have cached token
     ]);
+    
+    // Use fresh token if we computed one
+    if (freshStructureToken) {
+      structureToken = freshStructureToken;
+    }
+    
+    // ⚠️ POPULATE CACHE FOR NEXT REQUEST (daily mode only) ⚠️
+    if (!practiceMode && !cachedDaily && targetProtein && structureToken) {
+      // Fire-and-forget cache population
+      setDailyBootstrapCache(env, today, url.origin, targetProtein, structureToken)
+        .catch(e => console.warn('Cache population failed:', e));
+    }
     
     const payload = buildGamePayload(state, targetProtein);
     // Embed structure token in bootstrap response - client uses this instead of separate API call
