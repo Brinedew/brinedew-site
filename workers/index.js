@@ -303,7 +303,7 @@ export default {
     // Direct structure access by cacheKey - stable URLs for client-side caching
     // Safe because cacheKey (e.g., "pdb/8J07.bcif") doesn't reveal protein identity
     if (url.pathname === '/api/structure-cached' && request.method === 'GET') {
-      return handleCachedStructureFetch(request, env, corsHeaders);
+      return handleCachedStructureFetch(request, env, ctx, corsHeaders);
     }
 
     if (url.pathname === '/api/game/bootstrap' && request.method === 'GET') {
@@ -781,17 +781,17 @@ async function buildGuessStructureToken(protein, env, { origin }) {
     return null;
   }
   
-  const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
-  if (!cached) {
-    console.warn('GeneGuessr: buildGuessStructureToken - failed to cache structure for', protein.uniprot);
-    return null;
-  }
-  
-  // Get file size for client-side cache decisions
+  // ⚡ LAZY STRUCTURE: Don't block on structure caching during guess submission
+  // Just check if it exists in R2 - if not, client will trigger caching via /api/structure-cached
+  // This saves 2-4 seconds when structure isn't cached yet
   let sizeBytes = 0;
+  let cached = false;
   try {
     const head = await env.STRUCTURES_BUCKET.head(meta.r2Key);
-    sizeBytes = head?.size || 0;
+    if (head) {
+      cached = true;
+      sizeBytes = head.size || 0;
+    }
   } catch { /* ignore */ }
   
   const structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
@@ -820,6 +820,8 @@ async function buildGuessStructureToken(protein, env, { origin }) {
     url: structureUrl,
     cacheKey: meta.r2Key,
     sizeBytes,
+    cached, // Tell client whether it needs to trigger caching
+    upstreamUrl: cached ? undefined : meta.upstreamUrl, // Client can fetch directly if not cached
     chainLabels,
     linkUrl: meta.linkUrl
   };
@@ -932,7 +934,7 @@ async function handleStructureToken(request, env, corsHeaders) {
  * Direct structure fetch by cacheKey (r2Key).
  * Returns structure with long cache headers since the URL is stable.
  */
-async function handleCachedStructureFetch(request, env, corsHeaders) {
+async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
   const url = new URL(request.url);
   let cacheKey = url.searchParams.get('key');
   let protein = null;  // Hoist to function scope for lazy loading
@@ -1037,7 +1039,7 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
       ? 'application/octet-stream' 
       : (upstreamResp.headers.get('Content-Type') || 'chemical/x-cif');
     
-    env.waitUntil((async () => {
+    ctx.waitUntil((async () => {
       try {
         const arrayBuffer = await new Response(cacheStream).arrayBuffer();
         await env.STRUCTURES_BUCKET.put(cacheKey, arrayBuffer, {
