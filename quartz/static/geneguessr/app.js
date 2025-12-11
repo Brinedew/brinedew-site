@@ -861,16 +861,14 @@
   }
 
   async function ensureStructureTokenForTarget() {
-    // B-206: Early return uses cached structure info - may return stale structure after random restart
+    // Fast path: use token already hydrated from bootstrap or previous fetch
+    // ⚡ PERFORMANCE: Bootstrap embeds token - this should hit immediately after game load
     if (targetStructureInfo && targetStructureInfo.url) {
-      console.log(`[B-206 DEBUG] ensureStructureTokenForTarget - using cached info:`, {
-        url: targetStructureInfo.url?.substring(0, 50),
-        sourceLabel: targetStructureInfo.sourceLabel,
-        cacheKey: targetStructureInfo.cacheKey
-      });
+      console.log(`[TIMING] ensureStructureTokenForTarget | using hydrated token (no API call)`);
       return targetStructureInfo;
     }
-    console.log(`[B-206 DEBUG] ensureStructureTokenForTarget - fetching fresh token`);
+    // Fallback: fetch from API (only happens if bootstrap didn't include token)
+    console.log(`[TIMING] ensureStructureTokenForTarget | fetching from API (fallback)`);
     try {
       const practiceQuery = gameState.practiceMode ? '&practice=1' : '';
       const resp = await fetch(`${API_BASE}/api/structure-token?type=target${practiceQuery}`, {
@@ -888,12 +886,7 @@
       if (!data || !data.url) {
         throw new Error('Missing url in response');
       }
-      console.log(`[B-206 DEBUG] Structure token fetched:`, {
-        url: data.url?.substring(0, 50),
-        sourceLabel: data.sourceLabel,
-        cacheKey: data.cacheKey,
-        totalChainCount: data.totalChainCount
-      });
+      console.log(`[TIMING] ensureStructureTokenForTarget | API fallback succeeded`);
       targetStructureInfo = {
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
@@ -2875,6 +2868,21 @@
     gameState.maxGuesses = gameStatus.maxGuesses || 10; // Server is single source of truth
     gameState.statsRecorded = false;
     gameState.revealedHints = Array.isArray(gameStatus.revealedHints) ? [...gameStatus.revealedHints] : [];
+    
+    // ⚡ PERFORMANCE: Use embedded structure token from bootstrap (eliminates 3s API round-trip)
+    if (payload.targetStructureToken && payload.targetStructureToken.url) {
+      targetStructureInfo = {
+        sourceLabel: payload.targetStructureToken.sourceLabel || 'Source unavailable',
+        displayLabel: payload.targetStructureToken.displayLabel || payload.targetStructureToken.sourceLabel || 'Source unavailable',
+        format: payload.targetStructureToken.format || 'cif',
+        url: payload.targetStructureToken.url,
+        cacheKey: null,  // SECURITY: target structures don't expose cacheKey
+        sizeBytes: payload.targetStructureToken.sizeBytes || 0,
+        chainLabels: payload.targetStructureToken.targetChainHints?.map(h => ({ ...h, is_target: true })) || null,
+        totalChainCount: payload.targetStructureToken.totalChainCount || 0
+      };
+      console.log('[TIMING] targetStructureInfo hydrated from bootstrap (skipped API call)');
+    }
     
     // B-206 DEBUG: Log state changes (without exposing target)
     console.log(`[B-206 DEBUG] Hydrated state - date: ${payload.status.date}, guesses: ${guessEntries.length}`);

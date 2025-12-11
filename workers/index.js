@@ -697,18 +697,81 @@ export class GameSession {
   }
 }
 
+/**
+ * Build structure token payload for a target protein.
+ * Shared by bootstrap (embedded) and structure-token endpoint (fallback).
+ * Returns null if structure unavailable.
+ */
+async function buildTargetStructureToken(protein, env, { practiceMode, origin }) {
+  if (!protein) return null;
+  
+  const meta = await getCanonicalStructureMeta(protein, env);
+  if (!meta) {
+    console.warn('GeneGuessr: buildTargetStructureToken - no structure meta for', protein.uniprot);
+    return null;
+  }
+  
+  const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
+  if (!cached) {
+    console.warn('GeneGuessr: buildTargetStructureToken - failed to cache structure for', protein.uniprot);
+    return null;
+  }
+  
+  // Get file size for client-side cache decisions
+  let sizeBytes = 0;
+  try {
+    const head = await env.STRUCTURES_BUCKET.head(meta.r2Key);
+    sizeBytes = head?.size || 0;
+  } catch { /* ignore */ }
+  
+  // Build opaque URL for target
+  const practiceParam = practiceMode ? '&practice=1' : '';
+  const structureUrl = `${origin}/api/structure-cached?type=target${practiceParam}`;
+  
+  // Parse chain labels to create redacted version for target
+  let targetChainHints = null;
+  let totalChainCount = 0;
+  const chainLabelsRaw = meta.source === 'alphafold'
+    ? null
+    : (meta.source === 'swissmodel' 
+      ? protein.swissmodel_chain_labels 
+      : protein.pdb_chain_labels);
+  if (chainLabelsRaw) {
+    try {
+      const chainLabels = typeof chainLabelsRaw === 'string'
+        ? JSON.parse(chainLabelsRaw)
+        : chainLabelsRaw;
+      totalChainCount = chainLabels?.reduce((sum, l) => sum + (l.chains?.length || 0), 0) || 0;
+      targetChainHints = chainLabels
+        ?.filter(l => l.is_target)
+        ?.map(l => ({ chains: l.chains }));
+      if (targetChainHints?.length === 0) targetChainHints = null;
+    } catch (e) {
+      console.warn('Failed to parse chain_labels for target hints', e);
+    }
+  }
+  
+  return {
+    sourceLabel: meta.shortLabel,
+    displayLabel: `Source: ${meta.shortLabel}`,
+    format: meta.format || 'cif',
+    url: structureUrl,
+    sizeBytes,
+    targetChainHints,
+    totalChainCount
+  };
+}
+
 async function handleStructureToken(request, env, corsHeaders) {
   try {
     const url = new URL(request.url);
     const type = url.searchParams.get('type');
     if (type === 'target') {
-      // Use session state to get the actual target protein, not getDailyTargetProtein.
-      // This is critical for practice mode where the target is a random protein stored
-      // in the session, not the daily target.
+      // Fallback endpoint for clients without embedded bootstrap token.
+      // Most calls should be eliminated by embedding token in bootstrap payload.
       const { sessionId, practiceMode } = resolveSessionContext(request);
       let protein = null;
       
-      // Try to get target from session state first
       try {
         const state = await getGameState(env, sessionId);
         console.log(`[B-206] structure-token: sessionId=${sessionId}, targetId=${state?.targetId}`);
@@ -719,7 +782,6 @@ async function handleStructureToken(request, env, corsHeaders) {
         console.warn('GeneGuessr: failed to get target from session, falling back to daily', err);
       }
       
-      // Fall back to daily target if session lookup failed
       if (!protein) {
         protein = await getDailyTargetProtein(env, { practice: practiceMode });
       }
@@ -728,73 +790,19 @@ async function handleStructureToken(request, env, corsHeaders) {
         console.error('GeneGuessr: handleStructureToken - no target protein found');
         return Response.json({ error: 'Target unavailable' }, { status: 500, headers: corsHeaders });
       }
-      console.log('GeneGuessr: handleStructureToken - got protein', protein.uniprot);
-      const meta = await getCanonicalStructureMeta(protein, env);
-      if (!meta) {
-        console.warn('GeneGuessr: handleStructureToken - no structure meta for', protein.uniprot);
+      
+      console.log('GeneGuessr: handleStructureToken (fallback) - building token for', protein.uniprot);
+      const token = await buildTargetStructureToken(protein, env, {
+        practiceMode,
+        origin: url.origin
+      });
+      
+      if (!token) {
         return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
       }
-      console.log('GeneGuessr: handleStructureToken - got meta', meta.source, meta.id);
-      const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
-      if (!cached) {
-        console.warn('GeneGuessr: handleStructureToken - failed to cache structure for', protein.uniprot);
-        return Response.json({ error: 'Structure unavailable' }, { status: 404, headers: corsHeaders });
-      }
-      console.log('GeneGuessr: handleStructureToken - structure cached');
       
-      // Get file size for client-side cache decisions
-      let sizeBytes = 0;
-      try {
-        const head = await env.STRUCTURES_BUCKET.head(meta.r2Key);
-        sizeBytes = head?.size || 0;
-      } catch { /* ignore */ }
-      
-      // SECURITY: Use opaque URL for target - no key visible to client
-      // B-206 FIX: Include practice param so structure-cached reads correct session
-      const practiceParam = practiceMode ? '&practice=1' : '';
-      const structureUrl = `${url.origin}/api/structure-cached?type=target${practiceParam}`;
-    
-    // Parse chain labels to create redacted version for target
-    // SECURITY: Only send chain IDs + is_target flag, never gene names
-    // AlphaFold structures are single-chain predictions, so no chain labels
-    let targetChainHints = null;
-    let totalChainCount = 0;
-    const chainLabelsRaw = meta.source === 'alphafold'
-      ? null
-      : (meta.source === 'swissmodel' 
-        ? protein.swissmodel_chain_labels 
-        : protein.pdb_chain_labels);
-    if (chainLabelsRaw) {
-      try {
-        const chainLabels = typeof chainLabelsRaw === 'string'
-          ? JSON.parse(chainLabelsRaw)
-          : chainLabelsRaw;
-        // Count ALL chains in the structure (for deciding whether to show labels)
-        totalChainCount = chainLabels?.reduce((sum, l) => sum + (l.chains?.length || 0), 0) || 0;
-        // Redact: only keep chains array for target entries, no gene/name
-        targetChainHints = chainLabels
-          ?.filter(l => l.is_target)
-          ?.map(l => ({ chains: l.chains }));
-        if (targetChainHints?.length === 0) targetChainHints = null;
-      } catch (e) {
-        console.warn('Failed to parse chain_labels for target hints', e);
-      }
+      return Response.json(token, { headers: corsHeaders });
     }
-    
-    // SECURITY: For target structures, redact identifying info (PDB ID, etc)
-    // The URL still works (server-side routing), but client can't extract the ID
-    return Response.json({
-      sourceLabel: meta.shortLabel,  // "PDB" / "AlphaFold" / "SWISS-MODEL" - ok to reveal source type
-      displayLabel: `Source: ${meta.shortLabel}`,  // Redact structure ID (was "PDB (3BDW)")
-      format: meta.format || 'cif',
-      url: structureUrl,  // URL is opaque enough - key is encoded, not human-readable at a glance
-      // SECURITY: Don't send cacheKey to client for target - it contains the structure ID
-      // cacheKey: meta.r2Key,  // REMOVED - was "pdb/3BDW.bcif"
-      sizeBytes,
-      targetChainHints,
-      totalChainCount
-    }, { headers: corsHeaders });
-  }
 
   const uniprot = (url.searchParams.get('uniprot') || '').toUpperCase();
   if (!uniprot) {
@@ -998,8 +1006,26 @@ async function handleGameBootstrap(request, env, corsHeaders) {
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
-    await hydrateGuessProteins(env, sessionId, state, targetProtein);
+    
+    // ⚠️ PARALLEL EXECUTION - structure token + guess hydration run concurrently
+    // This eliminates client-side /api/structure-token round-trip (~3s savings)
+    const url = new URL(request.url);
+    const [_, structureToken] = await Promise.all([
+      hydrateGuessProteins(env, sessionId, state, targetProtein),
+      buildTargetStructureToken(targetProtein, env, {
+        practiceMode,
+        origin: url.origin
+      }).catch(err => {
+        console.warn('GeneGuessr: bootstrap structure token failed (non-fatal)', err);
+        return null;  // Client falls back to /api/structure-token if null
+      })
+    ]);
+    
     const payload = buildGamePayload(state, targetProtein);
+    // Embed structure token in bootstrap response - client uses this instead of separate API call
+    if (structureToken) {
+      payload.targetStructureToken = structureToken;
+    }
     return Response.json(payload, { headers: responseHeaders });
   } catch (err) {
     console.error('GeneGuessr: bootstrap failed', err);
