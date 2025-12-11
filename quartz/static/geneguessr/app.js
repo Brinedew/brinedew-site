@@ -2869,10 +2869,6 @@
     guessEntries = Array.isArray(payload.guesses) ? payload.guesses : [];
     targetProtein = payload.clueTarget ? (cacheEnrichedProtein(payload.clueTarget) || payload.clueTarget) : null;
     targetReveal = payload.targetReveal ? (cacheEnrichedProtein(payload.targetReveal) || payload.targetReveal) : null;
-    
-    // B-206 DEBUG: Log target protein identity changes
-    const targetUniprot = targetProtein?.uniprot || targetReveal?.uniprot || 'unknown';
-    console.log(`[B-206 DEBUG] Hydrated state - target: ${targetUniprot}, date: ${payload.status.date}, guesses: ${guessEntries.length}`);
     targetRevealSections = payload.targetRevealSections || null;
     shareText = payload.shareText || '';
     gameState.date = gameStatus.date;
@@ -2883,6 +2879,11 @@
     gameState.maxGuesses = gameStatus.maxGuesses || 10; // Server is single source of truth
     gameState.statsRecorded = false;
     gameState.revealedHints = Array.isArray(gameStatus.revealedHints) ? [...gameStatus.revealedHints] : [];
+    
+    // B-206 DEBUG: Log target protein identity changes (after all state is hydrated)
+    const targetUniprot = targetProtein?.uniprot || targetReveal?.uniprot || 'unknown';
+    console.log(`[B-206 DEBUG] Hydrated state - target: ${targetUniprot}, date: ${payload.status.date}, guesses: ${guessEntries.length}`);
+    
     updateHintDisplays();
   }
 
