@@ -1082,34 +1082,68 @@ async function handleGuessSubmission(request, env, corsHeaders) {
   }
 }
 
+/**
+ * ⚠️ PERFORMANCE CRITICAL - HINT REVEAL MUST BE FAST ⚠️
+ * 
+ * This endpoint reveals a single hint. It should be INSTANT.
+ * 
+ * BEFORE (slow - 2-3 seconds):
+ *   - getDailyTargetProtein (2-3 DB queries)
+ *   - ensureSessionForToday (DO read)
+ *   - hydrateGuessProteins (N × 2-3 DB queries for ALL guesses)
+ *   - buildGamePayload (CPU work to build full payload)
+ * 
+ * AFTER (fast - <200ms):
+ *   - Parallel: session state + target lookup
+ *   - NO hydrateGuessProteins (client already has guess data!)
+ *   - Minimal payload: just the hint text + updated status
+ * 
+ * The client already has all guess proteins from bootstrap.
+ * Hint reveal only needs to return the revealed text and updated hint balance.
+ * 
+ * DO NOT add hydrateGuessProteins back. It's not needed here.
+ * See Linear issue B-205 for full context.
+ */
 async function handleHintReveal(request, env, corsHeaders) {
   try {
     const sessionContext = resolveSessionContext(request);
     const { sessionId, practiceMode } = sessionContext;
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
     
-    const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
-    if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
-    }
     const body = await safeJson(request);
     const hintId = body?.hintId || body?.id;
     if (!hintId) {
       return Response.json({ error: 'Missing hintId' }, { status: 400, headers: responseHeaders });
     }
-    const state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
+    
+    // ⚠️ PARALLEL FETCH - DO NOT SERIALIZE ⚠️
+    const [targetSeed, existingState] = await Promise.all([
+      getDailyTargetProtein(env, { practice: practiceMode ? true : false }),
+      getGameState(env, sessionId).catch(() => null)
+    ]);
+    
+    if (!targetSeed && !practiceMode) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
+    }
+    
+    const state = await ensureSessionForTodayWithState(env, sessionId, targetSeed, existingState, { practiceMode });
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
+    
     const clueSections = buildClueSections(targetProtein);
     const hintText = extractHintText(clueSections, hintId);
     if (!hintText) {
       return Response.json({ error: 'Hint not found' }, { status: 404, headers: responseHeaders });
     }
-    await hydrateGuessProteins(env, sessionId, state, targetProtein);
+    
+    // ⚠️ DO NOT CALL hydrateGuessProteins HERE ⚠️
+    // Client already has guess data from bootstrap. We just need to reveal the hint.
+    // Adding guess hydration here caused 3+ second delays (B-205).
+    
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
         return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: responseHeaders });
@@ -1118,9 +1152,16 @@ async function handleHintReveal(request, env, corsHeaders) {
       state.hintBalance = Math.max(0, (state.hintBalance || 0) - DEFAULT_HINT_COST);
       await saveGameState(env, sessionId, state);
     }
-    const payload = buildGamePayload(state, targetProtein, { clueSections });
-    payload.revealedHint = { id: hintId, text: hintText };
-    return Response.json(payload, { headers: responseHeaders });
+    
+    // ⚠️ MINIMAL PAYLOAD - just what the client needs for hint reveal ⚠️
+    // Client does surgical DOM update, doesn't need full game payload rebuild
+    return Response.json({
+      revealedHint: { id: hintId, text: hintText },
+      status: {
+        hintBalance: state.hintBalance,
+        revealedHints: state.revealedHints
+      }
+    }, { headers: responseHeaders });
   } catch (err) {
     console.error('GeneGuessr: hint reveal failed', err);
     return Response.json({ error: 'Hint reveal failed' }, { status: 500, headers: corsHeaders });
