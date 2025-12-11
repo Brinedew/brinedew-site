@@ -4486,11 +4486,15 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       console.log(`[TIMING] fetching similarity for guessId=${pendingGuess.guessId}`);
       fetchGuessSimilarity(pendingGuess.guessId)
         .then(result => {
-          if (result && typeof result.score === 'number') {
+          // API returns { guessId, score: { percent, similarity, isLadder, ... } }
+          const scoreData = result?.score;
+          const scorePercent = typeof scoreData === 'number' ? scoreData : scoreData?.percent;
+          if (typeof scorePercent === 'number') {
+            const isLadder = scoreData?.isLadder || false;
             // Update game state
             const guess = gameState.guesses.find(g => g.guessId === pendingGuess.guessId);
             if (guess) {
-              guess.score = { percent: result.score, isLadder: result.isLadder || false };
+              guess.score = typeof scoreData === 'object' ? scoreData : { percent: scorePercent, isLadder };
               guess.similarityPending = false;
             }
             // Update DOM elements
@@ -4500,19 +4504,21 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
             const barEl = scoreEl?.previousElementSibling;
             
             if (scoreEl) {
-              scoreEl.textContent = `${result.score}%`;
+              scoreEl.textContent = `${scorePercent}%`;
               scoreEl.classList.remove('pg-pending');
-              if (result.isLadder) scoreEl.classList.add('pg-ladder');
+              if (isLadder) scoreEl.classList.add('pg-ladder');
             }
             if (barFillEl) {
-              barFillEl.style.width = `${result.score}%`;
-              if (result.isLadder) barFillEl.classList.add('pg-ladder');
+              barFillEl.style.width = `${scorePercent}%`;
+              if (isLadder) barFillEl.classList.add('pg-ladder');
             }
             if (barEl) {
               barEl.classList.remove('pg-pending');
-              if (result.isLadder) barEl.classList.add('pg-ladder');
+              if (isLadder) barEl.classList.add('pg-ladder');
             }
-            console.log(`[TIMING] similarity loaded for ${pendingGuess.guessId} | ${result.score}%`);
+            console.log(`[TIMING] similarity loaded for ${pendingGuess.guessId} | ${scorePercent}%`);
+          } else {
+            console.warn(`[TIMING] similarity returned unexpected format:`, result);
           }
         })
         .catch(err => {

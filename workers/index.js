@@ -1640,11 +1640,12 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
     dirty = true;
   }
   
-  // ⚠️ SKIP SIMILARITY RECALC IF SCORE EXISTS ⚠️
+  // ⚠️ SKIP SIMILARITY RECALC IF SCORE EXISTS OR PENDING ⚠️
   // Scores are stored in session state and only need calculation on first guess.
   // Recalculating every bootstrap wastes 100-300ms per guess.
+  // ⚡ LAZY SIMILARITY: Skip entries with similarityPending - client will fetch via /api/game/guess-similarity
   const entriesNeedingScore = validEntries.filter(entry => 
-    entry.protein && targetProtein && !entry.score?.similarity
+    entry.protein && targetProtein && !entry.score?.similarity && !entry.similarityPending
   );
   
   if (entriesNeedingScore.length > 0) {
@@ -1701,9 +1702,12 @@ function buildGamePayload(state, targetProtein, options = {}) {
       ...guessProtein,
       gene_summary: cleanGeneSummary(guessProtein.gene_summary)
     };
-    const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein, {
-      similarity: entry.score?.similarity
-    });
+    // ⚡ LAZY SIMILARITY: If similarity is pending, don't call scoreGuess - preserve null score
+    const resolvedScore = entry.similarityPending 
+      ? null  // Keep null, client will fetch via /api/game/guess-similarity
+      : (entry.score || scoreGuess(guessProtein, targetProtein, {
+          similarity: entry.score?.similarity
+        }));
     const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore);
     aggregateMatches(aggregatedMatches, matches);
     const isLatest = index === (state.guesses.length - 1);
@@ -1716,6 +1720,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       correct: Boolean(entry.correct),
       createdAt: entry.createdAt,
       score: resolvedScore,
+      similarityPending: Boolean(entry.similarityPending),  // ⚡ Pass through to client
       matchedHints: matches,
       sections: buildFeedbackSections(guessProteinCleaned),
       headerLabel: guessProtein.hgnc || guessProtein.uniprot,
