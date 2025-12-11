@@ -2837,6 +2837,23 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     return response.json();
   }
 
+  // Fetch similarity score for a guess (lazy loading)
+  async function fetchGuessSimilarity(guessId) {
+    const t0 = performance.now();
+    const response = await fetch(`${API_BASE}/api/game/guess-similarity${buildPracticeQuery()}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guessId })
+    });
+    console.log(`[TIMING] similarity-api-call | ${Math.round(performance.now() - t0)}ms`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error?.error || `Similarity fetch failed with status ${response.status}`);
+    }
+    return response.json();
+  }
+
   async function revealHintRequest(hintId) {
     const response = await fetch(`${API_BASE}/api/game/reveal-hint${buildPracticeQuery()}`, {
       method: 'POST',
@@ -3617,13 +3634,16 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       highlightMatches = false,
     } = options;
 
-    const similarityPercent = showSimilarity && score && typeof score.percent === 'number'
+    // Handle pending similarity (lazy loading)
+    const isPending = score === null || score?.similarityPending;
+    const similarityPercent = !isPending && showSimilarity && score && typeof score.percent === 'number'
       ? score.percent
       : null;
     const isLadder = score?.isLadder || false;
-    const similarityValue = similarityPercent === null ? 'N/A' : `${similarityPercent}%`;
+    const similarityValue = isPending ? '' : (similarityPercent === null ? 'N/A' : `${similarityPercent}%`);
     const similarityWidth = similarityPercent === null ? 0 : similarityPercent;
     const ladderClass = isLadder ? ' pg-ladder' : '';
+    const pendingClass = isPending ? ' pg-pending' : '';
 
     const sectionMarkup = sections
       .map(section => renderFeedbackSection(
@@ -3634,12 +3654,17 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       ))
       .join('');
 
+    // Show spinner when similarity is pending, otherwise show score
+    const scoreContent = isPending
+      ? '<span class="pg-score-spinner"></span>'
+      : similarityValue;
+
     const similarityMarkup = showSimilarity
       ? `
-        <div class="pg-bar${ladderClass}">
-          <div class="pg-bar-fill${ladderClass}" style="width: ${similarityWidth}%"></div>
+        <div class="pg-bar${ladderClass}${pendingClass}">
+          <div class="pg-bar-fill${ladderClass}" style="width: ${similarityWidth}%" data-guess-id="${cardId}"></div>
         </div>
-        <span class="pg-feedback-score${ladderClass}">${similarityValue}</span>
+        <span class="pg-feedback-score${ladderClass}${pendingClass}" data-guess-id="${cardId}">${scoreContent}</span>
       `
       : '';
 
@@ -3691,8 +3716,17 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       return '';
     }
 
+    // Handle score format: can be null (pending), number, or { percent, isLadder }
+    let score = guessEntry.score;
+    if (guessEntry.similarityPending) {
+      score = null; // Mark as pending
+    } else if (typeof score === 'number') {
+      // Legacy format: convert to object
+      score = { percent: score, isLadder: false };
+    }
+
     return buildFeedbackCardMarkup({ uniprot: guessEntry.uniprot }, {
-      score: guessEntry.score,
+      score,
       cardId,
       collapsible: true,
       expanded,
@@ -4442,6 +4476,53 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     render();
     if (guessStartTime != null) {
       console.log(`[TIMING] guess-submit | render() done | ${Math.round(performance.now() - guessStartTime)}ms`);
+    }
+
+    // ⚡ LAZY SIMILARITY: Fetch similarity for pending guesses in background
+    // This allows the card to appear instantly while we calculate similarity
+    const pendingGuess = gameState.guesses.find(g => g.uniprot === uniprot && g.similarityPending);
+    if (pendingGuess && pendingGuess.guessId) {
+      fetchGuessSimilarity(pendingGuess.guessId)
+        .then(result => {
+          if (result && typeof result.score === 'number') {
+            // Update game state
+            const guess = gameState.guesses.find(g => g.guessId === pendingGuess.guessId);
+            if (guess) {
+              guess.score = { percent: result.score, isLadder: result.isLadder || false };
+              guess.similarityPending = false;
+            }
+            // Update DOM elements
+            const cardId = `guess-card-${pendingGuess.guessId}`;
+            const scoreEl = document.querySelector(`.pg-feedback-score[data-guess-id="${cardId}"]`);
+            const barFillEl = document.querySelector(`.pg-bar-fill[data-guess-id="${cardId}"]`);
+            const barEl = scoreEl?.previousElementSibling;
+            
+            if (scoreEl) {
+              scoreEl.textContent = `${result.score}%`;
+              scoreEl.classList.remove('pg-pending');
+              if (result.isLadder) scoreEl.classList.add('pg-ladder');
+            }
+            if (barFillEl) {
+              barFillEl.style.width = `${result.score}%`;
+              if (result.isLadder) barFillEl.classList.add('pg-ladder');
+            }
+            if (barEl) {
+              barEl.classList.remove('pg-pending');
+              if (result.isLadder) barEl.classList.add('pg-ladder');
+            }
+            console.log(`[TIMING] similarity loaded for ${pendingGuess.guessId} | ${result.score}%`);
+          }
+        })
+        .catch(err => {
+          console.warn('Geneguessr: similarity fetch failed', err);
+          // Show N/A on error
+          const cardId = `guess-card-${pendingGuess.guessId}`;
+          const scoreEl = document.querySelector(`.pg-feedback-score[data-guess-id="${cardId}"]`);
+          if (scoreEl) {
+            scoreEl.textContent = 'N/A';
+            scoreEl.classList.remove('pg-pending');
+          }
+        });
     }
 
     // Kick off structure token hydration (guess + optional target reveal)

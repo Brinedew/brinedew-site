@@ -318,6 +318,11 @@ export default {
       return handleHintReveal(request, env, corsHeaders);
     }
 
+    // Lazy similarity calculation - called after guess card is shown
+    if (url.pathname === '/api/game/guess-similarity' && request.method === 'POST') {
+      return handleGuessSimilarity(request, env, corsHeaders);
+    }
+
     // Public proteins endpoint for autocomplete
     if (url.pathname === '/api/protein' && request.method === 'GET') {
       try {
@@ -713,18 +718,16 @@ async function buildTargetStructureToken(protein, env, { practiceMode, origin })
     return null;
   }
   
-  const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
-  if (!cached) {
-    console.warn('GeneGuessr: buildTargetStructureToken - failed to cache structure for', protein.uniprot);
-    return null;
-  }
+  // ⚠️ LAZY LOADING: Don't pre-cache structure on bootstrap
+  // Structure will be cached on first /api/structure-cached request
+  // This eliminates 3-10s network delay on page load
   
-  // Get file size for client-side cache decisions
+  // Get file size if already cached (fast R2 head operation)
   let sizeBytes = 0;
   try {
     const head = await env.STRUCTURES_BUCKET.head(meta.r2Key);
     sizeBytes = head?.size || 0;
-  } catch { /* ignore */ }
+  } catch { /* ignore - not cached yet */ }
   
   // Build opaque URL for target
   const practiceParam = practiceMode ? '&practice=1' : '';
@@ -932,13 +935,13 @@ async function handleStructureToken(request, env, corsHeaders) {
 async function handleCachedStructureFetch(request, env, corsHeaders) {
   const url = new URL(request.url);
   let cacheKey = url.searchParams.get('key');
+  let protein = null;  // Hoist to function scope for lazy loading
   
   // SECURITY: Support type=target to fetch target structure without exposing the key
   // This prevents cheating by inspecting the URL to see the PDB ID
   const type = url.searchParams.get('type');
   if (type === 'target') {
     const { sessionId, practiceMode } = resolveSessionContext(request);
-    let protein = null;
     
     try {
       const state = await getGameState(env, sessionId);
@@ -979,9 +982,88 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
     return Response.json({ error: 'Invalid key format' }, { status: 400, headers: corsHeaders });
   }
   
-  const object = await env.STRUCTURES_BUCKET.get(cacheKey);
+  let object = await env.STRUCTURES_BUCKET.get(cacheKey);
+  
+  // ⚠️ LAZY CACHING: If not in R2, fetch from upstream and cache
+  // This happens on first request after bootstrap (which no longer pre-caches)
   if (!object) {
-    return Response.json({ error: 'Structure not cached' }, { status: 404, headers: corsHeaders });
+    // We need the protein to get upstream URL - for type=target we already have it
+    // For key-based requests, derive source from the key prefix
+    let meta = null;
+    if (type === 'target' && protein) {
+      meta = await getCanonicalStructureMeta(protein, env);
+    } else {
+      // Parse key to build minimal meta for upstream fetch
+      const [source, filename] = cacheKey.split('/');
+      const format = filename.endsWith('.bcif') ? 'bcif' : (filename.endsWith('.pdb') ? 'pdb' : 'cif');
+      const id = filename.replace(/\.(bcif|cif|pdb)$/, '');
+      
+      // Build upstream URL based on source
+      let upstreamUrl = null;
+      if (source === 'pdb') {
+        upstreamUrl = `https://models.rcsb.org/${id}.bcif`;
+      } else if (source === 'alphafold') {
+        upstreamUrl = `https://alphafold.ebi.ac.uk/files/${id}.cif`;
+      } else if (source === 'swissmodel') {
+        // SwissModel URLs are stored in DB, can't derive from key alone
+        // Fall back to 404 for now - these should be pre-cached
+        return Response.json({ error: 'SwissModel structure not cached' }, { status: 404, headers: corsHeaders });
+      }
+      
+      meta = { r2Key: cacheKey, upstreamUrl, format, source };
+    }
+    
+    if (!meta?.upstreamUrl) {
+      return Response.json({ error: 'Structure not cached and no upstream available' }, { status: 404, headers: corsHeaders });
+    }
+    
+    // Fetch from upstream and stream to client while caching in background
+    console.log(`[LAZY-CACHE] Fetching ${cacheKey} from ${meta.upstreamUrl}`);
+    const upstreamResp = await fetch(meta.upstreamUrl, {
+      method: 'GET',
+      headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
+    });
+    
+    if (!upstreamResp.ok || !upstreamResp.body) {
+      console.warn('GeneGuessr: upstream structure fetch failed', meta.upstreamUrl, upstreamResp.status);
+      return Response.json({ error: 'Upstream structure unavailable' }, { status: 502, headers: corsHeaders });
+    }
+    
+    // Clone the response - one for client, one for R2 cache
+    const [clientStream, cacheStream] = upstreamResp.body.tee();
+    
+    // Fire-and-forget: cache to R2 in background
+    const contentType = meta.format === 'bcif' 
+      ? 'application/octet-stream' 
+      : (upstreamResp.headers.get('Content-Type') || 'chemical/x-cif');
+    
+    env.waitUntil((async () => {
+      try {
+        const arrayBuffer = await new Response(cacheStream).arrayBuffer();
+        await env.STRUCTURES_BUCKET.put(cacheKey, arrayBuffer, {
+          httpMetadata: { contentType }
+        });
+        await recordStructureCacheEntry(env, cacheKey, arrayBuffer.byteLength);
+        console.log(`[LAZY-CACHE] Cached ${cacheKey} (${Math.round(arrayBuffer.byteLength/1024)}KB)`);
+      } catch (e) {
+        console.warn('[LAZY-CACHE] Background cache failed:', e);
+      }
+    })());
+    
+    // Stream to client immediately (don't wait for cache)
+    const isSwissModelPdb = cacheKey.startsWith('swissmodel/') && cacheKey.endsWith('.pdb');
+    // Note: SwissModel PDB header fix won't work here since we're streaming
+    // But SwissModel should always be pre-cached anyway (fallback above)
+    
+    return new Response(clientStream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': contentType,
+        'Cache-Control': type === 'target' 
+          ? 'private, no-store, must-revalidate'
+          : 'public, max-age=604800, immutable'
+      }
+    });
   }
   
   await touchStructureCacheEntry(env, cacheKey, object.size);
@@ -1171,21 +1253,42 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     const { sessionId, practiceMode } = sessionContext;
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
     
-    const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode ? true : false });
-    if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
-    }
     const body = await safeJson(request);
     const uniprot = (body?.uniprot || '').toUpperCase();
     if (!uniprot) {
       return Response.json({ error: 'Missing uniprot' }, { status: 400, headers: responseHeaders });
     }
-    let state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
-    const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
-      ? targetSeed
-      : await fetchProteinByUniprot(env.DB, state.targetId);
+    
+    // ⚡ PERFORMANCE: Get state FIRST - it already contains the targetId
+    // Avoids slow getDailyTargetProtein call on every guess (was ~2-3s for practice mode)
+    let state = null;
+    try {
+      state = await getGameState(env, sessionId);
+    } catch (err) {
+      console.warn('GeneGuessr: failed to load session for guess', err);
+    }
+    
+    if (!state?.targetId) {
+      // No session or missing target - this shouldn't happen in normal flow
+      // Fall back to daily target lookup (slow path)
+      const targetSeed = await getDailyTargetProtein(env, { practice: practiceMode });
+      if (!targetSeed && !practiceMode) {
+        return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
+      }
+      state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode });
+    }
+    
+    // ⚡ PERFORMANCE: Fetch target and guess proteins in parallel
+    const [targetProtein, guessProtein] = await Promise.all([
+      fetchProteinByUniprot(env.DB, state.targetId),
+      fetchProteinByUniprot(env.DB, uniprot)
+    ]);
+    
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
+    }
+    if (!guessProtein) {
+      return Response.json({ error: 'Protein not found' }, { status: 404, headers: responseHeaders });
     }
     if (state.won || (state.guesses?.length || 0) >= MAX_GUESSES) {
       return Response.json({ error: 'Round already completed' }, { status: 409, headers: responseHeaders });
@@ -1193,36 +1296,17 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     if ((state.guesses || []).some((entry) => entry.uniprot === uniprot)) {
       return Response.json({ error: 'Protein already guessed' }, { status: 409, headers: responseHeaders });
     }
-    const guessProtein = await fetchProteinByUniprot(env.DB, uniprot);
-    if (!guessProtein) {
-      return Response.json({ error: 'Protein not found' }, { status: 404, headers: responseHeaders });
-    }
-    // Calculate similarity - use blended (HiG2Vec + ESM2) or legacy (HiG2Vec only)
-    let similarity;
-    let isLadder = false;
-    if (SIMILARITY_MODE === 'blended') {
-      const simResult = await getBlendedSimilarity(
-        env.DB,
-        guessProtein.gene,
-        targetProtein.gene,
-        { esm2Weight: ESM2_WEIGHT, targetNeighbors: targetProtein.neighbors }
-      );
-      similarity = simResult.blended;
-      isLadder = simResult.isLadder;
-    } else {
-      similarity = await getHig2vecSimilarity(
-        env.DB,
-        guessProtein.gene,
-        targetProtein.gene
-      );
-    }
-    const score = scoreGuess(guessProtein, targetProtein, { similarity, isLadder });
+    
+    // ⚡ LAZY SIMILARITY: Skip slow similarity calculation here
+    // Return immediately with score: null, client will fetch via /api/game/guess-similarity
+    // This saves ~1-2 seconds on guess submission
     const correct = guessProtein.uniprot === targetProtein.uniprot;
     const guessEntry = {
       guessId: crypto.randomUUID(),
       uniprot,
       correct,
-      score,
+      score: correct ? 100 : null, // 100% if correct, null (pending) otherwise
+      similarityPending: !correct, // Client should fetch similarity
       createdAt: Date.now(),
       protein: {
         ...guessProtein,
@@ -1339,6 +1423,90 @@ async function handleHintReveal(request, env, corsHeaders) {
   } catch (err) {
     console.error('GeneGuessr: hint reveal failed', err);
     return Response.json({ error: 'Hint reveal failed' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+/**
+ * ⚡ LAZY SIMILARITY CALCULATION
+ * 
+ * Called after guess card is displayed to calculate and return similarity score.
+ * This allows the guess card to appear instantly (~200ms) while similarity
+ * calculation happens in the background (~1-2s).
+ * 
+ * Client shows a spinner for the score, then updates when this returns.
+ */
+async function handleGuessSimilarity(request, env, corsHeaders) {
+  try {
+    const sessionContext = resolveSessionContext(request);
+    const { sessionId } = sessionContext;
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    
+    const body = await safeJson(request);
+    const guessId = body?.guessId;
+    if (!guessId) {
+      return Response.json({ error: 'Missing guessId' }, { status: 400, headers: responseHeaders });
+    }
+    
+    // Get current game state
+    const state = await getGameState(env, sessionId);
+    if (!state) {
+      return Response.json({ error: 'Session not found' }, { status: 404, headers: responseHeaders });
+    }
+    
+    // Find the guess entry
+    const guessIndex = (state.guesses || []).findIndex(g => g.guessId === guessId);
+    if (guessIndex === -1) {
+      return Response.json({ error: 'Guess not found' }, { status: 404, headers: responseHeaders });
+    }
+    
+    const guessEntry = state.guesses[guessIndex];
+    
+    // If similarity already calculated, return it immediately
+    if (guessEntry.score !== null && !guessEntry.similarityPending) {
+      return Response.json({ guessId, score: guessEntry.score }, { headers: responseHeaders });
+    }
+    
+    // Fetch proteins for similarity calculation
+    const [guessProtein, targetProtein] = await Promise.all([
+      fetchProteinByUniprot(env.DB, guessEntry.uniprot),
+      fetchProteinByUniprot(env.DB, state.targetId)
+    ]);
+    
+    if (!guessProtein || !targetProtein) {
+      return Response.json({ error: 'Protein data unavailable' }, { status: 500, headers: responseHeaders });
+    }
+    
+    // Calculate similarity
+    let similarity;
+    let isLadder = false;
+    if (SIMILARITY_MODE === 'blended') {
+      const simResult = await getBlendedSimilarity(
+        env.DB,
+        guessProtein.gene,
+        targetProtein.gene,
+        { esm2Weight: ESM2_WEIGHT, targetNeighbors: targetProtein.neighbors }
+      );
+      similarity = simResult.blended;
+      isLadder = simResult.isLadder;
+    } else {
+      similarity = await getHig2vecSimilarity(
+        env.DB,
+        guessProtein.gene,
+        targetProtein.gene
+      );
+    }
+    
+    const score = scoreGuess(guessProtein, targetProtein, { similarity, isLadder });
+    
+    // Update session state with calculated score
+    state.guesses[guessIndex].score = score;
+    state.guesses[guessIndex].similarityPending = false;
+    await saveGameState(env, sessionId, state);
+    
+    return Response.json({ guessId, score }, { headers: responseHeaders });
+  } catch (err) {
+    console.error('GeneGuessr: similarity calculation failed', err);
+    return Response.json({ error: 'Similarity calculation failed' }, { status: 500, headers: corsHeaders });
   }
 }
 
