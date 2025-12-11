@@ -3028,7 +3028,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     } else if (options.restart && options.sameTarget) {
       console.log(`[B-206 DEBUG] Retry same target - viewer persists`);
     }
+    const preBootstrapTime = performance.now() - NAVIGATION_START;
+    console.log(`[TIMING] pre-bootstrap (navigation → bootstrap call start) | ${Math.round(preBootstrapTime)}ms`);
+    const bootstrapStart = performance.now();
     const payload = await fetchGameBootstrap(options);
+    const bootstrapDuration = performance.now() - bootstrapStart;
+    console.log(`[TIMING] bootstrap-api-call (network + worker compute) | ${Math.round(bootstrapDuration)}ms`);
     hydrateStateFromPayload(payload);
     if (options.practice === true) {
       gameState.practiceMode = true; // ensure client-side practice flag for off-record runs
