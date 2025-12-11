@@ -2629,6 +2629,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           });
           stopAutoRotationOnInteraction(viewer, containerId);
         }
+        // Recompute card heights now that the viewer has real dimensions
+        syncFeedbackContentHeights();
         timing('styling applied - DONE');
       };
       if (viewer.events?.loadComplete) {
