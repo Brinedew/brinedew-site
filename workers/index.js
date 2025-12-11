@@ -830,7 +830,10 @@ async function buildGuessStructureToken(protein, env, { origin }) {
     cacheKey: meta.r2Key,
     sizeBytes,
     cached, // Tell client whether it needs to trigger caching
-    upstreamUrl: cached ? undefined : meta.upstreamUrl, // Client can fetch directly if not cached
+    // ALWAYS send upstreamUrl so client can store it in IndexedDB.
+    // The client needs this if local blob is evicted and R2 cache expires later.
+    // Only matters for SWISS-MODEL and AlphaFold - PDB has predictable URLs.
+    upstreamUrl: meta.upstreamUrl || undefined,
     chainLabels,
     linkUrl: meta.linkUrl
   };

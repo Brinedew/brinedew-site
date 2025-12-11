@@ -4462,7 +4462,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         cacheKey: payload.guessStructureToken.cacheKey || null,
         sizeBytes: payload.guessStructureToken.sizeBytes || 0,
         chainLabels: payload.guessStructureToken.chainLabels || null,
-        linkUrl: payload.guessStructureToken.linkUrl || null
+        linkUrl: payload.guessStructureToken.linkUrl || null,
+        // CRITICAL: Store upstreamUrl for SWISS-MODEL and AlphaFold lazy loading.
+        // Without this, if the local blob is evicted and needs re-fetching,
+        // the worker can't derive the upstream URL (multi-isoform proteins, templates, etc.)
+        upstreamUrl: payload.guessStructureToken.upstreamUrl || null
       };
       structureTokenCache.set(key, guessInfo);
       console.log(`[TIMING] guess-submit | cached embedded guessStructureToken for ${key}`);
@@ -4474,7 +4478,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           cacheKey: guessInfo.cacheKey,
           sizeBytes: guessInfo.sizeBytes,
           chainLabels: guessInfo.chainLabels,
-          linkUrl: guessInfo.linkUrl
+          linkUrl: guessInfo.linkUrl,
+          // CRITICAL: Persist upstreamUrl so SWISS-MODEL and AlphaFold work across sessions.
+          upstreamUrl: guessInfo.upstreamUrl
         }).catch(() => {});
       }
     }
