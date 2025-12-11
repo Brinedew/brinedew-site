@@ -3750,6 +3750,19 @@
     spoilerDelegationBound = true;
   }
 
+  /**
+   * DO NOT TOUCH - CRITICAL PERFORMANCE PATH
+   * 
+   * This function reveals hints using SURGICAL DOM UPDATES ONLY.
+   * Calling render() here causes 3+ second delays because it triggers:
+   *   1. Full DOM re-render of all clue sections
+   *   2. setupStructureInteractions() - checks/initializes ALL 3D viewers
+   * 
+   * The server now returns { revealedHint: { id, text }, status: { hintBalance, revealedHints } }
+   * We just update the DOM directly without rebuilding everything.
+   * 
+   * See Linear issue B-205 for full context.
+   */
   async function activateSpoiler(redaction) {
     const hintId = redaction.dataset.hintId;
     if (!hintId || redaction.dataset.loading === 'true') {
@@ -3759,9 +3772,33 @@
     redaction.classList.add('pg-redaction-loading');
     try {
       const payload = await requestHintReveal(hintId);
-      hydrateStateFromPayload(payload);
-      updateHintDisplays();
-      render();
+      
+      // Surgical DOM update - no render(), no viewer touching
+      // Server returns { revealedHint: { id, text }, status: { hintBalance, revealedHints } }
+      if (payload.revealedHint && payload.revealedHint.text) {
+        // Update local state (for future renders if they happen)
+        if (payload.status) {
+          gameStatus = { ...gameStatus, ...payload.status };
+          gameState.revealedHints = payload.status.revealedHints || gameState.revealedHints;
+        }
+        
+        // Swap the redaction element with revealed text
+        // Structure: <span class="pg-section-entry"><span class="pg-redaction">...</span></span>
+        // We replace just the pg-redaction with the revealed text span
+        const revealedSpan = document.createElement('span');
+        revealedSpan.className = 'pg-revealed-text';
+        revealedSpan.textContent = payload.revealedHint.text;
+        redaction.replaceWith(revealedSpan);
+        
+        // Update hint balance display
+        updateHintDisplays();
+      } else {
+        // Fallback path for backward compatibility (slow)
+        console.warn('activateSpoiler: Falling back to full render() - API did not return revealedHint!');
+        hydrateStateFromPayload(payload);
+        updateHintDisplays();
+        render();
+      }
       
       // Show tutorial step 3 after first hint reveal
       if (window.GeneGuessrTutorial && window.GeneGuessrTutorial.maybeShowStep) {
