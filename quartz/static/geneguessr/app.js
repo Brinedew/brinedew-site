@@ -939,9 +939,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         if (structureBlob) {
           console.log(`[TIMING] token for ${key} | IndexedDB cache hit | ${(performance.now() - t0).toFixed(0)}ms | SKIPPED API`);
           // Reconstruct the URL from cacheKey (IndexedDB doesn't store URLs)
+          // Include upstream URL if present (needed for SWISS-MODEL lazy loading)
+          let reconstructedUrl = `${API_BASE}/api/structure-cached?key=${encodeURIComponent(cachedInfo.cacheKey)}`;
+          if (cachedInfo.upstreamUrl) {
+            reconstructedUrl += `&upstream=${encodeURIComponent(cachedInfo.upstreamUrl)}`;
+          }
           const hydratedInfo = {
             ...cachedInfo,
-            url: `${API_BASE}/api/structure-cached?key=${encodeURIComponent(cachedInfo.cacheKey)}`
+            url: reconstructedUrl
           };
           // Store in memory cache too for fast subsequent access
           structureTokenCache.set(key, hydratedInfo);
@@ -987,7 +992,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         cacheKey: data.cacheKey || null,
         sizeBytes: data.sizeBytes || 0,
         chainLabels: data.chainLabels || null,
-        linkUrl: data.linkUrl || null
+        linkUrl: data.linkUrl || null,
+        upstreamUrl: data.upstreamUrl || null  // Store for SWISS-MODEL lazy loading
       };
       structureTokenCache.set(key, info);
       
@@ -1001,7 +1007,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           cacheKey: info.cacheKey,
           sizeBytes: info.sizeBytes,
           chainLabels: info.chainLabels,
-          linkUrl: info.linkUrl
+          linkUrl: info.linkUrl,
+          upstreamUrl: info.upstreamUrl  // Store for SWISS-MODEL lazy loading
         };
         putCachedStructureInfo(key, cacheableInfo).catch(() => {});
       }

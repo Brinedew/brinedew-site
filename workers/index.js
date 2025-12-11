@@ -794,7 +794,11 @@ async function buildGuessStructureToken(protein, env, { origin }) {
     }
   } catch { /* ignore */ }
   
-  const structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
+  let structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
+  // For uncached SWISS-MODEL structures, include upstream URL so worker can fetch
+  if (!cached && meta.source === 'swissmodel' && meta.upstreamUrl) {
+    structureUrl += `&upstream=${encodeURIComponent(meta.upstreamUrl)}`;
+  }
   
   // Parse chain labels if present
   let chainLabels = null;
@@ -1001,15 +1005,16 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       const id = filename.replace(/\.(bcif|cif|pdb)$/, '');
       
       // Build upstream URL based on source
-      let upstreamUrl = null;
-      if (source === 'pdb') {
-        upstreamUrl = `https://models.rcsb.org/${id}.bcif`;
-      } else if (source === 'alphafold') {
-        upstreamUrl = `https://alphafold.ebi.ac.uk/files/${id}.cif`;
-      } else if (source === 'swissmodel') {
-        // SwissModel URLs are stored in DB, can't derive from key alone
-        // Fall back to 404 for now - these should be pre-cached
-        return Response.json({ error: 'SwissModel structure not cached' }, { status: 404, headers: corsHeaders });
+      let upstreamUrl = url.searchParams.get('upstream'); // Allow client to pass upstream URL
+      if (!upstreamUrl) {
+        if (source === 'pdb') {
+          upstreamUrl = `https://models.rcsb.org/${id}.bcif`;
+        } else if (source === 'alphafold') {
+          upstreamUrl = `https://alphafold.ebi.ac.uk/files/${id}.cif`;
+        } else if (source === 'swissmodel') {
+          // SwissModel URLs are custom and must be provided by client
+          return Response.json({ error: 'SwissModel structure requires upstream URL parameter' }, { status: 400, headers: corsHeaders });
+        }
       }
       
       meta = { r2Key: cacheKey, upstreamUrl, format, source };
