@@ -2485,6 +2485,9 @@
       return;
     }
 
+    // Start Mol* asset load in parallel with structure fetch to hide latency on first paint
+    const molstarAssetsPromise = ensureMolstarAssets();
+
     let moleculeId;
     if (structureInfo.sourceLabel === 'PDB') {
       const match = structureInfo.displayLabel.match(/PDB \(([^)]+)\)/);
@@ -2523,7 +2526,8 @@
           if (resp.ok) {
             const arrayBuffer = await resp.arrayBuffer();
             timing('fetched structure, caching...');
-            await putStructureInCache(cacheKey, arrayBuffer, arrayBuffer.byteLength);
+            // Do not block first render on IndexedDB write; fire-and-forget
+            putStructureInCache(cacheKey, arrayBuffer, arrayBuffer.byteLength).catch(() => {});
             const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
             finalStructureUrl = URL.createObjectURL(blob);
             blobUrlToRevoke = finalStructureUrl;
@@ -2537,22 +2541,10 @@
         timing('cache MISS - file too large to cache, using direct URL');
       }
     } else {
-      // No cacheKey (e.g., target structures) - fetch with cache bypass to get fresh data
-      // This is critical for SWISS-MODEL PDB files which get HEADER prepended at serve time
-      timing('no cacheKey - fetching with cache bypass...');
-      try {
-        const resp = await fetch(structureUrl, { cache: 'no-store' });
-        if (resp.ok) {
-          const arrayBuffer = await resp.arrayBuffer();
-          const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
-          finalStructureUrl = URL.createObjectURL(blob);
-          blobUrlToRevoke = finalStructureUrl;
-          timing('fetched fresh structure data');
-        }
-      } catch (err) {
-        console.warn('[Geneguessr] Failed to fetch structure with cache bypass:', err);
-        // Fall through to use original URL (will be cached by browser)
-      }
+      // No cacheKey (e.g., target structures) - use direct URL with cache-busting query param
+      // Server handles SWISS-MODEL HEADER injection, no need to pre-fetch blob client-side
+      timing('no cacheKey - using direct URL');
+      finalStructureUrl = structureUrl + (structureUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
     }
 
     // PDBe Molstar requires format: 'cif' with binary: true for BCIF files
@@ -2587,7 +2579,8 @@
     timing('UI updated, loading Mol* assets...');
 
     try {
-      await ensureMolstarAssets();
+      // Use the already-started Mol* load; it may already be warm after the structure fetch
+      await molstarAssetsPromise;
       timing('Mol* assets loaded');
       if (!window.PDBeMolstarPlugin) {
         throw new Error('PDBeMolstarPlugin missing after script load');
@@ -2708,9 +2701,12 @@
   const STATIC_BASE = resolveStaticBase();
 
   // Constants
-  const MOLSTAR_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js";
-  const MOLSTAR_FALLBACK_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js";
-  const MOLSTAR_CSS_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css";
+  // Pinned Mol* version for consistent load times (avoids slow @latest npm lookups)
+  // Version 3.8.0 is current latest (published Nov 2024, confirmed via npm)
+  const MOLSTAR_VERSION = "3.8.0";
+  const MOLSTAR_SCRIPT_URL = `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar-plugin.js`;
+  const MOLSTAR_FALLBACK_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.7.1/build/pdbe-molstar-plugin.js";
+  const MOLSTAR_CSS_URL = `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar.css`;
   const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net";
   const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/";
   const DEFAULT_HINT_COST = 1;
@@ -3022,6 +3018,8 @@
     if (options.practice === true) {
       gameState.practiceMode = true; // ensure client-side practice flag for off-record runs
     }
+    // Preload Mol* assets in background - hides CDN latency before first viewer render
+    ensureMolstarAssets().catch(() => {});
     const tokenTasks = [];
     tokenTasks.push(ensureStructureTokenForTarget());
     tokenTasks.push(hydrateStructureTokensForGuesses(gameState.guesses));
