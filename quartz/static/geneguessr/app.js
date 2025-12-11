@@ -2976,6 +2976,12 @@
   }
 
   async function bootstrapGame(options = {}) {
+    // If restarting, clear the clue viewer tracking so it gets recreated with new target
+    // This fixes desync when ?restart=1 gives a new protein but same date (B-204 related)
+    if (options.restart) {
+      markViewerDirty('pg-clue-structure');
+      lastRenderedGameDate = null; // Force full re-render on next render()
+    }
     const payload = await fetchGameBootstrap(options);
     hydrateStateFromPayload(payload);
     if (options.practice === true) {
