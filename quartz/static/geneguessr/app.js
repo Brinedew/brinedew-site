@@ -1,3 +1,7 @@
+// ⚡ PERFORMANCE: Mark navigation start for pre-zero timing measurement
+const NAVIGATION_START = performance.now();
+console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
+
 /**
  * =============================================================
  * GeneGuessr - Daily Protein Guessing Game
@@ -2871,6 +2875,9 @@
     
     // ⚡ PERFORMANCE: Use embedded structure token from bootstrap (eliminates 3s API round-trip)
     if (payload.targetStructureToken && payload.targetStructureToken.url) {
+      const preZeroTime = performance.now() - NAVIGATION_START;
+      console.log(`[TIMING] pre-zero-time (navigation → first timing log) | ${Math.round(preZeroTime)}ms`);
+      console.log('[TIMING] targetStructureInfo hydrated from bootstrap (skipped API call)');
       targetStructureInfo = {
         sourceLabel: payload.targetStructureToken.sourceLabel || 'Source unavailable',
         displayLabel: payload.targetStructureToken.displayLabel || payload.targetStructureToken.sourceLabel || 'Source unavailable',
@@ -4904,3 +4911,4 @@ https://brinedew.bio/apps/geneguessr/`;
   }
 
 })();
+
