@@ -861,9 +861,16 @@
   }
 
   async function ensureStructureTokenForTarget() {
+    // B-206: Early return uses cached structure info - may return stale structure after random restart
     if (targetStructureInfo && targetStructureInfo.url) {
+      console.log(`[B-206 DEBUG] ensureStructureTokenForTarget - using cached info:`, {
+        url: targetStructureInfo.url?.substring(0, 50),
+        sourceLabel: targetStructureInfo.sourceLabel,
+        cacheKey: targetStructureInfo.cacheKey
+      });
       return targetStructureInfo;
     }
+    console.log(`[B-206 DEBUG] ensureStructureTokenForTarget - fetching fresh token`);
     try {
       const practiceQuery = gameState.practiceMode ? '&practice=1' : '';
       const resp = await fetch(`${API_BASE}/api/structure-token?type=target${practiceQuery}`, {
@@ -881,6 +888,12 @@
       if (!data || !data.url) {
         throw new Error('Missing url in response');
       }
+      console.log(`[B-206 DEBUG] Structure token fetched:`, {
+        url: data.url?.substring(0, 50),
+        sourceLabel: data.sourceLabel,
+        cacheKey: data.cacheKey,
+        totalChainCount: data.totalChainCount
+      });
       targetStructureInfo = {
         sourceLabel: data.sourceLabel || 'Source unavailable',
         displayLabel: data.displayLabel || data.sourceLabel || 'Source unavailable',
@@ -2740,10 +2753,13 @@
   let gamePayload = null;
   let collapseDelegationBound = false;
   let spoilerDelegationBound = false;
-  // B-199: Track game session to detect when we need to recreate the clue viewer
-  // (NOT based on targetId which is null during active gameplay)
+  // B-199 + B-206: Track game session to detect when we need to recreate the clue viewer.
+  // Date alone is insufficient - same-day restarts with new random targets must trigger viewer rebuild.
+  // gameSessionKey = composite of date + restart counter + targetId (when available)
   let lastRenderedGameDate = null;
   let lastRenderedWasGameOver = false;
+  let lastRenderedSessionKey = null;
+  let practiceRestartCounter = 0; // Increments on each random practice restart
 
   function markViewerDirty(containerId) {
     if (!containerId) {
@@ -2844,7 +2860,7 @@
     if (!payload || !payload.status) {
       return;
     }
-    targetStructureInfo = null;
+    // B-206: Don't clear targetStructureInfo here - it's cleared in bootstrapGame for new random targets only
     // B-199: Removed lastRenderedTargetStructureId reset - we now track by date/gameOver state
     // The clue viewer persists for the entire game session, not based on targetId
     gamePayload = payload;
@@ -2853,6 +2869,10 @@
     guessEntries = Array.isArray(payload.guesses) ? payload.guesses : [];
     targetProtein = payload.clueTarget ? (cacheEnrichedProtein(payload.clueTarget) || payload.clueTarget) : null;
     targetReveal = payload.targetReveal ? (cacheEnrichedProtein(payload.targetReveal) || payload.targetReveal) : null;
+    
+    // B-206 DEBUG: Log target protein identity changes
+    const targetUniprot = targetProtein?.uniprot || targetReveal?.uniprot || 'unknown';
+    console.log(`[B-206 DEBUG] Hydrated state - target: ${targetUniprot}, date: ${payload.status.date}, guesses: ${guessEntries.length}`);
     targetRevealSections = payload.targetRevealSections || null;
     shareText = payload.shareText || '';
     gameState.date = gameStatus.date;
@@ -2976,6 +2996,7 @@
   }
 
   async function bootstrapGame(options = {}) {
+    // B-206 FIX: Distinguish between "retry same target" and "new random target" restarts.
     // Only clear the clue viewer when getting a NEW random target.
     // Do NOT clear when sameTarget=true (retry with same protein) - viewer stays valid.
     // 
@@ -2986,8 +3007,15 @@
     // This fixes desync when ?restart=1 gives a new protein but same date.
     const isNewRandomTarget = options.restart && !options.sameTarget;
     if (isNewRandomTarget) {
+      practiceRestartCounter++;
+      console.log(`[B-206 DEBUG] New random target restart #${practiceRestartCounter}`);
+      // Clear viewer tracking + structure token cache to force fresh load
       markViewerDirty('pg-clue-structure');
-      lastRenderedGameDate = null; // Force full re-render on next render()
+      targetStructureInfo = null; // Force ensureStructureTokenForTarget to re-fetch
+      lastRenderedGameDate = null; // Force full re-render
+      lastRenderedSessionKey = null; // Invalidate session key
+    } else if (options.restart && options.sameTarget) {
+      console.log(`[B-206 DEBUG] Retry same target - viewer persists`);
     }
     const payload = await fetchGameBootstrap(options);
     hydrateStateFromPayload(payload);
@@ -3392,12 +3420,12 @@
     }
 
     const existingViewer = document.getElementById('pg-clue-structure');
-    // B-199 FOREVER FIX: The clue structure shows the SAME protein for the entire game session.
+    // B-199 + B-206 FOREVER FIX: The clue structure shows the SAME protein for the entire game session.
     // We should NEVER destroy and recreate the 3D viewer mid-game. The only valid reasons to
     // recreate it are:
     //   1. Initial page load (no existing viewer)
     //   2. Transition to/from game over (different card layout)
-    //   3. New game session (different date)
+    //   3. New game session (different date OR different practice restart)
     //
     // CRITICAL: Do NOT use gameState.targetId here - it's intentionally null during active
     // gameplay to prevent answer spoofing. Previous attempts to use it caused the bug where
@@ -3406,14 +3434,33 @@
     // The correct approach: If the viewer DOM exists AND is in our renderedViewers set,
     // it's already showing the correct structure. Just update the hint sections surgically.
     //
-    // Related bugs: B-184, B-179, B-199
+    // B-206: Use gameSessionKey (date + restart counter) to detect new random practice rounds.
+    // Date alone is insufficient - same-day restarts with new targets must rebuild viewer.
+    //
+    // Related bugs: B-184, B-179, B-199, B-206
     
     const viewerAlreadyLoaded = existingViewer && renderedViewers.has('pg-clue-structure');
     const dateChanged = lastRenderedGameDate !== gameState.date;
     const transitioningToGameOver = gameOver && !lastRenderedWasGameOver;
     
+    // Compute session key: date + practice restart counter
+    const currentSessionKey = `${gameState.date}-${practiceRestartCounter}`;
+    const sessionChanged = lastRenderedSessionKey !== currentSessionKey;
+    
+    // B-206 DEBUG: Log render decision inputs
+    console.log(`[B-206 DEBUG] renderClueCard decision:`, {
+      viewerAlreadyLoaded,
+      dateChanged,
+      sessionChanged,
+      transitioningToGameOver,
+      currentSessionKey,
+      lastSessionKey: lastRenderedSessionKey,
+      restartCounter: practiceRestartCounter
+    });
+    
     // Surgical update: viewer exists and loaded, same game session, not transitioning to game over
-    if (viewerAlreadyLoaded && !dateChanged && !transitioningToGameOver) {
+    // B-206: Must check sessionChanged to catch same-day random restarts
+    if (viewerAlreadyLoaded && !dateChanged && !sessionChanged && !transitioningToGameOver) {
       const sectionsContainer = slot.querySelector('.pg-clue-sections');
       if (sectionsContainer) {
         sectionsContainer.innerHTML = renderClueSectionsHtml();
@@ -3423,7 +3470,9 @@
     }
     
     // Full re-render needed: new session, game over transition, or no existing viewer
-    if (viewerAlreadyLoaded && (dateChanged || transitioningToGameOver)) {
+    // B-206: Also mark dirty on sessionChanged (catches same-day random restarts)
+    if (viewerAlreadyLoaded && (dateChanged || sessionChanged || transitioningToGameOver)) {
+      console.log(`[B-206 DEBUG] Marking clue viewer dirty - dateChanged: ${dateChanged}, sessionChanged: ${sessionChanged}`);
       markViewerDirty('pg-clue-structure');
     }
     if (gameOver) {
@@ -3431,6 +3480,7 @@
     }
     slot.innerHTML = renderClueCard(gameOver);
     lastRenderedGameDate = gameState.date;
+    lastRenderedSessionKey = currentSessionKey; // B-206: Update session key
     lastRenderedWasGameOver = gameOver;
     ensureSpoilerDelegation();
   }
