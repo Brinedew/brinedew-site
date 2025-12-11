@@ -2822,12 +2822,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
   async function submitGuessRequest(uniprot) {
     const normalized = (uniprot || '').toUpperCase();
+    const t0 = performance.now();
     const response = await fetch(`${API_BASE}/api/game/guess${buildPracticeQuery()}`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uniprot: normalized })
     });
+    console.log(`[TIMING] guess-api-call (network + worker compute) | ${Math.round(performance.now() - t0)}ms`);
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error?.error || `Guess failed with status ${response.status}`);
