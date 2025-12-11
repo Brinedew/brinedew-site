@@ -4481,9 +4481,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     submitBtn.disabled = true;
     const previousLabel = submitBtn.textContent;
     submitBtn.textContent = 'Submitting...';
+    const guessT0 = performance.now();
 
     try {
+      console.log(`[TIMING] guess-submit | start`);
       const payload = await submitGuessRequest(uniprot);
+      console.log(`[TIMING] guess-submit | API returned | ${Math.round(performance.now() - guessT0)}ms`);
       // B-137 DEBUG removed - payload contains clueTarget (answer)
       hydrateStateFromPayload(payload);
 
@@ -4495,15 +4498,19 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       // Sections come from server now, no need for protein hydration
       if (!newGuess?.sections) {
         console.warn('[Geneguessr] Guess missing sections, forcing bootstrap refresh...');
+        const bootstrapT0 = performance.now();
         try {
           const bootstrapPayload = await fetchGameBootstrap();
+          console.log(`[TIMING] guess-submit | bootstrap fallback | ${Math.round(performance.now() - bootstrapT0)}ms`);
           hydrateStateFromPayload(bootstrapPayload);
         } catch (err) {
           console.error('[Geneguessr] Bootstrap fallback failed', err);
         }
       }
 
+      console.log(`[TIMING] guess-submit | render() start | ${Math.round(performance.now() - guessT0)}ms`);
       render();
+      console.log(`[TIMING] guess-submit | render() done | ${Math.round(performance.now() - guessT0)}ms`);
       const tokenTasks = [ensureStructureTokenForProtein(uniprot)];
       const reachedEndOfRound = gameState.won || gameState.guesses.length >= gameState.maxGuesses;
       if (reachedEndOfRound && targetReveal?.uniprot) {
