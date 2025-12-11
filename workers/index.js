@@ -711,6 +711,7 @@ async function handleStructureToken(request, env, corsHeaders) {
       // Try to get target from session state first
       try {
         const state = await getGameState(env, sessionId);
+        console.log(`[B-206] structure-token: sessionId=${sessionId}, targetId=${state?.targetId}`);
         if (state?.targetId) {
           protein = await fetchProteinByUniprot(env.DB, state.targetId);
         }
@@ -988,6 +989,7 @@ async function handleGameBootstrap(request, env, corsHeaders) {
     
     // Determine if session needs reset (uses pre-fetched existingState)
     const state = await ensureSessionForTodayWithState(env, sessionId, targetSeed, existingState, { practiceMode, forceReset: practiceRestart });
+    console.log(`[B-206] bootstrap: sessionId=${sessionId}, forceReset=${practiceRestart}, targetId=${state.targetId}, seedId=${targetSeed?.uniprot}`);
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
       : await fetchProteinByUniprot(env.DB, state.targetId);
