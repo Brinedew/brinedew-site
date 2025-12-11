@@ -4490,6 +4490,37 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       // B-137 DEBUG removed - payload contains clueTarget (answer)
       hydrateStateFromPayload(payload);
 
+      // ⚡ PERFORMANCE: Cache embedded guess structure token immediately
+      // This eliminates ~3s API round-trip in ensureStructureTokenForProtein
+      if (payload.guessStructureToken && payload.guessStructureToken.url) {
+        const key = uniprot.toUpperCase();
+        const guessInfo = {
+          sourceLabel: payload.guessStructureToken.sourceLabel || 'Source unavailable',
+          displayLabel: payload.guessStructureToken.displayLabel || payload.guessStructureToken.sourceLabel || 'Source unavailable',
+          format: payload.guessStructureToken.format || 'cif',
+          url: payload.guessStructureToken.url,
+          cacheKey: payload.guessStructureToken.cacheKey || null,
+          sizeBytes: payload.guessStructureToken.sizeBytes || 0,
+          chainLabels: payload.guessStructureToken.chainLabels || null,
+          linkUrl: payload.guessStructureToken.linkUrl || null
+        };
+        structureTokenCache.set(key, guessInfo);
+        console.log(`[TIMING] guess-submit | cached embedded guessStructureToken for ${key}`);
+        
+        // Also persist to IndexedDB for future sessions
+        if (guessInfo.cacheKey) {
+          putCachedStructureInfo(key, {
+            sourceLabel: guessInfo.sourceLabel,
+            displayLabel: guessInfo.displayLabel,
+            format: guessInfo.format,
+            cacheKey: guessInfo.cacheKey,
+            sizeBytes: guessInfo.sizeBytes,
+            chainLabels: guessInfo.chainLabels,
+            linkUrl: guessInfo.linkUrl
+          }).catch(() => {});
+        }
+      }
+
       // B-137 Fix: Ensure data is populated fast.
       // If the guess payload didn't contain sections,
       // we force a full bootstrap refresh.

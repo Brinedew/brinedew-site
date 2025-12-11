@@ -764,6 +764,64 @@ async function buildTargetStructureToken(protein, env, { practiceMode, origin })
   };
 }
 
+/**
+ * Build structure token for a guess protein.
+ * Returns data suitable for client-side IndexedDB caching.
+ * Returns null if structure unavailable.
+ */
+async function buildGuessStructureToken(protein, env, { origin }) {
+  if (!protein) return null;
+  
+  const meta = await getCanonicalStructureMeta(protein, env);
+  if (!meta) {
+    console.warn('GeneGuessr: buildGuessStructureToken - no structure meta for', protein.uniprot);
+    return null;
+  }
+  
+  const cached = await ensureStructureCached(env, meta, { proteinId: protein.uniprot });
+  if (!cached) {
+    console.warn('GeneGuessr: buildGuessStructureToken - failed to cache structure for', protein.uniprot);
+    return null;
+  }
+  
+  // Get file size for client-side cache decisions
+  let sizeBytes = 0;
+  try {
+    const head = await env.STRUCTURES_BUCKET.head(meta.r2Key);
+    sizeBytes = head?.size || 0;
+  } catch { /* ignore */ }
+  
+  const structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
+  
+  // Parse chain labels if present
+  let chainLabels = null;
+  const chainLabelsRaw = meta.source === 'alphafold' 
+    ? null
+    : (meta.source === 'swissmodel' 
+      ? protein.swissmodel_chain_labels 
+      : protein.pdb_chain_labels);
+  if (chainLabelsRaw) {
+    try {
+      chainLabels = typeof chainLabelsRaw === 'string'
+        ? JSON.parse(chainLabelsRaw)
+        : chainLabelsRaw;
+    } catch (e) {
+      console.warn('Failed to parse chain_labels for guess', e);
+    }
+  }
+  
+  return {
+    sourceLabel: meta.shortLabel,
+    displayLabel: meta.displayLabel,
+    format: meta.format || 'cif',
+    url: structureUrl,
+    cacheKey: meta.r2Key,
+    sizeBytes,
+    chainLabels,
+    linkUrl: meta.linkUrl
+  };
+}
+
 async function handleStructureToken(request, env, corsHeaders) {
   try {
     const url = new URL(request.url);
@@ -1177,8 +1235,20 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     } else {
       state.hintBalance = (state.hintBalance || 0) + HINT_REWARD_ON_INCORRECT;
     }
-    await saveGameState(env, sessionId, state);
+    
+    // ⚡ PERFORMANCE: Build guess structure token in parallel with saveGameState
+    // This eliminates ~3s API round-trip on client after guess submission
+    const url = new URL(request.url);
+    const [, guessStructureToken] = await Promise.all([
+      saveGameState(env, sessionId, state),
+      buildGuessStructureToken(guessProtein, env, { origin: url.origin })
+    ]);
+    
     const payload = buildGamePayload(state, targetProtein, { includeProteins: true });
+    // Embed structure token so client can cache it immediately
+    if (guessStructureToken) {
+      payload.guessStructureToken = guessStructureToken;
+    }
     return Response.json(payload, { headers: responseHeaders });
   } catch (err) {
     console.error('GeneGuessr: guess submission failed', err);
