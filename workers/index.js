@@ -750,7 +750,9 @@ async function handleStructureToken(request, env, corsHeaders) {
       } catch { /* ignore */ }
       
       // SECURITY: Use opaque URL for target - no key visible to client
-      const structureUrl = `${url.origin}/api/structure-cached?type=target`;
+      // B-206 FIX: Include practice param so structure-cached reads correct session
+      const practiceParam = practiceMode ? '&practice=1' : '';
+      const structureUrl = `${url.origin}/api/structure-cached?type=target${practiceParam}`;
     
     // Parse chain labels to create redacted version for target
     // SECURITY: Only send chain IDs + is_target flag, never gene names
