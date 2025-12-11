@@ -137,7 +137,8 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
     : null;
   const isLadder = Boolean(options.isLadder);
   const domainIntersection = guessProtein.domains.filter((domain) => targetProtein.domains.includes(domain));
-  const lengthBinMatch = determineLengthBin(guessProtein.length) === determineLengthBin(targetProtein.length);
+  // Use 10% tolerance for length matching instead of bins - more precise for gameplay (B-204)
+  const lengthBinMatch = isLengthWithinTolerance(targetProtein.length, guessProtein.length);
   const tmMatch = Boolean(guessProtein.tmh) === Boolean(targetProtein.tmh);
   const secretedMatch = Boolean(guessProtein.secreted) === Boolean(targetProtein.secreted);
   const tissueMatch = Boolean(guessProtein.tissue?.label) && guessProtein.tissue.label === targetProtein.tissue.label;
@@ -191,9 +192,7 @@ export function collectMatchedHintTexts(target, guessProtein, score) {
   if (propertyMatches.length) {
     matches.properties = propertyMatches;
   }
-  // Use lengthBinMatch logic (same as scoring) instead of isLengthWithinTolerance
-  // This ensures length highlight on feedback card matches length reveal on clue card (B-204)
-  if (score?.lengthBinMatch) {
+  if (isLengthWithinTolerance(target?.length, guessProtein?.length)) {
     matches.length = [`${target.length} amino acid residues`];
   }
   // CATH architecture matches (intersection of arrays)
