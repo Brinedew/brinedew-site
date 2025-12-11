@@ -1039,8 +1039,9 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
           // PDB: predictable pattern from RCSB ModelServer
           upstreamUrl = `https://models.rcsb.org/${id}.bcif`;
         } else if (source === 'alphafold') {
-          // AlphaFold: predictable pattern from EBI
-          upstreamUrl = `https://alphafold.ebi.ac.uk/files/${id}.cif`;
+          // AlphaFold: format is AF-{UNIPROT}-F1-model_v6.{ext}
+          // But the key is alphafold/{UNIPROT}.{ext}, so we need to construct the full URL
+          upstreamUrl = `https://alphafold.ebi.ac.uk/files/AF-${id}-F1-model_v6.${format === 'pdb' ? 'pdb' : 'cif'}`;
         } else if (source === 'swissmodel') {
           // SWISS-MODEL: NO predictable pattern - URL must come from client
           // If we get here, the client didn't pass upstream param (old client code)
