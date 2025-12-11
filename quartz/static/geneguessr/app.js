@@ -2776,6 +2776,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
   let lastRenderedWasGameOver = false;
   let lastRenderedSessionKey = null;
   let practiceRestartCounter = 0; // Increments on each random practice restart
+  
+  // WebGL context limit enforcement
+  const MAX_EXPANDED_GUESS_CARDS = 8; // Keep under browser limit (typically 16 contexts)
+  const expandedGuessCardsOrder = []; // Track expansion order for auto-collapse
 
   function markViewerDirty(containerId) {
     if (!containerId) {
@@ -3884,15 +3888,37 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     const structureContainer = card.querySelector('[id$="-structure"]');
     if (structureContainer) {
       const viewerId = structureContainer.id;
+      const cardId = card.id;
       
       if (!newExpanded) {
-        // Collapsing: dispose viewer to free WebGL context
+        // Collapsing: dispose viewer and remove from expansion tracking
         disposeViewer(viewerId);
+        const idx = expandedGuessCardsOrder.indexOf(cardId);
+        if (idx !== -1) {
+          expandedGuessCardsOrder.splice(idx, 1);
+        }
       } else {
-        // Expanding: reload viewer if it was disposed
+        // Expanding: enforce hard cap by auto-collapsing oldest card if at limit
+        if (expandedGuessCardsOrder.length >= MAX_EXPANDED_GUESS_CARDS) {
+          const oldestCardId = expandedGuessCardsOrder.shift();
+          const oldestCard = document.getElementById(oldestCardId);
+          if (oldestCard && oldestCard !== card) {
+            const oldestToggle = oldestCard.querySelector('.pg-collapse-toggle');
+            if (oldestToggle) {
+              // Programmatically collapse the oldest card
+              console.log(`[GeneGuessr] Auto-collapsing ${oldestCardId} to enforce WebGL context limit`);
+              toggleFeedbackCard(oldestToggle);
+            }
+          }
+        }
+        
+        // Track this card's expansion
+        if (!expandedGuessCardsOrder.includes(cardId)) {
+          expandedGuessCardsOrder.push(cardId);
+        }
+        
+        // Reload viewer if it was disposed
         if (!renderedViewers.has(viewerId)) {
-          // Find the guess data to reload structure
-          const cardId = card.id;
           const guess = gameState.guesses.find(g => `guess-card-${g.guessId}` === cardId);
           if (guess) {
             loadStructureViewerInContainer(structureContainer, { uniprot: guess.uniprot }).catch((err) => {
