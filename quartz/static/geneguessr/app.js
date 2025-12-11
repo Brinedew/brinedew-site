@@ -2976,9 +2976,16 @@
   }
 
   async function bootstrapGame(options = {}) {
-    // If restarting, clear the clue viewer tracking so it gets recreated with new target
-    // This fixes desync when ?restart=1 gives a new protein but same date (B-204 related)
-    if (options.restart) {
+    // Only clear the clue viewer when getting a NEW random target.
+    // Do NOT clear when sameTarget=true (retry with same protein) - viewer stays valid.
+    // 
+    // Two distinct flows:
+    //   - "Try Again" (sameTarget: true): Keep same protein, clear guesses only. Viewer persists.
+    //   - "Random Practice" (restart without sameTarget): New protein. Viewer must be recreated.
+    //
+    // This fixes desync when ?restart=1 gives a new protein but same date.
+    const isNewRandomTarget = options.restart && !options.sameTarget;
+    if (isNewRandomTarget) {
       markViewerDirty('pg-clue-structure');
       lastRenderedGameDate = null; // Force full re-render on next render()
     }
