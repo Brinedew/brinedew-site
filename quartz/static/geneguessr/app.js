@@ -4481,7 +4481,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     // ⚡ LAZY SIMILARITY: Fetch similarity for pending guesses in background
     // This allows the card to appear instantly while we calculate similarity
     const pendingGuess = gameState.guesses.find(g => g.uniprot === uniprot && g.similarityPending);
+    console.log(`[TIMING] similarity check | uniprot=${uniprot}, found=${!!pendingGuess}, similarityPending=${pendingGuess?.similarityPending}, score=${pendingGuess?.score}`);
     if (pendingGuess && pendingGuess.guessId) {
+      console.log(`[TIMING] fetching similarity for guessId=${pendingGuess.guessId}`);
       fetchGuessSimilarity(pendingGuess.guessId)
         .then(result => {
           if (result && typeof result.score === 'number') {
