@@ -419,6 +419,7 @@ function buildProteinSections(protein, options = {}) {
     });
   }
   
+  // Pathways are pre-filtered and sorted by FDR in step_3_merge_columns.py
   const formattedReactome = reactomePaths
     .map((entry) => {
       if (!entry) return '';
