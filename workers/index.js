@@ -795,7 +795,11 @@ async function buildGuessStructureToken(protein, env, { origin }) {
   } catch { /* ignore */ }
   
   let structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`;
-  // For uncached SWISS-MODEL structures, include upstream URL so worker can fetch
+  // CRITICAL: For SWISS-MODEL, we MUST include the upstream URL in the request.
+  // Unlike PDB/AlphaFold, SWISS-MODEL URLs are custom per-protein and stored in the DB.
+  // The worker cannot derive them from the r2Key pattern alone.
+  // Without this, guess cards with SWISS-MODEL structures return 404.
+  // Only needed when not cached - if already in R2, worker serves directly.
   if (!cached && meta.source === 'swissmodel' && meta.upstreamUrl) {
     structureUrl += `&upstream=${encodeURIComponent(meta.upstreamUrl)}`;
   }
@@ -938,6 +942,25 @@ async function handleStructureToken(request, env, corsHeaders) {
  * Direct structure fetch by cacheKey (r2Key).
  * Returns structure with long cache headers since the URL is stable.
  */
+/**
+ * Serves structure files from R2 cache with lazy upstream fetching.
+ * 
+ * CRITICAL ARCHITECTURE DECISIONS (do not revert without understanding):
+ * 
+ * 1. Function signature must include `ctx` (execution context) - NOT just `env`.
+ *    The `ctx.waitUntil()` API is on the execution context, not environment bindings.
+ *    Using `env.waitUntil()` causes "waitUntil is not a function" crashes.
+ *    See: https://developers.cloudflare.com/workers/runtime-apis/context/
+ * 
+ * 2. SWISS-MODEL structures require `upstream` query parameter for lazy loading.
+ *    Unlike PDB (models.rcsb.org) and AlphaFold (alphafold.ebi.ac.uk) where URLs
+ *    can be derived from the r2Key pattern, SWISS-MODEL URLs are custom per-protein
+ *    and stored in the database. The client must pass the upstream URL explicitly.
+ * 
+ * 3. Lazy caching via ctx.waitUntil() is intentional for performance.
+ *    Structure files are cached to R2 in the background AFTER the response is sent.
+ *    This saves 2-4 seconds on first load vs blocking on R2 write.
+ */
 async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
   const url = new URL(request.url);
   let cacheKey = url.searchParams.get('key');
@@ -1005,14 +1028,22 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       const id = filename.replace(/\.(bcif|cif|pdb)$/, '');
       
       // Build upstream URL based on source
-      let upstreamUrl = url.searchParams.get('upstream'); // Allow client to pass upstream URL
+      // CRITICAL: Check for client-provided upstream URL FIRST.
+      // SWISS-MODEL URLs cannot be derived from r2Key - they're custom per-protein
+      // (e.g., https://swissmodel.expasy.org/repository/uniprot/Q8N2G8.pdb?template=7vka.1.A)
+      // The client gets this URL from buildGuessStructureToken which reads it from the database.
+      // PDB and AlphaFold have predictable URL patterns, so we can derive them from the key.
+      let upstreamUrl = url.searchParams.get('upstream');
       if (!upstreamUrl) {
         if (source === 'pdb') {
+          // PDB: predictable pattern from RCSB ModelServer
           upstreamUrl = `https://models.rcsb.org/${id}.bcif`;
         } else if (source === 'alphafold') {
+          // AlphaFold: predictable pattern from EBI
           upstreamUrl = `https://alphafold.ebi.ac.uk/files/${id}.cif`;
         } else if (source === 'swissmodel') {
-          // SwissModel URLs are custom and must be provided by client
+          // SWISS-MODEL: NO predictable pattern - URL must come from client
+          // If we get here, the client didn't pass upstream param (old client code)
           return Response.json({ error: 'SwissModel structure requires upstream URL parameter' }, { status: 400, headers: corsHeaders });
         }
       }
@@ -1044,6 +1075,9 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       ? 'application/octet-stream' 
       : (upstreamResp.headers.get('Content-Type') || 'chemical/x-cif');
     
+    // CRITICAL: Must use ctx.waitUntil(), NOT env.waitUntil()
+    // `ctx` = execution context (has waitUntil), `env` = environment bindings (does not)
+    // Using env.waitUntil() causes \"waitUntil is not a function\" error and 500 response
     ctx.waitUntil((async () => {
       try {
         const arrayBuffer = await new Response(cacheStream).arrayBuffer();

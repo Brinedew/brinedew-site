@@ -939,7 +939,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         if (structureBlob) {
           console.log(`[TIMING] token for ${key} | IndexedDB cache hit | ${(performance.now() - t0).toFixed(0)}ms | SKIPPED API`);
           // Reconstruct the URL from cacheKey (IndexedDB doesn't store URLs)
-          // Include upstream URL if present (needed for SWISS-MODEL lazy loading)
+          // CRITICAL: Include upstream URL for SWISS-MODEL structures.
+          // SWISS-MODEL URLs are custom per-protein (stored in DB), unlike PDB/AlphaFold
+          // which have predictable URL patterns. The worker needs this to lazy-fetch
+          // from SWISS-MODEL's server if not already cached in R2.
           let reconstructedUrl = `${API_BASE}/api/structure-cached?key=${encodeURIComponent(cachedInfo.cacheKey)}`;
           if (cachedInfo.upstreamUrl) {
             reconstructedUrl += `&upstream=${encodeURIComponent(cachedInfo.upstreamUrl)}`;
@@ -993,7 +996,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         sizeBytes: data.sizeBytes || 0,
         chainLabels: data.chainLabels || null,
         linkUrl: data.linkUrl || null,
-        upstreamUrl: data.upstreamUrl || null  // Store for SWISS-MODEL lazy loading
+        // CRITICAL: Store upstreamUrl for SWISS-MODEL lazy loading.
+        // SWISS-MODEL URLs are custom per-protein and cannot be derived from r2Key.
+        // This gets stored in IndexedDB so returning users can still lazy-fetch.
+        upstreamUrl: data.upstreamUrl || null
       };
       structureTokenCache.set(key, info);
       
@@ -1008,7 +1014,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           sizeBytes: info.sizeBytes,
           chainLabels: info.chainLabels,
           linkUrl: info.linkUrl,
-          upstreamUrl: info.upstreamUrl  // Store for SWISS-MODEL lazy loading
+          // CRITICAL: Persist upstreamUrl so SWISS-MODEL works across sessions.
+          // Without this, returning users would get 404 for SWISS-MODEL guess cards.
+          upstreamUrl: info.upstreamUrl
         };
         putCachedStructureInfo(key, cacheableInfo).catch(() => {});
       }
@@ -2636,7 +2644,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           });
           stopAutoRotationOnInteraction(viewer, containerId);
         }
-        // Recompute card heights now that the viewer has real dimensions
+        // CRITICAL: Recompute card heights AFTER viewer finishes loading.
+        // The CSS maxHeight is calculated before Mol* canvas has real dimensions.
+        // Without this call, the viewer gets clipped to 0px height and "disappears"
+        // after initial render. This was a major bug where viewers would flash
+        // briefly then vanish. The loadComplete event fires when canvas is ready.
         syncFeedbackContentHeights();
         timing('styling applied - DONE');
       };
