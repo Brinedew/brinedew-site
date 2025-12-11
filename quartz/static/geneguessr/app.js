@@ -2880,9 +2880,8 @@
     gameState.statsRecorded = false;
     gameState.revealedHints = Array.isArray(gameStatus.revealedHints) ? [...gameStatus.revealedHints] : [];
     
-    // B-206 DEBUG: Log target protein identity changes (after all state is hydrated)
-    const targetUniprot = targetProtein?.uniprot || targetReveal?.uniprot || 'unknown';
-    console.log(`[B-206 DEBUG] Hydrated state - target: ${targetUniprot}, date: ${payload.status.date}, guesses: ${guessEntries.length}`);
+    // B-206 DEBUG: Log state changes (without exposing target)
+    console.log(`[B-206 DEBUG] Hydrated state - date: ${payload.status.date}, guesses: ${guessEntries.length}`);
     
     updateHintDisplays();
   }
@@ -4385,7 +4384,7 @@
 
     try {
       const payload = await submitGuessRequest(uniprot);
-      console.log('[B-137 DEBUG] submitGuess payload:', JSON.stringify(payload, null, 2));
+      // B-137 DEBUG removed - payload contains clueTarget (answer)
       hydrateStateFromPayload(payload);
 
       render();
@@ -4467,7 +4466,7 @@
 
     try {
       const payload = await submitGuessRequest(uniprot);
-      console.log('[B-137 DEBUG] submitGuess payload:', JSON.stringify(payload, null, 2));
+      // B-137 DEBUG removed - payload contains clueTarget (answer)
       hydrateStateFromPayload(payload);
 
       // B-137 Fix: Ensure data is populated fast.
