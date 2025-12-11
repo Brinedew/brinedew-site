@@ -4388,6 +4388,84 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     submitGuessWithUniprot(normalizedId);
   }
 
+  async function handleGuessPayload(uniprot, payload, guessStartTime) {
+    // Update game state
+    hydrateStateFromPayload(payload);
+
+    // Cache embedded guess structure token if present to skip /api/structure-token
+    if (payload.guessStructureToken && payload.guessStructureToken.url) {
+      const key = uniprot.toUpperCase();
+      const guessInfo = {
+        sourceLabel: payload.guessStructureToken.sourceLabel || 'Source unavailable',
+        displayLabel: payload.guessStructureToken.displayLabel || payload.guessStructureToken.sourceLabel || 'Source unavailable',
+        format: payload.guessStructureToken.format || 'cif',
+        url: payload.guessStructureToken.url,
+        cacheKey: payload.guessStructureToken.cacheKey || null,
+        sizeBytes: payload.guessStructureToken.sizeBytes || 0,
+        chainLabels: payload.guessStructureToken.chainLabels || null,
+        linkUrl: payload.guessStructureToken.linkUrl || null
+      };
+      structureTokenCache.set(key, guessInfo);
+      console.log(`[TIMING] guess-submit | cached embedded guessStructureToken for ${key}`);
+      if (guessInfo.cacheKey) {
+        putCachedStructureInfo(key, {
+          sourceLabel: guessInfo.sourceLabel,
+          displayLabel: guessInfo.displayLabel,
+          format: guessInfo.format,
+          cacheKey: guessInfo.cacheKey,
+          sizeBytes: guessInfo.sizeBytes,
+          chainLabels: guessInfo.chainLabels,
+          linkUrl: guessInfo.linkUrl
+        }).catch(() => {});
+      }
+    }
+
+    // Ensure sections are present; otherwise refresh via bootstrap
+    let newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
+    if (!newGuess?.sections) {
+      console.warn('[Geneguessr] Guess missing sections, forcing bootstrap refresh...');
+      const bootstrapT0 = performance.now();
+      try {
+        const bootstrapPayload = await fetchGameBootstrap();
+        console.log(`[TIMING] guess-submit | bootstrap fallback | ${Math.round(performance.now() - bootstrapT0)}ms`);
+        hydrateStateFromPayload(bootstrapPayload);
+      } catch (err) {
+        console.error('[Geneguessr] Bootstrap fallback failed', err);
+      }
+    }
+
+    if (guessStartTime != null) {
+      console.log(`[TIMING] guess-submit | render() start | ${Math.round(performance.now() - guessStartTime)}ms`);
+    }
+    render();
+    if (guessStartTime != null) {
+      console.log(`[TIMING] guess-submit | render() done | ${Math.round(performance.now() - guessStartTime)}ms`);
+    }
+
+    // Kick off structure token hydration (guess + optional target reveal)
+    const tokenTasks = [ensureStructureTokenForProtein(uniprot)];
+    const reachedEndOfRound = gameState.won || gameState.guesses.length >= gameState.maxGuesses;
+    if (reachedEndOfRound && targetReveal?.uniprot) {
+      tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
+    }
+    Promise.allSettled(tokenTasks)
+      .then(() => {
+        requestAnimationFrame(() => setupStructureInteractions());
+      })
+      .catch((err) => {
+        console.warn('Geneguessr: structure token fetch after guess failed', err);
+      });
+
+    // Reset input + tutorial hint
+    const inputEl = document.getElementById('pg-input');
+    if (inputEl) {
+      inputEl.value = '';
+    }
+    if (window.GeneGuessrTutorial && window.GeneGuessrTutorial.maybeShowStep) {
+      window.GeneGuessrTutorial.maybeShowStep(2);
+    }
+  }
+
   async function submitGuessWithUniprot(uniprot) {
     if (!uniprot) {
       alert('Please select a protein from the suggestions.');
@@ -4402,20 +4480,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
     try {
       const payload = await submitGuessRequest(uniprot);
-      // B-137 DEBUG removed - payload contains clueTarget (answer)
-      hydrateStateFromPayload(payload);
-
-      render();
-
-      const inputEl = document.getElementById('pg-input');
-      if (inputEl) {
-        inputEl.value = '';
-      }
-      
-      // Show tutorial step 2 after first guess
-      if (window.GeneGuessrTutorial && window.GeneGuessrTutorial.maybeShowStep) {
-        window.GeneGuessrTutorial.maybeShowStep(2);
-      }
+      await handleGuessPayload(uniprot, payload, null);
     } catch (err) {
       console.error('[Geneguessr] Guess submission failed', err);
       alert('Failed to submit guess. Please try again.');
@@ -4487,73 +4552,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       console.log(`[TIMING] guess-submit | start`);
       const payload = await submitGuessRequest(uniprot);
       console.log(`[TIMING] guess-submit | API returned | ${Math.round(performance.now() - guessT0)}ms`);
-      // B-137 DEBUG removed - payload contains clueTarget (answer)
-      hydrateStateFromPayload(payload);
-
-      // ⚡ PERFORMANCE: Cache embedded guess structure token immediately
-      // This eliminates ~3s API round-trip in ensureStructureTokenForProtein
-      if (payload.guessStructureToken && payload.guessStructureToken.url) {
-        const key = uniprot.toUpperCase();
-        const guessInfo = {
-          sourceLabel: payload.guessStructureToken.sourceLabel || 'Source unavailable',
-          displayLabel: payload.guessStructureToken.displayLabel || payload.guessStructureToken.sourceLabel || 'Source unavailable',
-          format: payload.guessStructureToken.format || 'cif',
-          url: payload.guessStructureToken.url,
-          cacheKey: payload.guessStructureToken.cacheKey || null,
-          sizeBytes: payload.guessStructureToken.sizeBytes || 0,
-          chainLabels: payload.guessStructureToken.chainLabels || null,
-          linkUrl: payload.guessStructureToken.linkUrl || null
-        };
-        structureTokenCache.set(key, guessInfo);
-        console.log(`[TIMING] guess-submit | cached embedded guessStructureToken for ${key}`);
-        
-        // Also persist to IndexedDB for future sessions
-        if (guessInfo.cacheKey) {
-          putCachedStructureInfo(key, {
-            sourceLabel: guessInfo.sourceLabel,
-            displayLabel: guessInfo.displayLabel,
-            format: guessInfo.format,
-            cacheKey: guessInfo.cacheKey,
-            sizeBytes: guessInfo.sizeBytes,
-            chainLabels: guessInfo.chainLabels,
-            linkUrl: guessInfo.linkUrl
-          }).catch(() => {});
-        }
-      }
-
-      // B-137 Fix: Ensure data is populated fast.
-      // If the guess payload didn't contain sections,
-      // we force a full bootstrap refresh.
-      let newGuess = gameState.guesses.find(g => g.uniprot === uniprot);
-
-      // Sections come from server now, no need for protein hydration
-      if (!newGuess?.sections) {
-        console.warn('[Geneguessr] Guess missing sections, forcing bootstrap refresh...');
-        const bootstrapT0 = performance.now();
-        try {
-          const bootstrapPayload = await fetchGameBootstrap();
-          console.log(`[TIMING] guess-submit | bootstrap fallback | ${Math.round(performance.now() - bootstrapT0)}ms`);
-          hydrateStateFromPayload(bootstrapPayload);
-        } catch (err) {
-          console.error('[Geneguessr] Bootstrap fallback failed', err);
-        }
-      }
-
-      console.log(`[TIMING] guess-submit | render() start | ${Math.round(performance.now() - guessT0)}ms`);
-      render();
-      console.log(`[TIMING] guess-submit | render() done | ${Math.round(performance.now() - guessT0)}ms`);
-      const tokenTasks = [ensureStructureTokenForProtein(uniprot)];
-      const reachedEndOfRound = gameState.won || gameState.guesses.length >= gameState.maxGuesses;
-      if (reachedEndOfRound && targetReveal?.uniprot) {
-        tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
-      }
-      Promise.allSettled(tokenTasks)
-        .then(() => {
-          requestAnimationFrame(() => setupStructureInteractions());
-        })
-        .catch((err) => {
-          console.warn('Geneguessr: structure token fetch after guess failed', err);
-        });
+      await handleGuessPayload(uniprot, payload, guessT0);
     } catch (err) {
       console.error('Geneguessr: failed to submit guess', err);
       alert(err?.message || 'Failed to submit guess. Please try again.');
