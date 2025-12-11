@@ -191,7 +191,9 @@ export function collectMatchedHintTexts(target, guessProtein, score) {
   if (propertyMatches.length) {
     matches.properties = propertyMatches;
   }
-  if (isLengthWithinTolerance(target?.length, guessProtein?.length)) {
+  // Use lengthBinMatch logic (same as scoring) instead of isLengthWithinTolerance
+  // This ensures length highlight on feedback card matches length reveal on clue card (B-204)
+  if (score?.lengthBinMatch) {
     matches.length = [`${target.length} amino acid residues`];
   }
   // CATH architecture matches (intersection of arrays)
