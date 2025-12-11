@@ -2788,6 +2788,29 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     viewerChainComponentRefs.delete(containerId);
   }
 
+  /**
+   * Dispose a Mol* viewer and free its WebGL context.
+   * Called when guess cards collapse to stay under browser WebGL limits.
+   */
+  function disposeViewer(containerId) {
+    if (!containerId) {
+      return;
+    }
+    
+    const viewer = activeViewers.get(containerId);
+    if (viewer && typeof viewer.dispose === 'function') {
+      try {
+        viewer.dispose();
+        console.log(`[GeneGuessr] Disposed viewer for ${containerId}`);
+      } catch (err) {
+        console.warn(`[GeneGuessr] Error disposing viewer ${containerId}:`, err);
+      }
+    }
+    
+    activeViewers.delete(containerId);
+    markViewerDirty(containerId);
+  }
+
   function markGuessViewersDirty() {
     for (const id of Array.from(renderedViewers)) {
       if (id.startsWith('guess-card-')) {
@@ -3856,6 +3879,29 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     }
 
     setCardExpansionState(card.id, newExpanded);
+
+    // WebGL context management: dispose viewer on collapse, reload on expand
+    const structureContainer = card.querySelector('[id$="-structure"]');
+    if (structureContainer) {
+      const viewerId = structureContainer.id;
+      
+      if (!newExpanded) {
+        // Collapsing: dispose viewer to free WebGL context
+        disposeViewer(viewerId);
+      } else {
+        // Expanding: reload viewer if it was disposed
+        if (!renderedViewers.has(viewerId)) {
+          // Find the guess data to reload structure
+          const cardId = card.id;
+          const guess = gameState.guesses.find(g => `guess-card-${g.guessId}` === cardId);
+          if (guess) {
+            loadStructureViewerInContainer(structureContainer, { uniprot: guess.uniprot }).catch((err) => {
+              console.error(`[GeneGuessr] Failed to reload structure viewer for ${cardId}:`, err);
+            });
+          }
+        }
+      }
+    }
 
     if (newExpanded) {
       card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
