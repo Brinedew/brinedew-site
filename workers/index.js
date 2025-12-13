@@ -1466,8 +1466,11 @@ async function handleHintReveal(request, env, corsHeaders) {
       await saveGameState(env, sessionId, state);
     }
     
-    // ⚠️ MINIMAL PAYLOAD - just what the client needs for hint reveal ⚠️
-    // Client does surgical DOM update, doesn't need full game payload rebuild
+    // ⚠️ CRITICAL PERFORMANCE - MINIMAL PAYLOAD ONLY ⚠️
+    // DO NOT add guesses, clue, target, or ANY other data here!
+    // The client does a surgical DOM update (just swaps the redaction span).
+    // Adding more data triggers full re-render + 3D viewer reload = 3+ second delay.
+    // See B-205 for the full horror story. This exact format is REQUIRED:
     return Response.json({
       revealedHint: { id: hintId, text: hintText },
       status: {

@@ -3984,17 +3984,27 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
   }
 
   /**
-   * DO NOT TOUCH - CRITICAL PERFORMANCE PATH
+   * ⚠️⚠️⚠️ CRITICAL PERFORMANCE PATH - DO NOT TOUCH ⚠️⚠️⚠️
    * 
    * This function reveals hints using SURGICAL DOM UPDATES ONLY.
-   * Calling render() here causes 3+ second delays because it triggers:
+   * 
+   * NEVER call render() in this function! It causes 3+ second delays because:
    *   1. Full DOM re-render of all clue sections
-   *   2. setupStructureInteractions() - checks/initializes ALL 3D viewers
+   *   2. setupStructureInteractions() checks/initializes ALL 3D viewers
+   *   3. Mol* viewer reload = multiple seconds of WebGL work
    * 
-   * The server now returns { revealedHint: { id, text }, status: { hintBalance, revealedHints } }
-   * We just update the DOM directly without rebuilding everything.
+   * The server returns { revealedHint: { id, text }, status: { hintBalance, revealedHints } }
+   * We ONLY:
+   *   1. Update local state (gameState.revealedHints)
+   *   2. Replace the <span class="pg-redaction"> with <span class="pg-revealed-text">
+   *   3. Update hint balance displays
    * 
-   * See Linear issue B-205 for full context.
+   * If you're debugging slow reveals:
+   *   - Check if server returns revealedHint (if not, we fall back to slow path)
+   *   - Check if render() is being called anywhere in this flow
+   *   - Check if any code triggers renderClueSectionsIntoDom
+   * 
+   * See Linear issue B-205 for the full horror story of this bug.
    */
   async function activateSpoiler(redaction) {
     const hintId = redaction.dataset.hintId;
