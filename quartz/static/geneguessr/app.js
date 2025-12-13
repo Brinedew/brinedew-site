@@ -1154,11 +1154,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     return '';
   }
 
+  // Max guess card viewers to load on initial render (clue card and solution card are ALWAYS protected)
+  const MAX_GUESS_VIEWERS_ON_LOAD = 4;
+
   function setupStructureInteractions() {
     // Ensure chain toggle event delegation is set up
     ensureChainToggleDelegation();
 
-    // Auto-load structure viewer for clue card if present
+    // CRITICAL: Auto-load clue card viewer FIRST and ALWAYS - it must never be evicted
     const clueViewer = document.getElementById('pg-clue-structure');
     if (clueViewer && !renderedViewers.has('pg-clue-structure')) {
       loadStructureViewerInContainer(clueViewer, targetProtein).catch((err) => {
@@ -1166,7 +1169,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       });
     }
 
-    // Auto-load structure viewer for solution card if present (game over)
+    // Auto-load structure viewer for solution card if present (game over) - also protected
     const solutionViewer = document.getElementById('pg-solution-card-structure');
     const solutionTarget = targetReveal || targetProtein;
     if (solutionViewer && !renderedViewers.has('pg-solution-card-structure')) {
@@ -1175,16 +1178,37 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       });
     }
 
-    // Auto-load structure viewers for guess cards if present
-    gameState.guesses.forEach((guess) => {
-      const viewerId = `guess-card-${guess.guessId}-structure`;
+    // Auto-load structure viewers for guess cards - LIMITED to prevent WebGL context exhaustion
+    // Only load viewers for the N most recent expanded cards
+    let loadedGuessViewers = 0;
+    const guessesToLoad = [...gameState.guesses].reverse(); // Most recent first
+    
+    for (const guess of guessesToLoad) {
+      if (loadedGuessViewers >= MAX_GUESS_VIEWERS_ON_LOAD) {
+        break;
+      }
+      
+      const cardId = `guess-card-${guess.guessId}`;
+      const card = document.getElementById(cardId);
+      const viewerId = `${cardId}-structure`;
       const container = document.getElementById(viewerId);
-      if (container && !renderedViewers.has(viewerId)) {
+      
+      // Only load viewer if card is expanded and not already rendered
+      const isExpanded = card?.dataset?.expanded === 'true';
+      if (container && isExpanded && !renderedViewers.has(viewerId)) {
         loadStructureViewerInContainer(container, { uniprot: guess.uniprot }).catch((err) => {
           console.error(`Geneguessr: failed to load structure viewer for guess ${guess.guessId}`, err);
         });
+        loadedGuessViewers++;
+        
+        // Track in expansion order for proper eviction later
+        if (!expandedGuessCardsOrder.includes(cardId)) {
+          expandedGuessCardsOrder.push(cardId);
+        }
       }
-    });
+    }
+    
+    console.log(`[GeneGuessr] setupStructureInteractions: loaded ${loadedGuessViewers} guess viewers (limit: ${MAX_GUESS_VIEWERS_ON_LOAD})`);
   }
 
   function addMolstarPreconnectOnce() {
@@ -2780,7 +2804,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
   let practiceRestartCounter = 0; // Increments on each random practice restart
   
   // WebGL context limit enforcement
-  const MAX_EXPANDED_GUESS_CARDS = 8; // Keep under browser limit (typically 16 contexts)
+  // Browser limit is typically 8-16 contexts. Reserve 2 for clue + solution viewers.
+  const MAX_EXPANDED_GUESS_CARDS = 4; // Conservative limit to prevent context exhaustion
   const expandedGuessCardsOrder = []; // Track expansion order for auto-collapse
 
   function markViewerDirty(containerId) {
