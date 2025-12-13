@@ -74,6 +74,7 @@ import { resolveStructureRepresentation } from './lib/structure-utils.js';
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    console.log(`[WORKER] Incoming: ${request.method} ${url.pathname}`);
     const origin = request.headers.get('Origin') || '';
     const corsHeaders = getCorsHeaders(origin);
     
@@ -302,7 +303,8 @@ export default {
 
     // Direct structure access by cacheKey - stable URLs for client-side caching
     // Safe because cacheKey (e.g., "pdb/8J07.bcif") doesn't reveal protein identity
-    if (url.pathname === '/api/structure-cached' && request.method === 'GET') {
+    // Support both GET (fetch) and HEAD (validation) requests
+    if (url.pathname === '/api/structure-cached' && (request.method === 'GET' || request.method === 'HEAD')) {
       return handleCachedStructureFetch(request, env, ctx, corsHeaders);
     }
 
@@ -1215,9 +1217,11 @@ async function setDailyBootstrapCache(env, date, origin, targetProtein, structur
  * DO NOT call hydrateGuessProteins with sequential DB calls.
  */
 async function handleGameBootstrap(request, env, corsHeaders) {
+  console.log('[BOOTSTRAP] Handler started');
   try {
     const sessionContext = resolveSessionContext(request);
     const { sessionId, practiceMode, practiceRestart } = sessionContext;
+    console.log(`[BOOTSTRAP] Session resolved: practiceMode=${practiceMode}`);
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
     const url = new URL(request.url);
     const today = new Date().toISOString().slice(0, 10);
@@ -1228,16 +1232,19 @@ async function handleGameBootstrap(request, env, corsHeaders) {
     if (!practiceMode) {
       cachedDaily = await getDailyBootstrapCache(env, today, url.origin);
     }
+    console.log(`[BOOTSTRAP] Cache checked: ${cachedDaily ? 'HIT' : 'MISS'}`);
     
     // ⚠️ PARALLEL FETCH - DO NOT SERIALIZE ⚠️
     // Target protein lookup and session state load are independent
     // Running in parallel saves 50-150ms per request
+    console.log('[BOOTSTRAP] Starting parallel fetch: targetSeed + existingState');
     const [targetSeed, existingState] = await Promise.all([
       cachedDaily?.targetProtein 
         ? Promise.resolve(cachedDaily.targetProtein)  // Use cached target
         : getDailyTargetProtein(env, { practice: practiceMode }),
       getGameState(env, sessionId).catch(() => null)  // Graceful fallback if session doesn't exist
     ]);
+    console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || 'null'}`);
     
     if (!targetSeed && !practiceMode) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
@@ -1585,7 +1592,7 @@ async function getDailyTargetProtein(env, options = {}) {
   let protein = selection?.protein || null;
   
   // CARMACK FIX: Validate structure availability before committing to this pick
-  // If upstream (e.g., SWISS-MODEL) is down, iterate to next candidate
+  // If upstream (e.g., SWISS-MODEL) is down or URL is broken, iterate to next candidate
   // This prevents serving a broken game of the day
   if (protein && env) {
     const MAX_STRUCTURE_VALIDATION_ATTEMPTS = 10;
@@ -1605,13 +1612,22 @@ async function getDailyTargetProtein(env, options = {}) {
           }
         } catch { /* not cached */ }
         
-        // Not cached - validate upstream is reachable with HEAD request
+        // Not cached - validate upstream with Range GET (SWISS-MODEL blocks HEAD from Workers)
+        // Fetch only first byte to minimize bandwidth, abort immediately after response starts
         try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
           const upstreamResp = await fetch(structureMeta.upstreamUrl, {
-            method: 'HEAD',
-            headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
+            method: 'GET',
+            headers: { 
+              'User-Agent': 'GeneGuessr-Worker/1.0',
+              'Range': 'bytes=0-0'  // Request only first byte
+            },
+            signal: controller.signal
           });
-          if (upstreamResp.ok) {
+          clearTimeout(timeout);
+          // 200 or 206 (partial content) both indicate success
+          if (upstreamResp.ok || upstreamResp.status === 206) {
             console.log(`[DAILY-PICK] ${protein.uniprot} upstream OK (${upstreamResp.status})`);
             break; // Upstream is working
           }
