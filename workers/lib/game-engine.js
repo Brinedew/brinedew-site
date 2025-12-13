@@ -204,6 +204,14 @@ export function collectMatchedHintTexts(target, guessProtein, score) {
   if (archIntersection.length) {
     matches.cath = archIntersection;
   }
+  // B-214: Clan matches (intersection of arrays)
+  const targetClans = Array.isArray(target?.clans) ? target.clans : [];
+  const guessClans = Array.isArray(guessProtein?.clans) ? guessProtein.clans : [];
+  const clanIntersection = targetClans.filter(clan => guessClans.includes(clan));
+  if (clanIntersection.length) {
+    // Match the format used in buildProteinSections (replace _ with space)
+    matches.clans = clanIntersection.map(c => c.replace(/_/g, ' '));
+  }
   return matches;
 }
 
