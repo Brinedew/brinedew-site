@@ -4011,10 +4011,13 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     if (!hintId || redaction.dataset.loading === 'true') {
       return;
     }
+    const startTime = performance.now();
     redaction.dataset.loading = 'true';
     redaction.classList.add('pg-redaction-loading');
     try {
       const payload = await requestHintReveal(hintId);
+      const networkTime = performance.now() - startTime;
+      console.log(`[HINT REVEAL] Network round-trip: ${Math.round(networkTime)}ms`);
       
       // Surgical DOM update - no render(), no viewer touching
       // Server returns { revealedHint: { id, text }, status: { hintBalance, revealedHints } }
@@ -4035,12 +4038,18 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         
         // Update hint balance display
         updateHintDisplays();
+        
+        const totalTime = performance.now() - startTime;
+        const domTime = totalTime - networkTime;
+        console.log(`[HINT REVEAL] DOM update: ${Math.round(domTime)}ms | Total: ${Math.round(totalTime)}ms (surgical path)`);
       } else {
         // Fallback path for backward compatibility (slow)
-        console.warn('activateSpoiler: Falling back to full render() - API did not return revealedHint!');
+        console.warn(`[HINT REVEAL] Falling back to full render() - API did not return revealedHint! Response:`, payload);
         hydrateStateFromPayload(payload);
         updateHintDisplays();
         render();
+        const totalTime = performance.now() - startTime;
+        console.warn(`[HINT REVEAL] Total: ${Math.round(totalTime)}ms (SLOW FALLBACK PATH)`);
       }
       
       // Show tutorial step 3 after first hint reveal
