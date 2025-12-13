@@ -1582,7 +1582,65 @@ async function getDailyTargetProtein(env, options = {}) {
 
   const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
   const selection = await pickDailyTarget(env.DB, eligibleIds, salt);
-  return selection?.protein || null;
+  let protein = selection?.protein || null;
+  
+  // CARMACK FIX: Validate structure availability before committing to this pick
+  // If upstream (e.g., SWISS-MODEL) is down, iterate to next candidate
+  // This prevents serving a broken game of the day
+  if (protein && env) {
+    const MAX_STRUCTURE_VALIDATION_ATTEMPTS = 10;
+    let attempts = 0;
+    let currentIdx = eligibleIds.indexOf(protein.uniprot);
+    if (currentIdx < 0) currentIdx = 0;
+    
+    while (attempts < MAX_STRUCTURE_VALIDATION_ATTEMPTS) {
+      const structureMeta = buildMetaFromStoredStructure(protein);
+      if (structureMeta?.upstreamUrl) {
+        // Check if structure is cached in R2 (instant, no upstream needed)
+        try {
+          const head = await env.STRUCTURES_BUCKET.head(structureMeta.r2Key);
+          if (head) {
+            console.log(`[DAILY-PICK] ${protein.uniprot} structure cached in R2, using it`);
+            break; // Cached, good to go
+          }
+        } catch { /* not cached */ }
+        
+        // Not cached - validate upstream is reachable with HEAD request
+        try {
+          const upstreamResp = await fetch(structureMeta.upstreamUrl, {
+            method: 'HEAD',
+            headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
+          });
+          if (upstreamResp.ok) {
+            console.log(`[DAILY-PICK] ${protein.uniprot} upstream OK (${upstreamResp.status})`);
+            break; // Upstream is working
+          }
+          console.warn(`[DAILY-PICK] ${protein.uniprot} upstream failed (${upstreamResp.status}), trying next`);
+        } catch (err) {
+          console.warn(`[DAILY-PICK] ${protein.uniprot} upstream error:`, err.message);
+        }
+      } else if (!structureMeta) {
+        console.warn(`[DAILY-PICK] ${protein.uniprot} has no structure meta, trying next`);
+      }
+      
+      // This protein's structure is unavailable - try next in sequence
+      attempts++;
+      currentIdx = (currentIdx + 1) % eligibleIds.length;
+      const nextId = eligibleIds[currentIdx];
+      const nextProtein = await fetchProteinByUniprot(env.DB, nextId);
+      if (nextProtein && !isAlphaFoldOnlyProtein(nextProtein)) {
+        protein = nextProtein;
+      }
+    }
+    
+    if (attempts >= MAX_STRUCTURE_VALIDATION_ATTEMPTS) {
+      console.error(`[DAILY-PICK] Failed to find protein with available structure after ${attempts} attempts`);
+    } else if (attempts > 0) {
+      console.log(`[DAILY-PICK] Skipped ${attempts} proteins with unavailable structures`);
+    }
+  }
+  
+  return protein;
 }
 
 function createInitialGameState(date, targetId, options = {}) {
