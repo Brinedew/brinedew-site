@@ -2555,27 +2555,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         timing('cache MISS - file too large to cache, using direct URL');
       }
     } else {
-      // No cacheKey (e.g., target structures) - validate URL before passing to Mol*
-      // DEFENSIVE: Check if proxied URL returns 502 (upstream unavailable) before trying to load
-      // Use GET instead of HEAD since: (1) worker might not support HEAD, (2) we need same URL Mol* will fetch
-      timing('no cacheKey - validating URL with cache-busting');
+      // No cacheKey means this structure wasn't pre-cached (common for target clue structures).
+      // Server-side target selection already validated that upstream sources are reachable,
+      // so this should succeed. If it fails, Mol* shows its error state gracefully.
+      timing('no cacheKey - passing URL to Mol* (will fetch on render)');
       const timestampedUrl = structureUrl + (structureUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
-      try {
-        const validationResp = await fetch(timestampedUrl, { method: 'HEAD', cache: 'no-store' });
-        if (!validationResp.ok) {
-          throw new Error(`Structure URL returned ${validationResp.status}`);
-        }
-      } catch (err) {
-        console.warn('[Geneguessr] Structure URL validation failed:', err);
-        if (errorEl) {
-          errorEl.textContent = 'Structure temporarily unavailable.';
-          errorEl.hidden = false;
-        }
-        if (loadingEl) loadingEl.hidden = true;
-        if (placeholder) placeholder.hidden = true;
-        renderedViewers.delete(containerId); // Allow retry
-        return;
-      }
       finalStructureUrl = timestampedUrl;
     }
 
@@ -3431,7 +3415,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     return renderProteinSection(section, { showSpoilers: true, ...options });
   }
 
-
+  // Helper for ordinal numbers (1st, 2nd, 3rd, etc.)
+  function ordinal(n) {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
 
   function renderFeedbackSection(section, score, matchedItemsForSection = [], options = {}) {
     const highlightMatches = Boolean(options.highlightMatches);
@@ -3705,9 +3694,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     // Handle pending similarity (lazy loading)
     const isPending = score === null || score?.similarityPending;
     const similarityPercent = !isPending && showSimilarity && score && typeof score.percent === 'number'
-      ? score.percent
+      ? Math.round(score.percent)
       : null;
     const isLadder = score?.isLadder || false;
+    const ladderRank = score?.ladderRank ?? score?.ladder_rank ?? null;
+    const rankLabel = isLadder && ladderRank ? `${ordinal(ladderRank)} closest` : '';
     const similarityValue = isPending ? '' : (similarityPercent === null ? 'N/A' : `${similarityPercent}%`);
     const similarityWidth = similarityPercent === null ? 0 : similarityPercent;
     const ladderClass = isLadder ? ' pg-ladder' : '';
@@ -3729,6 +3720,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
     const similarityMarkup = showSimilarity
       ? `
+        ${rankLabel ? `<span class="pg-ladder-rank">${rankLabel}</span>` : ''}
         <div class="pg-bar${ladderClass}${pendingClass}">
           <div class="pg-bar-fill${ladderClass}" style="width: ${similarityWidth}%" data-guess-id="${cardId}"></div>
         </div>
@@ -4610,10 +4602,29 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           const scorePercent = typeof scoreData === 'number' ? scoreData : scoreData?.percent;
           if (typeof scorePercent === 'number') {
             const isLadder = scoreData?.isLadder || false;
+            const rawLadderRank = (scoreData && typeof scoreData === 'object')
+              ? (scoreData.ladderRank ?? scoreData.ladder_rank ?? null)
+              : null;
+            let ladderRank = rawLadderRank;
+            // Fallback: in ladder mode, percent 91-99 encodes rank as (100 - percent).
+            if (ladderRank == null && isLadder) {
+              const rounded = Math.round(scorePercent);
+              if (rounded >= 91 && rounded <= 99) {
+                ladderRank = 100 - rounded;
+              }
+            }
             // Update game state
             const guess = gameState.guesses.find(g => g.guessId === pendingGuess.guessId);
             if (guess) {
-              guess.score = typeof scoreData === 'object' ? scoreData : { percent: scorePercent, isLadder };
+              if (scoreData && typeof scoreData === 'object') {
+                const hydratedScore = { ...scoreData };
+                if (isLadder && ladderRank && hydratedScore.ladderRank == null && hydratedScore.ladder_rank == null) {
+                  hydratedScore.ladderRank = ladderRank;
+                }
+                guess.score = hydratedScore;
+              } else {
+                guess.score = { percent: scorePercent, isLadder, ladderRank: isLadder ? ladderRank : null };
+              }
               guess.similarityPending = false;
             }
             // Update DOM elements
@@ -4621,6 +4632,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
             const scoreEl = document.querySelector(`.pg-feedback-score[data-guess-id="${cardId}"]`);
             const barFillEl = document.querySelector(`.pg-bar-fill[data-guess-id="${cardId}"]`);
             const barEl = scoreEl?.previousElementSibling;
+            const headerEl = scoreEl?.closest('.pg-collapse-toggle');
             
             if (scoreEl) {
               scoreEl.textContent = `${scorePercent}%`;
@@ -4635,6 +4647,27 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
               barEl.classList.remove('pg-pending');
               if (isLadder) barEl.classList.add('pg-ladder');
             }
+
+            // Ensure ladder rank label is shown for top-9 matches (fixes missing callout on lazy-loaded similarity).
+            if (headerEl) {
+              const existingRankEl = headerEl.querySelector('.pg-ladder-rank');
+              const rankLabel = (isLadder && ladderRank) ? `${ordinal(ladderRank)} closest` : '';
+              if (rankLabel) {
+                const rankEl = existingRankEl || document.createElement('span');
+                rankEl.className = 'pg-ladder-rank';
+                rankEl.textContent = rankLabel;
+                if (!existingRankEl) {
+                  if (barEl && barEl.parentElement === headerEl) {
+                    headerEl.insertBefore(rankEl, barEl);
+                  } else {
+                    headerEl.appendChild(rankEl);
+                  }
+                }
+              } else if (existingRankEl) {
+                existingRankEl.remove();
+              }
+            }
+
             console.log(`[TIMING] similarity loaded for ${pendingGuess.guessId} | ${scorePercent}%`);
           } else {
             console.warn(`[TIMING] similarity returned unexpected format:`, result);

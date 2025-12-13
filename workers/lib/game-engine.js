@@ -132,10 +132,11 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   const similarity = (typeof options.similarity === 'number')
     ? options.similarity
     : null;
-  const percent = typeof similarity === 'number'
-    ? Math.round(similarity * 100)
-    : null;
+  // B-212: similarity is now returned as integer percentage (0-99) from getBlendedSimilarity
+  // No need to multiply by 100 anymore
+  const percent = similarity;
   const isLadder = Boolean(options.isLadder);
+  const ladderRank = options.ladderRank || null;
   const domainIntersection = guessProtein.domains.filter((domain) => targetProtein.domains.includes(domain));
   // Use 10% tolerance for length matching instead of bins - more precise for gameplay (B-204)
   const lengthBinMatch = isLengthWithinTolerance(targetProtein.length, guessProtein.length);
@@ -146,6 +147,7 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
     percent,
     similarity,
     isLadder,
+    ladderRank,
     domainMatches: domainIntersection,
     lengthBinMatch,
     tmMatch,

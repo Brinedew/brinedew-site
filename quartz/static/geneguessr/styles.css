@@ -1363,6 +1363,15 @@
   transition: width 0.3s ease;
 }
 
+/* Ladder rank label (1st closest, 2nd closest, etc.) */
+.pg-ladder-rank {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Ladder match styling - accent color for top-9 similar proteins */
 .pg-bar.pg-ladder {
   background: color-mix(in srgb, var(--tertiary) 30%, var(--lightgray) 70%);

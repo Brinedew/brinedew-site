@@ -65,14 +65,16 @@ function cloneArrayBuffer(value) {
 }
 
 function toFloat32Vector(row) {
-  if (!row?.vector) {
+  // B-212: Handle combined_vector column (2760-d)
+  const vectorData = row?.combined_vector || row?.vector;
+  if (!vectorData) {
     return null;
   }
-  let buffer = cloneArrayBuffer(row.vector);
+  let buffer = cloneArrayBuffer(vectorData);
   // Some D1 clients or drivers return BLOBs as hex or base64 strings.
   // If so, convert them into ArrayBuffer/Uint8Array for Float32Array view.
-  if (!buffer && typeof row.vector === 'string') {
-    const s = row.vector.trim();
+  if (!buffer && typeof vectorData === 'string') {
+    const s = vectorData.trim();
     // Hex string (even length, only hex chars)
     if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0) {
       const len = s.length / 2;
@@ -282,7 +284,7 @@ export async function fetchProteinEmbedding(db, geneSymbol) {
     return embeddingCache.get(key);
   }
   const row = await db.prepare(
-    `SELECT vector, dim FROM protein_embeddings WHERE upper(gene_symbol) = ? LIMIT 1`
+    `SELECT combined_vector, combined_dim FROM protein_embeddings WHERE upper(gene_symbol) = ? LIMIT 1`
   ).bind(key).first();
   const vector = toFloat32Vector(row);
   rememberEmbedding(key, vector);
@@ -651,21 +653,19 @@ function getLadderRank(neighbors, guessKey) {
 }
 
 /**
- * Compute blended similarity using both HiG2Vec (functional) and ESM2 (structural) embeddings.
- * Uses ladder-based display scoring: if guess is in target's top-K neighbors, use rank-based display.
+ * B-212: Compute similarity using combined embeddings (2760-d pre-blended vectors).
+ * Returns simple cosine similarity as integer percentage (0-100).
  * 
- * NEW: Reads neighbors from target protein object (from D1) instead of KV lookup.
+ * For top-9 ladder matches, returns rank-based discrete scores (91-99).
  * 
  * @param {D1Database} db - The D1 database binding
  * @param {string} guessId - Gene symbol or UniProt ID of the guess
  * @param {string} targetId - Gene symbol or UniProt ID of the target
  * @param {object} options - Configuration options
- * @param {number} options.esm2Weight - Weight for ESM2 similarity (0-1, default 0.25)
  * @param {Array} options.targetNeighbors - Pre-fetched neighbors array from target protein
  * @returns {Promise<{blended: number|null, isLadder: boolean, ladderRank: number|null}>}
  */
 export async function getBlendedSimilarity(db, guessId, targetId, options = {}) {
-  const esm2Weight = typeof options.esm2Weight === 'number' ? options.esm2Weight : 0.25;
   const targetNeighbors = options.targetNeighbors || null;
   const guessKey = normalizeKey(guessId);
   const targetKey = normalizeKey(targetId);
@@ -674,45 +674,32 @@ export async function getBlendedSimilarity(db, guessId, targetId, options = {}) 
     return { blended: null, isLadder: false, ladderRank: null };
   }
 
-  // Check if guess is in target's precomputed neighbors
+  // Check if guess is in target's precomputed neighbors (top-9 ladder)
   const ladderRank = getLadderRank(targetNeighbors, guessKey);
-  const isLadder = ladderRank !== null;
+  const isLadder = ladderRank !== null && ladderRank <= 9;
 
-  // If in ladder, use the precomputed similarity from neighbors array
-  if (isLadder && targetNeighbors[ladderRank - 1]?.similarity != null) {
-    const precomputedSim = targetNeighbors[ladderRank - 1].similarity;
-    // Use rank-based display score for ladder proteins (91-99%)
-    const blendedDisplay = toDisplayScoreLadder(ladderRank);
-    return { blended: blendedDisplay, isLadder: true, ladderRank };
+  // If in ladder, use rank-based discrete scores (91-99)
+  if (isLadder) {
+    const ladderPercent = 100 - ladderRank; // rank 1 → 99, rank 2 → 98, ..., rank 9 → 91
+    return { blended: ladderPercent, isLadder: true, ladderRank };
   }
 
-  // Not in ladder: compute similarity from embeddings
-  const [guessEmb, targetEmb] = await Promise.all([
-    fetchDualEmbeddings(db, guessKey),
-    fetchDualEmbeddings(db, targetKey)
+  // Not in ladder: compute cosine similarity from combined embeddings
+  const [guessVec, targetVec] = await Promise.all([
+    fetchProteinEmbedding(db, guessKey),
+    fetchProteinEmbedding(db, targetKey)
   ]);
 
-  // Calculate individual METRIC similarities (before display transform)
-  const hig2vecCosine = cosineSimilarity(guessEmb.hig2vec, targetEmb.hig2vec);
-  const esm2Cosine = cosineSimilarity(guessEmb.esm2, targetEmb.esm2);
-
-  const hig2vecMetric = getMetricSimilarity(hig2vecCosine, 'hig2vec');
-  const esm2Metric = getMetricSimilarity(esm2Cosine, 'esm2');
-
-  // Calculate blended METRIC score (25% ESM2 + 75% HiG2Vec)
-  let blendedMetric = null;
-  if (hig2vecMetric !== null && esm2Metric !== null) {
-    blendedMetric = esm2Weight * esm2Metric + (1 - esm2Weight) * hig2vecMetric;
-  } else if (hig2vecMetric !== null) {
-    blendedMetric = hig2vecMetric;
-  } else if (esm2Metric !== null) {
-    blendedMetric = esm2Metric;
+  if (!guessVec || !targetVec) {
+    return { blended: null, isLadder: false, ladderRank: null };
   }
 
-  // Clamp blended metric to [0, 0.9] - values above 90% reserved for ladder
-  const clampedMetric = blendedMetric !== null 
-    ? Math.max(0, Math.min(0.9, blendedMetric))
-    : null;
+  // Pure cosine similarity (dot product of normalized vectors)
+  const cosine = cosineSimilarity(guessVec, targetVec);
+  
+  // Convert to percentage and round to integer (no decimals)
+  // Clamp to [0, 90] - values 91-99 reserved for ladder
+  const percent = Math.round(Math.max(0, Math.min(90, cosine * 100)));
 
-  return { blended: clampedMetric, isLadder: false, ladderRank: null };
+  return { blended: percent, isLadder: false, ladderRank: null };
 }

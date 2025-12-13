@@ -1534,6 +1534,7 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
     // Calculate similarity
     let similarity;
     let isLadder = false;
+    let ladderRank = null;
     if (SIMILARITY_MODE === 'blended') {
       const simResult = await getBlendedSimilarity(
         env.DB,
@@ -1543,6 +1544,7 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
       );
       similarity = simResult.blended;
       isLadder = simResult.isLadder;
+      ladderRank = simResult.ladderRank;
     } else {
       similarity = await getHig2vecSimilarity(
         env.DB,
@@ -1551,7 +1553,7 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
       );
     }
     
-    const score = scoreGuess(guessProtein, targetProtein, { similarity, isLadder });
+    const score = scoreGuess(guessProtein, targetProtein, { similarity, isLadder, ladderRank });
     
     // Update session state with calculated score
     state.guesses[guessIndex].score = score;
@@ -1571,49 +1573,61 @@ async function getDailyTargetProtein(env, options = {}) {
   if (!eligibleIds.length) {
     return null;
   }
-  if (options.practice) {
-    const randomIndex = Math.floor(Math.random() * eligibleIds.length);
-    const randomId = eligibleIds[randomIndex];
-    return await fetchProteinByUniprot(env.DB, randomId);
-  }
-
-  // Check for manual override
-  const today = new Date().toISOString().slice(0, 10);
-  const overrideId = await env.KV.get(`puzzle_override:${today}`);
-  if (overrideId) {
-    const overrideProtein = await fetchProteinByUniprot(env.DB, overrideId);
-    if (overrideProtein) {
-      return overrideProtein;
-    }
-  }
-
-  const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
-  const selection = await pickDailyTarget(env.DB, eligibleIds, salt);
-  let protein = selection?.protein || null;
   
-  // CARMACK FIX: Validate structure availability before committing to this pick
-  // If upstream (e.g., SWISS-MODEL) is down or URL is broken, iterate to next candidate
-  // This prevents serving a broken game of the day
-  if (protein && env) {
-    const MAX_STRUCTURE_VALIDATION_ATTEMPTS = 10;
-    let attempts = 0;
-    let currentIdx = eligibleIds.indexOf(protein.uniprot);
-    if (currentIdx < 0) currentIdx = 0;
+  let protein = null;
+  let startIdx = 0;
+  
+  if (options.practice) {
+    // Practice mode: random starting point
+    startIdx = Math.floor(Math.random() * eligibleIds.length);
+    const randomId = eligibleIds[startIdx];
+    protein = await fetchProteinByUniprot(env.DB, randomId);
+  } else {
+    // Daily mode: check for manual override first
+    const today = new Date().toISOString().slice(0, 10);
+    const overrideId = await env.KV.get(`puzzle_override:${today}`);
+    if (overrideId) {
+      const overrideProtein = await fetchProteinByUniprot(env.DB, overrideId);
+      if (overrideProtein) {
+        return overrideProtein;  // Manual override skips validation (admin's responsibility)
+      }
+    }
     
-    while (attempts < MAX_STRUCTURE_VALIDATION_ATTEMPTS) {
+    const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
+    const selection = await pickDailyTarget(env.DB, eligibleIds, salt);
+    protein = selection?.protein || null;
+    startIdx = eligibleIds.indexOf(protein?.uniprot);
+    if (startIdx < 0) startIdx = 0;
+  }
+
+  // Validate structure availability before committing to this pick.
+  // If upstream (SWISS-MODEL/AlphaFold/PDB) is down or URL is broken, try next candidate.
+  // This prevents serving a game with a broken structure viewer.
+  if (protein && env) {
+    const MAX_ATTEMPTS = 10;
+    let attempts = 0;
+    let currentIdx = startIdx;
+    
+    while (attempts < MAX_ATTEMPTS) {
       const structureMeta = buildMetaFromStoredStructure(protein);
+      
+      // If no upstream URL needed (e.g., structure pre-baked), accept it
+      if (structureMeta && !structureMeta.upstreamUrl) {
+        console.log(`[TARGET-PICK] ${protein.uniprot} has no upstream dependency, using it`);
+        break;
+      }
+      
       if (structureMeta?.upstreamUrl) {
         // Check if structure is cached in R2 (instant, no upstream needed)
         try {
           const head = await env.STRUCTURES_BUCKET.head(structureMeta.r2Key);
           if (head) {
-            console.log(`[DAILY-PICK] ${protein.uniprot} structure cached in R2, using it`);
-            break; // Cached, good to go
+            console.log(`[TARGET-PICK] ${protein.uniprot} cached in R2, using it`);
+            break;
           }
         } catch { /* not cached */ }
         
-        // Not cached - validate upstream with Range GET (SWISS-MODEL blocks HEAD from Workers)
-        // Fetch only first byte to minimize bandwidth, abort immediately after response starts
+        // Not cached - validate upstream with Range GET (SWISS-MODEL blocks HEAD)
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 5000);
@@ -1621,25 +1635,24 @@ async function getDailyTargetProtein(env, options = {}) {
             method: 'GET',
             headers: { 
               'User-Agent': 'GeneGuessr-Worker/1.0',
-              'Range': 'bytes=0-0'  // Request only first byte
+              'Range': 'bytes=0-0'
             },
             signal: controller.signal
           });
           clearTimeout(timeout);
-          // 200 or 206 (partial content) both indicate success
           if (upstreamResp.ok || upstreamResp.status === 206) {
-            console.log(`[DAILY-PICK] ${protein.uniprot} upstream OK (${upstreamResp.status})`);
-            break; // Upstream is working
+            console.log(`[TARGET-PICK] ${protein.uniprot} upstream OK (${upstreamResp.status})`);
+            break;
           }
-          console.warn(`[DAILY-PICK] ${protein.uniprot} upstream failed (${upstreamResp.status}), trying next`);
+          console.warn(`[TARGET-PICK] ${protein.uniprot} upstream failed (${upstreamResp.status}), trying next`);
         } catch (err) {
-          console.warn(`[DAILY-PICK] ${protein.uniprot} upstream error:`, err.message);
+          console.warn(`[TARGET-PICK] ${protein.uniprot} upstream error:`, err.message);
         }
       } else if (!structureMeta) {
-        console.warn(`[DAILY-PICK] ${protein.uniprot} has no structure meta, trying next`);
+        console.warn(`[TARGET-PICK] ${protein.uniprot} has no structure meta, trying next`);
       }
       
-      // This protein's structure is unavailable - try next in sequence
+      // This protein's structure is unavailable - try next candidate
       attempts++;
       currentIdx = (currentIdx + 1) % eligibleIds.length;
       const nextId = eligibleIds[currentIdx];
@@ -1649,10 +1662,10 @@ async function getDailyTargetProtein(env, options = {}) {
       }
     }
     
-    if (attempts >= MAX_STRUCTURE_VALIDATION_ATTEMPTS) {
-      console.error(`[DAILY-PICK] Failed to find protein with available structure after ${attempts} attempts`);
+    if (attempts >= MAX_ATTEMPTS) {
+      console.error(`[TARGET-PICK] Failed to find protein with working structure after ${attempts} attempts`);
     } else if (attempts > 0) {
-      console.log(`[DAILY-PICK] Skipped ${attempts} proteins with unavailable structures`);
+      console.log(`[TARGET-PICK] Skipped ${attempts} proteins with unavailable structures`);
     }
   }
   
@@ -1775,6 +1788,7 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
     const similarityPromises = entriesNeedingScore.map(async (entry) => {
       let similarity;
       let isLadder = false;
+      let ladderRank = null;
       if (SIMILARITY_MODE === 'blended') {
         const simResult = await getBlendedSimilarity(
           env.DB,
@@ -1784,6 +1798,7 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
         );
         similarity = simResult.blended;
         isLadder = simResult.isLadder;
+        ladderRank = simResult.ladderRank;
       } else {
         similarity = await getHig2vecSimilarity(
           env.DB,
@@ -1791,7 +1806,7 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
           targetProtein.gene
         );
       }
-      const nextScore = scoreGuess(entry.protein, targetProtein, { similarity, isLadder });
+      const nextScore = scoreGuess(entry.protein, targetProtein, { similarity, isLadder, ladderRank });
       entry.score = nextScore;
       return true; // dirty
     });
