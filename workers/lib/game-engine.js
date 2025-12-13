@@ -156,62 +156,66 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   };
 }
 
+/**
+ * B-214: Atheoretical matching - compare all section text values between target and guess.
+ * No field-specific logic except:
+ *   - Length uses 10% tolerance (not exact match)
+ * 
+ * Returns matches keyed by section ID for highlighting.
+ */
 export function collectMatchedHintTexts(target, guessProtein, score) {
   const matches = {};
   if (!target || !guessProtein) {
     return matches;
   }
-  const intersect = (a, b) => {
-    if (!a?.length || !b?.length) {
-      return [];
+
+  // Build sections for both proteins using the exact same logic that renders them
+  const targetSections = buildProteinSections(target, { forClue: false });
+  const guessSections = buildProteinSections(guessProtein, { forClue: false });
+
+  // Index guess texts by section ID for fast lookup
+  const guessBySectionId = {};
+  for (const section of guessSections) {
+    if (!section.id || !Array.isArray(section.items)) continue;
+    guessBySectionId[section.id] = new Set(
+      section.items
+        .map(item => (typeof item.text === 'string' ? item.text : String(item.text ?? '')).toLowerCase().trim())
+        .filter(Boolean)
+    );
+  }
+
+  // For each target section, find matching texts from guess
+  for (const section of targetSections) {
+    if (!section.id || !Array.isArray(section.items)) continue;
+    const guessTexts = guessBySectionId[section.id];
+    if (!guessTexts || guessTexts.size === 0) continue;
+
+    // Special case: length uses 10% tolerance instead of exact match
+    if (section.id === 'length') {
+      if (isLengthWithinTolerance(target?.length, guessProtein?.length)) {
+        const targetItem = section.items[0];
+        if (targetItem?.text) {
+          matches.length = [targetItem.text];
+        }
+      }
+      continue;
     }
-    const setB = new Set(b);
-    return a.filter((item) => setB.has(item));
-  };
-  if (score?.domainMatches?.length) {
-    matches.domains = score.domainMatches;
-  }
-  ['mf', 'cc', 'bp'].forEach((aspect) => {
-    const overlap = intersect(formatGoTerms(target, aspect), formatGoTerms(guessProtein, aspect));
-    if (overlap.length) {
-      matches[`function-${aspect}`] = overlap;
+
+    // Atheoretical: any exact text match (case-insensitive) counts
+    const sectionMatches = [];
+    for (const item of section.items) {
+      const text = typeof item.text === 'string' ? item.text : String(item.text ?? '');
+      const normalized = text.toLowerCase().trim();
+      if (normalized && guessTexts.has(normalized)) {
+        sectionMatches.push(text); // Keep original casing for display
+      }
     }
-  });
-  const reactomeMatches = intersect(formatReactomeList(target), formatReactomeList(guessProtein));
-  if (reactomeMatches.length) {
-    matches.reactome = reactomeMatches;
+
+    if (sectionMatches.length > 0) {
+      matches[section.id] = sectionMatches;
+    }
   }
-  if (score?.tissueMatch) {
-    matches.tissue = [target.tissue.label];
-  }
-  const propertyMatches = [];
-  if (score?.tmMatch) {
-    propertyMatches.push(target.tmh ? 'Transmembrane' : 'Soluble');
-  }
-  if (score?.secretedMatch) {
-    propertyMatches.push(target.secreted ? 'Secreted' : 'Intracellular');
-  }
-  if (propertyMatches.length) {
-    matches.properties = propertyMatches;
-  }
-  if (isLengthWithinTolerance(target?.length, guessProtein?.length)) {
-    matches.length = [`${target.length} amino acid residues`];
-  }
-  // CATH architecture matches (intersection of arrays)
-  const targetArchs = Array.isArray(target?.cath_architecture) ? target.cath_architecture : [];
-  const guessArchs = Array.isArray(guessProtein?.cath_architecture) ? guessProtein.cath_architecture : [];
-  const archIntersection = targetArchs.filter(arch => guessArchs.includes(arch));
-  if (archIntersection.length) {
-    matches.cath = archIntersection;
-  }
-  // B-214: Clan matches (intersection of arrays)
-  const targetClans = Array.isArray(target?.clans) ? target.clans : [];
-  const guessClans = Array.isArray(guessProtein?.clans) ? guessProtein.clans : [];
-  const clanIntersection = targetClans.filter(clan => guessClans.includes(clan));
-  if (clanIntersection.length) {
-    // Match the format used in buildProteinSections (replace _ with space)
-    matches.clans = clanIntersection.map(c => c.replace(/_/g, ' '));
-  }
+
   return matches;
 }
 
