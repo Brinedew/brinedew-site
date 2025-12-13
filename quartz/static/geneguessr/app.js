@@ -2555,9 +2555,25 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         timing('cache MISS - file too large to cache, using direct URL');
       }
     } else {
-      // No cacheKey (e.g., target structures) - use direct URL with cache-busting query param
-      // Server handles SWISS-MODEL HEADER injection, no need to pre-fetch blob client-side
-      timing('no cacheKey - using direct URL');
+      // No cacheKey (e.g., target structures) - validate URL before passing to Mol*
+      // DEFENSIVE: Check if proxied URL returns 502 (upstream unavailable) before trying to load
+      timing('no cacheKey - validating URL before Mol* load');
+      try {
+        const validationResp = await fetch(structureUrl, { method: 'HEAD', cache: 'no-store' });
+        if (!validationResp.ok) {
+          throw new Error(`Structure URL returned ${validationResp.status}`);
+        }
+      } catch (err) {
+        console.warn('[Geneguessr] Structure URL validation failed:', err);
+        if (errorEl) {
+          errorEl.textContent = 'Structure temporarily unavailable.';
+          errorEl.hidden = false;
+        }
+        if (loadingEl) loadingEl.hidden = true;
+        if (placeholder) placeholder.hidden = true;
+        renderedViewers.delete(containerId); // Allow retry
+        return;
+      }
       finalStructureUrl = structureUrl + (structureUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
     }
 
