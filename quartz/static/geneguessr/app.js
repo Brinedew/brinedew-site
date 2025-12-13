@@ -3930,15 +3930,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
     setCardExpansionState(card.id, newExpanded);
 
-    // WebGL context management: dispose viewer on collapse, reload on expand
+    // WebGL context management: keep viewers alive when collapsed, only dispose when making room for new cards
     const structureContainer = card.querySelector('[id$="-structure"]');
     if (structureContainer) {
       const viewerId = structureContainer.id;
       const cardId = card.id;
       
       if (!newExpanded) {
-        // Collapsing: dispose viewer and remove from expansion tracking
-        disposeViewer(viewerId);
+        // Collapsing: just remove from expansion tracking (keep viewer alive for fast re-expand)
         const idx = expandedGuessCardsOrder.indexOf(cardId);
         if (idx !== -1) {
           expandedGuessCardsOrder.splice(idx, 1);
@@ -3949,11 +3948,22 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           const oldestCardId = expandedGuessCardsOrder.shift();
           const oldestCard = document.getElementById(oldestCardId);
           if (oldestCard && oldestCard !== card) {
+            // Dispose the oldest card's viewer to free WebGL context
+            const oldestViewerId = `${oldestCardId}-structure`;
+            disposeViewer(oldestViewerId);
+            console.log(`[GeneGuessr] Disposed viewer ${oldestViewerId} to make room for ${cardId}`);
+            
+            // Collapse the oldest card (UI only, viewer already disposed)
             const oldestToggle = oldestCard.querySelector('.pg-collapse-toggle');
             if (oldestToggle) {
-              // Programmatically collapse the oldest card
-              console.log(`[GeneGuessr] Auto-collapsing ${oldestCardId} to enforce WebGL context limit`);
-              toggleFeedbackCard(oldestToggle);
+              oldestCard.classList.remove('expanded');
+              oldestCard.classList.add('collapsed');
+              oldestCard.dataset.expanded = 'false';
+              oldestToggle.setAttribute('aria-expanded', 'false');
+              const oldestContent = oldestCard.querySelector('.pg-feedback-content');
+              const oldestChevron = oldestCard.querySelector('.pg-collapse-chevron');
+              if (oldestContent) setFeedbackContentHeight(oldestContent, false);
+              if (oldestChevron) oldestChevron.textContent = '▶';
             }
           }
         }
@@ -3963,12 +3973,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
           expandedGuessCardsOrder.push(cardId);
         }
         
-        // Reload viewer if it was disposed
+        // Load viewer if not already rendered
         if (!renderedViewers.has(viewerId)) {
           const guess = gameState.guesses.find(g => `guess-card-${g.guessId}` === cardId);
           if (guess) {
             loadStructureViewerInContainer(structureContainer, { uniprot: guess.uniprot }).catch((err) => {
-              console.error(`[GeneGuessr] Failed to reload structure viewer for ${cardId}:`, err);
+              console.error(`[GeneGuessr] Failed to load structure viewer for ${cardId}:`, err);
             });
           }
         }
