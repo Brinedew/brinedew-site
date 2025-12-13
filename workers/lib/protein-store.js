@@ -656,8 +656,6 @@ function getLadderRank(neighbors, guessKey) {
  * B-212: Compute similarity using combined embeddings (2760-d pre-blended vectors).
  * Returns simple cosine similarity as integer percentage (0-100).
  * 
- * For top-9 ladder matches, returns rank-based discrete scores (91-99).
- * 
  * @param {D1Database} db - The D1 database binding
  * @param {string} guessId - Gene symbol or UniProt ID of the guess
  * @param {string} targetId - Gene symbol or UniProt ID of the target
@@ -674,17 +672,11 @@ export async function getBlendedSimilarity(db, guessId, targetId, options = {}) 
     return { blended: null, isLadder: false, ladderRank: null };
   }
 
-  // Check if guess is in target's precomputed neighbors (top-9 ladder)
+  // Check if guess is in target's precomputed neighbors for ladder display
   const ladderRank = getLadderRank(targetNeighbors, guessKey);
   const isLadder = ladderRank !== null && ladderRank <= 9;
 
-  // If in ladder, use rank-based discrete scores (91-99)
-  if (isLadder) {
-    const ladderPercent = 100 - ladderRank; // rank 1 → 99, rank 2 → 98, ..., rank 9 → 91
-    return { blended: ladderPercent, isLadder: true, ladderRank };
-  }
-
-  // Not in ladder: compute cosine similarity from combined embeddings
+  // Compute cosine similarity from combined embeddings
   const [guessVec, targetVec] = await Promise.all([
     fetchProteinEmbedding(db, guessKey),
     fetchProteinEmbedding(db, targetKey)
@@ -698,8 +690,7 @@ export async function getBlendedSimilarity(db, guessId, targetId, options = {}) 
   const cosine = cosineSimilarity(guessVec, targetVec);
   
   // Convert to percentage and round to integer (no decimals)
-  // Clamp to [0, 90] - values 91-99 reserved for ladder
-  const percent = Math.round(Math.max(0, Math.min(90, cosine * 100)));
+  const percent = Math.round(Math.max(0, Math.min(100, cosine * 100)));
 
-  return { blended: percent, isLadder: false, ladderRank: null };
+  return { blended: percent, isLadder, ladderRank };
 }
