@@ -2557,9 +2557,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     } else {
       // No cacheKey (e.g., target structures) - validate URL before passing to Mol*
       // DEFENSIVE: Check if proxied URL returns 502 (upstream unavailable) before trying to load
-      timing('no cacheKey - validating URL before Mol* load');
+      // Use GET instead of HEAD since: (1) worker might not support HEAD, (2) we need same URL Mol* will fetch
+      timing('no cacheKey - validating URL with cache-busting');
+      const timestampedUrl = structureUrl + (structureUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
       try {
-        const validationResp = await fetch(structureUrl, { method: 'HEAD', cache: 'no-store' });
+        const validationResp = await fetch(timestampedUrl, { method: 'HEAD', cache: 'no-store' });
         if (!validationResp.ok) {
           throw new Error(`Structure URL returned ${validationResp.status}`);
         }
@@ -2574,7 +2576,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         renderedViewers.delete(containerId); // Allow retry
         return;
       }
-      finalStructureUrl = structureUrl + (structureUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+      finalStructureUrl = timestampedUrl;
     }
 
     // PDBe Molstar requires format: 'cif' with binary: true for BCIF files
