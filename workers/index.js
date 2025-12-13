@@ -1418,6 +1418,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
  * See Linear issue B-205 for full context.
  */
 async function handleHintReveal(request, env, corsHeaders) {
+  const t0 = Date.now();
   try {
     const sessionContext = resolveSessionContext(request);
     const { sessionId, practiceMode } = sessionContext;
@@ -1428,21 +1429,25 @@ async function handleHintReveal(request, env, corsHeaders) {
     if (!hintId) {
       return Response.json({ error: 'Missing hintId' }, { status: 400, headers: responseHeaders });
     }
+    const t1 = Date.now();
     
-    // ⚠️ PARALLEL FETCH - DO NOT SERIALIZE ⚠️
-    const [targetSeed, existingState] = await Promise.all([
-      getDailyTargetProtein(env, { practice: practiceMode ? true : false }),
-      getGameState(env, sessionId).catch(() => null)
-    ]);
+    // ⚠️ PERFORMANCE FIX: DON'T call getDailyTargetProtein here! ⚠️
+    // getDailyTargetProtein validates structure availability with HTTP requests to upstream,
+    // which takes 500-800ms. For hint reveals, we already HAVE a session with targetId.
+    // Just load the existing state and fetch the protein directly from D1.
+    const existingState = await getGameState(env, sessionId).catch(() => null);
+    const t2 = Date.now();
     
-    if (!targetSeed && !practiceMode) {
-      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
+    // For hint reveal, we MUST have an existing session (you can't reveal hints without playing)
+    if (!existingState || !existingState.targetId) {
+      return Response.json({ error: 'No active game session' }, { status: 400, headers: responseHeaders });
     }
     
-    const state = await ensureSessionForTodayWithState(env, sessionId, targetSeed, existingState, { practiceMode });
-    const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
-      ? targetSeed
-      : await fetchProteinByUniprot(env.DB, state.targetId);
+    // Use existing state directly - no need for ensureSessionForTodayWithState
+    const state = existingState;
+    const t3 = Date.now();
+    const targetProtein = await fetchProteinByUniprot(env.DB, state.targetId);
+    const t4 = Date.now();
     if (!targetProtein) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
@@ -1457,6 +1462,7 @@ async function handleHintReveal(request, env, corsHeaders) {
     // Client already has guess data from bootstrap. We just need to reveal the hint.
     // Adding guess hydration here caused 3+ second delays (B-205).
     
+    let t5 = t4;
     if (!(state.revealedHints || []).includes(hintId)) {
       if ((state.hintBalance || 0) < DEFAULT_HINT_COST) {
         return Response.json({ error: 'Insufficient hints' }, { status: 402, headers: responseHeaders });
@@ -1464,7 +1470,9 @@ async function handleHintReveal(request, env, corsHeaders) {
       state.revealedHints = [...(state.revealedHints || []), hintId];
       state.hintBalance = Math.max(0, (state.hintBalance || 0) - DEFAULT_HINT_COST);
       await saveGameState(env, sessionId, state);
+      t5 = Date.now();
     }
+    console.log(`[HINT REVEAL TIMING] parse:${t1-t0}ms parallel:${t2-t1}ms session:${t3-t2}ms protein:${t4-t3}ms save:${t5-t4}ms total:${t5-t0}ms`);
     
     // ⚠️ CRITICAL PERFORMANCE - MINIMAL PAYLOAD ONLY ⚠️
     // DO NOT add guesses, clue, target, or ANY other data here!
