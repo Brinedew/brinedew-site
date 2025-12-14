@@ -10,7 +10,7 @@ export const sharedPageComponents: SharedLayout = {
     links: {
       // Use an absolute link so it doesn't change based on current page depth
       "About": "/About.html",
-      "Support me": "/Support-me.html",
+      "Support me": "/posts/Support-me.html",
     },
   }),
 }
