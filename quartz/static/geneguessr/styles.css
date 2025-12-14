@@ -1424,17 +1424,28 @@
 
 /* Collapsible Feedback Cards - now using unified card styling above */
 
-.pg-collapse-toggle {
+/*
+ * Collapsible feedback header row layout
+ * Keep similarity bars aligned across guesses:
+ * chevron | gene | top-9 callout | bar | %
+ */
+button.pg-collapse-toggle {
   width: 100%;
   padding: 0.75rem 1rem;
   background: none;
   border: none;
   cursor: pointer;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1rem 12ch 9.5rem 1fr 3.75rem;
   align-items: center;
-  gap: 0.75rem;
+  column-gap: 0.75rem;
   text-align: left;
   transition: background-color 0.2s ease;
+}
+
+/* Keep non-button header (final card) as-is */
+.pg-collapse-toggle.pg-static-toggle {
+  display: flex;
 }
 
 .pg-collapse-toggle:hover {
@@ -1470,6 +1481,38 @@
   font-size: 1rem;
   color: var(--dark);
   flex-shrink: 0;
+}
+
+button.pg-collapse-toggle .pg-feedback-gene {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.pg-collapse-toggle .pg-ladder-rank {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.pg-collapse-toggle .pg-bar {
+  margin: 0;
+  width: 100%;
+}
+
+button.pg-collapse-toggle .pg-feedback-score {
+  margin-left: 0;
+  justify-self: end;
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  button.pg-collapse-toggle {
+    grid-template-columns: 1rem 10ch 8rem 1fr 3.5rem;
+    column-gap: 0.5rem;
+  }
 }
 
 .pg-feedback-score {
