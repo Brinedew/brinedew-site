@@ -5042,14 +5042,14 @@ https://brinedew.bio/apps/geneguessr/`;
       </div>
     `;
 
-    const practiceLabel = practiceMode ? 'On (practice)' : 'Off (daily)';
+    const practiceLabel = practiceMode ? 'ON' : 'OFF';
 
     sidebarStats.innerHTML = `
       ${authSection}
       <div class="pg-sidebar-section">
-        <div class="pg-sidebar-label">Practice Mode</div>
-        <div class="pg-sidebar-practice-value ${practiceMode ? 'is-active' : ''}">
-          ${practiceLabel}
+        <div class="pg-hints-badge pg-sidebar-practice-badge ${practiceMode ? 'has-hints' : ''}">
+          <span class="pg-hints-label">Practice Mode</span>
+          <span class="pg-hints-value">${practiceLabel}</span>
         </div>
       </div>
       <div class="pg-sidebar-section">
@@ -5121,11 +5121,14 @@ https://brinedew.bio/apps/geneguessr/`;
       inlineHints.textContent = getHintsBalance();
     }
 
-    const sidebarPractice = document.querySelector('.pg-sidebar-practice-value');
+    const sidebarPractice = document.querySelector('.pg-sidebar-practice-badge');
     if (sidebarPractice) {
       const practiceMode = !!gameState?.practiceMode;
-      sidebarPractice.textContent = practiceMode ? 'On (practice)' : 'Off (daily)';
-      sidebarPractice.classList.toggle('is-active', practiceMode);
+      const practiceValue = sidebarPractice.querySelector('.pg-hints-value');
+      if (practiceValue) {
+        practiceValue.textContent = practiceMode ? 'ON' : 'OFF';
+      }
+      sidebarPractice.classList.toggle('has-hints', practiceMode);
     }
 
     const statsGrid = document.querySelector('.pg-sidebar-stats-grid');

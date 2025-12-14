@@ -95,6 +95,10 @@
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.pg-sidebar-practice-badge {
+  display: inline-flex;
+}
+
 /* Auth section */
 .pg-auth-section {
   border-bottom: 1px solid var(--ui-border);
