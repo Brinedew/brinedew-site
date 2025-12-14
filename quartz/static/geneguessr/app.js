@@ -4947,7 +4947,10 @@ https://brinedew.bio/apps/geneguessr/`;
 
   // Auth state
   let currentUser = null;
-  const API_BASE = window.location.origin;
+  // API lives on geneguessr.brinedew.bio worker, not the static site
+  const API_BASE = window.location.hostname === 'geneguessr.brinedew.bio'
+    ? window.location.origin
+    : 'https://geneguessr.brinedew.bio';
 
   /**
    * Check auth status
