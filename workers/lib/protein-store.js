@@ -191,6 +191,7 @@ function toProteinObject(row) {
     id: row.id,
     uniprot: row.uniprot,
     gene: row.gene,
+    gene_surname: row.gene_surname,
     hgnc: row.gene,  // alias for game engine compatibility
     full_name: row.full_name,
     length: row.length,
@@ -466,6 +467,115 @@ export async function getEligibleProteinIds(db) {
   eligibleCache.ids = ids;
   eligibleCache.fetchedAt = now;
   return ids.slice();
+}
+
+// Cache for surname-based protein grouping (for balanced random selection)
+const surnameCache = {
+  surnames: null,      // Array of unique surnames
+  byName: null,        // Map<surname, Array<uniprot>>
+  fetchedAt: 0,
+  ttl: 5 * 60 * 1000   // 5 minutes
+};
+
+/**
+ * Get eligible proteins grouped by gene surname.
+ * This enables balanced random selection that doesn't over-represent
+ * large gene families like ZNF, OR, KRTAP, etc.
+ */
+export async function getEligibleProteinsBySurname(db) {
+  const now = Date.now();
+  if (surnameCache.surnames && (now - surnameCache.fetchedAt) < surnameCache.ttl) {
+    return {
+      surnames: surnameCache.surnames.slice(),
+      byName: new Map(surnameCache.byName)
+    };
+  }
+  
+  await ensureStructureFailureTable(db);
+  
+  try {
+    const statement = `
+      SELECT p.uniprot, p.gene_surname
+      FROM proteins p
+      LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
+      WHERE p.structure_source IS NOT NULL
+        AND p.gene_summary IS NOT NULL
+        AND sf.uniprot IS NULL
+        AND p.gene_surname IS NOT NULL
+    `;
+    const { results } = await db.prepare(statement).all();
+    
+    // Group proteins by surname
+    const byName = new Map();
+    for (const row of (results || [])) {
+      const surname = row.gene_surname;
+      if (!byName.has(surname)) {
+        byName.set(surname, []);
+      }
+      byName.get(surname).push(row.uniprot);
+    }
+    
+    const surnames = Array.from(byName.keys()).sort();
+    
+    surnameCache.surnames = surnames;
+    surnameCache.byName = byName;
+    surnameCache.fetchedAt = now;
+    
+    console.log(`[SURNAME-CACHE] Loaded ${surnames.length} unique gene surnames`);
+    
+    return { surnames: surnames.slice(), byName: new Map(byName) };
+  } catch (err) {
+    console.warn('GeneGuessr: D1 getEligibleProteinsBySurname failed', err);
+    return { surnames: [], byName: new Map() };
+  }
+}
+
+/**
+ * Pick a random protein using surname-based balancing.
+ * 1. Pick a random surname
+ * 2. Pick a random protein within that surname
+ * 
+ * This ensures each gene family has equal representation regardless of size.
+ * For example, the 400+ OR genes now have the same probability as the 1 TP53 gene.
+ * 
+ * Returns: { protein, surname, familySize } or null
+ */
+export async function pickRandomProteinBalanced(db) {
+  const { surnames, byName } = await getEligibleProteinsBySurname(db);
+  
+  if (!surnames.length) {
+    console.warn('[BALANCED-PICK] No surnames available, falling back to unbalanced');
+    return null;
+  }
+  
+  // Step 1: Pick random surname
+  const surnameIdx = Math.floor(Math.random() * surnames.length);
+  const surname = surnames[surnameIdx];
+  const familyProteins = byName.get(surname) || [];
+  
+  if (!familyProteins.length) {
+    console.warn(`[BALANCED-PICK] Surname ${surname} has no proteins, retrying`);
+    return pickRandomProteinBalanced(db);  // Retry with different surname
+  }
+  
+  // Step 2: Pick random protein within surname
+  const proteinIdx = Math.floor(Math.random() * familyProteins.length);
+  const uniprot = familyProteins[proteinIdx];
+  
+  const protein = await fetchProteinByUniprot(db, uniprot);
+  
+  if (!protein) {
+    console.warn(`[BALANCED-PICK] Protein ${uniprot} not found, retrying`);
+    return pickRandomProteinBalanced(db);
+  }
+  
+  console.log(`[BALANCED-PICK] Picked ${protein.gene} from ${surname} family (${familyProteins.length} members)`);
+  
+  return {
+    protein,
+    surname,
+    familySize: familyProteins.length
+  };
 }
 
 export async function pickDailyTarget(db, eligibleIds, salt, date = new Date()) {

@@ -64,6 +64,7 @@ import {
   searchProteins,
   getEligibleProteinIds,
   pickDailyTarget,
+  pickRandomProteinBalanced,
   getBlendedSimilarity,
   getHig2vecSimilarity,
   markStructureFailure,
@@ -1587,12 +1588,25 @@ async function getDailyTargetProtein(env, options = {}) {
   
   let protein = null;
   let startIdx = 0;
+  let balancedPick = null;  // Track surname info for practice mode
   
   if (options.practice) {
-    // Practice mode: random starting point
-    startIdx = Math.floor(Math.random() * eligibleIds.length);
-    const randomId = eligibleIds[startIdx];
-    protein = await fetchProteinByUniprot(env.DB, randomId);
+    // Practice mode: Use surname-based balanced picking
+    // This prevents over-representation of large gene families like ZNF, OR, KRTAP
+    balancedPick = await pickRandomProteinBalanced(env.DB);
+    
+    if (balancedPick?.protein) {
+      protein = balancedPick.protein;
+      startIdx = eligibleIds.indexOf(protein.uniprot);
+      if (startIdx < 0) startIdx = 0;
+      console.log(`[PRACTICE] Balanced pick: ${protein.gene} from ${balancedPick.surname} family (${balancedPick.familySize} members)`);
+    } else {
+      // Fallback to unbalanced random if surname-based fails
+      console.warn('[PRACTICE] Balanced pick failed, using unbalanced random');
+      startIdx = Math.floor(Math.random() * eligibleIds.length);
+      const randomId = eligibleIds[startIdx];
+      protein = await fetchProteinByUniprot(env.DB, randomId);
+    }
   } else {
     // Daily mode: check for manual override first
     const today = new Date().toISOString().slice(0, 10);
