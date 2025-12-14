@@ -3308,7 +3308,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
         linkable: true,
         structureSource: solutionStructureSource,
         matchedHintMap,
-        highlightMatches: true
+        // On win we reveal everything, but we don't want teal "match" highlighting.
+        highlightMatches: !gameState.won
       });
       return `
         ${revealCard}
