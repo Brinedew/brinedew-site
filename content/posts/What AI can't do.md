@@ -3,7 +3,7 @@ title: What AI can't do
 tags:
   - content/post
 date: 2025-09-02
-draft: false
+draft: true
 ---
 # What AI can't do
 

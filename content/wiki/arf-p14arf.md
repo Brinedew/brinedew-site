@@ -8,7 +8,7 @@ date: 2025-08-21
 domain_count: 2
 domains: []
 domains_top3: Interaction with CDK5RAP3 and MDM2; Disordered
-draft: false
+draft: true
 first_letter: C
 full_name: Tumor suppressor ARF
 gene_symbol: CDKN2A

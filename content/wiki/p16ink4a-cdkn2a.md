@@ -8,7 +8,7 @@ date: 2025-08-21
 domain_count: 1
 domains: []
 domains_top3:
-draft: false
+draft: true
 first_letter: C
 full_name: Cyclin-dependent kinase inhibitor 2A
 gene_symbol: CDKN2A

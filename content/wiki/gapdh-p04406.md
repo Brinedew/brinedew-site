@@ -7,7 +7,7 @@ date: 2025-09-02
 domain_count: 2
 domains: []
 domains_top3: Interaction with WARS1; [IL]-x-C-x-x-[DE] motif
-draft: false
+draft: true
 first_letter: G
 full_name: Glyceraldehyde-3-phosphate dehydrogenase
 gene_symbol: GAPDH

@@ -3,7 +3,7 @@ title: De-Darwinization
 tags:
   - content/wiki
 date: 2025-09-20
-draft: false
+draft: true
 aliases:
   -
 ---

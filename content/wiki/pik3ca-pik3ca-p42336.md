@@ -9,7 +9,7 @@ domains:
   - p85-binding domain
   - kinase domain
 domains_top3: PI3K-ABD; PI3K-RBD; C2 PI3K-type
-draft: false
+draft: true
 first_letter: P
 full_name: Phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit alpha isoform
 gene_symbol: PIK3CA

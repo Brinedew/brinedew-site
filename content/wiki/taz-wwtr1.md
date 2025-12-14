@@ -8,7 +8,7 @@ domain_count: 4
 domains:
   - WW domain
 domains_top3: WW; Disordered; Required for interaction with PALS1
-draft: false
+draft: true
 first_letter: W
 full_name: WW domain-containing transcription regulator protein 1
 gene_symbol: WWTR1

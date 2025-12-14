@@ -8,7 +8,7 @@ domain_count: 0
 domains:
   - Wnt domain
 domains_top3:
-draft: false
+draft: true
 first_letter: W
 full_name: Protein Wnt-3a
 gene_symbol: WNT3A

@@ -9,7 +9,7 @@ domains:
   - Ig-like domains
   - transmembrane helix
 domains_top3: Ig-like V-type; Ig-like C2-type
-draft: false
+draft: true
 first_letter: C
 full_name: Programmed cell death 1 ligand 1
 gene_symbol: CD274

@@ -9,7 +9,7 @@ domain_count: 13
 domains:
   - EGF-like repeats
 domains_top3: EGF-like 1; EGF-like 2; calcium-binding; EGF-like 3
-draft: false
+draft: true
 first_letter: E
 full_name: Pro-epidermal growth factor
 gene_symbol: EGF

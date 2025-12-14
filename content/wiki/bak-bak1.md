@@ -11,7 +11,7 @@ domains:
   - BH3
   - transmembrane domain
 domains_top3: Disordered; BH3; BH1
-draft: false
+draft: true
 first_letter: B
 full_name: Bcl-2 homologous antagonist/killer
 gene_symbol: BAK1

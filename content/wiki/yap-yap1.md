@@ -8,7 +8,7 @@ domain_count: 8
 domains:
   - WW domains
 domains_top3: WW 1; WW 2; Disordered
-draft: false
+draft: true
 first_letter: Y
 full_name: Transcriptional coactivator YAP1
 gene_symbol: YAP1

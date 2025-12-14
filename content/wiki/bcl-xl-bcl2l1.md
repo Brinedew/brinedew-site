@@ -12,7 +12,7 @@ domains:
   - BH4
   - transmembrane domain
 domains_top3: Disordered; BH4; BH3
-draft: false
+draft: true
 first_letter: B
 full_name: Bcl-2-like protein 1
 gene_symbol: BCL2L1

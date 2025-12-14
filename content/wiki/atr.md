@@ -9,7 +9,7 @@ domains:
   - kinase domain
   - HEAT repeats
 domains_top3: FAT; PI3K/PI4K catalytic; FATC
-draft: false
+draft: true
 first_letter: A
 full_name: Serine/threonine-protein kinase ATR
 gene_symbol: ATR

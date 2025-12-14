@@ -9,7 +9,7 @@ domains:
   - Ig-like domain
   - transmembrane helix
 domains_top3: Ig-like V-type; Nivolumab binding; Interaction with CD274/PDCD1L1
-draft: false
+draft: true
 first_letter: P
 full_name: Programmed cell death protein 1
 gene_symbol: PDCD1

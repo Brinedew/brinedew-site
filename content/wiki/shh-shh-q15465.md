@@ -10,7 +10,7 @@ domains:
   - N-terminal signaling domain (ShhN)
   - C-terminal autoprocessing domain (ShhC)
 domains_top3: Disordered; Disordered; Cardin-Weintraub
-draft: false
+draft: true
 first_letter: S
 full_name: Sonic hedgehog protein
 gene_symbol: SHH

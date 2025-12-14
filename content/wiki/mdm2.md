@@ -8,7 +8,7 @@ domains:
   - RING finger
   - p53-binding domain
 domains_top3: SWIB/MDM2; Necessary for interaction with USP2; Sufficient to promote the mitochondrial pathway of apoptosis
-draft: false
+draft: true
 first_letter: M
 full_name: E3 ubiquitin-protein ligase Mdm2
 gene_symbol: MDM2

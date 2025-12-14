@@ -7,7 +7,7 @@ date: 2025-08-21
 domain_count: 4
 domains: []
 domains_top3: Straightjacket domain; Arm domain; Bowtie tail
-draft: false
+draft: true
 first_letter: T
 full_name: Transforming growth factor beta-1 proprotein
 gene_symbol: TGFB1

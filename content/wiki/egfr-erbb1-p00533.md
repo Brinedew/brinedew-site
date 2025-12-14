@@ -11,7 +11,7 @@ domains:
   - transmembrane helix
   - tyrosine kinase domain
 domains_top3: Protein kinase; Important for dimerization, phosphorylation and activation; Disordered
-draft: false
+draft: true
 first_letter: E
 full_name: Epidermal growth factor receptor
 gene_symbol: EGFR

@@ -9,7 +9,7 @@ domains:
   - RAS-binding domain
   - kinase domain
 domains_top3: RBD; Protein kinase; Disordered
-draft: false
+draft: true
 first_letter: B
 full_name: Serine/threonine-protein kinase B-raf
 gene_symbol: BRAF

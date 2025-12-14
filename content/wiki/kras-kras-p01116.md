@@ -8,7 +8,7 @@ domain_count: 2
 domains:
   - GTPase domain
 domains_top3: Hypervariable region; Effector region
-draft: false
+draft: true
 first_letter: K
 full_name: GTPase KRas
 gene_symbol: KRAS

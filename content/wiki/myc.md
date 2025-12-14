@@ -8,7 +8,7 @@ domain_count: 7
 domains:
   - bHLH-LZ domain
 domains_top3: bHLH; Disordered; Basic motif
-draft: false
+draft: true
 first_letter: M
 full_name: Myc proto-oncogene protein
 gene_symbol: MYC

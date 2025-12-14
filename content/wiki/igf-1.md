@@ -9,7 +9,7 @@ domains:
   - signal peptide
   - propeptide
 domains_top3: B; C; A
-draft: false
+draft: true
 first_letter: I
 full_name: Insulin-like growth factor 1
 gene_symbol: IGF1

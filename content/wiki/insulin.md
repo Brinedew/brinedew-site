@@ -8,7 +8,7 @@ domains:
   - signal peptide
   - proinsulin
 domains_top3:
-draft: false
+draft: true
 first_letter: I
 full_name: Insulin
 gene_symbol: INS

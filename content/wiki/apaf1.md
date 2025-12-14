@@ -10,7 +10,7 @@ domains:
   - NBD
   - WD40 repeats
 domains_top3: CARD; NB-ARC; Interpropeller linker
-draft: false
+draft: true
 first_letter: A
 full_name: Apoptotic protease-activating factor 1
 gene_symbol: APAF1

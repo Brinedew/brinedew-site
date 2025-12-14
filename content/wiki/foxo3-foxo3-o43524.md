@@ -8,7 +8,7 @@ domain_count: 6
 domains:
   - Forkhead DNA-binding domain
 domains_top3: Disordered; Required for mitochondrial import; Disordered
-draft: false
+draft: true
 first_letter: F
 full_name: Forkhead box protein O3
 gene_symbol: FOXO3

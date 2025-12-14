@@ -1,7 +1,7 @@
 ---
-title: "Interactive Apps"
+title: Interactive Apps
 date: 2025-08-10
-draft: false
+draft: true
 ---
 
 # Interactive Apps

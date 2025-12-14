@@ -7,7 +7,7 @@ date: 2025-08-21
 domain_count: 0
 domains: []
 domains_top3:
-draft: false
+draft: true
 first_letter: C
 full_name: Interleukin-8
 gene_symbol: CXCL8

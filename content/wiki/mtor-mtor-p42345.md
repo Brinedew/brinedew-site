@@ -12,7 +12,7 @@ domains:
   - FRB domain
   - kinase domain
 domains_top3: FAT; PI3K/PI4K catalytic; FATC
-draft: false
+draft: true
 first_letter: M
 full_name: Serine/threonine-protein kinase mTOR
 gene_symbol: MTOR

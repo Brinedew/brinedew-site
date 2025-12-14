@@ -1,7 +1,7 @@
 ---
-title: "Selection Shadow Theory"
+title: Selection Shadow Theory
 date: 2025-08-10
-draft: false
+draft: true
 tags:
   - content/wiki
 ---

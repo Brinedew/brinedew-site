@@ -9,7 +9,7 @@ domain_count: 0
 domains:
   - CARD-like prodomain (zymogen)
 domains_top3:
-draft: false
+draft: true
 first_letter: C
 full_name: Caspase-3
 gene_symbol: CASP3

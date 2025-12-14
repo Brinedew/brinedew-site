@@ -7,7 +7,7 @@ date: 2025-08-21
 domain_count: 1
 domains: []
 domains_top3: THD
-draft: false
+draft: true
 first_letter: T
 full_name: Tumor necrosis factor
 gene_symbol: TNF

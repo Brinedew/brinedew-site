@@ -7,7 +7,7 @@ date: 2025-08-21
 domain_count: 3
 domains: []
 domains_top3: Disordered; Disordered; Disordered
-draft: false
+draft: true
 first_letter: V
 full_name: Vascular endothelial growth factor A, long form
 gene_symbol: VEGFA

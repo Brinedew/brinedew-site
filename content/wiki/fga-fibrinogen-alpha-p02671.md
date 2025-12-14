@@ -10,7 +10,7 @@ domains:
   - coiled-coil region
   - fibrinopeptide A
 domains_top3: Fibrinogen C-terminal; Alpha-chain polymerization, binding distal domain of another fibrin gamma chain; Disordered
-draft: false
+draft: true
 first_letter: F
 full_name: Fibrinogen alpha chain
 gene_symbol: FGA

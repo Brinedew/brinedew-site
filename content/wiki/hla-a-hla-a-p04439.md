@@ -9,7 +9,7 @@ domains:
   - Ig-like domains
   - transmembrane helix
 domains_top3: Ig-like C1-type; VL9 epitope; Alpha-1
-draft: false
+draft: true
 first_letter: H
 full_name: HLA class I histocompatibility antigen, A alpha chain
 gene_symbol: HLA-A

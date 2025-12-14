@@ -10,7 +10,7 @@ domains:
   - BH3
   - transmembrane domain
 domains_top3: BH3; BH1; BH2
-draft: false
+draft: true
 first_letter: B
 full_name: Apoptosis regulator BAX
 gene_symbol: BAX

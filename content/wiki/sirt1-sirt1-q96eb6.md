@@ -9,7 +9,7 @@ domains:
   - catalytic SIR2 domain
   - Zn2+-binding region
 domains_top3: Deacetylase sirtuin-type; Disordered; Interaction with H1-4
-draft: false
+draft: true
 first_letter: S
 full_name: NAD-dependent protein deacetylase sirtuin-1
 gene_symbol: SIRT1

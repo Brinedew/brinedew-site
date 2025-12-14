@@ -10,7 +10,7 @@ domains:
   - BH3
   - transmembrane domain
 domains_top3: Disordered; PEST-like; Disordered
-draft: false
+draft: true
 first_letter: M
 full_name: Induced myeloid leukemia cell differentiation protein Mcl-1
 gene_symbol: MCL1

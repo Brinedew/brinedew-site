@@ -1,7 +1,7 @@
 ---
-title: "Self-Fertilization"
+title: Self-Fertilization
 date: 2025-08-10
-draft: false
+draft: true
 tags:
   - content/wiki
 ---

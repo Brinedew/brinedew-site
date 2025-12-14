@@ -1,8 +1,8 @@
 ---
 title: Protein Gallery
 description: Browse all protein personas
-draft: false
+draft: true
 tags:
-- content/apps
+  - content/apps
 ---
 

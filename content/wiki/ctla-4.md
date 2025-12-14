@@ -9,7 +9,7 @@ domain_count: 4
 domains:
   - Ig-like domain
 domains_top3: Ig-like V-type; Homodimerization; Important for interaction with CD80 and CD86
-draft: false
+draft: true
 first_letter: C
 full_name: Cytotoxic T-lymphocyte protein 4
 gene_symbol: CTLA4

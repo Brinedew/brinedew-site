@@ -8,7 +8,7 @@ date: 2025-08-21
 domain_count: 6
 domains: []
 domains_top3: Required for binding cyclins; Required for binding CDKs; Disordered
-draft: false
+draft: true
 first_letter: C
 full_name: Cyclin-dependent kinase inhibitor 1
 gene_symbol: CDKN1A

@@ -1,7 +1,7 @@
 ---
-title: "Disposable Soma Theory"
+title: Disposable Soma Theory
 date: 2025-08-10
-draft: false
+draft: true
 tags:
   - content/wiki
 ---
