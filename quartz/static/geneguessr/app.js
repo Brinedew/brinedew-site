@@ -3495,6 +3495,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     const guessesText = `${gameState.guesses.length}/${gameState.maxGuesses} guesses`;
     // B-208: Discord invite only shown on win screen in proper mode
     const discordInvite = 'https://discord.com/invite/kx8FVzUrpf';
+    const practiceMode = !!gameState?.practiceMode;
     const showDiscordButton = gameState.won && !practiceMode;
 
     // Render into the floating bar instead of a separate card; no extra helper text.
