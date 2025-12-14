@@ -1636,8 +1636,13 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     disableMarking: true,
   };
 
+  // Resolve API base URL (worker lives on geneguessr.brinedew.bio)
+  const GRAPHICS_API_BASE = window.location.hostname === 'geneguessr.brinedew.bio'
+    ? window.location.origin
+    : 'https://geneguessr.brinedew.bio';
+
   // Fetch graphics settings from API and update DEBUG_STYLIZATION
-  fetch(`${window.location.origin}/api/graphics-settings`, {
+  fetch(`${GRAPHICS_API_BASE}/api/graphics-settings`, {
     credentials: 'include'
   })
     .then(response => response.ok ? response.json() : null)
