@@ -4,7 +4,7 @@ import * as Plugin from "./quartz/plugins"
 
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "B",
+    pageTitle: "Brinedew.bio",
     enableSPA: true,
     enablePopovers: true,
     analytics: null,

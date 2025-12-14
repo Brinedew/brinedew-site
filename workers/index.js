@@ -93,9 +93,16 @@ export default {
         body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined
       });
       
-      // For HTML, keep paths as-is (no rewriting) so subdomain requests go through this proxy
+      // For HTML, rewrite the homepage link so "B" button goes to main site, not subdomain
       if (response.headers.get('content-type')?.includes('text/html')) {
-        const html = await response.text();
+        let html = await response.text();
+        // Rewrite relative homepage links to absolute main site URL
+        // The PageTitle component renders: <a href={baseDir} class="site-brand">
+        // On subdomain root, baseDir is "/" which we need to change to "https://brinedew.bio/"
+        html = html.replace(
+          /<a\s+href=["']\/["']\s+class=["']site-brand["']/g,
+          '<a href="https://brinedew.bio/" class="site-brand"'
+        );
         return new Response(html, {
           status: response.status,
           statusText: response.statusText,
