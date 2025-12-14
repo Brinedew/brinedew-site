@@ -3759,9 +3759,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       ? '<span class="pg-score-spinner"></span>'
       : similarityValue;
 
+    const rankSlotMarkup = `<span class="pg-ladder-rank${rankLabel ? '' : ' pg-ladder-rank-empty'}">${rankLabel}</span>`;
+
     const similarityMarkup = showSimilarity
       ? `
-        ${rankLabel ? `<span class="pg-ladder-rank">${rankLabel}</span>` : ''}
+        ${rankSlotMarkup}
         <div class="pg-bar${ladderClass}${pendingClass}">
           <div class="pg-bar-fill${ladderClass}" style="width: ${similarityWidth}%" data-guess-id="${cardId}"></div>
         </div>

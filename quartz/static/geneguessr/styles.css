@@ -1376,6 +1376,10 @@
   flex-shrink: 0;
 }
 
+.pg-ladder-rank.pg-ladder-rank-empty {
+  visibility: hidden;
+}
+
 /* Ladder match styling - accent color for top-9 similar proteins */
 .pg-bar.pg-ladder {
   background: color-mix(in srgb, var(--tertiary) 30%, var(--lightgray) 70%);
