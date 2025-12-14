@@ -3676,9 +3676,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     }
     ensureCollapseDelegation();
 
+    // When user wins, skip the winning guess - it's already shown as the solution card
+    const guessesToRender = gameState.won
+      ? gameState.guesses.filter(g => !g.correct)
+      : gameState.guesses;
+
     // Check if we only need to add the latest guess (avoid destroying all existing cards)
     const existingCards = guessesEl.querySelectorAll('.pg-feedback-card');
-    const expectedCount = gameState.guesses.length;
+    const expectedCount = guessesToRender.length;
     const existingCount = existingCards.length;
 
     // Nothing to render and nothing displayed
@@ -3695,9 +3700,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       return;
     }
 
-    if (existingCount === expectedCount - 1) {
+    if (existingCount === expectedCount - 1 && !gameState.won) {
       // Only latest guess is new - append it instead of recreating everything
-      const latestGuess = gameState.guesses[gameState.guesses.length - 1];
+      // Skip this optimization on win since we filter out the winning guess
+      const latestGuess = guessesToRender[guessesToRender.length - 1];
       const newCardHtml = renderCollapsibleFeedback(latestGuess, true);
       guessesEl.insertAdjacentHTML('afterbegin', newCardHtml);
       syncFeedbackContentHeights();
@@ -3706,9 +3712,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
     // Full re-render needed (initial load or state mismatch)
     markGuessViewersDirty();
-    guessesEl.innerHTML = gameState.guesses
+    guessesEl.innerHTML = guessesToRender
       .map((g, idx) => {
-        const isLatest = idx === gameState.guesses.length - 1;
+        const isLatest = idx === guessesToRender.length - 1;
         return renderCollapsibleFeedback(g, isLatest);
       })
       .reverse()
