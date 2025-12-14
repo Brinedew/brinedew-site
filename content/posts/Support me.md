@@ -7,7 +7,7 @@ draft: false
 ---
 # Support me
 
-Donate and subscribe on my Boosty page: https://boosty.to/brinedew
+**Donate and subscribe on my Boosty page:** https://boosty.to/brinedew
 
 Thank you for your kind thoughts. Unfortunately, my bloodline is not currently compatible with the traditional payment processor routes (Patreon, Ko-fi, Paypal etc.)
 
