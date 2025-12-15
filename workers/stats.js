@@ -5,6 +5,65 @@
 
 import { parseCookies } from './auth.js';
 
+function getGameSessionTokenFromCookies(cookies) {
+  const token = cookies.geneguessr_session;
+  if (!token) return null;
+  // Keep in sync with resolveSessionCookie() regex in workers/index.js
+  if (!/^[a-zA-Z0-9_-]+$/.test(token)) return null;
+  return token;
+}
+
+async function tryLoadAuthoritativeDailyResult(request, env, cookies) {
+  const token = getGameSessionTokenFromCookies(cookies);
+  if (!token) {
+    return { ok: false, reason: 'missing_cookie' };
+  }
+
+  const sessionId = `guest_${token}`;
+  const id = env.GAME_SESSIONS.idFromName(sessionId);
+  const stub = env.GAME_SESSIONS.get(id);
+
+  let state;
+  try {
+    const resp = await stub.fetch('https://sessions/game/state', { method: 'GET' });
+    if (!resp.ok) {
+      return { ok: false, reason: 'no_state' };
+    }
+    state = await resp.json();
+  } catch {
+    return { ok: false, reason: 'no_state' };
+  }
+
+  if (!state || typeof state !== 'object') {
+    return { ok: false, reason: 'no_state' };
+  }
+
+  // Never record practice mode games in account stats.
+  if (state.practiceMode) {
+    return { ok: false, reason: 'practice_mode' };
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  if (state.date !== today) {
+    return { ok: false, reason: 'wrong_day' };
+  }
+
+  const guesses = Array.isArray(state.guesses) ? state.guesses : [];
+  const completed = Boolean(state.won) || guesses.length >= 10;
+  if (!completed) {
+    return { ok: false, reason: 'not_completed' };
+  }
+
+  return {
+    ok: true,
+    won: Boolean(state.won),
+    statsRecorded: Boolean(state.statsRecorded),
+    sessionId,
+    state,
+    today
+  };
+}
+
 /**
  * POST /api/migrate-stats
  * Migrate localStorage stats to D1 (one-time operation)
@@ -165,20 +224,30 @@ export async function handleUpdateStats(request, env) {
   
   const userId = session.user_id;
   
-  // Parse update payload
+  // Parse update payload (kept for backwards compatibility; we prefer server-derived result).
   let payload;
   try {
     payload = await request.json();
   } catch (err) {
     return Response.json({ error: 'Invalid JSON' }, { status: 400 });
   }
-  
-  const won = Boolean(payload.won);
-  const today = new Date().toISOString().split('T')[0];
+
+  const authoritative = await tryLoadAuthoritativeDailyResult(request, env, cookies);
+  if (!authoritative.ok) {
+    const status = authoritative.reason === 'not_completed' ? 409 : 400;
+    return Response.json({
+      error: 'Unable to validate completed daily game session',
+      reason: authoritative.reason
+    }, { status });
+  }
+
+  const today = authoritative.today;
+  const won = authoritative.won;
   
   // Fetch current stats
   const current = await env.DB.prepare(`
     SELECT total_played, total_wins, current_streak, best_streak
+         , last_played_date
     FROM stats WHERE user_id = ?
   `).bind(userId).first();
   
@@ -186,6 +255,38 @@ export async function handleUpdateStats(request, env) {
   let wins = current ? current.total_wins : 0;
   let currentStreak = current ? current.current_streak : 0;
   let bestStreak = current ? current.best_streak : 0;
+
+  // Idempotence guard: allow at most one stats record per user per day.
+  if (current?.last_played_date === today) {
+    const winRate = played > 0 ? wins / played : 0;
+    return Response.json({
+      success: true,
+      alreadyRecorded: true,
+      stats: {
+        played,
+        won: wins,
+        winRate,
+        currentStreak,
+        maxStreak: bestStreak
+      }
+    });
+  }
+
+  // If we have authoritative game state and it says we already recorded stats, also treat as idempotent.
+  if (authoritative.ok && authoritative.statsRecorded) {
+    const winRate = played > 0 ? wins / played : 0;
+    return Response.json({
+      success: true,
+      alreadyRecorded: true,
+      stats: {
+        played,
+        won: wins,
+        winRate,
+        currentStreak,
+        maxStreak: bestStreak
+      }
+    });
+  }
   
   // Update stats
   played++;
@@ -208,6 +309,22 @@ export async function handleUpdateStats(request, env) {
       best_streak = excluded.best_streak,
       last_played_date = excluded.last_played_date
   `).bind(userId, played, wins, currentStreak, bestStreak, today).run();
+
+  // Mark the daily game session as having recorded stats, to prevent repeat submissions from the same browser.
+  if (authoritative.ok && authoritative.sessionId && authoritative.state) {
+    try {
+      const updatedState = { ...authoritative.state, statsRecorded: true };
+      const doId = env.GAME_SESSIONS.idFromName(authoritative.sessionId);
+      const stub = env.GAME_SESSIONS.get(doId);
+      await stub.fetch('https://sessions/game/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedState)
+      });
+    } catch {
+      // Non-fatal: D1 is the source of truth for user stats.
+    }
+  }
   
   const winRate = played > 0 ? wins / played : 0;
   
