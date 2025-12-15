@@ -1501,6 +1501,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
   function updateHintDisplays(explicitValue) {
     const value = typeof explicitValue === 'number' ? explicitValue : getHintsBalance();
     document.querySelectorAll('.pg-hints-value, .pg-sidebar-hints').forEach((el) => {
+      // The sidebar's "Practice Mode" badge reuses `.pg-hints-value` for styling.
+      // Do not overwrite it with the numeric hints balance.
+      if (el.closest('.pg-sidebar-practice-badge')) {
+        return;
+      }
       el.textContent = value;
     });
   }
@@ -5126,7 +5131,7 @@ https://brinedew.bio/apps/geneguessr/`;
 
   function updateSidebarStats() {
     // Update inline hints badge
-    const inlineHints = document.querySelector('.pg-hints-value');
+    const inlineHints = document.querySelector('#pg-input-slot .pg-hints-badge .pg-hints-value');
     if (inlineHints) {
       inlineHints.textContent = getHintsBalance();
     }
