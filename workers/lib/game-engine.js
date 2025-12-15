@@ -6,6 +6,60 @@ const HINT_REWARD_ON_INCORRECT = 1;
 
 const LOCKED_HINT_PLACEHOLDER = 'Hint locked';
 
+// B-217: Domain names can sometimes include the protein's descriptive name.
+// For clue cards, filter out domain hints that contain "too-specific" full_name tokens.
+//
+// This is intentionally unigram-based (with a fairly aggressive stopword list) so we can
+// catch things like "ankyrin", "histone", etc., while ignoring generic biology words.
+const DOMAIN_SPOILER_TOKEN_STOPWORDS = new Set([
+  // Generic words that appear in lots of names/domains
+  'protein', 'proteins', 'domain', 'domains', 'family', 'subunit', 'type', 'like', 'related',
+  'putative', 'probable', 'homolog', 'homologue', 'isoform', 'fragment', 'chain', 'region',
+  'repeat', 'binding', 'associated', 'containing', 'contains', 'component', 'complex', 'signal',
+  'predicted', 'unknown', 'uncharacterized', 'cell', 'human', 'mitochondrial', 'cytoplasmic',
+  'nuclear', 'membrane', 'secreted', 'enzyme', 'factor', 'receptor',
+
+  // High-frequency overlap tokens observed in InterPro names (noise, not spoilers)
+  'finger', 'zinc', 'kinase', 'olfactory', 'ribosomal', 'alpha', 'immunoglobulin', 'phosphatase',
+  'beta', 'tyrosine', 'interacting', 'dehydrogenase', 'rich', 'ubiquitin', 'inhibitor',
+  'transmembrane', 'transporter', 'leucine', 'synthase', 'channel', 'atpase', 'prolyl',
+  'interleukin', 'isomerase', 'transcription',
+]);
+
+function getDomainSpoilerTokensFromFullName(fullName) {
+  if (typeof fullName !== 'string' || !fullName.trim()) {
+    return [];
+  }
+  const tokens = new Set();
+  const matches = fullName.toLowerCase().match(/[a-z0-9]+/g) || [];
+  for (const raw of matches) {
+    const token = raw.trim();
+    if (!token) continue;
+    if (token.length < 4) continue;
+    if (/^\d+$/.test(token)) continue;
+    if (DOMAIN_SPOILER_TOKEN_STOPWORDS.has(token)) continue;
+    tokens.add(token);
+  }
+  return Array.from(tokens);
+}
+
+function domainContainsToken(domainTextLower, tokenLower) {
+  if (!domainTextLower || !tokenLower) {
+    return false;
+  }
+  // Token must be delimited by non-alnum or string ends.
+  const re = new RegExp(`(^|[^a-z0-9])${tokenLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`);
+  return re.test(domainTextLower);
+}
+
+function shouldFilterDomainHint(domainText, spoilerTokens) {
+  if (!Array.isArray(spoilerTokens) || spoilerTokens.length === 0 || typeof domainText !== 'string') {
+    return false;
+  }
+  const domainLower = domainText.toLowerCase();
+  return spoilerTokens.some((token) => domainContainsToken(domainLower, token));
+}
+
 function stripRefSeqAttribution(text) {
   if (typeof text !== 'string') {
     return text;
@@ -304,6 +358,7 @@ function buildProteinSections(protein, options = {}) {
   const domainNames = Array.isArray(protein?.domain_names) ? protein.domain_names : [];
   const clans = Array.isArray(protein?.clans) ? protein.clans : [];
   const reactomePaths = Array.isArray(protein?.reactome_pathways) ? protein.reactome_pathways : [];
+  const domainSpoilerTokens = forClue ? getDomainSpoilerTokensFromFullName(protein?.full_name) : [];
   
   const sections = [];
   const filterTokens = [
@@ -411,13 +466,22 @@ function buildProteinSections(protein, options = {}) {
   // Domains - prefer human-readable names, fall back to IPR IDs
   const displayDomains = domainNames.length ? domainNames : domains;
   if (displayDomains.length) {
+    const domainItems = displayDomains
+      .map((domain, idx) => {
+        if (forClue && shouldFilterDomainHint(domain, domainSpoilerTokens)) {
+          return null;
+        }
+        return {
+          id: forClue ? `hint-domain-${idx}` : undefined,
+          text: domain,
+        };
+      })
+      .filter(Boolean);
+
     pushSection({
       id: 'domains',
       label: 'Domains',
-      items: displayDomains.map((domain, idx) => ({
-        id: forClue ? `hint-domain-${idx}` : undefined,
-        text: domain,
-      })),
+      items: domainItems,
     });
   }
 
