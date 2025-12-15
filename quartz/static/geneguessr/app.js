@@ -4741,6 +4741,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
                 const rankEl = existingRankEl || document.createElement('span');
                 rankEl.className = 'pg-ladder-rank';
                 rankEl.textContent = rankLabel;
+                rankEl.classList.remove('pg-ladder-rank-empty');
                 if (!existingRankEl) {
                   if (barEl && barEl.parentElement === headerEl) {
                     headerEl.insertBefore(rankEl, barEl);
@@ -4748,8 +4749,18 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
                     headerEl.appendChild(rankEl);
                   }
                 }
-              } else if (existingRankEl) {
-                existingRankEl.remove();
+              } else {
+                // Keep an empty placeholder so the header grid columns don't shift left.
+                const rankEl = existingRankEl || document.createElement('span');
+                rankEl.className = 'pg-ladder-rank pg-ladder-rank-empty';
+                rankEl.textContent = '';
+                if (!existingRankEl) {
+                  if (barEl && barEl.parentElement === headerEl) {
+                    headerEl.insertBefore(rankEl, barEl);
+                  } else {
+                    headerEl.appendChild(rankEl);
+                  }
+                }
               }
             }
 
