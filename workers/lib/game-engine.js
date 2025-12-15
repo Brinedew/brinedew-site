@@ -26,7 +26,7 @@ const DOMAIN_SPOILER_TOKEN_STOPWORDS = new Set([
   'interleukin', 'isomerase', 'transcription',
 ]);
 
-function getDomainSpoilerTokensFromFullName(fullName) {
+export function getDomainSpoilerTokensFromFullName(fullName) {
   if (typeof fullName !== 'string' || !fullName.trim()) {
     return [];
   }
@@ -121,11 +121,15 @@ export function sanitizeTargetProtein(protein, options = {}) {
 }
 
 export function buildClueSections(protein) {
-  return buildProteinSections(protein, { forClue: true });
+  const domainSpoilerTokens = getDomainSpoilerTokensFromFullName(protein?.full_name);
+  return buildProteinSections(protein, { forClue: true, domainSpoilerTokens });
 }
 
-export function buildFeedbackSections(protein) {
-  return buildProteinSections(protein, { forClue: false });
+export function buildFeedbackSections(protein, options = {}) {
+  const domainSpoilerTokens = Array.isArray(options.domainSpoilerTokens)
+    ? options.domainSpoilerTokens
+    : [];
+  return buildProteinSections(protein, { forClue: false, domainSpoilerTokens });
 }
 
 /**
@@ -217,15 +221,19 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
  * 
  * Returns matches keyed by section ID for highlighting.
  */
-export function collectMatchedHintTexts(target, guessProtein, score) {
+export function collectMatchedHintTexts(target, guessProtein, score, options = {}) {
   const matches = {};
   if (!target || !guessProtein) {
     return matches;
   }
 
+  const domainSpoilerTokens = Array.isArray(options.domainSpoilerTokens)
+    ? options.domainSpoilerTokens
+    : [];
+
   // Build sections for both proteins using the exact same logic that renders them
-  const targetSections = buildProteinSections(target, { forClue: false });
-  const guessSections = buildProteinSections(guessProtein, { forClue: false });
+  const targetSections = buildProteinSections(target, { forClue: false, domainSpoilerTokens });
+  const guessSections = buildProteinSections(guessProtein, { forClue: false, domainSpoilerTokens });
 
   // Index guess texts by section ID for fast lookup
   const guessBySectionId = {};
@@ -358,7 +366,9 @@ function buildProteinSections(protein, options = {}) {
   const domainNames = Array.isArray(protein?.domain_names) ? protein.domain_names : [];
   const clans = Array.isArray(protein?.clans) ? protein.clans : [];
   const reactomePaths = Array.isArray(protein?.reactome_pathways) ? protein.reactome_pathways : [];
-  const domainSpoilerTokens = forClue ? getDomainSpoilerTokensFromFullName(protein?.full_name) : [];
+  const domainSpoilerTokens = Array.isArray(options.domainSpoilerTokens)
+    ? options.domainSpoilerTokens
+    : (forClue ? getDomainSpoilerTokensFromFullName(protein?.full_name) : []);
   
   const sections = [];
   const filterTokens = [
@@ -468,7 +478,7 @@ function buildProteinSections(protein, options = {}) {
   if (displayDomains.length) {
     const domainItems = displayDomains
       .map((domain, idx) => {
-        if (forClue && shouldFilterDomainHint(domain, domainSpoilerTokens)) {
+        if (shouldFilterDomainHint(domain, domainSpoilerTokens)) {
           return null;
         }
         return {

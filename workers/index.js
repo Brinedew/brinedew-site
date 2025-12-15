@@ -53,6 +53,7 @@ import {
   cleanGeneSummary,
   buildClueSections,
   buildFeedbackSections,
+  getDomainSpoilerTokensFromFullName,
   collectMatchedHintTexts,
   extractHintText,
   maskClueSections,
@@ -1786,6 +1787,7 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
 
 function buildGamePayload(state, targetProtein, options = {}) {
   const revealedHints = new Set(state.revealedHints || []);
+  const domainSpoilerTokens = getDomainSpoilerTokensFromFullName(targetProtein?.full_name);
   const clueSections = options.clueSections || buildClueSections(targetProtein);
   const maskedSections = maskClueSections(clueSections, revealedHints);
   const clueTarget = sanitizeTargetProtein(targetProtein, {
@@ -1809,7 +1811,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       : (entry.score || scoreGuess(guessProtein, targetProtein, {
           similarity: entry.score?.similarity
         }));
-    const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore);
+    const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore, { domainSpoilerTokens });
     aggregateMatches(aggregatedMatches, matches);
     const isLatest = index === (state.guesses.length - 1);
     if (isLatest) {
@@ -1823,7 +1825,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       score: resolvedScore,
       similarityPending: Boolean(entry.similarityPending),  // ⚡ Pass through to client
       matchedHints: matches,
-      sections: buildFeedbackSections(guessProteinCleaned),
+      sections: buildFeedbackSections(guessProteinCleaned, { domainSpoilerTokens }),
       headerLabel: guessProtein.hgnc || guessProtein.uniprot,
       fullName: guessProtein.full_name || '',
       isLatest
@@ -1836,7 +1838,11 @@ function buildGamePayload(state, targetProtein, options = {}) {
   const targetRevealSections = targetReveal ? buildFeedbackSections(targetProtein) : null;
   const shareText = targetReveal ? buildShareText(state, guessEntries) : null;
   applyMatchReveals(maskedSections, aggregatedMatches);
-  applyLatestHighlights(maskedSections, latestMatches);
+
+  // B-217: Some clue-domain items may be filtered out server-side.
+  // Ensure clue highlight metadata only refers to items that actually exist in clue sections.
+  const latestMatchesForClue = filterMatchesToExistingSectionItems(maskedSections, latestMatches);
+  applyLatestHighlights(maskedSections, latestMatchesForClue);
   // Only reveal targetId after game ends (won or lost) to prevent cheating
   const gameOver = Boolean(state.won) || lost;
   return {
@@ -1855,13 +1861,39 @@ function buildGamePayload(state, targetProtein, options = {}) {
     clue: {
       sections: maskedSections,
       allMatches: aggregatedMatches,
-      latestMatches
+      latestMatches: latestMatchesForClue
     },
     guesses: guessEntries,
     targetReveal,
     targetRevealSections,
     shareText
   };
+}
+
+function filterMatchesToExistingSectionItems(sections, matches) {
+  if (!matches || typeof matches !== 'object' || !Array.isArray(sections)) {
+    return matches || {};
+  }
+  const filtered = {};
+  for (const section of sections) {
+    if (!section?.id || !Array.isArray(section.items)) {
+      continue;
+    }
+    const values = matches?.[section.id];
+    if (!Array.isArray(values) || values.length === 0) {
+      continue;
+    }
+    const allowed = new Set(
+      section.items
+        .map((item) => (item?.fullText ? String(item.fullText) : (item?.text ? String(item.text) : '')))
+        .filter(Boolean)
+    );
+    const kept = values.filter((value) => allowed.has(value));
+    if (kept.length) {
+      filtered[section.id] = kept;
+    }
+  }
+  return filtered;
 }
 
 function aggregateMatches(destination, matches) {
