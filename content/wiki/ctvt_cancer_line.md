@@ -1,3 +1,6 @@
+---
+draft: true
+---
 # summary
 
 Okay, here's a lead section draft for a Wikipedia page on the CTVT cancer line, aiming to meet your guidelines.  I'm assuming the draft page you're referring to will provide the details to support these statements.  **Please read the notes at the very end of this response â€“ they are crucial for ensuring accuracy and completeness when you integrate this into the full article.**
