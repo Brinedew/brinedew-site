@@ -5,7 +5,7 @@
 
 import { parseCookies } from './auth.js';
 
-function getGameSessionTokenFromCookies(cookies) {
+function getGuestSessionTokenFromCookies(cookies) {
   const token = cookies.geneguessr_session;
   if (!token) return null;
   // Keep in sync with resolveSessionCookie() regex in workers/index.js
@@ -13,54 +13,70 @@ function getGameSessionTokenFromCookies(cookies) {
   return token;
 }
 
-async function tryLoadAuthoritativeDailyResult(request, env, cookies) {
-  const token = getGameSessionTokenFromCookies(cookies);
+async function loadGameState(env, sessionId) {
+  const id = env.GAME_SESSIONS.idFromName(sessionId);
+  const stub = env.GAME_SESSIONS.get(id);
+  const resp = await stub.fetch('https://sessions/game/state', { method: 'GET' });
+  if (!resp.ok) return null;
+  return await resp.json();
+}
+
+function validateDailyCompletedState(state) {
+  if (!state || typeof state !== 'object') return { ok: false, reason: 'no_state' };
+  if (state.practiceMode) return { ok: false, reason: 'practice_mode' };
+  const today = new Date().toISOString().split('T')[0];
+  if (state.date !== today) return { ok: false, reason: 'wrong_day' };
+  const guesses = Array.isArray(state.guesses) ? state.guesses : [];
+  const completed = Boolean(state.won) || guesses.length >= 10;
+  if (!completed) return { ok: false, reason: 'not_completed' };
+  return { ok: true, today, won: Boolean(state.won), statsRecorded: Boolean(state.statsRecorded) };
+}
+
+async function tryLoadAuthoritativeDailyResultForUser(env, userId) {
+  const sessionId = `user_${userId}`;
+  let state;
+  try {
+    state = await loadGameState(env, sessionId);
+  } catch {
+    state = null;
+  }
+  const validation = validateDailyCompletedState(state);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
+  }
+  return {
+    ok: true,
+    won: validation.won,
+    statsRecorded: validation.statsRecorded,
+    sessionId,
+    state,
+    today: validation.today
+  };
+}
+
+async function tryLoadAuthoritativeDailyResultFromGuest(env, cookies) {
+  const token = getGuestSessionTokenFromCookies(cookies);
   if (!token) {
     return { ok: false, reason: 'missing_cookie' };
   }
-
   const sessionId = `guest_${token}`;
-  const id = env.GAME_SESSIONS.idFromName(sessionId);
-  const stub = env.GAME_SESSIONS.get(id);
-
   let state;
   try {
-    const resp = await stub.fetch('https://sessions/game/state', { method: 'GET' });
-    if (!resp.ok) {
-      return { ok: false, reason: 'no_state' };
-    }
-    state = await resp.json();
+    state = await loadGameState(env, sessionId);
   } catch {
-    return { ok: false, reason: 'no_state' };
+    state = null;
   }
-
-  if (!state || typeof state !== 'object') {
-    return { ok: false, reason: 'no_state' };
+  const validation = validateDailyCompletedState(state);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
   }
-
-  // Never record practice mode games in account stats.
-  if (state.practiceMode) {
-    return { ok: false, reason: 'practice_mode' };
-  }
-
-  const today = new Date().toISOString().split('T')[0];
-  if (state.date !== today) {
-    return { ok: false, reason: 'wrong_day' };
-  }
-
-  const guesses = Array.isArray(state.guesses) ? state.guesses : [];
-  const completed = Boolean(state.won) || guesses.length >= 10;
-  if (!completed) {
-    return { ok: false, reason: 'not_completed' };
-  }
-
   return {
     ok: true,
-    won: Boolean(state.won),
-    statsRecorded: Boolean(state.statsRecorded),
+    won: validation.won,
+    statsRecorded: validation.statsRecorded,
     sessionId,
     state,
-    today
+    today: validation.today
   };
 }
 
@@ -232,7 +248,30 @@ export async function handleUpdateStats(request, env) {
     return Response.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const authoritative = await tryLoadAuthoritativeDailyResult(request, env, cookies);
+  // Prefer the authenticated user session. If missing (e.g., user played as guest then logged in),
+  // migrate same-day completed state from the guest session once.
+  let authoritative = await tryLoadAuthoritativeDailyResultForUser(env, userId);
+  if (!authoritative.ok) {
+    const guest = await tryLoadAuthoritativeDailyResultFromGuest(env, cookies);
+    if (guest.ok) {
+      try {
+        const userSessionId = `user_${userId}`;
+        const doId = env.GAME_SESSIONS.idFromName(userSessionId);
+        const userStub = env.GAME_SESSIONS.get(doId);
+        await userStub.fetch('https://sessions/game/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...guest.state, statsRecorded: Boolean(guest.state?.statsRecorded) })
+        });
+      } catch {
+        // If migration fails, we can still proceed based on guest state.
+      }
+      authoritative = {
+        ...guest,
+        sessionId: `user_${userId}`
+      };
+    }
+  }
   if (!authoritative.ok) {
     const status = authoritative.reason === 'not_completed' ? 409 : 400;
     return Response.json({
@@ -310,8 +349,8 @@ export async function handleUpdateStats(request, env) {
       last_played_date = excluded.last_played_date
   `).bind(userId, played, wins, currentStreak, bestStreak, today).run();
 
-  // Mark the daily game session as having recorded stats, to prevent repeat submissions from the same browser.
-  if (authoritative.ok && authoritative.sessionId && authoritative.state) {
+  // Mark the daily game session as having recorded stats, to prevent repeat submissions.
+  if (authoritative.sessionId && authoritative.state) {
     try {
       const updatedState = { ...authoritative.state, statsRecorded: true };
       const doId = env.GAME_SESSIONS.idFromName(authoritative.sessionId);

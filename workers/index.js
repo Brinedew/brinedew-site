@@ -398,8 +398,8 @@ export default {
 async function handleSession(request, env) {
   const url = new URL(request.url);
   
-  // Get session identifier (user ID or IP hash)
-  const sessionId = getSessionId(request);
+  // Get session identifier (prefer authenticated Discord user when available)
+  const sessionId = await getPreferredSessionId(request, env);
   
   // Get Durable Object stub
   const id = env.GAME_SESSIONS.idFromName(sessionId);
@@ -407,6 +407,44 @@ async function handleSession(request, env) {
   
   // Forward request to Durable Object
   return stub.fetch(request);
+}
+
+function parseCookies(cookieHeader) {
+  const cookies = {};
+  cookieHeader.split(';').forEach(cookie => {
+    const [name, ...rest] = cookie.trim().split('=');
+    if (name) {
+      cookies[name] = rest.join('=');
+    }
+  });
+  return cookies;
+}
+
+async function getAuthenticatedUserIdFromRequest(request, env) {
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const cookies = parseCookies(cookieHeader);
+  const authSession = cookies.session;
+  if (!authSession) return null;
+  if (!/^[a-zA-Z0-9_-]+$/.test(authSession)) return null;
+
+  try {
+    const id = env.GAME_SESSIONS.idFromName(`session:${authSession}`);
+    const stub = env.GAME_SESSIONS.get(id);
+    const resp = await stub.fetch('http://internal/get');
+    if (!resp.ok) return null;
+    const session = await resp.json();
+    return session?.user_id || null;
+  } catch {
+    return null;
+  }
+}
+
+async function getPreferredSessionId(request, env) {
+  const userId = await getAuthenticatedUserIdFromRequest(request, env);
+  if (userId) {
+    return `user_${userId}`;
+  }
+  return getSessionId(request);
 }
 
 /**
@@ -465,6 +503,53 @@ function resolveSessionContext(request) {
     sessionId: practiceMode ? `practice_${baseSessionId}` : baseSessionId,
     sessionToken,
     needsSessionCookie: isNew
+  };
+}
+
+async function resolveSessionContextAsync(request, env, options = {}) {
+  const url = new URL(request.url);
+  const practiceMode = url.searchParams.get('practice') === '1';
+  const practiceRestart = practiceMode && url.searchParams.get('restart') === '1';
+  const { sessionToken, isNew } = resolveSessionCookie(request);
+  const guestBaseSessionId = `guest_${sessionToken}`;
+
+  const authenticatedUserId = await getAuthenticatedUserIdFromRequest(request, env);
+  const baseSessionId = authenticatedUserId ? `user_${authenticatedUserId}` : guestBaseSessionId;
+
+  // Optional migration: if the user just logged in, keep their current same-day progress.
+  // Only do this on bootstrap to avoid extra DO reads on every guess/hint.
+  if (options.migrateGuestState && authenticatedUserId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const userSessionId = practiceMode ? `practice_user_${authenticatedUserId}` : `user_${authenticatedUserId}`;
+    const guestSessionId = practiceMode ? `practice_${guestBaseSessionId}` : guestBaseSessionId;
+    try {
+      const [userState, guestState] = await Promise.all([
+        getGameState(env, userSessionId).catch(() => null),
+        getGameState(env, guestSessionId).catch(() => null)
+      ]);
+
+      const userGuesses = Array.isArray(userState?.guesses) ? userState.guesses.length : 0;
+      const guestGuesses = Array.isArray(guestState?.guesses) ? guestState.guesses.length : 0;
+      const shouldMigrate =
+        guestState?.date === today &&
+        (userState?.date !== today || userGuesses === 0) &&
+        guestGuesses > 0;
+
+      if (shouldMigrate) {
+        await saveGameState(env, userSessionId, guestState);
+      }
+    } catch {
+      // Non-fatal: fallback is a fresh user session.
+    }
+  }
+
+  return {
+    practiceMode,
+    practiceRestart,
+    sessionId: practiceMode ? `practice_${baseSessionId}` : baseSessionId,
+    sessionToken,
+    needsSessionCookie: isNew,
+    authenticatedUserId
   };
 }
 
@@ -856,7 +941,7 @@ async function handleStructureToken(request, env, corsHeaders) {
     if (type === 'target') {
       // Fallback endpoint for clients without embedded bootstrap token.
       // Most calls should be eliminated by embedding token in bootstrap payload.
-      const { sessionId, practiceMode } = resolveSessionContext(request);
+      const { sessionId, practiceMode } = await resolveSessionContextAsync(request, env);
       let protein = null;
       
       try {
@@ -984,7 +1069,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
   // This prevents cheating by inspecting the URL to see the PDB ID
   const type = url.searchParams.get('type');
   if (type === 'target') {
-    const { sessionId, practiceMode } = resolveSessionContext(request);
+    const { sessionId, practiceMode } = await resolveSessionContextAsync(request, env);
     
     try {
       const state = await getGameState(env, sessionId);
@@ -1227,7 +1312,7 @@ async function setDailyBootstrapCache(env, date, origin, targetProtein, structur
 async function handleGameBootstrap(request, env, corsHeaders) {
   console.log('[BOOTSTRAP] Handler started');
   try {
-    const sessionContext = resolveSessionContext(request);
+    const sessionContext = await resolveSessionContextAsync(request, env, { migrateGuestState: true });
     const { sessionId, practiceMode, practiceRestart } = sessionContext;
     console.log(`[BOOTSTRAP] Session resolved: practiceMode=${practiceMode}`);
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
@@ -1312,7 +1397,7 @@ async function handleGameBootstrap(request, env, corsHeaders) {
 
 async function handleGuessSubmission(request, env, corsHeaders) {
   try {
-    const sessionContext = resolveSessionContext(request);
+    const sessionContext = await resolveSessionContextAsync(request, env);
     const { sessionId, practiceMode } = sessionContext;
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
     
@@ -1428,7 +1513,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
 async function handleHintReveal(request, env, corsHeaders) {
   const t0 = Date.now();
   try {
-    const sessionContext = resolveSessionContext(request);
+    const sessionContext = await resolveSessionContextAsync(request, env);
     const { sessionId, practiceMode } = sessionContext;
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
     
@@ -1511,7 +1596,7 @@ async function handleHintReveal(request, env, corsHeaders) {
  */
 async function handleGuessSimilarity(request, env, corsHeaders) {
   try {
-    const sessionContext = resolveSessionContext(request);
+    const sessionContext = await resolveSessionContextAsync(request, env);
     const { sessionId } = sessionContext;
     const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
     
