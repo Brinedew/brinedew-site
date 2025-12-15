@@ -374,40 +374,12 @@ export default {
       }
     }
 
-    // Session management endpoints
-    if (url.pathname.startsWith('/api/session')) {
-      const response = await handleSession(request, env);
-      // Clone response with CORS headers
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
-      });
-    }
-    
     return Response.json({ error: 'Not found' }, { 
       status: 404,
       headers: corsHeaders 
     });
   }
 };
-
-/**
- * Handle session management requests
- */
-async function handleSession(request, env) {
-  const url = new URL(request.url);
-  
-  // Get session identifier (prefer authenticated Discord user when available)
-  const sessionId = await getPreferredSessionId(request, env);
-  
-  // Get Durable Object stub
-  const id = env.GAME_SESSIONS.idFromName(sessionId);
-  const stub = env.GAME_SESSIONS.get(id);
-  
-  // Forward request to Durable Object
-  return stub.fetch(request);
-}
 
 function parseCookies(cookieHeader) {
   const cookies = {};
@@ -439,32 +411,6 @@ async function getAuthenticatedUserIdFromRequest(request, env) {
   }
 }
 
-async function getPreferredSessionId(request, env) {
-  const userId = await getAuthenticatedUserIdFromRequest(request, env);
-  if (userId) {
-    return `user_${userId}`;
-  }
-  return getSessionId(request);
-}
-
-/**
- * Get session identifier from request
- * Uses user ID if authenticated, session cookie for guests, IP hash as fallback
- */
-function getSessionId(request) {
-  // TODO: Extract from auth cookie when B-94 (Discord OAuth) is implemented
-  
-  // Check for existing session cookie
-  const cookieHeader = request.headers.get('Cookie') || '';
-  const sessionMatch = cookieHeader.match(/geneguessr_session=([a-zA-Z0-9_-]+)/);
-  if (sessionMatch) {
-    return `guest_${sessionMatch[1]}`;
-  }
-  
-  // Fallback to IP hash (for clients without cookies, like some bots)
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  return `guest_${hashIP(ip)}`;
-}
 
 /**
  * Check if request has a session cookie, if not generate one
@@ -574,17 +520,6 @@ function buildResponseHeaders(corsHeaders, sessionContext) {
 /**
  * Hash IP address for guest session identification
  */
-function hashIP(ip) {
-  // Simple hash for demo - replace with proper hashing in production
-  let hash = 0;
-  for (let i = 0; i < ip.length; i++) {
-    const char = ip.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(36);
-}
-
 async function getGameState(env, sessionId) {
   const id = env.GAME_SESSIONS.idFromName(sessionId);
   const stub = env.GAME_SESSIONS.get(id);
@@ -643,15 +578,7 @@ export class GameSession {
     const path = url.pathname;
 
     // Route requests
-    if (path === '/api/session/get' && request.method === 'GET') {
-      return this.getSession();
-    } else if (path === '/api/session/update' && request.method === 'POST') {
-      return this.updateSession(request);
-    } else if (path === '/api/session/reset' && request.method === 'POST') {
-      return this.resetSession();
-    } else if (path === '/api/session/check-played-today' && request.method === 'GET') {
-      return this.checkPlayedToday();
-    } else if (path === '/game/state' && request.method === 'GET') {
+    if (path === '/game/state' && request.method === 'GET') {
       return this.getGameState();
     } else if (path === '/game/state' && request.method === 'POST') {
       return this.setGameState(request);
@@ -667,86 +594,6 @@ export class GameSession {
     } else {
       return new Response('Not found', { status: 404 });
     }
-  }
-
-  /**
-   * Get current session state
-   */
-  async getSession() {
-    const session = await this.state.storage.get('session') || {
-      wrong_guesses: 0,
-      hints_revealed: [],
-      played_today: false,
-      last_played_date: null,
-      created_at: Date.now()
-    };
-
-    return new Response(JSON.stringify(session), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  /**
-   * Update session state
-   */
-  async updateSession(request) {
-    const updates = await request.json();
-    const session = await this.state.storage.get('session') || {
-      wrong_guesses: 0,
-      hints_revealed: [],
-      played_today: false,
-      last_played_date: null,
-      created_at: Date.now()
-    };
-
-    // Merge updates
-    const updatedSession = { ...session, ...updates };
-    await this.state.storage.put('session', updatedSession);
-
-    return new Response(JSON.stringify(updatedSession), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  /**
-   * Reset session (new game)
-   */
-  async resetSession() {
-    const session = {
-      wrong_guesses: 0,
-      hints_revealed: [],
-      played_today: true,
-      last_played_date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
-      created_at: Date.now()
-    };
-
-    await this.state.storage.put('session', session);
-
-    return new Response(JSON.stringify(session), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  /**
-   * Check if user/guest has played today
-   */
-  async checkPlayedToday() {
-    const session = await this.state.storage.get('session');
-    if (!session) {
-      return new Response(JSON.stringify({ played_today: false }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    const today = new Date().toISOString().split('T')[0];
-    const played_today = session.last_played_date === today;
-
-    return new Response(JSON.stringify({ 
-      played_today,
-      last_played_date: session.last_played_date 
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
   }
 
   async getGameState() {
