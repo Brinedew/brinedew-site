@@ -5212,8 +5212,8 @@ https://brinedew.bio/apps/geneguessr/`;
     render();
     setStatus('rendered');
 
-    // Attach collapse handler for attribution card (outside geneguessr-root)
-    attachAttributionToggle();
+    // Attach collapse handler for sources card (outside geneguessr-root)
+    attachSourcesToggle();
 
     if (!tutorialBootRequested && window.GeneGuessrTutorial && typeof window.GeneGuessrTutorial.boot === 'function') {
       tutorialBootRequested = true;
@@ -5221,15 +5221,16 @@ https://brinedew.bio/apps/geneguessr/`;
     }
   }
 
-  // Handle attribution card collapse (card is in markdown, outside geneguessr-root)
-  function attachAttributionToggle() {
-    const card = document.getElementById('attribution-card');
+  // Handle sources/attribution card collapse (card is in markdown, outside geneguessr-root)
+  function attachSourcesToggle() {
+    // Backward-compatible: older builds used attribution-card.
+    const card = document.getElementById('sources-card') || document.getElementById('attribution-card');
     if (!card) return;
     const toggle = card.querySelector('.pg-collapse-toggle');
     if (!toggle || toggle.dataset.listenerAttached) return;
     toggle.dataset.listenerAttached = 'true';
     toggle.addEventListener('click', function() {
-      const content = document.getElementById('attribution-content');
+      const content = document.getElementById('sources-content') || document.getElementById('attribution-content');
       const chevron = card.querySelector('.pg-collapse-chevron');
       const expanded = card.dataset.expanded === 'true';
       const next = !expanded;

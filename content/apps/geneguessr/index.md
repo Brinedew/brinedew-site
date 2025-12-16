@@ -15,12 +15,12 @@ tags:
 
 ---
 
-<div class="pg-feedback-card collapsed" id="attribution-card" data-expanded="false">
-  <button class="pg-collapse-toggle" aria-expanded="false" aria-controls="attribution-content">
+<div class="pg-feedback-card collapsed" id="sources-card" data-expanded="false">
+  <button class="pg-collapse-toggle" aria-expanded="false" aria-controls="sources-content">
     <span class="pg-collapse-chevron">▶</span>
-    <span class="pg-feedback-gene">Attribution & Data Sources</span>
+    <span class="pg-feedback-gene">Sources</span>
   </button>
-  <div class="pg-feedback-content" id="attribution-content" style="display: none;">
+  <div class="pg-feedback-content" id="sources-content" style="display: none;">
     <div class="pg-section">
       <span class="pg-section-label">Protein data:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a></span>
     </div>
@@ -29,6 +29,9 @@ tags:
     </div>
     <div class="pg-section">
       <span class="pg-section-label">Domains & clans:</span> <span class="pg-section-entry"><a href="https://www.ebi.ac.uk/interpro/">InterPro</a> / <a href="https://www.ebi.ac.uk/interpro/entry/pfam/">Pfam</a></span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">Architecture:</span> <span class="pg-section-entry"><a href="https://www.cathdb.info/">CATH</a></span>
     </div>
     <div class="pg-section">
       <span class="pg-section-label">Pathway data:</span> <span class="pg-section-entry"><a href="https://reactome.org/">Reactome</a></span>
