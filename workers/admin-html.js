@@ -536,68 +536,132 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       gap: 0.5rem;
+      auto-rows: 1fr;
     }
     .calendar-day-header {
       text-align: center;
       font-weight: bold;
       padding: 0.5rem;
       color: #94a3b8;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
     }
     .calendar-day {
-      background: #0f172a;
+      background: #1e293b;
       border: 1px solid #334155;
-      border-radius: 4px;
-      min-height: 80px;
+      border-radius: 6px;
+      min-height: 100px;
       padding: 0.5rem;
       cursor: pointer;
-      transition: border-color 0.2s;
+      transition: all 0.2s ease;
       position: relative;
+      display: flex;
+      flex-direction: column;
     }
     .calendar-day:hover {
       border-color: #38bdf8;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
     .calendar-day.empty {
       background: transparent;
       border: none;
       cursor: default;
+      box-shadow: none;
     }
     .calendar-day.today {
       border-color: #38bdf8;
       background: #1e293b;
     }
-    .calendar-day.has-override {
-      background: #1e3a8a;
-      border-color: #60a5fa;
+    .calendar-day.today .day-number {
+      color: #38bdf8;
     }
-    .day-number {
-      font-weight: bold;
-      margin-bottom: 0.25rem;
-    }
-    .day-content {
-      font-size: 0.75rem;
-      color: #cbd5e1;
-      word-break: break-all;
-    }
-
     .calendar-day.selected {
       border-color: #38bdf8;
       box-shadow: 0 0 0 2px #38bdf8;
-      background: #1e293b;
       z-index: 10;
     }
     
-    /* Schedule styles */
-    .schedule-controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
-      flex-wrap: wrap;
+    /* Status Colors */
+    .calendar-day.is-override {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: rgba(56, 189, 248, 0.3);
     }
-    .schedule-table {
-      width: 100%;
-      border-collapse: collapse;
+    .calendar-day.is-computed {
+      background: rgba(148, 163, 184, 0.05);
+    }
+    .calendar-day.is-history {
+      opacity: 0.7;
+    }
+    
+    .day-number {
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+      color: #94a3b8;
+    }
+    
+    .day-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    
+    .day-symbol {
+      font-weight: 700;
+      font-size: 1rem;
+      color: #f1f5f9;
+    }
+    
+    .day-badge {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .day-badge.override { background: #0ea5e9; color: white; }
+    .day-badge.computed { background: #475569; color: #e2e8f0; }
+    
+    /* Inspector Panel Styles */
+    .inspector-header {
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #334155;
+    }
+    .inspector-date {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 0.25rem;
+    }
+    .inspector-meta {
+      color: #94a3b8;
+      font-size: 0.875rem;
+    }
+    
+    .inspector-section {
+      margin-bottom: 2rem;
+    }
+    .inspector-label {
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.05em;
+    }
+    
+    .inspector-cards {
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 1rem;
+      border: 1px solid #334155;
+    }
       margin-top: 0.5rem;
       font-size: 0.9rem;
     }
@@ -686,54 +750,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- Schedule Section -->
-    <div class="section">
-      <h2>Schedule (History + Next Month)</h2>
-      <p class="helper-text helper-text--title" style="margin-bottom: 0.75rem;">
-        History is based on recorded daily picks (what players actually saw). Upcoming is the computed pick for each day, plus any planned overrides.
-      </p>
-      <div class="schedule-controls">
-        <div>
-          <label for="schedule-future-days">Future Days</label>
-          <input type="number" id="schedule-future-days" min="0" max="90" value="30" style="width: 6rem;" />
-          <button type="button" id="schedule-refresh">Refresh</button>
-        </div>
-        <div id="schedule-message" class="helper-text"></div>
-      </div>
-      <div id="schedule-table-wrap"></div>
-      <div id="schedule-cards" class="cards-preview" style="display:none;"></div>
-    </div>
-
-    <!-- Protein Override -->
-    <div class="section" id="override-section">
-      <h2 id="override-section-title">Protein Override</h2>
-      <p class="helper-text helper-text--title" style="margin-bottom: 1rem;">
-        Set a specific protein for a given date. Overrides the daily random selection.
-      </p>
-      
-      <form id="override-form">
-        <div class="form-group">
-          <label for="override-date">Date (YYYY-MM-DD)</label>
-          <input type="date" id="override-date" required>
-        </div>
-        
-        <div class="form-group">
-          <label for="override-uniprot">UniProt ID</label>
-          <input type="text" id="override-uniprot" placeholder="e.g., P04637" required>
-        </div>
-        
-        <div class="form-actions">
-          <button type="submit" id="btn-save-override">Set Override</button>
-          <button type="button" id="btn-preview-override">Preview</button>
-          <button type="button" id="btn-delete-override" class="btn-delete" style="display: none;">Clear Override</button>
-        </div>
-      </form>
-      
-      <div id="override-message"></div>
-      
-      <div class="override-list" id="override-list"></div>
-    </div>
-    
     <!-- Graphics Options -->
     <div class="section">
       <h2>Graphics Options</h2>
@@ -1073,6 +1089,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     </div>
     
     <div class="right-panel">
+      <div class="inspector-header">
+        <div class="inspector-date" id="inspector-date">Select a Date</div>
+        <div class="inspector-meta" id="inspector-meta">Click a day on the calendar to inspect</div>
+      </div>
+
       <div class="viewer-preview" id="viewer-preview" data-theme="dark">
         <div class="viewer-preview__header">
           <h3>Live 3D Preview</h3>
@@ -1083,23 +1104,36 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
         <p class="helper-text viewer-preview__status" id="viewer-preview-status">Loading preview...</p>
         <div class="viewer-preview__canvas" id="graphics-preview">
-          <div class="viewer-placeholder" id="graphics-preview-placeholder">Preparing sample protein...</div>
+          <div class="viewer-placeholder" id="graphics-preview-placeholder">Select a date to view protein</div>
           <div class="viewer-loading" id="graphics-preview-loading" hidden>Loading viewer...</div>
           <div class="viewer-error" id="graphics-preview-error" hidden></div>
           <div class="viewer-mount" id="graphics-preview-mount" aria-hidden="true"></div>
         </div>
-        <div class="form-group" style="margin-top: 1rem;">
-          <label for="preview-protein-select">Select Protein to Preview</label>
-          <div class="protein-selector-wrapper">
-            <input 
-              type="text" 
-              id="preview-protein-select" 
-              placeholder="Type to search (e.g., p53, AKT1, EGFR)..."
-              autocomplete="off"
-            />
-            <div class="protein-suggestions" id="preview-protein-suggestions"></div>
+      </div>
+
+      <!-- Inspector Controls (Override Form) -->
+      <div class="inspector-section" id="inspector-controls" style="display:none;">
+        <div class="inspector-label">Daily Protein Selection</div>
+        <form id="override-form">
+          <input type="hidden" id="override-date">
+          <div class="form-group">
+            <div class="protein-selector-wrapper">
+              <input type="text" id="override-uniprot" placeholder="Enter UniProt ID (e.g. P04637) to override" autocomplete="off">
+              <div class="protein-suggestions" id="protein-suggestions"></div>
+            </div>
           </div>
-        </div>
+          <div class="form-actions" style="margin-top: 0.5rem;">
+            <button type="submit" id="btn-save-override">Set Override</button>
+            <button type="button" id="btn-delete-override" class="btn-delete" style="display: none;">Clear Override</button>
+          </div>
+        </form>
+        <div id="override-message"></div>
+      </div>
+
+      <!-- Cards / Details -->
+      <div class="inspector-section" id="inspector-details" style="display:none;">
+        <div class="inspector-label">Game Data</div>
+        <div id="schedule-cards" class="inspector-cards"></div>
       </div>
     </div>
   </div>
@@ -1325,125 +1359,63 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     loadProteinDatabase();
     initializePreview();
 
+    let scheduleData = {};
+
     function setupSchedule() {
-      const btn = document.getElementById('schedule-refresh');
-      const futureInput = document.getElementById('schedule-future-days');
-      if (btn) {
-        btn.addEventListener('click', () => loadSchedule());
-      }
-      if (futureInput) {
-        futureInput.addEventListener('change', () => loadSchedule());
-      }
+      // No controls needed anymore, auto-load on init
       loadSchedule();
     }
 
     async function loadSchedule() {
-      const wrap = document.getElementById('schedule-table-wrap');
-      const msg = document.getElementById('schedule-message');
-      const futureDays = Number(document.getElementById('schedule-future-days')?.value || 30) || 30;
-      if (!wrap) return;
-      wrap.innerHTML = '<p class="helper-text">Loading schedule...</p>';
-      if (msg) msg.textContent = '';
       try {
-        const response = await fetch(API_BASE + '/api/admin/schedule?futureDays=' + encodeURIComponent(String(futureDays)), { credentials: 'include' });
+        // Fetch enough days to cover the calendar view (e.g. 60 days)
+        const response = await fetch(API_BASE + '/api/admin/schedule?futureDays=60', { credentials: 'include' });
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.error || 'Failed to load schedule');
         }
-        renderSchedule(data);
+        
+        // Process data into map
+        scheduleData = {};
+        
+        // History
+        (data.history || []).forEach(row => {
+          scheduleData[row.date] = {
+            type: 'history',
+            source: row.source || 'actual',
+            uniprot: row.uniprot_id,
+            symbol: row.protein?.hgnc || row.uniprot_id,
+            rejected: row.rejected_count
+          };
+        });
+        
+        // Upcoming
+        (data.upcoming || []).forEach(row => {
+          const isOverride = !!row.override_uniprot_id;
+          const protein = isOverride ? { uniprot: row.override_uniprot_id } : row.computed;
+          
+          scheduleData[row.date] = {
+            type: 'upcoming',
+            source: isOverride ? 'override' : 'computed',
+            uniprot: protein?.uniprot || row.override_uniprot_id,
+            symbol: protein?.hgnc || protein?.uniprot || row.override_uniprot_id,
+            fullName: protein?.full_name
+          };
+        });
+        
+        renderCalendar(currentDate);
+        
+        // If we have a selected date, refresh inspector
+        if (selectedDate) {
+          selectDate(selectedDate);
+        }
       } catch (err) {
         console.error('Error loading schedule:', err);
-        wrap.innerHTML = '<p class="helper-text error-text">Failed to load schedule</p>';
-        if (msg) msg.textContent = '';
       }
     }
+    
+    // Removed renderSchedule
 
-    function renderSchedule(data) {
-      const wrap = document.getElementById('schedule-table-wrap');
-      if (!wrap) return;
-      const today = data?.today || '';
-      const history = Array.isArray(data?.history) ? data.history : [];
-      const upcoming = Array.isArray(data?.upcoming) ? data.upcoming : [];
-
-      const table = document.createElement('table');
-      table.className = 'schedule-table';
-      table.innerHTML =
-        '<thead><tr>' +
-          '<th style="width: 9.5rem;">Date</th>' +
-          '<th>Resolved / Planned</th>' +
-          '<th style="width: 16rem;">Actions</th>' +
-        '</tr></thead>';
-
-      const tbody = document.createElement('tbody');
-
-      // History (recorded actual picks)
-      history.forEach((row) => {
-        const tr = document.createElement('tr');
-        const date = row.date;
-        const uniprot = row.uniprot_id || '';
-        const source = row.source || '';
-        const rejectedCount = (row.rejected_count === null || row.rejected_count === undefined)
-          ? ''
-          : String(row.rejected_count);
-
-        tr.innerHTML =
-          '<td>' +
-            '<div>' + escapeHtml(date) + (date === today ? ' <span class="value-pill">today</span>' : '') + '</div>' +
-            '<div class="schedule-meta">history</div>' +
-          '</td>' +
-          '<td>' +
-            '<div><span class="value-pill">' + escapeHtml(source || 'actual') + '</span> ' + escapeHtml(uniprot || '(missing)') + '</div>' +
-            (rejectedCount ? '<div class="schedule-meta">rejected: ' + escapeHtml(rejectedCount) + '</div>' : '') +
-          '</td>' +
-          '<td></td>';
-
-        const actionsTd = tr.querySelector('td:last-child');
-        const actions = document.createElement('div');
-        actions.className = 'schedule-actions';
-        actions.appendChild(makeButton('Cards', () => loadCardsForDate(date)));
-        actions.appendChild(makeButton('Edit override', () => openOverrideForDate(date)));
-        actionsTd.appendChild(actions);
-
-        tbody.appendChild(tr);
-      });
-
-      // Upcoming (planned)
-      upcoming.forEach((row) => {
-        const tr = document.createElement('tr');
-        const date = row.date;
-        const overrideId = row.override_uniprot_id || '';
-        const computed = row.computed;
-        const computedLabel = computed?.hgnc
-          ? (computed.hgnc + ' / ' + computed.uniprot)
-          : (computed?.uniprot || '');
-        const plannedLabel = overrideId
-          ? ('override: ' + overrideId)
-          : ('computed: ' + computedLabel);
-        tr.innerHTML =
-          '<td>' +
-            '<div>' + escapeHtml(date) + (date === today ? ' <span class="value-pill">today</span>' : '') + '</div>' +
-            '<div class="schedule-meta">upcoming</div>' +
-          '</td>' +
-          '<td>' +
-            '<div>' + escapeHtml(plannedLabel || '(missing)') + '</div>' +
-            (computed?.full_name ? '<div class="schedule-meta">' + escapeHtml(computed.full_name) + '</div>' : '') +
-          '</td>' +
-          '<td></td>';
-
-        const actionsTd = tr.querySelector('td:last-child');
-        const actions = document.createElement('div');
-        actions.className = 'schedule-actions';
-        actions.appendChild(makeButton('Cards', () => loadCardsForDate(date)));
-        actions.appendChild(makeButton('Edit override', () => openOverrideForDate(date)));
-        actionsTd.appendChild(actions);
-
-        tbody.appendChild(tr);
-      });
-
-      table.appendChild(tbody);
-      wrap.innerHTML = '';
-      wrap.appendChild(table);
-    }
 
     async function loadCardsForDate(date) {
       const cardsEl = document.getElementById('schedule-cards');
@@ -2858,27 +2830,37 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0');
         const el = document.createElement('div');
         el.className = 'calendar-day';
+        
+        const data = scheduleData[dateStr];
+        
         if (dateStr === todayStr) el.classList.add('today');
         if (dateStr === selectedDate) el.classList.add('selected');
         
-        const override = currentOverrides.find(o => o.date === dateStr);
-        if (override) {
-          el.classList.add('has-override');
+        if (data) {
+          if (data.type === 'history') el.classList.add('is-history');
+          if (data.source === 'override') el.classList.add('is-override');
+          else if (data.source === 'computed') el.classList.add('is-computed');
         }
         
-        el.innerHTML = '<div class="day-number">' + i + '</div><div class="day-content">' + (override ? override.uniprot_id : '') + '</div>';
+        let content = '<div class="day-number">' + i + '</div>';
+        content += '<div class="day-content">';
+        
+        if (data && data.symbol) {
+          content += '<div class="day-symbol">' + escapeHtml(data.symbol) + '</div>';
+          if (data.source === 'override') {
+            content += '<div class="day-badge override">Override</div>';
+          } else if (data.type === 'history') {
+             // History doesn't need a badge usually, maybe just dim
+          } else {
+            content += '<div class="day-badge computed">Auto</div>';
+          }
+        }
+        
+        content += '</div>';
+        el.innerHTML = content;
         
         el.addEventListener('click', () => selectDate(dateStr));
         grid.appendChild(el);
-      }
-    }
-
-    function updateCalendarOverrides(overrides) {
-      currentOverrides = overrides || [];
-      renderCalendar(currentDate);
-      // If we have a selected date, refresh the form state as overrides might have changed
-      if (selectedDate) {
-        selectDate(selectedDate);
       }
     }
 
@@ -2886,21 +2868,35 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       selectedDate = date;
       renderCalendar(currentDate); // Re-render to show selection highlight
       
-      const override = currentOverrides.find(o => o.date === date);
+      const data = scheduleData[date];
       
-      // Update form
+      // Update Inspector Header
+      document.getElementById('inspector-date').textContent = new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      
+      let metaText = 'No data for this date';
+      if (data) {
+        if (data.type === 'history') {
+          metaText = 'Historical Record • Source: ' + data.source;
+        } else {
+          metaText = (data.source === 'override' ? 'Manual Override' : 'Computed Selection') + (data.fullName ? ' • ' + data.fullName : '');
+        }
+      }
+      document.getElementById('inspector-meta').textContent = metaText;
+      
+      // Show sections
+      document.getElementById('inspector-controls').style.display = 'block';
+      document.getElementById('inspector-details').style.display = 'block';
+      
+      // Update Form
       document.getElementById('override-date').value = date;
-      document.getElementById('override-uniprot').value = override ? override.uniprot_id : '';
-      
-      // Update section title
-      const titleEl = document.getElementById('override-section-title');
-      titleEl.textContent = 'Protein Override: ' + date;
+      const overrideId = (data && data.source === 'override') ? data.uniprot : '';
+      document.getElementById('override-uniprot').value = overrideId;
       
       // Update buttons
       const deleteBtn = document.getElementById('btn-delete-override');
       const saveBtn = document.getElementById('btn-save-override');
       
-      if (override) {
+      if (overrideId) {
         deleteBtn.style.display = 'inline-block';
         saveBtn.textContent = 'Update Override';
       } else {
@@ -2908,11 +2904,20 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         saveBtn.textContent = 'Set Override';
       }
       
-      // Scroll to section if needed (optional, maybe too jumpy)
-      // document.getElementById('override-section').scrollIntoView({ behavior: 'smooth' });
+      // Load Preview
+      const proteinToLoad = (data && data.uniprot) ? data.uniprot : null;
+      if (proteinToLoad) {
+        loadProteinInPreview(proteinToLoad);
+      } else {
+        // Clear preview if no protein
+        document.getElementById('graphics-preview-placeholder').style.display = 'flex';
+        document.getElementById('graphics-preview-placeholder').textContent = 'No protein scheduled for this date';
+        document.getElementById('graphics-preview-mount').innerHTML = '';
+      }
+      
+      // Load Cards
+      loadCardsForDate(date);
     }
-    
-    // Removed Modal functions
     
     // Initialize calendar
     initCalendar();
