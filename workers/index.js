@@ -330,6 +330,25 @@ export default {
       });
     }
 
+    // Maintenance: purge orphaned structure objects from R2.
+    // Orphan = object exists in R2 but KV has no structure_meta:<key> record.
+    // Cursor-based so it can be run repeatedly without timing out.
+    if (url.pathname === '/api/admin/purge-orphan-structures' && request.method === 'POST') {
+      return handleAdminPurgeOrphanStructures(request, env, corsHeaders);
+    }
+
+    // Maintenance: delete a specific structure object from R2 by key.
+    // This is for removing large or problematic cached blobs even when they are not orphans.
+    if (url.pathname === '/api/admin/delete-structure' && request.method === 'POST') {
+      return handleAdminDeleteStructure(request, env, corsHeaders);
+    }
+
+    // Maintenance: purge any structure objects that are no longer referenced by the current DB.
+    // This cleans up blobs that became obsolete after reseeding/rebuilding structure columns.
+    if (url.pathname === '/api/admin/purge-unreferenced-structures' && request.method === 'POST') {
+      return handleAdminPurgeUnreferencedStructures(request, env, corsHeaders);
+    }
+
     // Debug endpoint for cache stats (no sensitive data)
     if (url.pathname === '/api/debug/cache-stats' && request.method === 'GET') {
       const usage = await getStructureBucketUsage(env);
@@ -2092,6 +2111,338 @@ async function safeJson(request) {
   } catch {
     return null;
   }
+}
+
+function parseBoolParam(raw, fallback = false) {
+  if (raw === null || raw === undefined) {
+    return fallback;
+  }
+  const value = String(raw).trim().toLowerCase();
+  if (value === '1' || value === 'true' || value === 'yes' || value === 'y') return true;
+  if (value === '0' || value === 'false' || value === 'no' || value === 'n') return false;
+  return fallback;
+}
+
+function clampInt(value, min, max, fallback) {
+  const numeric = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, numeric));
+}
+
+async function handleAdminPurgeOrphanStructures(request, env, corsHeaders) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403, headers: corsHeaders });
+  }
+  if (!env?.STRUCTURES_BUCKET || !env?.KV) {
+    return Response.json({ error: 'Missing STRUCTURES_BUCKET or KV binding' }, { status: 500, headers: corsHeaders });
+  }
+
+  const url = new URL(request.url);
+  const cursorIn = url.searchParams.get('cursor') || undefined;
+  const prefixRaw = (url.searchParams.get('prefix') || '').trim();
+  const prefix = prefixRaw === '' ? undefined : prefixRaw;
+  const dryRun = parseBoolParam(url.searchParams.get('dryRun'), true);
+  const limit = clampInt(url.searchParams.get('limit'), 1, 1000, 250);
+
+  // Safety: only allow the known structure prefixes.
+  const allowedPrefixes = new Set(['pdb/', 'alphafold/', 'swissmodel/']);
+  if (prefix && !allowedPrefixes.has(prefix)) {
+    return Response.json({
+      error: 'Invalid prefix. Allowed: pdb/, alphafold/, swissmodel/',
+      prefix
+    }, { status: 400, headers: corsHeaders });
+  }
+
+  const listResp = await env.STRUCTURES_BUCKET.list({ cursor: cursorIn, limit, prefix });
+  const objects = listResp?.objects || [];
+
+  let scanned = 0;
+  let orphaned = 0;
+  let deleted = 0;
+  let errors = 0;
+  const sampleOrphans = [];
+
+  for (const obj of objects) {
+    const key = obj?.key || obj?.name;
+    if (!key) {
+      continue;
+    }
+    scanned += 1;
+    let metaRaw = null;
+    try {
+      metaRaw = await env.KV.get(`${STRUCTURE_CACHE_META_PREFIX}${key}`);
+    } catch {
+      // If KV read fails, don't delete blindly.
+      errors += 1;
+      continue;
+    }
+
+    if (metaRaw) {
+      continue;
+    }
+
+    orphaned += 1;
+    if (sampleOrphans.length < 25) {
+      sampleOrphans.push({ key, size: obj?.size || 0, uploaded: obj?.uploaded || null });
+    }
+
+    if (dryRun) {
+      continue;
+    }
+
+    try {
+      await env.STRUCTURES_BUCKET.delete(key);
+      deleted += 1;
+    } catch {
+      errors += 1;
+    }
+  }
+
+  const nextCursor = listResp?.truncated ? (listResp?.cursor || null) : null;
+
+  return Response.json({
+    dryRun,
+    limit,
+    prefix: prefix || null,
+    cursorIn: cursorIn || null,
+    nextCursor,
+    scanned,
+    orphaned,
+    deleted,
+    errors,
+    sampleOrphans
+  }, { headers: corsHeaders });
+}
+
+async function handleAdminDeleteStructure(request, env, corsHeaders) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403, headers: corsHeaders });
+  }
+  if (!env?.STRUCTURES_BUCKET || !env?.KV) {
+    return Response.json({ error: 'Missing STRUCTURES_BUCKET or KV binding' }, { status: 500, headers: corsHeaders });
+  }
+
+  const url = new URL(request.url);
+  const key = (url.searchParams.get('key') || '').trim();
+  const dryRun = parseBoolParam(url.searchParams.get('dryRun'), true);
+  const deleteMeta = parseBoolParam(url.searchParams.get('deleteMeta'), true);
+
+  if (!key) {
+    return Response.json({ error: 'Missing key' }, { status: 400, headers: corsHeaders });
+  }
+  if (key.startsWith('/') || key.includes('..')) {
+    return Response.json({ error: 'Invalid key' }, { status: 400, headers: corsHeaders });
+  }
+
+  const allowedPrefixes = new Set(['pdb/', 'alphafold/', 'swissmodel/']);
+  const keyPrefix = [...allowedPrefixes].find((p) => key.startsWith(p)) || null;
+  if (!keyPrefix) {
+    return Response.json({
+      error: 'Invalid key prefix. Allowed: pdb/, alphafold/, swissmodel/',
+      key
+    }, { status: 400, headers: corsHeaders });
+  }
+
+  let exists = false;
+  let size = null;
+  try {
+    const head = await env.STRUCTURES_BUCKET.head(key);
+    exists = Boolean(head);
+    size = head?.size ?? null;
+  } catch {
+    // If head fails, don't delete blindly.
+    return Response.json({ error: 'Failed to read object metadata', key }, { status: 500, headers: corsHeaders });
+  }
+
+  let deletedObject = false;
+  let deletedMeta = false;
+
+  if (!dryRun && exists) {
+    try {
+      await env.STRUCTURES_BUCKET.delete(key);
+      deletedObject = true;
+    } catch {
+      return Response.json({ error: 'Failed to delete object', key }, { status: 500, headers: corsHeaders });
+    }
+  }
+
+  if (!dryRun && deleteMeta) {
+    try {
+      await env.KV.delete(`${STRUCTURE_CACHE_META_PREFIX}${key}`);
+      deletedMeta = true;
+    } catch {
+      // Non-fatal. Meta is best-effort.
+      deletedMeta = false;
+    }
+  }
+
+  return Response.json({
+    dryRun,
+    key,
+    keyPrefix,
+    exists,
+    size,
+    deleteMeta,
+    deletedObject,
+    deletedMeta
+  }, { headers: corsHeaders });
+}
+
+async function listReferencedStructureKeys(env) {
+  const keys = new Set();
+  const stats = {
+    rows: 0,
+    referenced: 0,
+    referencedBySource: {
+      pdb: 0,
+      alphafold: 0,
+      swissmodel: 0,
+      other: 0
+    },
+    nullMetaRows: 0
+  };
+
+  if (!env?.DB) {
+    return { keys, stats };
+  }
+
+  const PAGE = 1000;
+  let offset = 0;
+  while (true) {
+    const resp = await env.DB
+      .prepare(
+        `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
+         FROM proteins
+         WHERE structure_source IS NOT NULL
+         LIMIT ? OFFSET ?`
+      )
+      .bind(PAGE, offset)
+      .all();
+
+    const rows = resp?.results || [];
+    stats.rows += rows.length;
+    if (rows.length === 0) {
+      break;
+    }
+
+    for (const row of rows) {
+      const meta = buildMetaFromStoredStructure(row);
+      if (!meta?.r2Key) {
+        stats.nullMetaRows += 1;
+        continue;
+      }
+      keys.add(meta.r2Key);
+      stats.referenced += 1;
+      const source = meta.source || row.structure_source;
+      if (source === 'pdb') stats.referencedBySource.pdb += 1;
+      else if (source === 'alphafold') stats.referencedBySource.alphafold += 1;
+      else if (source === 'swissmodel') stats.referencedBySource.swissmodel += 1;
+      else stats.referencedBySource.other += 1;
+    }
+
+    if (rows.length < PAGE) {
+      break;
+    }
+    offset += PAGE;
+  }
+
+  return { keys, stats };
+}
+
+async function handleAdminPurgeUnreferencedStructures(request, env, corsHeaders) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403, headers: corsHeaders });
+  }
+  if (!env?.STRUCTURES_BUCKET || !env?.KV || !env?.DB) {
+    return Response.json({ error: 'Missing STRUCTURES_BUCKET, KV, or DB binding' }, { status: 500, headers: corsHeaders });
+  }
+
+  const url = new URL(request.url);
+  const cursorIn = url.searchParams.get('cursor') || undefined;
+  const prefixRaw = (url.searchParams.get('prefix') || '').trim();
+  const prefix = prefixRaw === '' ? undefined : prefixRaw;
+  const dryRun = parseBoolParam(url.searchParams.get('dryRun'), true);
+  const limit = clampInt(url.searchParams.get('limit'), 1, 1000, 250);
+  const deleteMeta = parseBoolParam(url.searchParams.get('deleteMeta'), true);
+
+  const allowedPrefixes = new Set(['pdb/', 'alphafold/', 'swissmodel/']);
+  if (prefix && !allowedPrefixes.has(prefix)) {
+    return Response.json({
+      error: 'Invalid prefix. Allowed: pdb/, alphafold/, swissmodel/',
+      prefix
+    }, { status: 400, headers: corsHeaders });
+  }
+
+  // Build the referenced set from the current DB.
+  const { keys: referencedKeys, stats: referenceStats } = await listReferencedStructureKeys(env);
+
+  const listResp = await env.STRUCTURES_BUCKET.list({ cursor: cursorIn, limit, prefix });
+  const objects = listResp?.objects || [];
+
+  let scanned = 0;
+  let unreferenced = 0;
+  let deleted = 0;
+  let deletedBytes = 0;
+  let errors = 0;
+  const sampleUnreferenced = [];
+
+  for (const obj of objects) {
+    const key = obj?.key || obj?.name;
+    if (!key) {
+      continue;
+    }
+    scanned += 1;
+    if (referencedKeys.has(key)) {
+      continue;
+    }
+
+    unreferenced += 1;
+    if (sampleUnreferenced.length < 25) {
+      sampleUnreferenced.push({ key, size: obj?.size || 0, uploaded: obj?.uploaded || null });
+    }
+
+    if (dryRun) {
+      continue;
+    }
+
+    try {
+      await env.STRUCTURES_BUCKET.delete(key);
+      deleted += 1;
+      deletedBytes += obj?.size || 0;
+    } catch {
+      errors += 1;
+      continue;
+    }
+
+    if (deleteMeta) {
+      try {
+        await env.KV.delete(`${STRUCTURE_CACHE_META_PREFIX}${key}`);
+      } catch {
+        // Best-effort.
+      }
+    }
+  }
+
+  const nextCursor = listResp?.truncated ? (listResp?.cursor || null) : null;
+
+  return Response.json({
+    dryRun,
+    limit,
+    prefix: prefix || null,
+    cursorIn: cursorIn || null,
+    nextCursor,
+    deleteMeta,
+    scanned,
+    unreferenced,
+    deleted,
+    deletedBytes,
+    errors,
+    sampleUnreferenced,
+    referenceStats,
+    referencedKeyCount: referencedKeys.size
+  }, { headers: corsHeaders });
 }
 
 /**
