@@ -556,6 +556,20 @@
   pointer-events: none;
   transition: opacity 0.2s ease;
   z-index: 1050;
+
+  /* Keep the tutorial card in light mode even when the site is dark. */
+  color-scheme: light;
+  --light: oklch(96% 0.015 75);
+  --lightgray: oklch(85% 0.02 65);
+  --gray: oklch(70% 0.025 60);
+  --darkgray: oklch(45% 0.03 55);
+  --dark: oklch(20% 0.035 50);
+  --accent: oklch(50% 0.08 185);
+  --ui-border: oklch(82% 0.02 70);
+  --ui-bg: oklch(92% 0.01 75);
+  --secondary: oklch(40% 0.04 55);
+  --tertiary: var(--accent);
+  --highlight: oklch(from var(--accent) l c h / 0.25);
 }
 
 .pg-tutorial-overlay.is-visible {
@@ -572,7 +586,7 @@
 
 .pg-tutorial-card {
   position: relative;
-  width: min(420px, calc(100% - 2rem));
+  width: min(700px, 100%);
   max-height: calc(100dvh - 3rem);
   padding: 1.5rem 1.5rem 1.25rem;
   border-radius: 16px;
