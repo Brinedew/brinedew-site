@@ -662,9 +662,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       padding: 1rem;
       border: 1px solid #334155;
     }
-      margin-top: 0.5rem;
-      font-size: 0.9rem;
-    }
     .schedule-table th,
     .schedule-table td {
       border: 1px solid #334155;
@@ -720,6 +717,26 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       border-radius: 999px;
       font-size: 0.75rem;
       color: #94a3b8;
+    }
+
+    .cards-preview .redaction-line {
+      display: inline;
+      white-space: normal;
+    }
+
+    .cards-preview .redaction-word {
+      display: inline-block;
+      height: 0.9em;
+      background: #334155;
+      border-radius: 2px;
+      margin: 0 0.25rem 0.15rem 0;
+      vertical-align: middle;
+      opacity: 0.9;
+    }
+
+    .cards-preview .redaction-space {
+      display: inline-block;
+      width: 0.35rem;
     }
   </style>
 </head>
@@ -1333,7 +1350,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let molstarCssLoaded = false;
     let molstarPreconnectAdded = false;
     let previewStructureChoice = null;
-    let proteinDatabase = [];
     const profileState = {
       builtInIds: new Set(BUILT_IN_PROFILES.map((p) => p.id)),
       profiles: deepClone(DEFAULT_GRAPHICS_SETTINGS.profileManager.profiles),
@@ -1364,9 +1380,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     setupPreviewToggle();
     setupGraphicsForm();
     bindForms();
+    setupProteinSelector();
     loadStatus();
     setupSchedule();
-    loadProteinDatabase();
     initializePreview();
 
     let scheduleData = {};
@@ -1453,6 +1469,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       const allSections = Array.isArray(data?.clue?.all) ? data.clue.all : [];
       const rejected = Array.isArray(selection?.rejected) ? selection.rejected : [];
 
+      // Ensure card preview styles apply within the inspector container.
+      rootEl.classList.add('cards-preview');
+
       const title = protein?.hgnc
         ? (protein.hgnc + ' / ' + (protein.uniprot || selection.uniprot_id || ''))
         : (selection.uniprot_id || '');
@@ -1488,7 +1507,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     function openOverrideForDate(date) {
       selectDate(date);
       // Scroll to calendar/form
-      document.getElementById('override-section').scrollIntoView({ behavior: 'smooth' });
+      const anchor = document.getElementById('override-section');
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: 'smooth' });
+      }
     }
 
     function renderSectionBlock(title, sections, masked) {
@@ -1509,16 +1531,51 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         (section?.items || []).forEach((item) => {
           const div = document.createElement('div');
           div.className = 'clue-item';
-          const label = item?.label ? (item.label + ': ') : '';
           const isHidden = masked && item?.id && item?.revealed === false;
-          const text = isHidden
-            ? (item?.placeholder || '[locked]')
-            : (typeof item?.text === 'string' ? item.text : (typeof item?.fullText === 'string' ? item.fullText : String(item?.text ?? '')));
-          div.innerHTML = (isHidden ? '<span class="pill">locked</span>' : '') + escapeHtml(label + text);
+
+          if (isHidden) {
+            const pill = document.createElement('span');
+            pill.className = 'pill';
+            pill.textContent = 'locked';
+            div.appendChild(pill);
+            div.appendChild(document.createTextNode(' '));
+
+            if (Array.isArray(item?.wordLengths) && item.wordLengths.length) {
+              div.appendChild(renderRedactionLine(item.wordLengths));
+            } else {
+              div.appendChild(document.createTextNode(item?.placeholder || 'Hint locked'));
+            }
+          } else {
+            const label = item?.label ? (item.label + ': ') : '';
+            const text = (typeof item?.text === 'string' ? item.text : (typeof item?.fullText === 'string' ? item.fullText : String(item?.text ?? '')));
+            div.textContent = label + text;
+          }
           block.appendChild(div);
         });
       });
       return block;
+    }
+
+    function renderRedactionLine(wordLengths) {
+      const line = document.createElement('span');
+      line.className = 'redaction-line';
+
+      // Render each word as a bar whose width scales with word length.
+      wordLengths.forEach((len, idx) => {
+        const w = document.createElement('span');
+        w.className = 'redaction-word';
+        const clamped = Math.max(1, Math.min(Number(len) || 1, 30));
+        // Use "ch" so widths track font metrics.
+        w.style.width = (clamped * 0.6) + 'ch';
+        line.appendChild(w);
+        if (idx !== wordLengths.length - 1) {
+          const s = document.createElement('span');
+          s.className = 'redaction-space';
+          line.appendChild(s);
+        }
+      });
+
+      return line;
     }
 
     function makeButton(text, onClick) {
@@ -1712,16 +1769,57 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       });
     }
 
+    async function resolveUniprotIdFromInput(raw) {
+      const value = String(raw || '').trim();
+      if (!value) return null;
+
+      const upper = value.toUpperCase();
+
+      try {
+        const response = await fetch(API_BASE + '/api/proteins?query=' + encodeURIComponent(value) + '&limit=6');
+        if (!response.ok) {
+          return null;
+        }
+        const matches = await response.json();
+        const list = Array.isArray(matches) ? matches : [];
+        const exactUniprot = list.find((p) => String(p?.uniprot || '').toUpperCase() === upper);
+        if (exactUniprot?.uniprot) {
+          return exactUniprot.uniprot;
+        }
+
+        const exactGeneMatches = list.filter((p) => {
+          const gene = String(p?.hgnc || p?.gene || '').toUpperCase();
+          return gene === upper;
+        });
+        if (exactGeneMatches.length === 1 && exactGeneMatches[0]?.uniprot) {
+          return exactGeneMatches[0].uniprot;
+        }
+
+        // If the query is unambiguous, pick the single match.
+        if (list.length === 1 && list[0]?.uniprot) {
+          return list[0].uniprot;
+        }
+      } catch {
+        return null;
+      }
+
+      return null;
+    }
+
     async function handleOverrideSubmit(event) {
       event.preventDefault();
       const date = document.getElementById('override-date').value;
-      const uniprotId = document.getElementById('override-uniprot').value;
+      const rawInput = document.getElementById('override-uniprot').value;
       try {
+        const resolvedUniprotId = await resolveUniprotIdFromInput(rawInput);
+        if (!resolvedUniprotId) {
+          throw new Error('Pick a protein from suggestions (or type a more specific gene/uniprot).');
+        }
         const response = await fetch(API_BASE + '/api/admin/override-protein', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date, uniprot_id: uniprotId })
+          body: JSON.stringify({ date, uniprot_id: resolvedUniprotId })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -2213,67 +2311,92 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       clearPreviewMount();
     }
 
-    async function loadProteinDatabase() {
-      try {
-        const response = await fetch(API_BASE + '/api/proteins');
-        if (response.ok) {
-          proteinDatabase = await response.json();
-          setupProteinSelector();
-        }
-      } catch (err) {
-        console.warn('Failed to load protein database:', err);
-      }
-    }
-
     function setupProteinSelector() {
       // Autocomplete for the override input in the inspector.
       const inputEl = document.getElementById('override-uniprot');
       const suggestionsEl = document.getElementById('protein-suggestions');
       if (!inputEl || !suggestionsEl) return;
 
+      let pendingTimer = null;
+      let activeSearchController = null;
+      let activeSearchToken = 0;
+      let lastMatches = [];
+
       let selectedIndex = -1;
 
       inputEl.addEventListener('input', (e) => {
-        const query = e.target.value.trim().toLowerCase();
+        const raw = e.target.value || '';
+        const query = raw.trim();
+
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          pendingTimer = null;
+        }
 
         if (query.length < 1) {
+          lastMatches = [];
           suggestionsEl.innerHTML = '';
           suggestionsEl.classList.remove('show');
           return;
         }
 
-        const matches = searchProteins(query);
+        // Debounce so we don't fire a request per keystroke.
+        pendingTimer = setTimeout(async () => {
+          const token = ++activeSearchToken;
+          if (activeSearchController) {
+            try { activeSearchController.abort(); } catch {}
+          }
+          activeSearchController = new AbortController();
 
-        if (matches.length === 0) {
-          suggestionsEl.innerHTML = '<div class="protein-suggestion"><div class="protein-suggestion-title">No matches found</div></div>';
-          suggestionsEl.classList.add('show');
-          return;
-        }
-
-        suggestionsEl.innerHTML = matches.map((p, idx) => {
-          const title = escapeHtml(p.full_name || '');
-          const hgnc = escapeHtml(p.hgnc || '');
-          const fullName = escapeHtml(p.full_name || p.hgnc || '');
-          return ''
-            + '<div class="protein-suggestion" data-uniprot="' + p.uniprot + '" data-index="' + idx + '" title="' + title + '">'
-            + '<div class="protein-suggestion-title">' + hgnc + '</div>'
-            + '<div class="protein-suggestion-sub">' + fullName + '</div>'
-            + '<div class="protein-suggestion-uniprot">' + p.uniprot + '</div>'
-            + '</div>';
-        }).join('');
-        suggestionsEl.classList.add('show');
-        selectedIndex = -1;
-
-        suggestionsEl.querySelectorAll('.protein-suggestion').forEach((el) => {
-          el.addEventListener('click', () => {
-            const uniprot = el.dataset.uniprot;
-            if (uniprot) {
-              inputEl.value = uniprot;
-              suggestionsEl.classList.remove('show');
-              loadProteinInPreview(uniprot);
+          try {
+            const url = API_BASE + '/api/proteins?query=' + encodeURIComponent(query) + '&limit=12';
+            const response = await fetch(url, { signal: activeSearchController.signal });
+            if (!response.ok) {
+              throw new Error('Search failed');
             }
-          });
-        });
+            const matches = await response.json();
+            if (token !== activeSearchToken) return;
+
+            lastMatches = Array.isArray(matches) ? matches : [];
+
+            if (lastMatches.length === 0) {
+              suggestionsEl.innerHTML = '<div class="protein-suggestion"><div class="protein-suggestion-title">No matches found</div></div>';
+              suggestionsEl.classList.add('show');
+              selectedIndex = -1;
+              return;
+            }
+
+            suggestionsEl.innerHTML = lastMatches.map((p, idx) => {
+              const title = escapeHtml(p.full_name || '');
+              const gene = escapeHtml(p.hgnc || p.gene || '');
+              const fullName = escapeHtml(p.full_name || p.hgnc || p.gene || '');
+              return ''
+                + '<div class="protein-suggestion" data-uniprot="' + p.uniprot + '" data-index="' + idx + '" title="' + title + '">' 
+                + '<div class="protein-suggestion-title">' + gene + '</div>'
+                + '<div class="protein-suggestion-sub">' + fullName + '</div>'
+                + '<div class="protein-suggestion-uniprot">' + p.uniprot + '</div>'
+                + '</div>';
+            }).join('');
+            suggestionsEl.classList.add('show');
+            selectedIndex = -1;
+
+            suggestionsEl.querySelectorAll('.protein-suggestion').forEach((el) => {
+              el.addEventListener('click', () => {
+                const uniprot = el.dataset.uniprot;
+                if (uniprot) {
+                  inputEl.value = uniprot;
+                  suggestionsEl.classList.remove('show');
+                  loadProteinInPreview(uniprot);
+                }
+              });
+            });
+          } catch (err) {
+            if (token !== activeSearchToken) return;
+            if (err && (err.name === 'AbortError' || String(err).includes('AbortError'))) return;
+            suggestionsEl.innerHTML = '<div class="protein-suggestion"><div class="protein-suggestion-title">Search error</div></div>';
+            suggestionsEl.classList.add('show');
+          }
+        }, 120);
       });
 
       inputEl.addEventListener('keydown', (e) => {
@@ -2317,46 +2440,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       });
     }
 
-    function searchProteins(query) {
-      const normalizedQuery = query.toLowerCase();
-      const MAX_RESULTS = 8;
-
-      return proteinDatabase
-        .map((protein) => ({
-          protein,
-          score: getSearchScore(protein, normalizedQuery),
-        }))
-        .filter((entry) => entry.score !== Number.POSITIVE_INFINITY)
-        .sort((a, b) => {
-          if (a.score !== b.score) return a.score - b.score;
-          return a.protein.hgnc.localeCompare(b.protein.hgnc);
-        })
-        .slice(0, MAX_RESULTS)
-        .map((entry) => entry.protein);
-    }
-
-    function getSearchScore(protein, query) {
-      if (!query) return Number.POSITIVE_INFINITY;
-      const hgnc = (protein.hgnc || '').toLowerCase();
-      const uniprot = (protein.uniprot || '').toLowerCase();
-
-      if (hgnc === query || uniprot === query) return 0;
-      if (hgnc.startsWith(query) || uniprot.startsWith(query)) return 1;
-
-      const synonyms = (protein.synonyms || []).map(s => (s || '').toLowerCase());
-      if (synonyms.some(s => s === query)) return 2;
-      if (synonyms.some(s => s.startsWith(query))) return 3;
-
-      const fullName = (protein.full_name || '').toLowerCase();
-      if (fullName.startsWith(query)) return 4;
-      if (fullName.includes(query)) return 5;
-
-      const subSynonym = synonyms.find(s => s.includes(query));
-      if (subSynonym) return 6;
-
-      return Number.POSITIVE_INFINITY;
-    }
-
     function escapeHtml(str) {
       return String(str || '')
         .replace(/&/g, '&amp;')
@@ -2372,10 +2455,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
 
     async function loadProteinInPreview(uniprot) {
-      const localProtein = proteinDatabase.find((p) => p.uniprot === uniprot);
-
       const loadToken = ++previewLoadToken;
-      const pendingLabel = localProtein ? localProtein.hgnc : uniprot;
+      const pendingLabel = uniprot;
       previewStatusEl.textContent = 'Loading ' + pendingLabel + '...';
       previewLoadingEl.hidden = false;
       previewErrorEl.hidden = true;
