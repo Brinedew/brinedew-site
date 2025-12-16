@@ -373,12 +373,30 @@ function buildProteinSections(protein, options = {}) {
     : (forClue ? getDomainSpoilerTokensFromFullName(protein?.full_name) : []);
   
   const sections = [];
-  const filterTokens = [
+
+  const baseFilterTokens = [
     protein?.hgnc,
+    protein?.gene_surname,
     ...(Array.isArray(protein?.synonyms) ? protein.synonyms : []),
-  ]
-    .filter(Boolean)
-    .map((token) => token.toLowerCase());
+  ].filter(Boolean);
+
+  const filterTokens = Array.from(new Set(
+    baseFilterTokens
+      .map((token) => String(token).toLowerCase().trim())
+      .filter(Boolean)
+  ));
+
+  const containsGeneToken = (normalizedText, token) => {
+    if (!token) {
+      return false;
+    }
+    // For letter-only tokens (e.g., WNT), use word-boundary matching to avoid
+    // accidental substring locks.
+    if (/^[a-z]+$/.test(token)) {
+      return domainContainsToken(normalizedText, token);
+    }
+    return normalizedText.includes(token);
+  };
 
   const shouldLockClueHint = (text) => {
     if (!forClue || typeof text !== 'string') {
@@ -387,7 +405,7 @@ function buildProteinSections(protein, options = {}) {
     const normalized = text.toLowerCase();
 
     // Hard lock: gene symbol or synonyms appear in hint text.
-    if (filterTokens.length && filterTokens.some((token) => token && normalized.includes(token))) {
+    if (filterTokens.length && filterTokens.some((token) => containsGeneToken(normalized, token))) {
       return true;
     }
 
