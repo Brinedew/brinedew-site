@@ -43,7 +43,8 @@ import {
   normalizeGraphicsSettings,
   handleProteinPreview,
   handleAdminSchedule,
-  handleAdminCards
+  handleAdminCards,
+  isAdmin
 } from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
@@ -82,8 +83,14 @@ export default {
     const origin = request.headers.get('Origin') || '';
     const corsHeaders = getCorsHeaders(origin);
     
-    // Handle geneguessr subdomain proxy - proxy NON-API requests from subdomain to main site
-    if (url.hostname === 'geneguessr.brinedew.bio' && !url.pathname.startsWith('/api/')) {
+    // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
+    // NOTE: /admin and /admin-v2 are served by the Worker and must NOT be proxied.
+    if (
+      url.hostname === 'geneguessr.brinedew.bio' &&
+      !url.pathname.startsWith('/api/') &&
+      url.pathname !== '/admin' &&
+      url.pathname !== '/admin-v2'
+    ) {
       // For root path, fetch the geneguessr app page
       let targetPath = url.pathname === '/' 
         ? '/apps/geneguessr/index' 
@@ -194,9 +201,11 @@ export default {
       });
     }
 
-    // Admin panel UI (protected by Cloudflare Access)
+    // Admin panel UI (restricted to admin Discord session)
     if (url.pathname === '/admin' && request.method === 'GET') {
-      // Serve admin HTML directly from Worker
+      if (!(await isAdmin(request, env))) {
+        return new Response('Unauthorized', { status: 403 });
+      }
       return new Response(ADMIN_HTML, {
         headers: {
           'Content-Type': 'text/html;charset=UTF-8',
@@ -206,6 +215,9 @@ export default {
 
     // Admin panel v2 - auto-generated controls from Mol* runtime
     if (url.pathname === '/admin-v2' && request.method === 'GET') {
+      if (!(await isAdmin(request, env))) {
+        return new Response('Unauthorized', { status: 403 });
+      }
       return new Response(ADMIN_V2_HTML, {
         headers: {
           'Content-Type': 'text/html;charset=UTF-8',
@@ -248,12 +260,18 @@ export default {
 
     // Graphics profiles for v2 admin panel - full Mol* props snapshots
     if (url.pathname === '/api/admin/graphics-profiles' && request.method === 'GET') {
+      if (!(await isAdmin(request, env))) {
+        return Response.json({ error: 'Unauthorized' }, { status: 403, headers: corsHeaders });
+      }
       const stored = await env.KV.get('graphics_profiles_v2');
       const profiles = stored ? JSON.parse(stored) : {};
       return Response.json({ profiles }, { headers: corsHeaders });
     }
     
     if (url.pathname === '/api/admin/graphics-profiles' && request.method === 'POST') {
+      if (!(await isAdmin(request, env))) {
+        return Response.json({ error: 'Unauthorized' }, { status: 403, headers: corsHeaders });
+      }
       try {
         const body = await request.json();
         await env.KV.put('graphics_profiles_v2', JSON.stringify(body.profiles || {}));

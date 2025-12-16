@@ -703,7 +703,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
   <div class="container">
     <div class="left-panel">
       <h1>GeneGuessr Admin Panel</h1>
-      <p class="subtitle">Protected by Cloudflare Access</p>
+      <p class="subtitle">Protected by Discord login</p>
       
       <!-- Current Status -->
     <div class="section">
@@ -1164,7 +1164,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
   
 
   <script>
-    const API_BASE = 'https://geneguessr-api.decap.workers.dev';
+    const API_BASE = '';
 
     function deepClone(value) {
       if (value === undefined || value === null) {

@@ -15,6 +15,10 @@ name = "geneguessr-api"
 main = "workers/index.js"
 compatibility_date = "2025-11-12"
 
+[vars]
+# Immutable Discord snowflake for the only admin user.
+ADMIN_DISCORD_ID = "1289482311557058641"
+
 # Custom domain routes
 routes = [
   { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" }

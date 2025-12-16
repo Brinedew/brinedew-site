@@ -375,7 +375,7 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
   
   <script src="https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js"></script>
   <script>
-    const API_BASE = 'https://geneguessr-api.decap.workers.dev';
+    const API_BASE = '';
     
     let viewer = null;
     let plugin = null;

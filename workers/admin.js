@@ -1,6 +1,6 @@
 /**
  * Admin API endpoints for GeneGuessr
- * Protected by Cloudflare Access
+ * Restricted to the admin Discord session identity.
  */
 
 import { parseCookies } from './auth.js';
@@ -506,13 +506,36 @@ export const normalizeGraphicsSettings = (payload) => {
   return normalized;
 };
 
-/**
- * Verify user is admin (brinedew@proton.me)
- * Cloudflare Access injects CF-Access-Authenticated-User-Email header
- */
-function isAdmin(request) {
-  const email = request.headers.get('CF-Access-Authenticated-User-Email');
-  return email === 'brinedew@proton.me';
+export async function isAdmin(request, env) {
+  try {
+    const cookies = parseCookies(request.headers.get('Cookie') || '');
+    const sessionId = cookies.session;
+    if (!sessionId) {
+      return false;
+    }
+
+    const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`);
+    const stub = env.GAME_SESSIONS.get(id);
+    const resp = await stub.fetch('http://internal/get');
+    if (!resp.ok) {
+      return false;
+    }
+
+    const session = await resp.json();
+    if (!session || !session.user_id) {
+      return false;
+    }
+
+    const allowedDiscordId = typeof env.ADMIN_DISCORD_ID === 'string' && env.ADMIN_DISCORD_ID.trim()
+      ? env.ADMIN_DISCORD_ID.trim()
+      : null;
+    if (!allowedDiscordId) {
+      return false;
+    }
+    return String(session.user_id) === allowedDiscordId;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -520,7 +543,7 @@ function isAdmin(request) {
  * Set protein override for specific date
  */
 export async function handleOverrideProtein(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
   
@@ -568,7 +591,7 @@ export async function handleOverrideProtein(request, env) {
  * Update feature flags
  */
 export async function handleFeatureFlags(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
   
@@ -606,7 +629,7 @@ export async function handleFeatureFlags(request, env) {
  * Get current admin status (overrides, feature flags)
  */
 export async function handleAdminStatus(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
   
@@ -677,7 +700,7 @@ export async function handleAdminStatus(request, env) {
  * - upcoming: next N days (computed + any planned overrides)
  */
 export async function handleAdminSchedule(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
@@ -761,7 +784,7 @@ export async function handleAdminSchedule(request, env) {
  * Returns clue sections for a specific date's resolved pick.
  */
 export async function handleAdminCards(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
@@ -851,7 +874,7 @@ export async function handleAdminCards(request, env) {
  * Update graphics settings for 3D protein viewer
  */
 export async function handleGraphicsSettings(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
   
@@ -883,7 +906,7 @@ export async function handleGraphicsSettings(request, env) {
  * Remove protein override for specific date
  */
 export async function handleDeleteOverride(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
   
@@ -910,7 +933,7 @@ export async function handleDeleteOverride(request, env) {
  * Prepare Mol* render payload for admin preview
  */
 export async function handleProteinPreview(request, env) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request, env))) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
