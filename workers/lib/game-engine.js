@@ -52,14 +52,6 @@ function domainContainsToken(domainTextLower, tokenLower) {
   return re.test(domainTextLower);
 }
 
-function shouldFilterDomainHint(domainText, spoilerTokens) {
-  if (!Array.isArray(spoilerTokens) || spoilerTokens.length === 0 || typeof domainText !== 'string') {
-    return false;
-  }
-  const domainLower = domainText.toLowerCase();
-  return spoilerTokens.some((token) => domainContainsToken(domainLower, token));
-}
-
 function stripRefSeqAttribution(text) {
   if (typeof text !== 'string') {
     return text;
@@ -149,13 +141,15 @@ export function maskClueSections(sections, revealedHints = new Set()) {
     items: section.items.map((item) => {
       const textValue = typeof item.text === 'string' ? item.text : String(item.text ?? '');
       if (!item?.id) {
-        return { ...item, revealed: true, fullText: textValue, highlighted: Boolean(item.highlighted) };
+        return { ...item, revealed: true, locked: false, fullText: textValue, highlighted: Boolean(item.highlighted) };
       }
-      const revealed = revealedHints.has(item.id);
+      const locked = Boolean(item.locked);
+      const revealed = !locked && revealedHints.has(item.id);
       return {
         ...item,
         fullText: textValue,
         highlighted: Boolean(item.highlighted),
+        locked,
         revealed,
         text: revealed ? textValue : null,
         // Send word lengths instead of total length - enables correct word-wrap reflow
@@ -168,7 +162,7 @@ export function maskClueSections(sections, revealedHints = new Set()) {
   }));
 }
 
-export function extractHintText(sections, hintId) {
+export function extractHintData(sections, hintId) {
   if (!hintId || !Array.isArray(sections)) {
     return null;
   }
@@ -176,11 +170,19 @@ export function extractHintText(sections, hintId) {
     if (!section?.items) continue;
     for (const item of section.items) {
       if (item?.id === hintId) {
-        return typeof item.text === 'string' ? item.text : String(item.text ?? '');
+        return {
+          text: typeof item.text === 'string' ? item.text : String(item.text ?? ''),
+          locked: Boolean(item.locked),
+        };
       }
     }
   }
   return null;
+}
+
+export function extractHintText(sections, hintId) {
+  const data = extractHintData(sections, hintId);
+  return data ? data.text : null;
 }
 
 export function scoreGuess(guessProtein, targetProtein, options = {}) {
@@ -377,17 +379,36 @@ function buildProteinSections(protein, options = {}) {
   ]
     .filter(Boolean)
     .map((token) => token.toLowerCase());
-  
-  const shouldFilterText = (text) => {
-    if (!forClue || !filterTokens.length || typeof text !== 'string') {
+
+  const shouldLockClueHint = (text) => {
+    if (!forClue || typeof text !== 'string') {
       return false;
     }
     const normalized = text.toLowerCase();
-    return filterTokens.some((token) => token && normalized.includes(token));
+
+    // Hard lock: gene symbol or synonyms appear in hint text.
+    if (filterTokens.length && filterTokens.some((token) => token && normalized.includes(token))) {
+      return true;
+    }
+
+    // Soft lock: any unigram token from full_name appears in hint text.
+    if (Array.isArray(domainSpoilerTokens) && domainSpoilerTokens.length) {
+      if (domainSpoilerTokens.some((token) => domainContainsToken(normalized, token))) {
+        return true;
+      }
+    }
+
+    return false;
   };
-  
+
   const pushSection = (section, { skipFilter = false } = {}) => {
-    const items = skipFilter ? section.items : section.items.filter((item) => !shouldFilterText(item.text));
+    const items = (skipFilter ? section.items : section.items.map((item) => {
+      if (!item) return item;
+      if (shouldLockClueHint(item.text)) {
+        return { ...item, locked: true };
+      }
+      return item;
+    })).filter(Boolean);
     if (!items.length) {
       return;
     }
@@ -477,16 +498,11 @@ function buildProteinSections(protein, options = {}) {
   const displayDomains = domainNames.length ? domainNames : domains;
   if (displayDomains.length) {
     const domainItems = displayDomains
-      .map((domain, idx) => {
-        if (shouldFilterDomainHint(domain, domainSpoilerTokens)) {
-          return null;
-        }
-        return {
-          id: forClue ? `hint-domain-${idx}` : undefined,
-          text: domain,
-        };
-      })
-      .filter(Boolean);
+      .map((domain, idx) => ({
+        id: forClue ? `hint-domain-${idx}` : undefined,
+        text: domain,
+      }))
+      .filter((item) => Boolean(item?.text));
 
     pushSection({
       id: 'domains',

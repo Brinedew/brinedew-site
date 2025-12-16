@@ -3272,6 +3272,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     if (!item?.id) {
       return `<span class="${entryClass}">${escapeHtml(item?.placeholder || LOCKED_HINT_PLACEHOLDER)}</span>`;
     }
+    const locked = Boolean(item?.locked);
     const placeholder = item?.placeholder || LOCKED_HINT_PLACEHOLDER;
     const maskLength = Number(item?.maskLength) || placeholder.length || LOCKED_HINT_PLACEHOLDER.length;
     const width = Math.max(maskLength, placeholder.length, LOCKED_HINT_PLACEHOLDER.length);
@@ -3280,10 +3281,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     // Falls back to solid block if wordLengths unavailable
     const wordMask = item?.wordLengths ? buildWordMask(item.wordLengths) : null;
     const mask = wordMask || buildMaskCharacters(width);
+    const ariaLabel = locked ? 'Hint locked' : `Click to reveal hint for ${DEFAULT_HINT_COST} hint`;
+    const lockedAttr = locked ? ' data-locked="true"' : '';
     
     return (
       `<span class="${entryClass}">` +
-      `<span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}" role="button" tabindex="0" aria-label="Click to reveal hint for ${DEFAULT_HINT_COST} hint" style="min-width:${width}ch">` +
+      `<span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}"${lockedAttr} role="button" tabindex="0" aria-label="${escapeAttribute(ariaLabel)}" style="min-width:${width}ch">` +
       `<span class="pg-redaction-cover" aria-hidden="true">${mask}</span>` +
       `</span>` +
       `</span>`
@@ -4038,6 +4041,26 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     spoilerDelegationBound = true;
   }
 
+  function showLockedHintIndicator(redaction) {
+    if (!redaction) {
+      return;
+    }
+    const entry = redaction.closest('.pg-section-entry') || redaction.parentElement;
+    if (!entry) {
+      return;
+    }
+    if (entry.querySelector('.pg-redaction-lock-indicator')) {
+      return;
+    }
+    redaction.classList.add('pg-redaction-locked');
+    redaction.setAttribute('aria-label', 'Hint locked');
+
+    const indicator = document.createElement('span');
+    indicator.className = 'pg-redaction-lock-indicator';
+    indicator.textContent = 'locked';
+    entry.appendChild(indicator);
+  }
+
   /**
    * ⚠️⚠️⚠️ CRITICAL PERFORMANCE PATH - DO NOT TOUCH ⚠️⚠️⚠️
    * 
@@ -4066,6 +4089,13 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     if (!hintId || redaction.dataset.loading === 'true') {
       return;
     }
+
+    // B-222: Locked hints stay redacted; clicking does not spend credits.
+    if (redaction.dataset.locked === 'true') {
+      showLockedHintIndicator(redaction);
+      return;
+    }
+
     const startTime = performance.now();
     redaction.dataset.loading = 'true';
     redaction.classList.add('pg-redaction-loading');
@@ -4073,6 +4103,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       const payload = await requestHintReveal(hintId);
       const networkTime = performance.now() - startTime;
       console.log(`[HINT REVEAL] Network round-trip: ${Math.round(networkTime)}ms`);
+
+      if (payload && payload.lockedHint && payload.lockedHint.locked) {
+        showLockedHintIndicator(redaction);
+        return;
+      }
       
       // Surgical DOM update - no render(), no viewer touching
       // Server returns { revealedHint: { id, text }, status: { hintBalance, revealedHints } }

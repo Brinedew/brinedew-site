@@ -58,7 +58,7 @@ import {
   buildFeedbackSections,
   getDomainSpoilerTokensFromFullName,
   collectMatchedHintTexts,
-  extractHintText,
+  extractHintData,
   maskClueSections,
   sanitizeTargetProtein,
   scoreGuess
@@ -1492,9 +1492,21 @@ async function handleHintReveal(request, env, corsHeaders) {
     }
     
     const clueSections = buildClueSections(targetProtein);
-    const hintText = extractHintText(clueSections, hintId);
-    if (!hintText) {
+    const hintData = extractHintData(clueSections, hintId);
+    if (!hintData || !hintData.text) {
       return Response.json({ error: 'Hint not found' }, { status: 404, headers: responseHeaders });
+    }
+
+    // B-222: Locked hints are visible as spoiler bars but cannot be revealed early.
+    // Clicking them should not spend credits.
+    if (hintData.locked) {
+      return Response.json({
+        lockedHint: { id: hintId, locked: true },
+        status: {
+          hintBalance: state.hintBalance,
+          revealedHints: state.revealedHints || []
+        }
+      }, { headers: responseHeaders });
     }
     
     // ⚠️ DO NOT CALL hydrateGuessProteins HERE ⚠️
@@ -1519,7 +1531,7 @@ async function handleHintReveal(request, env, corsHeaders) {
     // Adding more data triggers full re-render + 3D viewer reload = 3+ second delay.
     // See B-205 for the full horror story. This exact format is REQUIRED:
     return Response.json({
-      revealedHint: { id: hintId, text: hintText },
+      revealedHint: { id: hintId, text: hintData.text },
       status: {
         hintBalance: state.hintBalance,
         revealedHints: state.revealedHints

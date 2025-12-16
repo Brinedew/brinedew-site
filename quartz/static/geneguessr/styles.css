@@ -1004,6 +1004,24 @@
   opacity: 0.85;
 }
 
+.pg-redaction-locked {
+  cursor: default;
+}
+
+.pg-redaction-lock-indicator {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.35rem;
+  padding: 0.08rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+  color: var(--secondary);
+  font-size: 0.75rem;
+  font-family: var(--codeFont);
+  user-select: none;
+}
+
 .pg-redaction:focus-visible {
   outline: 2px solid var(--secondary);
   outline-offset: 2px;
