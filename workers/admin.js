@@ -5,7 +5,33 @@
 
 import { parseCookies } from './auth.js';
 import { buildStructurePreviewPayload, sanitizeProteinSummary } from './lib/structure-utils.js';
-import { fetchProteinByUniprot as loadProtein } from './lib/protein-store.js';
+import {
+  fetchProteinByUniprot as loadProtein,
+  getEligibleProteinIds,
+  pickDailyTarget
+} from './lib/protein-store.js';
+import { buildClueSections, maskClueSections, sanitizeTargetProtein } from './lib/game-engine.js';
+
+function addDaysISO(dateIso, days) {
+  const base = new Date(`${dateIso}T00:00:00.000Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+async function listAllKvKeys(env, prefix) {
+  const keys = [];
+  let cursor = undefined;
+  do {
+    const res = await env.KV.list({ prefix, cursor });
+    keys.push(...(res?.keys || []));
+    cursor = res?.cursor;
+    if (!res?.list_complete) {
+      continue;
+    }
+    break;
+  } while (cursor);
+  return keys;
+}
 
 const CAMERA_MODES = ['perspective', 'orthographic'];
 const ANTIALIASING_MODES = ['off', 'fxaa'];
@@ -641,6 +667,182 @@ export async function handleAdminStatus(request, env) {
       error: 'Internal server error', 
       details: err.message 
     }, { status: 500 });
+  }
+}
+
+/**
+ * GET /api/admin/schedule
+ * Returns:
+ * - history: recorded actual picks (what players actually saw)
+ * - upcoming: next N days (computed + any planned overrides)
+ */
+export async function handleAdminSchedule(request, env) {
+  if (!isAdmin(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const url = new URL(request.url);
+    const futureDaysRaw = url.searchParams.get('futureDays');
+    const futureDays = Math.max(0, Math.min(90, Number(futureDaysRaw ?? 30) || 30));
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Overrides map (we'll use it for upcoming rows)
+    const overrideKeys = await listAllKvKeys(env, 'puzzle_override:');
+    const overrides = await Promise.all(
+      overrideKeys.map(async (key) => {
+        try {
+          const value = await env.KV.get(key.name);
+          return {
+            date: key.name.replace('puzzle_override:', ''),
+            uniprot_id: value,
+            metadata: key.metadata || {}
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+    const overrideByDate = new Map(
+      overrides
+        .filter(Boolean)
+        .map((entry) => [entry.date, entry])
+    );
+
+    // Actual picks (history)
+    const actualKeys = await listAllKvKeys(env, 'puzzle_actual:');
+    const history = actualKeys
+      .map((key) => {
+        const date = key.name.replace('puzzle_actual:', '');
+        const meta = key.metadata || {};
+        return {
+          date,
+          uniprot_id: meta.uniprot_id || null,
+          source: meta.source || null,
+          override_id: meta.override_id || null,
+          rejected_count: Number.isFinite(meta.rejected_count) ? meta.rejected_count : null,
+          recorded_at: Number.isFinite(meta.recorded_at) ? meta.recorded_at : null
+        };
+      })
+      .filter((row) => row.date && /^\d{4}-\d{2}-\d{2}$/.test(row.date))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    // Upcoming (planned)
+    const eligibleIds = await getEligibleProteinIds(env.DB);
+    const salt = env?.DAILY_TARGET_SALT || 'geneguessr-v2-939b5a0b';
+    const upcoming = [];
+    for (let offset = 0; offset <= futureDays; offset += 1) {
+      const date = addDaysISO(today, offset);
+      const plannedOverride = overrideByDate.get(date)?.uniprot_id || null;
+      const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date);
+      const computedProtein = selection?.protein || null;
+      upcoming.push({
+        date,
+        override_uniprot_id: plannedOverride,
+        computed: computedProtein ? sanitizeProteinSummary(computedProtein) : null,
+        skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold) ? selection.skippedAlphaFold : null
+      });
+    }
+
+    return Response.json({
+      today,
+      history,
+      upcoming
+    });
+  } catch (err) {
+    console.error('Error in handleAdminSchedule:', err);
+    return Response.json({ error: 'Internal server error', details: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * GET /api/admin/cards?date=YYYY-MM-DD
+ * Returns clue sections for a specific date's resolved pick.
+ */
+export async function handleAdminCards(request, env) {
+  if (!isAdmin(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const url = new URL(request.url);
+    const date = url.searchParams.get('date');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return Response.json({ error: 'Missing or invalid date (YYYY-MM-DD)' }, { status: 400 });
+    }
+
+    // Prefer recorded actual pick (history shouldn't change if overrides change later)
+    const actualKey = `puzzle_actual:${date}`;
+    const actualJson = await env.KV.get(actualKey);
+    let resolvedUniprot = null;
+    let audit = null;
+
+    if (actualJson) {
+      try {
+        const record = JSON.parse(actualJson);
+        resolvedUniprot = record?.uniprot_id || null;
+        audit = record || null;
+      } catch {
+        resolvedUniprot = null;
+      }
+    }
+
+    // If not recorded, use planned override, else computed.
+    if (!resolvedUniprot) {
+      const overrideId = await env.KV.get(`puzzle_override:${date}`);
+      if (overrideId) {
+        resolvedUniprot = overrideId;
+        audit = { date, uniprot_id: overrideId, source: 'override', override_id: overrideId, rejected: [] };
+      }
+    }
+
+    if (!resolvedUniprot) {
+      const eligibleIds = await getEligibleProteinIds(env.DB);
+      const salt = env?.DAILY_TARGET_SALT || 'geneguessr-v2-939b5a0b';
+      const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date);
+      resolvedUniprot = selection?.protein?.uniprot || null;
+      audit = {
+        date,
+        uniprot_id: resolvedUniprot,
+        source: 'computed',
+        override_id: null,
+        rejected: [],
+        skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold) ? selection.skippedAlphaFold : null
+      };
+    }
+
+    if (!resolvedUniprot) {
+      return Response.json({ error: 'No target found for date' }, { status: 404 });
+    }
+
+    const protein = await loadProtein(env.DB, resolvedUniprot);
+    if (!protein) {
+      return Response.json({ error: 'Protein not found', uniprot_id: resolvedUniprot }, { status: 404 });
+    }
+
+    const clueSections = buildClueSections(protein);
+    const maskedSections = maskClueSections(clueSections, new Set());
+
+    return Response.json({
+      date,
+      selection: {
+        uniprot_id: resolvedUniprot,
+        source: audit?.source || null,
+        override_id: audit?.override_id || null,
+        rejected: Array.isArray(audit?.rejected) ? audit.rejected : [],
+        skipped_alpha_fold: Number.isFinite(audit?.skipped_alpha_fold) ? audit.skipped_alpha_fold : null,
+        recorded: Boolean(actualJson)
+      },
+      protein: sanitizeTargetProtein(protein, { revealIdentity: true }),
+      clue: {
+        start: maskedSections,
+        all: clueSections
+      }
+    });
+  } catch (err) {
+    console.error('Error in handleAdminCards:', err);
+    return Response.json({ error: 'Internal server error', details: err.message }, { status: 500 });
   }
 }
 

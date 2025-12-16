@@ -625,6 +625,78 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     .modal-close:hover {
       color: #ffffff;
     }
+
+    /* Schedule styles */
+    .schedule-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .schedule-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+    .schedule-table th,
+    .schedule-table td {
+      border: 1px solid #334155;
+      padding: 0.5rem;
+      vertical-align: top;
+    }
+    .schedule-table th {
+      background: #0f172a;
+      color: #e2e8f0;
+      text-align: left;
+      font-weight: 600;
+    }
+    .schedule-meta {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      margin-top: 0.15rem;
+    }
+    .schedule-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .cards-preview {
+      margin-top: 1rem;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 1rem;
+      background: #0b1220;
+    }
+    .cards-preview h3 {
+      margin-top: 0;
+    }
+    .cards-preview .section-block {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #334155;
+    }
+    .cards-preview .clue-section-title {
+      margin: 0 0 0.35rem 0;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .cards-preview .clue-item {
+      margin: 0.25rem 0;
+      color: #cbd5e1;
+      font-size: 0.9rem;
+    }
+    .cards-preview .clue-item .pill {
+      display: inline-block;
+      margin-right: 0.5rem;
+      padding: 0.1rem 0.4rem;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
   </style>
 </head>
 <body>
@@ -652,6 +724,24 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       <div class="calendar-grid" id="calendar-grid">
         <!-- Days will be injected here -->
       </div>
+    </div>
+
+    <!-- Schedule Section -->
+    <div class="section">
+      <h2>Schedule (History + Next Month)</h2>
+      <p class="helper-text helper-text--title" style="margin-bottom: 0.75rem;">
+        History is based on recorded daily picks (what players actually saw). Upcoming is the computed pick for each day, plus any planned overrides.
+      </p>
+      <div class="schedule-controls">
+        <div>
+          <label for="schedule-future-days">Future Days</label>
+          <input type="number" id="schedule-future-days" min="0" max="90" value="30" style="width: 6rem;" />
+          <button type="button" id="schedule-refresh">Refresh</button>
+        </div>
+        <div id="schedule-message" class="helper-text"></div>
+      </div>
+      <div id="schedule-table-wrap"></div>
+      <div id="schedule-cards" class="cards-preview" style="display:none;"></div>
     </div>
 
     <!-- Modal -->
@@ -1289,8 +1379,245 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     setupGraphicsForm();
     bindForms();
     loadStatus();
+    setupSchedule();
     loadProteinDatabase();
     initializePreview();
+
+    function setupSchedule() {
+      const btn = document.getElementById('schedule-refresh');
+      const futureInput = document.getElementById('schedule-future-days');
+      if (btn) {
+        btn.addEventListener('click', () => loadSchedule());
+      }
+      if (futureInput) {
+        futureInput.addEventListener('change', () => loadSchedule());
+      }
+      loadSchedule();
+    }
+
+    async function loadSchedule() {
+      const wrap = document.getElementById('schedule-table-wrap');
+      const msg = document.getElementById('schedule-message');
+      const futureDays = Number(document.getElementById('schedule-future-days')?.value || 30) || 30;
+      if (!wrap) return;
+      wrap.innerHTML = '<p class="helper-text">Loading schedule...</p>';
+      if (msg) msg.textContent = '';
+      try {
+        const response = await fetch(API_BASE + '/api/admin/schedule?futureDays=' + encodeURIComponent(String(futureDays)), { credentials: 'include' });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load schedule');
+        }
+        renderSchedule(data);
+      } catch (err) {
+        console.error('Error loading schedule:', err);
+        wrap.innerHTML = '<p class="helper-text error-text">Failed to load schedule</p>';
+        if (msg) msg.textContent = '';
+      }
+    }
+
+    function renderSchedule(data) {
+      const wrap = document.getElementById('schedule-table-wrap');
+      if (!wrap) return;
+      const today = data?.today || '';
+      const history = Array.isArray(data?.history) ? data.history : [];
+      const upcoming = Array.isArray(data?.upcoming) ? data.upcoming : [];
+
+      const table = document.createElement('table');
+      table.className = 'schedule-table';
+      table.innerHTML =
+        '<thead><tr>' +
+          '<th style="width: 9.5rem;">Date</th>' +
+          '<th>Resolved / Planned</th>' +
+          '<th style="width: 16rem;">Actions</th>' +
+        '</tr></thead>';
+
+      const tbody = document.createElement('tbody');
+
+      // History (recorded actual picks)
+      history.forEach((row) => {
+        const tr = document.createElement('tr');
+        const date = row.date;
+        const uniprot = row.uniprot_id || '';
+        const source = row.source || '';
+        const rejectedCount = (row.rejected_count === null || row.rejected_count === undefined)
+          ? ''
+          : String(row.rejected_count);
+
+        tr.innerHTML =
+          '<td>' +
+            '<div>' + escapeHtml(date) + (date === today ? ' <span class="value-pill">today</span>' : '') + '</div>' +
+            '<div class="schedule-meta">history</div>' +
+          '</td>' +
+          '<td>' +
+            '<div><span class="value-pill">' + escapeHtml(source || 'actual') + '</span> ' + escapeHtml(uniprot || '(missing)') + '</div>' +
+            (rejectedCount ? '<div class="schedule-meta">rejected: ' + escapeHtml(rejectedCount) + '</div>' : '') +
+          '</td>' +
+          '<td></td>';
+
+        const actionsTd = tr.querySelector('td:last-child');
+        const actions = document.createElement('div');
+        actions.className = 'schedule-actions';
+        actions.appendChild(makeButton('Cards', () => loadCardsForDate(date)));
+        actions.appendChild(makeButton('Edit override', () => openOverrideForDate(date)));
+        actionsTd.appendChild(actions);
+
+        tbody.appendChild(tr);
+      });
+
+      // Upcoming (planned)
+      upcoming.forEach((row) => {
+        const tr = document.createElement('tr');
+        const date = row.date;
+        const overrideId = row.override_uniprot_id || '';
+        const computed = row.computed;
+        const computedLabel = computed?.hgnc
+          ? (computed.hgnc + ' / ' + computed.uniprot)
+          : (computed?.uniprot || '');
+        const plannedLabel = overrideId
+          ? ('override: ' + overrideId)
+          : ('computed: ' + computedLabel);
+        tr.innerHTML =
+          '<td>' +
+            '<div>' + escapeHtml(date) + (date === today ? ' <span class="value-pill">today</span>' : '') + '</div>' +
+            '<div class="schedule-meta">upcoming</div>' +
+          '</td>' +
+          '<td>' +
+            '<div>' + escapeHtml(plannedLabel || '(missing)') + '</div>' +
+            (computed?.full_name ? '<div class="schedule-meta">' + escapeHtml(computed.full_name) + '</div>' : '') +
+          '</td>' +
+          '<td></td>';
+
+        const actionsTd = tr.querySelector('td:last-child');
+        const actions = document.createElement('div');
+        actions.className = 'schedule-actions';
+        actions.appendChild(makeButton('Cards', () => loadCardsForDate(date)));
+        actions.appendChild(makeButton('Edit override', () => openOverrideForDate(date)));
+        actionsTd.appendChild(actions);
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      wrap.innerHTML = '';
+      wrap.appendChild(table);
+    }
+
+    async function loadCardsForDate(date) {
+      const cardsEl = document.getElementById('schedule-cards');
+      if (!cardsEl) return;
+      cardsEl.style.display = 'block';
+      cardsEl.innerHTML = '<p class="helper-text">Loading cards for ' + escapeHtml(date) + '...</p>';
+      try {
+        const response = await fetch(API_BASE + '/api/admin/cards?date=' + encodeURIComponent(date), { credentials: 'include' });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load cards');
+        }
+        renderCardsPreview(cardsEl, data);
+      } catch (err) {
+        console.error('Error loading cards:', err);
+        cardsEl.innerHTML = '<p class="helper-text error-text">Failed to load cards for ' + escapeHtml(date) + '</p>';
+      }
+    }
+
+    function renderCardsPreview(rootEl, data) {
+      const date = data?.date || '';
+      const protein = data?.protein || {};
+      const selection = data?.selection || {};
+      const startSections = Array.isArray(data?.clue?.start) ? data.clue.start : [];
+      const allSections = Array.isArray(data?.clue?.all) ? data.clue.all : [];
+      const rejected = Array.isArray(selection?.rejected) ? selection.rejected : [];
+
+      const title = protein?.hgnc
+        ? (protein.hgnc + ' / ' + (protein.uniprot || selection.uniprot_id || ''))
+        : (selection.uniprot_id || '');
+
+      rootEl.innerHTML = '';
+
+      const header = document.createElement('div');
+      header.innerHTML =
+        '<h3 style="margin-bottom: 0.25rem;">Cards for ' + escapeHtml(date) + '</h3>' +
+        '<div class="schedule-meta">' +
+          '<span class="value-pill">' + escapeHtml(selection.source || '') + '</span> ' +
+          escapeHtml(title) +
+          (protein?.full_name ? ' &mdash; ' + escapeHtml(protein.full_name) : '') +
+        '</div>';
+      rootEl.appendChild(header);
+
+      if (rejected.length) {
+        const rej = document.createElement('div');
+        rej.className = 'section-block';
+        const lines = rejected.slice(0, 10).map((r) => {
+          const u = r?.uniprot_id || '';
+          const reason = r?.reason || '';
+          return '<div class="clue-item"><span class="pill">rejected</span>' + escapeHtml(u) + ' <span class="schedule-meta">(' + escapeHtml(reason) + ')</span></div>';
+        }).join('');
+        rej.innerHTML = '<div class="clue-section-title">Rejections (first 10)</div>' + lines;
+        rootEl.appendChild(rej);
+      }
+
+      rootEl.appendChild(renderSectionBlock('Start of day (masked)', startSections, true));
+      rootEl.appendChild(renderSectionBlock('All clues (unmasked)', allSections, false));
+    }
+
+    function openOverrideForDate(date) {
+      try {
+        const override = (typeof currentOverrides !== 'undefined' && Array.isArray(currentOverrides))
+          ? (currentOverrides.find((o) => o?.date === date) || null)
+          : null;
+        openModal(date, override);
+      } catch (err) {
+        console.error('Failed to open override modal:', err);
+      }
+    }
+
+    function renderSectionBlock(title, sections, masked) {
+      const block = document.createElement('div');
+      block.className = 'section-block';
+      const h = document.createElement('div');
+      h.className = 'clue-section-title';
+      h.textContent = title;
+      block.appendChild(h);
+
+      sections.forEach((section) => {
+        const secTitle = document.createElement('div');
+        secTitle.className = 'clue-section-title';
+        secTitle.style.marginTop = '0.5rem';
+        secTitle.textContent = section?.title || section?.label || section?.id || 'Section';
+        block.appendChild(secTitle);
+
+        (section?.items || []).forEach((item) => {
+          const div = document.createElement('div');
+          div.className = 'clue-item';
+          const label = item?.label ? (item.label + ': ') : '';
+          const isHidden = masked && item?.id && item?.revealed === false;
+          const text = isHidden
+            ? (item?.placeholder || '[locked]')
+            : (typeof item?.text === 'string' ? item.text : (typeof item?.fullText === 'string' ? item.fullText : String(item?.text ?? '')));
+          div.innerHTML = (isHidden ? '<span class="pill">locked</span>' : '') + escapeHtml(label + text);
+          block.appendChild(div);
+        });
+      });
+      return block;
+    }
+
+    function makeButton(text, onClick) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = text;
+      btn.addEventListener('click', onClick);
+      return btn;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     async function loadStatus() {
       try {

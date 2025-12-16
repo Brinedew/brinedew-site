@@ -41,7 +41,9 @@ import {
   handleGraphicsSettings,
   DEFAULT_GRAPHICS_SETTINGS,
   normalizeGraphicsSettings,
-  handleProteinPreview
+  handleProteinPreview,
+  handleAdminSchedule,
+  handleAdminCards
 } from './admin.js';
 // Import admin HTML
 import { ADMIN_HTML } from './admin-html.js';
@@ -294,6 +296,22 @@ export default {
       });
     }
 
+    if (url.pathname === '/api/admin/schedule' && request.method === 'GET') {
+      const response = await handleAdminSchedule(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
+      });
+    }
+
+    if (url.pathname === '/api/admin/cards' && request.method === 'GET') {
+      const response = await handleAdminCards(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
+      });
+    }
+
     // Debug endpoint for cache stats (no sensitive data)
     if (url.pathname === '/api/debug/cache-stats' && request.method === 'GET') {
       const usage = await getStructureBucketUsage(env);
@@ -318,7 +336,7 @@ export default {
     }
 
     if (url.pathname === '/api/game/bootstrap' && request.method === 'GET') {
-      return handleGameBootstrap(request, env, corsHeaders);
+      return handleGameBootstrap(request, env, ctx, corsHeaders);
     }
 
     if (url.pathname === '/api/game/guess' && request.method === 'POST') {
@@ -1157,7 +1175,7 @@ async function setDailyBootstrapCache(env, date, origin, targetProtein, structur
  * DO NOT add sequential awaits here without measuring impact.
  * DO NOT call hydrateGuessProteins with sequential DB calls.
  */
-async function handleGameBootstrap(request, env, corsHeaders) {
+async function handleGameBootstrap(request, env, ctx, corsHeaders) {
   console.log('[BOOTSTRAP] Handler started');
   try {
     const sessionContext = await resolveSessionContextAsync(request, env, { migrateGuestState: true });
@@ -1179,12 +1197,14 @@ async function handleGameBootstrap(request, env, corsHeaders) {
     // Target protein lookup and session state load are independent
     // Running in parallel saves 50-150ms per request
     console.log('[BOOTSTRAP] Starting parallel fetch: targetSeed + existingState');
-    const [targetSeed, existingState] = await Promise.all([
+    const [targetSeedRaw, existingState] = await Promise.all([
       cachedDaily?.targetProtein 
         ? Promise.resolve(cachedDaily.targetProtein)  // Use cached target
-        : getDailyTargetProtein(env, { practice: practiceMode }),
+        : getDailyTargetProtein(env, { practice: practiceMode, returnAudit: !practiceMode }),
       getGameState(env, sessionId).catch(() => null)  // Graceful fallback if session doesn't exist
     ]);
+    const targetSeed = targetSeedRaw?.protein ? targetSeedRaw.protein : targetSeedRaw;
+    const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : null;
     console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || 'null'}`);
     
     if (!targetSeed && !practiceMode) {
@@ -1226,9 +1246,19 @@ async function handleGameBootstrap(request, env, corsHeaders) {
     
     // ⚠️ POPULATE CACHE FOR NEXT REQUEST (daily mode only) ⚠️
     if (!practiceMode && !cachedDaily && targetProtein && structureToken) {
-      // Fire-and-forget cache population
-      setDailyBootstrapCache(env, today, url.origin, targetProtein, structureToken)
-        .catch(e => console.warn('Cache population failed:', e));
+      ctx.waitUntil(
+        setDailyBootstrapCache(env, today, url.origin, targetProtein, structureToken)
+          .catch(e => console.warn('Cache population failed:', e))
+      );
+    }
+
+    // Record what was actually shown to players (daily mode only).
+    // Uses waitUntil so we don't add latency to bootstrap.
+    if (!practiceMode && targetProtein?.uniprot) {
+      const audit = targetAudit && targetAudit.date === today
+        ? targetAudit
+        : { date: today, source: 'unknown', rejected: [] };
+      ctx.waitUntil(recordDailyPickOnce(env, today, targetProtein.uniprot, audit));
     }
     
     const payload = buildGamePayload(state, targetProtein);
@@ -1240,6 +1270,37 @@ async function handleGameBootstrap(request, env, corsHeaders) {
   } catch (err) {
     console.error('GeneGuessr: bootstrap failed', err);
     return Response.json({ error: 'Failed to load game state' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+async function recordDailyPickOnce(env, date, uniprotId, audit) {
+  try {
+    const key = `puzzle_actual:${date}`;
+    const existing = await env.KV.get(key);
+    if (existing) {
+      return;
+    }
+    const record = {
+      date,
+      uniprot_id: uniprotId,
+      source: audit?.source || 'unknown',
+      override_id: audit?.override_id || null,
+      rejected: Array.isArray(audit?.rejected) ? audit.rejected : [],
+      skipped_alpha_fold: Number.isFinite(audit?.skipped_alpha_fold) ? audit.skipped_alpha_fold : null,
+      recorded_at: Date.now()
+    };
+    const rejectedCount = Array.isArray(record.rejected) ? record.rejected.length : 0;
+    await env.KV.put(key, JSON.stringify(record), {
+      metadata: {
+        uniprot_id: record.uniprot_id,
+        source: record.source,
+        override_id: record.override_id,
+        rejected_count: rejectedCount,
+        recorded_at: record.recorded_at
+      }
+    });
+  } catch (err) {
+    console.warn('Daily pick record write failed:', err);
   }
 }
 
@@ -1530,6 +1591,17 @@ async function getDailyTargetProtein(env, options = {}) {
   let startIdx = 0;
   let balancedPick = null;  // Track surname info for practice mode
   
+  const wantsAudit = Boolean(options.returnAudit);
+  const audit = wantsAudit
+    ? {
+        date: null,
+        source: options.practice ? 'practice' : 'computed',
+        override_id: null,
+        rejected: [],
+        skipped_alpha_fold: null
+      }
+    : null;
+
   if (options.practice) {
     // Practice mode: Use surname-based balanced picking
     // This prevents over-representation of large gene families like ZNF, OR, KRTAP
@@ -1550,17 +1622,29 @@ async function getDailyTargetProtein(env, options = {}) {
   } else {
     // Daily mode: check for manual override first
     const today = new Date().toISOString().slice(0, 10);
+    if (audit) {
+      audit.date = today;
+    }
     const overrideId = await env.KV.get(`puzzle_override:${today}`);
     if (overrideId) {
       const overrideProtein = await fetchProteinByUniprot(env.DB, overrideId);
       if (overrideProtein) {
-        return overrideProtein;  // Manual override skips validation (admin's responsibility)
+        if (audit) {
+          audit.source = 'override';
+          audit.override_id = overrideId;
+          audit.skipped_alpha_fold = 0;
+        }
+        return audit ? { protein: overrideProtein, audit } : overrideProtein;
       }
     }
     
     const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
     const selection = await pickDailyTarget(env.DB, eligibleIds, salt);
     protein = selection?.protein || null;
+    if (audit) {
+      audit.source = 'computed';
+      audit.skipped_alpha_fold = Number.isFinite(selection?.skippedAlphaFold) ? selection.skippedAlphaFold : null;
+    }
     startIdx = eligibleIds.indexOf(protein?.uniprot);
     if (startIdx < 0) startIdx = 0;
   }
@@ -1610,11 +1694,20 @@ async function getDailyTargetProtein(env, options = {}) {
             break;
           }
           console.warn(`[TARGET-PICK] ${protein.uniprot} upstream failed (${upstreamResp.status}), trying next`);
+          if (audit) {
+            audit.rejected.push({ uniprot_id: protein.uniprot, reason: `upstream_failed_${upstreamResp.status}` });
+          }
         } catch (err) {
           console.warn(`[TARGET-PICK] ${protein.uniprot} upstream error:`, err.message);
+          if (audit) {
+            audit.rejected.push({ uniprot_id: protein.uniprot, reason: 'upstream_error' });
+          }
         }
       } else if (!structureMeta) {
         console.warn(`[TARGET-PICK] ${protein.uniprot} has no structure meta, trying next`);
+        if (audit) {
+          audit.rejected.push({ uniprot_id: protein.uniprot, reason: 'no_structure_meta' });
+        }
       }
       
       // This protein's structure is unavailable - try next candidate
@@ -1633,8 +1726,8 @@ async function getDailyTargetProtein(env, options = {}) {
       console.log(`[TARGET-PICK] Skipped ${attempts} proteins with unavailable structures`);
     }
   }
-  
-  return protein;
+
+  return audit ? { protein, audit } : protein;
 }
 
 function createInitialGameState(date, targetId, options = {}) {
