@@ -206,6 +206,65 @@ export function resolveStructureRepresentation(structure, proteinLength) {
   return null;
 }
 
+function buildRepresentationFromStoredSource(protein) {
+  if (!protein) {
+    return null;
+  }
+
+  const source = typeof protein.structure_source === 'string'
+    ? protein.structure_source.trim().toLowerCase()
+    : '';
+
+  if (!source) {
+    return null;
+  }
+
+  if (source === 'pdb' && protein.pdb_id) {
+    const pdbId = String(protein.pdb_id).trim().toUpperCase();
+    if (!pdbId) {
+      return null;
+    }
+    return {
+      source: 'pdb',
+      structureId: pdbId,
+      coverage: 1,
+      pdb: { id: pdbId },
+      chains: []
+    };
+  }
+
+  if (source === 'swissmodel' && protein.swissmodel_url) {
+    return {
+      source: 'swissmodel',
+      structureId: protein.swissmodel_template ? String(protein.swissmodel_template) : (protein.uniprot ? String(protein.uniprot) : 'SWISS'),
+      coverage: typeof protein.swissmodel_coverage === 'number' ? protein.swissmodel_coverage : null,
+      swissModel: {
+        coordinates_url: protein.swissmodel_url,
+        coverage: protein.swissmodel_coverage,
+        qmean: protein.swissmodel_qmean,
+        template: protein.swissmodel_template
+      },
+      chains: []
+    };
+  }
+
+  if (source === 'alphafold' && protein.alphafold_url) {
+    const uniprot = protein.uniprot ? String(protein.uniprot).trim().toUpperCase() : '';
+    return {
+      source: 'alphafold',
+      structureId: uniprot || 'Preview',
+      coverage: 1,
+      alphafold: {
+        id: uniprot ? ('AF-' + uniprot + '-F1') : undefined,
+        model_url: protein.alphafold_url
+      },
+      chains: []
+    };
+  }
+
+  return null;
+}
+
 function detectStructureFormat(url, explicitFormat) {
   if (explicitFormat) {
     return explicitFormat;
@@ -218,8 +277,45 @@ function detectStructureFormat(url, explicitFormat) {
     if (lower.includes('.bcif')) {
       return 'bcif';
     }
+    if (lower.includes('.pdb')) {
+      return 'pdb';
+    }
   }
   return 'pdb';
+}
+
+function coerceProteinStructure(protein) {
+  if (!protein) {
+    return null;
+  }
+  if (protein.structure) {
+    return protein.structure;
+  }
+
+  const uniprot = protein.uniprot;
+  const structure = {};
+
+  if (protein.pdb_id) {
+    structure.pdb = { id: protein.pdb_id };
+  }
+
+  if (protein.alphafold_url) {
+    structure.alphafold = {
+      id: uniprot ? ('AF-' + uniprot + '-F1') : undefined,
+      model_url: protein.alphafold_url
+    };
+  }
+
+  if (protein.swissmodel_url) {
+    structure.swiss_model = {
+      coordinates_url: protein.swissmodel_url,
+      coverage: protein.swissmodel_coverage,
+      qmean: protein.swissmodel_qmean,
+      template: protein.swissmodel_template
+    };
+  }
+
+  return Object.keys(structure).length ? structure : null;
 }
 
 export function buildMolstarOptionsFromRepresentation(representation) {
@@ -241,7 +337,7 @@ export function buildMolstarOptionsFromRepresentation(representation) {
       moleculeId: representation.alphafold.id || representation.structureId || 'Preview',
       customData: {
         url: representation.alphafold.model_url,
-        format: 'cif'
+        format: detectStructureFormat(representation.alphafold.model_url, representation.alphafold.format)
       }
     };
   }
@@ -263,10 +359,15 @@ export function buildMolstarOptionsFromRepresentation(representation) {
 }
 
 export function buildStructurePreviewPayload(protein) {
-  if (!protein || !protein.structure) {
+  if (!protein) {
     return null;
   }
-  const representation = resolveStructureRepresentation(protein.structure, protein.length || 0);
+
+  // Keep admin preview consistent with the public game: if the DB has an explicit
+  // structure_source, use it directly instead of re-running heuristic selection.
+  const storedRepresentation = buildRepresentationFromStoredSource(protein);
+  const structure = storedRepresentation ? null : coerceProteinStructure(protein);
+  const representation = storedRepresentation || resolveStructureRepresentation(structure, protein.length || 0);
   if (!representation) {
     return null;
   }

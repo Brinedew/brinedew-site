@@ -11,6 +11,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       padding: 0;
       box-sizing: border-box;
     }
+
+    [hidden] {
+      display: none !important;
+    }
     
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1330,7 +1334,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       ultra: { enabled: true, samples: 128, radius: 8, bias: 0.8, blurKernelSize: 9, resolutionScale: 1 }
     };
 
-    const DEFAULT_PREVIEW_UNIPROT = 'P04637';
     const ACCENT_COLOR_HEX = '#1b7269';
     const LIGHT_NEUTRAL_GRAY_HEX = '#ab9b8f';
     const DARK_NEUTRAL_GRAY_HEX = '#87776d';
@@ -1443,7 +1446,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     // Removed renderSchedule
 
 
+    let cardsLoadToken = 0;
+
     async function loadCardsForDate(date) {
+      const loadToken = ++cardsLoadToken;
       const cardsEl = document.getElementById('schedule-cards');
       if (!cardsEl) return;
       cardsEl.style.display = 'block';
@@ -1454,8 +1460,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         if (!response.ok) {
           throw new Error(data.error || 'Failed to load cards');
         }
+        if (loadToken !== cardsLoadToken) {
+          return;
+        }
         renderCardsPreview(cardsEl, data);
       } catch (err) {
+        if (loadToken !== cardsLoadToken) {
+          return;
+        }
         console.error('Error loading cards:', err);
         cardsEl.innerHTML = '<p class="helper-text error-text">Failed to load cards for ' + escapeHtml(date) + '</p>';
       }
@@ -2471,6 +2483,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           throw new Error(payload.error || 'Failed to load preview data');
         }
 
+        // If a newer preview load started while this request was in flight, bail out
+        // before we touch the existing viewer/UI.
+        if (loadToken !== previewLoadToken) {
+          return;
+        }
+
         // The server may return a successful response with no preview available.
         if (payload && payload.available === false) {
           await destroyPreviewViewer();
@@ -2535,20 +2553,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       if (!previewContainer) {
         return;
       }
-      previewPlaceholderEl.hidden = false;
-      previewLoadingEl.hidden = false;
+      previewLoadingEl.hidden = true;
       previewErrorEl.hidden = true;
-      previewStatusEl.textContent = 'Loading preview...';
-      try {
-        await loadProteinInPreview(DEFAULT_PREVIEW_UNIPROT);
-      } catch (err) {
-        console.error('Preview viewer failed', err);
-        previewLoadingEl.hidden = true;
-        previewPlaceholderEl.hidden = true;
-        previewErrorEl.hidden = false;
-        previewErrorEl.textContent = 'Could not load 3D viewer: ' + err.message;
-        previewStatusEl.textContent = 'Preview unavailable';
-      }
+      previewPlaceholderEl.hidden = false;
+      previewPlaceholderEl.textContent = 'Select a date to view protein';
+      previewStatusEl.textContent = 'Select a date to preview';
     }
 
 
