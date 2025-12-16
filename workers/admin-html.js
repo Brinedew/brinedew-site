@@ -1349,7 +1349,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     const previewLoadingEl = document.getElementById('graphics-preview-loading');
     const previewErrorEl = document.getElementById('graphics-preview-error');
 
-    document.getElementById('override-date').valueAsDate = new Date();
+    // Inspector uses a hidden date field; set an initial ISO date value safely.
+    {
+      const overrideDateEl = document.getElementById('override-date');
+      if (overrideDateEl) {
+        const now = new Date();
+        const yyyy = String(now.getFullYear());
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        overrideDateEl.value = yyyy + '-' + mm + '-' + dd;
+      }
+    }
 
     setupPreviewToggle();
     setupGraphicsForm();
@@ -1535,53 +1545,87 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           throw new Error('Failed to load status');
         }
         const data = await response.json();
+        // Keep status loading robust even if some optional panels are removed.
         displayStatus(data);
         displayOverrides(data.all_overrides);
-        updateCalendarOverrides(data.all_overrides);
         updateFlagCheckboxes(data.feature_flags || {});
         syncGraphicsSettings(data.graphics_settings);
       } catch (err) {
         console.error('Error loading status:', err);
-        document.getElementById('status-display').innerHTML = '<p class="helper-text error-text">Failed to load status</p>';
+        const statusEl = document.getElementById('status-display');
+        if (statusEl) {
+          statusEl.innerHTML = '<p class="helper-text error-text">Failed to load status</p>';
+        }
       }
     }
 
     function bindForms() {
-      document.getElementById('override-form').addEventListener('submit', handleOverrideSubmit);
-      document.getElementById('btn-preview-override').addEventListener('click', () => {
-        const uniprot = document.getElementById('override-uniprot').value;
-        if (uniprot) loadProteinInPreview(uniprot);
-      });
-      document.getElementById('btn-delete-override').addEventListener('click', async () => {
-        const date = document.getElementById('override-date').value;
-        if (date) await deleteOverride(date);
-      });
+      const overrideForm = document.getElementById('override-form');
+      if (overrideForm) {
+        overrideForm.addEventListener('submit', handleOverrideSubmit);
+      }
 
-      document.getElementById('flags-form').addEventListener('submit', handleFlagsSubmit);
-      document.getElementById('graphics-form').addEventListener('submit', handleGraphicsSubmit);
-      document.getElementById('graphics-reset').addEventListener('click', () => {
+      const deleteBtn = document.getElementById('btn-delete-override');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+          const date = document.getElementById('override-date')?.value;
+          if (date) await deleteOverride(date);
+        });
+      }
+
+      const flagsForm = document.getElementById('flags-form');
+      if (flagsForm) {
+        flagsForm.addEventListener('submit', handleFlagsSubmit);
+      }
+
+      const graphicsForm = document.getElementById('graphics-form');
+      if (graphicsForm) {
+        graphicsForm.addEventListener('submit', handleGraphicsSubmit);
+      }
+
+      const graphicsReset = document.getElementById('graphics-reset');
+      if (graphicsReset) {
+        graphicsReset.addEventListener('click', () => {
         pendingGraphicsSettings = deepClone(DEFAULT_GRAPHICS_SETTINGS);
         syncProfileState(pendingGraphicsSettings.profileManager);
         applyGraphicsSettingsToForm(pendingGraphicsSettings);
         refreshPreview({ immediate: true });
-      });
-      document.getElementById('graphics-revert').addEventListener('click', () => {
+        });
+      }
+
+      const graphicsRevert = document.getElementById('graphics-revert');
+      if (graphicsRevert) {
+        graphicsRevert.addEventListener('click', () => {
         pendingGraphicsSettings = deepClone(currentGraphicsSettings);
         syncProfileState(pendingGraphicsSettings.profileManager);
         applyGraphicsSettingsToForm(pendingGraphicsSettings);
         refreshPreview({ immediate: true });
-      });
-      document.getElementById('profile-select').addEventListener('change', (event) => {
+        });
+      }
+
+      const profileSelect = document.getElementById('profile-select');
+      if (profileSelect) {
+        profileSelect.addEventListener('change', (event) => {
         profileState.selectedId = event.target.value;
         hydrateProfileControls();
-      });
-      document.getElementById('profile-load').addEventListener('click', loadSelectedProfile);
-      document.getElementById('profile-save').addEventListener('click', saveProfileFromCurrent);
-      document.getElementById('profile-delete').addEventListener('click', deleteSelectedProfile);
-      document.getElementById('profile-reset').addEventListener('click', resetBuiltInProfiles);
-      document.getElementById('occlusion-quality').addEventListener('change', (event) => {
+        });
+      }
+
+      const profileLoad = document.getElementById('profile-load');
+      if (profileLoad) profileLoad.addEventListener('click', loadSelectedProfile);
+      const profileSave = document.getElementById('profile-save');
+      if (profileSave) profileSave.addEventListener('click', saveProfileFromCurrent);
+      const profileDelete = document.getElementById('profile-delete');
+      if (profileDelete) profileDelete.addEventListener('click', deleteSelectedProfile);
+      const profileReset = document.getElementById('profile-reset');
+      if (profileReset) profileReset.addEventListener('click', resetBuiltInProfiles);
+
+      const occlusionQuality = document.getElementById('occlusion-quality');
+      if (occlusionQuality) {
+        occlusionQuality.addEventListener('change', (event) => {
         applyOcclusionPresetToFields(event.target.value);
-      });
+        });
+      }
     }
 
     function setupPreviewToggle() {
@@ -1759,6 +1803,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     function displayOverrides(overrides) {
       const listEl = document.getElementById('override-list');
+      if (!listEl) {
+        return;
+      }
       listEl.innerHTML = '';
       if (!overrides || overrides.length === 0) {
         const empty = document.createElement('p');
@@ -2179,8 +2226,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     function setupProteinSelector() {
-      const inputEl = document.getElementById('preview-protein-select');
-      const suggestionsEl = document.getElementById('preview-protein-suggestions');
+      // Autocomplete for the override input in the inspector.
+      const inputEl = document.getElementById('override-uniprot');
+      const suggestionsEl = document.getElementById('protein-suggestions');
       if (!inputEl || !suggestionsEl) return;
 
       let selectedIndex = -1;
@@ -2216,10 +2264,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         suggestionsEl.classList.add('show');
         selectedIndex = -1;
 
-        suggestionsEl.querySelectorAll('.protein-suggestion').forEach(el => {
+        suggestionsEl.querySelectorAll('.protein-suggestion').forEach((el) => {
           el.addEventListener('click', () => {
             const uniprot = el.dataset.uniprot;
-            loadProteinInPreview(uniprot);
+            if (uniprot) {
+              inputEl.value = uniprot;
+              suggestionsEl.classList.remove('show');
+              loadProteinInPreview(uniprot);
+            }
           });
         });
       });
@@ -2239,7 +2291,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           e.preventDefault();
           if (selectedIndex >= 0 && suggestions[selectedIndex]) {
             const uniprot = suggestions[selectedIndex].dataset.uniprot;
-            loadProteinInPreview(uniprot);
+            if (uniprot) {
+              inputEl.value = uniprot;
+              suggestionsEl.classList.remove('show');
+              loadProteinInPreview(uniprot);
+            }
           }
         } else if (e.key === 'Escape') {
           suggestionsEl.innerHTML = '';
@@ -2316,16 +2372,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
 
     async function loadProteinInPreview(uniprot) {
-      const inputEl = document.getElementById('preview-protein-select');
-      const suggestionsEl = document.getElementById('preview-protein-suggestions');
-      const localProtein = proteinDatabase.find(p => p.uniprot === uniprot);
-      if (inputEl) {
-        inputEl.value = localProtein ? localProtein.hgnc : uniprot;
-      }
-      if (suggestionsEl) {
-        suggestionsEl.innerHTML = '';
-        suggestionsEl.classList.remove('show');
-      }
+      const localProtein = proteinDatabase.find((p) => p.uniprot === uniprot);
 
       const loadToken = ++previewLoadToken;
       const pendingLabel = localProtein ? localProtein.hgnc : uniprot;
@@ -2342,6 +2389,20 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         if (!response.ok) {
           throw new Error(payload.error || 'Failed to load preview data');
         }
+
+        // The server may return a successful response with no preview available.
+        if (payload && payload.available === false) {
+          await destroyPreviewViewer();
+          previewStructureChoice = null;
+          previewReady = false;
+          previewLoadingEl.hidden = true;
+          previewErrorEl.hidden = true;
+          previewPlaceholderEl.hidden = false;
+          previewPlaceholderEl.textContent = payload.message || 'No 3D structure available for preview.';
+          previewStatusEl.textContent = 'Preview unavailable';
+          return;
+        }
+
         if (!payload.renderOptions || !payload.representation) {
           throw new Error('Preview payload incomplete');
         }

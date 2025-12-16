@@ -951,7 +951,11 @@ export async function handleProteinPreview(request, env) {
     }
     const preview = buildStructurePreviewPayload(protein);
     if (!preview) {
-      return Response.json({ error: 'No valid structure available for preview' }, { status: 422 });
+      return Response.json({
+        available: false,
+        message: 'No valid structure available for preview',
+        protein: sanitizeProteinSummary(protein)
+      }, { status: 200 });
     }
     return Response.json({
       protein: sanitizeProteinSummary(protein),
