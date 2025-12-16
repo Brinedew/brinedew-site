@@ -760,9 +760,20 @@ export async function handleAdminSchedule(request, env) {
       const plannedOverride = overrideByDate.get(date)?.uniprot_id || null;
       const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date);
       const computedProtein = selection?.protein || null;
+
+      let overrideProtein = null;
+      if (plannedOverride) {
+        try {
+          const protein = await loadProtein(env.DB, plannedOverride);
+          overrideProtein = protein ? sanitizeProteinSummary(protein) : null;
+        } catch {
+          overrideProtein = null;
+        }
+      }
       upcoming.push({
         date,
         override_uniprot_id: plannedOverride,
+        override_protein: overrideProtein,
         computed: computedProtein ? sanitizeProteinSummary(computedProtein) : null,
         skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold) ? selection.skippedAlphaFold : null
       });

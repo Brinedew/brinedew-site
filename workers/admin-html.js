@@ -1209,7 +1209,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           <input type="hidden" id="override-date">
           <div class="form-group">
             <div class="protein-selector-wrapper">
-              <input type="text" id="override-uniprot" placeholder="Enter UniProt ID (e.g. P04637) to override" autocomplete="off">
+              <input type="text" id="override-uniprot" placeholder="Enter gene symbol (e.g. WEE1) to override" autocomplete="off">
               <div class="protein-suggestions" id="protein-suggestions"></div>
             </div>
           </div>
@@ -1466,6 +1466,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     let scheduleData = {};
 
+    // Override picker state: keep the UI gene-first, but keep the selected UniProt ID as the internal key.
+    let overrideSelectedSuggestionUniprot = null;
+    let overrideSelectedSuggestionGene = null;
+
     function setupSchedule() {
       // No controls needed anymore, auto-load on init
       loadSchedule();
@@ -1497,7 +1501,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         // Upcoming
         (data.upcoming || []).forEach(row => {
           const isOverride = !!row.override_uniprot_id;
-          const protein = isOverride ? { uniprot: row.override_uniprot_id } : row.computed;
+          const protein = isOverride
+            ? (row.override_protein || { uniprot: row.override_uniprot_id })
+            : row.computed;
           
           scheduleData[row.date] = {
             type: 'upcoming',
@@ -1863,6 +1869,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
       const upper = value.toUpperCase();
 
+      // Suggestions write the UniProt accession into the input.
+      // The /api/proteins endpoint may not search by accession, so accept
+      // anything that looks like a UniProt accession directly and let the
+      // server validate existence/authorization.
+      const UNIPROT_ACCESSION_RE = /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})$/i;
+      if (UNIPROT_ACCESSION_RE.test(upper)) {
+        return upper;
+      }
+
       try {
         const response = await fetch(API_BASE + '/api/proteins?query=' + encodeURIComponent(value) + '&limit=6');
         if (!response.ok) {
@@ -1899,7 +1914,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       const date = document.getElementById('override-date').value;
       const rawInput = document.getElementById('override-uniprot').value;
       try {
-        const resolvedUniprotId = await resolveUniprotIdFromInput(rawInput);
+        const typed = String(rawInput || '').trim().toUpperCase();
+        const resolvedUniprotId = (overrideSelectedSuggestionUniprot && (!overrideSelectedSuggestionGene || typed === overrideSelectedSuggestionGene))
+          ? overrideSelectedSuggestionUniprot
+          : await resolveUniprotIdFromInput(rawInput);
         if (!resolvedUniprotId) {
           throw new Error('Pick a protein from suggestions (or type a more specific gene/uniprot).');
         }
@@ -1915,7 +1933,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
         showMessage('override-message', data.message || 'Override updated', 'success');
         document.getElementById('override-uniprot').value = '';
+        overrideSelectedSuggestionUniprot = null;
+        overrideSelectedSuggestionGene = null;
         await loadStatus();
+        await loadSchedule();
       } catch (err) {
         console.error('Error setting override:', err);
         showMessage('override-message', err.message || 'Failed to set override', 'error');
@@ -2416,6 +2437,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const raw = e.target.value || '';
         const query = raw.trim();
 
+        overrideSelectedSuggestionUniprot = null;
+        overrideSelectedSuggestionGene = null;
+
         if (pendingTimer) {
           clearTimeout(pendingTimer);
           pendingTimer = null;
@@ -2462,7 +2486,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 + '<div class="protein-suggestion" data-uniprot="' + p.uniprot + '" data-index="' + idx + '" title="' + title + '">' 
                 + '<div class="protein-suggestion-title">' + gene + '</div>'
                 + '<div class="protein-suggestion-sub">' + fullName + '</div>'
-                + '<div class="protein-suggestion-uniprot">' + p.uniprot + '</div>'
                 + '</div>';
             }).join('');
             suggestionsEl.classList.add('show');
@@ -2472,7 +2495,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               el.addEventListener('click', () => {
                 const uniprot = el.dataset.uniprot;
                 if (uniprot) {
-                  inputEl.value = uniprot;
+                  const idx = Number(el.dataset.index);
+                  const match = Number.isFinite(idx) ? lastMatches[idx] : null;
+                  const gene = String(match?.hgnc || match?.gene || '').trim();
+                  overrideSelectedSuggestionUniprot = uniprot;
+                  overrideSelectedSuggestionGene = gene ? gene.toUpperCase() : null;
+                  inputEl.value = gene || uniprot;
                   suggestionsEl.classList.remove('show');
                   loadProteinInPreview(uniprot);
                 }
@@ -2499,11 +2527,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           selectedIndex = Math.max(selectedIndex - 1, -1);
           updateSelectedSuggestion(suggestions);
         } else if (e.key === 'Enter') {
-          e.preventDefault();
           if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+            e.preventDefault();
             const uniprot = suggestions[selectedIndex].dataset.uniprot;
             if (uniprot) {
-              inputEl.value = uniprot;
+              const idx = Number(suggestions[selectedIndex].dataset.index);
+              const match = Number.isFinite(idx) ? lastMatches[idx] : null;
+              const gene = String(match?.hgnc || match?.gene || '').trim();
+              overrideSelectedSuggestionUniprot = uniprot;
+              overrideSelectedSuggestionGene = gene ? gene.toUpperCase() : null;
+              inputEl.value = gene || uniprot;
               suggestionsEl.classList.remove('show');
               loadProteinInPreview(uniprot);
             }
@@ -3004,6 +3037,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
         showMessage('override-message', data.message || 'Override removed', 'success');
         await loadStatus();
+        await loadSchedule();
         // Re-select to update UI state
         if (selectedDate === date) {
           selectDate(date);
@@ -3133,7 +3167,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       // Update Form
       document.getElementById('override-date').value = date;
       const overrideId = (data && data.source === 'override') ? data.uniprot : '';
-      document.getElementById('override-uniprot').value = overrideId;
+      const overrideLabel = (data && data.source === 'override') ? (data.symbol || '') : '';
+      document.getElementById('override-uniprot').value = overrideLabel;
+
+      if (overrideId) {
+        overrideSelectedSuggestionUniprot = overrideId;
+        overrideSelectedSuggestionGene = overrideLabel ? String(overrideLabel).trim().toUpperCase() : null;
+      } else {
+        overrideSelectedSuggestionUniprot = null;
+        overrideSelectedSuggestionGene = null;
+      }
       
       // Update buttons
       const deleteBtn = document.getElementById('btn-delete-override');

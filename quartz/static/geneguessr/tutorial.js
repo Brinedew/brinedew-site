@@ -22,24 +22,24 @@
     {
       title: 'Welcome to GeneGuessr!',
       body: [
-        { img: 1, text: 'This is a protein. Can you figure out which gene made it?' },
-        { img: 2, text: 'All hints are hidden at the start, but they will reveal as you play' },
-        { img: 3, text: 'Take a guess and type it into the search bar' }
+        { img: 1, text: 'This is a protein. \n Can you figure out which gene made it?' },
+        { img: 2, text: 'All hints are hidden at the start. \n They will reveal as you play.' },
+        { img: 3, text: 'Take a guess and type it into the search bar.' }
       ]
     },
     {
       title: 'Feedback cards',
       body: [
-        { img: 4, text: 'Each of your guesses will appear as a feedback card' },
-        { img: 5, text: 'The feedback bar shows how close you got' },
-        { img: 6, text: 'Look for highlighted properties - they match your target' }
+        { img: 4, text: 'Each of your guesses will appear as a feedback card.' },
+        { img: 5, text: 'The feedback bar shows how close you got.' },
+        { img: 6, text: 'Look for highlighted properties. \n They match your target.' }
       ]
     },
     {
       title: 'Hints',
       body: [
-        { img: 7, text: 'Tap a hint bar to reveal info' },
-        { img: 8, text: 'Each guess gives you +1 hint' },
+        { img: 7, text: 'Tap a hint bar to reveal info.' },
+        { img: 8, text: 'Each guess gives you +1 hint.' },
         { img: 9, text: "You've got 10 total guesses - feel free to experiment!" }
       ]
     }
