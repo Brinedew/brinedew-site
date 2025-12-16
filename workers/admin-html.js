@@ -356,6 +356,71 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       overflow: hidden;
     }
 
+    /* Match the public game's floating "Target" callout styling. */
+    .pg-chain-callouts.pg-chain-callouts-3d {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-width: none;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .pg-chain-callout {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.5rem;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 4px;
+      font-size: 0.7rem;
+      line-height: 1.2;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    /* 3D-positioned callout styling: no background, colored text */
+    .pg-chain-callout.pg-chain-callout-3d {
+      position: absolute;
+      background: none !important;
+      backdrop-filter: none !important;
+      box-shadow: none !important;
+      border: none !important;
+      padding: 0;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-shadow: none;
+      transition: opacity 0.15s ease-out;
+      pointer-events: auto;
+      cursor: default;
+      white-space: nowrap;
+    }
+
+    .pg-chain-callout-3d .pg-chain-label-gene {
+      display: inline;
+    }
+
+    .pg-chain-callout-3d .pg-chain-label-full {
+      display: none;
+      margin-left: 0.25em;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+
+    .pg-chain-callout-3d:hover .pg-chain-label-full {
+      display: inline;
+    }
+
+    .pg-chain-callout-3d:hover .pg-chain-label-gene {
+      display: none;
+    }
+
+    .pg-chain-callout.pg-chain-callout-3d.pg-chain-callout-target {
+      font-size: 0.95rem;
+    }
+
     .viewer-preview__canvas canvas {
       border-radius: 8px;
     }
@@ -1125,6 +1190,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
         <p class="helper-text viewer-preview__status" id="viewer-preview-status">Loading preview...</p>
         <div class="viewer-preview__canvas" id="graphics-preview">
+          <div class="pg-chain-callouts pg-chain-callouts-3d" id="graphics-preview-callouts" hidden style="display: flex;">
+            <div class="pg-chain-callout pg-chain-callout-3d pg-chain-callout-target" id="graphics-preview-target-callout" style="opacity: 1; left: 12px; top: 12px;">
+              <span class="pg-chain-label-gene">Target</span><span class="pg-chain-label-full">Target</span>
+            </div>
+          </div>
           <div class="viewer-placeholder" id="graphics-preview-placeholder">Select a date to view protein</div>
           <div class="viewer-loading" id="graphics-preview-loading" hidden>Loading viewer...</div>
           <div class="viewer-error" id="graphics-preview-error" hidden></div>
@@ -1367,6 +1437,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     const previewPlaceholderEl = document.getElementById('graphics-preview-placeholder');
     const previewLoadingEl = document.getElementById('graphics-preview-loading');
     const previewErrorEl = document.getElementById('graphics-preview-error');
+    const previewCalloutsEl = document.getElementById('graphics-preview-callouts');
+    const previewTargetCalloutEl = document.getElementById('graphics-preview-target-callout');
+
+    if (previewTargetCalloutEl) {
+      previewTargetCalloutEl.style.color = ACCENT_COLOR_HEX;
+    }
 
     // Inspector uses a hidden date field; set an initial ISO date value safely.
     {
@@ -2473,6 +2549,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       previewLoadingEl.hidden = false;
       previewErrorEl.hidden = true;
       previewPlaceholderEl.hidden = true;
+      if (previewCalloutsEl) {
+        previewCalloutsEl.hidden = false;
+      }
+      if (previewTargetCalloutEl) {
+        previewTargetCalloutEl.hidden = false;
+      }
 
       try {
         const response = await fetch(API_BASE + '/api/admin/protein-preview?uniprot=' + encodeURIComponent(uniprot), {
@@ -2499,6 +2581,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewPlaceholderEl.hidden = false;
           previewPlaceholderEl.textContent = payload.message || 'No 3D structure available for preview.';
           previewStatusEl.textContent = 'Preview unavailable';
+          if (previewCalloutsEl) {
+            previewCalloutsEl.hidden = true;
+          }
           return;
         }
 
@@ -2526,6 +2611,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewStructureChoice = payload.representation;
           previewReady = true;
           previewLoadingEl.hidden = true;
+
           previewStatusEl.textContent = 'Showing ' + (payload.protein && payload.protein.hgnc ? payload.protein.hgnc : uniprot);
           refreshPreview({ immediate: true });
           applyPreviewChainColoring(viewer);
@@ -2543,6 +2629,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewErrorEl.hidden = false;
           previewErrorEl.textContent = 'Failed to load ' + pendingLabel + ': ' + (err && err.message ? err.message : err);
           previewStatusEl.textContent = 'Error loading protein';
+          if (previewCalloutsEl) {
+            previewCalloutsEl.hidden = true;
+          }
         } else {
           console.warn('Admin preview: ignored stale protein load', err);
         }
@@ -2558,6 +2647,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       previewPlaceholderEl.hidden = false;
       previewPlaceholderEl.textContent = 'Select a date to view protein';
       previewStatusEl.textContent = 'Select a date to preview';
+      if (previewCalloutsEl) {
+        previewCalloutsEl.hidden = true;
+      }
     }
 
 
