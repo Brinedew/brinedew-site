@@ -4045,20 +4045,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     if (!redaction) {
       return;
     }
-    const entry = redaction.closest('.pg-section-entry') || redaction.parentElement;
-    if (!entry) {
-      return;
-    }
-    if (entry.querySelector('.pg-redaction-lock-indicator')) {
-      return;
-    }
     redaction.classList.add('pg-redaction-locked');
     redaction.setAttribute('aria-label', 'Hint locked');
 
-    const indicator = document.createElement('span');
-    indicator.className = 'pg-redaction-lock-indicator';
-    indicator.textContent = 'locked';
-    entry.appendChild(indicator);
+    // B-222: Show lock icon ON the redaction bar itself (no DOM siblings, no reflow).
+    redaction.dataset.lockedClicked = 'true';
   }
 
   /**
