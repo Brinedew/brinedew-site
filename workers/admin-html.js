@@ -578,54 +578,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       color: #cbd5e1;
       word-break: break-all;
     }
-    
-    /* Modal Styles */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
-    }
-    .modal-overlay.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .modal {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 2rem;
-      width: 400px;
-      max-width: 90%;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    }
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-    }
-    .modal-close {
-      background: transparent;
-      border: none;
-      color: #94a3b8;
-      cursor: pointer;
-      font-size: 1.5rem;
-      padding: 0;
-    }
-    .modal-close:hover {
-      color: #ffffff;
-    }
 
+    .calendar-day.selected {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px #38bdf8;
+      background: #1e293b;
+      z-index: 10;
+    }
+    
     /* Schedule styles */
     .schedule-controls {
       display: flex;
@@ -744,31 +704,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       <div id="schedule-cards" class="cards-preview" style="display:none;"></div>
     </div>
 
-    <!-- Modal -->
-    <div class="modal-overlay" id="override-modal">
-      <div class="modal">
-        <div class="modal-header">
-          <h3 id="modal-date-title">Edit Override</h3>
-          <button class="modal-close" id="modal-close">&times;</button>
-        </div>
-        <form id="modal-form">
-          <input type="hidden" id="modal-date">
-          <div class="form-group">
-            <label for="modal-uniprot">UniProt ID</label>
-            <input type="text" id="modal-uniprot" placeholder="e.g., P04637" required>
-          </div>
-          <div class="form-actions">
-            <button type="button" id="modal-preview">Preview</button>
-            <button type="submit">Save</button>
-            <button type="button" class="btn-delete" id="modal-delete" style="display: none;">Delete</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
     <!-- Protein Override -->
-    <div class="section">
-      <h2>Protein Override</h2>
+    <div class="section" id="override-section">
+      <h2 id="override-section-title">Protein Override</h2>
       <p class="helper-text helper-text--title" style="margin-bottom: 1rem;">
         Set a specific protein for a given date. Overrides the daily random selection.
       </p>
@@ -784,7 +722,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           <input type="text" id="override-uniprot" placeholder="e.g., P04637" required>
         </div>
         
-        <button type="submit">Set Override</button>
+        <div class="form-actions">
+          <button type="submit" id="btn-save-override">Set Override</button>
+          <button type="button" id="btn-preview-override">Preview</button>
+          <button type="button" id="btn-delete-override" class="btn-delete" style="display: none;">Clear Override</button>
+        </div>
       </form>
       
       <div id="override-message"></div>
@@ -1562,14 +1504,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     function openOverrideForDate(date) {
-      try {
-        const override = (typeof currentOverrides !== 'undefined' && Array.isArray(currentOverrides))
-          ? (currentOverrides.find((o) => o?.date === date) || null)
-          : null;
-        openModal(date, override);
-      } catch (err) {
-        console.error('Failed to open override modal:', err);
-      }
+      selectDate(date);
+      // Scroll to calendar/form
+      document.getElementById('override-section').scrollIntoView({ behavior: 'smooth' });
     }
 
     function renderSectionBlock(title, sections, masked) {
@@ -1639,6 +1576,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     function bindForms() {
       document.getElementById('override-form').addEventListener('submit', handleOverrideSubmit);
+      document.getElementById('btn-preview-override').addEventListener('click', () => {
+        const uniprot = document.getElementById('override-uniprot').value;
+        if (uniprot) loadProteinInPreview(uniprot);
+      });
+      document.getElementById('btn-delete-override').addEventListener('click', async () => {
+        const date = document.getElementById('override-date').value;
+        if (date) await deleteOverride(date);
+      });
+
       document.getElementById('flags-form').addEventListener('submit', handleFlagsSubmit);
       document.getElementById('graphics-form').addEventListener('submit', handleGraphicsSubmit);
       document.getElementById('graphics-reset').addEventListener('click', () => {
@@ -2250,7 +2196,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     async function loadProteinDatabase() {
       try {
-        const response = await fetch('https://geneguessr-api.decap.workers.dev/api/proteins');
+        const response = await fetch(API_BASE + '/api/proteins');
         if (response.ok) {
           proteinDatabase = await response.json();
           setupProteinSelector();
@@ -2843,6 +2789,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
         showMessage('override-message', data.message || 'Override removed', 'success');
         await loadStatus();
+        // Re-select to update UI state
+        if (selectedDate === date) {
+          selectDate(date);
+        }
       } catch (err) {
         console.error('Error deleting override:', err);
         showMessage('override-message', err.message || 'Failed to delete override', 'error');
@@ -2852,6 +2802,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     // Calendar Logic
     let currentDate = new Date();
     let currentOverrides = [];
+    let selectedDate = null;
 
     function initCalendar() {
       renderCalendar(currentDate);
@@ -2864,15 +2815,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       document.getElementById('next-month').addEventListener('click', () => {
         currentDate.setMonth(currentDate.getMonth() + 1);
         renderCalendar(currentDate);
-      });
-      
-      // Modal events
-      document.getElementById('modal-close').addEventListener('click', closeModal);
-      document.getElementById('modal-form').addEventListener('submit', handleModalSubmit);
-      document.getElementById('modal-delete').addEventListener('click', handleModalDelete);
-      document.getElementById('modal-preview').addEventListener('click', handleModalPreview);
-      document.querySelector('.modal-overlay').addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal-overlay')) closeModal();
       });
     }
 
@@ -2917,6 +2859,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const el = document.createElement('div');
         el.className = 'calendar-day';
         if (dateStr === todayStr) el.classList.add('today');
+        if (dateStr === selectedDate) el.classList.add('selected');
         
         const override = currentOverrides.find(o => o.date === dateStr);
         if (override) {
@@ -2925,7 +2868,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         
         el.innerHTML = '<div class="day-number">' + i + '</div><div class="day-content">' + (override ? override.uniprot_id : '') + '</div>';
         
-        el.addEventListener('click', () => openModal(dateStr, override));
+        el.addEventListener('click', () => selectDate(dateStr));
         grid.appendChild(el);
       }
     }
@@ -2933,75 +2876,44 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     function updateCalendarOverrides(overrides) {
       currentOverrides = overrides || [];
       renderCalendar(currentDate);
-    }
-
-    function openModal(date, override) {
-      document.getElementById('modal-date').value = date;
-      document.getElementById('modal-date-title').textContent = 'Edit Override: ' + date;
-      document.getElementById('modal-uniprot').value = override ? override.uniprot_id : '';
-      
-      const deleteBtn = document.getElementById('modal-delete');
-      deleteBtn.style.display = override ? 'inline-block' : 'none';
-      deleteBtn.dataset.date = date;
-      
-      document.getElementById('override-modal').classList.add('active');
-    }
-
-    function closeModal() {
-      document.getElementById('override-modal').classList.remove('active');
-    }
-
-    async function handleModalSubmit(e) {
-      e.preventDefault();
-      const date = document.getElementById('modal-date').value;
-      const uniprot = document.getElementById('modal-uniprot').value;
-      
-      try {
-        const response = await fetch(API_BASE + '/api/admin/override-protein', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ date, uniprot_id: uniprot })
-        });
-        
-        if (!response.ok) throw new Error('Failed to set override');
-        
-        closeModal();
-        await loadStatus();
-        showMessage('override-message', 'Override saved', 'success');
-      } catch (err) {
-        alert(err.message);
+      // If we have a selected date, refresh the form state as overrides might have changed
+      if (selectedDate) {
+        selectDate(selectedDate);
       }
     }
 
-    async function handleModalDelete() {
-      const date = this.dataset.date;
-      if (!confirm('Delete override for ' + date + '?')) return;
+    function selectDate(date) {
+      selectedDate = date;
+      renderCalendar(currentDate); // Re-render to show selection highlight
       
-      try {
-        const response = await fetch(API_BASE + '/api/admin/override-protein?date=' + date, {
-          method: 'DELETE',
-          credentials: 'include'
-        });
-        
-        if (!response.ok) throw new Error('Failed to delete override');
-        
-        closeModal();
-        await loadStatus();
-        showMessage('override-message', 'Override deleted', 'success');
-      } catch (err) {
-        alert(err.message);
+      const override = currentOverrides.find(o => o.date === date);
+      
+      // Update form
+      document.getElementById('override-date').value = date;
+      document.getElementById('override-uniprot').value = override ? override.uniprot_id : '';
+      
+      // Update section title
+      const titleEl = document.getElementById('override-section-title');
+      titleEl.textContent = 'Protein Override: ' + date;
+      
+      // Update buttons
+      const deleteBtn = document.getElementById('btn-delete-override');
+      const saveBtn = document.getElementById('btn-save-override');
+      
+      if (override) {
+        deleteBtn.style.display = 'inline-block';
+        saveBtn.textContent = 'Update Override';
+      } else {
+        deleteBtn.style.display = 'none';
+        saveBtn.textContent = 'Set Override';
       }
-    }
-
-    async function handleModalPreview() {
-      const uniprot = document.getElementById('modal-uniprot').value;
-      if (!uniprot) return;
       
-      closeModal();
-      loadProteinInPreview(uniprot);
+      // Scroll to section if needed (optional, maybe too jumpy)
+      // document.getElementById('override-section').scrollIntoView({ behavior: 'smooth' });
     }
-
+    
+    // Removed Modal functions
+    
     // Initialize calendar
     initCalendar();
   </script>

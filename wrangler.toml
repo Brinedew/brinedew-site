@@ -15,9 +15,10 @@ name = "geneguessr-api"
 main = "workers/index.js"
 compatibility_date = "2025-11-12"
 
-[vars]
-# Immutable Discord snowflake for the only admin user.
-ADMIN_DISCORD_ID = "1289482311557058641"
+# Keep the worker off workers.dev; only serve the custom domain route.
+workers_dev = false
+preview_urls = false
+
 
 # Custom domain routes
 routes = [

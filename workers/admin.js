@@ -526,8 +526,8 @@ export async function isAdmin(request, env) {
       return false;
     }
 
-    const allowedDiscordId = typeof env.ADMIN_DISCORD_ID === 'string' && env.ADMIN_DISCORD_ID.trim()
-      ? env.ADMIN_DISCORD_ID.trim()
+    const allowedDiscordId = typeof env.ADMIN_DISCORD_USER_ID === 'string' && env.ADMIN_DISCORD_USER_ID.trim()
+      ? env.ADMIN_DISCORD_USER_ID.trim()
       : null;
     if (!allowedDiscordId) {
       return false;
