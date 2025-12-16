@@ -965,7 +965,8 @@
   display: inline;
   cursor: pointer;
   user-select: none;
-  color: transparent;
+  /* Lock icons use currentColor; keep actual mask text hidden via .pg-redaction-cover */
+  color: var(--secondary);
   background: var(--gray);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -978,6 +979,10 @@
   word-spacing: 0;
   font-kerning: none;
   -webkit-font-kerning: none;
+}
+
+.pg-redaction-cover {
+  color: transparent;
 }
 
 /* Dark mode: use lightgray (1 step brighter than background) for spoiler bars */
@@ -1013,26 +1018,16 @@
   position: relative;
 }
 
-.pg-redaction[data-locked="true"][data-locked-clicked="true"]::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 0.25ch;
-  transform: translateY(-50%);
-  width: 0.95em;
-  height: 0.95em;
-  opacity: 0.85;
-  pointer-events: none;
-  background-color: var(--secondary);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
-  /* simple lock glyph */
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z'/%3E%3C/svg%3E");
+.pg-redaction[data-locked="true"][data-locked-clicked="true"] {
+  /* Background images are painted per line fragment when box-decoration-break: clone is set. */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 0.95em 0.95em;
+  background-position: 0.25ch 50%, 50% 50%, calc(100% - 0.25ch - 0.95em) 50%;
+  background-blend-mode: normal;
 }
 
 .pg-redaction:focus-visible {

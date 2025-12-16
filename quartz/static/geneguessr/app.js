@@ -2791,7 +2791,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     practiceMode: false,
     maxGuesses: 10, // Default, overwritten by server on bootstrap
     statsRecorded: false,
-    revealedHints: []
+    revealedHints: [],
+    lockedHintClicks: []
   };
   let tutorialBootRequested = false;
   const structureTokenCache = new Map();
@@ -2959,6 +2960,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     if (!payload || !payload.status) {
       return;
     }
+    const previousDate = gameState.date;
     // B-206: Don't clear targetStructureInfo here - it's cleared in bootstrapGame for new random targets only
     // B-199: Removed lastRenderedTargetStructureId reset - we now track by date/gameOver state
     // The clue viewer persists for the entire game session, not based on targetId
@@ -2971,6 +2973,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     targetRevealSections = payload.targetRevealSections || null;
     shareText = payload.shareText || '';
     gameState.date = gameStatus.date;
+    if (previousDate && gameState.date && previousDate !== gameState.date) {
+      // New day = new target/hints; clear any UI-only locked-click state.
+      gameState.lockedHintClicks = [];
+    }
     gameState.guesses = guessEntries;
     gameState.won = Boolean(gameStatus.won);
     gameState.targetId = gameStatus.targetId || targetReveal?.uniprot || targetProtein?.uniprot || null;
@@ -3126,6 +3132,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     if (isNewRandomTarget) {
       practiceRestartCounter++;
       console.log(`[B-206 DEBUG] New random target restart #${practiceRestartCounter}`);
+      gameState.lockedHintClicks = [];
       // Clear viewer tracking + structure token cache to force fresh load
       markViewerDirty('pg-clue-structure');
       targetStructureInfo = null; // Force ensureStructureTokenForTarget to re-fetch
@@ -3283,10 +3290,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     const mask = wordMask || buildMaskCharacters(width);
     const ariaLabel = locked ? 'Hint locked' : `Click to reveal hint for ${DEFAULT_HINT_COST} hint`;
     const lockedAttr = locked ? ' data-locked="true"' : '';
+    const lockedClicked = locked && Array.isArray(gameState.lockedHintClicks) && gameState.lockedHintClicks.includes(item.id);
+    const lockedClickedAttr = lockedClicked ? ' data-locked-clicked="true"' : '';
     
     return (
       `<span class="${entryClass}">` +
-      `<span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}"${lockedAttr} role="button" tabindex="0" aria-label="${escapeAttribute(ariaLabel)}" style="min-width:${width}ch">` +
+      `<span class="pg-redaction" data-hint-id="${escapeAttribute(item.id)}"${lockedAttr}${lockedClickedAttr} role="button" tabindex="0" aria-label="${escapeAttribute(ariaLabel)}" style="min-width:${width}ch">` +
       `<span class="pg-redaction-cover" aria-hidden="true">${mask}</span>` +
       `</span>` +
       `</span>`
@@ -4050,6 +4059,16 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
     // B-222: Show lock icon ON the redaction bar itself (no DOM siblings, no reflow).
     redaction.dataset.lockedClicked = 'true';
+
+    const hintId = redaction.dataset.hintId;
+    if (hintId) {
+      if (!Array.isArray(gameState.lockedHintClicks)) {
+        gameState.lockedHintClicks = [];
+      }
+      if (!gameState.lockedHintClicks.includes(hintId)) {
+        gameState.lockedHintClicks.push(hintId);
+      }
+    }
   }
 
   /**
