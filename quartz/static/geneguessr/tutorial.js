@@ -38,9 +38,9 @@
     {
       title: 'Hints',
       body: [
-        { img: 7, text: 'Tap a hint bar to reveal info.' },
-        { img: 8, text: 'Each guess gives you +1 hint.' },
-        { img: 9, text: "You've got 10 total guesses. \n Feel free to experiment!" }
+        { img: 7, text: 'Tap a spoiler bar to reveal hidden info.' },
+        { img: 8, text: 'It costs 1 hint to reveal a bar. \n You get +1 hint for each guess. \n' },
+        { img: 9, text: "You get to make 10 guesses before the game ends. \n Feel free to experiment!" }
       ]
     }
   ];
