@@ -656,6 +656,7 @@
   font-size: 0.95rem;
   color: var(--dark);
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .pg-tutorial-nav {
