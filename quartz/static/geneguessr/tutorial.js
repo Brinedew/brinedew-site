@@ -122,7 +122,6 @@
   let forwardBtn = null;
   let skipBtn = null;
   let footerEl = null;
-  let checkboxLabel = null;
   
   // State
   let stepIndex = 0;
@@ -181,21 +180,7 @@
 
     card.appendChild(nav);
 
-    footerEl = document.createElement('div');
-    footerEl.className = 'pg-tutorial-footer';
-
-    checkboxLabel = document.createElement('label');
-    checkboxLabel.className = 'pg-tutorial-checkbox';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.id = 'pg-tutorial-hide';
-    checkboxLabel.appendChild(checkbox);
-    const checkboxText = document.createElement('span');
-    checkboxText.textContent = 'Do not show again';
-    checkboxLabel.appendChild(checkboxText);
-    footerEl.appendChild(checkboxLabel);
-
-    card.appendChild(footerEl);
+    // Intentionally no footer/checkbox. The tutorial already uses localStorage progress tracking.
 
     overlay.appendChild(card);
     document.body.appendChild(overlay);
@@ -248,7 +233,7 @@
     statusEl.style.display = contextualMode ? 'none' : '';
     dotsEl.style.display = contextualMode ? 'none' : '';
     backBtn.style.display = contextualMode ? 'none' : '';
-    footerEl.style.display = contextualMode ? 'none' : '';
+    if (footerEl) footerEl.style.display = contextualMode ? 'none' : '';
     skipBtn.style.display = contextualMode ? 'none' : '';
     
     renderStep(step);
