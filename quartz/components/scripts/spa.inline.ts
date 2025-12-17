@@ -118,7 +118,23 @@ async function _navigate(url: URL, isBack: boolean = false) {
   const elementsToRemove = document.head.querySelectorAll(":not([spa-preserve])")
   elementsToRemove.forEach((el) => el.remove())
   const elementsToAdd = html.head.querySelectorAll(":not([spa-preserve])")
-  elementsToAdd.forEach((el) => document.head.appendChild(el))
+  elementsToAdd.forEach((el) => {
+    if (el.tagName === "SCRIPT") {
+      const srcAttr = el.getAttribute("src")
+      if (srcAttr?.includes("/static/geneguessr/")) {
+        const script = document.createElement("script")
+        Array.from(el.attributes).forEach((attr) => {
+          if (attr.name === "src") return
+          script.setAttribute(attr.name, attr.value)
+        })
+        script.src = new URL(srcAttr, url.toString()).toString()
+        document.head.appendChild(script)
+        return
+      }
+    }
+
+    document.head.appendChild(el)
+  })
 
   // delay setting the url until now
   // at this point everything is loaded so changing the url should resolve to the correct addresses
