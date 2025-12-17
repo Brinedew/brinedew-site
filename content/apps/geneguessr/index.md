@@ -1,6 +1,6 @@
 ---
 title: "GeneGuessr - Daily Protein Guessing Game"
-description: "Can you identify the protein from its 3D structure? A daily guessing game where you use clues about domains, pathways, and molecular functions to figure out which gene made the protein."
+description: "Lunch break riddles for life scientists. Best enjoyed while your Western blot is running."
 canonicalUrl: "https://geneguessr.brinedew.bio/"
 date: 2025-11-23
 draft: false
