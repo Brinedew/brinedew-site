@@ -188,7 +188,7 @@ export default {
         body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined
       });
       
-      // For HTML, rewrite the homepage link so "B" button goes to main site, not subdomain
+      // For HTML, rewrite links so navigation goes to main site, not subdomain
       if (response.headers.get('content-type')?.includes('text/html')) {
         let html = await response.text();
         // Rewrite relative homepage links to absolute main site URL
@@ -197,6 +197,14 @@ export default {
         html = html.replace(
           /<a\s+href=["']\/["']\s+class=["']site-brand["']/g,
           '<a href="https://brinedew.bio/" class="site-brand"'
+        );
+
+        // Rewrite all internal navigation links to point to main domain
+        // This prevents SPA navigation on the subdomain from going to wrong paths
+        // Match href="/tags/...", href="/posts/...", href="/wiki/...", etc.
+        html = html.replace(
+          /href=["']\/(tags|posts|wiki|About|index)([^"']*)["']/g,
+          'href="https://brinedew.bio/$1$2"'
         );
 
         // Keep share/debug metadata consistent with the subdomain host.
