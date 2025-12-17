@@ -94,6 +94,40 @@
     return file ? withAssetVersion(`/static/geneguessr/tutorial/${file}`) : null;
   }
 
+  const illustrationLoadPromises = new Map();
+
+  function preloadIllustration(slot) {
+    const url = resolveIllustrationPath(slot);
+    if (!url) return Promise.resolve(null);
+    if (illustrationLoadPromises.has(url)) return illustrationLoadPromises.get(url);
+
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
+
+    const promise = (img.decode ? img.decode() : new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+    }))
+      .catch(() => null);
+
+    illustrationLoadPromises.set(url, promise);
+    return promise;
+  }
+
+  function preloadStepImages(index) {
+    const step = STEP_CONTENT[index];
+    if (!step) return Promise.resolve(null);
+    const slots = step.body.map((item) => item.img).filter(Boolean);
+    const uniqueSlots = Array.from(new Set(slots));
+    return Promise.all(uniqueSlots.map(preloadIllustration)).then(() => null);
+  }
+
+  function preloadAllIllustrations() {
+    const slots = Object.keys(ILLUSTRATION_FILES).map((k) => Number(k)).filter((n) => Number.isFinite(n));
+    return Promise.all(slots.map(preloadIllustration)).then(() => null);
+  }
+
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   function buildList(items) {
@@ -159,6 +193,31 @@
   let stepIndex = 0;
   let contextualMode = false;
   let onCloseCallback = null;
+  let renderToken = 0;
+
+  function setControlsDisabled(disabled) {
+    if (backBtn) backBtn.disabled = disabled || (!contextualMode && stepIndex === 0);
+    if (forwardBtn) forwardBtn.disabled = disabled;
+    if (skipBtn) skipBtn.disabled = disabled;
+    if (!disabled) updateNavState();
+
+    if (dotsEl) {
+      dotsEl.querySelectorAll('button').forEach((btn) => {
+        btn.disabled = disabled;
+      });
+    }
+  }
+
+  function showStep(index) {
+    const token = ++renderToken;
+    setControlsDisabled(true);
+
+    return preloadStepImages(index).finally(() => {
+      if (token !== renderToken) return;
+      renderStep(index);
+      setControlsDisabled(false);
+    });
+  }
 
   function createOverlay() {
     overlay = document.createElement('div');
@@ -254,31 +313,35 @@
   }
 
   function open(options = {}) {
-    if (!overlay) createOverlay();
-    if (isOpen()) return;
-    
-    contextualMode = Boolean(options.contextual);
-    onCloseCallback = options.onClose || null;
-    const step = options.step != null ? options.step : 0;
-    
-    // Toggle UI elements based on mode
-    statusEl.style.display = contextualMode ? 'none' : '';
-    dotsEl.style.display = contextualMode ? 'none' : '';
-    backBtn.style.display = contextualMode ? 'none' : '';
-    if (footerEl) footerEl.style.display = contextualMode ? 'none' : '';
-    skipBtn.style.display = contextualMode ? 'none' : '';
-    
-    renderStep(step);
-    
-    overlay.classList.add('is-visible');
-    overlay.setAttribute('aria-hidden', 'false');
-    lockBackground(true);
-    
-    if (contextualMode) {
-      forwardBtn.focus();
-    } else if (skipBtn) {
-      skipBtn.focus();
-    }
+    void (async () => {
+      if (!overlay) createOverlay();
+      if (isOpen()) return;
+
+      contextualMode = Boolean(options.contextual);
+      onCloseCallback = options.onClose || null;
+      const step = options.step != null ? options.step : 0;
+
+      // Toggle UI elements based on mode
+      statusEl.style.display = contextualMode ? 'none' : '';
+      dotsEl.style.display = contextualMode ? 'none' : '';
+      backBtn.style.display = contextualMode ? 'none' : '';
+      if (footerEl) footerEl.style.display = contextualMode ? 'none' : '';
+      skipBtn.style.display = contextualMode ? 'none' : '';
+
+      // Preload images for the first shown step before displaying the overlay to avoid layout swings.
+      await preloadStepImages(step);
+      renderStep(step);
+
+      overlay.classList.add('is-visible');
+      overlay.setAttribute('aria-hidden', 'false');
+      lockBackground(true);
+
+      if (contextualMode) {
+        forwardBtn.focus();
+      } else if (skipBtn) {
+        skipBtn.focus();
+      }
+    })();
   }
 
   function close() {
@@ -332,7 +395,7 @@
       dot.type = 'button';
       dot.className = 'pg-tutorial-dot' + (idx === stepIndex ? ' is-active' : '');
       dot.setAttribute('aria-label', `Go to step ${idx + 1}`);
-      dot.addEventListener('click', () => renderStep(idx));
+      dot.addEventListener('click', () => void showStep(idx));
       dotsEl.appendChild(dot);
     });
   }
@@ -356,12 +419,12 @@
 
   function next() {
     if (stepIndex >= STEP_CONTENT.length - 1) return;
-    renderStep(stepIndex + 1);
+    void showStep(stepIndex + 1);
   }
 
   function prev() {
     if (stepIndex <= 0) return;
-    renderStep(stepIndex - 1);
+    void showStep(stepIndex - 1);
   }
 
   // Public API
@@ -400,13 +463,15 @@
     close() { close(); },
     next() { next(); },
     prev() { prev(); },
-    goToStep(index) { renderStep(index); },
+    goToStep(index) { void showStep(index); },
     finish() { finish(); }
   };
 
   // Auto-boot on DOM ready
   function autoBoot() {
     if (document.getElementById('geneguessr-root')) {
+      // Start warming the tutorial images immediately so the modal can autosize without swings.
+      void preloadAllIllustrations();
       window.GeneGuessrTutorial.boot();
     }
   }
