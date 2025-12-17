@@ -1,6 +1,38 @@
 (function () {
   const STEPS_KEY = 'gg_tut';
   const OPEN_DELAY_MS = 500;
+
+  function getAssetVersion() {
+    try {
+      const current = document.currentScript;
+      const src = current && (current.getAttribute('src') || current.src);
+      if (src) return new URL(src, window.location.href).searchParams.get('v');
+    } catch (err) {
+      // ignore
+    }
+
+    try {
+      const scripts = document.getElementsByTagName('script');
+      for (let i = scripts.length - 1; i >= 0; i--) {
+        const src = scripts[i] && scripts[i].src;
+        if (!src) continue;
+        if (!src.includes('/static/geneguessr/tutorial.js')) continue;
+        return new URL(src, window.location.href).searchParams.get('v');
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    return null;
+  }
+
+  const ASSET_VERSION = getAssetVersion();
+
+  function withAssetVersion(url) {
+    if (!ASSET_VERSION) return url;
+    const joiner = url.includes('?') ? '&' : '?';
+    return `${url}${joiner}v=${encodeURIComponent(ASSET_VERSION)}`;
+  }
   
   // Bitmask: 0b001 = step 1, 0b010 = step 2, 0b100 = step 3
   function getSeenMask() {
@@ -59,7 +91,7 @@
 
   function resolveIllustrationPath(slot) {
     const file = ILLUSTRATION_FILES[slot];
-    return file ? `/static/geneguessr/tutorial/${file}` : null;
+    return file ? withAssetVersion(`/static/geneguessr/tutorial/${file}`) : null;
   }
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
