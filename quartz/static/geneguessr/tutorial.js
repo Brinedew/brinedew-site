@@ -22,24 +22,24 @@
     {
       title: 'Welcome to GeneGuessr!',
       body: [
-        { img: 1, text: 'This is a protein. \n Can you figure out which gene made it?' },
-        { img: 2, text: 'All hints are hidden at the start. \n They will reveal as you play.' },
-        { img: 3, text: 'Take a guess and type it into the search bar.' }
+        { img: 1, text: 'This is the protein of the day. \n Can you figure out which gene made it?' },
+        { img: 2, text: 'You will see spoiler bars that cover valuable hints. \n Tap the spoiler bar to reveal a hint underneath.' },
+        { img: 3, text: 'Look up your favorite gene with the search bar. \n Submit it as your first guess.' }
       ]
     },
     {
       title: 'Feedback cards',
       body: [
         { img: 4, text: 'Each of your guesses will appear as a feedback card.' },
-        { img: 5, text: 'The feedback bar shows how close you got.' },
+        { img: 5, text: 'The feedback bar percentage shows how close you got.' },
         { img: 6, text: 'Look for highlighted properties. \n They match your target.' }
       ]
     },
     {
-      title: 'Hints',
+      title: 'Revealing hints',
       body: [
-        { img: 7, text: 'Tap a spoiler bar to reveal hidden info.' },
-        { img: 8, text: 'It costs 1 hint to reveal a bar. \n You get +1 hint for each guess. \n' },
+        { img: 7, text: 'It costs 1 hint to remove a spoiler bar. \n You get +1 hint for each guess.' },
+        { img: 8, text: 'If the spoiler bar stays locked, the hint contains gene name. \n Just try unlocking another one.' },
         { img: 9, text: "You get to make 10 guesses before the game ends. \n Feel free to experiment!" }
       ]
     }
