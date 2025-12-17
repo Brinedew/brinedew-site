@@ -1230,6 +1230,11 @@
   line-height: 1;
 }
 
+.pg-hints-badge .pg-hints-value,
+.pg-guesses-badge .pg-guesses-value {
+  transform: translateY(-0.5px);
+}
+
 .pg-hints-badge.has-hints {
   /* No background change - keep it neutral */
   background: var(--light);
