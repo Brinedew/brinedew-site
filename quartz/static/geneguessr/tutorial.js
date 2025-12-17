@@ -71,7 +71,7 @@
       title: 'Revealing hints',
       body: [
         { img: 7, text: 'It costs 1 hint to remove a spoiler bar. \n You get +1 hint for each guess.' },
-        { img: 8, text: 'When hints are too obvious, the bar stays locked. \n Just try unlocking another one.' },
+        { img: 8, text: 'When the hint is too obvious, the bar stays locked. \n Just try unlocking another one.' },
         { img: 9, text: "You get to make 10 guesses before the game ends. \n Feel free to experiment!" }
       ]
     }
