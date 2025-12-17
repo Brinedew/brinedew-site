@@ -67,11 +67,11 @@
         { img: 6, text: 'Look for highlighted properties. \n They match your target.' }
       ]
     },
-    {
+    { 
       title: 'Revealing hints',
       body: [
         { img: 7, text: 'It costs 1 hint to remove a spoiler bar. \n You get +1 hint for each guess.' },
-        { img: 8, text: 'If the spoiler bar stays locked, the hint contains gene name. \n Just try unlocking another one.' },
+        { img: 8, text: 'When hints are too obvious, the bar stays locked. \n Just try unlocking another one.' },
         { img: 9, text: "You get to make 10 guesses before the game ends. \n Feel free to experiment!" }
       ]
     }
