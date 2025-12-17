@@ -1310,12 +1310,13 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
 
     // If a completed daily game never got recorded (retry/crash), backfill aggregates in the background.
     // This stores only per-day guess counts (no user ids, no IPs).
-    if (!practiceMode && !state?.guessStatsRecorded) {
+    const guessStatsThrough = Number(state?.guessStatsRecordedThrough || 0);
+    if (!practiceMode && (!Number.isFinite(guessStatsThrough) || guessStatsThrough === 0)) {
       ctx.waitUntil((async () => {
         try {
           const latest = await getGameState(env, sessionId).catch(() => null);
           if (!latest) return;
-          const didUpdate = await maybeRecordCompletedDailyGuessAggregates(env, latest, { practiceMode });
+          const didUpdate = await maybeRecordDailyGuessAggregatesDelta(env, latest, { practiceMode });
           if (didUpdate) {
             await saveGameState(env, sessionId, latest);
           }
@@ -1441,10 +1442,10 @@ async function handleGuessSubmission(request, env, corsHeaders) {
       state.hintBalance = (state.hintBalance || 0) + HINT_REWARD_ON_INCORRECT;
     }
     
-    // Record aggregate guess stats once per completed daily game.
+    // Record aggregate guess stats for daily mode as the player guesses.
     // Stores only per-day counts (no user ids, no IPs) and is safe to retry.
     try {
-      await maybeRecordCompletedDailyGuessAggregates(env, state, { practiceMode });
+      await maybeRecordDailyGuessAggregatesDelta(env, state, { practiceMode });
     } catch (err) {
       console.warn('Guess aggregate recording failed (non-fatal):', err?.message || err);
     }
@@ -1824,30 +1825,38 @@ function createInitialGameState(date, targetId, options = {}) {
     revealedHints: [],
     won: false,
     statsRecorded: false,
-    guessStatsRecorded: false,
+    guessStatsRecordedThrough: 0,
     practiceMode: Boolean(options.practiceMode),
     createdAt: Date.now()
   };
 }
 
-async function maybeRecordCompletedDailyGuessAggregates(env, state, { practiceMode }) {
+async function maybeRecordDailyGuessAggregatesDelta(env, state, { practiceMode }) {
   const isPractice = Boolean(practiceMode) || Boolean(state?.practiceMode);
   if (isPractice) return false;
   if (!state?.date || !state?.targetId) return false;
-  if (state.guessStatsRecorded) return false;
 
-  const guessCount = Array.isArray(state.guesses) ? state.guesses.length : 0;
-  const completed = Boolean(state.won) || guessCount >= MAX_GUESSES;
-  if (!completed) return false;
+  const guesses = Array.isArray(state.guesses) ? state.guesses : [];
+  let recordedThrough = Number(state.guessStatsRecordedThrough);
+  if (!Number.isFinite(recordedThrough) || recordedThrough < 0) recordedThrough = 0;
 
+  // Backwards-compat: if an older session already marked aggregates as recorded, don't double-count.
+  if (state.guessStatsRecorded === true && state.guessStatsRecordedThrough == null) {
+    state.guessStatsRecordedThrough = guesses.length;
+    return false;
+  }
+
+  if (guesses.length <= recordedThrough) return false;
+
+  const delta = guesses.slice(recordedThrough);
   const result = await recordDailyGuessAggregates(env.DB, {
     day: state.date,
     targetUniprot: state.targetId,
-    guesses: state.guesses,
+    guesses: delta,
   });
 
   if (!result.ok) return false;
-  state.guessStatsRecorded = true;
+  state.guessStatsRecordedThrough = guesses.length;
   return true;
 }
 
