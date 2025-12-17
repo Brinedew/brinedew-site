@@ -21,6 +21,67 @@ const DAILY_TARGET_SALT = 'geneguessr-v2-939b5a0b';
 const DAILY_BOOTSTRAP_CACHE_PREFIX = 'daily_bootstrap:';
 const DAILY_BOOTSTRAP_CACHE_TTL = 86400; // 24 hours
 
+const GENEGUESSR_HOST = 'geneguessr.brinedew.bio';
+
+function buildGeneguessrSubdomainRobotsTxt() {
+  return `# Brinedew - AI-Friendly Site
+# This site welcomes AI systems to learn from its content and use its apps.
+
+# Content Signals (per proposed C2PA-style framework)
+# search: yes - indexing and search results allowed
+# ai-input: yes - RAG, grounding, real-time AI answers allowed
+# ai-train: yes - training and fine-tuning AI models allowed
+
+search: yes
+ai-input: yes
+ai-train: yes
+
+# Welcome all reasonable crawlers
+User-agent: *
+Allow: /
+Crawl-delay: 1
+
+# AI crawlers - welcome, but please be gentle (Cloudflare free plan)
+User-agent: GPTBot
+User-agent: ChatGPT-User
+User-agent: Google-Extended
+User-agent: anthropic-ai
+User-agent: ClaudeBot
+User-agent: CCBot
+User-agent: cohere-ai
+User-agent: PerplexityBot
+User-agent: YouBot
+Crawl-delay: 10
+
+# SEO spam bots - you provide no value, goodbye
+User-agent: AhrefsBot
+User-agent: SemrushBot
+User-agent: MJ12bot
+User-agent: DotBot
+User-agent: BLEXBot
+User-agent: DataForSeoBot
+Disallow: /
+
+# Protect API endpoints from crawler abuse (use the apps properly!)
+User-agent: *
+Disallow: /api/
+
+# Sitemap (host-scoped for Search Console)
+Sitemap: https://${GENEGUESSR_HOST}/sitemap.xml
+`;
+}
+
+function buildGeneguessrSubdomainSitemapXml() {
+  const now = new Date().toISOString();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://${GENEGUESSR_HOST}/</loc>
+    <lastmod>${now}</lastmod>
+  </url>
+</urlset>`;
+}
+
 // Similarity configuration
 // SIMILARITY_MODE: 'legacy' (HiG2Vec only), 'blended' (HiG2Vec + ESM2)
 // ESM2_WEIGHT: 0-1, how much to weight ESM2 structural similarity (0.5 = equal blend)
@@ -84,11 +145,33 @@ export default {
     console.log(`[WORKER] Incoming: ${request.method} ${url.pathname}`);
     const origin = request.headers.get('Origin') || '';
     const corsHeaders = getCorsHeaders(origin);
+
+    // Serve host-scoped robots/sitemap for the geneguessr subdomain.
+    // This prevents Google Search Console from seeing a sitemap full of brinedew.bio URLs.
+    if (url.hostname === GENEGUESSR_HOST && (request.method === 'GET' || request.method === 'HEAD')) {
+      if (url.pathname === '/robots.txt') {
+        return new Response(request.method === 'HEAD' ? null : buildGeneguessrSubdomainRobotsTxt(), {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'max-age=600',
+          },
+        });
+      }
+
+      if (url.pathname === '/sitemap.xml') {
+        return new Response(request.method === 'HEAD' ? null : buildGeneguessrSubdomainSitemapXml(), {
+          headers: {
+            'Content-Type': 'application/xml; charset=utf-8',
+            'Cache-Control': 'max-age=600',
+          },
+        });
+      }
+    }
     
     // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
     // NOTE: /admin and /admin-v2 are served by the Worker and must NOT be proxied.
     if (
-      url.hostname === 'geneguessr.brinedew.bio' &&
+      url.hostname === GENEGUESSR_HOST &&
       !url.pathname.startsWith('/api/') &&
       url.pathname !== '/admin' &&
       url.pathname !== '/admin-v2'
@@ -115,6 +198,23 @@ export default {
           /<a\s+href=["']\/["']\s+class=["']site-brand["']/g,
           '<a href="https://brinedew.bio/" class="site-brand"'
         );
+
+        // Keep share/debug metadata consistent with the subdomain host.
+        if (url.pathname === '/') {
+          html = html.replace(
+            /<meta\b[^>]*\b(?:property|name)=["']og:url["'][^>]*>/gi,
+            `<meta property="og:url" content="https://${GENEGUESSR_HOST}/">`
+          );
+          html = html.replace(
+            /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/gi,
+            `<meta name="twitter:url" content="https://${GENEGUESSR_HOST}/">`
+          );
+        }
+        html = html.replace(
+          /<meta\b[^>]*\b(?:property|name)=["']twitter:domain["'][^>]*>/gi,
+          `<meta name="twitter:domain" content="${GENEGUESSR_HOST}">`
+        );
+
         return new Response(html, {
           status: response.status,
           statusText: response.statusText,
