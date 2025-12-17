@@ -1226,6 +1226,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         <div class="inspector-label">Game Data</div>
         <div id="schedule-cards" class="inspector-cards"></div>
       </div>
+
+      <!-- Aggregated guess stats (no per-user data) -->
+      <div class="inspector-section" id="inspector-guess-stats" style="display:none;">
+        <div class="inspector-label">Top Guesses</div>
+        <div id="guess-stats" class="inspector-cards"></div>
+      </div>
     </div>
   </div>
   
@@ -1553,6 +1559,81 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         console.error('Error loading cards:', err);
         cardsEl.innerHTML = '<p class="helper-text error-text">Failed to load cards for ' + escapeHtml(date) + '</p>';
       }
+    }
+
+    let guessStatsLoadToken = 0;
+
+    async function loadGuessStatsForDate(date) {
+      const loadToken = ++guessStatsLoadToken;
+      const sectionEl = document.getElementById('inspector-guess-stats');
+      const rootEl = document.getElementById('guess-stats');
+      if (!sectionEl || !rootEl) return;
+
+      sectionEl.style.display = 'block';
+      rootEl.innerHTML = '<p class="helper-text">Loading guess stats for ' + escapeHtml(date) + '...</p>';
+
+      try {
+        const response = await fetch(API_BASE + '/api/admin/guess-stats?date=' + encodeURIComponent(date) + '&limit=25', { credentials: 'include' });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load guess stats');
+        }
+        if (loadToken !== guessStatsLoadToken) {
+          return;
+        }
+        renderGuessStats(rootEl, data);
+      } catch (err) {
+        if (loadToken !== guessStatsLoadToken) {
+          return;
+        }
+        console.error('Error loading guess stats:', err);
+        rootEl.innerHTML = '<p class="helper-text error-text">Failed to load guess stats for ' + escapeHtml(date) + '</p>';
+      }
+    }
+
+    function renderGuessStats(rootEl, data) {
+      const guesses = Array.isArray(data?.guesses) ? data.guesses : [];
+      const total = Number(data?.totalGuesses) || 0;
+
+      rootEl.innerHTML = '';
+
+      const header = document.createElement('div');
+      header.innerHTML =
+        '<h3 style="margin-bottom: 0.25rem;">Top guesses</h3>' +
+        '<div class="schedule-meta">' +
+          escapeHtml(String(total)) + ' total guesses recorded' +
+        '</div>';
+      rootEl.appendChild(header);
+
+      if (!guesses.length) {
+        const empty = document.createElement('p');
+        empty.className = 'helper-text';
+        empty.textContent = 'No data recorded for this day yet.';
+        rootEl.appendChild(empty);
+        return;
+      }
+
+      const max = Math.max(...guesses.map((g) => Number(g?.count) || 0), 1);
+      const list = document.createElement('div');
+      list.className = 'section-block';
+
+      guesses.forEach((g) => {
+        const count = Number(g?.count) || 0;
+        const label = (g?.gene ? (String(g.gene) + ' / ') : '') + (g?.uniprot || '');
+        const pct = Math.round((count / max) * 100);
+
+        const row = document.createElement('div');
+        row.className = 'clue-item';
+        row.innerHTML =
+          '<span class="pill">' + escapeHtml(String(count)) + '</span> ' +
+          '<span style="flex:1;">' + escapeHtml(label) + '</span>' +
+          '<span style="width: 90px; height: 10px; background: rgba(148,163,184,0.18); border-radius: 999px; overflow: hidden; display:inline-block; vertical-align: middle;">' +
+            '<span style="display:block; height: 100%; width: ' + pct + '%; background: rgba(56,189,248,0.65);"></span>' +
+          '</span>';
+        list.appendChild(row);
+      });
+
+      rootEl.appendChild(list);
     }
 
     function renderCardsPreview(rootEl, data) {
@@ -3163,6 +3244,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       // Show sections
       document.getElementById('inspector-controls').style.display = 'block';
       document.getElementById('inspector-details').style.display = 'block';
+      document.getElementById('inspector-guess-stats').style.display = 'block';
       
       // Update Form
       document.getElementById('override-date').value = date;
@@ -3203,6 +3285,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       
       // Load Cards
       loadCardsForDate(date);
+      loadGuessStatsForDate(date);
     }
     
     // Initialize calendar

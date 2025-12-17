@@ -44,6 +44,7 @@ import {
   handleProteinPreview,
   handleAdminSchedule,
   handleAdminCards,
+  handleAdminGuessStats,
   isAdmin
 } from './admin.js';
 // Import admin HTML
@@ -75,6 +76,7 @@ import {
   clearStructureFailure
 } from './lib/protein-store.js';
 import { resolveStructureRepresentation } from './lib/structure-utils.js';
+import { recordDailyGuessAggregates } from './lib/guess-aggregates.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -324,6 +326,14 @@ export default {
 
     if (url.pathname === '/api/admin/cards' && request.method === 'GET') {
       const response = await handleAdminCards(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
+      });
+    }
+
+    if (url.pathname === '/api/admin/guess-stats' && request.method === 'GET') {
+      const response = await handleAdminGuessStats(request, env);
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
@@ -1297,6 +1307,23 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
         : { date: today, source: 'unknown', rejected: [] };
       ctx.waitUntil(recordDailyPickOnce(env, today, targetProtein.uniprot, audit));
     }
+
+    // If a completed daily game never got recorded (retry/crash), backfill aggregates in the background.
+    // This stores only per-day guess counts (no user ids, no IPs).
+    if (!practiceMode && !state?.guessStatsRecorded) {
+      ctx.waitUntil((async () => {
+        try {
+          const latest = await getGameState(env, sessionId).catch(() => null);
+          if (!latest) return;
+          const didUpdate = await maybeRecordCompletedDailyGuessAggregates(env, latest, { practiceMode });
+          if (didUpdate) {
+            await saveGameState(env, sessionId, latest);
+          }
+        } catch (err) {
+          console.warn('Guess aggregate backfill failed (non-fatal):', err?.message || err);
+        }
+      })());
+    }
     
     const payload = buildGamePayload(state, targetProtein);
     // Embed structure token in bootstrap response - client uses this instead of separate API call
@@ -1414,6 +1441,14 @@ async function handleGuessSubmission(request, env, corsHeaders) {
       state.hintBalance = (state.hintBalance || 0) + HINT_REWARD_ON_INCORRECT;
     }
     
+    // Record aggregate guess stats once per completed daily game.
+    // Stores only per-day counts (no user ids, no IPs) and is safe to retry.
+    try {
+      await maybeRecordCompletedDailyGuessAggregates(env, state, { practiceMode });
+    } catch (err) {
+      console.warn('Guess aggregate recording failed (non-fatal):', err?.message || err);
+    }
+
     // ⚡ PERFORMANCE: Build guess structure token in parallel with saveGameState
     // This eliminates ~3s API round-trip on client after guess submission
     const url = new URL(request.url);
@@ -1789,9 +1824,31 @@ function createInitialGameState(date, targetId, options = {}) {
     revealedHints: [],
     won: false,
     statsRecorded: false,
+    guessStatsRecorded: false,
     practiceMode: Boolean(options.practiceMode),
     createdAt: Date.now()
   };
+}
+
+async function maybeRecordCompletedDailyGuessAggregates(env, state, { practiceMode }) {
+  const isPractice = Boolean(practiceMode) || Boolean(state?.practiceMode);
+  if (isPractice) return false;
+  if (!state?.date || !state?.targetId) return false;
+  if (state.guessStatsRecorded) return false;
+
+  const guessCount = Array.isArray(state.guesses) ? state.guesses.length : 0;
+  const completed = Boolean(state.won) || guessCount >= MAX_GUESSES;
+  if (!completed) return false;
+
+  const result = await recordDailyGuessAggregates(env.DB, {
+    day: state.date,
+    targetUniprot: state.targetId,
+    guesses: state.guesses,
+  });
+
+  if (!result.ok) return false;
+  state.guessStatsRecorded = true;
+  return true;
 }
 
 async function ensureSessionForToday(env, sessionId, targetProtein, options = {}) {

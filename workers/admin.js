@@ -11,6 +11,7 @@ import {
   pickDailyTarget
 } from './lib/protein-store.js';
 import { buildClueSections, maskClueSections, sanitizeTargetProtein } from './lib/game-engine.js';
+import { getDailyGuessAggregates } from './lib/guess-aggregates.js';
 
 function addDaysISO(dateIso, days) {
   const base = new Date(`${dateIso}T00:00:00.000Z`);
@@ -881,6 +882,33 @@ export async function handleAdminCards(request, env) {
 }
 
 /**
+ * GET /api/admin/guess-stats?date=YYYY-MM-DD&limit=25
+ * Returns aggregated guess counts for a given day (no per-user data).
+ */
+export async function handleAdminGuessStats(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const url = new URL(request.url);
+    const date = url.searchParams.get('date');
+    const limitRaw = url.searchParams.get('limit');
+    const limit = limitRaw != null ? Number(limitRaw) : 25;
+
+    const data = await getDailyGuessAggregates(env.DB, { day: date, limit });
+    if (!data.ok) {
+      return Response.json({ error: 'Missing or invalid date (YYYY-MM-DD)' }, { status: 400 });
+    }
+
+    return Response.json(data);
+  } catch (err) {
+    console.error('Error in handleAdminGuessStats:', err);
+    return Response.json({ error: 'Internal server error', details: err.message }, { status: 500 });
+  }
+}
+
+/**
  * POST /api/admin/graphics-settings
  * Update graphics settings for 3D protein viewer
  */
@@ -978,4 +1006,3 @@ export async function handleProteinPreview(request, env) {
     return Response.json({ error: 'Failed to build preview' }, { status: 500 });
   }
 }
-
