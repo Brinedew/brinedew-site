@@ -1218,6 +1218,7 @@
   letter-spacing: 0.08em;
   color: var(--secondary);
   font-weight: 700;
+  line-height: 1;
 }
 
 .pg-guesses-value,
@@ -1226,6 +1227,7 @@
   font-weight: 700;
   color: var(--dark);
   letter-spacing: -0.01em;
+  line-height: 1;
 }
 
 .pg-hints-badge.has-hints {
