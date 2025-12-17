@@ -13,6 +13,9 @@ import { QuartzPluginData } from "../vfile"
 import fs from "node:fs/promises"
 import { styleText } from "util"
 
+// Build-time cache buster - prefer explicit env override, fall back to commit or timestamp
+const CACHE_BUST = process.env.CACHE_BUST || process.env.VERCEL_GIT_COMMIT_SHA || `${Date.now()}`
+
 const defaultOptions: SocialImageOptions = {
   colorScheme: "lightMode",
   width: 1200,
@@ -154,11 +157,11 @@ export const CustomOgImages: QuartzEmitterPlugin<Partial<SocialImageOptions>> = 
             }
 
             const generatedOgImagePath = isRealFile
-              ? `https://${baseUrl}/${pageData.slug!}-og-image.webp`
+              ? `https://${baseUrl}/${pageData.slug!}-og-image.webp?v=${CACHE_BUST}`
               : undefined
-            const defaultOgImagePath = `https://${baseUrl}/static/og-image.png`
+            const defaultOgImagePath = `https://${baseUrl}/static/og-image.png?v=${CACHE_BUST}`
             const ogImagePath = userDefinedOgImagePath ?? generatedOgImagePath ?? defaultOgImagePath
-            const ogImageMimeType = `image/${getFileExtension(ogImagePath) ?? "png"}`
+            const ogImageMimeType = `image/${getFileExtension(ogImagePath)?.slice(1) ?? "png"}`
             return (
               <>
                 {!userDefinedOgImagePath && (
