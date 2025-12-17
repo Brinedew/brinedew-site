@@ -2531,16 +2531,13 @@ function buildMetaFromStoredStructure(protein) {
 const STRUCTURE_SOURCE_CACHE_PREFIX = 'structure_source:';
 const STRUCTURE_SOURCE_CACHE_TTL = 60 * 60 * 24; // 24 hours
 
-// Cache index metadata TTL (KV).
+// Cache index metadata (KV).
 //
 // We keep an index of R2 objects in KV (size + lastAccess) so we can evict old
 // structures when the bucket hits a cap.
 //
-// IMPORTANT: This must be long-lived.
-// If it expires too quickly (e.g., 30 days), R2 objects can become “orphaned”
-// from the eviction index: they still occupy R2 bytes, but we stop seeing them
-// in listStructureCacheMeta(), so eviction can’t delete them.
-const STRUCTURE_CACHE_META_TTL_SECONDS = 60 * 60 * 24 * 36500; // 100 years
+// These entries have NO TTL - they persist until explicitly deleted by evictStructureCache().
+// This prevents orphaning: if KV expired but R2 didn't, eviction couldn't find/delete the R2 object.
 
 async function getCanonicalStructureMeta(protein, env) {
   if (!protein) {
@@ -2963,9 +2960,8 @@ async function recordStructureCacheEntry(env, key, size) {
     size: Number(size) || 0,
     lastAccess: Date.now()
   };
-  await env.KV.put(`${STRUCTURE_CACHE_META_PREFIX}${key}`, JSON.stringify(meta), {
-    expirationTtl: STRUCTURE_CACHE_META_TTL_SECONDS
-  });
+  // No TTL - entries persist until explicitly deleted by evictStructureCache()
+  await env.KV.put(`${STRUCTURE_CACHE_META_PREFIX}${key}`, JSON.stringify(meta));
 }
 
 async function touchStructureCacheEntry(env, key, sizeHint) {
@@ -2984,7 +2980,8 @@ async function touchStructureCacheEntry(env, key, sizeHint) {
     if (typeof sizeHint === 'number' && sizeHint > 0) {
       meta.size = sizeHint;
     }
-    await env.KV.put(cacheKey, JSON.stringify(meta), { expirationTtl: STRUCTURE_CACHE_META_TTL_SECONDS });
+    // No TTL - entries persist until explicitly deleted by evictStructureCache()
+    await env.KV.put(cacheKey, JSON.stringify(meta));
   } catch (err) {
     console.warn('GeneGuessr: failed to touch cache entry, recreating', err);
     await recordStructureCacheEntry(env, key, sizeHint);
