@@ -11,6 +11,22 @@ tags:
 
 <h1 class="sr-only">GeneGuessr - Daily Protein Guessing Game</h1>
 
+<div style="height: 0; overflow: hidden; position: absolute; left: -9999px;" aria-hidden="true">
+<h2>How to Play GeneGuessr</h2>
+<h3>Welcome to GeneGuessr!</h3>
+<p>This is the protein of the day. Can you figure out which gene made it?</p>
+<p>You will see spoiler bars that cover valuable hints. Tap the spoiler bar to reveal a hint underneath.</p>
+<p>Look up your favorite gene with the search bar. Submit it as your first guess.</p>
+<h3>Feedback cards</h3>
+<p>Each of your guesses will appear as a feedback card.</p>
+<p>The feedback bar percentage shows how close you got.</p>
+<p>Look for highlighted properties. They match your target.</p>
+<h3>Revealing hints</h3>
+<p>It costs 1 hint to remove a spoiler bar. You get +1 hint for each guess.</p>
+<p>When the hint is too obvious, the bar stays locked. Just try unlocking another one.</p>
+<p>You get to make 10 guesses before the game ends. Feel free to experiment!</p>
+</div>
+
 <div id="geneguessr-root" data-static="/static/geneguessr"></div>
 
 ---
