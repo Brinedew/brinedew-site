@@ -3095,9 +3095,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     function showMessage(elementId, message, type) {
       const el = document.getElementById(elementId);
-      el.innerHTML = '<div class="message ' + type + '">' + message + '</div>';
+      const safeType = type === 'success' ? 'success' : 'error';
+      const safeMessage = escapeHtml(String(message));
+      el.innerHTML = '<div class="message ' + safeType + '">' + safeMessage + '</div>';
       setTimeout(() => {
-        if (el.innerHTML.indexOf(message) !== -1) {
+        if (el.innerHTML.indexOf(safeMessage) !== -1) {
           el.innerHTML = '';
         }
       }, 5000);
