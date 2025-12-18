@@ -43,3 +43,16 @@ tools/thoteins/data/go/
 tools/thoteins/data/geneguessr/*.json
 !tools/thoteins/data/geneguessr/version.json
 .wrangler/
+
+# Binary executables (download separately)
+scripts/datasets.exe
+
+# Large data files that should be fetched/generated
+scripts/topk_ladder.json
+scripts/embedding_dump.json
+
+# Root-level junk (temp files, scratch images)
+/nul
+/*.png
+/*.jpg
+!logo-mask.png
