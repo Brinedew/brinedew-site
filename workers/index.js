@@ -217,6 +217,20 @@ export default {
             /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/gi,
             `<meta name="twitter:url" content="https://${GENEGUESSR_HOST}/">`
           );
+          // Use GeneGuessr-specific og:image for Discord/social embeds
+          const geneGuessrOgImage = 'https://brinedew.bio/static/geneguessr/og-image.png';
+          html = html.replace(
+            /<meta\b[^>]*\b(?:property)=["']og:image["'][^>]*>/gi,
+            `<meta property="og:image" content="${geneGuessrOgImage}">`
+          );
+          html = html.replace(
+            /<meta\b[^>]*\b(?:property)=["']og:image:url["'][^>]*>/gi,
+            `<meta property="og:image:url" content="${geneGuessrOgImage}">`
+          );
+          html = html.replace(
+            /<meta\b[^>]*\b(?:name)=["']twitter:image["'][^>]*>/gi,
+            `<meta name="twitter:image" content="${geneGuessrOgImage}">`
+          );
         }
         html = html.replace(
           /<meta\b[^>]*\b(?:property|name)=["']twitter:domain["'][^>]*>/gi,
