@@ -612,7 +612,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       gap: 0.5rem;
-      grid-auto-rows: 1fr;
+      grid-auto-rows: minmax(80px, auto);
     }
     .calendar-day-header {
       text-align: center;
@@ -813,6 +813,42 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     .cards-preview .redaction-space {
       display: inline-block;
       width: 0.35rem;
+    }
+
+    /* Guess statistics bar chart */
+    .guess-stats-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .guess-stats-row {
+      display: grid;
+      grid-template-columns: 32px 1fr 100px;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+    }
+    .guess-stats-count {
+      font-weight: 600;
+      color: #94a3b8;
+      text-align: right;
+    }
+    .guess-stats-label {
+      color: #e2e8f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .guess-stats-bar {
+      height: 8px;
+      background: rgba(148,163,184,0.18);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .guess-stats-bar-fill {
+      height: 100%;
+      background: rgba(56,189,248,0.65);
+      border-radius: 4px;
     }
   </style>
 </head>
@@ -1616,7 +1652,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
       const max = Math.max(...guesses.map((g) => Number(g?.count) || 0), 1);
       const list = document.createElement('div');
-      list.className = 'section-block';
+      list.className = 'guess-stats-list';
 
       guesses.forEach((g) => {
         const count = Number(g?.count) || 0;
@@ -1624,13 +1660,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const pct = Math.round((count / max) * 100);
 
         const row = document.createElement('div');
-        row.className = 'clue-item';
+        row.className = 'guess-stats-row';
         row.innerHTML =
-          '<span class="pill">' + escapeHtml(String(count)) + '</span> ' +
-          '<span style="flex:1;">' + escapeHtml(label) + '</span>' +
-          '<span style="width: 90px; height: 10px; background: rgba(148,163,184,0.18); border-radius: 999px; overflow: hidden; display:inline-block; vertical-align: middle;">' +
-            '<span style="display:block; height: 100%; width: ' + pct + '%; background: rgba(56,189,248,0.65);"></span>' +
-          '</span>';
+          '<span class="guess-stats-count">' + escapeHtml(String(count)) + '</span>' +
+          '<span class="guess-stats-label">' + escapeHtml(label) + '</span>' +
+          '<div class="guess-stats-bar">' +
+            '<div class="guess-stats-bar-fill" style="width: ' + pct + '%;"></div>' +
+          '</div>';
         list.appendChild(row);
       });
 

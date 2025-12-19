@@ -736,7 +736,7 @@ export async function handleAdminSchedule(request, env) {
 
     // Actual picks (history)
     const actualKeys = await listAllKvKeys(env, 'puzzle_actual:');
-    const history = actualKeys
+    const historyRaw = actualKeys
       .map((key) => {
         const date = key.name.replace('puzzle_actual:', '');
         const meta = key.metadata || {};
@@ -751,6 +751,21 @@ export async function handleAdminSchedule(request, env) {
       })
       .filter((row) => row.date && /^\d{4}-\d{2}-\d{2}$/.test(row.date))
       .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    // Fetch protein data for history rows to get gene symbols
+    const history = await Promise.all(
+      historyRaw.map(async (row) => {
+        if (row.uniprot_id) {
+          try {
+            const protein = await loadProtein(env.DB, row.uniprot_id);
+            return { ...row, protein: protein ? sanitizeProteinSummary(protein) : null };
+          } catch {
+            return row;
+          }
+        }
+        return row;
+      })
+    );
 
     // Upcoming (planned)
     const eligibleIds = await getEligibleProteinIds(env.DB);
