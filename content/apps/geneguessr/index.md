@@ -41,6 +41,12 @@ tags:
       <span class="pg-section-label">Protein data:</span> <span class="pg-section-entry"><a href="https://www.uniprot.org/">UniProt</a></span>
     </div>
     <div class="pg-section">
+      <span class="pg-section-label">Gene nomenclature:</span> <span class="pg-section-entry"><a href="https://www.genenames.org/">HGNC</a></span>
+    </div>
+    <div class="pg-section">
+      <span class="pg-section-label">Gene summaries:</span> <span class="pg-section-entry"><a href="https://www.ncbi.nlm.nih.gov/gene">NCBI Gene</a></span>
+    </div>
+    <div class="pg-section">
       <span class="pg-section-label">Gene Ontology:</span> <span class="pg-section-entry"><a href="http://geneontology.org/">GO Consortium</a></span>
     </div>
     <div class="pg-section">
