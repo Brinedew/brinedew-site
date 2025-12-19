@@ -51,14 +51,21 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     
     h1 {
       color: #ffffff;
-      margin-bottom: 0.5rem;
-      font-size: 2rem;
+      margin: 0;
+      font-size: 1.5rem;
     }
-    
-    .subtitle {
-      color: #ffffff;
-      margin-bottom: 2rem;
-      opacity: 0.8;
+
+    .admin-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .admin-header-status {
+      color: #94a3b8;
+      font-size: 0.875rem;
     }
     
     .section {
@@ -605,7 +612,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       gap: 0.5rem;
-      auto-rows: 1fr;
+      grid-auto-rows: 1fr;
     }
     .calendar-day-header {
       text-align: center;
@@ -620,7 +627,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       background: #1e293b;
       border: 1px solid #334155;
       border-radius: 6px;
-      min-height: 100px;
+      min-height: 80px;
       padding: 0.5rem;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -670,7 +677,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       margin-bottom: 0.25rem;
       color: #94a3b8;
     }
-    
+
     .day-content {
       flex: 1;
       display: flex;
@@ -679,7 +686,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       align-items: center;
       gap: 0.25rem;
     }
-    
+
     .day-symbol {
       font-weight: 700;
       font-size: 1rem;
@@ -812,17 +819,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 <body>
   <div class="container">
     <div class="left-panel">
-      <h1>GeneGuessr Admin Panel</h1>
-      <p class="subtitle">Protected by Discord login</p>
-      
-      <!-- Current Status -->
-    <div class="section">
-      <h2>Current Status</h2>
-      <div class="status" id="status-display">
-        <p class="helper-text">Loading...</p>
+      <div class="admin-header">
+        <h1>GeneGuessr Admin Panel</h1>
+        <span class="admin-header-status" id="status-display">Loading...</span>
       </div>
-    </div>
-    
+
     <!-- Calendar Section -->
     <div class="section">
       <h2>Calendar & Overrides</h2>
@@ -1619,7 +1620,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
       guesses.forEach((g) => {
         const count = Number(g?.count) || 0;
-        const label = (g?.gene ? (String(g.gene) + ' / ') : '') + (g?.uniprot || '');
+        const label = g?.gene ? String(g.gene) : 'Unknown';
         const pct = Math.round((count / max) * 100);
 
         const row = document.createElement('div');
@@ -1647,9 +1648,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       // Ensure card preview styles apply within the inspector container.
       rootEl.classList.add('cards-preview');
 
-      const title = protein?.hgnc
-        ? (protein.hgnc + ' / ' + (protein.uniprot || selection.uniprot_id || ''))
-        : (selection.uniprot_id || '');
+      const title = protein?.hgnc || protein?.gene || 'Unknown';
 
       rootEl.innerHTML = '';
 
@@ -1667,16 +1666,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const rej = document.createElement('div');
         rej.className = 'section-block';
         const lines = rejected.slice(0, 10).map((r) => {
-          const u = r?.uniprot_id || '';
+          const gene = r?.gene || r?.hgnc || r?.symbol || 'Unknown';
           const reason = r?.reason || '';
-          return '<div class="clue-item"><span class="pill">rejected</span>' + escapeHtml(u) + ' <span class="schedule-meta">(' + escapeHtml(reason) + ')</span></div>';
+          return '<div class="clue-item"><span class="pill">rejected</span>' + escapeHtml(gene) + ' <span class="schedule-meta">(' + escapeHtml(reason) + ')</span></div>';
         }).join('');
         rej.innerHTML = '<div class="clue-section-title">Rejections (first 10)</div>' + lines;
         rootEl.appendChild(rej);
       }
 
-      rootEl.appendChild(renderSectionBlock('Start of day (masked)', startSections, true));
-      rootEl.appendChild(renderSectionBlock('All clues (unmasked)', allSections, false));
+      // Only show unmasked clues - redaction bars aren't useful for admins
+      rootEl.appendChild(renderSectionBlock('All clues', allSections, false));
     }
 
     function openOverrideForDate(date) {
@@ -2073,20 +2072,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
     }
     function displayStatus(data) {
-      const statusHtml =
-        '<div class="status-item">' +
-          '<span class="status-label">Today&#39;s Date</span>' +
-          '<span class="status-value">' + data.today.date + '</span>' +
-        '</div>' +
-        '<div class="status-item">' +
-          '<span class="status-label">Today&#39;s Override</span>' +
-          '<span class="status-value">' + (data.today.override || 'None (using random selection)') + '</span>' +
-        '</div>' +
-        '<div class="status-item">' +
-          '<span class="status-label">Active Overrides</span>' +
-          '<span class="status-value">' + data.all_overrides.length + '</span>' +
-        '</div>';
-      document.getElementById('status-display').innerHTML = statusHtml;
+      const override = data.today.override ? 'Override set' : 'No override';
+      const overrideCount = data.all_overrides.length;
+      const statusText = data.today.date + ' | ' + override + ' | ' + overrideCount + ' active override' + (overrideCount === 1 ? '' : 's');
+      document.getElementById('status-display').textContent = statusText;
     }
 
     function displayOverrides(overrides) {
@@ -2121,7 +2110,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           dateEl.textContent = override.date;
           const proteinEl = document.createElement('span');
           proteinEl.className = 'override-protein';
-          proteinEl.textContent = override.uniprot_id;
+          // Look up gene symbol from scheduleData, fall back to showing gene if available
+          const scheduled = scheduleData[override.date];
+          const geneLabel = scheduled?.symbol || override.gene || override.hgnc || 'Unknown';
+          proteinEl.textContent = geneLabel;
           info.appendChild(dateEl);
           info.appendChild(proteinEl);
           const button = document.createElement('button');
@@ -3156,26 +3148,27 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       const firstDay = new Date(year, month, 1);
       const lastDay = new Date(year, month + 1, 0);
       const daysInMonth = lastDay.getDate();
-      const startingDay = firstDay.getDay(); // 0 = Sunday
-      
+      // Monday-based: convert Sunday=0 to 6, Monday=1 to 0, etc.
+      const startingDay = (firstDay.getDay() + 6) % 7;
+
       const monthNames = ["January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
       ];
-      
+
       document.getElementById('current-month-label').textContent = monthNames[month] + ' ' + year;
-      
+
       const grid = document.getElementById('calendar-grid');
       grid.innerHTML = '';
-      
-      // Day headers
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      // Day headers (Monday-first)
+      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       dayNames.forEach(day => {
         const el = document.createElement('div');
         el.className = 'calendar-day-header';
         el.textContent = day;
         grid.appendChild(el);
       });
-      
+
       // Empty slots before first day
       for (let i = 0; i < startingDay; i++) {
         const el = document.createElement('div');
