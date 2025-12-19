@@ -903,7 +903,6 @@
 .pg-section-entry.matched-highlight {
   color: var(--accent);
   font-weight: 600;
-  text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 /* Gene summary styling */
