@@ -198,7 +198,7 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
   const isLadder = Boolean(options.isLadder);
   const ladderRank = options.ladderRank || null;
   const domainIntersection = guessProtein.domains.filter((domain) => targetProtein.domains.includes(domain));
-  // Use 10% tolerance for length matching instead of bins - more precise for gameplay (B-204)
+  // Use 1% tolerance for length matching instead of bins - more precise for gameplay (B-204)
   const lengthBinMatch = isLengthWithinTolerance(targetProtein.length, guessProtein.length);
   const tmMatch = Boolean(guessProtein.tmh) === Boolean(targetProtein.tmh);
   const secretedMatch = Boolean(guessProtein.secreted) === Boolean(targetProtein.secreted);
@@ -219,8 +219,8 @@ export function scoreGuess(guessProtein, targetProtein, options = {}) {
 /**
  * B-214: Atheoretical matching - compare all section text values between target and guess.
  * No field-specific logic except:
- *   - Length uses 10% tolerance (not exact match)
- * 
+ *   - Length uses 1% tolerance (not exact match)
+ *
  * Returns matches keyed by section ID for highlighting.
  */
 export function collectMatchedHintTexts(target, guessProtein, score, options = {}) {
@@ -254,7 +254,7 @@ export function collectMatchedHintTexts(target, guessProtein, score, options = {
     const guessTexts = guessBySectionId[section.id];
     if (!guessTexts || guessTexts.size === 0) continue;
 
-    // Special case: length uses 10% tolerance instead of exact match
+    // Special case: length uses 1% tolerance instead of exact match
     if (section.id === 'length') {
       if (isLengthWithinTolerance(target?.length, guessProtein?.length)) {
         const targetItem = section.items[0];
@@ -330,7 +330,7 @@ function determineLengthBin(len) {
   return 4;
 }
 
-function isLengthWithinTolerance(targetLength, guessLength, toleranceRatio = 0.1) {
+function isLengthWithinTolerance(targetLength, guessLength, toleranceRatio = 0.01) {
   const target = Number(targetLength);
   const guess = Number(guessLength);
   if (!Number.isFinite(target) || !Number.isFinite(guess) || target <= 0) {
