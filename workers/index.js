@@ -97,8 +97,8 @@ import { handleMigrateStats, handleGetStats, handleUpdateStats } from './stats.j
 import { 
   handleOverrideProtein, 
   handleFeatureFlags, 
-  handleAdminStatus, 
-  handleDeleteOverride, 
+  handleAdminStatus,
+  handleDeleteOverride,
   handleGraphicsSettings,
   DEFAULT_GRAPHICS_SETTINGS,
   normalizeGraphicsSettings,
@@ -106,6 +106,7 @@ import {
   handleAdminSchedule,
   handleAdminCards,
   handleAdminGuessStats,
+  handleAdminSimilarity,
   isAdmin
 } from './admin.js';
 // Import admin HTML
@@ -412,7 +413,15 @@ export default {
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
       });
     }
-    
+
+    if (url.pathname === '/api/admin/similarity' && request.method === 'GET') {
+      const response = await handleAdminSimilarity(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
+      });
+    }
+
     // Public graphics settings endpoint (no auth required)
     if (url.pathname === '/api/graphics-settings' && request.method === 'GET') {
       const storedSettings = await env.KV.get('graphics_settings');

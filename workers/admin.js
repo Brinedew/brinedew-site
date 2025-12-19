@@ -8,7 +8,8 @@ import { buildStructurePreviewPayload, sanitizeProteinSummary } from './lib/stru
 import {
   fetchProteinByUniprot as loadProtein,
   getEligibleProteinIds,
-  pickDailyTarget
+  pickDailyTarget,
+  fetchProteinEmbedding
 } from './lib/protein-store.js';
 import { buildClueSections, maskClueSections, sanitizeTargetProtein } from './lib/game-engine.js';
 import { getDailyGuessAggregates } from './lib/guess-aggregates.js';
@@ -1019,5 +1020,57 @@ export async function handleProteinPreview(request, env) {
   } catch (err) {
     console.error('Error building protein preview', err);
     return Response.json({ error: 'Failed to build preview' }, { status: 500 });
+  }
+}
+
+/**
+ * GET /api/admin/similarity?gene1=PKP1&gene2=PKP2
+ * Compute cosine similarity between two genes' embeddings.
+ */
+export async function handleAdminSimilarity(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const url = new URL(request.url);
+    const gene1 = url.searchParams.get('gene1');
+    const gene2 = url.searchParams.get('gene2');
+
+    if (!gene1 || !gene2) {
+      return Response.json({ error: 'Missing gene1 or gene2 parameter' }, { status: 400 });
+    }
+
+    // Fetch embeddings
+    const [vec1, vec2] = await Promise.all([
+      fetchProteinEmbedding(env.DB, gene1.toUpperCase()),
+      fetchProteinEmbedding(env.DB, gene2.toUpperCase())
+    ]);
+
+    if (!vec1) {
+      return Response.json({ error: `No embedding for ${gene1}` }, { status: 404 });
+    }
+    if (!vec2) {
+      return Response.json({ error: `No embedding for ${gene2}` }, { status: 404 });
+    }
+
+    // Compute cosine similarity
+    let dot = 0, magA = 0, magB = 0;
+    for (let i = 0; i < vec1.length; i++) {
+      dot += vec1[i] * vec2[i];
+      magA += vec1[i] * vec1[i];
+      magB += vec2[i] * vec2[i];
+    }
+    const cosine = dot / (Math.sqrt(magA) * Math.sqrt(magB));
+
+    return Response.json({
+      gene1: gene1.toUpperCase(),
+      gene2: gene2.toUpperCase(),
+      cosine,
+      percent: Math.round(cosine * 100)
+    });
+  } catch (err) {
+    console.error('Error computing similarity', err);
+    return Response.json({ error: 'Failed to compute similarity' }, { status: 500 });
   }
 }
