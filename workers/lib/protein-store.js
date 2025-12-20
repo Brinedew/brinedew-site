@@ -66,8 +66,7 @@ function cloneArrayBuffer(value) {
 }
 
 function toFloat32Vector(row) {
-  // B-212: Handle combined_vector column (2760-d)
-  const vectorData = row?.combined_vector || row?.vector;
+  const vectorData = row?.vector;
   if (!vectorData) {
     return null;
   }
