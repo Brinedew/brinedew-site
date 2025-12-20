@@ -5,6 +5,7 @@ const MAX_CACHE_SIZE = 512;
 const MAX_EMBEDDING_CACHE_SIZE = 256;
 const proteinCache = new Map();
 const embeddingCache = new Map();
+const DUAL_EMBEDDINGS_TABLE = 'protein_embeddings_old';
 const eligibleCache = {
   ids: null,
   fetchedAt: 0,
@@ -285,7 +286,7 @@ export async function fetchProteinEmbedding(db, geneSymbol) {
     return embeddingCache.get(key);
   }
   const row = await db.prepare(
-    `SELECT combined_vector, combined_dim FROM protein_embeddings WHERE upper(gene_symbol) = ? LIMIT 1`
+    `SELECT vector, dim FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`
   ).bind(key).first();
   const vector = toFloat32Vector(row);
   rememberEmbedding(key, vector);
@@ -323,7 +324,7 @@ export async function fetchDualEmbeddings(db, geneSymbol) {
   }
   const row = await db.prepare(
     `SELECT vector, dim, esm2_vector, esm2_dim 
-     FROM protein_embeddings WHERE upper(gene_symbol) = ? LIMIT 1`
+     FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`
   ).bind(key).first();
 
   const result = {
@@ -660,9 +661,16 @@ const EMBEDDING_STATS = {
   hig2vec: { scale: 0.4101, offset: 0.5123 }
 };
 
+// Soft-OR calibration constants (q90, gamma=1.6)
+const SOFT_OR_CALIBRATION = {
+  gamma: 1.6,
+  hig2vec: { slope: 1.8304547958771813, midpoint: 0.3030015605091524 },
+  esm2: { slope: 4.584771332415639, midpoint: 0.12455377192395384 }
+};
+
 // Beta calibration constants (Kull et al. 2017)
-// Fitted offline to satisfy: median≈50%, HBB→HBD≈97%, BRCA1 spread maximized
-// Formula: p_cal = σ(A*log(s) + B*log(1-s) + C)
+// Fitted offline to satisfy: median÷50%, HBBHBD÷97%, BRCA1 spread maximized
+// Formula: p_cal = å(A*log(s) + B*log(1-s) + C)
 // Note: BRCA1 spread limited by embedding resolution, not transform
 const BETA_CAL = { A: 3.415631, B: -3.366470, C: 0.005369 };
 
@@ -686,6 +694,25 @@ function getMetricSimilarity(cosine, embeddingType) {
   }
   // Linear transform: scale * raw + offset
   return stats.scale * cosine + stats.offset;
+}
+
+function sigmoid(value) {
+  return 1 / (1 + Math.exp(-value));
+}
+
+function getSoftOrPercent(cosH, cosE) {
+  if (!Number.isFinite(cosH) && !Number.isFinite(cosE)) {
+    return null;
+  }
+  const h = Number.isFinite(cosH)
+    ? sigmoid(SOFT_OR_CALIBRATION.hig2vec.slope * (cosH - SOFT_OR_CALIBRATION.hig2vec.midpoint))
+    : 0;
+  const e = Number.isFinite(cosE)
+    ? sigmoid(SOFT_OR_CALIBRATION.esm2.slope * (cosE - SOFT_OR_CALIBRATION.esm2.midpoint))
+    : 0;
+  const pOr = 1 - (1 - h) * (1 - e);
+  const pDisplay = Math.pow(pOr, SOFT_OR_CALIBRATION.gamma);
+  return Math.round(pDisplay * 100);
 }
 
 /**
@@ -735,17 +762,15 @@ export async function getHig2vecSimilarity(db, guessId, targetId) {
   if (!guessKey || !targetKey) {
     return null;
   }
-  const [guessVec, targetVec] = await Promise.all([
-    fetchProteinEmbedding(db, guessKey),
-    fetchProteinEmbedding(db, targetKey)
+  const [{ hig2vec: guessVec }, { hig2vec: targetVec }] = await Promise.all([
+    fetchDualEmbeddings(db, guessKey),
+    fetchDualEmbeddings(db, targetKey)
   ]);
   if (!guessVec || !targetVec) {
     return null;
   }
   const cosine = cosineSimilarity(guessVec, targetVec);
-  const metric = normalizeWithZScore(cosine, 'hig2vec');
-  // No ladder for legacy single-embedding, use global transform
-  return toDisplayScoreGlobal(metric);
+  return getSoftOrPercent(cosine, null);
 }
 
 /**
@@ -763,8 +788,8 @@ function getLadderRank(neighbors, guessKey) {
 }
 
 /**
- * B-212: Compute similarity using combined embeddings (2760-d pre-blended vectors).
- * Returns simple cosine similarity as integer percentage (0-100).
+ * Compute similarity using calibrated soft-OR on HiG2Vec + isotropic ESM2.
+ * Returns integer percentage (0-100).
  * 
  * @param {D1Database} db - The D1 database binding
  * @param {string} guessId - Gene symbol or UniProt ID of the guess
@@ -786,21 +811,18 @@ export async function getBlendedSimilarity(db, guessId, targetId, options = {}) 
   const ladderRank = getLadderRank(targetNeighbors, guessKey);
   const isLadder = ladderRank !== null && ladderRank <= 9;
 
-  // Compute cosine similarity from combined embeddings
-  const [guessVec, targetVec] = await Promise.all([
-    fetchProteinEmbedding(db, guessKey),
-    fetchProteinEmbedding(db, targetKey)
+  const [guessEmbeddings, targetEmbeddings] = await Promise.all([
+    fetchDualEmbeddings(db, guessKey),
+    fetchDualEmbeddings(db, targetKey)
   ]);
 
-  if (!guessVec || !targetVec) {
-    return { blended: null, isLadder: false, ladderRank: null };
-  }
+  const cosH = (guessEmbeddings?.hig2vec && targetEmbeddings?.hig2vec)
+    ? cosineSimilarity(guessEmbeddings.hig2vec, targetEmbeddings.hig2vec)
+    : null;
+  const cosE = (guessEmbeddings?.esm2 && targetEmbeddings?.esm2)
+    ? cosineSimilarity(guessEmbeddings.esm2, targetEmbeddings.esm2)
+    : null;
 
-  // Pure cosine similarity (dot product of normalized vectors)
-  const cosine = cosineSimilarity(guessVec, targetVec);
-  
-  // Convert to percentage and round to integer (no decimals)
-  const percent = Math.round(Math.max(0, Math.min(100, cosine * 100)));
-
+  const percent = getSoftOrPercent(cosH, cosE);
   return { blended: percent, isLadder, ladderRank };
 }

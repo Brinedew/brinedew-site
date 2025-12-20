@@ -9,7 +9,7 @@ import {
   fetchProteinByUniprot as loadProtein,
   getEligibleProteinIds,
   pickDailyTarget,
-  fetchProteinEmbedding
+  getBlendedSimilarity
 } from './lib/protein-store.js';
 import { buildClueSections, maskClueSections, sanitizeTargetProtein } from './lib/game-engine.js';
 import { getDailyGuessAggregates } from './lib/guess-aggregates.js';
@@ -1041,33 +1041,22 @@ export async function handleAdminSimilarity(request, env) {
       return Response.json({ error: 'Missing gene1 or gene2 parameter' }, { status: 400 });
     }
 
-    // Fetch embeddings
-    const [vec1, vec2] = await Promise.all([
-      fetchProteinEmbedding(env.DB, gene1.toUpperCase()),
-      fetchProteinEmbedding(env.DB, gene2.toUpperCase())
-    ]);
+    const simResult = await getBlendedSimilarity(
+      env.DB,
+      gene1.toUpperCase(),
+      gene2.toUpperCase()
+    );
 
-    if (!vec1) {
-      return Response.json({ error: `No embedding for ${gene1}` }, { status: 404 });
+    if (simResult.blended === null) {
+      return Response.json({ error: `No embedding for ${gene1} or ${gene2}` }, { status: 404 });
     }
-    if (!vec2) {
-      return Response.json({ error: `No embedding for ${gene2}` }, { status: 404 });
-    }
-
-    // Compute cosine similarity
-    let dot = 0, magA = 0, magB = 0;
-    for (let i = 0; i < vec1.length; i++) {
-      dot += vec1[i] * vec2[i];
-      magA += vec1[i] * vec1[i];
-      magB += vec2[i] * vec2[i];
-    }
-    const cosine = dot / (Math.sqrt(magA) * Math.sqrt(magB));
 
     return Response.json({
       gene1: gene1.toUpperCase(),
       gene2: gene2.toUpperCase(),
-      cosine,
-      percent: Math.round(cosine * 100)
+      percent: simResult.blended,
+      isLadder: simResult.isLadder,
+      ladderRank: simResult.ladderRank
     });
   } catch (err) {
     console.error('Error computing similarity', err);

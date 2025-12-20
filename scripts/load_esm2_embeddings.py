@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
@@ -39,11 +40,29 @@ def load_proteins() -> list[dict]:
     return json.loads(PROTEINS_JSON.read_text(encoding="utf-8"))
 
 
-def vector_to_hex_float16(tensor: torch.Tensor) -> str:
-    """Convert a tensor to a hex string using float16 to save space."""
-    arr = tensor.detach().cpu().to(torch.float16).numpy()
+def vector_to_hex_float16(vector) -> str:
+    """Convert a vector to a hex string using float16 to save space."""
+    if isinstance(vector, torch.Tensor):
+        arr = vector.detach().cpu().to(torch.float16).numpy()
+    else:
+        arr = np.asarray(vector, dtype=np.float16)
     blob = arr.tobytes()
     return blob.hex()
+
+
+def load_esm2_vectors(source_path: Path) -> dict[str, np.ndarray]:
+    if source_path.suffix.lower() == ".parquet":
+        import pandas as pd
+
+        df = pd.read_parquet(source_path)
+        return {
+            row["name"]: np.asarray(row["embedding"], dtype=np.float32)
+            for _, row in df.iterrows()
+        }
+    data = torch.load(source_path, map_location="cpu")
+    if not isinstance(data, dict):
+        raise SystemExit(f"Unexpected ESM2 format at {source_path}")
+    return {key: value.detach().cpu().numpy() for key, value in data.items()}
 
 
 def main() -> None:
@@ -51,16 +70,21 @@ def main() -> None:
     parser.add_argument("--remote", action="store_true", help="Apply to remote D1 database")
     parser.add_argument("--dry-run", action="store_true", help="Print SQL without executing")
     parser.add_argument("--batch-size", type=int, default=500, help="Statements per batch (default 500)")
+    parser.add_argument("--source", help="Path to ESM2 embeddings (.pt or .parquet)")
+    parser.add_argument("--table", default="protein_embeddings", help="Target table name")
+    parser.add_argument("--max-retries", type=int, default=3, help="Retries per batch on wrangler failure")
+    parser.add_argument("--retry-delay", type=float, default=3.0, help="Seconds to wait between retries")
     args = parser.parse_args()
 
-    if not ESM2_EMBEDDING_PATH.exists():
-        raise SystemExit(f"Missing ESM2 embedding file at {ESM2_EMBEDDING_PATH}")
+    source_path = Path(args.source) if args.source else ESM2_EMBEDDING_PATH
+    if not source_path.exists():
+        raise SystemExit(f"Missing ESM2 embedding file at {source_path}")
     if not PROTEINS_JSON.exists():
         raise SystemExit(f"Missing proteins.json at {PROTEINS_JSON}")
 
     print("Loading ESM2 embeddings...")
-    esm2_data = torch.load(ESM2_EMBEDDING_PATH, map_location="cpu")
-    print(f"  Loaded {len(esm2_data)} gene embeddings")
+    esm2_data = load_esm2_vectors(source_path)
+    print(f"  Loaded {len(esm2_data)} gene embeddings from {source_path}")
 
     print("Loading proteins.json...")
     proteins = load_proteins()
@@ -72,7 +96,7 @@ def main() -> None:
 
     # Check dimensions of first entry
     sample_key = next(iter(esm2_data.keys()))
-    sample_dim = esm2_data[sample_key].shape[0]
+    sample_dim = int(np.asarray(esm2_data[sample_key]).shape[0])
     print(f"  ESM2 dimension: {sample_dim}")
 
     statements: list[str] = []
@@ -97,7 +121,7 @@ def main() -> None:
 
         # Update existing row with ESM2 data
         statements.append(
-            f"UPDATE protein_embeddings SET esm2_dim = {sample_dim}, esm2_vector = x'{vector_hex}' "
+            f"UPDATE {args.table} SET esm2_dim = {sample_dim}, esm2_vector = x'{vector_hex}' "
             f"WHERE upper(gene_symbol) = upper('{gene_escaped}');"
         )
         matched += 1
@@ -143,11 +167,15 @@ def main() -> None:
 
         try:
             print(f"Executing batch {batch_num + 1}/{total_batches} ({len(batch)} statements)...")
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
-            if result.returncode != 0:
+            for attempt in range(args.max_retries):
+                result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
+                if result.returncode == 0:
+                    break
                 print(result.stdout)
                 print(result.stderr)
-                raise SystemExit(f"wrangler exited with {result.returncode}")
+                if attempt + 1 >= args.max_retries:
+                    raise SystemExit(f"wrangler exited with {result.returncode}")
+                time.sleep(args.retry_delay)
         finally:
             tmp_path.unlink(missing_ok=True)
 
