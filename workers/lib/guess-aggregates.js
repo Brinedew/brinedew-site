@@ -124,3 +124,45 @@ export async function getDailyGuessAggregates(db, { day, limit = 25 }) {
     })),
   };
 }
+
+export async function getGuessAggregatesForDateRange(db, { startDay, endDay, limit = 50 }) {
+  const isValidDay = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (!isValidDay(startDay) || !isValidDay(endDay)) {
+    return { ok: false, reason: "invalid_day" };
+  }
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 50));
+  await ensureGuessAggregateSchema(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        guess_uniprot,
+        MAX(guess_gene) AS guess_gene,
+        SUM(guess_count) AS guess_count
+      FROM daily_guess_aggregate
+      WHERE day >= ? AND day <= ?
+      GROUP BY guess_uniprot
+      ORDER BY guess_count DESC, guess_uniprot ASC
+      LIMIT ?
+    `,
+    )
+    .bind(startDay, endDay, safeLimit)
+    .all();
+
+  const results = Array.isArray(rows?.results) ? rows.results : [];
+  const totalGuesses = results.reduce((sum, r) => sum + (Number(r.guess_count) || 0), 0);
+
+  return {
+    ok: true,
+    startDay,
+    endDay,
+    totalGuesses,
+    guesses: results.map((r) => ({
+      uniprot: r.guess_uniprot,
+      gene: r.guess_gene || null,
+      count: Number(r.guess_count) || 0,
+    })),
+  };
+}

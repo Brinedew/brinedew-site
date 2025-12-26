@@ -36,20 +36,18 @@ PUBLIC_DIR = WEBSITE_ROOT / "public"
 STATIC_PROTEINS_DIR = WEBSITE_ROOT / "static" / "proteins"
 ATTACHMENTS_DIR = CONTENT_DIR / "Attachments"
 
-# Thoteins data - now in tools/thoteins/ within the same repo
-THOTEINS_ROOT = WEBSITE_ROOT / "tools" / "thoteins"
-DATA_DIR = THOTEINS_ROOT / "data" / "proteins"
-FEATURES_CSV = DATA_DIR / "features.csv"
-PERSONA_CSV = DATA_DIR / "persona.csv"
-MAPPING_JSON = THOTEINS_ROOT / "data" / "mapping.json"
+# Thoteins data sources:
+# - v2 (preferred): ../Datasets/thoteins-v2/proteins_with_demographics.json (outside Website repo)
+# - v1 (deprecated): Website/tools/thoteins-v1/data/proteins/*.csv (often not present in CI)
+REPO_ROOT = WEBSITE_ROOT.parent
 
-# Check if Thoteins data exists
-if not FEATURES_CSV.exists():
-    print("=" * 60)
-    print(f"ERROR: Features CSV not found at {FEATURES_CSV}")
-    print("Thoteins data should be in tools/thoteins/")
-    print("=" * 60)
-    sys.exit(1)
+THOTEINS_V2_ROOT = REPO_ROOT / "Datasets" / "thoteins-v2"
+THOTEINS_V2_PROTEINS_JSON = THOTEINS_V2_ROOT / "proteins_with_demographics.json"
+
+THOTEINS_V1_ROOT = WEBSITE_ROOT / "tools" / "thoteins-v1"
+THOTEINS_V1_DATA_DIR = THOTEINS_V1_ROOT / "data" / "proteins"
+THOTEINS_V1_FEATURES_CSV = THOTEINS_V1_DATA_DIR / "features.csv"
+THOTEINS_V1_PERSONA_CSV = THOTEINS_V1_DATA_DIR / "persona.csv"
 
 # Output
 IMAGE_QUEUE_FILE = WEBSITE_ROOT / "image_generation_queue.txt"
@@ -61,29 +59,138 @@ Professional studio lighting, high fashion photography style, sharp focus on fac
 Subheads: {title}; {domains}."""
 
 
+def hsl_to_hex(h: float, s: float, l: float) -> str:
+    """Convert HSL in degrees/[0-100]/[0-100] to #RRGGBB."""
+    h = float(h) % 360.0
+    s = max(0.0, min(100.0, float(s))) / 100.0
+    l = max(0.0, min(100.0, float(l))) / 100.0
+
+    c = (1.0 - abs(2.0 * l - 1.0)) * s
+    x = c * (1.0 - abs((h / 60.0) % 2.0 - 1.0))
+    m = l - c / 2.0
+
+    r1 = g1 = b1 = 0.0
+    if 0 <= h < 60:
+        r1, g1, b1 = c, x, 0.0
+    elif 60 <= h < 120:
+        r1, g1, b1 = x, c, 0.0
+    elif 120 <= h < 180:
+        r1, g1, b1 = 0.0, c, x
+    elif 180 <= h < 240:
+        r1, g1, b1 = 0.0, x, c
+    elif 240 <= h < 300:
+        r1, g1, b1 = x, 0.0, c
+    else:
+        r1, g1, b1 = c, 0.0, x
+
+    r = int(round((r1 + m) * 255.0))
+    g = int(round((g1 + m) * 255.0))
+    b = int(round((b1 + m) * 255.0))
+
+    r = max(0, min(255, r))
+    g = max(0, min(255, g))
+    b = max(0, min(255, b))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def normalize_mass_kda(mass_value) -> Optional[float]:
+    """Normalize mass into kDa (frontmatter convention)."""
+    if mass_value is None:
+        return None
+    try:
+        mass = float(mass_value)
+    except Exception:
+        return None
+
+    # Thoteins v2 stores mass in daltons (e.g., 16499). Frontmatter uses kDa.
+    if mass > 1000:
+        return mass / 1000.0
+    return mass
+
+
 def load_thoteins_data():
     """Load Thoteins CSVs and mapping configuration."""
     print("Loading Thoteins data...")
-    
-    if not FEATURES_CSV.exists():
-        print(f"ERROR: Features CSV not found at {FEATURES_CSV}")
-        print("Please copy Thoteins data: cp -r D:/Coding/Thoteins/data/proteins/*.csv data/thoteins/")
-        sys.exit(1)
-    
-    features = pd.read_csv(FEATURES_CSV)
-    persona = pd.read_csv(PERSONA_CSV)
-    
-    with open(MAPPING_JSON, 'r') as f:
-        mapping_config = json.load(f)
-    
-    # Merge on uniprot_id
-    combined = features.merge(persona, on='uniprot_id', how='left', suffixes=('', '_persona'))
-    
-    # Clean up duplicate columns
-    combined = combined.loc[:, ~combined.columns.str.endswith('_persona')]
-    
-    print(f"Loaded {len(combined)} proteins from Thoteins")
-    return combined, mapping_config
+
+    # Prefer v2 dataset if available (outside the Website repo).
+    if THOTEINS_V2_PROTEINS_JSON.exists():
+        try:
+            with open(THOTEINS_V2_PROTEINS_JSON, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            df = pd.json_normalize(raw, sep="_")
+
+            # Normalize/derive columns expected by the rest of this script.
+            df["uniprot_id"] = df.get("uniprot")
+            df["gene_symbol"] = df.get("gene")
+
+            def _domains_top3(domains):
+                if not isinstance(domains, list):
+                    return None
+                top = [str(d).strip() for d in domains[:3] if str(d).strip()]
+                return ", ".join(top) if top else None
+
+            df["domain_count"] = df["domains"].apply(lambda v: len(v) if isinstance(v, list) else None)
+            df["domains_top3"] = df["domains"].apply(_domains_top3)
+
+            df["locations"] = df["locations"].apply(
+                lambda v: ", ".join([str(x).strip() for x in v if str(x).strip()]) if isinstance(v, list) else v
+            )
+
+            # Persona columns (keep legacy column names so the rest of the script is minimally changed).
+            df["height"] = df.get("demographics_height")
+            df["Sex"] = df.get("demographics_sex")
+            df["Politics"] = df.get("demographics_politics")
+            df["Skintone Hue "] = df.get("demographics_skintone_hue")
+            df["Skintone Saturation"] = df.get("demographics_skintone_saturation")
+            df["Skintone Lightness"] = df.get("demographics_skintone_lightness")
+            df["Age"] = df.get("demographics_apparent_age")
+
+            def _aesthetics_list_to_str(aes):
+                if isinstance(aes, list):
+                    cleaned = [str(a).strip() for a in aes if str(a).strip()]
+                    return ", ".join(cleaned) if cleaned else None
+                return None
+
+            df["Aesthetics"] = df.get("demographics_aesthetics").apply(_aesthetics_list_to_str)
+
+            def _hexcode_from_demographics(row):
+                try:
+                    hue = row.get("demographics_skintone_hue")
+                    sat = row.get("demographics_skintone_saturation")
+                    lig = row.get("demographics_skintone_lightness")
+                    if hue is None or sat is None or lig is None:
+                        return "#cccccc"
+                    return hsl_to_hex(hue, sat, lig)
+                except Exception:
+                    return "#cccccc"
+
+            df["hexcode"] = df.apply(_hexcode_from_demographics, axis=1)
+
+            print(f"Loaded {len(df)} proteins from Thoteins v2 ({THOTEINS_V2_PROTEINS_JSON})")
+            return df, {}
+        except Exception as err:
+            print(f"WARNING: Failed to load Thoteins v2 dataset at {THOTEINS_V2_PROTEINS_JSON}: {err}")
+
+    # Deprecated: v1 CSVs (often not present in CI).
+    if THOTEINS_V1_FEATURES_CSV.exists() and THOTEINS_V1_PERSONA_CSV.exists():
+        print(f"WARNING: Falling back to deprecated Thoteins v1 CSVs at {THOTEINS_V1_DATA_DIR}")
+        features = pd.read_csv(THOTEINS_V1_FEATURES_CSV)
+        persona = pd.read_csv(THOTEINS_V1_PERSONA_CSV)
+
+        combined = features.merge(persona, on="uniprot_id", how="left", suffixes=("", "_persona"))
+        combined = combined.loc[:, ~combined.columns.str.endswith("_persona")]
+
+        print(f"Loaded {len(combined)} proteins from Thoteins v1")
+        return combined, {}
+
+    # No data available. Do not fail Pages builds.
+    print("=" * 60)
+    print("WARNING: Thoteins dataset not found.")
+    print(f"- Looked for v2 JSON at: {THOTEINS_V2_PROTEINS_JSON}")
+    print(f"- Looked for v1 CSVs at: {THOTEINS_V1_DATA_DIR}")
+    print("Skipping enrichment to avoid breaking builds.")
+    print("=" * 60)
+    return None, {}
 
 
 def get_mapped_fields(mapping_config: Dict) -> Dict[str, str]:
@@ -186,15 +293,21 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     # Helper to handle NaN strings
     def clean_str(value):
         """Convert value to string, handling NaN."""
-        if pd.isna(value) or str(value).lower() == 'nan':
+        if pd.isna(value):
             return None
-        return str(value)
+        s = str(value).strip()
+        if not s or s.lower() == 'nan':
+            return None
+        return s
     
     # Check if already enriched (compare key fields)
+    mass_kda = normalize_mass_kda(protein_data.get('mass'))
+    mass_kda_rounded = round(mass_kda) if mass_kda is not None else None
+    background_setting_clean = clean_str(protein_data.get('background_setting')) if 'background_setting' in getattr(proteins_df, 'columns', []) else None
     needs_update = (
-        post.get('mass') != (round(float(protein_data['mass'])) if pd.notna(protein_data.get('mass')) else None) or
+        post.get('mass') != mass_kda_rounded or
         post.get('alignment') != clean_str(protein_data.get('alignment', '')) or
-        post.get('persona_background_setting') != clean_str(protein_data.get('background_setting', ''))
+        (background_setting_clean is not None and post.get('persona_background_setting') != background_setting_clean)
     )
     
     if not needs_update:
@@ -212,7 +325,7 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     # Populate molecular properties
     post['gene_symbol'] = clean_str(protein_data.get('gene_symbol', ''))
     post['full_name'] = clean_str(protein_data.get('full_name', ''))
-    post['mass'] = round(float(protein_data['mass'])) if pd.notna(protein_data.get('mass')) else None
+    post['mass'] = mass_kda_rounded
     post['length (aa)'] = int(protein_data['length']) if pd.notna(protein_data.get('length')) else None
     post['domain_count'] = int(protein_data['domain_count']) if pd.notna(protein_data.get('domain_count')) else None
     post['domains_top3'] = clean_str(protein_data.get('domains_top3', ''))
@@ -236,7 +349,8 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     post['persona_hexcode'] = clean_str(protein_data.get('hexcode', '#cccccc'))
     post['persona_aesthetics'] = clean_str(protein_data.get('Aesthetics', ''))
     post['persona_age'] = round(float(protein_data['Age'])) if pd.notna(protein_data.get('Age')) else None
-    post['persona_background_setting'] = clean_str(protein_data.get('background_setting', ''))
+    if background_setting_clean is not None:
+        post['persona_background_setting'] = background_setting_clean
     
     # Handle persona image
     image_path = f"/static/proteins/{uniprot_id}.png"
@@ -287,6 +401,9 @@ def main():
     
     # Load Thoteins data
     proteins_df, mapping_config = load_thoteins_data()
+    if proteins_df is None:
+        print("[OK] No Thoteins data available; skipping enrichment.")
+        return
     
     # Find protein pages
     protein_pages = find_protein_pages()

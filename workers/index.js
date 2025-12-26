@@ -106,6 +106,7 @@ import {
   handleAdminSchedule,
   handleAdminCards,
   handleAdminGuessStats,
+  handleAdminGuessAnalytics,
   handleAdminSimilarity,
   isAdmin
 } from './admin.js';
@@ -465,6 +466,14 @@ export default {
 
     if (url.pathname === '/api/admin/guess-stats' && request.method === 'GET') {
       const response = await handleAdminGuessStats(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
+      });
+    }
+
+    if (url.pathname === '/api/admin/guess-analytics' && request.method === 'GET') {
+      const response = await handleAdminGuessAnalytics(request, env);
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders }

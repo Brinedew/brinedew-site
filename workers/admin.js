@@ -12,7 +12,7 @@ import {
   getBlendedSimilarity
 } from './lib/protein-store.js';
 import { buildClueSections, maskClueSections, sanitizeTargetProtein } from './lib/game-engine.js';
-import { getDailyGuessAggregates } from './lib/guess-aggregates.js';
+import { getDailyGuessAggregates, getGuessAggregatesForDateRange } from './lib/guess-aggregates.js';
 
 function addDaysISO(dateIso, days) {
   const base = new Date(`${dateIso}T00:00:00.000Z`);
@@ -920,6 +920,76 @@ export async function handleAdminGuessStats(request, env) {
     return Response.json(data);
   } catch (err) {
     console.error('Error in handleAdminGuessStats:', err);
+    return Response.json({ error: 'Internal server error', details: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * GET /api/admin/guess-analytics?range=week|month|year
+ * Returns aggregated guess counts across a recent window (admin-only).
+ *
+ * Caching: computed at most once per UTC day per range (KV-backed), and only
+ * when an admin requests it (no background jobs).
+ */
+export async function handleAdminGuessAnalytics(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const url = new URL(request.url);
+    const rangeRaw = (url.searchParams.get('range') || '').toLowerCase();
+
+    const windowDaysByRange = {
+      week: 7,
+      month: 30,
+      year: 365,
+      '7d': 7,
+      '30d': 30,
+      '365d': 365,
+    };
+    const windowDays = windowDaysByRange[rangeRaw] || null;
+    if (!windowDays) {
+      return Response.json({ error: 'Missing or invalid range (week|month|year)' }, { status: 400 });
+    }
+
+    const endDay = new Date().toISOString().slice(0, 10);
+    const startDay = addDaysISO(endDay, -(windowDays - 1));
+    const limit = 50;
+
+    const cacheKey = `admin_guess_analytics:v1:${windowDays}:${endDay}`;
+    try {
+      const cached = await env.KV.get(cacheKey);
+      if (cached) {
+        const payload = JSON.parse(cached);
+        return Response.json(payload);
+      }
+    } catch (err) {
+      console.warn('Admin guess analytics cache read failed; recomputing', err);
+    }
+
+    const data = await getGuessAggregatesForDateRange(env.DB, { startDay, endDay, limit });
+    if (!data.ok) {
+      return Response.json({ error: 'Failed to compute guess analytics' }, { status: 500 });
+    }
+
+    const payload = {
+      ...data,
+      range: rangeRaw,
+      windowDays,
+      generatedAt: Date.now(),
+    };
+
+    try {
+      // Keep a short TTL so KV doesn’t accumulate indefinitely; key is day-scoped anyway.
+      await env.KV.put(cacheKey, JSON.stringify(payload), { expirationTtl: 60 * 60 * 48 });
+    } catch (err) {
+      console.warn('Admin guess analytics cache write failed; serving uncached', err);
+    }
+
+    return Response.json(payload);
+  } catch (err) {
+    console.error('Error in handleAdminGuessAnalytics:', err);
     return Response.json({ error: 'Internal server error', details: err.message }, { status: 500 });
   }
 }

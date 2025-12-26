@@ -850,6 +850,76 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       background: rgba(56,189,248,0.65);
       border-radius: 4px;
     }
+
+    /* Guess analytics (range) */
+    .guess-analytics-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.75rem 0 0.5rem 0;
+    }
+    .guess-analytics-range {
+      padding: 0.45rem 0.7rem;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      background: rgba(15,23,42,0.6);
+      color: #cbd5e1;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .guess-analytics-range.is-active {
+      border-color: rgba(56,189,248,0.75);
+      background: rgba(56,189,248,0.12);
+      color: #e2e8f0;
+    }
+    .guess-analytics-meta {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      margin: 0.25rem 0 0.75rem 0;
+    }
+    .guess-analytics-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      max-height: 520px;
+      overflow: auto;
+      padding-right: 0.25rem;
+    }
+    .guess-analytics-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 54px 140px;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.875rem;
+    }
+    .guess-analytics-count {
+      font-weight: 600;
+      color: #94a3b8;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .guess-analytics-label {
+      color: #e2e8f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .guess-analytics-share {
+      color: #94a3b8;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .guess-analytics-bar {
+      height: 8px;
+      background: rgba(148,163,184,0.18);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .guess-analytics-bar-fill {
+      height: 100%;
+      background: rgba(56,189,248,0.65);
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
@@ -870,6 +940,23 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       </div>
       <div class="calendar-grid" id="calendar-grid">
         <!-- Days will be injected here -->
+      </div>
+    </div>
+
+    <!-- Guess Analytics -->
+    <div class="section" id="guess-analytics-section">
+      <h2>Guess Analytics</h2>
+      <p class="helper-text helper-text--title" style="margin-bottom: 0.25rem;">
+        This shows the most guessed genes across the last week, month, or year. It only refreshes at most once per day, and only when you click a range.
+      </p>
+      <div class="guess-analytics-controls">
+        <button type="button" class="guess-analytics-range" data-range="week">Last 7 days</button>
+        <button type="button" class="guess-analytics-range" data-range="month">Last 30 days</button>
+        <button type="button" class="guess-analytics-range" data-range="year">Last 365 days</button>
+      </div>
+      <div class="guess-analytics-meta" id="guess-analytics-meta">Not loaded yet.</div>
+      <div id="guess-analytics-root">
+        <p class="helper-text">Pick a range to load top 50 guesses.</p>
       </div>
     </div>
 
@@ -1671,6 +1758,144 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       });
 
       rootEl.appendChild(list);
+    }
+
+    let guessAnalyticsLoadToken = 0;
+
+    function getUtcDayString() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function buildGuessAnalyticsStorageKey(range, endDay) {
+      return 'guessAnalytics:' + String(range) + ':' + String(endDay);
+    }
+
+    function setActiveGuessAnalyticsRange(range) {
+      const buttons = document.querySelectorAll('.guess-analytics-range[data-range]');
+      buttons.forEach((btn) => {
+        const isActive = btn.getAttribute('data-range') === range;
+        btn.classList.toggle('is-active', isActive);
+      });
+    }
+
+    function renderGuessAnalytics(rootEl, payload) {
+      const guesses = Array.isArray(payload?.guesses) ? payload.guesses : [];
+      const total = Number(payload?.totalGuesses) || 0;
+      const startDay = payload?.startDay || '';
+      const endDay = payload?.endDay || '';
+
+      rootEl.innerHTML = '';
+
+      if (!guesses.length) {
+        const empty = document.createElement('p');
+        empty.className = 'helper-text';
+        empty.textContent = 'No aggregated guesses found for this range yet.';
+        rootEl.appendChild(empty);
+        return;
+      }
+
+      const max = Math.max(...guesses.map((g) => Number(g?.count) || 0), 1);
+      const list = document.createElement('div');
+      list.className = 'guess-analytics-list';
+
+      guesses.forEach((g) => {
+        const count = Number(g?.count) || 0;
+        const label = g?.gene ? String(g.gene) : (g?.uniprot ? String(g.uniprot) : 'Unknown');
+        const share = total > 0 ? (count / total) : 0;
+        const sharePct = Math.round(share * 1000) / 10; // 1 decimal
+        const barPct = Math.round((count / max) * 100);
+
+        const row = document.createElement('div');
+        row.className = 'guess-analytics-row';
+        row.innerHTML =
+          '<span class="guess-analytics-count">' + escapeHtml(String(count)) + '</span>' +
+          '<span class="guess-analytics-label" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+          '<span class="guess-analytics-share">' + escapeHtml(String(sharePct)) + '%</span>' +
+          '<div class="guess-analytics-bar">' +
+            '<div class="guess-analytics-bar-fill" style="width: ' + barPct + '%;"></div>' +
+          '</div>';
+        list.appendChild(row);
+      });
+
+      rootEl.appendChild(list);
+
+      const metaEl = document.getElementById('guess-analytics-meta');
+      if (metaEl) {
+        metaEl.textContent = startDay && endDay
+          ? ('Range: ' + startDay + ' to ' + endDay + ' • ' + String(total) + ' guesses total')
+          : (String(total) + ' guesses total');
+      }
+    }
+
+    async function loadGuessAnalytics(range) {
+      const loadToken = ++guessAnalyticsLoadToken;
+      const rootEl = document.getElementById('guess-analytics-root');
+      const metaEl = document.getElementById('guess-analytics-meta');
+      if (!rootEl) return;
+
+      const endDay = getUtcDayString();
+      const storageKey = buildGuessAnalyticsStorageKey(range, endDay);
+
+      setActiveGuessAnalyticsRange(range);
+
+      try {
+        const cachedRaw = localStorage.getItem(storageKey);
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && cached.endDay === endDay) {
+            renderGuessAnalytics(rootEl, cached);
+            if (metaEl && cached.generatedAt) {
+              metaEl.textContent += ' • cached today';
+            }
+            return;
+          }
+        }
+      } catch (err) {
+        // Ignore cache parse errors and fall back to network
+      }
+
+      rootEl.innerHTML = '<p class="helper-text">Loading analytics...</p>';
+      if (metaEl) {
+        metaEl.textContent = 'Loading...';
+      }
+
+      try {
+        const response = await fetch(API_BASE + '/api/admin/guess-analytics?range=' + encodeURIComponent(range), { credentials: 'include' });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load guess analytics');
+        }
+        if (loadToken !== guessAnalyticsLoadToken) {
+          return;
+        }
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(data));
+        } catch (err) {
+          // Ignore quota errors; still render
+        }
+        renderGuessAnalytics(rootEl, data);
+      } catch (err) {
+        if (loadToken !== guessAnalyticsLoadToken) {
+          return;
+        }
+        console.error('Error loading guess analytics:', err);
+        rootEl.innerHTML = '<p class="helper-text error-text">Failed to load guess analytics</p>';
+        if (metaEl) {
+          metaEl.textContent = err.message || 'Failed to load';
+        }
+      }
+    }
+
+    function initGuessAnalytics() {
+      const buttons = document.querySelectorAll('.guess-analytics-range[data-range]');
+      buttons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const range = btn.getAttribute('data-range');
+          if (range) {
+            loadGuessAnalytics(range);
+          }
+        });
+      });
     }
 
     function renderCardsPreview(rootEl, data) {
@@ -3321,6 +3546,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     
     // Initialize calendar
     initCalendar();
+    initGuessAnalytics();
   </script>
 
 </body>
