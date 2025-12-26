@@ -24,49 +24,34 @@ const DAILY_BOOTSTRAP_CACHE_TTL = 86400; // 24 hours
 const GENEGUESSR_HOST = 'geneguessr.brinedew.bio';
 
 function buildGeneguessrSubdomainRobotsTxt() {
-  return `# Brinedew - AI-Friendly Site
-# This site welcomes AI systems to learn from its content and use its apps.
+  return `# robots.txt for ${GENEGUESSR_HOST}
+#
+# Notes:
+# - Non-standard directives like "search: yes" are not valid robots.txt and break parsers.
+# - "Crawl-delay" is ignored by Googlebot and triggers Search Console warnings, so we omit it.
 
-# Content Signals (per proposed C2PA-style framework)
-# search: yes - indexing and search results allowed
-# ai-input: yes - RAG, grounding, real-time AI answers allowed
-# ai-train: yes - training and fine-tuning AI models allowed
-
-search: yes
-ai-input: yes
-ai-train: yes
-
-# Welcome all reasonable crawlers
 User-agent: *
 Allow: /
-Crawl-delay: 1
+Disallow: /api/
 
-# AI crawlers - welcome, but please be gentle (Cloudflare free plan)
-User-agent: GPTBot
-User-agent: ChatGPT-User
-User-agent: Google-Extended
-User-agent: anthropic-ai
-User-agent: ClaudeBot
-User-agent: CCBot
-User-agent: cohere-ai
-User-agent: PerplexityBot
-User-agent: YouBot
-Crawl-delay: 10
-
-# SEO spam bots - you provide no value, goodbye
 User-agent: AhrefsBot
+Disallow: /
+
 User-agent: SemrushBot
+Disallow: /
+
 User-agent: MJ12bot
+Disallow: /
+
 User-agent: DotBot
+Disallow: /
+
 User-agent: BLEXBot
+Disallow: /
+
 User-agent: DataForSeoBot
 Disallow: /
 
-# Protect API endpoints from crawler abuse (use the apps properly!)
-User-agent: *
-Disallow: /api/
-
-# Sitemap (host-scoped for Search Console)
 Sitemap: https://${GENEGUESSR_HOST}/sitemap.xml
 `;
 }

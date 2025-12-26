@@ -1,5 +1,5 @@
 // ⚡ PERFORMANCE: Mark navigation start for pre-zero timing measurement
-const NAVIGATION_START = performance.now();
+var NAVIGATION_START = performance.now();
 console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
 /**
