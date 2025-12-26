@@ -178,12 +178,18 @@ export default {
       // For HTML, rewrite links so navigation goes to main site, not subdomain
       if (response.headers.get('content-type')?.includes('text/html')) {
         let html = await response.text();
-        // Rewrite relative homepage links to absolute main site URL
-        // The PageTitle component renders: <a href={baseDir} class="site-brand">
-        // On subdomain root, baseDir is "/" which we need to change to "https://brinedew.bio/"
+        // Rewrite site-brand/home links to absolute main site URL.
+        // Quartz renders: <a href={baseDir} class="site-brand"> where baseDir may be "/" or "../..".
+        // If left relative on the subdomain, client-side navigation can re-inject scripts and
+        // cause reload-time errors (e.g., redeclared top-level consts in app bundles).
         html = html.replace(
-          /<a\s+href=["']\/["']\s+class=["']site-brand["']/g,
-          '<a href="https://brinedew.bio/" class="site-brand"'
+          /<a\b[^>]*\bclass=["'][^"']*\bsite-brand\b[^"']*["'][^>]*>/gi,
+          (tag) => {
+            if (!/\bhref\s*=/i.test(tag)) {
+              return tag;
+            }
+            return tag.replace(/\bhref=["'][^"']*["']/i, 'href="https://brinedew.bio/"');
+          }
         );
 
         // Rewrite all internal navigation links to point to main domain
