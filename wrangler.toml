@@ -46,3 +46,7 @@ new_sqlite_classes = ["GameSession"]
 [[r2_buckets]]
 binding = "STRUCTURES_BUCKET"
 bucket_name = "geneguessr-structures"
+
+# Daily pre-warm cron: runs at 23:55 UTC to warm next day's target structure
+[triggers]
+crons = ["55 23 * * *"]

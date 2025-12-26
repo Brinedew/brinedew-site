@@ -571,10 +571,89 @@ export default {
       }
     }
 
-    return Response.json({ error: 'Not found' }, { 
+    return Response.json({ error: 'Not found' }, {
       status: 404,
-      headers: corsHeaders 
+      headers: corsHeaders
     });
+  },
+
+  /**
+   * Scheduled handler for daily pre-warming.
+   * Runs at 23:55 UTC to warm next day's target structure and bootstrap cache.
+   * This eliminates cold start latency for the first user of each day.
+   */
+  async scheduled(event, env, ctx) {
+    console.log('[CRON] Daily pre-warm triggered at', new Date().toISOString());
+
+    try {
+      // Get tomorrow's date
+      const tomorrow = new Date();
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+      // 1. Check for admin override first
+      const overrideId = await env.KV.get(`puzzle_override:${tomorrowStr}`);
+      let targetProtein;
+      let source;
+
+      if (overrideId) {
+        targetProtein = await fetchProteinByUniprot(env.DB, overrideId);
+        source = 'admin_override';
+        console.log(`[CRON] Using admin override for ${tomorrowStr}: ${overrideId}`);
+      } else {
+        // 2. Use deterministic selection
+        const eligibleIds = await getEligibleProteinIds(env.DB);
+        const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT;
+        const selection = await pickDailyTarget(env.DB, eligibleIds, salt, tomorrowStr);
+        targetProtein = selection?.protein;
+        source = 'computed';
+        console.log(`[CRON] Computed target for ${tomorrowStr}: ${targetProtein?.uniprot}`);
+      }
+
+      if (!targetProtein) {
+        console.error('[CRON] No target protein found for', tomorrowStr);
+        return;
+      }
+
+      // 3. Get structure metadata
+      const structureMeta = await getCanonicalStructureMeta(targetProtein, env);
+      if (!structureMeta?.r2Key) {
+        console.error('[CRON] No structure meta for', targetProtein.uniprot);
+        return;
+      }
+
+      // 4. Pre-cache structure in R2 with pinning metadata
+      const cached = await ensureStructureCachedWithPin(env, structureMeta, tomorrowStr);
+      if (cached) {
+        console.log(`[CRON] Structure cached: ${structureMeta.r2Key}, pinned until ${tomorrowStr}`);
+      } else {
+        console.warn(`[CRON] Failed to cache structure for ${targetProtein.uniprot}`);
+      }
+
+      // 5. Build structure token for bootstrap cache
+      const structureToken = {
+        sourceLabel: structureMeta.sourceLabel,
+        displayLabel: structureMeta.displayLabel,
+        format: structureMeta.format,
+        url: `/api/structure-cached?key=${encodeURIComponent(structureMeta.r2Key)}`,
+        cacheKey: structureMeta.r2Key,
+        chainLabels: structureMeta.chainLabels || [],
+        linkUrl: structureMeta.linkUrl,
+        upstreamUrl: structureMeta.upstreamUrl,
+        sizeBytes: structureMeta.sizeBytes
+      };
+
+      // 6. Pre-warm bootstrap KV cache for tomorrow (for both origins)
+      const origins = ['https://brinedew.bio', 'https://geneguessr.brinedew.bio'];
+      for (const origin of origins) {
+        await setDailyBootstrapCache(env, tomorrowStr, origin, targetProtein, structureToken);
+      }
+      console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`);
+
+      console.log(`[CRON] Pre-warm complete: ${targetProtein.uniprot} (${source})`);
+    } catch (err) {
+      console.error('[CRON] Pre-warm failed:', err);
+    }
   }
 };
 
@@ -1105,6 +1184,7 @@ async function handleStructureToken(request, env, corsHeaders) {
  *    This saves 2-4 seconds on first load vs blocking on R2 write.
  */
 async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
+  const fetchStart = Date.now();
   const url = new URL(request.url);
   let cacheKey = url.searchParams.get('key');
   let protein = null;  // Hoist to function scope for lazy loading
@@ -1230,7 +1310,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
         await env.STRUCTURES_BUCKET.put(cacheKey, arrayBuffer, {
           httpMetadata: { contentType }
         });
-        await recordStructureCacheEntry(env, cacheKey, arrayBuffer.byteLength);
+        // FIFO eviction uses R2's built-in uploaded timestamp - no KV tracking needed
         console.log(`[LAZY-CACHE] Cached ${cacheKey} (${Math.round(arrayBuffer.byteLength/1024)}KB)`);
       } catch (e) {
         console.warn('[LAZY-CACHE] Background cache failed:', e);
@@ -1241,26 +1321,43 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     const isSwissModelPdb = cacheKey.startsWith('swissmodel/') && cacheKey.endsWith('.pdb');
     // Note: SwissModel PDB header fix won't work here since we're streaming
     // But SwissModel should always be pre-cached anyway (fallback above)
-    
-    return new Response(clientStream, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': contentType,
-        'Cache-Control': type === 'target' 
-          ? 'private, no-store, must-revalidate'
-          : 'public, max-age=604800, immutable'
-      }
-    });
+
+    // Only add timing headers for non-target requests (target headers could leak puzzle info)
+    const responseHeaders = {
+      ...corsHeaders,
+      'Content-Type': contentType,
+      'Cache-Control': type === 'target'
+        ? 'private, no-store, must-revalidate'
+        : 'public, max-age=604800, immutable'
+    };
+    if (type !== 'target') {
+      const [upstreamSource] = cacheKey.split('/');
+      responseHeaders['X-Cache'] = 'UPSTREAM';
+      responseHeaders['X-Source'] = upstreamSource;
+      responseHeaders['X-Fetch-Ms'] = String(Date.now() - fetchStart);
+    }
+    return new Response(clientStream, { headers: responseHeaders });
   }
-  
-  await touchStructureCacheEntry(env, cacheKey, object.size);
-  
+
+  // REMOVED: touchStructureCacheEntry - no longer tracking lastAccess in KV
+  // Using FIFO eviction based on R2's uploaded timestamp instead of LRU
+
   // For type=target, don't cache at edge - the "target" changes daily but URL is static
   // For key-based requests, cache 7 days - the key includes the structure ID so it's stable
   const cacheControl = type === 'target' 
     ? 'private, no-store, must-revalidate'
     : 'public, max-age=604800, immutable';
   
+  // Timing headers for monitoring (only for non-target requests - target headers could leak puzzle info)
+  const timingHeaders = {};
+  if (type !== 'target') {
+    const [r2Source] = cacheKey.split('/');
+    timingHeaders['X-Cache'] = 'R2';
+    timingHeaders['X-Source'] = r2Source;
+    timingHeaders['X-Fetch-Ms'] = String(Date.now() - fetchStart);
+    timingHeaders['X-Size'] = String(object.size);
+  }
+
   // SWISS-MODEL PDB files lack the HEADER record that Mol* requires for parsing.
   // Mol*'s PDB parser needs a HEADER to create an "entry" object; without it,
   // we get "Cannot read properties of undefined (reading 'entry')" errors.
@@ -1275,19 +1372,23 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     const combinedBuffer = new Uint8Array(headerBytes.length + originalData.byteLength);
     combinedBuffer.set(headerBytes, 0);
     combinedBuffer.set(new Uint8Array(originalData), headerBytes.length);
-    
-    return new Response(combinedBuffer, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'chemical/x-pdb',
-        'Cache-Control': cacheControl
-      }
-    });
+
+    const swissHeaders = {
+      ...corsHeaders,
+      ...timingHeaders,
+      'Content-Type': 'chemical/x-pdb',
+      'Cache-Control': cacheControl
+    };
+    if (type !== 'target') {
+      swissHeaders['X-Size'] = String(combinedBuffer.byteLength);  // Override with actual size after header prepend
+    }
+    return new Response(combinedBuffer, { headers: swissHeaders });
   }
-  
+
   return new Response(object.body, {
     headers: {
       ...corsHeaders,
+      ...timingHeaders,
       'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
       'Cache-Control': cacheControl
     }
@@ -3059,13 +3160,85 @@ async function ensureStructureCached(env, meta, options = {}) {
     await multipartUploadFromStream(env, meta.r2Key, upstreamResp.body, contentType);
   }
   
-  // Get actual size from R2 object (Content-Length may be missing from upstream)
-  const uploaded = await env.STRUCTURES_BUCKET.head(meta.r2Key);
-  const uploadedSize = uploaded?.size || 0;
-  await recordStructureCacheEntry(env, meta.r2Key, uploadedSize);
+  // FIFO eviction uses R2's built-in uploaded timestamp - no KV tracking needed
   if (options?.proteinId && env?.DB) {
     await clearStructureFailure(env.DB, options.proteinId);
   }
+  return true;
+}
+
+/**
+ * Cache a structure with pinning metadata for daily target protection.
+ * Pinned structures are skipped during FIFO eviction until pinnedUntil date passes.
+ * @param {Object} env - Worker environment bindings
+ * @param {Object} meta - Structure metadata with r2Key, upstreamUrl, format, source
+ * @param {string} pinnedUntil - Date string (YYYY-MM-DD) until which the structure is protected
+ * @returns {boolean} True if structure was cached successfully
+ */
+async function ensureStructureCachedWithPin(env, meta, pinnedUntil) {
+  if (!meta?.r2Key) {
+    return false;
+  }
+
+  // Check if already cached
+  const existing = await env.STRUCTURES_BUCKET.head(meta.r2Key);
+  if (existing) {
+    // Already cached - check if pin needs update
+    const currentPin = existing.customMetadata?.pinnedUntil;
+    if (currentPin && currentPin >= pinnedUntil) {
+      // Already pinned for same or later date
+      console.log(`[PIN] ${meta.r2Key} already pinned until ${currentPin}`);
+      return true;
+    }
+    // Need to update pin - R2 doesn't support metadata-only updates,
+    // so we'd need to re-upload. For now, just log and accept existing cache.
+    console.log(`[PIN] ${meta.r2Key} cached but pin expired (${currentPin}), accepting anyway`);
+    return true;
+  }
+
+  if (!meta.upstreamUrl) {
+    console.warn(`[PIN] ${meta.r2Key} has no upstream URL`);
+    return false;
+  }
+
+  // Check bucket capacity and evict if needed
+  let usage = await getStructureBucketUsage(env);
+  if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
+    const targetBytes = Math.floor(STRUCTURE_BUCKET_CAP_BYTES * STRUCTURE_CACHE_TARGET_RATIO);
+    const eviction = await evictStructureCache(env, targetBytes);
+    if (eviction.removed > 0) {
+      console.warn('[PIN] Structure cache eviction before caching daily target', eviction);
+    }
+  }
+
+  // Fetch from upstream
+  const upstreamResp = await fetch(meta.upstreamUrl, {
+    method: 'GET',
+    headers: { 'User-Agent': 'GeneGuessr-Worker/1.0' }
+  });
+
+  if (!upstreamResp.ok || !upstreamResp.body) {
+    console.warn(`[PIN] Upstream fetch failed for ${meta.r2Key}:`, upstreamResp.status);
+    return false;
+  }
+
+  const contentType = meta.format === 'bcif'
+    ? 'application/octet-stream'
+    : (upstreamResp.headers.get('Content-Type') || 'chemical/x-cif');
+
+  // Read entire body for simple put (daily targets are usually small)
+  const data = await upstreamResp.arrayBuffer();
+
+  // Store with pinning metadata
+  await env.STRUCTURES_BUCKET.put(meta.r2Key, data, {
+    httpMetadata: { contentType },
+    customMetadata: {
+      pinnedUntil,  // "2025-12-27" - protects from eviction until this date
+      source: meta.source || 'unknown'
+    }
+  });
+
+  console.log(`[PIN] Cached ${meta.r2Key} (${Math.round(data.byteLength / 1024)}KB) pinned until ${pinnedUntil}`);
   return true;
 }
 
@@ -3148,96 +3321,76 @@ async function getStructureBucketUsage(env) {
   return { bytes, objects };
 }
 
-async function recordStructureCacheEntry(env, key, size) {
-  if (!env?.KV || !key) {
-    return;
-  }
-  const meta = {
-    key,
-    size: Number(size) || 0,
-    lastAccess: Date.now()
-  };
-  // No TTL - entries persist until explicitly deleted by evictStructureCache()
-  await env.KV.put(`${STRUCTURE_CACHE_META_PREFIX}${key}`, JSON.stringify(meta));
-}
-
-async function touchStructureCacheEntry(env, key, sizeHint) {
-  if (!env?.KV || !key) {
-    return;
-  }
-  const cacheKey = `${STRUCTURE_CACHE_META_PREFIX}${key}`;
-  const raw = await env.KV.get(cacheKey);
-  if (!raw) {
-    await recordStructureCacheEntry(env, key, sizeHint);
-    return;
-  }
-  try {
-    const meta = JSON.parse(raw);
-    meta.lastAccess = Date.now();
-    if (typeof sizeHint === 'number' && sizeHint > 0) {
-      meta.size = sizeHint;
-    }
-    // No TTL - entries persist until explicitly deleted by evictStructureCache()
-    await env.KV.put(cacheKey, JSON.stringify(meta));
-  } catch (err) {
-    console.warn('GeneGuessr: failed to touch cache entry, recreating', err);
-    await recordStructureCacheEntry(env, key, sizeHint);
-  }
-}
-
-async function listStructureCacheMeta(env) {
-  if (!env?.KV) {
+/**
+ * List all R2 objects in the structure cache bucket.
+ * Returns objects with key, size, uploaded timestamp, and customMetadata for FIFO eviction.
+ * customMetadata includes pinnedUntil for daily target protection.
+ */
+async function listStructureCacheObjects(env) {
+  if (!env?.STRUCTURES_BUCKET) {
     return [];
   }
-  const entries = [];
+  const objects = [];
   let cursor = undefined;
   do {
-    const resp = await env.KV.list({ prefix: STRUCTURE_CACHE_META_PREFIX, cursor });
-    for (const key of resp.keys || []) {
-      const raw = await env.KV.get(key.name);
-      if (!raw) {
-        continue;
-      }
-      try {
-        const meta = JSON.parse(raw);
-        if (meta?.key) {
-          entries.push(meta);
-        }
-      } catch {
-        // ignore malformed entry
-      }
+    const resp = await env.STRUCTURES_BUCKET.list({ cursor, include: ['customMetadata'] });
+    for (const obj of resp.objects || []) {
+      objects.push({
+        key: obj.key,
+        size: obj.size,
+        uploaded: obj.uploaded, // Date object from R2
+        customMetadata: obj.customMetadata || {}
+      });
     }
-    cursor = resp.list_complete ? undefined : resp.cursor;
+    cursor = resp.truncated ? resp.cursor : undefined;
   } while (cursor);
-  return entries;
+  return objects;
 }
 
+/**
+ * FIFO eviction: delete oldest objects (by R2 uploaded timestamp) until under target.
+ * No KV tracking needed - R2 provides the uploaded timestamp natively.
+ * Skips objects with pinnedUntil metadata that haven't expired (protects daily targets).
+ */
 async function evictStructureCache(env, targetBytes) {
   const usage = await getStructureBucketUsage(env);
   if (usage.bytes <= targetBytes) {
-    return { beforeBytes: usage.bytes, afterBytes: usage.bytes, removed: 0 };
+    return { beforeBytes: usage.bytes, afterBytes: usage.bytes, removed: 0, skippedPinned: 0 };
   }
-  const entries = await listStructureCacheMeta(env);
-  entries.sort((a, b) => (a.lastAccess || 0) - (b.lastAccess || 0));
+  const objects = await listStructureCacheObjects(env);
+  // FIFO: sort by uploaded timestamp, oldest first
+  objects.sort((a, b) => (a.uploaded?.getTime() || 0) - (b.uploaded?.getTime() || 0));
+
+  const today = new Date().toISOString().slice(0, 10);
   let currentBytes = usage.bytes;
   let removed = 0;
-  for (const meta of entries) {
-    if (!meta?.key) {
+  let skippedPinned = 0;
+
+  for (const obj of objects) {
+    if (!obj?.key) {
       continue;
     }
-    try {
-      await env.STRUCTURES_BUCKET.delete(meta.key);
-    } catch (err) {
-      console.warn('GeneGuessr: failed to delete R2 object during eviction', meta.key, err);
+
+    // Skip pinned objects that haven't expired (daily target protection)
+    const pinnedUntil = obj.customMetadata?.pinnedUntil;
+    if (pinnedUntil && pinnedUntil >= today) {
+      console.log(`[EVICT] Skipping pinned: ${obj.key} (until ${pinnedUntil})`);
+      skippedPinned += 1;
+      continue;
     }
-    await env.KV.delete(`${STRUCTURE_CACHE_META_PREFIX}${meta.key}`);
-    currentBytes -= Number(meta.size) || 0;
+
+    try {
+      await env.STRUCTURES_BUCKET.delete(obj.key);
+    } catch (err) {
+      console.warn('GeneGuessr: failed to delete R2 object during eviction', obj.key, err);
+    }
+    currentBytes -= Number(obj.size) || 0;
     removed += 1;
     if (currentBytes <= targetBytes) {
       break;
     }
   }
-  return { beforeBytes: usage.bytes, afterBytes: currentBytes, removed };
+  return { beforeBytes: usage.bytes, afterBytes: currentBytes, removed, skippedPinned };
 }
 
 function sanitizeKeySegment(value) {

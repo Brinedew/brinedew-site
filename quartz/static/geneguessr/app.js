@@ -2856,7 +2856,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
   function markGuessViewersDirty() {
     for (const id of Array.from(renderedViewers)) {
       if (id.startsWith('guess-card-')) {
-        markViewerDirty(id);
+        disposeViewer(id);
       }
     }
   }
@@ -3134,7 +3134,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       console.log(`[B-206 DEBUG] New random target restart #${practiceRestartCounter}`);
       gameState.lockedHintClicks = [];
       // Clear viewer tracking + structure token cache to force fresh load
-      markViewerDirty('pg-clue-structure');
+      disposeViewer('pg-clue-structure');
       targetStructureInfo = null; // Force ensureStructureTokenForTarget to re-fetch
       lastRenderedGameDate = null; // Force full re-render
       lastRenderedSessionKey = null; // Invalidate session key
@@ -3626,11 +3626,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     // Full re-render needed: new session, game over transition, or no existing viewer
     // B-206: Also mark dirty on sessionChanged (catches same-day random restarts)
     if (viewerAlreadyLoaded && (dateChanged || sessionChanged || transitioningToGameOver)) {
-      console.log(`[B-206 DEBUG] Marking clue viewer dirty - dateChanged: ${dateChanged}, sessionChanged: ${sessionChanged}`);
-      markViewerDirty('pg-clue-structure');
+      console.log(`[B-206 DEBUG] Disposing clue viewer - dateChanged: ${dateChanged}, sessionChanged: ${sessionChanged}`);
+      disposeViewer('pg-clue-structure');
     }
     if (gameOver) {
-      markViewerDirty('pg-solution-card-structure');
+      disposeViewer('pg-solution-card-structure');
     }
     slot.innerHTML = renderClueCard(gameOver);
     lastRenderedGameDate = gameState.date;
@@ -5347,4 +5347,3 @@ https://brinedew.bio/apps/geneguessr/`;
   }
 
 })();
-
