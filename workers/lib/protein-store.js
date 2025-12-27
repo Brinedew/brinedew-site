@@ -292,7 +292,7 @@ export async function fetchProteinEmbedding(db, geneSymbol) {
   return vector;
 }
 
-// Cache for dual embeddings (HiG2Vec + ESM2)
+// Cache for dual embeddings (HiG2Vec + SaProt, with optional legacy ESM2 fallback)
 const dualEmbeddingCache = new Map();
 const MAX_DUAL_CACHE_SIZE = 256;
 
@@ -310,24 +310,25 @@ function rememberDualEmbedding(key, value) {
 }
 
 /**
- * Fetch both HiG2Vec and ESM2 embeddings for a gene.
- * Returns { hig2vec: Float32Array|null, esm2: Float32Array|null }
+ * Fetch HiG2Vec + SaProt embeddings for a gene (with optional legacy ESM2 fallback).
+ * Returns { hig2vec: Float32Array|null, saprot: Float32Array|null, esm2: Float32Array|null }
  */
 export async function fetchDualEmbeddings(db, geneSymbol) {
   if (!geneSymbol) {
-    return { hig2vec: null, esm2: null };
+    return { hig2vec: null, saprot: null, esm2: null };
   }
   const key = geneSymbol.toUpperCase();
   if (dualEmbeddingCache.has(key)) {
     return dualEmbeddingCache.get(key);
   }
   const row = await db.prepare(
-    `SELECT vector, dim, esm2_vector, esm2_dim 
+    `SELECT vector, dim, esm2_vector, esm2_dim, saprot_vector, saprot_dim
      FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`
   ).bind(key).first();
 
   const result = {
     hig2vec: toFloat32Vector(row),
+    saprot: row?.saprot_vector ? toFloat16ToFloat32Vector(row.saprot_vector, row.saprot_dim) : null,
     esm2: row?.esm2_vector ? toFloat16ToFloat32Vector(row.esm2_vector, row.esm2_dim) : null
   };
   rememberDualEmbedding(key, result);
@@ -660,10 +661,15 @@ const EMBEDDING_STATS = {
   hig2vec: { scale: 0.4101, offset: 0.5123 }
 };
 
-// Soft-OR calibration constants (q90, gamma=1.6)
+// Soft-OR calibration constants (q90, gamma=1.6).
+// Notes:
+// - `hig2vec` is computed on the isotropic HiG2Vec space (mean-center + remove top PCs + L2).
+// - `saprot` is computed on isotropic SaProt (mean-center + L2).
+// - `esm2` is legacy fallback for older rows that lack SaProt.
 const SOFT_OR_CALIBRATION = {
   gamma: 1.6,
-  hig2vec: { slope: 1.8304547958771813, midpoint: 0.3030015605091524 },
+  hig2vec: { slope: 3.0523066887460613, midpoint: 0.11959530995180852 },
+  saprot: { slope: 3.5181330442836676, midpoint: 0.2361672823590854 },
   esm2: { slope: 4.584771332415639, midpoint: 0.12455377192395384 }
 };
 
@@ -699,17 +705,18 @@ function sigmoid(value) {
   return 1 / (1 + Math.exp(-value));
 }
 
-function getSoftOrPercent(cosH, cosE) {
-  if (!Number.isFinite(cosH) && !Number.isFinite(cosE)) {
+function getSoftOrPercent(cosH, cosSeq, seqKey = 'saprot') {
+  if (!Number.isFinite(cosH) && !Number.isFinite(cosSeq)) {
     return null;
   }
+  const seq = SOFT_OR_CALIBRATION[seqKey] || SOFT_OR_CALIBRATION.saprot;
   const h = Number.isFinite(cosH)
     ? sigmoid(SOFT_OR_CALIBRATION.hig2vec.slope * (cosH - SOFT_OR_CALIBRATION.hig2vec.midpoint))
     : 0;
-  const e = Number.isFinite(cosE)
-    ? sigmoid(SOFT_OR_CALIBRATION.esm2.slope * (cosE - SOFT_OR_CALIBRATION.esm2.midpoint))
+  const s = Number.isFinite(cosSeq)
+    ? sigmoid(seq.slope * (cosSeq - seq.midpoint))
     : 0;
-  const pOr = 1 - (1 - h) * (1 - e);
+  const pOr = 1 - (1 - h) * (1 - s);
   const pDisplay = Math.pow(pOr, SOFT_OR_CALIBRATION.gamma);
   return Math.round(pDisplay * 100);
 }
@@ -769,7 +776,7 @@ export async function getHig2vecSimilarity(db, guessId, targetId) {
     return null;
   }
   const cosine = cosineSimilarity(guessVec, targetVec);
-  return getSoftOrPercent(cosine, null);
+  return getSoftOrPercent(cosine, null, 'saprot');
 }
 
 /**
@@ -787,7 +794,7 @@ function getLadderRank(neighbors, guessKey) {
 }
 
 /**
- * Compute similarity using calibrated soft-OR on HiG2Vec + isotropic ESM2.
+ * Compute similarity using calibrated soft-OR on HiG2Vec + isotropic SaProt.
  * Returns integer percentage (0-100).
  * 
  * @param {D1Database} db - The D1 database binding
@@ -818,10 +825,15 @@ export async function getBlendedSimilarity(db, guessId, targetId, options = {}) 
   const cosH = (guessEmbeddings?.hig2vec && targetEmbeddings?.hig2vec)
     ? cosineSimilarity(guessEmbeddings.hig2vec, targetEmbeddings.hig2vec)
     : null;
+  const cosS = (guessEmbeddings?.saprot && targetEmbeddings?.saprot)
+    ? cosineSimilarity(guessEmbeddings.saprot, targetEmbeddings.saprot)
+    : null;
   const cosE = (guessEmbeddings?.esm2 && targetEmbeddings?.esm2)
     ? cosineSimilarity(guessEmbeddings.esm2, targetEmbeddings.esm2)
     : null;
 
-  const percent = getSoftOrPercent(cosH, cosE);
+  const cosSeq = Number.isFinite(cosS) ? cosS : cosE;
+  const seqKey = Number.isFinite(cosS) ? 'saprot' : 'esm2';
+  const percent = getSoftOrPercent(cosH, cosSeq, seqKey);
   return { blended: percent, isLadder, ladderRank };
 }
