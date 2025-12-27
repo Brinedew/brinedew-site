@@ -23,7 +23,7 @@ const DOMAIN_SPOILER_TOKEN_STOPWORDS = new Set([
   'finger', 'zinc', 'kinase', 'olfactory', 'ribosomal', 'alpha', 'immunoglobulin', 'phosphatase',
   'beta', 'tyrosine', 'interacting', 'dehydrogenase', 'rich', 'ubiquitin', 'inhibitor',
   'transmembrane', 'transporter', 'leucine', 'synthase', 'channel', 'atpase', 'prolyl',
-  'interleukin', 'isomerase', 'transcription',
+  'isomerase', 'transcription',
 ]);
 
 export function getDomainSpoilerTokensFromFullName(fullName) {
