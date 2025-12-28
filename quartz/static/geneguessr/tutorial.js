@@ -78,15 +78,15 @@
   ];
 
   const ILLUSTRATION_FILES = {
-    1: '1.png',
-    2: '2.png',
-    3: '3.png',
-    4: '4.png',
-    5: '5.png',
-    6: '6.png',
-    7: '7.png',
-    8: '8.png',
-    9: '9.png'
+    1: '1.webp',
+    2: '2.webp',
+    3: '3.webp',
+    4: '4.webp',
+    5: '5.webp',
+    6: '6.webp',
+    7: '7.webp',
+    8: '8.webp',
+    9: '9.webp'
   };
 
   function resolveIllustrationPath(slot) {

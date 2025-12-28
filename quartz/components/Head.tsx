@@ -162,6 +162,7 @@ export default (() => {
               )}
               {isGeneguessr && (
                 <>
+                  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
               <link
                     rel="stylesheet"
                     href={joinSegments(root, "static", `geneguessr/styles.css?v=${CACHE_BUST}`)}
