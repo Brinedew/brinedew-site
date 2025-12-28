@@ -3865,7 +3865,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
       matchedHintMap,
       structureInfo: getStructureInfoForProtein(guessEntry.uniprot),
       linkable: true,
-      highlightMatches: isLatestGuess
+      highlightMatches: true
     });
   }
 
