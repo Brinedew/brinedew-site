@@ -147,7 +147,7 @@ export function maskClueSections(sections, revealedHints = new Set()) {
       const revealed = !locked && revealedHints.has(item.id);
       return {
         ...item,
-        fullText: textValue,
+        fullText: revealed ? textValue : undefined,
         highlighted: Boolean(item.highlighted),
         locked,
         revealed,

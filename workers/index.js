@@ -2406,6 +2406,10 @@ function applyMatchReveals(sections, matches) {
       if (!item || !item.fullText) {
         return;
       }
+      // Don't reveal locked hints through matching
+      if (item.locked) {
+        return;
+      }
       if (set.has(item.fullText)) {
         item.revealed = true;
         item.text = item.fullText;
