@@ -1,18 +1,19 @@
-# Quartz v4
+# brinedew.bio
 
-> “[One] who works with the door open gets all kinds of interruptions, but [they] also occasionally gets clues as to what the world is and what might be important.” — Richard Hamming
+Personal research wiki covering cancer biology, aging, and computational biology.
 
-Quartz is a set of tools that helps you publish your [digital garden](https://jzhao.xyz/posts/networked-thought) and notes as a website for free.
-Quartz v4 features a from-the-ground rewrite focusing on end-user extensibility and ease-of-use.
+**Live site:** https://brinedew.bio
 
-🔗 Read the documentation and get started: https://quartz.jzhao.xyz/
+## What's here
 
-[Join the Discord Community](https://discord.gg/cRFFHYye7t)
+- **Wiki** - Notes on genes, proteins, aging theories, cancer models
+- **GeneGuessr** - Daily protein guessing game (Wordle-style)
+- **Blog** - Occasional posts on research topics
 
-## Sponsors
+## Tech
 
-<p align="center">
-  <a href="https://github.com/sponsors/jackyzha0">
-    <img src="https://cdn.jsdelivr.net/gh/jackyzha0/jackyzha0/sponsorkit/sponsors.svg" />
-  </a>
-</p>
+Built with [Quartz](https://quartz.jzhao.xyz/), deployed via GitHub Pages. Content managed in Obsidian.
+
+## License
+
+Code: MIT (inherited from Quartz). Written content: All rights reserved.
