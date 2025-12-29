@@ -4,7 +4,7 @@
  */
 
 import { parseCookies } from './auth.js';
-import { buildStructurePreviewPayload, sanitizeProteinSummary } from './lib/structure-utils.js';
+import { sanitizeProteinSummary } from './lib/structure-utils.js';
 import {
   fetchProteinByUniprot as loadProtein,
   getEligibleProteinIds,
@@ -1051,46 +1051,6 @@ export async function handleDeleteOverride(request, env) {
     success: true,
     message: `Protein override removed for ${date}`
   });
-}
-
-/**
- * GET /api/admin/protein-preview
- * Prepare Mol* render payload for admin preview
- */
-export async function handleProteinPreview(request, env) {
-  if (!(await isAdmin(request, env))) {
-    return Response.json({ error: 'Unauthorized' }, { status: 403 });
-  }
-
-  const url = new URL(request.url);
-  const uniprot = url.searchParams.get('uniprot');
-  if (!uniprot) {
-    return Response.json({ error: 'Missing required parameter: uniprot' }, { status: 400 });
-  }
-
-  try {
-    const normalized = (uniprot || '').trim().toUpperCase();
-    const protein = await loadProtein(env.DB, normalized);
-    if (!protein) {
-      return Response.json({ error: `Protein ${uniprot} not found` }, { status: 404 });
-    }
-    const preview = buildStructurePreviewPayload(protein);
-    if (!preview) {
-      return Response.json({
-        available: false,
-        message: 'No valid structure available for preview',
-        protein: sanitizeProteinSummary(protein)
-      }, { status: 200 });
-    }
-    return Response.json({
-      protein: sanitizeProteinSummary(protein),
-      representation: preview.representation,
-      renderOptions: preview.renderOptions
-    });
-  } catch (err) {
-    console.error('Error building protein preview', err);
-    return Response.json({ error: 'Failed to build preview' }, { status: 500 });
-  }
 }
 
 /**

@@ -87,7 +87,6 @@ import {
   handleGraphicsSettings,
   DEFAULT_GRAPHICS_SETTINGS,
   normalizeGraphicsSettings,
-  handleProteinPreview,
   handleAdminSchedule,
   handleAdminCards,
   handleAdminGuessStats,
@@ -420,14 +419,6 @@ export default {
       } catch (err) {
         return Response.json({ error: err.message }, { status: 400, headers: corsHeaders });
       }
-    }
-
-    if (url.pathname === '/api/admin/protein-preview' && request.method === 'GET') {
-      const response = await handleProteinPreview(request, env);
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders }
-      });
     }
 
     if (url.pathname === '/api/admin/similarity' && request.method === 'GET') {

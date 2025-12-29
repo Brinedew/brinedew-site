@@ -2924,12 +2924,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
 
       try {
-        const response = await fetch(API_BASE + '/api/admin/protein-preview?uniprot=' + encodeURIComponent(uniprot), {
+        // Use the same API endpoint as the game for consistent structure rendering
+        const response = await fetch(API_BASE + '/api/structure-token?uniprot=' + encodeURIComponent(uniprot), {
           credentials: 'include'
         });
-        const payload = await response.json();
+        const data = await response.json();
         if (!response.ok) {
-          throw new Error(payload.error || 'Failed to load preview data');
+          throw new Error(data.error || 'Failed to load structure data');
         }
 
         // If a newer preview load started while this request was in flight, bail out
@@ -2938,24 +2939,20 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           return;
         }
 
-        // The server may return a successful response with no preview available.
-        if (payload && payload.available === false) {
+        // Check if structure is available
+        if (!data.url) {
           await destroyPreviewViewer();
           previewStructureChoice = null;
           previewReady = false;
           previewLoadingEl.hidden = true;
           previewErrorEl.hidden = true;
           previewPlaceholderEl.hidden = false;
-          previewPlaceholderEl.textContent = payload.message || 'No 3D structure available for preview.';
+          previewPlaceholderEl.textContent = 'No 3D structure available for preview.';
           previewStatusEl.textContent = 'Preview unavailable';
           if (previewCalloutsEl) {
             previewCalloutsEl.hidden = true;
           }
           return;
-        }
-
-        if (!payload.renderOptions || !payload.representation) {
-          throw new Error('Preview payload incomplete');
         }
 
         await destroyPreviewViewer();
@@ -2965,9 +2962,38 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         if (!mountTarget) {
           throw new Error('Preview container unavailable');
         }
-        viewer.render(mountTarget, payload.renderOptions);
+
+        // Build render options matching the game's app.js
+        // This ensures admin preview looks identical to live site
+        const isBinary = data.format === 'bcif';
+        const renderOptions = {
+          moleculeId: data.displayLabel || uniprot,
+          customData: {
+            url: data.url,
+            format: isBinary ? 'cif' : (data.format || 'cif'),
+            binary: isBinary
+          },
+          visualStyle: 'cartoon',
+          lighting: 'glossy',
+          hideControls: true,
+          hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
+          pdbeLink: false,
+          loadMaps: false,
+          selectInteraction: false,
+          lowPrecisionCoords: false,
+          hideStructureSourceTooltip: true
+        };
+
+        viewer.render(mountTarget, renderOptions);
         disableViewerUi(viewer);
         suppressViewerInteractivity(viewer);
+
+        // Store representation info for chain coloring
+        const representation = {
+          source: data.sourceLabel === 'PDB' ? 'pdb' : (data.sourceLabel === 'AlphaFold' ? 'alphafold' : 'swissmodel'),
+          structureId: data.displayLabel,
+          chainLabels: data.chainLabels
+        };
 
         const finalize = async () => {
           if (loadToken !== previewLoadToken) {
@@ -2975,11 +3001,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             return;
           }
           previewViewer = viewer;
-          previewStructureChoice = payload.representation;
+          previewStructureChoice = representation;
           previewReady = true;
           previewLoadingEl.hidden = true;
 
-          previewStatusEl.textContent = 'Showing ' + (payload.protein && payload.protein.hgnc ? payload.protein.hgnc : uniprot);
+          previewStatusEl.textContent = 'Showing ' + uniprot;
           refreshPreview({ immediate: true });
           applyPreviewChainColoring(viewer);
         };
