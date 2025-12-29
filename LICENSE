@@ -1,13 +1,21 @@
 License overview
 
-This repository contains both software and original content.
+This repository contains both software and original content. Licenses are scoped by path.
 
-1) Quartz framework and related software code
-   Licensed under MIT. See: LICENSES/MIT-Quartz.txt
+1. Software (Quartz framework + code)
 
-2) Site content (content/, writing, wiki pages, images)
-   (c) Brinedew 2024-2025
-   Licensed under CC BY-NC-ND 4.0. See: LICENSES/CC-BY-NC-ND-4.0.txt
+All files outside of content/ are licensed under the MIT License, except where a file or directory states otherwise.
 
-3) Third-party components
-   Retain their original licenses as noted in their files.
+See: LICENSES/MIT-Quartz.txt
+
+2. Site content (original writing/media)
+
+All original content authored by Brinedew in content/ is (c) Brinedew 2024-2025 and licensed under CC BY-NC-ND 4.0, except where otherwise noted.
+
+See: LICENSES/CC-BY-NC-ND-4.0.txt
+
+3. Third-party material
+
+Third-party code and third-party content (including any images/media not authored by Brinedew) retain their original licenses as noted in their files or sources and are not covered by (2).
+
+Contact: https://brinedew.bio/About
