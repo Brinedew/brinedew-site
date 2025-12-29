@@ -20,7 +20,7 @@ Daily protein guessing game. Infer today's target from function, domains, and ti
 
 Browse all protein personas with sortable gallery view and colored placeholders.
 
-- **Data:** Features and persona attributes from Thoteins
+- **Data:** Features and persona attributes from Cellulore
 - **Sorting:** By name, lightness, or age
 - **Status:** Static display with CSV-based updates
 

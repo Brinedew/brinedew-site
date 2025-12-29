@@ -3,7 +3,7 @@
 Protein Page Enrichment Script
 
 Scans Website/content/wiki/*.md for protein pages and enriches frontmatter
-with molecular + persona data from Thoteins CSVs.
+with molecular + persona data from Cellulore.
 
 Usage:
     python scripts/enrich-proteins.py
@@ -36,23 +36,16 @@ PUBLIC_DIR = WEBSITE_ROOT / "public"
 STATIC_PROTEINS_DIR = WEBSITE_ROOT / "static" / "proteins"
 ATTACHMENTS_DIR = CONTENT_DIR / "Attachments"
 
-# Thoteins data sources:
-# - v2 (preferred): ../Datasets/thoteins-v2/proteins_with_demographics.json (outside Website repo)
-# - v1 (deprecated): Website/tools/thoteins-v1/data/proteins/*.csv (often not present in CI)
+# Cellulore data source: ../Datasets/cellulore/proteins_with_demographics.json (outside Website repo)
 REPO_ROOT = WEBSITE_ROOT.parent
 
-THOTEINS_V2_ROOT = REPO_ROOT / "Datasets" / "thoteins-v2"
-THOTEINS_V2_PROTEINS_JSON = THOTEINS_V2_ROOT / "proteins_with_demographics.json"
-
-THOTEINS_V1_ROOT = WEBSITE_ROOT / "tools" / "thoteins-v1"
-THOTEINS_V1_DATA_DIR = THOTEINS_V1_ROOT / "data" / "proteins"
-THOTEINS_V1_FEATURES_CSV = THOTEINS_V1_DATA_DIR / "features.csv"
-THOTEINS_V1_PERSONA_CSV = THOTEINS_V1_DATA_DIR / "persona.csv"
+CELLULORE_DATA_ROOT = REPO_ROOT / "Datasets" / "cellulore"
+CELLULORE_PROTEINS_JSON = CELLULORE_DATA_ROOT / "proteins_with_demographics.json"
 
 # Output
 IMAGE_QUEUE_FILE = WEBSITE_ROOT / "image_generation_queue.txt"
 
-# Template from Thoteins logic.js
+# Prompt template for portrait generation
 PROMPT_TEMPLATE = """Editorial magazine cover portrait photo. Magazine title: "{symbol} MONTHLY".
 Subject: {age} year old {gender}, {height} cm tall, {ethnicity} appearance, {hair_color} hair, {expression} expression, wearing {clothing_style} with {accessories_count} accessories, {pose_description}, {background_setting}.
 Professional studio lighting, high fashion photography style, sharp focus on face, shallow depth of field.
@@ -102,20 +95,19 @@ def normalize_mass_kda(mass_value) -> Optional[float]:
     except Exception:
         return None
 
-    # Thoteins v2 stores mass in daltons (e.g., 16499). Frontmatter uses kDa.
+    # Cellulore stores mass in daltons (e.g., 16499). Frontmatter uses kDa.
     if mass > 1000:
         return mass / 1000.0
     return mass
 
 
-def load_thoteins_data():
-    """Load Thoteins CSVs and mapping configuration."""
-    print("Loading Thoteins data...")
+def load_cellulore_data():
+    """Load Cellulore protein data."""
+    print("Loading Cellulore data...")
 
-    # Prefer v2 dataset if available (outside the Website repo).
-    if THOTEINS_V2_PROTEINS_JSON.exists():
+    if CELLULORE_PROTEINS_JSON.exists():
         try:
-            with open(THOTEINS_V2_PROTEINS_JSON, "r", encoding="utf-8") as f:
+            with open(CELLULORE_PROTEINS_JSON, "r", encoding="utf-8") as f:
                 raw = json.load(f)
             df = pd.json_normalize(raw, sep="_")
 
@@ -166,28 +158,15 @@ def load_thoteins_data():
 
             df["hexcode"] = df.apply(_hexcode_from_demographics, axis=1)
 
-            print(f"Loaded {len(df)} proteins from Thoteins v2 ({THOTEINS_V2_PROTEINS_JSON})")
+            print(f"Loaded {len(df)} proteins from {CELLULORE_PROTEINS_JSON}")
             return df, {}
         except Exception as err:
-            print(f"WARNING: Failed to load Thoteins v2 dataset at {THOTEINS_V2_PROTEINS_JSON}: {err}")
-
-    # Deprecated: v1 CSVs (often not present in CI).
-    if THOTEINS_V1_FEATURES_CSV.exists() and THOTEINS_V1_PERSONA_CSV.exists():
-        print(f"WARNING: Falling back to deprecated Thoteins v1 CSVs at {THOTEINS_V1_DATA_DIR}")
-        features = pd.read_csv(THOTEINS_V1_FEATURES_CSV)
-        persona = pd.read_csv(THOTEINS_V1_PERSONA_CSV)
-
-        combined = features.merge(persona, on="uniprot_id", how="left", suffixes=("", "_persona"))
-        combined = combined.loc[:, ~combined.columns.str.endswith("_persona")]
-
-        print(f"Loaded {len(combined)} proteins from Thoteins v1")
-        return combined, {}
+            print(f"WARNING: Failed to load Cellulore dataset at {CELLULORE_PROTEINS_JSON}: {err}")
 
     # No data available. Do not fail Pages builds.
     print("=" * 60)
-    print("WARNING: Thoteins dataset not found.")
-    print(f"- Looked for v2 JSON at: {THOTEINS_V2_PROTEINS_JSON}")
-    print(f"- Looked for v1 CSVs at: {THOTEINS_V1_DATA_DIR}")
+    print("WARNING: Cellulore dataset not found.")
+    print(f"- Expected: {CELLULORE_PROTEINS_JSON}")
     print("Skipping enrichment to avoid breaking builds.")
     print("=" * 60)
     return None, {}
@@ -205,7 +184,7 @@ def get_mapped_fields(mapping_config: Dict) -> Dict[str, str]:
 
 
 def generate_image_prompt(protein_data: pd.Series) -> str:
-    """Generate prompt from persona attributes using Thoteins template."""
+    """Generate prompt from persona attributes."""
     
     # Get values with fallbacks
     symbol = protein_data.get('gene_symbol', 'PROTEIN')
@@ -217,7 +196,7 @@ def generate_image_prompt(protein_data: pd.Series) -> str:
     # Persona attributes (from persona.csv or deterministic fallback)
     gender = protein_data.get('Sex', 'person')
     
-    # Fallback attributes (matching Thoteins deterministicHuman logic)
+    # Fallback attributes
     ethnicity = "European"
     hair_color = "dark brown"  
     expression = "confident"
@@ -272,7 +251,7 @@ def find_protein_pages() -> List[Path]:
 
 def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame, 
                         mapping_config: Dict, image_queue: List[str]):
-    """Enrich a single protein page with Thoteins data."""
+    """Enrich a single protein page with Cellulore data."""
     
     post = frontmatter.load(md_file)
     uniprot_id = post.get('uniprot_id')
@@ -285,7 +264,7 @@ def enrich_protein_page(md_file: Path, proteins_df: pd.DataFrame,
     protein_row = proteins_df[proteins_df['uniprot_id'] == uniprot_id]
     
     if protein_row.empty:
-        print(f"  WARNING: {uniprot_id} not in Thoteins database")
+        print(f"  WARNING: {uniprot_id} not in Cellulore database")
         return
     
     protein_data = protein_row.iloc[0]
@@ -399,10 +378,10 @@ def main():
     print("Protein Page Enrichment Script")
     print("=" * 60)
     
-    # Load Thoteins data
-    proteins_df, mapping_config = load_thoteins_data()
+    # Load Cellulore data
+    proteins_df, mapping_config = load_cellulore_data()
     if proteins_df is None:
-        print("[OK] No Thoteins data available; skipping enrichment.")
+        print("[OK] No Cellulore data available; skipping enrichment.")
         return
     
     # Find protein pages

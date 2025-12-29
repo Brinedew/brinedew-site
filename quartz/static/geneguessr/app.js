@@ -9,14 +9,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
  *
  * DATA FLOW (so future-you doesn't get confused):
  * ------------------------------------------------
- * 1. Source of truth: tools/thoteins/data/geneguessr/proteins.json
+ * 1. Source of truth: Datasets/GeneGuessr/ pipeline
  *    - Contains all protein metadata including: clans, domain_names, domains, etc.
- *    - This file is NOT deployed via GitHub Pages / normal site build.
- *
- * 2. Database upload: tools/thoteins/scripts/upload_local_database.py --remote
- *    - Uploads proteins.json to Cloudflare D1 database
- *    - Each protein's full JSON is stored in the `metadata` column
- *    - Must run this script after updating proteins.json to see changes live!
+ *    - Data is uploaded to Cloudflare D1 database
  *
  * 3. Cloudflare Worker: workers/index.js
  *    - Serves /api/protein, /api/game/bootstrap, etc.

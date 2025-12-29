@@ -24,7 +24,7 @@ if (Test-Path $oldFolderPath) {
 }
 
 $excludedFoldersPattern = '[\\/](node_modules|\.git|dist|build|\.cache|coverage)[\\/]'
-$excludedPathFragments = @('tools\thoteins\nul')
+$excludedPathFragments = @()
 
 function Test-ExcludedPath {
     param(

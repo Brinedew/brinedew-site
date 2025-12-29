@@ -27,7 +27,7 @@ python scripts/populate_local_database.py --batch-size 200
 - **Use When**: You want to refresh Wikipedia data or fetch for new proteins
 
 ## Cache Location
-`tools/thoteins/data/ncbi_gene_cache/wikipedia_pageviews_2024.json`
+Cache location is configured in the data pipeline (see `Datasets/GeneGuessr/`).
 
 ## Workflow
 

@@ -32,7 +32,6 @@ export default (() => {
     const url = new URL(`https://${cfg.baseUrl ?? "example.com"}`)
     const path = url.pathname as FullSlug
     const baseDir = fileData.slug === "404" ? path : pathToRoot(fileData.slug!)
-    const iconPath = joinSegments(baseDir, "static/icon.png")
 
     // Url of current page
     const socialUrl =
@@ -91,7 +90,9 @@ export default (() => {
           </>
         )}
 
-        <link rel="icon" href={iconPath} />
+        <link rel="icon" type="image/png" sizes="48x48" href={joinSegments(baseDir, "static/icon-48.png")} />
+        <link rel="icon" type="image/png" sizes="192x192" href={joinSegments(baseDir, "static/icon.png")} />
+        <link rel="apple-touch-icon" sizes="180x180" href={joinSegments(baseDir, "static/apple-touch-icon.png")} />
         <meta name="description" content={description} />
         <meta name="generator" content="Quartz" />
         <meta name="geneguessr-build" content="head-tsx-patched" />
