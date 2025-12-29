@@ -17,4 +17,4 @@ Obsidian vault in `content/`, push to GitHub, Quartz builds static HTML, GitHub 
 
 ## license
 
-Code: MIT (inherited from Quartz). Content: all rights reserved.
+Code (Quartz framework, workers/, scripts/): MIT. Content: CC BY-NC-ND 4.0. See [LICENSE](LICENSE) for details.
