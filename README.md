@@ -1,19 +1,20 @@
 # brinedew.bio
 
-Personal research wiki covering cancer biology, aging, and computational biology.
+Source for my personal site. Wet lab biologist, interested in aging and cancer, trying to learn the computational side.
 
 **Live site:** https://brinedew.bio
 
-## What's here
+## what's in here
 
-- **Wiki** - Notes on genes, proteins, aging theories, cancer models
-- **GeneGuessr** - Daily protein guessing game (Wordle-style)
-- **Blog** - Occasional posts on research topics
+- `content/` - wiki pages on genes, proteins, aging theories. Blog posts. A protein guessing game.
+- `quartz/` - the static site framework (forked from Quartz)
+- `workers/` - Cloudflare backend for GeneGuessr
+- `scripts/` - protein enrichment pipelines, data processing
 
-## Tech
+## how it works
 
-Built with [Quartz](https://quartz.jzhao.xyz/), deployed via GitHub Pages. Content managed in Obsidian.
+Obsidian vault in `content/`, push to GitHub, Quartz builds static HTML, GitHub Pages serves it. About 60 seconds from commit to live.
 
-## License
+## license
 
-Code: MIT (inherited from Quartz). Written content: All rights reserved.
+Code: MIT (inherited from Quartz). Content: all rights reserved.
