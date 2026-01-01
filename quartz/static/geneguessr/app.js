@@ -5641,13 +5641,21 @@ https://brinedew.bio/apps/geneguessr/`
 
     const practiceList = loadPracticeList()
     const practicePoolSize = getPracticePoolFromList(practiceList).length
-    const practiceBadgeActive = practiceMode || practicePoolSize > 0
-    const practiceBadgeValue = practicePoolSize > 0 ? `${practicePoolSize} genes` : "Open"
+    const practiceBadgeActive = practiceMode
+    const practiceBadgeValue = practiceMode
+      ? practicePoolSize > 0
+        ? `${practicePoolSize} genes`
+        : "On"
+      : "Off"
+    const practiceBadgeTitle =
+      practicePoolSize > 0 && !practiceMode
+        ? `Practice mode: choose a list of genes to practice. Saved list: ${practicePoolSize} genes.`
+        : "Practice mode: choose a list of genes to practice."
 
     sidebarStats.innerHTML = `
       ${authSection}
       <div class="pg-sidebar-section">
-        <button type="button" class="pg-hints-badge pg-sidebar-practice-badge pg-sidebar-practice-button ${practiceBadgeActive ? "has-hints" : ""}" onclick="window.geneguessrOpenPracticeList()" title="Practice mode: choose a list of genes to practice">
+        <button type="button" class="pg-hints-badge pg-sidebar-practice-badge pg-sidebar-practice-button ${practiceBadgeActive ? "has-hints" : ""}" onclick="window.geneguessrOpenPracticeList()" title="${practiceBadgeTitle}">
           <span class="pg-hints-label">Practice Mode</span>
           <span class="pg-hints-value">${practiceBadgeValue}</span>
         </button>
@@ -6090,9 +6098,17 @@ https://brinedew.bio/apps/geneguessr/`
       const practicePoolSize = getPracticePoolFromList(practiceList).length
       const practiceValue = sidebarPractice.querySelector(".pg-hints-value")
       if (practiceValue) {
-        practiceValue.textContent = practicePoolSize > 0 ? `${practicePoolSize} genes` : "Open"
+        practiceValue.textContent = practiceMode
+          ? practicePoolSize > 0
+            ? `${practicePoolSize} genes`
+            : "On"
+          : "Off"
       }
-      sidebarPractice.classList.toggle("has-hints", practiceMode || practicePoolSize > 0)
+      sidebarPractice.title =
+        practicePoolSize > 0 && !practiceMode
+          ? `Practice mode: choose a list of genes to practice. Saved list: ${practicePoolSize} genes.`
+          : "Practice mode: choose a list of genes to practice."
+      sidebarPractice.classList.toggle("has-hints", practiceMode)
     }
 
     const statsGrid = document.querySelector(".pg-sidebar-stats-grid")
