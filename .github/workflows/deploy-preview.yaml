@@ -15,10 +15,7 @@ jobs:
   deploy-preview:
     # This workflow is optional. If CLOUDFLARE_ACCOUNT_ID is not configured,
     # skip the preview deploy instead of failing the entire Actions run history.
-    if: >-
-      ${{ github.event.workflow_run.conclusion == 'success'
-          && (secrets.CLOUDFLARE_ACCOUNT_ID || '') != ''
-          && (secrets.CLOUDFLARE_API_TOKEN || '') != '' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && (secrets.CLOUDFLARE_ACCOUNT_ID || '') != '' && (secrets.CLOUDFLARE_API_TOKEN || '') != '' }}
     runs-on: ubuntu-latest
     name: Deploy Preview to Cloudflare Pages
     steps:
