@@ -5712,17 +5712,123 @@ https://brinedew.bio/apps/geneguessr/`
     return cleaned.toUpperCase()
   }
 
-  function parsePracticeText(text) {
-    const parts = String(text || "").split(/[,\s;]+/g)
-    const out = []
-    const seen = new Set()
-    for (const part of parts) {
-      const gene = normalizePracticeGeneToken(part)
-      if (!gene || seen.has(gene)) continue
-      seen.add(gene)
-      out.push(gene)
+  const PRACTICE_CLIENT_MAX_INPUTS = 10000
+
+  function isLikelyHgncSymbol(symbol) {
+    if (!symbol) return false
+    if (symbol.length < 2 || symbol.length > 15) return false
+    if (!/^[A-Z][A-Z0-9-]*$/.test(symbol)) return false
+    const hyphenCount = (symbol.match(/-/g) || []).length
+    if (hyphenCount > 1) return false
+
+    const hasDigit = /\d/.test(symbol)
+    const hasHyphen = symbol.includes("-")
+    if (hasHyphen && !hasDigit && symbol.length > 6) return false
+
+    const isAllLetters = /^[A-Z]+$/.test(symbol)
+    if (isAllLetters && !hasDigit && symbol.length > 6) return false
+
+    return true
+  }
+
+  function extractHgncSymbolFromCell(cell) {
+    const matches = String(cell || "").match(/[A-Za-z0-9-]{2,40}/g) || []
+    for (const match of matches) {
+      const token = normalizePracticeGeneToken(match)
+      if (isLikelyHgncSymbol(token)) {
+        return token
+      }
     }
-    return out
+    return null
+  }
+
+  function splitPracticeLineIntoCells(line) {
+    const raw = String(line || "")
+    if (!raw.trim()) return []
+    if (raw.includes("\t")) {
+      return raw.split("\t")
+    }
+    if (/\s{2,}/.test(raw)) {
+      return raw.trim().split(/\s{2,}/)
+    }
+    return raw.trim().split(/\s+/)
+  }
+
+  function parsePracticeText(text) {
+    const raw = String(text || "")
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    const genes = []
+    const seen = new Set()
+    let truncated = false
+
+    const addGene = (gene) => {
+      if (!gene || seen.has(gene)) return true
+      seen.add(gene)
+      genes.push(gene)
+      if (genes.length >= PRACTICE_CLIENT_MAX_INPUTS) {
+        truncated = true
+        return false
+      }
+      return true
+    }
+
+    const rows = lines.map(splitPracticeLineIntoCells)
+    const maxCols = rows.reduce((acc, row) => Math.max(acc, row.length), 0)
+
+    if (maxCols > 1 && rows.length > 1) {
+      const columnCandidates = new Array(maxCols).fill(null).map(() => [])
+      const columnScores = new Array(maxCols).fill(0)
+
+      for (let col = 0; col < maxCols; col++) {
+        let baseCount = 0
+        let digitCount = 0
+        let shortCount = 0
+
+        for (const row of rows) {
+          if (col >= row.length) continue
+          const candidate = extractHgncSymbolFromCell(row[col])
+          if (!candidate) continue
+
+          baseCount += 1
+          columnCandidates[col].push(candidate)
+          if (/\d/.test(candidate)) digitCount += 1
+          if (candidate.length <= 5) shortCount += 1
+        }
+
+        columnScores[col] = baseCount + digitCount * 0.75 + shortCount * 0.25
+      }
+
+      let bestCol = -1
+      let bestScore = 0
+      for (let col = 0; col < maxCols; col++) {
+        if (columnScores[col] > bestScore) {
+          bestScore = columnScores[col]
+          bestCol = col
+        }
+      }
+
+      const bestCandidates = bestCol >= 0 ? columnCandidates[bestCol] : []
+      const minimumCandidates = Math.max(3, Math.floor(rows.length * 0.2))
+      if (bestCandidates.length >= minimumCandidates) {
+        for (const candidate of bestCandidates) {
+          if (!addGene(candidate)) break
+        }
+        return { genes, truncated }
+      }
+    }
+
+    const globalMatches = raw.match(/[A-Za-z0-9-]{2,40}/g) || []
+    for (const match of globalMatches) {
+      const candidate = normalizePracticeGeneToken(match)
+      if (!isLikelyHgncSymbol(candidate)) continue
+      if (!addGene(candidate)) break
+    }
+
+    return { genes, truncated }
   }
 
   function renderPracticeResults(result, errorText) {
@@ -5796,7 +5902,14 @@ https://brinedew.bio/apps/geneguessr/`
   async function resolvePracticeListFromTextarea() {
     if (!practiceTextarea) return
     const text = practiceTextarea.value || ""
-    const genes = parsePracticeText(text)
+    const { genes, truncated: clientTruncated } = parsePracticeText(text)
+    if (!genes.length) {
+      renderPracticeResults(
+        null,
+        "No HGNC symbols detected. Paste HGNC symbols (one per line is fine), or paste a table that contains an HGNC symbol column.",
+      )
+      return
+    }
     setPracticeBusy(true)
     try {
       const resp = await fetch(`${API_BASE}/api/game/practice/resolve?practice=1`, {
@@ -5820,7 +5933,7 @@ https://brinedew.bio/apps/geneguessr/`
         recognizedCount: Number(payload.recognizedCount) || 0,
         playableCount: Number(payload.playableCount) || 0,
         uniqueCount: Number(payload.uniqueCount) || 0,
-        truncated: Boolean(payload.truncated),
+        truncated: Boolean(payload.truncated || clientTruncated),
       }
       savePracticeList(practiceList)
       renderPracticeResults(practiceList, null)
@@ -5930,7 +6043,7 @@ https://brinedew.bio/apps/geneguessr/`
     const desc = document.createElement("p")
     desc.className = "pg-practice-desc"
     desc.textContent =
-      "Paste HGNC gene symbols (1000+ is fine). We will validate which ones exist in the human dataset."
+      "Paste HGNC gene symbols (1000+ is fine). You can also paste a table; we will try to detect the gene-symbol column and ignore the rest."
     content.appendChild(desc)
 
     practiceTextarea = document.createElement("textarea")
