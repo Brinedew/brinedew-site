@@ -6,15 +6,15 @@
   overflow-y: hidden;
   min-height: 1.2rem;
   flex: 0 1 auto;
-  
+
   &.collapsed {
     flex: 0 1 1.2rem;
-    
+
     // Hide the content when collapsed
     .tag-explorer-content {
       display: none;
     }
-    
+
     // Rotate the fold icon
     & .fold {
       transform: rotateZ(-90deg);
@@ -42,16 +42,20 @@
       overflow-y: auto;
       transform: translateX(-100%);
       visibility: hidden;
-      transition: transform 200ms ease, visibility 0s linear 200ms;
+      transition:
+        transform 200ms ease,
+        visibility 0s linear 200ms;
     }
-    
+
     // Open state - slide in from left
     &.mobile-open .tag-explorer-content {
       transform: translateX(0);
       visibility: visible;
-      transition: transform 200ms ease, visibility 0s;
+      transition:
+        transform 200ms ease,
+        visibility 0s;
     }
-    
+
     // Hide the header button on mobile (hamburger replaces it)
     .tag-explorer-header {
       display: none;
@@ -109,8 +113,10 @@ button.tag-explorer-header {
     cursor: pointer;
     border-radius: 3px;
     padding: 0.1rem 0.3rem;
-    transition: background-color 0.2s ease, opacity 0.2s ease;
-    
+    transition:
+      background-color 0.2s ease,
+      opacity 0.2s ease;
+
     // Default hover: toggle behavior (brightness change) for collapsed tags
     &:hover {
       opacity: 0.8;
@@ -124,30 +130,32 @@ button.tag-explorer-header {
   background-color: var(--lightgray);
 }
 
-  .tag-name {
-    font-size: 0.95rem;
-    color: var(--dark);
-    font-weight: $semiBoldWeight;
-    margin-right: 0.3rem;
-  }
+.tag-name {
+  font-size: 0.95rem;
+  color: var(--dark);
+  font-weight: $semiBoldWeight;
+  margin-right: 0.3rem;
+}
 
-  .tag-count {
-    opacity: 0.6;
-    font-size: 0.8rem;
-    font-weight: normal;
-  }
+.tag-count {
+  opacity: 0.6;
+  font-size: 0.8rem;
+  font-weight: normal;
+}
 
 .tag-icon {
   color: var(--secondary);
   cursor: pointer;
-  transition: transform 0.3s ease, opacity 0.2s ease;
+  transition:
+    transform 0.3s ease,
+    opacity 0.2s ease;
   backface-visibility: visible;
   flex-shrink: 0;
   width: 16px;
   height: 16px;
   padding: 0.2rem;
   border-radius: 3px;
-  
+
   // Arrow always shows toggle behavior (brightness change)
   &:hover {
     opacity: 0.8;
@@ -173,7 +181,7 @@ button.tag-explorer-header {
   li {
     margin-bottom: 1rem; /* More space between separate links */
     line-height: 1; /* Tight but readable line spacing for wrapped text */
-    
+
     a {
       color: var(--dark);
       opacity: 0.85;

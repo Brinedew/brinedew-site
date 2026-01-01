@@ -1,6 +1,6 @@
-import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types" 
-import { classNames } from "../util/lang" 
-import { Hsluv } from "hsluv" 
+import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import { classNames } from "../util/lang"
+import { Hsluv } from "hsluv"
 
 interface Mapping {
   source: string
@@ -53,25 +53,27 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
     }
     return fallback
   }
-  
+
   // Filter to only show pairs where both values exist in frontmatter
-  const visibleMappings = mappings.filter(m => {
+  const visibleMappings = mappings.filter((m) => {
     const molecularValue = fm?.[m.source]
     // Handle field name normalization for persona fields
-    const targetNormalized = m.target.toLowerCase().replace(/\s+/g, '_').replace(/_+$/, '')
+    const targetNormalized = m.target.toLowerCase().replace(/\s+/g, "_").replace(/_+$/, "")
     const personaKey = `persona_${targetNormalized}`
     const personaValue = fm?.[personaKey]
-    
+
     // Filter out null, undefined, empty strings, and "nan"
-    const hasMolecular = molecularValue !== undefined && 
-                         molecularValue !== null && 
-                         molecularValue !== '' && 
-                         String(molecularValue).toLowerCase() !== 'nan'
-    const hasPersona = personaValue !== undefined && 
-                       personaValue !== null && 
-                       personaValue !== '' && 
-                       String(personaValue).toLowerCase() !== 'nan'
-    
+    const hasMolecular =
+      molecularValue !== undefined &&
+      molecularValue !== null &&
+      molecularValue !== "" &&
+      String(molecularValue).toLowerCase() !== "nan"
+    const hasPersona =
+      personaValue !== undefined &&
+      personaValue !== null &&
+      personaValue !== "" &&
+      String(personaValue).toLowerCase() !== "nan"
+
     return hasMolecular && hasPersona
   })
 
@@ -79,90 +81,91 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
   const personaImage =
     toStringValue(fm.persona_image) ||
     (typeof fm.uniprot_id === "string" ? `/static/proteins/${fm.uniprot_id}.png` : "")
-  
-  // HSLuv conversion (no RGB/HSL fallback) 
-  const toHexHsluv = (h: number, s: number, l: number): string => { 
-    const hue = ((h % 360) + 360) % 360 
-    const sat = Math.max(0, Math.min(100, s)) 
-    const lum = Math.max(0, Math.min(100, l)) 
-    const conv = new Hsluv() 
-    conv.hsluv_h = hue 
-    conv.hsluv_s = sat 
-    conv.hsluv_l = lum 
-    conv.hsluvToHex() 
-    return conv.hex 
-  } 
-  
-  let hexcode = toStringValue(fm.persona_hexcode) 
-  if (!hexcode || hexcode === 'null') { 
-    const hue = toNumberValue(fm.persona_skintone_hue, 0) 
-    const sat = toNumberValue(fm.persona_skintone_saturation, 50) 
-    const light = toNumberValue(fm.persona_skintone_lightness, 50) 
-    hexcode = toHexHsluv(hue, sat, light) 
-  } 
- 
+
+  // HSLuv conversion (no RGB/HSL fallback)
+  const toHexHsluv = (h: number, s: number, l: number): string => {
+    const hue = ((h % 360) + 360) % 360
+    const sat = Math.max(0, Math.min(100, s))
+    const lum = Math.max(0, Math.min(100, l))
+    const conv = new Hsluv()
+    conv.hsluv_h = hue
+    conv.hsluv_s = sat
+    conv.hsluv_l = lum
+    conv.hsluvToHex()
+    return conv.hex
+  }
+
+  let hexcode = toStringValue(fm.persona_hexcode)
+  if (!hexcode || hexcode === "null") {
+    const hue = toNumberValue(fm.persona_skintone_hue, 0)
+    const sat = toNumberValue(fm.persona_skintone_saturation, 50)
+    const light = toNumberValue(fm.persona_skintone_lightness, 50)
+    hexcode = toHexHsluv(hue, sat, light)
+  }
+
   const geneSymbol =
-    toStringValue(fm.symbol) ||
-    toStringValue(fm.gene_symbol) ||
-    toStringValue(fm.title, "Protein")
+    toStringValue(fm.symbol) || toStringValue(fm.gene_symbol) || toStringValue(fm.title, "Protein")
 
   // Helper to prettify field names and format values with units
   const prettifyLabel = (fieldName: string): string => {
     const labelMap: Record<string, string> = {
-      'mass': 'Mass',
-      'length': 'Length',
-      'percent_disordered': 'Disorder',
-      'rvis_percentile': 'RVIS',
-      'alignment': 'Classification',
-      'first_letter': 'First Letter',
-      'Has transmembrane domains': 'Transmembrane',
-      'membrane_depth': 'Membrane Depth',
-      'tissue_tau': 'Tissue Specificity',
-      'height': 'Height',
-      'Sex': 'Gender',
-      'Politics': 'Politics',
-      'Skintone Hue ': 'Skin Hue',
-      'Skintone Saturation': 'Skin Saturation',
-      'Skintone Lightness': 'Skin Lightness',
-      'Aesthetics': 'Aesthetics',
-      'background_setting': 'Setting',
-      'Age': 'Age'
+      mass: "Mass",
+      length: "Length",
+      percent_disordered: "Disorder",
+      rvis_percentile: "RVIS",
+      alignment: "Classification",
+      first_letter: "First Letter",
+      "Has transmembrane domains": "Transmembrane",
+      membrane_depth: "Membrane Depth",
+      tissue_tau: "Tissue Specificity",
+      height: "Height",
+      Sex: "Gender",
+      Politics: "Politics",
+      "Skintone Hue ": "Skin Hue",
+      "Skintone Saturation": "Skin Saturation",
+      "Skintone Lightness": "Skin Lightness",
+      Aesthetics: "Aesthetics",
+      background_setting: "Setting",
+      Age: "Age",
     }
     return labelMap[fieldName] || fieldName
   }
 
   const formatValue = (fieldName: string, value: any): string => {
     const unitMap: Record<string, string> = {
-      'mass': ' kDa',
-      'length': ' aa',
-      'percent_disordered': '%',
-      'rvis_percentile': '',
-      'height': ' cm',
-      'Age': '',
-      'Skintone Hue ': '', // Will be handled specially
-      'Skintone Saturation': '%',
-      'Skintone Lightness': '%'
+      mass: " kDa",
+      length: " aa",
+      percent_disordered: "%",
+      rvis_percentile: "",
+      height: " cm",
+      Age: "",
+      "Skintone Hue ": "", // Will be handled specially
+      "Skintone Saturation": "%",
+      "Skintone Lightness": "%",
     }
-    const unit = unitMap[fieldName] || ''
+    const unit = unitMap[fieldName] || ""
     return `${value}${unit}`
   }
-  
+
   return (
     <div class={classNames(displayClass, "protein-infobox")}>
       {/* Persona Image */}
       <div class="infobox-image-container">
         <div class="infobox-image" style={`background-color: ${hexcode}`}>
-          <img 
-            src={personaImage} 
+          <img
+            src={personaImage}
             alt={`${geneSymbol} persona portrait`}
             onError={(e) => {
               const target = e.target as HTMLImageElement
-              target.style.display = 'none'
+              target.style.display = "none"
               const placeholder = target.nextElementSibling as HTMLElement
-              if (placeholder) placeholder.style.display = 'flex'
+              if (placeholder) placeholder.style.display = "flex"
             }}
           />
-          <div class="infobox-image-placeholder" style={`background-color: ${hexcode}; display: none;`}>
+          <div
+            class="infobox-image-placeholder"
+            style={`background-color: ${hexcode}; display: none;`}
+          >
             {geneSymbol}
           </div>
         </div>
@@ -181,30 +184,31 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
             <span class="mapping-arrow">→</span>
             <span class="mapping-col-title">Persona</span>
           </div>
-          
-          {visibleMappings.map(m => {
-            const targetNormalized = m.target.toLowerCase().replace(/\s+/g, '_').replace(/_+$/, '')
+
+          {visibleMappings.map((m) => {
+            const targetNormalized = m.target.toLowerCase().replace(/\s+/g, "_").replace(/_+$/, "")
             const personaKey = `persona_${targetNormalized}`
             const molecularValue = fm[m.source]
             const personaValue = fm[personaKey]
-            
+
             // Special handling for hue (first_letter -> Skintone Hue)
-            const isHueMapping = m.source === 'first_letter' && m.target === 'Skintone Hue '
+            const isHueMapping = m.source === "first_letter" && m.target === "Skintone Hue "
             let personaDisplay = formatValue(m.target, personaValue)
-            
+
             if (isHueMapping) {
-              const hue = fm?.persona_skintone_hue || 0 
-              const letter = (molecularValue || 'X').toUpperCase() 
-              const hueColor = toHexHsluv(hue, 100, 50) 
-              
+              const hue = fm?.persona_skintone_hue || 0
+              const letter = (molecularValue || "X").toUpperCase()
+              const hueColor = toHexHsluv(hue, 100, 50)
+
               // Convert letter to enclosed alphanumeric UTF-8 character
               // A-Z: U+1F170 to U+1F189
               const letterCode = letter.charCodeAt(0)
               let enclosedChar = letter
-              if (letterCode >= 65 && letterCode <= 90) { // A-Z
-                enclosedChar = String.fromCodePoint(0x1F170 + (letterCode - 65))
+              if (letterCode >= 65 && letterCode <= 90) {
+                // A-Z
+                enclosedChar = String.fromCodePoint(0x1f170 + (letterCode - 65))
               }
-              
+
               return (
                 <div class="mapping-row">
                   <div class="mapping-molecular">
@@ -223,7 +227,7 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
                 </div>
               )
             }
-            
+
             return (
               <div class="mapping-row">
                 <div class="mapping-molecular">
@@ -244,7 +248,11 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
       {/* UniProt Link */}
       {fm?.uniprot_id && (
         <div class="infobox-footer">
-          <a href={`https://www.uniprot.org/uniprotkb/${fm.uniprot_id}`} target="_blank" rel="noopener">
+          <a
+            href={`https://www.uniprot.org/uniprotkb/${fm.uniprot_id}`}
+            target="_blank"
+            rel="noopener"
+          >
             UniProt: {fm.uniprot_id}
           </a>
         </div>
@@ -252,7 +260,6 @@ const ProteinInfobox: QuartzComponent = ({ fileData, displayClass }: QuartzCompo
     </div>
   )
 }
-
 
 ProteinInfobox.css = `
 .protein-infobox {

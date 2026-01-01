@@ -2,7 +2,7 @@
   --bd-gap: 12px;
   --bd-card: color-mix(in oklch, var(--light) 90%, var(--dark) 10%);
   --bd-ok: oklch(70% 0.12 150);
-  --bd-warn: oklch(75% 0.10 80);
+  --bd-warn: oklch(75% 0.1 80);
   --bd-err: oklch(60% 0.16 30);
 }
 
@@ -17,33 +17,100 @@
   box-shadow: 0 2px 12px color-mix(in oklch, var(--dark) 15%, transparent);
 }
 
-.scr-row { display: grid; gap: 8px; }
+.scr-row {
+  display: grid;
+  gap: 8px;
+}
 
-.scr-label { font-weight: 600; }
-.scr-input { width: 100%; padding: .65rem .8rem; border-radius: 8px; border: 1px solid var(--lightgray); background: var(--light); color: var(--darkgray); }
-.scr-actions { display: flex; gap: 8px; align-items: center; }
-.scr-btn { padding: .6rem .9rem; border-radius: 8px; border: 1px solid var(--darkgray); background: var(--light); cursor: pointer; }
-.scr-btn[disabled] { opacity: .6; cursor: not-allowed; }
+.scr-label {
+  font-weight: 600;
+}
+.scr-input {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--lightgray);
+  background: var(--light);
+  color: var(--darkgray);
+}
+.scr-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.scr-btn {
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--darkgray);
+  background: var(--light);
+  cursor: pointer;
+}
+.scr-btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
-.scr-status { font-size: .9rem; padding: .5rem .6rem; border-radius: 8px; background: color-mix(in oklch, var(--light) 80%, var(--dark) 20%); }
-.scr-status.ok { outline: 2px solid var(--bd-ok); }
-.scr-status.warn { outline: 2px solid var(--bd-warn); }
-.scr-status.err { outline: 2px solid var(--bd-err); }
+.scr-status {
+  font-size: 0.9rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--light) 80%, var(--dark) 20%);
+}
+.scr-status.ok {
+  outline: 2px solid var(--bd-ok);
+}
+.scr-status.warn {
+  outline: 2px solid var(--bd-warn);
+}
+.scr-status.err {
+  outline: 2px solid var(--bd-err);
+}
 
-.scr-progress { height: 8px; border-radius: 999px; background: color-mix(in oklch, var(--light) 70%, var(--dark) 30%); overflow: clip; }
-.scr-progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+.scr-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--light) 70%, var(--dark) 30%);
+  overflow: clip;
+}
+.scr-progress > div {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
 
-.scr-results { border-top: 1px solid var(--lightgray); padding-top: .75rem; }
-.scr-meta { font-size: .85rem; opacity: .8; }
-.scr-meta.offline { color: var(--bd-err); }
-.scr-meta.starting { color: var(--bd-warn); animation: pulse 2s infinite; }
-.scr-meta.ready { color: var(--bd-ok); }
+.scr-results {
+  border-top: 1px solid var(--lightgray);
+  padding-top: 0.75rem;
+}
+.scr-meta {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.scr-meta.offline {
+  color: var(--bd-err);
+}
+.scr-meta.starting {
+  color: var(--bd-warn);
+  animation: pulse 2s infinite;
+}
+.scr-meta.ready {
+  color: var(--bd-ok);
+}
 
 @keyframes pulse {
-  0%, 100% { opacity: .8; }
-  50% { opacity: .4; }
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 @media (max-width: 800px) {
-  #scriptotic-root { margin: 1rem .5rem; padding: .75rem; }
+  #scriptotic-root {
+    margin: 1rem 0.5rem;
+    padding: 0.75rem;
+  }
 }

@@ -26,7 +26,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install Python dependencies
         run: |
@@ -35,13 +35,13 @@ jobs:
       - name: Enrich protein pages
         run: python scripts/enrich-proteins.py
 
-      - name: Upload image generation queue 
-        if: always() 
-        uses: actions/upload-artifact@v6 
-        with: 
-          name: image-generation-queue 
-          path: image_generation_queue.txt 
-          if-no-files-found: ignore 
+      - name: Upload image generation queue
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: image-generation-queue
+          path: image_generation_queue.txt
+          if-no-files-found: ignore
 
       - name: Setup Node.js (22.x) with npm cache
         uses: actions/setup-node@v6

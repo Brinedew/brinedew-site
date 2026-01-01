@@ -36,6 +36,10 @@ export default (() => {
     // Url of current page
     const socialUrl =
       fileData.slug === "404" ? url.toString() : joinSegments(url.toString(), fileData.slug!)
+    const canonicalUrl =
+      typeof fileData.frontmatter?.canonicalUrl === "string"
+        ? fileData.frontmatter.canonicalUrl
+        : socialUrl
 
     const usesCustomOgImage = ctx.cfg.plugins.emitters.some(
       (e) => e.name === CustomOgImagesEmitterName,
@@ -74,10 +78,7 @@ export default (() => {
             <meta property="og:image" content={ogImageDefaultPath} />
             <meta property="og:image:url" content={ogImageDefaultPath} />
             <meta name="twitter:image" content={ogImageDefaultPath} />
-            <meta
-              property="og:image:type"
-              content={`image/${ogImageDefaultExtension}`}
-            />
+            <meta property="og:image:type" content={`image/${ogImageDefaultExtension}`} />
           </>
         )}
 
@@ -86,13 +87,27 @@ export default (() => {
             <meta property="twitter:domain" content={cfg.baseUrl}></meta>
             <meta property="og:url" content={socialUrl}></meta>
             <meta property="twitter:url" content={socialUrl}></meta>
-            <link rel="canonical" href={fileData.frontmatter?.canonicalUrl ?? socialUrl} />
+            <link rel="canonical" href={canonicalUrl} />
           </>
         )}
 
-        <link rel="icon" type="image/png" sizes="48x48" href={joinSegments(baseDir, "static/icon-48.png")} />
-        <link rel="icon" type="image/png" sizes="192x192" href={joinSegments(baseDir, "static/icon.png")} />
-        <link rel="apple-touch-icon" sizes="180x180" href={joinSegments(baseDir, "static/apple-touch-icon.png")} />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="48x48"
+          href={joinSegments(baseDir, "static/icon-48.png")}
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="192x192"
+          href={joinSegments(baseDir, "static/icon.png")}
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href={joinSegments(baseDir, "static/apple-touch-icon.png")}
+        />
         <meta name="description" content={description} />
         <meta name="generator" content="Quartz" />
         <meta name="geneguessr-build" content="head-tsx-patched" />
@@ -126,25 +141,25 @@ export default (() => {
 
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
         <link href="/static/custom.css?v=bio4" rel="stylesheet" type="text/css" />
-        
+
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {
-          const slugValue = typeof fileData.slug === "string" ? fileData.slug : undefined;
+          const slugValue = typeof fileData.slug === "string" ? fileData.slug : undefined
 
           if (!slugValue) {
-            return null;
+            return null
           }
 
-          const normalizedSlug = slugValue.replace(/\/index(?:\.html)?$/, "");
-          const root = pathToRoot(slugValue as FullSlug);
+          const normalizedSlug = slugValue.replace(/\/index(?:\.html)?$/, "")
+          const root = pathToRoot(slugValue as FullSlug)
           const isScriptotic =
             normalizedSlug === "apps/scriptotic" ||
-            fileData.frontmatter?.title === "Scriptotic — YouTube Transcript Generator";
+            fileData.frontmatter?.title === "Scriptotic — YouTube Transcript Generator"
           const isGeneguessr =
-            normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr";
+            normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr"
 
           if (!isScriptotic && !isGeneguessr) {
-            return null;
+            return null
           }
 
           return (
@@ -164,7 +179,7 @@ export default (() => {
               {isGeneguessr && (
                 <>
                   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-              <link
+                  <link
                     rel="stylesheet"
                     href={joinSegments(root, "static", `geneguessr/styles.css?v=${CACHE_BUST}`)}
                   />
@@ -175,13 +190,16 @@ export default (() => {
                   <script
                     src={joinSegments(root, "static", `geneguessr/tutorial.js?v=${CACHE_BUST}`)}
                   ></script>
-                  <script defer src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}></script>
+                  <script
+                    defer
+                    src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}
+                  ></script>
                 </>
               )}
             </>
           )
         })()}
-        
+
         {/* Performance optimizations */}
         <link rel="prefetch" href="/posts" as="document" />
         {js

@@ -1,3 +1,6 @@
 public
 node_modules
 .quartz-cache
+content/
+scripts/tag_cleanup_backups/
+.claude/

@@ -18,10 +18,12 @@ Obsidian vault in `content/`, push to GitHub, Quartz builds static HTML, GitHub 
 ## GeneGuessr dev (don’t hit prod by accident)
 
 GeneGuessr’s frontend can be pointed at a non-prod API worker via a URL override:
+
 - Set API base for this browser: add `?gg_api=https://<your-worker-host>` to the GeneGuessr URL once (it persists in `localStorage`).
 - Clear the override: `?gg_api=clear`.
 
 Recommended flows:
+
 - Local API dev:
   - Run `npx wrangler dev --env staging --remote --port 8787`.
   - In another terminal, run `npm run dev`.

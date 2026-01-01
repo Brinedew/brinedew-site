@@ -1020,4 +1020,4 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     });
   </script>
 </body>
-</html>`;
+</html>`

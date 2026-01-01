@@ -4,22 +4,25 @@
 
 1. Go to https://discord.com/developers/applications
 2. Click "New Application"
-3. Name it "GeneGuessr" 
+3. Name it "GeneGuessr"
 4. Go to OAuth2 section
 
 ## Step 2: Configure OAuth2
 
 **Redirect URIs:**
+
 - Development: `http://localhost:8787/api/auth/callback`
 - Production: `https://geneguessr-api.decap.workers.dev/api/auth/callback`
 
 **Scopes needed:**
+
 - `identify` - Get user ID, username, avatar
 - `guilds.members.read` - Check server membership
 
 ## Step 3: Get Credentials
 
 Copy these values:
+
 - **Client ID**: Found in OAuth2 General page
 - **Client Secret**: Click "Reset Secret" to generate (keep this secure)
 
@@ -42,6 +45,7 @@ npx wrangler secret put DISCORD_GUILD_ID
 ## Step 5: Test
 
 After deployment, visit:
+
 - `https://geneguessr-api.decap.workers.dev/api/auth/login`
 
 Should redirect to Discord OAuth consent screen.

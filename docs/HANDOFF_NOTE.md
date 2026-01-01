@@ -13,12 +13,14 @@ But the plugin was doing the opposite - it was making files unusable by moving "
 **Fixed comment accumulation**: Wrapper comments are now properly stripped before re-emission, preventing the 3x duplication issue.
 
 Files I changed:
+
 - `content/.obsidian/plugins/lineage-order-agnostic-shim/main.js` - complete rewrite with SaveArbiter architecture (lines 154-213 contain the core arbiter logic)
 
 The new architecture works like this:
+
 ```
 READ: File loads → inject ephemeral IDs → transform to hierarchical for Lineage display
-EDIT: User edits in Lineage view (hierarchical structure)  
+EDIT: User edits in Lineage view (hierarchical structure)
 SAVE: Lineage calls requestSave → SaveArbiter intercepts → single transform back to website format → save clean file
 ```
 
@@ -28,7 +30,7 @@ SAVE: Lineage calls requestSave → SaveArbiter intercepts → single transform 
 
 **Still need to test the fix properly** - I implemented the complete SaveArbiter rewrite but haven't verified it actually prevents all three bugs yet. Need to:
 
-1. Reset test file to clean state  
+1. Reset test file to clean state
 2. Reload plugin in Obsidian
 3. Test save operation and verify no content scrambling occurs
 4. Check console logs show single execution
@@ -44,6 +46,7 @@ The SaveArbiter fixes the multiple-application symptom, but the real fix is movi
 **Environment**: Windows system, Obsidian running, need to reload shim plugin
 
 Commands that should work now:
+
 ```bash
 # Test the fix
 # 1. Reset content/posts/shim-bug-test.md to clean initial state
@@ -62,6 +65,7 @@ Commands that should work now:
 **Why this matters**: The website filtering system depends on content being in the right sections. If scaffolding content (editorial notes) leaks into the reader sections, it breaks the whole content pipeline.
 
 Files to check:
+
 - `content/posts/shim-bug-test.md` - reset to clean state for testing
 - Console output during save operations - should show single execution
 - `bugs_log.md` - update with test results

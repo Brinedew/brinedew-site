@@ -216,7 +216,7 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
     .explorer-content {
       box-sizing: border-box;
       z-index: 100;
-      position: fixed;  /* fixed instead of absolute */
+      position: fixed; /* fixed instead of absolute */
       top: 0;
       left: 0;
       margin-top: 0;
@@ -225,12 +225,14 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
       height: 100dvh;
       overflow: auto;
       padding: 4rem 0 2rem 0;
-      
+
       /* CLOSED by default */
       transform: translateX(-100%);
       visibility: hidden;
       pointer-events: none;
-      transition: transform 200ms ease, visibility 0s linear 200ms;
+      transition:
+        transform 200ms ease,
+        visibility 0s linear 200ms;
     }
 
     /* OPEN only when explicit flag is present */
@@ -239,7 +241,9 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
       transform: translateX(0);
       visibility: visible;
       pointer-events: auto;
-      transition: transform 200ms ease, visibility 0s;
+      transition:
+        transform 200ms ease,
+        visibility 0s;
     }
 
     .mobile-explorer {

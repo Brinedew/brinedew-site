@@ -6,7 +6,7 @@ import type { PluggableList } from "unified"
 /**
  * Remove "column 1 & 2" content delineated by Gingko markers.
  * Filters at HTML-AST stage to ensure modifications persist to final output.
- * 
+ *
  * Rule: keep sections with depth >= minDepthToShow (default 3), drop others.
  */
 interface Options {

@@ -1,117 +1,115 @@
-import { isAlphaFoldOnlyProtein } from './game-engine.js';
-import { sanitizeProteinSummary } from './structure-utils.js';
+import { isAlphaFoldOnlyProtein } from "./game-engine.js"
+import { sanitizeProteinSummary } from "./structure-utils.js"
 
-const MAX_CACHE_SIZE = 512;
-const MAX_EMBEDDING_CACHE_SIZE = 256;
-const proteinCache = new Map();
-const embeddingCache = new Map();
-const DUAL_EMBEDDINGS_TABLE = 'protein_embeddings_old';
+const MAX_CACHE_SIZE = 512
+const MAX_EMBEDDING_CACHE_SIZE = 256
+const proteinCache = new Map()
+const embeddingCache = new Map()
+const DUAL_EMBEDDINGS_TABLE = "protein_embeddings_old"
 const eligibleCache = {
   ids: null,
   fetchedAt: 0,
-  ttl: 5 * 60 * 1000
-};
-let structureFailureTableEnsured = false;
+  ttl: 5 * 60 * 1000,
+}
+let structureFailureTableEnsured = false
 
 function normalizeKey(uniprot) {
-  return (uniprot || '').toUpperCase();
+  return (uniprot || "").toUpperCase()
 }
 
 function rememberProtein(key, value) {
   if (!key || !value) {
-    return;
+    return
   }
-  proteinCache.set(key, value);
+  proteinCache.set(key, value)
   if (proteinCache.size > MAX_CACHE_SIZE) {
-    const oldestKey = proteinCache.keys().next().value;
-    proteinCache.delete(oldestKey);
+    const oldestKey = proteinCache.keys().next().value
+    proteinCache.delete(oldestKey)
   }
 }
 
 function rememberEmbedding(key, vector) {
   if (!key) {
-    return;
+    return
   }
   if (!vector) {
-    embeddingCache.delete(key);
-    return;
+    embeddingCache.delete(key)
+    return
   }
-  embeddingCache.set(key, vector);
+  embeddingCache.set(key, vector)
   if (embeddingCache.size > MAX_EMBEDDING_CACHE_SIZE) {
-    const oldestKey = embeddingCache.keys().next().value;
-    embeddingCache.delete(oldestKey);
+    const oldestKey = embeddingCache.keys().next().value
+    embeddingCache.delete(oldestKey)
   }
 }
 
 function cloneArrayBuffer(value) {
   if (value instanceof ArrayBuffer) {
-    return value.slice(0);
+    return value.slice(0)
   }
   if (Array.isArray(value)) {
-    const u8 = new Uint8Array(value.length);
+    const u8 = new Uint8Array(value.length)
     for (let i = 0; i < value.length; i += 1) {
-      const byte = value[i];
-      u8[i] = (typeof byte === 'number' && Number.isFinite(byte))
-        ? (byte & 0xFF)
-        : 0;
+      const byte = value[i]
+      u8[i] = typeof byte === "number" && Number.isFinite(byte) ? byte & 0xff : 0
     }
-    return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+    return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
   }
   if (ArrayBuffer.isView(value) && value?.buffer instanceof ArrayBuffer) {
-    const { buffer, byteOffset = 0, byteLength } = value;
-    const length = typeof byteLength === 'number' ? byteLength : buffer.byteLength;
-    return buffer.slice(byteOffset, byteOffset + length);
+    const { buffer, byteOffset = 0, byteLength } = value
+    const length = typeof byteLength === "number" ? byteLength : buffer.byteLength
+    return buffer.slice(byteOffset, byteOffset + length)
   }
-  return null;
+  return null
 }
 
 function toFloat32Vector(row) {
-  const vectorData = row?.vector;
+  const vectorData = row?.vector
   if (!vectorData) {
-    return null;
+    return null
   }
-  let buffer = cloneArrayBuffer(vectorData);
+  let buffer = cloneArrayBuffer(vectorData)
   // Some D1 clients or drivers return BLOBs as hex or base64 strings.
   // If so, convert them into ArrayBuffer/Uint8Array for Float32Array view.
-  if (!buffer && typeof vectorData === 'string') {
-    const s = vectorData.trim();
+  if (!buffer && typeof vectorData === "string") {
+    const s = vectorData.trim()
     // Hex string (even length, only hex chars)
     if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0) {
-      const len = s.length / 2;
-      const u8 = new Uint8Array(len);
+      const len = s.length / 2
+      const u8 = new Uint8Array(len)
       for (let i = 0; i < len; i += 1) {
-        u8[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+        u8[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16)
       }
-      buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
     } else {
       // Attempt base64 decode common in web contexts
       try {
-        const bin = atob(s);
-        const u8 = new Uint8Array(bin.length);
+        const bin = atob(s)
+        const u8 = new Uint8Array(bin.length)
         for (let i = 0; i < bin.length; i += 1) {
-          u8[i] = bin.charCodeAt(i);
+          u8[i] = bin.charCodeAt(i)
         }
-        buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+        buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
       } catch (e) {
-        buffer = null;
+        buffer = null
       }
     }
   }
   if (!buffer || buffer.byteLength === 0) {
-    return null;
+    return null
   }
-  const vector = new Float32Array(buffer);
-  const dim = Number(row.dim);
+  const vector = new Float32Array(buffer)
+  const dim = Number(row.dim)
   if (Number.isFinite(dim) && dim > 0) {
     if (vector.length === dim) {
-      return vector;
+      return vector
     }
     if (vector.length > dim) {
-      return vector.slice(0, dim);
+      return vector.slice(0, dim)
     }
-    return null;
+    return null
   }
-  return vector;
+  return vector
 }
 
 /**
@@ -119,80 +117,84 @@ function toFloat32Vector(row) {
  * ESM2 embeddings are stored as float16 to save space.
  */
 function float16ToFloat32(uint16) {
-  const sign = (uint16 >> 15) & 0x1;
-  const exp = (uint16 >> 10) & 0x1f;
-  const frac = uint16 & 0x3ff;
+  const sign = (uint16 >> 15) & 0x1
+  const exp = (uint16 >> 10) & 0x1f
+  const frac = uint16 & 0x3ff
 
   if (exp === 0) {
     // Subnormal or zero
-    if (frac === 0) return sign ? -0 : 0;
+    if (frac === 0) return sign ? -0 : 0
     // Subnormal: value = (-1)^sign * 2^-14 * (frac/1024)
-    return (sign ? -1 : 1) * Math.pow(2, -14) * (frac / 1024);
+    return (sign ? -1 : 1) * Math.pow(2, -14) * (frac / 1024)
   } else if (exp === 31) {
     // Infinity or NaN
-    return frac === 0 ? (sign ? -Infinity : Infinity) : NaN;
+    return frac === 0 ? (sign ? -Infinity : Infinity) : NaN
   }
   // Normal: value = (-1)^sign * 2^(exp-15) * (1 + frac/1024)
-  return (sign ? -1 : 1) * Math.pow(2, exp - 15) * (1 + frac / 1024);
+  return (sign ? -1 : 1) * Math.pow(2, exp - 15) * (1 + frac / 1024)
 }
 
 function toFloat16ToFloat32Vector(blobData, expectedDim) {
   if (!blobData) {
-    return null;
+    return null
   }
-  let buffer = cloneArrayBuffer(blobData);
+  let buffer = cloneArrayBuffer(blobData)
   // Handle hex or base64 strings
-  if (!buffer && typeof blobData === 'string') {
-    const s = blobData.trim();
+  if (!buffer && typeof blobData === "string") {
+    const s = blobData.trim()
     if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0) {
-      const len = s.length / 2;
-      const u8 = new Uint8Array(len);
+      const len = s.length / 2
+      const u8 = new Uint8Array(len)
       for (let i = 0; i < len; i += 1) {
-        u8[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+        u8[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16)
       }
-      buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
     } else {
       try {
-        const bin = atob(s);
-        const u8 = new Uint8Array(bin.length);
+        const bin = atob(s)
+        const u8 = new Uint8Array(bin.length)
         for (let i = 0; i < bin.length; i += 1) {
-          u8[i] = bin.charCodeAt(i);
+          u8[i] = bin.charCodeAt(i)
         }
-        buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+        buffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
       } catch (e) {
-        buffer = null;
+        buffer = null
       }
     }
   }
   if (!buffer || buffer.byteLength === 0) {
-    return null;
+    return null
   }
   // Read as Uint16Array (float16 is 2 bytes per value)
-  const uint16View = new Uint16Array(buffer);
-  const dim = expectedDim || uint16View.length;
-  const float32 = new Float32Array(dim);
+  const uint16View = new Uint16Array(buffer)
+  const dim = expectedDim || uint16View.length
+  const float32 = new Float32Array(dim)
   for (let i = 0; i < dim && i < uint16View.length; i += 1) {
-    float32[i] = float16ToFloat32(uint16View[i]);
+    float32[i] = float16ToFloat32(uint16View[i])
   }
-  return float32;
+  return float32
 }
 
 function toProteinObject(row) {
   if (!row) {
-    return null;
+    return null
   }
   // Parse JSON array columns
   const parseJson = (str) => {
-    if (!str) return [];
-    try { return JSON.parse(str); } catch { return []; }
-  };
-  
+    if (!str) return []
+    try {
+      return JSON.parse(str)
+    } catch {
+      return []
+    }
+  }
+
   return {
     id: row.id,
     uniprot: row.uniprot,
     gene: row.gene,
     gene_surname: row.gene_surname,
-    hgnc: row.gene,  // alias for game engine compatibility
+    hgnc: row.gene, // alias for game engine compatibility
     full_name: row.full_name,
     length: row.length,
     mass: row.mass,
@@ -222,90 +224,97 @@ function toProteinObject(row) {
     // JSON arrays
     synonyms: parseJson(row.synonyms),
     domains: parseJson(row.domains),
-    domain_names: parseJson(row.domains),  // same as domains (already names)
+    domain_names: parseJson(row.domains), // same as domains (already names)
     clans: parseJson(row.clans),
     subcell: parseJson(row.locations),
     // GO terms in expected structure
     go_terms: {
       bp: parseJson(row.go_bp),
       mf: parseJson(row.go_mf),
-      cc: parseJson(row.go_cc)
+      cc: parseJson(row.go_cc),
     },
     go_terms_named: {
       bp: parseJson(row.go_bp),
       mf: parseJson(row.go_mf),
-      cc: parseJson(row.go_cc)
+      cc: parseJson(row.go_cc),
     },
     // Pathways as expected structure
     reactome_pathways: parseJson(row.pathways),
     // Top-9 similar neighbors for ladder display
-    neighbors: parseJson(row.neighbors)
-  };
+    neighbors: parseJson(row.neighbors),
+  }
 }
 
 export async function fetchProteinByUniprot(db, uniprot) {
-  const key = normalizeKey(uniprot);
+  const key = normalizeKey(uniprot)
   if (!key) {
-    return null;
+    return null
   }
   if (proteinCache.has(key)) {
-    return proteinCache.get(key);
+    return proteinCache.get(key)
   }
-  let protein = null;
+  let protein = null
   try {
-    const row = await db.prepare(
-      `SELECT * FROM proteins WHERE upper(uniprot) = ? LIMIT 1`
-    ).bind(key).first();
-    protein = toProteinObject(row);
+    const row = await db
+      .prepare(`SELECT * FROM proteins WHERE upper(uniprot) = ? LIMIT 1`)
+      .bind(key)
+      .first()
+    protein = toProteinObject(row)
   } catch (err) {
-    console.warn('GeneGuessr: D1 fetchProteinByUniprot failed', err);
+    console.warn("GeneGuessr: D1 fetchProteinByUniprot failed", err)
   }
   if (protein) {
-    rememberProtein(key, protein);
+    rememberProtein(key, protein)
   }
-  return protein || null;
+  return protein || null
 }
 
 export async function fetchProteinSummaries(db, limit = 100) {
-  const { results } = await db.prepare(
-    `SELECT uniprot, gene, full_name, length
+  const { results } = await db
+    .prepare(
+      `SELECT uniprot, gene, full_name, length
      FROM proteins
      ORDER BY gene
-     LIMIT ?`
-  ).bind(limit).all();
-  return (results || []).map((row) => sanitizeProteinSummary(row));
+     LIMIT ?`,
+    )
+    .bind(limit)
+    .all()
+  return (results || []).map((row) => sanitizeProteinSummary(row))
 }
 
 export async function fetchProteinEmbedding(db, geneSymbol) {
   if (!geneSymbol) {
-    return null;
+    return null
   }
-  const key = geneSymbol.toUpperCase();
+  const key = geneSymbol.toUpperCase()
   if (embeddingCache.has(key)) {
-    return embeddingCache.get(key);
+    return embeddingCache.get(key)
   }
-  const row = await db.prepare(
-    `SELECT vector, dim FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`
-  ).bind(key).first();
-  const vector = toFloat32Vector(row);
-  rememberEmbedding(key, vector);
-  return vector;
+  const row = await db
+    .prepare(
+      `SELECT vector, dim FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`,
+    )
+    .bind(key)
+    .first()
+  const vector = toFloat32Vector(row)
+  rememberEmbedding(key, vector)
+  return vector
 }
 
 // Cache for dual embeddings (HiG2Vec + SaProt, with optional legacy ESM2 fallback)
-const dualEmbeddingCache = new Map();
-const MAX_DUAL_CACHE_SIZE = 256;
+const dualEmbeddingCache = new Map()
+const MAX_DUAL_CACHE_SIZE = 256
 
 function rememberDualEmbedding(key, value) {
-  if (!key) return;
+  if (!key) return
   if (!value) {
-    dualEmbeddingCache.delete(key);
-    return;
+    dualEmbeddingCache.delete(key)
+    return
   }
-  dualEmbeddingCache.set(key, value);
+  dualEmbeddingCache.set(key, value)
   if (dualEmbeddingCache.size > MAX_DUAL_CACHE_SIZE) {
-    const oldestKey = dualEmbeddingCache.keys().next().value;
-    dualEmbeddingCache.delete(oldestKey);
+    const oldestKey = dualEmbeddingCache.keys().next().value
+    dualEmbeddingCache.delete(oldestKey)
   }
 }
 
@@ -315,79 +324,85 @@ function rememberDualEmbedding(key, value) {
  */
 export async function fetchDualEmbeddings(db, geneSymbol) {
   if (!geneSymbol) {
-    return { hig2vec: null, saprot: null, esm2: null };
+    return { hig2vec: null, saprot: null, esm2: null }
   }
-  const key = geneSymbol.toUpperCase();
+  const key = geneSymbol.toUpperCase()
   if (dualEmbeddingCache.has(key)) {
-    return dualEmbeddingCache.get(key);
+    return dualEmbeddingCache.get(key)
   }
-  const row = await db.prepare(
-    `SELECT vector, dim, esm2_vector, esm2_dim, saprot_vector, saprot_dim
-     FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`
-  ).bind(key).first();
+  const row = await db
+    .prepare(
+      `SELECT vector, dim, esm2_vector, esm2_dim, saprot_vector, saprot_dim
+     FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`,
+    )
+    .bind(key)
+    .first()
 
   const result = {
     hig2vec: toFloat32Vector(row),
     saprot: row?.saprot_vector ? toFloat16ToFloat32Vector(row.saprot_vector, row.saprot_dim) : null,
-    esm2: row?.esm2_vector ? toFloat16ToFloat32Vector(row.esm2_vector, row.esm2_dim) : null
-  };
-  rememberDualEmbedding(key, result);
-  return result;
+    esm2: row?.esm2_vector ? toFloat16ToFloat32Vector(row.esm2_vector, row.esm2_dim) : null,
+  }
+  rememberDualEmbedding(key, result)
+  return result
 }
 
 async function ensureStructureFailureTable(db) {
   if (!db || structureFailureTableEnsured) {
-    return;
+    return
   }
-  await db.prepare(
-    `CREATE TABLE IF NOT EXISTS structure_failures (
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS structure_failures (
        uniprot TEXT PRIMARY KEY,
        failed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-     )`
-  ).run();
-  structureFailureTableEnsured = true;
+     )`,
+    )
+    .run()
+  structureFailureTableEnsured = true
 }
 
 export async function markStructureFailure(db, uniprot) {
   if (!db || !uniprot) {
-    return;
+    return
   }
-  await ensureStructureFailureTable(db);
-  await db.prepare(
-    `INSERT INTO structure_failures (uniprot, failed_at)
+  await ensureStructureFailureTable(db)
+  await db
+    .prepare(
+      `INSERT INTO structure_failures (uniprot, failed_at)
      VALUES (upper(?), CURRENT_TIMESTAMP)
-     ON CONFLICT(uniprot) DO UPDATE SET failed_at = excluded.failed_at`
-  ).bind(uniprot).run();
+     ON CONFLICT(uniprot) DO UPDATE SET failed_at = excluded.failed_at`,
+    )
+    .bind(uniprot)
+    .run()
 }
 
 export async function clearStructureFailure(db, uniprot) {
   if (!db || !uniprot) {
-    return;
+    return
   }
-  await ensureStructureFailureTable(db);
-  await db.prepare(
-    `DELETE FROM structure_failures WHERE uniprot = upper(?)`
-  ).bind(uniprot).run();
+  await ensureStructureFailureTable(db)
+  await db.prepare(`DELETE FROM structure_failures WHERE uniprot = upper(?)`).bind(uniprot).run()
 }
 
 export async function searchProteins(db, query, limit = 20, exclude = []) {
   if (!query || !query.trim()) {
-    return [];
+    return []
   }
-  await ensureStructureFailureTable(db);
-  const needle = query.trim().toLowerCase();
-  const wildcard = `%${needle}%`;
-  const prefix = `${needle}%`;
-  
+  await ensureStructureFailureTable(db)
+  const needle = query.trim().toLowerCase()
+  const wildcard = `%${needle}%`
+  const prefix = `${needle}%`
+
   // Build exclusion clause if needed
-  let excludeClause = '';
-  const excludeBindings = [];
+  let excludeClause = ""
+  const excludeBindings = []
   if (exclude.length > 0) {
-    const placeholders = exclude.map(() => '?').join(',');
-    excludeClause = `AND upper(p.uniprot) NOT IN (${placeholders})`;
-    excludeBindings.push(...exclude);
+    const placeholders = exclude.map(() => "?").join(",")
+    excludeClause = `AND upper(p.uniprot) NOT IN (${placeholders})`
+    excludeBindings.push(...exclude)
   }
-  
+
   try {
     const statement = `
       SELECT p.uniprot, p.gene, p.full_name, p.length,
@@ -413,8 +428,9 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
         ${excludeClause}
       GROUP BY p.id
       ORDER BY match_rank ASC, lower(p.gene) ASC
-      LIMIT ?`;
-    const { results } = await db.prepare(statement)
+      LIMIT ?`
+    const { results } = await db
+      .prepare(statement)
       .bind(
         needle,
         needle,
@@ -428,55 +444,55 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
         wildcard,
         wildcard,
         ...excludeBindings,
-        limit
+        limit,
       )
-      .all();
-    return (results || []).map((row) => sanitizeProteinSummary(row));
+      .all()
+    return (results || []).map((row) => sanitizeProteinSummary(row))
   } catch (err) {
-    console.warn('GeneGuessr: D1 searchProteins failed', err);
-    return [];
+    console.warn("GeneGuessr: D1 searchProteins failed", err)
+    return []
   }
 }
 
 export async function getEligibleProteinIds(db) {
-  const now = Date.now();
-  if (eligibleCache.ids && (now - eligibleCache.fetchedAt) < eligibleCache.ttl) {
-    return eligibleCache.ids.slice();
+  const now = Date.now()
+  if (eligibleCache.ids && now - eligibleCache.fetchedAt < eligibleCache.ttl) {
+    return eligibleCache.ids.slice()
   }
-  await ensureStructureFailureTable(db);
+  await ensureStructureFailureTable(db)
   const fetchIds = async (clause) => {
     const statement = `
       SELECT p.uniprot
       FROM proteins p
       LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
       ${clause}
-    `;
-    const { results } = await db.prepare(statement).all();
-    return (results || []).map((row) => row.uniprot);
-  };
-  let ids = [];
+    `
+    const { results } = await db.prepare(statement).all()
+    return (results || []).map((row) => row.uniprot)
+  }
+  let ids = []
   try {
     ids = await fetchIds(
       `WHERE p.structure_source IS NOT NULL
          AND p.gene_summary IS NOT NULL
-         AND sf.uniprot IS NULL`
-    );
+         AND sf.uniprot IS NULL`,
+    )
   } catch (err) {
-    console.warn('GeneGuessr: D1 getEligibleProteinIds failed', err);
-    ids = [];
+    console.warn("GeneGuessr: D1 getEligibleProteinIds failed", err)
+    ids = []
   }
-  eligibleCache.ids = ids;
-  eligibleCache.fetchedAt = now;
-  return ids.slice();
+  eligibleCache.ids = ids
+  eligibleCache.fetchedAt = now
+  return ids.slice()
 }
 
 // Cache for surname-based protein grouping (for balanced random selection)
 const surnameCache = {
-  surnames: null,      // Array of unique surnames
-  byName: null,        // Map<surname, Array<uniprot>>
+  surnames: null, // Array of unique surnames
+  byName: null, // Map<surname, Array<uniprot>>
   fetchedAt: 0,
-  ttl: 5 * 60 * 1000   // 5 minutes
-};
+  ttl: 5 * 60 * 1000, // 5 minutes
+}
 
 /**
  * Get eligible proteins grouped by gene surname.
@@ -484,16 +500,16 @@ const surnameCache = {
  * large gene families like ZNF, OR, KRTAP, etc.
  */
 export async function getEligibleProteinsBySurname(db) {
-  const now = Date.now();
-  if (surnameCache.surnames && (now - surnameCache.fetchedAt) < surnameCache.ttl) {
+  const now = Date.now()
+  if (surnameCache.surnames && now - surnameCache.fetchedAt < surnameCache.ttl) {
     return {
       surnames: surnameCache.surnames.slice(),
-      byName: new Map(surnameCache.byName)
-    };
+      byName: new Map(surnameCache.byName),
+    }
   }
-  
-  await ensureStructureFailureTable(db);
-  
+
+  await ensureStructureFailureTable(db)
+
   try {
     const statement = `
       SELECT p.uniprot, p.gene_surname
@@ -503,31 +519,31 @@ export async function getEligibleProteinsBySurname(db) {
         AND p.gene_summary IS NOT NULL
         AND sf.uniprot IS NULL
         AND p.gene_surname IS NOT NULL
-    `;
-    const { results } = await db.prepare(statement).all();
-    
+    `
+    const { results } = await db.prepare(statement).all()
+
     // Group proteins by surname
-    const byName = new Map();
-    for (const row of (results || [])) {
-      const surname = row.gene_surname;
+    const byName = new Map()
+    for (const row of results || []) {
+      const surname = row.gene_surname
       if (!byName.has(surname)) {
-        byName.set(surname, []);
+        byName.set(surname, [])
       }
-      byName.get(surname).push(row.uniprot);
+      byName.get(surname).push(row.uniprot)
     }
-    
-    const surnames = Array.from(byName.keys()).sort();
-    
-    surnameCache.surnames = surnames;
-    surnameCache.byName = byName;
-    surnameCache.fetchedAt = now;
-    
-    console.log(`[SURNAME-CACHE] Loaded ${surnames.length} unique gene surnames`);
-    
-    return { surnames: surnames.slice(), byName: new Map(byName) };
+
+    const surnames = Array.from(byName.keys()).sort()
+
+    surnameCache.surnames = surnames
+    surnameCache.byName = byName
+    surnameCache.fetchedAt = now
+
+    console.log(`[SURNAME-CACHE] Loaded ${surnames.length} unique gene surnames`)
+
+    return { surnames: surnames.slice(), byName: new Map(byName) }
   } catch (err) {
-    console.warn('GeneGuessr: D1 getEligibleProteinsBySurname failed', err);
-    return { surnames: [], byName: new Map() };
+    console.warn("GeneGuessr: D1 getEligibleProteinsBySurname failed", err)
+    return { surnames: [], byName: new Map() }
   }
 }
 
@@ -535,119 +551,120 @@ export async function getEligibleProteinsBySurname(db) {
  * Pick a random protein using surname-based balancing.
  * 1. Pick a random surname
  * 2. Pick a random protein within that surname
- * 
+ *
  * This ensures each gene family has equal representation regardless of size.
  * For example, the 400+ OR genes now have the same probability as the 1 TP53 gene.
- * 
+ *
  * Returns: { protein, surname, familySize } or null
  */
 export async function pickRandomProteinBalanced(db) {
-  const { surnames, byName } = await getEligibleProteinsBySurname(db);
-  
+  const { surnames, byName } = await getEligibleProteinsBySurname(db)
+
   if (!surnames.length) {
-    console.warn('[BALANCED-PICK] No surnames available, falling back to unbalanced');
-    return null;
+    console.warn("[BALANCED-PICK] No surnames available, falling back to unbalanced")
+    return null
   }
-  
+
   // Step 1: Pick random surname
-  const surnameIdx = Math.floor(Math.random() * surnames.length);
-  const surname = surnames[surnameIdx];
-  const familyProteins = byName.get(surname) || [];
-  
+  const surnameIdx = Math.floor(Math.random() * surnames.length)
+  const surname = surnames[surnameIdx]
+  const familyProteins = byName.get(surname) || []
+
   if (!familyProteins.length) {
-    console.warn(`[BALANCED-PICK] Surname ${surname} has no proteins, retrying`);
-    return pickRandomProteinBalanced(db);  // Retry with different surname
+    console.warn(`[BALANCED-PICK] Surname ${surname} has no proteins, retrying`)
+    return pickRandomProteinBalanced(db) // Retry with different surname
   }
-  
+
   // Step 2: Pick random protein within surname
-  const proteinIdx = Math.floor(Math.random() * familyProteins.length);
-  const uniprot = familyProteins[proteinIdx];
-  
-  const protein = await fetchProteinByUniprot(db, uniprot);
-  
+  const proteinIdx = Math.floor(Math.random() * familyProteins.length)
+  const uniprot = familyProteins[proteinIdx]
+
+  const protein = await fetchProteinByUniprot(db, uniprot)
+
   if (!protein) {
-    console.warn(`[BALANCED-PICK] Protein ${uniprot} not found, retrying`);
-    return pickRandomProteinBalanced(db);
+    console.warn(`[BALANCED-PICK] Protein ${uniprot} not found, retrying`)
+    return pickRandomProteinBalanced(db)
   }
-  
-  console.log(`[BALANCED-PICK] Picked ${protein.gene} from ${surname} family (${familyProteins.length} members)`);
-  
+
+  console.log(
+    `[BALANCED-PICK] Picked ${protein.gene} from ${surname} family (${familyProteins.length} members)`,
+  )
+
   return {
     protein,
     surname,
-    familySize: familyProteins.length
-  };
+    familySize: familyProteins.length,
+  }
 }
 
 export async function pickDailyTarget(db, eligibleIds, salt, date = new Date()) {
-  const ids = Array.isArray(eligibleIds) && eligibleIds.length
-    ? eligibleIds
-    : await getEligibleProteinIds(db);
+  const ids =
+    Array.isArray(eligibleIds) && eligibleIds.length ? eligibleIds : await getEligibleProteinIds(db)
   if (!ids.length) {
-    return null;
+    return null
   }
-  const today = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
-  const encoder = new TextEncoder();
-  const hashInput = encoder.encode(`${today}|${salt || ''}`);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', hashInput);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-  const hashInt = parseInt(hash.slice(0, 16), 16);
-  const idx = hashInt % ids.length;
-  let skippedAlphaFold = 0;
-  let chosenId = ids[idx];
-  let protein = await fetchProteinByUniprot(db, chosenId);
+  const today = typeof date === "string" ? date : date.toISOString().slice(0, 10)
+  const encoder = new TextEncoder()
+  const hashInput = encoder.encode(`${today}|${salt || ""}`)
+  const hashBuffer = await crypto.subtle.digest("SHA-256", hashInput)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+  const hashInt = parseInt(hash.slice(0, 16), 16)
+  const idx = hashInt % ids.length
+  let skippedAlphaFold = 0
+  let chosenId = ids[idx]
+  let protein = await fetchProteinByUniprot(db, chosenId)
   if (protein && isAlphaFoldOnlyProtein(protein)) {
     for (let offset = 1; offset < ids.length; offset++) {
-      const candidateId = ids[(idx + offset) % ids.length];
-      const candidate = await fetchProteinByUniprot(db, candidateId);
+      const candidateId = ids[(idx + offset) % ids.length]
+      const candidate = await fetchProteinByUniprot(db, candidateId)
       if (candidate && !isAlphaFoldOnlyProtein(candidate)) {
-        skippedAlphaFold = offset;
-        chosenId = candidateId;
-        protein = candidate;
-        break;
+        skippedAlphaFold = offset
+        chosenId = candidateId
+        protein = candidate
+        break
       }
     }
   }
   return {
     protein,
     skippedAlphaFold,
-    date: today
-  };
+    date: today,
+  }
 }
 
 function cosineSimilarity(vecA, vecB) {
   if (!vecA || !vecB || vecA.length !== vecB.length || !vecA.length) {
-    return null;
+    return null
   }
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
+  let dot = 0
+  let magA = 0
+  let magB = 0
   for (let i = 0; i < vecA.length; i += 1) {
-    const a = vecA[i];
-    const b = vecB[i];
-    dot += a * b;
-    magA += a * a;
-    magB += b * b;
+    const a = vecA[i]
+    const b = vecB[i]
+    dot += a * b
+    magA += a * a
+    magB += b * b
   }
   if (magA <= 0 || magB <= 0) {
-    return null;
+    return null
   }
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB))
 }
 
 function normalizeCosine(value) {
   if (!Number.isFinite(value)) {
-    return null;
+    return null
   }
-  const normalized = (value + 1) / 2;
+  const normalized = (value + 1) / 2
   if (normalized <= 0) {
-    return 0;
+    return 0
   }
   if (normalized >= 1) {
-    return 1;
+    return 1
   }
-  return normalized;
+  return normalized
 }
 
 // Mode-aligned normalization (from 10k random pair analysis)
@@ -658,8 +675,8 @@ const EMBEDDING_STATS = {
   // ESM2 cosine: mode=0.976, right spread=0.017 → very narrow peak
   esm2: { scale: 23.0569, offset: -21.9954 },
   // HiG2Vec cosine: mode=-0.030, right spread=0.975 → wide symmetric
-  hig2vec: { scale: 0.4101, offset: 0.5123 }
-};
+  hig2vec: { scale: 0.4101, offset: 0.5123 },
+}
 
 // Soft-OR calibration constants (q90, gamma=1.6).
 // Notes:
@@ -670,88 +687,86 @@ const SOFT_OR_CALIBRATION = {
   gamma: 1.6,
   hig2vec: { slope: 3.0523066887460613, midpoint: 0.11959530995180852 },
   saprot: { slope: 3.5181330442836676, midpoint: 0.2361672823590854 },
-  esm2: { slope: 4.584771332415639, midpoint: 0.12455377192395384 }
-};
+  esm2: { slope: 4.584771332415639, midpoint: 0.12455377192395384 },
+}
 
 // Beta calibration constants (Kull et al. 2017)
 // Fitted offline to satisfy: median÷50%, HBBHBD÷97%, BRCA1 spread maximized
 // Formula: p_cal = å(A*log(s) + B*log(1-s) + C)
 // Note: BRCA1 spread limited by embedding resolution, not transform
-const BETA_CAL = { A: 3.415631, B: -3.366470, C: 0.005369 };
+const BETA_CAL = { A: 3.415631, B: -3.36647, C: 0.005369 }
 
 /**
  * Stage 1: Compute metric similarity (internal, preserves discrimination).
  * Uses percentile-aligned linear transform: norm = scale * raw + offset.
  * Calibrated so median → 0.50, p99 → 0.90 for both embedding types.
- * 
+ *
  * This ensures equal contribution from ESM2 and HiG2Vec in the 89-90% bracket,
  * where the ladder boundary sits. No clipping needed - blended metric naturally
  * stays in reasonable bounds (both inputs calibrated to [0, 1] at p0→p100).
  */
 function getMetricSimilarity(cosine, embeddingType) {
   if (!Number.isFinite(cosine)) {
-    return null;
+    return null
   }
-  const stats = EMBEDDING_STATS[embeddingType];
+  const stats = EMBEDDING_STATS[embeddingType]
   if (!stats) {
     // Fallback to simple normalization if unknown type
-    return normalizeCosine(cosine);
+    return normalizeCosine(cosine)
   }
   // Linear transform: scale * raw + offset
-  return stats.scale * cosine + stats.offset;
+  return stats.scale * cosine + stats.offset
 }
 
 function sigmoid(value) {
-  return 1 / (1 + Math.exp(-value));
+  return 1 / (1 + Math.exp(-value))
 }
 
-function getSoftOrPercent(cosH, cosSeq, seqKey = 'saprot') {
+function getSoftOrPercent(cosH, cosSeq, seqKey = "saprot") {
   if (!Number.isFinite(cosH) && !Number.isFinite(cosSeq)) {
-    return null;
+    return null
   }
-  const seq = SOFT_OR_CALIBRATION[seqKey] || SOFT_OR_CALIBRATION.saprot;
+  const seq = SOFT_OR_CALIBRATION[seqKey] || SOFT_OR_CALIBRATION.saprot
   const h = Number.isFinite(cosH)
     ? sigmoid(SOFT_OR_CALIBRATION.hig2vec.slope * (cosH - SOFT_OR_CALIBRATION.hig2vec.midpoint))
-    : 0;
-  const s = Number.isFinite(cosSeq)
-    ? sigmoid(seq.slope * (cosSeq - seq.midpoint))
-    : 0;
-  const pOr = 1 - (1 - h) * (1 - s);
-  const pDisplay = Math.pow(pOr, SOFT_OR_CALIBRATION.gamma);
-  return Math.round(pDisplay * 100);
+    : 0
+  const s = Number.isFinite(cosSeq) ? sigmoid(seq.slope * (cosSeq - seq.midpoint)) : 0
+  const pOr = 1 - (1 - h) * (1 - s)
+  const pDisplay = Math.pow(pOr, SOFT_OR_CALIBRATION.gamma)
+  return Math.round(pDisplay * 100)
 }
 
 /**
  * Stage 2A: Beta calibration for display score (global fallback).
  * Used when guess is NOT in target's precomputed top-K neighbors.
  * Maps metric [0, 1] → display [0, ~90%].
- * 
+ *
  * Formula: p_cal = σ(A*log(s) + B*log(1-s) + C)
  */
 function toDisplayScoreGlobal(pMetric) {
   if (pMetric === null || !Number.isFinite(pMetric)) {
-    return null;
+    return null
   }
   // Clamp to avoid log(0) or log(1)
-  const eps = 1e-9;
-  const s = Math.max(eps, Math.min(1 - eps, pMetric));
+  const eps = 1e-9
+  const s = Math.max(eps, Math.min(1 - eps, pMetric))
   // Beta calibration: logit-like transform with asymmetric coefficients
-  const x = BETA_CAL.A * Math.log(s) + BETA_CAL.B * Math.log(1 - s) + BETA_CAL.C;
-  let pCal = 1 / (1 + Math.exp(-x));
+  const x = BETA_CAL.A * Math.log(s) + BETA_CAL.B * Math.log(1 - s) + BETA_CAL.C
+  let pCal = 1 / (1 + Math.exp(-x))
   // Cap at 0.90 - top 10% reserved for ladder neighbors
-  return Math.min(pCal, 0.90);
+  return Math.min(pCal, 0.9)
 }
 
 /**
  * Stage 2B: Rank-based display score for ladder neighbors.
  * If guess is in target's top-K neighbors, use discrete rank mapping:
  *   rank 1 → 99%, rank 2 → 98%, ..., rank K → (100-K)%
- * 
+ *
  * This guarantees distinct integer percentages regardless of metric compression.
  */
 function toDisplayScoreLadder(rank) {
   // rank 1 → 0.99, rank 2 → 0.98, etc.
-  return (100 - rank) / 100;
+  return (100 - rank) / 100
 }
 
 /**
@@ -759,24 +774,24 @@ function toDisplayScoreLadder(rank) {
  * Display transform happens in getBlendedSimilarity with ladder support.
  */
 function normalizeWithZScore(cosine, embeddingType) {
-  return getMetricSimilarity(cosine, embeddingType);
+  return getMetricSimilarity(cosine, embeddingType)
 }
 
 export async function getHig2vecSimilarity(db, guessId, targetId) {
-  const guessKey = normalizeKey(guessId);
-  const targetKey = normalizeKey(targetId);
+  const guessKey = normalizeKey(guessId)
+  const targetKey = normalizeKey(targetId)
   if (!guessKey || !targetKey) {
-    return null;
+    return null
   }
   const [{ hig2vec: guessVec }, { hig2vec: targetVec }] = await Promise.all([
     fetchDualEmbeddings(db, guessKey),
-    fetchDualEmbeddings(db, targetKey)
-  ]);
+    fetchDualEmbeddings(db, targetKey),
+  ])
   if (!guessVec || !targetVec) {
-    return null;
+    return null
   }
-  const cosine = cosineSimilarity(guessVec, targetVec);
-  return getSoftOrPercent(cosine, null, 'saprot');
+  const cosine = cosineSimilarity(guessVec, targetVec)
+  return getSoftOrPercent(cosine, null, "saprot")
 }
 
 /**
@@ -784,19 +799,19 @@ export async function getHig2vecSimilarity(db, guessId, targetId) {
  * Returns null if guess is not in neighbors.
  */
 function getLadderRank(neighbors, guessKey) {
-  if (!neighbors || !Array.isArray(neighbors)) return null;
+  if (!neighbors || !Array.isArray(neighbors)) return null
   for (let i = 0; i < neighbors.length; i++) {
     if (neighbors[i].gene?.toUpperCase() === guessKey) {
-      return i + 1; // 1-indexed rank
+      return i + 1 // 1-indexed rank
     }
   }
-  return null;
+  return null
 }
 
 /**
  * Compute similarity using calibrated soft-OR on HiG2Vec + isotropic SaProt.
  * Returns integer percentage (0-100).
- * 
+ *
  * @param {D1Database} db - The D1 database binding
  * @param {string} guessId - Gene symbol or UniProt ID of the guess
  * @param {string} targetId - Gene symbol or UniProt ID of the target
@@ -805,35 +820,38 @@ function getLadderRank(neighbors, guessKey) {
  * @returns {Promise<{blended: number|null, isLadder: boolean, ladderRank: number|null}>}
  */
 export async function getBlendedSimilarity(db, guessId, targetId, options = {}) {
-  const targetNeighbors = options.targetNeighbors || null;
-  const guessKey = normalizeKey(guessId);
-  const targetKey = normalizeKey(targetId);
+  const targetNeighbors = options.targetNeighbors || null
+  const guessKey = normalizeKey(guessId)
+  const targetKey = normalizeKey(targetId)
 
   if (!guessKey || !targetKey) {
-    return { blended: null, isLadder: false, ladderRank: null };
+    return { blended: null, isLadder: false, ladderRank: null }
   }
 
   // Check if guess is in target's precomputed neighbors for ladder display
-  const ladderRank = getLadderRank(targetNeighbors, guessKey);
-  const isLadder = ladderRank !== null && ladderRank <= 9;
+  const ladderRank = getLadderRank(targetNeighbors, guessKey)
+  const isLadder = ladderRank !== null && ladderRank <= 9
 
   const [guessEmbeddings, targetEmbeddings] = await Promise.all([
     fetchDualEmbeddings(db, guessKey),
-    fetchDualEmbeddings(db, targetKey)
-  ]);
+    fetchDualEmbeddings(db, targetKey),
+  ])
 
-  const cosH = (guessEmbeddings?.hig2vec && targetEmbeddings?.hig2vec)
-    ? cosineSimilarity(guessEmbeddings.hig2vec, targetEmbeddings.hig2vec)
-    : null;
-  const cosS = (guessEmbeddings?.saprot && targetEmbeddings?.saprot)
-    ? cosineSimilarity(guessEmbeddings.saprot, targetEmbeddings.saprot)
-    : null;
-  const cosE = (guessEmbeddings?.esm2 && targetEmbeddings?.esm2)
-    ? cosineSimilarity(guessEmbeddings.esm2, targetEmbeddings.esm2)
-    : null;
+  const cosH =
+    guessEmbeddings?.hig2vec && targetEmbeddings?.hig2vec
+      ? cosineSimilarity(guessEmbeddings.hig2vec, targetEmbeddings.hig2vec)
+      : null
+  const cosS =
+    guessEmbeddings?.saprot && targetEmbeddings?.saprot
+      ? cosineSimilarity(guessEmbeddings.saprot, targetEmbeddings.saprot)
+      : null
+  const cosE =
+    guessEmbeddings?.esm2 && targetEmbeddings?.esm2
+      ? cosineSimilarity(guessEmbeddings.esm2, targetEmbeddings.esm2)
+      : null
 
-  const cosSeq = Number.isFinite(cosS) ? cosS : cosE;
-  const seqKey = Number.isFinite(cosS) ? 'saprot' : 'esm2';
-  const percent = getSoftOrPercent(cosH, cosSeq, seqKey);
-  return { blended: percent, isLadder, ladderRank };
+  const cosSeq = Number.isFinite(cosS) ? cosS : cosE
+  const seqKey = Number.isFinite(cosS) ? "saprot" : "esm2"
+  const percent = getSoftOrPercent(cosH, cosSeq, seqKey)
+  return { blended: percent, isLadder, ladderRank }
 }

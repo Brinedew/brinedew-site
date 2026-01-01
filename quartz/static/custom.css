@@ -36,16 +36,37 @@
 }
 
 /* Apply fonts directly - no variables, no fights */
-html, body, article { font-family: "Crimson Pro", serif; }
+html,
+body,
+article {
+  font-family: "Crimson Pro", serif;
+}
 /* Ensure all headings use Crimson Pro regardless of theme defaults */
-h1,h2,h3,h4,h5,h6,.page-title,.breadcrumbs,nav,button { font-family: "Crimson Pro", serif !important; }
-code, pre { font-family: "Monaspace Xenon Web", monospace; }
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.page-title,
+.breadcrumbs,
+nav,
+button {
+  font-family: "Crimson Pro", serif !important;
+}
+code,
+pre {
+  font-family: "Monaspace Xenon Web", monospace;
+}
 
 /* Also override Quartz variable so any var(--headerFont) usages resolve to Crimson Pro */
-:root { --headerFont: "Crimson Pro", serif; --codeFont: "Monaspace Xenon Web", monospace; }
+:root {
+  --headerFont: "Crimson Pro", serif;
+  --codeFont: "Monaspace Xenon Web", monospace;
+}
 
-body { 
-  font-synthesis: none; 
+body {
+  font-synthesis: none;
   font-size: 19px;
   font-weight: 400;
   line-height: 1.45;
@@ -55,23 +76,23 @@ body {
 @layer base {
   :root {
     /* Light mode: Rich paper tones with sufficient contrast */
-    --light: oklch(96% 0.015 75);      /* Warm cream paper */
-    --lightgray: oklch(85% 0.02 65);   /* Soft taupe */
-    --gray: oklch(70% 0.025 60);       /* Medium warm gray */
-    --darkgray: oklch(45% 0.03 55);    /* Deep warm gray */
-    --dark: oklch(20% 0.035 50);       /* Rich dark brown - WCAG AA compliant */
-    --accent: oklch(50% 0.08 185);     /* Keep the beloved teal */
-    
+    --light: oklch(96% 0.015 75); /* Warm cream paper */
+    --lightgray: oklch(85% 0.02 65); /* Soft taupe */
+    --gray: oklch(70% 0.025 60); /* Medium warm gray */
+    --darkgray: oklch(45% 0.03 55); /* Deep warm gray */
+    --dark: oklch(20% 0.035 50); /* Rich dark brown - WCAG AA compliant */
+    --accent: oklch(50% 0.08 185); /* Keep the beloved teal */
+
     /* UI elements with subtle warmth */
     --ui-border: oklch(82% 0.02 70);
     --ui-bg: oklch(92% 0.01 75);
-    
+
     /* Semantic colors for better hierarchy */
-    --secondary: oklch(40% 0.04 55);   /* Darker brown for secondary text */
-    --tertiary: var(--accent);         /* Use accent for tertiary - unified teal */
+    --secondary: oklch(40% 0.04 55); /* Darker brown for secondary text */
+    --tertiary: var(--accent); /* Use accent for tertiary - unified teal */
     --highlight: oklch(from var(--accent) l c h / 0.25); /* Accent-based highlight */
   }
-  
+
   /* Dark mode: True dark academia with softer text */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
@@ -123,20 +144,20 @@ body {
 
 :root[data-theme="dark"] {
   /* Dark mode: doubled background brightness while preserving contrast offsets */
-  --light: oklch(16% 0.01 45);      /* was 8% */
-  --lightgray: oklch(36% 0.02 50);  /* was 18% (bg+10) */
-  --gray: oklch(58% 0.025 55);      /* was 40% (bg+32) */
-  --darkgray: oklch(80% 0.02 60);   /* was 62% (bg+54) */
-  --dark: oklch(85% 0.015 65);      /* body text unchanged */
-  --accent: oklch(68% 0.08 185);    /* unchanged */
+  --light: oklch(16% 0.01 45); /* was 8% */
+  --lightgray: oklch(36% 0.02 50); /* was 18% (bg+10) */
+  --gray: oklch(58% 0.025 55); /* was 40% (bg+32) */
+  --darkgray: oklch(80% 0.02 60); /* was 62% (bg+54) */
+  --dark: oklch(85% 0.015 65); /* body text unchanged */
+  --accent: oklch(68% 0.08 185); /* unchanged */
   --ui-border: oklch(38% 0.025 50); /* was 20% (bg+12) */
-  --ui-bg: oklch(30% 0.02 45);      /* was 12% (bg+4) */
-  --secondary: oklch(70% 0.02 60);  /* unchanged */
+  --ui-bg: oklch(30% 0.02 45); /* was 12% (bg+4) */
+  --secondary: oklch(70% 0.02 60); /* unchanged */
   --tertiary: var(--accent);
 }
 
 /* Headlines that actually create hierarchy */
-h1 { 
+h1 {
   font-size: 2.4em;
   font-weight: 300; /* Light weight at large size */
   letter-spacing: -0.02em;
@@ -190,7 +211,9 @@ a:hover {
 }
 
 /* Hide external link glyph (also disabled in config) */
-a.external .external-icon { display: none !important; }
+a.external .external-icon {
+  display: none !important;
+}
 
 /* Text selection highlighting with proper contrast */
 ::selection {
@@ -231,12 +254,22 @@ a.external .external-icon { display: none !important; }
 }
 
 /* Hide placeholder text inside the search input */
-.search-bar::placeholder { color: transparent; }
+.search-bar::placeholder {
+  color: transparent;
+}
 /* Vendor placeholders for broader support */
-.search-bar::-webkit-input-placeholder { color: transparent; }
-.search-bar::-moz-placeholder { color: transparent; }
-.search-bar:-ms-input-placeholder { color: transparent; }
-.search-bar:-moz-placeholder { color: transparent; }
+.search-bar::-webkit-input-placeholder {
+  color: transparent;
+}
+.search-bar::-moz-placeholder {
+  color: transparent;
+}
+.search-bar:-ms-input-placeholder {
+  color: transparent;
+}
+.search-bar:-moz-placeholder {
+  color: transparent;
+}
 
 /* Make backlinks subtle, not dominant */
 .backlinks {
@@ -290,12 +323,16 @@ header {
 }
 
 /* Keep sidebar elements stable during theme transitions */
-.explorer, .toc, .tag-explorer {
+.explorer,
+.toc,
+.tag-explorer {
   view-transition-name: none;
 }
 
 /* Prevent any transitions on sidebar text during theme changes */
-.explorer *, .toc *, .tag-explorer * {
+.explorer *,
+.toc *,
+.tag-explorer * {
   transition: none !important;
 }
 
@@ -329,7 +366,7 @@ article li:has(> input[type="checkbox"]:checked) {
 /* Fix Explorer Sidebar - Remove Blue Colors and Bold Text */
 .explorer-content {
   /* Override Quartz's blue secondary color for sidebar links */
-  
+
   & ul li > a {
     color: var(--dark) !important;
     opacity: 0.85 !important; /* Match consistent opacity */
@@ -337,12 +374,12 @@ article li:has(> input[type="checkbox"]:checked) {
     font-family: "Crimson Pro", serif !important; /* Serif for consistency */
     font-size: 0.9rem !important; /* Explicit size override */
     line-height: 1.4;
-    
+
     &:hover {
       opacity: 1 !important;
       color: var(--accent);
     }
-    
+
     &.active {
       opacity: 1 !important;
       color: var(--accent);
@@ -355,17 +392,17 @@ article li:has(> input[type="checkbox"]:checked) {
   /* Folder names (like "Core Concepts") */
   & div > a {
     color: var(--darkgray) !important; /* Slightly muted for hierarchy */
-    font-weight: 500 !important;      /* Medium weight, not semibold */
+    font-weight: 500 !important; /* Medium weight, not semibold */
     font-size: 0.9rem !important;
     font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
     opacity: 0.9;
-    
+
     &:hover {
       color: var(--dark) !important;
       opacity: 1;
     }
   }
-  
+
   /* Folder buttons */
   & div > button span {
     color: var(--darkgray) !important;
@@ -373,11 +410,11 @@ article li:has(> input[type="checkbox"]:checked) {
     font-size: 0.9rem !important;
     font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
   }
-  
+
   /* Folder icons */
   .folder-icon {
     color: var(--gray) !important;
-    
+
     &:hover {
       color: var(--accent) !important;
     }
@@ -393,31 +430,31 @@ article li:has(> input[type="checkbox"]:checked) {
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important; /* Normal weight for consistency */
     opacity: 0.85 !important; /* Match TOC opacity */
-    
+
     &:hover {
       opacity: 1 !important;
     }
   }
-  
+
   /* Nested items smaller for hierarchy */
   .folder-outer ul li a {
     font-size: 0.85rem !important;
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
     opacity: 0.85 !important; /* Consistent with top-level */
-    
+
     &:hover {
       opacity: 1 !important;
     }
   }
-  
+
   /* Third level and deeper even smaller */
   .folder-outer .folder-outer ul li a {
     font-size: 0.8rem !important;
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
     opacity: 0.85 !important; /* Consistent opacity across all levels */
-    
+
     &:hover {
       opacity: 1 !important;
     }
@@ -442,12 +479,12 @@ ul.toc-content.overflow {
     font-weight: 400 !important;
     font-size: 0.9rem !important; /* Much smaller - TOC shouldn't compete with body text */
     transition: none !important; /* Remove opacity transitions */
-    
+
     &:hover {
       opacity: 1 !important;
       color: var(--accent) !important;
     }
-    
+
     &.in-view {
       opacity: 0.85 !important; /* Same as default, no special highlighting */
     }
@@ -462,24 +499,23 @@ ul.toc-content.overflow {
     font-weight: 400 !important;
     font-size: 0.9rem !important; /* Consistent size */
     opacity: 0.85 !important; /* Consistent opacity */
-    
+
     &:hover {
       opacity: 1 !important;
     }
   }
-  
+
   /* Make sure nested items also use serif */
   ul li a {
     font-family: "Crimson Pro", serif !important;
     font-weight: 400 !important;
     opacity: 0.85 !important; /* Consistent opacity for nested items too */
-    
+
     &:hover {
       opacity: 1 !important;
     }
   }
 }
-
 
 /* Protein Gallery Styles */
 @import url("/static/protein-gallery.css");
@@ -520,12 +556,14 @@ ul.toc-content.overflow {
   border: 1px solid var(--gray);
   border-radius: 8px;
   overflow: hidden;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .protein-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .protein-card-image {
@@ -553,7 +591,7 @@ ul.toc-content.overflow {
   font-weight: 600;
   font-size: 1.2rem;
   color: white;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .protein-card-info {

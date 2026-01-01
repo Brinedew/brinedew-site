@@ -9,7 +9,7 @@ export const sharedPageComponents: SharedLayout = {
   footer: Component.Footer({
     links: {
       // Use an absolute link so it doesn't change based on current page depth
-      "About": "/About.html",
+      About: "/About.html",
       "Support me": "/posts/Support-me.html",
     },
   }),
@@ -67,8 +67,8 @@ export const defaultContentPageLayout: PageLayout = {
 export const defaultListPageLayout: PageLayout = {
   beforeBody: [
     // MINIMALISM: Breadcrumbs, title, and meta commented out for cleaner design
-    // Component.Breadcrumbs(), 
-    // Component.ArticleTitle(), 
+    // Component.Breadcrumbs(),
+    // Component.ArticleTitle(),
     // Component.ContentMeta()
     // Render the protein gallery only on /apps/proteins/index
     Component.ProteinGallery(),
