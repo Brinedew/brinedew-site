@@ -50,12 +50,12 @@ button.toc-header {
   & > li {
     margin-bottom: 1rem; /* More space between separate TOC links */
     line-height: 1; /* Tight but readable line spacing for wrapped text */
-    
+
     > a {
       color: var(--dark);
       opacity: 0.85;
       transition: color 0.3s ease;
-      
+
       &:hover {
         opacity: 1;
         color: var(--secondary);

@@ -3576,4 +3576,4 @@ export const ADMIN_HTML = `<!DOCTYPE html>
   </script>
 
 </body>
-</html>`;
+</html>`

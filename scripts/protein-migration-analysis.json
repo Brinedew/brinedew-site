@@ -529,11 +529,7 @@
       "mass": 43.7,
       "length_aa": 393,
       "protein_type": "tumor suppressor",
-      "pathways": [
-        "p53 pathway",
-        "DNA damage response",
-        "ARF-MDM2-p53"
-      ],
+      "pathways": ["p53 pathway", "DNA damage response", "ARF-MDM2-p53"],
       "likely_family_page": false,
       "uniprot_mentions_in_content": 0,
       "migration_status": "single_protein"

@@ -47,7 +47,7 @@ const subdomainMappings: Record<string, string> = {
 
 function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
   const base = cfg.baseUrl ?? ""
-  
+
   const getUrlForSlug = (slug: SimpleSlug): string => {
     // Check if this slug should be mapped to a subdomain
     for (const [pathPrefix, subdomain] of Object.entries(subdomainMappings)) {
@@ -64,7 +64,7 @@ function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string
     // Default: use base URL
     return `https://${joinSegments(base, encodeURI(slug))}`
   }
-  
+
   const createURLEntry = (slug: SimpleSlug, content: ContentDetails): string => `<url>
     <loc>${getUrlForSlug(slug)}</loc>
     ${content.date && `<lastmod>${content.date.toISOString()}</lastmod>`}

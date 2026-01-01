@@ -18,11 +18,11 @@ document.addEventListener("nav", () => {
 
   // Close on Escape
   const onEscapeKey = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && tagSections.classList.contains('mobile-open')) {
-      tagSections.classList.remove('mobile-open')
-      const button = document.querySelector<HTMLButtonElement>('.mobile-menu-toggle')
+    if (event.key === "Escape" && tagSections.classList.contains("mobile-open")) {
+      tagSections.classList.remove("mobile-open")
+      const button = document.querySelector<HTMLButtonElement>(".mobile-menu-toggle")
       if (button) {
-        button.setAttribute('aria-expanded', 'false')
+        button.setAttribute("aria-expanded", "false")
         button.focus()
       }
     }
@@ -31,21 +31,21 @@ document.addEventListener("nav", () => {
   // Close on click outside
   const onOutsideClick = (event: Event) => {
     const target = event.target as HTMLElement
-    if (!tagSections.classList.contains('mobile-open')) return
-    if (tagSections.contains(target) || target.closest('.mobile-menu-toggle')) return
-    
-    tagSections.classList.remove('mobile-open')
-    const button = document.querySelector<HTMLButtonElement>('.mobile-menu-toggle')
+    if (!tagSections.classList.contains("mobile-open")) return
+    if (tagSections.contains(target) || target.closest(".mobile-menu-toggle")) return
+
+    tagSections.classList.remove("mobile-open")
+    const button = document.querySelector<HTMLButtonElement>(".mobile-menu-toggle")
     if (button) {
-      button.setAttribute('aria-expanded', 'false')
+      button.setAttribute("aria-expanded", "false")
     }
   }
 
-  document.addEventListener('keydown', onEscapeKey)
-  document.addEventListener('click', onOutsideClick)
-  
+  document.addEventListener("keydown", onEscapeKey)
+  document.addEventListener("click", onOutsideClick)
+
   window.addCleanup(() => {
-    document.removeEventListener('keydown', onEscapeKey)
-    document.removeEventListener('click', onOutsideClick)
+    document.removeEventListener("keydown", onEscapeKey)
+    document.removeEventListener("click", onOutsideClick)
   })
 })

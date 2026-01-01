@@ -28,7 +28,9 @@ const CitationComponent = ({ displayClass, cite }: CitationProps) => {
           setMetadata({
             title: data.message?.title?.[0],
             authors: Array.isArray(data.message?.author)
-              ? data.message.author.map((a: { given: string; family: string }) => `${a.given} ${a.family}`)
+              ? data.message.author.map(
+                  (a: { given: string; family: string }) => `${a.given} ${a.family}`,
+                )
               : undefined,
             year: data.message?.published?.["date-parts"]?.[0]?.[0],
           })
@@ -58,22 +60,28 @@ const CitationComponent = ({ displayClass, cite }: CitationProps) => {
       cancelled = true
     }
   }, [cite.doi, cite.zoteroKey])
-  
+
   return (
     <span
       class={classNames(displayClass, "citation")}
       onMouseEnter={() => setShowPopover(true)}
       onMouseLeave={() => setShowPopover(false)}
     >
-      <sup>[{metadata?.year || cite.year || '...'}]</sup>
+      <sup>[{metadata?.year || cite.year || "..."}]</sup>
       {showPopover && metadata && (
         <div class="citation-popover">
           <h4>{metadata.title}</h4>
-          <p>{metadata.authors?.join(', ')}</p>
+          <p>{metadata.authors?.join(", ")}</p>
           <div className="citation-actions">
-            <button onClick={() => navigator.clipboard.writeText(
-              `@article{${cite.doi || cite.zoteroKey},\n  title={${metadata.title}},\n  author={${metadata.authors?.join(' and ')}},\n  year={${metadata.year}}\n}`
-            )}>Copy BibTeX</button>
+            <button
+              onClick={() =>
+                navigator.clipboard.writeText(
+                  `@article{${cite.doi || cite.zoteroKey},\n  title={${metadata.title}},\n  author={${metadata.authors?.join(" and ")}},\n  year={${metadata.year}}\n}`,
+                )
+              }
+            >
+              Copy BibTeX
+            </button>
           </div>
         </div>
       )}

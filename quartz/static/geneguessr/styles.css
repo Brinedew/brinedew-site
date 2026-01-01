@@ -162,7 +162,9 @@
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 
 .pg-auth-discord:hover {
@@ -189,7 +191,9 @@
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .pg-auth-logout:hover {
@@ -651,7 +655,9 @@
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .pg-practice-clear:hover,
@@ -785,7 +791,7 @@
   right: -4px;
   width: 20px;
   height: 20px;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
 .pg-tutorial-item-text {
@@ -816,7 +822,9 @@
   color: var(--dark);
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .pg-tutorial-nav-btn:disabled {
@@ -845,7 +853,9 @@
   border: none;
   background: var(--ui-border);
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .pg-tutorial-dot.is-active {
@@ -877,7 +887,7 @@
   .pg-tutorial-overlay {
     padding: 1rem;
   }
-  
+
   .pg-tutorial-card {
     padding: 1.25rem;
   }
@@ -886,12 +896,12 @@
     width: 36px;
     height: 36px;
   }
-  
+
   .pg-tutorial-icon {
     width: 20px;
     height: 20px;
   }
-  
+
   .pg-tutorial-img {
     max-width: 100px;
   }
@@ -942,8 +952,8 @@
   z-index: 1;
 }
 
-.pg-clue-card>*,
-.pg-feedback-card>* {
+.pg-clue-card > *,
+.pg-feedback-card > * {
   position: relative;
   z-index: 2;
 }
@@ -1148,7 +1158,10 @@
   background-repeat: no-repeat;
   background-size: 0.95em 0.95em;
   /* Keep left/right padding identical. */
-  background-position: left 0.1em center, center center, right 0.1em center;
+  background-position:
+    left 0.1em center,
+    center center,
+    right 0.1em center;
   background-blend-mode: normal;
 }
 
@@ -1584,14 +1597,23 @@
 
 /* Pending similarity - spinner while loading */
 .pg-bar.pg-pending {
-  background: linear-gradient(90deg, var(--lightgray) 25%, color-mix(in srgb, var(--secondary) 30%, var(--lightgray) 70%) 50%, var(--lightgray) 75%);
+  background: linear-gradient(
+    90deg,
+    var(--lightgray) 25%,
+    color-mix(in srgb, var(--secondary) 30%, var(--lightgray) 70%) 50%,
+    var(--lightgray) 75%
+  );
   background-size: 200% 100%;
   animation: pg-shimmer 1.5s infinite;
 }
 
 @keyframes pg-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .pg-score-spinner {
@@ -1605,7 +1627,9 @@
 }
 
 @keyframes pg-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .pg-feedback-score.pg-pending {
@@ -1720,7 +1744,10 @@ button.pg-collapse-toggle .pg-feedback-score {
   max-height: 0;
   overflow: hidden;
   opacity: 0;
-  transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.2s ease;
+  transition:
+    max-height 0.3s ease,
+    opacity 0.3s ease,
+    padding 0.2s ease;
 }
 
 /*
@@ -1737,8 +1764,8 @@ button.pg-collapse-toggle .pg-feedback-score {
   line-height: 1.4;
   -webkit-hyphens: auto;
   hyphens: auto;
-  overflow-wrap: break-word;  /* Fallback if hyphenation unavailable */
-  word-break: normal;  /* Don't break mid-word without hyphenation */
+  overflow-wrap: break-word; /* Fallback if hyphenation unavailable */
+  word-break: normal; /* Don't break mid-word without hyphenation */
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1776,7 +1803,9 @@ button.pg-collapse-toggle .pg-feedback-score {
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .pg-play-again:hover {
@@ -1814,7 +1843,9 @@ button.pg-collapse-toggle .pg-feedback-score {
   color: var(--dark);
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .pg-practice-btn:hover {
@@ -1885,7 +1916,7 @@ button.pg-collapse-toggle .pg-feedback-score {
   gap: 0.5rem;
   padding: 0.5rem 1.25rem;
   border-radius: 999px;
-  background: #5865F2;
+  background: #5865f2;
   color: white;
   text-decoration: none;
   font-weight: 600;
@@ -1896,7 +1927,7 @@ button.pg-collapse-toggle .pg-feedback-score {
 }
 
 .pg-discord-invite:hover {
-  background: #4752C4;
+  background: #4752c4;
 }
 
 .pg-discord-invite svg {
