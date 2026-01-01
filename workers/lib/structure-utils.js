@@ -168,10 +168,10 @@ export function resolveStructureRepresentation(structure, proteinLength) {
   const swissModel = normalizeSwissModel(structure.swiss_model, proteinLength)
   const swissAvailable = Boolean(
     swissModel &&
-      (swissModel.coordinates_url ||
-        swissModel.coordinatesUrl ||
-        swissModel.model_url ||
-        swissModel.modelcif),
+    (swissModel.coordinates_url ||
+      swissModel.coordinatesUrl ||
+      swissModel.model_url ||
+      swissModel.modelcif),
   )
   const coverage = computePdbCoverage(structure, proteinLength)
   const structureId =
@@ -199,8 +199,8 @@ export function resolveStructureRepresentation(structure, proteinLength) {
   const swissQuality = typeof swissModel?.qmean === "number" ? swissModel.qmean : null
   const swissAcceptable = Boolean(
     swissRepresentation &&
-      swissRepresentation.coverage >= SWISS_MODEL_COVERAGE_THRESHOLD &&
-      (typeof swissQuality !== "number" || swissQuality >= SWISS_MODEL_QMEAN_THRESHOLD),
+    swissRepresentation.coverage >= SWISS_MODEL_COVERAGE_THRESHOLD &&
+    (typeof swissQuality !== "number" || swissQuality >= SWISS_MODEL_QMEAN_THRESHOLD),
   )
 
   if (pdbAvailable && coverage >= PDB_COVERAGE_THRESHOLD) {
