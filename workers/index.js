@@ -38,7 +38,9 @@ const DAILY_BOOTSTRAP_CACHE_TTL = 86400 // 24 hours
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
 
 const PRACTICE_RESOLVE_MAX_INPUTS = 10000
-const PRACTICE_RESOLVE_SQL_CHUNK = 400
+// Cloudflare D1 enforces a relatively small limit on bound parameters per query.
+// Keep this low enough to avoid `too many SQL variables`-style failures when users paste 100+ symbols.
+const PRACTICE_RESOLVE_SQL_CHUNK = 100
 
 function buildGeneguessrSubdomainRobotsTxt() {
   return `# robots.txt for ${GENEGUESSR_HOST}
