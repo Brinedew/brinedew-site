@@ -49,6 +49,63 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
   const LIGHT_NEUTRAL_GRAY_HEX = '#ab9b8f';
   const DARK_NEUTRAL_GRAY_HEX = '#87776d';
 
+  // API host resolution
+  // - Default: prod worker on https://geneguessr.brinedew.bio
+  // - Override: ?gg_api=https://... (persists into localStorage)
+  // - Clear override: ?gg_api=clear
+  const API_OVERRIDE_QUERY_KEY = 'gg_api';
+  const API_OVERRIDE_STORAGE_KEY = 'gg_api_base';
+
+  function getDefaultApiBase() {
+    return window.location.hostname === 'geneguessr.brinedew.bio'
+      ? window.location.origin
+      : 'https://geneguessr.brinedew.bio';
+  }
+
+  function normalizeApiBase(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return null;
+    if (value.toLowerCase() === 'clear') return 'clear';
+    if (!/^https?:\/\//i.test(value)) return null;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      return parsed.origin;
+    } catch {
+      return null;
+    }
+  }
+
+  function resolveApiBase() {
+    const params = new URLSearchParams(window.location.search);
+    const queryOverride = params.get(API_OVERRIDE_QUERY_KEY);
+    if (queryOverride != null) {
+      const normalized = normalizeApiBase(queryOverride);
+      if (normalized === 'clear') {
+        try { localStorage.removeItem(API_OVERRIDE_STORAGE_KEY); } catch {}
+        return getDefaultApiBase();
+      }
+      if (normalized) {
+        try { localStorage.setItem(API_OVERRIDE_STORAGE_KEY, normalized); } catch {}
+        return normalized;
+      }
+    }
+
+    try {
+      const stored = normalizeApiBase(localStorage.getItem(API_OVERRIDE_STORAGE_KEY));
+      if (stored && stored !== 'clear') {
+        return stored;
+      }
+    } catch {
+      // ignore storage failures
+    }
+
+    return getDefaultApiBase();
+  }
+
+  // API lives on the geneguessr.brinedew.bio worker by default (unless overridden).
+  const API_BASE = resolveApiBase();
+
   function setStatus(status) {
     try {
       window.__geneguessrStatus = status;
@@ -1636,13 +1693,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
     disableMarking: true,
   };
 
-  // Resolve API base URL (worker lives on geneguessr.brinedew.bio)
-  const GRAPHICS_API_BASE = window.location.hostname === 'geneguessr.brinedew.bio'
-    ? window.location.origin
-    : 'https://geneguessr.brinedew.bio';
-
   // Fetch graphics settings from API and update DEBUG_STYLIZATION
-  fetch(`${GRAPHICS_API_BASE}/api/graphics-settings`, {
+  fetch(`${API_BASE}/api/graphics-settings`, {
     credentials: 'include'
   })
     .then(response => response.ok ? response.json() : null)
@@ -5018,10 +5070,6 @@ https://brinedew.bio/apps/geneguessr/`;
 
   // Auth state
   let currentUser = null;
-  // API lives on geneguessr.brinedew.bio worker, not the static site
-  const API_BASE = window.location.hostname === 'geneguessr.brinedew.bio'
-    ? window.location.origin
-    : 'https://geneguessr.brinedew.bio';
 
   /**
    * Check auth status

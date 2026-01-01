@@ -47,3 +47,41 @@ bucket_name = "geneguessr-structures"
 # Daily pre-warm cron: runs at 23:55 UTC to warm next day's target structure
 [triggers]
 crons = ["55 23 * * *"]
+
+[env.staging]
+name = "geneguessr-api-staging"
+
+# Staging should be reachable without DNS work.
+workers_dev = true
+preview_urls = true
+
+# Do not claim the prod custom-domain route in staging.
+routes = []
+
+# Reuse prod D1 for now (read-heavy; avoids duplicating the dataset).
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "geneguessr"
+database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
+
+# Separate KV namespace so staging does not pollute prod caches/flags.
+[[env.staging.kv_namespaces]]
+binding = "KV"
+id = "b0394946bccf4cd3afd9e1ff6de2bedc"
+
+# Separate DO storage (keyed by worker name) so staging sessions do not touch prod.
+[[env.staging.durable_objects.bindings]]
+name = "GAME_SESSIONS"
+class_name = "GameSession"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameSession"]
+
+# Separate R2 bucket so staging caching does not touch prod objects.
+[[env.staging.r2_buckets]]
+binding = "STRUCTURES_BUCKET"
+bucket_name = "geneguessr-structures-staging"
+
+[env.staging.triggers]
+crons = []
