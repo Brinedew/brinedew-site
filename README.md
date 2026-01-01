@@ -23,10 +23,9 @@ GeneGuessr’s frontend can be pointed at a non-prod API worker via a URL overri
 
 Recommended flows:
 - Local API dev:
-  - `cd Website`
-  - `npx wrangler dev --env staging --remote --port 8787`
-  - `npm run dev`
-  - Open `http://localhost:<quartz-port>/apps/geneguessr/?gg_api=http://127.0.0.1:8787`
+  - Run `npx wrangler dev --env staging --remote --port 8787`.
+  - In another terminal, run `npm run dev`.
+  - Open `http://localhost:<quartz-port>/apps/geneguessr/?gg_api=http://127.0.0.1:8787`.
 - Online staging: deploy the staging worker and open GeneGuessr with `?gg_api=https://<staging-worker>.workers.dev`.
 
 ## license
