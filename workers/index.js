@@ -1,7 +1,22 @@
 // CORS headers for frontend access - supports both main domain and subdomain
-function getCorsHeaders(origin) {
+function getCorsHeaders(origin, requestHost = '') {
   const allowedOrigins = ['https://brinedew.bio', 'https://geneguessr.brinedew.bio'];
-  const corsOrigin = allowedOrigins.includes(origin) ? origin : 'https://brinedew.bio';
+  const lowerHost = String(requestHost || '').toLowerCase();
+  const lowerOrigin = String(origin || '').toLowerCase();
+  const isWorkersDev = lowerHost.endsWith('.workers.dev');
+  const isLocalHost =
+    lowerHost === 'localhost' ||
+    lowerHost === '127.0.0.1' ||
+    lowerHost === '0.0.0.0';
+  const isLocalOrigin =
+    lowerOrigin.startsWith('http://localhost') ||
+    lowerOrigin.startsWith('http://127.0.0.1') ||
+    lowerOrigin.startsWith('http://0.0.0.0');
+
+  // Allow localhost origins only when we're running on localhost (wrangler dev)
+  // or on a workers.dev hostname (staging/dev). Do NOT allow localhost origins on prod custom domains.
+  const allowLocalOrigin = isLocalOrigin && (isLocalHost || isWorkersDev);
+  const corsOrigin = (allowedOrigins.includes(origin) || allowLocalOrigin) ? origin : 'https://brinedew.bio';
   return {
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -11,7 +26,7 @@ function getCorsHeaders(origin) {
 }
 
 // Backward compatibility - default CORS headers for main domain
-const CORS_HEADERS = getCorsHeaders('https://brinedew.bio');
+const CORS_HEADERS = getCorsHeaders('https://brinedew.bio', 'brinedew.bio');
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB);
@@ -22,6 +37,9 @@ const DAILY_BOOTSTRAP_CACHE_PREFIX = 'daily_bootstrap:';
 const DAILY_BOOTSTRAP_CACHE_TTL = 86400; // 24 hours
 
 const GENEGUESSR_HOST = 'geneguessr.brinedew.bio';
+
+const PRACTICE_RESOLVE_MAX_INPUTS = 10000;
+const PRACTICE_RESOLVE_SQL_CHUNK = 400;
 
 function buildGeneguessrSubdomainRobotsTxt() {
   return `# robots.txt for ${GENEGUESSR_HOST}
@@ -130,7 +148,7 @@ export default {
     const url = new URL(request.url);
     console.log(`[WORKER] Incoming: ${request.method} ${url.pathname}`);
     const origin = request.headers.get('Origin') || '';
-    const corsHeaders = getCorsHeaders(origin);
+    const corsHeaders = getCorsHeaders(origin, url.hostname);
 
     // Serve host-scoped robots/sitemap for the geneguessr subdomain.
     // This prevents Google Search Console from seeing a sitemap full of brinedew.bio URLs.
@@ -532,6 +550,15 @@ export default {
       return handleGameBootstrap(request, env, ctx, corsHeaders);
     }
 
+    // Practice mode helpers: bulk HGNC validation + start from a user-provided pool.
+    if (url.pathname === '/api/game/practice/resolve' && request.method === 'POST') {
+      return handlePracticeResolve(request, env, corsHeaders);
+    }
+
+    if (url.pathname === '/api/game/practice/start' && request.method === 'POST') {
+      return handlePracticeStart(request, env, ctx, corsHeaders);
+    }
+
     if (url.pathname === '/api/game/guess' && request.method === 'POST') {
       return handleGuessSubmission(request, env, corsHeaders);
     }
@@ -792,15 +819,39 @@ async function resolveSessionContextAsync(request, env, options = {}) {
 
 /**
  * Build response headers, optionally adding Set-Cookie for new sessions
- * Cookie is HttpOnly, SameSite=Lax, 1 year expiry - "strictly necessary" for game function
+ * Cookie is HttpOnly, SameSite=Lax by default, 1 year expiry - "strictly necessary" for game function.
+ *
+ * Note: For localhost dev against a `*.workers.dev` API (cross-origin), SameSite=Lax cookies will not
+ * be sent by the browser, which breaks session continuity (every request looks like a fresh session).
+ * For those allowed dev origins, we switch to SameSite=None so local playtests behave like prod.
  */
-function buildResponseHeaders(corsHeaders, sessionContext) {
+function shouldUseSameSiteNoneCookie(origin, requestHost = '') {
+  const lowerHost = String(requestHost || '').toLowerCase();
+  const lowerOrigin = String(origin || '').toLowerCase();
+  const isWorkersDev = lowerHost.endsWith('.workers.dev');
+  const isLocalOrigin =
+    lowerOrigin.startsWith('http://localhost') ||
+    lowerOrigin.startsWith('http://127.0.0.1') ||
+    lowerOrigin.startsWith('http://0.0.0.0');
+  return isWorkersDev && isLocalOrigin;
+}
+
+function buildResponseHeaders(corsHeaders, sessionContext, request) {
   if (!sessionContext?.needsSessionCookie) {
     return corsHeaders;
   }
-  
+
+  let requestHost = '';
+  try {
+    requestHost = new URL(request?.url || '').hostname || '';
+  } catch {
+    requestHost = '';
+  }
+  const origin = request?.headers?.get?.('Origin') || '';
+  const sameSite = shouldUseSameSiteNoneCookie(origin, requestHost) ? 'None' : 'Lax';
+
   const maxAge = 365 * 24 * 60 * 60; // 1 year in seconds
-  const cookie = `geneguessr_session=${sessionContext.sessionToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax; HttpOnly; Secure`;
+  const cookie = `geneguessr_session=${sessionContext.sessionToken}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}; HttpOnly; Secure`;
   
   return {
     ...corsHeaders,
@@ -1475,7 +1526,7 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     const sessionContext = await resolveSessionContextAsync(request, env, { migrateGuestState: true });
     const { sessionId, practiceMode, practiceRestart } = sessionContext;
     console.log(`[BOOTSTRAP] Session resolved: practiceMode=${practiceMode}`);
-    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request);
     const url = new URL(request.url);
     const today = new Date().toISOString().slice(0, 10);
     
@@ -1497,16 +1548,48 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
         : getDailyTargetProtein(env, { practice: practiceMode, returnAudit: !practiceMode }),
       getGameState(env, sessionId).catch(() => null)  // Graceful fallback if session doesn't exist
     ]);
-    const targetSeed = targetSeedRaw?.protein ? targetSeedRaw.protein : targetSeedRaw;
+    let targetSeed = targetSeedRaw?.protein ? targetSeedRaw.protein : targetSeedRaw;
     const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : null;
     console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || 'null'}`);
+
+    // Practice-list overrides:
+    // - `same_target=1&target_id=...` replays the same (already revealed) practice target.
+    // - If `existingState.practicePool` exists, restarts pick from that pool instead of global practice picking.
+    if (practiceMode) {
+      const sameTargetRequested = url.searchParams.get('same_target') === '1';
+      const requestedTargetId = sameTargetRequested
+        ? ((url.searchParams.get('target_id') || '').trim().toUpperCase() || null)
+        : null;
+
+      const pool = Array.isArray(existingState?.practicePool) ? existingState.practicePool.filter(Boolean) : [];
+      let desiredUniprot = null;
+      if (sameTargetRequested && requestedTargetId) {
+        desiredUniprot = requestedTargetId;
+      } else if (!practiceRestart && existingState?.targetId && existingState?.date === today) {
+        desiredUniprot = existingState.targetId;
+      } else if (pool.length) {
+        desiredUniprot = pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      if (desiredUniprot) {
+        const overrideProtein = await fetchProteinByUniprot(env.DB, desiredUniprot);
+        if (overrideProtein) {
+          targetSeed = overrideProtein;
+          console.log(`[BOOTSTRAP] Practice override target: ${overrideProtein.uniprot} (poolSize=${pool.length})`);
+        }
+      }
+    }
     
     if (!targetSeed && !practiceMode) {
       return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
     }
     
     // Determine if session needs reset (uses pre-fetched existingState)
-    const state = await ensureSessionForTodayWithState(env, sessionId, targetSeed, existingState, { practiceMode, forceReset: practiceRestart });
+    const state = await ensureSessionForTodayWithState(env, sessionId, targetSeed, existingState, {
+      practiceMode,
+      forceReset: practiceRestart,
+      preservePracticePool: true,
+    });
     console.log(`[B-206] bootstrap: sessionId=${sessionId}, forceReset=${practiceRestart}, targetId=${state.targetId}, seedId=${targetSeed?.uniprot}`);
     const targetProtein = targetSeed && state.targetId === targetSeed.uniprot
       ? targetSeed
@@ -1620,7 +1703,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
   try {
     const sessionContext = await resolveSessionContextAsync(request, env);
     const { sessionId, practiceMode } = sessionContext;
-    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request);
     
     const body = await safeJson(request);
     const uniprot = (body?.uniprot || '').toUpperCase();
@@ -1744,7 +1827,7 @@ async function handleHintReveal(request, env, corsHeaders) {
   try {
     const sessionContext = await resolveSessionContextAsync(request, env);
     const { sessionId, practiceMode } = sessionContext;
-    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request);
     
     const body = await safeJson(request);
     const hintId = body?.hintId || body?.id;
@@ -1839,7 +1922,7 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
   try {
     const sessionContext = await resolveSessionContextAsync(request, env);
     const { sessionId } = sessionContext;
-    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext);
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request);
     
     const body = await safeJson(request);
     const guessId = body?.guessId;
@@ -2074,6 +2157,7 @@ function createInitialGameState(date, targetId, options = {}) {
     statsRecorded: false,
     guessStatsRecordedThrough: 0,
     practiceMode: Boolean(options.practiceMode),
+    practicePool: Array.isArray(options.practicePool) ? options.practicePool.slice() : null,
     createdAt: Date.now()
   };
 }
@@ -2132,6 +2216,7 @@ async function ensureSessionForToday(env, sessionId, targetProtein, options = {}
 async function ensureSessionForTodayWithState(env, sessionId, targetProtein, existingState, options = {}) {
   const practiceMode = Boolean(options.practiceMode);
   const forceReset = Boolean(options.forceReset);
+  const preservePracticePool = Boolean(options.preservePracticePool);
   const today = new Date().toISOString().slice(0, 10);
   let state = existingState;
   const applyDesiredTarget = forceReset || !state;
@@ -2144,7 +2229,10 @@ async function ensureSessionForTodayWithState(env, sessionId, targetProtein, exi
     if (!targetProtein?.uniprot) {
       throw new Error('Target protein required to initialize session');
     }
-    state = createInitialGameState(today, targetProtein.uniprot, { practiceMode });
+    const practicePool = (practiceMode && preservePracticePool && Array.isArray(existingState?.practicePool))
+      ? existingState.practicePool
+      : null;
+    state = createInitialGameState(today, targetProtein.uniprot, { practiceMode, practicePool });
     await saveGameState(env, sessionId, state);
   } else if (state.practiceMode !== practiceMode) {
     state.practiceMode = practiceMode;
@@ -2432,6 +2520,177 @@ function applyLatestHighlights(sections, latestMatches) {
       item.highlighted = set.has(item.fullText);
     });
   });
+}
+
+function normalizeGeneToken(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return null;
+  const cleaned = trimmed.replace(/^[^A-Za-z0-9-]+|[^A-Za-z0-9-]+$/g, '');
+  if (!cleaned) return null;
+  return cleaned.toUpperCase();
+}
+
+function parseGeneInputs(body) {
+  if (Array.isArray(body?.genes)) {
+    return body.genes;
+  }
+  if (typeof body?.text === 'string') {
+    return body.text.split(/[,\s;]+/g);
+  }
+  return [];
+}
+
+async function resolveGenesExact(db, genesUpper) {
+  const found = new Map();
+  if (!db || !Array.isArray(genesUpper) || genesUpper.length === 0) {
+    return found;
+  }
+
+  for (let offset = 0; offset < genesUpper.length; offset += PRACTICE_RESOLVE_SQL_CHUNK) {
+    const chunk = genesUpper.slice(offset, offset + PRACTICE_RESOLVE_SQL_CHUNK);
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const statement = `
+      SELECT gene, uniprot, structure_source, alphafold_url, pdb_id, swissmodel_url
+      FROM proteins
+      WHERE upper(gene) IN (${placeholders})
+    `;
+    const resp = await db.prepare(statement).bind(...chunk).all();
+    for (const row of (resp?.results || [])) {
+      const key = normalizeGeneToken(row?.gene);
+      if (!key) continue;
+      if (!found.has(key)) {
+        found.set(key, row);
+      }
+    }
+  }
+
+  return found;
+}
+
+async function handlePracticeResolve(request, env, corsHeaders) {
+  try {
+    const sessionContext = await resolveSessionContextAsync(request, env);
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request);
+    const body = await safeJson(request);
+
+    const rawInputs = parseGeneInputs(body);
+    const normalizedInputs = [];
+    const seen = new Set();
+    for (const value of rawInputs) {
+      const gene = normalizeGeneToken(value);
+      if (!gene) continue;
+      if (seen.has(gene)) continue;
+      seen.add(gene);
+      normalizedInputs.push(gene);
+      if (normalizedInputs.length >= PRACTICE_RESOLVE_MAX_INPUTS) break;
+    }
+
+    if (normalizedInputs.length === 0) {
+      return Response.json({
+        inputCount: rawInputs.length,
+        uniqueCount: 0,
+        recognizedCount: 0,
+        playableCount: 0,
+        playable: [],
+        unrecognized: [],
+        recognizedUnplayable: []
+      }, { headers: responseHeaders });
+    }
+
+    const found = await resolveGenesExact(env.DB, normalizedInputs);
+    const playable = [];
+    const recognizedUnplayable = [];
+    const unrecognized = [];
+
+    for (const gene of normalizedInputs) {
+      const row = found.get(gene);
+      if (!row) {
+        unrecognized.push(gene);
+        continue;
+      }
+      const hasStructure = Boolean(row?.structure_source) || Boolean(row?.alphafold_url) || Boolean(row?.pdb_id) || Boolean(row?.swissmodel_url);
+      if (hasStructure) {
+        playable.push({ gene: row.gene || gene, uniprot: String(row.uniprot || '').toUpperCase() });
+      } else {
+        recognizedUnplayable.push(row.gene || gene);
+      }
+    }
+
+    return Response.json({
+      inputCount: rawInputs.length,
+      uniqueCount: normalizedInputs.length,
+      recognizedCount: normalizedInputs.length - unrecognized.length,
+      playableCount: playable.length,
+      playable,
+      unrecognized,
+      recognizedUnplayable,
+      truncated: normalizedInputs.length >= PRACTICE_RESOLVE_MAX_INPUTS
+    }, { headers: responseHeaders });
+  } catch (err) {
+    console.error('GeneGuessr: practice resolve failed', err);
+    return Response.json({ error: 'Practice resolve failed' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+async function handlePracticeStart(request, env, ctx, corsHeaders) {
+  try {
+    const sessionContext = await resolveSessionContextAsync(request, env);
+    const { sessionId } = sessionContext;
+    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request);
+    const url = new URL(request.url);
+    const practiceMode = url.searchParams.get('practice') === '1';
+    if (!practiceMode) {
+      return Response.json({ error: 'Practice mode required' }, { status: 400, headers: responseHeaders });
+    }
+
+    const body = await safeJson(request);
+    const raw = Array.isArray(body?.uniprots) ? body.uniprots : [];
+    const pool = [];
+    const seen = new Set();
+    for (const value of raw) {
+      const id = String(value || '').trim().toUpperCase();
+      if (!id) continue;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      pool.push(id);
+    }
+
+    if (pool.length === 0) {
+      return Response.json({ error: 'Empty practice pool' }, { status: 400, headers: responseHeaders });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const targetId = pool[Math.floor(Math.random() * pool.length)];
+    const targetProtein = await fetchProteinByUniprot(env.DB, targetId);
+    if (!targetProtein) {
+      return Response.json({ error: 'Target unavailable' }, { status: 500, headers: responseHeaders });
+    }
+
+    const state = createInitialGameState(today, targetProtein.uniprot, { practiceMode: true, practicePool: pool });
+    await saveGameState(env, sessionId, state);
+
+    let structureToken = null;
+    try {
+      structureToken = await buildTargetStructureToken(targetProtein, env, {
+        practiceMode: true,
+        origin: url.origin
+      });
+    } catch (err) {
+      console.warn('GeneGuessr: practice start structure token failed (non-fatal)', err);
+      structureToken = null;
+    }
+
+    const payload = buildGamePayload(state, targetProtein);
+    if (structureToken) {
+      payload.targetStructureToken = structureToken;
+    }
+
+    return Response.json(payload, { headers: responseHeaders });
+  } catch (err) {
+    console.error('GeneGuessr: practice start failed', err);
+    return Response.json({ error: 'Practice start failed' }, { status: 500, headers: corsHeaders });
+  }
 }
 
 async function safeJson(request) {

@@ -38,6 +38,8 @@ scripts/embedding_dump.json
 
 # Root-level junk (temp files, scratch images)
 /nul
+/.tmp_quartz_dev*.log
+/.tmp_quartz_dev_pid.txt
 /*.png
 /*.jpg
 !logo-mask.png

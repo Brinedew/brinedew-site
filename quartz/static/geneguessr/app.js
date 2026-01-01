@@ -55,6 +55,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
   // - Clear override: ?gg_api=clear
   const API_OVERRIDE_QUERY_KEY = 'gg_api';
   const API_OVERRIDE_STORAGE_KEY = 'gg_api_base';
+  const PRACTICE_LIST_STORAGE_KEY = 'geneguessr_practice_list_v1';
 
   function getDefaultApiBase() {
     return window.location.hostname === 'geneguessr.brinedew.bio'
@@ -105,6 +106,68 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`);
 
   // API lives on the geneguessr.brinedew.bio worker by default (unless overridden).
   const API_BASE = resolveApiBase();
+
+  function loadPracticeList() {
+    try {
+      const raw = localStorage.getItem(PRACTICE_LIST_STORAGE_KEY);
+      const parsed = safeJsonParse(raw, {
+        label: 'practice list',
+        storageKey: PRACTICE_LIST_STORAGE_KEY,
+        fallback: null
+      });
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function savePracticeList(next) {
+    try {
+      if (!next) {
+        localStorage.removeItem(PRACTICE_LIST_STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(PRACTICE_LIST_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function getPracticePoolFromList(practiceList) {
+    const playable = Array.isArray(practiceList?.playable) ? practiceList.playable : [];
+    const pool = [];
+    const seen = new Set();
+    for (const entry of playable) {
+      const id = String(entry?.uniprot || '').trim().toUpperCase();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      pool.push(id);
+    }
+    return pool;
+  }
+
+  function setQueryParam(key, value) {
+    try {
+      const nextUrl = new URL(window.location.href);
+      if (value == null || value === '') {
+        nextUrl.searchParams.delete(key);
+      } else {
+        nextUrl.searchParams.set(key, String(value));
+      }
+      window.history.replaceState({}, '', nextUrl.toString());
+    } catch {
+      // ignore URL mutation failures
+    }
+  }
+
+  function ensurePracticeUrlEnabled(enabled) {
+    if (enabled) {
+      setQueryParam('practice', '1');
+    } else {
+      setQueryParam('practice', null);
+    }
+  }
 
   function setStatus(status) {
     try {
@@ -5156,15 +5219,18 @@ https://brinedew.bio/apps/geneguessr/`;
       </div>
     `;
 
-    const practiceLabel = practiceMode ? 'ON' : 'OFF';
+    const practiceList = loadPracticeList();
+    const practicePoolSize = getPracticePoolFromList(practiceList).length;
+    const practiceBadgeActive = practiceMode || practicePoolSize > 0;
+    const practiceBadgeValue = practicePoolSize > 0 ? `${practicePoolSize} genes` : 'Open';
 
     sidebarStats.innerHTML = `
       ${authSection}
       <div class="pg-sidebar-section">
-        <div class="pg-hints-badge pg-sidebar-practice-badge ${practiceMode ? 'has-hints' : ''}">
+        <button type="button" class="pg-hints-badge pg-sidebar-practice-badge pg-sidebar-practice-button ${practiceBadgeActive ? 'has-hints' : ''}" onclick="window.geneguessrOpenPracticeList()" title="Practice mode: choose a list of genes to practice">
           <span class="pg-hints-label">Practice Mode</span>
-          <span class="pg-hints-value">${practiceLabel}</span>
-        </div>
+          <span class="pg-hints-value">${practiceBadgeValue}</span>
+        </button>
       </div>
       <div class="pg-sidebar-section">
         <div class="pg-sidebar-label">Stats</div>
@@ -5184,6 +5250,340 @@ https://brinedew.bio/apps/geneguessr/`;
       sidebar.appendChild(sidebarStats);
     }
   }
+
+  // Practice-list overlay (B-247)
+  let practiceOverlay = null;
+  let practiceTextarea = null;
+  let practiceResultsEl = null;
+  let practiceValidateBtn = null;
+  let practicePlayBtn = null;
+  let practiceClearBtn = null;
+  let practiceBusy = false;
+
+  function isPracticeOverlayOpen() {
+    return practiceOverlay && practiceOverlay.classList.contains('is-visible');
+  }
+
+  function lockBackground(enabled) {
+    document.documentElement.classList.toggle('pg-tutorial-locked', enabled);
+    document.body.classList.toggle('pg-tutorial-locked', enabled);
+  }
+
+  function closePracticeOverlay() {
+    if (!practiceOverlay) return;
+    practiceOverlay.classList.remove('is-visible');
+    practiceOverlay.setAttribute('aria-hidden', 'true');
+    lockBackground(false);
+  }
+
+  function normalizePracticeGeneToken(raw) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return null;
+    const cleaned = trimmed.replace(/^[^A-Za-z0-9-]+|[^A-Za-z0-9-]+$/g, '');
+    if (!cleaned) return null;
+    return cleaned.toUpperCase();
+  }
+
+  function parsePracticeText(text) {
+    const parts = String(text || '').split(/[,\s;]+/g);
+    const out = [];
+    const seen = new Set();
+    for (const part of parts) {
+      const gene = normalizePracticeGeneToken(part);
+      if (!gene || seen.has(gene)) continue;
+      seen.add(gene);
+      out.push(gene);
+    }
+    return out;
+  }
+
+  function renderPracticeResults(result, errorText) {
+    if (!practiceResultsEl) return;
+    if (errorText) {
+      practiceResultsEl.innerHTML = `<div class="pg-practice-error">${escapeHtml(errorText)}</div>`;
+      return;
+    }
+    if (!result) {
+      practiceResultsEl.innerHTML = '';
+      return;
+    }
+
+    const recognized = Number(result.recognizedCount) || 0;
+    const playable = Number(result.playableCount) || 0;
+    const unrecognized = Array.isArray(result.unrecognized) ? result.unrecognized : [];
+    const unplayable = Array.isArray(result.recognizedUnplayable) ? result.recognizedUnplayable : [];
+    const truncated = Boolean(result.truncated);
+
+    const previewList = (items, limit = 200) => {
+      const list = items.slice(0, limit);
+      const remaining = items.length - list.length;
+      return { list, remaining };
+    };
+
+    const unrecognizedPreview = previewList(unrecognized);
+    const unplayablePreview = previewList(unplayable);
+
+    practiceResultsEl.innerHTML = `
+      <div class="pg-practice-summary">
+        <div><strong>${recognized}</strong> recognized</div>
+        <div><strong>${playable}</strong> playable</div>
+        <div><strong>${unrecognized.length}</strong> unrecognized</div>
+        <div><strong>${unplayable.length}</strong> recognized but missing structure</div>
+      </div>
+      ${truncated ? `<div class="pg-practice-note">Input was truncated after a large number of entries.</div>` : ''}
+      ${unrecognized.length ? `
+        <details class="pg-practice-details">
+          <summary>Unrecognized (${unrecognized.length})</summary>
+          <div class="pg-practice-list">${unrecognizedPreview.list.map(escapeHtml).join(', ')}${unrecognizedPreview.remaining > 0 ? ` … (+${unrecognizedPreview.remaining} more)` : ''}</div>
+        </details>
+      ` : ''}
+      ${unplayable.length ? `
+        <details class="pg-practice-details">
+          <summary>Recognized but missing structure (${unplayable.length})</summary>
+          <div class="pg-practice-list">${unplayablePreview.list.map(escapeHtml).join(', ')}${unplayablePreview.remaining > 0 ? ` … (+${unplayablePreview.remaining} more)` : ''}</div>
+        </details>
+      ` : ''}
+    `;
+  }
+
+  function setPracticeBusy(enabled) {
+    practiceBusy = enabled;
+    if (practiceValidateBtn) practiceValidateBtn.disabled = enabled;
+    if (practiceClearBtn) practiceClearBtn.disabled = enabled;
+    if (practicePlayBtn) {
+      const stored = loadPracticeList();
+      const pool = getPracticePoolFromList(stored);
+      practicePlayBtn.disabled = enabled || pool.length === 0;
+    }
+  }
+
+  async function resolvePracticeListFromTextarea() {
+    if (!practiceTextarea) return;
+    const text = practiceTextarea.value || '';
+    const genes = parsePracticeText(text);
+    setPracticeBusy(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/game/practice/resolve?practice=1`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genes })
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(payload?.error || `Resolve failed (${resp.status})`);
+      }
+      const practiceList = {
+        text,
+        resolvedAt: Date.now(),
+        playable: Array.isArray(payload.playable) ? payload.playable : [],
+        unrecognized: Array.isArray(payload.unrecognized) ? payload.unrecognized : [],
+        recognizedUnplayable: Array.isArray(payload.recognizedUnplayable) ? payload.recognizedUnplayable : [],
+        recognizedCount: Number(payload.recognizedCount) || 0,
+        playableCount: Number(payload.playableCount) || 0,
+        uniqueCount: Number(payload.uniqueCount) || 0,
+        truncated: Boolean(payload.truncated),
+      };
+      savePracticeList(practiceList);
+      renderPracticeResults(practiceList, null);
+      updateSidebarStats();
+    } catch (err) {
+      console.warn('Geneguessr: practice resolve failed', err);
+      renderPracticeResults(null, err?.message || 'Practice resolve failed');
+    } finally {
+      setPracticeBusy(false);
+    }
+  }
+
+  function prepareForNewRandomPracticeTarget() {
+    practiceRestartCounter++;
+    gameState.lockedHintClicks = [];
+    disposeViewer('pg-clue-structure');
+    targetStructureInfo = null;
+    lastRenderedGameDate = null;
+    lastRenderedSessionKey = null;
+  }
+
+  async function startPracticeFromPool(uniprots) {
+    if (!Array.isArray(uniprots) || uniprots.length === 0) {
+      throw new Error('No playable genes in the practice list.');
+    }
+    ensurePracticeUrlEnabled(true);
+    prepareForNewRandomPracticeTarget();
+
+    const resp = await fetch(`${API_BASE}/api/game/practice/start?practice=1`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uniprots })
+    });
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({}));
+      throw new Error(error?.error || `Practice start failed (${resp.status})`);
+    }
+    const payload = await resp.json();
+    hydrateStateFromPayload(payload);
+    gameState.practiceMode = true;
+
+    ensureMolstarAssets().catch(() => {});
+    const tokenTasks = [];
+    tokenTasks.push(ensureStructureTokenForTarget());
+    tokenTasks.push(hydrateStructureTokensForGuesses(gameState.guesses));
+    const solvedOrExhausted = gameState.won || gameState.guesses.length >= gameState.maxGuesses;
+    if (solvedOrExhausted && targetReveal?.uniprot) {
+      tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot));
+    }
+    Promise.allSettled(tokenTasks)
+      .then(() => {
+        try {
+          setupStructureInteractions();
+        } catch (err) {
+          console.warn('Geneguessr: error while initializing viewers after practice start', err);
+        }
+      })
+      .catch(() => {});
+  }
+
+  async function startPracticeFromStoredList() {
+    const stored = loadPracticeList();
+    const pool = getPracticePoolFromList(stored);
+    if (!pool.length) {
+      await resolvePracticeListFromTextarea();
+      const resolved = loadPracticeList();
+      const pool2 = getPracticePoolFromList(resolved);
+      if (!pool2.length) {
+        throw new Error('No playable genes found. Please add more gene symbols and validate.');
+      }
+      return startPracticeFromPool(pool2);
+    }
+    return startPracticeFromPool(pool);
+  }
+
+  function ensurePracticeOverlay() {
+    if (practiceOverlay) return;
+    practiceOverlay = document.createElement('div');
+    practiceOverlay.className = 'pg-tutorial-overlay pg-practice-overlay';
+    practiceOverlay.setAttribute('aria-hidden', 'true');
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'pg-tutorial-backdrop';
+    practiceOverlay.appendChild(backdrop);
+
+    const card = document.createElement('div');
+    card.className = 'pg-tutorial-card pg-practice-card';
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-labelledby', 'pg-practice-title');
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'pg-tutorial-skip pg-practice-close';
+    closeBtn.textContent = 'Close';
+    card.appendChild(closeBtn);
+
+    const content = document.createElement('div');
+    content.className = 'pg-practice-content';
+
+    const title = document.createElement('h2');
+    title.id = 'pg-practice-title';
+    title.textContent = 'Practice mode';
+    content.appendChild(title);
+
+    const desc = document.createElement('p');
+    desc.className = 'pg-practice-desc';
+    desc.textContent = 'Paste HGNC gene symbols (1000+ is fine). We will validate which ones exist in the human dataset.';
+    content.appendChild(desc);
+
+    practiceTextarea = document.createElement('textarea');
+    practiceTextarea.className = 'pg-practice-textarea';
+    practiceTextarea.placeholder = 'TP53\nBRCA1\nEGFR\n...\n';
+    practiceTextarea.spellcheck = false;
+    practiceTextarea.autocapitalize = 'off';
+    practiceTextarea.autocomplete = 'off';
+    practiceTextarea.rows = 10;
+    content.appendChild(practiceTextarea);
+
+    const actions = document.createElement('div');
+    actions.className = 'pg-practice-actions';
+
+    practiceClearBtn = document.createElement('button');
+    practiceClearBtn.type = 'button';
+    practiceClearBtn.className = 'pg-practice-clear';
+    practiceClearBtn.textContent = 'Clear';
+    actions.appendChild(practiceClearBtn);
+
+    practiceValidateBtn = document.createElement('button');
+    practiceValidateBtn.type = 'button';
+    practiceValidateBtn.className = 'pg-practice-validate';
+    practiceValidateBtn.textContent = 'Validate';
+    actions.appendChild(practiceValidateBtn);
+
+    practicePlayBtn = document.createElement('button');
+    practicePlayBtn.type = 'button';
+    practicePlayBtn.className = 'pg-practice-play';
+    practicePlayBtn.textContent = 'Play';
+    actions.appendChild(practicePlayBtn);
+
+    content.appendChild(actions);
+
+    practiceResultsEl = document.createElement('div');
+    practiceResultsEl.className = 'pg-practice-results';
+    content.appendChild(practiceResultsEl);
+
+    card.appendChild(content);
+    practiceOverlay.appendChild(card);
+    document.body.appendChild(practiceOverlay);
+
+    const handleKeydown = (event) => {
+      if (!isPracticeOverlayOpen()) return;
+      if (event.key === 'Escape') {
+        closePracticeOverlay();
+        event.preventDefault();
+      }
+    };
+
+    backdrop.addEventListener('click', () => closePracticeOverlay());
+    closeBtn.addEventListener('click', () => closePracticeOverlay());
+    document.addEventListener('keydown', handleKeydown);
+
+    practiceValidateBtn.addEventListener('click', () => void resolvePracticeListFromTextarea());
+    practicePlayBtn.addEventListener('click', () => void (async () => {
+      setPracticeBusy(true);
+      try {
+        await startPracticeFromStoredList();
+        closePracticeOverlay();
+        render();
+        setStatus('rendered');
+      } catch (err) {
+        renderPracticeResults(null, err?.message || 'Practice start failed');
+      } finally {
+        setPracticeBusy(false);
+      }
+    })());
+
+    practiceClearBtn.addEventListener('click', () => {
+      if (!practiceTextarea) return;
+      practiceTextarea.value = '';
+      savePracticeList(null);
+      renderPracticeResults(null, null);
+      updateSidebarStats();
+      setPracticeBusy(false);
+    });
+  }
+
+  window.geneguessrOpenPracticeList = function () {
+    ensurePracticeOverlay();
+    const stored = loadPracticeList();
+    if (practiceTextarea) {
+      practiceTextarea.value = typeof stored?.text === 'string' ? stored.text : '';
+    }
+    renderPracticeResults(stored, null);
+    setPracticeBusy(false);
+    practiceOverlay.classList.add('is-visible');
+    practiceOverlay.setAttribute('aria-hidden', 'false');
+    lockBackground(true);
+    practiceTextarea && practiceTextarea.focus();
+  };
 
   /**
    * Logout handler
@@ -5205,6 +5605,7 @@ https://brinedew.bio/apps/geneguessr/`;
   window.geneguessrTryAgain = async function () {
     try {
       setStatus('loading-data');
+      ensurePracticeUrlEnabled(true);
       await bootstrapGame({ practice: true, restart: true, sameTarget: true, targetId: gameState.targetId });
       render();
       setStatus('rendered');
@@ -5218,7 +5619,14 @@ https://brinedew.bio/apps/geneguessr/`;
   window.geneguessrPracticeRandom = async function () {
     try {
       setStatus('loading-data');
-      await bootstrapGame({ practice: true, restart: true });
+      ensurePracticeUrlEnabled(true);
+      const stored = loadPracticeList();
+      const pool = getPracticePoolFromList(stored);
+      if (pool.length) {
+        await startPracticeFromPool(pool);
+      } else {
+        await bootstrapGame({ practice: true, restart: true });
+      }
       render();
       setStatus('rendered');
     } catch (err) {
@@ -5238,11 +5646,13 @@ https://brinedew.bio/apps/geneguessr/`;
     const sidebarPractice = document.querySelector('.pg-sidebar-practice-badge');
     if (sidebarPractice) {
       const practiceMode = !!gameState?.practiceMode;
+      const practiceList = loadPracticeList();
+      const practicePoolSize = getPracticePoolFromList(practiceList).length;
       const practiceValue = sidebarPractice.querySelector('.pg-hints-value');
       if (practiceValue) {
-        practiceValue.textContent = practiceMode ? 'ON' : 'OFF';
+        practiceValue.textContent = practicePoolSize > 0 ? `${practicePoolSize} genes` : 'Open';
       }
-      sidebarPractice.classList.toggle('has-hints', practiceMode);
+      sidebarPractice.classList.toggle('has-hints', practiceMode || practicePoolSize > 0);
     }
 
     const statsGrid = document.querySelector('.pg-sidebar-stats-grid');

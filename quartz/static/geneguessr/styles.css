@@ -597,6 +597,128 @@
   overflow-y: auto;
 }
 
+.pg-practice-card {
+  width: min(760px, 100%);
+}
+
+.pg-practice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pg-practice-desc {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.pg-practice-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 200px;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+  color: var(--dark);
+  font-family: var(--codeFont);
+  font-size: 0.9rem;
+}
+
+.pg-practice-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.pg-practice-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.pg-practice-clear,
+.pg-practice-validate,
+.pg-practice-play {
+  border: 1px solid var(--ui-border);
+  background: var(--light);
+  color: var(--dark);
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.pg-practice-clear:hover,
+.pg-practice-validate:hover {
+  background: var(--ui-bg);
+  border-color: var(--secondary);
+}
+
+.pg-practice-play {
+  background: color-mix(in srgb, var(--accent) 12%, var(--light));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--ui-border));
+}
+
+.pg-practice-play:hover {
+  background: color-mix(in srgb, var(--accent) 18%, var(--light));
+  border-color: var(--accent);
+}
+
+.pg-practice-clear:disabled,
+.pg-practice-validate:disabled,
+.pg-practice-play:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pg-practice-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.pg-practice-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+}
+
+.pg-practice-details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.pg-practice-list {
+  margin-top: 0.35rem;
+  color: var(--darkgray);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.pg-practice-error {
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, red 40%, var(--ui-border));
+  background: color-mix(in srgb, red 8%, var(--ui-bg));
+  color: var(--dark);
+  font-weight: 600;
+}
+
+.pg-practice-note {
+  color: var(--secondary);
+  font-size: 0.9rem;
+}
+
 .pg-tutorial-skip {
   position: absolute;
   top: 1rem;
@@ -1251,6 +1373,22 @@
   /* Label stays muted */
   color: var(--secondary);
   font-weight: 700;
+}
+
+.pg-sidebar-practice-button {
+  width: 100%;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+}
+
+.pg-sidebar-practice-button:hover {
+  background: var(--ui-bg);
+  box-shadow: inset 0 0 0 1px var(--secondary);
+}
+
+.pg-sidebar-practice-button:active {
+  transform: translateY(0.5px);
 }
 
 .pg-how-to-play {
