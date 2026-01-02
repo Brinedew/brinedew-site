@@ -1351,16 +1351,22 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         <div id="schedule-cards" class="inspector-cards"></div>
       </div>
 
-      <!-- Aggregated guess stats (no per-user data) -->
-      <div class="inspector-section" id="inspector-guess-stats" style="display:none;">
-        <div class="inspector-label">Top Guesses</div>
-        <div id="guess-stats" class="inspector-cards"></div>
+        <!-- Aggregated guess stats (no per-user data) -->
+        <div class="inspector-section" id="inspector-guess-stats" style="display:none;">
+          <div class="inspector-label">Top Guesses</div>
+          <div id="guess-stats" class="inspector-cards"></div>
+        </div>
+
+        <!-- Top-9 neighbors (precomputed similarity) -->
+        <div class="inspector-section" id="inspector-neighbors" style="display:none;">
+          <div class="inspector-label">Top-9 Neighbors</div>
+          <div id="neighbors-list" class="inspector-cards"></div>
+        </div>
       </div>
     </div>
-  </div>
+    
   
-
-  <script>
+    <script>
     const API_BASE = '';
 
     function deepClone(value) {

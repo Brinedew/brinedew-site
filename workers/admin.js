@@ -975,6 +975,7 @@ export async function handleAdminCards(request, env) {
         recorded: Boolean(actualJson),
       },
       protein: sanitizeTargetProtein(protein, { revealIdentity: true }),
+      neighbors: Array.isArray(protein?.neighbors) ? protein.neighbors : [],
       clue: {
         start: maskedSections,
         all: clueSections,
