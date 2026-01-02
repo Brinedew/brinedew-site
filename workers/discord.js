@@ -557,21 +557,24 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
           }
         }
 
-        // Hide loading when complete
+        // Signal ready when viewer finishes loading
+        let loadCompleted = false;
+        const markReady = () => {
+          if (loadCompleted) return;
+          loadCompleted = true;
+          loading.style.display = 'none';
+          applyPostLoadStyling();
+          document.body.setAttribute('data-loaded', 'true');
+          console.log('Render page ready');
+        };
+
+        // Try loadComplete event if available
         if (viewer.events && viewer.events.loadComplete) {
-          viewer.events.loadComplete.subscribe(() => {
-            loading.style.display = 'none';
-            applyPostLoadStyling();
-            // Signal to Playwright that we're ready
-            document.body.setAttribute('data-loaded', 'true');
-          });
-        } else {
-          setTimeout(() => {
-            loading.style.display = 'none';
-            applyPostLoadStyling();
-            document.body.setAttribute('data-loaded', 'true');
-          }, 3000);
+          viewer.events.loadComplete.subscribe(markReady);
         }
+
+        // Always set a fallback timeout (in case event never fires)
+        setTimeout(markReady, 8000);
 
       } catch (err) {
         loading.style.display = 'none';
