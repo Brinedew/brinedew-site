@@ -1836,6 +1836,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         list.className = 'neighbors-list';
 
         items.slice(0, 9).forEach((n, idx) => {
+          const displayPct = 100 - (idx + 1);
           const gene =
             n?.gene != null ? String(n.gene)
               : (n?.hgnc != null ? String(n.hgnc)
@@ -1846,24 +1847,34 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               : (n?.uniprot_id != null ? String(n.uniprot_id)
                 : (n?.id != null ? String(n.id) : ''));
 
+          const metric = Number(n?.metric);
+          let metricText = '';
+          if (Number.isFinite(metric)) {
+            metricText = 'metric ' + metric.toFixed(3);
+          }
+
           const rawScore =
             n?.score ?? n?.similarity ?? n?.blended ?? n?.pct ?? n?.percent ?? n?.value ?? null;
-
           let scoreText = '';
-          const num = Number(rawScore);
-          if (Number.isFinite(num)) {
-            if (num >= 0 && num <= 1) {
-              scoreText = String(Math.round(num * 100)) + '%';
-            } else if (num >= 0 && num <= 100) {
-              scoreText = String(Math.round(num)) + '%';
+          const scoreNum = Number(rawScore);
+          if (Number.isFinite(scoreNum)) {
+            if (scoreNum >= 0 && scoreNum <= 1) {
+              scoreText = String(Math.round(scoreNum * 100)) + '%';
+            } else if (scoreNum >= 0 && scoreNum <= 100) {
+              scoreText = String(Math.round(scoreNum)) + '%';
             } else {
-              scoreText = String(num);
+              scoreText = String(scoreNum);
             }
           }
 
           const metaParts = [];
           if (uniprot) metaParts.push(uniprot);
-          if (scoreText) metaParts.push(scoreText);
+          metaParts.push('display ' + String(displayPct) + '%');
+          if (metricText) {
+            metaParts.push(metricText);
+          } else if (scoreText) {
+            metaParts.push('score ' + scoreText);
+          }
           const meta = metaParts.join('  ');
 
           const row = document.createElement('div');
