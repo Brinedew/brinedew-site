@@ -13,9 +13,9 @@
  * - message_id: The ID of the posted message (for GitHub Actions)
  */
 
-const fs = require("fs")
-const path = require("path")
-const https = require("https")
+import fs from "node:fs"
+import path from "node:path"
+import https from "node:https"
 
 const DISCORD_API = "https://discord.com/api/v10"
 
