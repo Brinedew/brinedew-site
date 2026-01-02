@@ -91,14 +91,10 @@ jobs:
           RENDER_URL="https://geneguessr.brinedew.bio/apps/geneguessr/render?day=${{ steps.day.outputs.day }}&mode=structure"
           echo "URL: $RENDER_URL"
 
-          # Use Playwright to screenshot with fixed wait time
-          # (Mol* viewer loads, then page sets data-loaded after 8s fallback)
-          npx playwright screenshot \
-            --wait-for-timeout=12000 \
-            "$RENDER_URL" \
-            screenshot.png
+          # Use custom script with software WebGL for headless rendering
+          node scripts/take-screenshot.js "$RENDER_URL" screenshot.png
 
-          echo "Screenshot saved to screenshot.png"
+          echo "Screenshot saved:"
           ls -la screenshot.png
 
       - name: Post to Discord

@@ -78,7 +78,7 @@ async function main() {
     content += "\n"
   }
 
-  content += "Play today's puzzle: https://geneguessr.brinedew.bio"
+  content += "Play today's puzzle: <https://geneguessr.brinedew.bio>"
 
   console.log("Message content:")
   console.log(content)
