@@ -58,16 +58,28 @@ async function main() {
   const gene = target.gene || "Unknown"
   const fullName = target.full_name || ""
 
-  let content = `**Yesterday's GeneGuessr: ${gene}**`
+  // Format date as "1st of January, 2026"
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr + "T00:00:00Z")
+    const dayNum = date.getUTCDate()
+    const suffix = dayNum === 1 || dayNum === 21 || dayNum === 31 ? "st"
+      : dayNum === 2 || dayNum === 22 ? "nd"
+      : dayNum === 3 || dayNum === 23 ? "rd" : "th"
+    const month = date.toLocaleString("en-US", { month: "long", timeZone: "UTC" })
+    const year = date.getUTCFullYear()
+    return `${dayNum}${suffix} of ${month}, ${year}`
+  }
+
+  let content = `GeneGuessr for ${formatDate(day)}\n**${gene}**`
   if (fullName) {
-    content += ` (${fullName})`
+    content += `\n${fullName}`
   }
   content += "\n\n"
 
   if (winners_count > 0) {
     content += `${winners_count} player${winners_count === 1 ? "" : "s"} solved it!\n\n`
   } else {
-    content += "No one solved it yesterday!\n\n"
+    content += "No one solved it!\n\n"
   }
 
   if (top_guesses && top_guesses.length > 0) {
