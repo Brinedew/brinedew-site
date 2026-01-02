@@ -201,37 +201,30 @@ export default {
 
       const targetUrl = new URL("https://brinedew.bio" + targetPath + url.search)
 
-      // Hotfix: Quartz client-side navigation may load the GeneGuessr app bundle more than once
-      // without a full reload, which breaks when the bundle declares top-level `const`s.
-      // Patch the proxied script on the fly to keep the subdomain stable until Pages rebuilds.
-      if (
-        url.pathname === "/static/geneguessr/app.js" &&
-        (request.method === "GET" || request.method === "HEAD")
-      ) {
-        const upstream = await fetch(targetUrl.toString(), {
-          method: request.method,
-          headers: request.headers,
-        })
-        if (request.method === "HEAD") {
-          return upstream
-        }
-        const js = await upstream.text()
-        const patched = js.replace(/\bconst\s+NAVIGATION_START\s*=\s*/m, "var NAVIGATION_START = ")
-        const headers = new Headers(upstream.headers)
-        headers.set("Content-Type", "application/javascript; charset=utf-8")
-        headers.set("Cache-Control", "no-store")
-        return new Response(patched, {
-          status: upstream.status,
-          statusText: upstream.statusText,
-          headers,
-        })
-      }
+      // GeneGuessr bundle hotfix removed:
+      // The app bundle now avoids global `const` redeclarations, so we can serve it directly and allow caching.
 
       const response = await fetch(targetUrl.toString(), {
         method: request.method,
         headers: request.headers,
         body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
       })
+
+      // For versioned GeneGuessr static assets, extend cache lifetime aggressively.
+      // The upstream build emits `?v=<timestamp>` for cache busting, so `immutable` is safe here.
+      if (
+        url.pathname.startsWith("/static/geneguessr/") &&
+        url.searchParams.has("v") &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        const headers = new Headers(response.headers)
+        headers.set("Cache-Control", "public, max-age=31536000, immutable")
+        return new Response(request.method === "HEAD" ? null : response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        })
+      }
 
       // For HTML, rewrite links so navigation goes to main site, not subdomain
       if (response.headers.get("content-type")?.includes("text/html")) {
