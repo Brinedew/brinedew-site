@@ -125,6 +125,32 @@ export async function getDailyGuessAggregates(db, { day, limit = 25 }) {
   }
 }
 
+export async function getWinnersCount(db, { day }) {
+  if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return { ok: false, reason: "invalid_day" }
+  }
+
+  await ensureGuessAggregateSchema(db)
+
+  // Winners are guesses where guess_uniprot matches target_uniprot
+  const row = await db
+    .prepare(
+      `
+      SELECT COALESCE(SUM(guess_count), 0) AS winners_count
+      FROM daily_guess_aggregate
+      WHERE day = ? AND guess_uniprot = target_uniprot
+    `,
+    )
+    .bind(day)
+    .first()
+
+  return {
+    ok: true,
+    day,
+    winnersCount: Number(row?.winners_count) || 0,
+  }
+}
+
 export async function getGuessAggregatesForDateRange(db, { startDay, endDay, limit = 50 }) {
   const isValidDay = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
   if (!isValidDay(startDay) || !isValidDay(endDay)) {

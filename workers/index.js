@@ -94,6 +94,8 @@ const ESM2_WEIGHT = 0.25
 
 // Import auth handlers
 import { handleLogin, handleCallback, handleMe, handleLogout } from "./auth.js"
+// Import Discord bot handlers
+import { handleDailySummary, handleInteractions, handleMarkPosted, handleRenderPage } from "./discord.js"
 // Import stats handlers
 import { handleMigrateStats, handleGetStats, handleUpdateStats } from "./stats.js"
 // Import admin handlers
@@ -179,6 +181,11 @@ export default {
           },
         )
       }
+    }
+
+    // Discord render page for screenshots - served by worker, not proxied
+    if (url.pathname === "/apps/geneguessr/render" && request.method === "GET") {
+      return handleRenderPage(request, env)
     }
 
     // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
@@ -345,6 +352,19 @@ export default {
 
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {
       return handleLogout(request, env)
+    }
+
+    // Discord bot endpoints
+    if (url.pathname === "/api/discord/daily-summary" && request.method === "GET") {
+      return handleDailySummary(request, env)
+    }
+
+    if (url.pathname === "/api/discord/interactions" && request.method === "POST") {
+      return handleInteractions(request, env)
+    }
+
+    if (url.pathname === "/api/discord/mark-posted" && request.method === "POST") {
+      return handleMarkPosted(request, env)
     }
 
     // Stats endpoints
