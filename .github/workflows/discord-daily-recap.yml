@@ -91,10 +91,10 @@ jobs:
           RENDER_URL="https://geneguessr.brinedew.bio/apps/geneguessr/render?day=${{ steps.day.outputs.day }}&mode=structure"
           echo "URL: $RENDER_URL"
 
-          # Use Playwright to screenshot with wait for load
+          # Use Playwright to screenshot with fixed wait time
+          # (Mol* viewer loads, then page sets data-loaded after 8s fallback)
           npx playwright screenshot \
-            --wait-for-selector="body[data-loaded='true']" \
-            --timeout=30000 \
+            --wait-for-timeout=12000 \
             "$RENDER_URL" \
             screenshot.png
 
