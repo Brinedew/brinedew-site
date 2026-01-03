@@ -2285,6 +2285,31 @@ async function getDailyTargetProtein(env, options = {}) {
       }
     }
 
+    // If prod has already served today's puzzle (no override needed), mirror that pick in staging.
+    // This keeps `?gg_api=...staging...` usable for comparing visuals without changing live behavior.
+    if (env.PROD_KV?.get) {
+      try {
+        const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
+        if (prodActualRaw) {
+          const prodActual = JSON.parse(prodActualRaw)
+          const prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
+          if (prodUniprot) {
+            const prodProtein = await fetchProteinByUniprot(env.DB, prodUniprot)
+            if (prodProtein) {
+              if (audit) {
+                audit.source = "prod_actual"
+                audit.override_id = null
+                audit.skipped_alpha_fold = 0
+              }
+              return audit ? { protein: prodProtein, audit } : prodProtein
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("GeneGuessr: failed to mirror prod daily pick", err?.message || err)
+      }
+    }
+
     const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
     const selection = await pickDailyTarget(env.DB, eligibleIds, salt)
     protein = selection?.protein || null
