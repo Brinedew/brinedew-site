@@ -203,13 +203,21 @@
   function applyViewerThemeColors(viewer, container) {
     const colors = resolveViewerColors(container)
 
-    // Keep this conservative: only touch the one prop we need for single-source-of-truth theming.
+    // Single source of truth: we read the site's intended background from CSS and apply it to the
+    // Mol* renderer. This keeps all consumers (game, admin, discord) consistent without hardcoding.
     // `safeApplyCanvasProps` merges into existing renderer props so we do not clobber required sub-props.
     try {
       safeApplyCanvasProps(
         viewer,
-        { renderer: { backgroundColor: toMolstarColor(colors.background) } },
-        "theme background",
+        {
+          renderer: {
+            backgroundColor: toMolstarColor(colors.background),
+            ambientColor: toMolstarColor(colors.background),
+            ambientIntensity: 0.55,
+            interiorDarkening: 0,
+          },
+        },
+        "theme background & ambient",
       )
     } catch {}
 

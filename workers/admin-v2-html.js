@@ -12,11 +12,21 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
       padding: 0;
       box-sizing: border-box;
     }
+
+    :root {
+      --gg-viewer-bg: #110c0a;
+      --gg-viewer-fg: #e2e8f0;
+    }
+
+    body.theme-light {
+      --gg-viewer-bg: #f8f1e7;
+      --gg-viewer-fg: #0b0f19;
+    }
     
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--gg-viewer-bg);
+      color: var(--gg-viewer-fg);
       line-height: 1.5;
     }
     
@@ -28,12 +38,13 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     
     .viewer-panel {
       position: relative;
-      background: transparent;
+      background: var(--gg-viewer-bg);
     }
     
     #molstar-viewer {
       width: 100%;
       height: 100%;
+      background: var(--gg-viewer-bg);
     }
     
     .controls-panel {
@@ -383,18 +394,6 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     let profiles = {};
     let currentTheme = 'dark';
     
-    // Theme-specific colors (matches game's light/dark mode)
-    const THEME_COLORS = {
-      dark: {
-        backgroundColor: 0x1a1a2e,
-        ambientColor: 0x404060
-      },
-      light: {
-        backgroundColor: 0xf8f8f8,
-        ambientColor: 0xa0a0a0
-      }
-    };
-    
     // ============ Mol* Initialization ============
     
     async function initMolstar() {
@@ -452,17 +451,9 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     function applyThemePreview(theme) {
       const viewerContainer = document.getElementById('molstar-viewer');
       if (!viewer || !viewerContainer) return;
-      const colors = THEME_COLORS[theme];
-      viewerContainer.style.background = theme === 'dark' ? '#1a1a2e' : '#f8f8f8';
-      if (window.GeneguessrMolstar && window.GeneguessrMolstar.applyViewerThemeColors) {
+      document.body.classList.toggle('theme-light', theme === 'light');
+      if (window.GeneguessrMolstar?.applyViewerThemeColors) {
         window.GeneguessrMolstar.applyViewerThemeColors(viewer, viewerContainer);
-      } else if (plugin?.canvas3d && colors) {
-        plugin.canvas3d.setProps({
-          renderer: {
-            backgroundColor: colors.backgroundColor,
-            ambientColor: colors.ambientColor
-          }
-        });
       }
     }
     
@@ -905,15 +896,7 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
       document.getElementById('theme-dark').classList.toggle('active', theme === 'dark');
       document.getElementById('theme-light').classList.toggle('active', theme === 'light');
       
-      // Apply theme colors to viewer
-      const colors = THEME_COLORS[theme];
       applyThemePreview(theme);
-
-      // Update pendingProps with new theme colors (session-only until user explicitly saves/exports)
-      if (pendingProps?.renderer && colors) {
-        pendingProps.renderer.backgroundColor = colors.backgroundColor;
-        pendingProps.renderer.ambientColor = colors.ambientColor;
-      }
 
       renderParams();
       setStatus('Switched to ' + theme + ' theme preview', 'success');

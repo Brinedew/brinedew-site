@@ -300,7 +300,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     .viewer-preview[data-theme="light"] .viewer-preview__canvas {
-      background: #ffffff;
+      background: #f8f1e7;
       border-color: #d4ddec;
     }
 
@@ -358,7 +358,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       border: 1px solid #1f2a3d;
       border-radius: 8px;
       height: 320px;
-      background: #050914;
+      background: #110c0a;
       position: relative;
       overflow: hidden;
     }
@@ -436,6 +436,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       position: relative;
       width: 100%;
       height: 100%;
+      background: inherit;
     }
 
     .viewer-mount > .msp-plugin {
@@ -1575,11 +1576,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     const ACCENT_COLOR_HEX = '#1b7269';
     const LIGHT_NEUTRAL_GRAY_HEX = '#ab9b8f';
     const DARK_NEUTRAL_GRAY_HEX = '#87776d';
-
-    const MOLSTAR_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js';
-    const MOLSTAR_FALLBACK_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.7.1/build/pdbe-molstar-plugin.js';
-    const MOLSTAR_CSS_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar.css';
-    const MOLSTAR_PRECONNECT_URL = 'https://cdn.jsdelivr.net';
     let currentGraphicsSettings = deepClone(DEFAULT_GRAPHICS_SETTINGS);
     let pendingGraphicsSettings = deepClone(DEFAULT_GRAPHICS_SETTINGS);
     let GRAPHICS_SETTINGS = deepClone(DEFAULT_GRAPHICS_SETTINGS);
@@ -1587,9 +1583,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let previewTheme = 'dark';
     let previewReady = false;
     let previewLoadToken = 0;
-    let molstarLoaderPromise = null;
-    let molstarCssLoaded = false;
-    let molstarPreconnectAdded = false;
     let previewStructureChoice = null;
     const profileState = {
       builtInIds: new Set(BUILT_IN_PROFILES.map((p) => p.id)),
@@ -3196,63 +3189,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
     }
 
-    function ensureMolstarAssets() {
-      if (window.GeneguessrMolstar && window.GeneguessrMolstar.ensureMolstarAssets) {
-        return window.GeneguessrMolstar.ensureMolstarAssets();
-      }
-      if (window.PDBeMolstarPlugin) {
-        if (!molstarCssLoaded) {
-          appendMolstarCssOnce();
-        }
-        return Promise.resolve();
-      }
-      if (!molstarLoaderPromise) {
-        addMolstarPreconnectOnce();
-        appendMolstarCssOnce();
-        molstarLoaderPromise = loadScript(MOLSTAR_SCRIPT_URL).catch((err) => {
-          console.warn('Primary Mol* load failed, falling back', err);
-          return loadScript(MOLSTAR_FALLBACK_SCRIPT_URL);
-        });
-      }
-      return molstarLoaderPromise;
-    }
-
-    function addMolstarPreconnectOnce() {
-      if (molstarPreconnectAdded) {
-        return;
-      }
-      const link = document.createElement('link');
-      link.rel = 'preconnect';
-      link.href = MOLSTAR_PRECONNECT_URL;
-      link.crossOrigin = '';
-      document.head.appendChild(link);
-      molstarPreconnectAdded = true;
-    }
-
-    function appendMolstarCssOnce() {
-      if (molstarCssLoaded) {
-        return;
-      }
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = MOLSTAR_CSS_URL;
-      link.onload = () => {
-        molstarCssLoaded = true;
-      };
-      document.head.appendChild(link);
-    }
-
-    function loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = true;
-        script.onload = () => resolve();
-        script.onerror = (err) => reject(err || new Error('Failed to load ' + src));
-        document.head.appendChild(script);
-      });
-    }
-
     function suppressViewerInteractivity(viewer) {
       try {
         if (viewer.plugin && viewer.plugin.managers && viewer.plugin.managers.interactivity) {
@@ -3362,18 +3298,18 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     function resolveBackgroundHex(background) {
       if (!background) {
-        return previewTheme === 'dark' ? '#0f172a' : '#f8f1e7';
+        return previewTheme === 'dark' ? '#110c0a' : '#f8f1e7';
       }
       if (background.mode === 'dark') {
-        return background.dark || '#0f172a';
+        return background.dark || '#110c0a';
       }
       if (background.mode === 'light') {
         return background.light || '#f8f1e7';
       }
       if (background.mode === 'custom') {
-        return background.custom || '#0f172a';
+        return background.custom || '#110c0a';
       }
-      return previewTheme === 'dark' ? (background.dark || '#0f172a') : (background.light || '#f8f1e7');
+      return previewTheme === 'dark' ? (background.dark || '#110c0a') : (background.light || '#f8f1e7');
     }
 
     function parseColorString(value) {
