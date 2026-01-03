@@ -201,11 +201,19 @@
   }
 
   function applyViewerThemeColors(viewer, container) {
-    // Background is already driven by the PDBeMolstarPlugin `bgColor` render option that we set in
-    // `initializeViewer`, which is the safest (and single-source) approach across all embeds.
-    // Avoid mutating canvas renderer props here because partial renderer updates can trip Mol* into
-    // a noisy render-loop error on some embeds (especially minimal worker-hosted pages).
-    return resolveViewerColors(container)
+    const colors = resolveViewerColors(container)
+
+    // Keep this conservative: only touch the one prop we need for single-source-of-truth theming.
+    // `safeApplyCanvasProps` merges into existing renderer props so we do not clobber required sub-props.
+    try {
+      safeApplyCanvasProps(
+        viewer,
+        { renderer: { backgroundColor: toMolstarColor(colors.background) } },
+        "theme background",
+      )
+    } catch {}
+
+    return colors
   }
 
   async function waitForCanvasPropGroups(viewer, groups, timeoutMs) {
