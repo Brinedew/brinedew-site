@@ -434,9 +434,12 @@ function getStructureInfo(protein) {
   }
 
   if (protein.structure_source === "swissmodel" && protein.swissmodel_url) {
+    // SwissModel URLs end in .pdb - detect from URL like main app does
+    const url = protein.swissmodel_url
+    const format = url.toLowerCase().includes(".pdb") ? "pdb" : "cif"
     return {
-      url: protein.swissmodel_url,
-      format: "cif",
+      url,
+      format,
       moleculeId: protein.swissmodel_template || "SWISS",
     }
   }
