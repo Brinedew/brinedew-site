@@ -16,7 +16,11 @@ type SearchType = "basic" | "tags"
 let searchType: SearchType = "basic"
 let currentSearchTerm: string = ""
 const encoder = (str: string) => str.toLowerCase().split(/([^a-z]|[^\x00-\x7F])/)
-let index = new FlexSearch.Document<Item>({
+type SearchResultUnit = { field: string; result: number[] }
+
+// flexsearch's types drift across versions (and the module has multiple builds). This is client-only,
+// so keep the runtime stable and avoid coupling Quartz's typecheck to flexsearch's TS surface.
+let index: any = new (FlexSearch as any).Document({
   charset: "latin:extra",
   encode: encoder,
   document: {
@@ -397,7 +401,7 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
     searchLayout.classList.toggle("display-results", currentSearchTerm !== "")
     searchType = currentSearchTerm.startsWith("#") ? "tags" : "basic"
 
-    let searchResults: FlexSearch.SimpleDocumentSearchResultSetUnit[]
+    let searchResults: SearchResultUnit[]
     if (searchType === "tags") {
       currentSearchTerm = currentSearchTerm.substring(1).trim()
       const separatorIndex = currentSearchTerm.indexOf(" ")

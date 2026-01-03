@@ -1,6 +1,9 @@
 import type { QuartzTransformerPlugin } from "../types"
 
-interface Options { minDepthToShow?: number; attribute?: string }
+interface Options {
+  minDepthToShow?: number
+  attribute?: string
+}
 
 /**
  * Keep only content that follows markers with depth >= minDepthToShow.
@@ -19,13 +22,13 @@ export const LineageTextFilter: QuartzTransformerPlugin<Options> = (opts) => {
   return {
     name: "LineageTextFilter",
     textTransform(_ctx, src) {
-      const hasMarkers = src.includes('data-section')
-      
+      const hasMarkers = src.includes("data-section")
+
       // Only process files that have markers to avoid unnecessary work
       if (!hasMarkers) {
         return src
       }
-      
+
       const out: string[] = []
       let idx = 0
       let m: RegExpExecArray | null
@@ -39,7 +42,7 @@ export const LineageTextFilter: QuartzTransformerPlugin<Options> = (opts) => {
         const start = m.index
         const end = MARKER.lastIndex
         const markerDepth = depth(m[1])
-        
+
         // push untouched text before marker
         out.push(src.slice(idx, start))
 
@@ -56,14 +59,14 @@ export const LineageTextFilter: QuartzTransformerPlugin<Options> = (opts) => {
         // continue from next marker (or EOF)
         idx = nextStart
         if (!nextMatch) break
-        
+
         // Reset for next iteration - we already found the next match
         MARKER.lastIndex = nextMatch.index
       }
 
       // tail
       out.push(src.slice(idx))
-      
+
       return out.join("")
     },
   }

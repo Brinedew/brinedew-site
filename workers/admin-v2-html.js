@@ -6,7 +6,6 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GeneGuessr Admin Panel v2</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css">
   <style>
     * {
       margin: 0;
@@ -29,7 +28,7 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     
     .viewer-panel {
       position: relative;
-      background: #000;
+      background: transparent;
     }
     
     #molstar-viewer {
@@ -373,7 +372,7 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     <span id="changes-indicator"></span>
   </div>
   
-  <script src="https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js"></script>
+  <script src="/static/geneguessr/molstar-shared.js?v=admin-v2"></script>
   <script>
     const API_BASE = '';
     
@@ -401,30 +400,21 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     async function initMolstar() {
       const viewerContainer = document.getElementById('molstar-viewer');
       
-      // Use PDBeMolstarPlugin exactly like the game does
-      viewer = new window.PDBeMolstarPlugin();
-      
-      // Render with same options as game
-      viewer.render(viewerContainer, {
-        hideControls: true,
-        hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
-        pdbeLink: false,
-        visualStyle: 'cartoon',
-        lighting: 'glossy',
-        loadMaps: false,
-        selectInteraction: false,
-        lowPrecisionCoords: false,
-        hideStructureSourceTooltip: true,
+      if (!window.GeneguessrMolstar || !window.GeneguessrMolstar.initializeViewer) {
+        throw new Error('Mol* shared initializer not available');
+      }
+
+      const init = await window.GeneguessrMolstar.initializeViewer(viewerContainer, {
         moleculeId: '1CRN'
+      }, {
+        apiBase: API_BASE,
+        interactive: true,
+        loadTimeoutMs: 60000,
       });
-      
-      // Wait for the viewer's plugin to be ready
-      await waitForPlugin();
-      
+
+      viewer = init.viewer;
+      await init.loadComplete;
       plugin = viewer.plugin;
-      
-      // Apply game's stylization profile after load
-      applyGameStylization();
       
       // Get current props for auto-generated controls
       currentProps = getCanvasProps();
@@ -459,72 +449,21 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
       });
     }
     
-    function applyGameStylization() {
-      if (!plugin?.canvas3d) return;
-      
-      // Hide axes
-      if (plugin.canvas3d.helper && plugin.canvas3d.helper.axes) {
-        plugin.canvas3d.helper.axes.behavior.props.visible = false;
-        plugin.canvas3d.commit();
+    function applyThemePreview(theme) {
+      const viewerContainer = document.getElementById('molstar-viewer');
+      if (!viewer || !viewerContainer) return;
+      const colors = THEME_COLORS[theme];
+      viewerContainer.style.background = theme === 'dark' ? '#1a1a2e' : '#f8f8f8';
+      if (window.GeneguessrMolstar && window.GeneguessrMolstar.applyViewerThemeColors) {
+        window.GeneguessrMolstar.applyViewerThemeColors(viewer, viewerContainer);
+      } else if (plugin?.canvas3d && colors) {
+        plugin.canvas3d.setProps({
+          renderer: {
+            backgroundColor: colors.backgroundColor,
+            ambientColor: colors.ambientColor
+          }
+        });
       }
-      
-      // Apply theme colors
-      const colors = THEME_COLORS[currentTheme];
-      
-      // Apply canvas props matching game's applyViewerStylizationProfile
-      plugin.canvas3d.setProps({
-        renderer: {
-          backgroundColor: colors.backgroundColor,
-          ambientColor: colors.ambientColor,
-          ambientIntensity: 1.0,
-          lightIntensity: 1.0,
-          directionalLight: [1, 0.5, 0.3],
-          light: [{ inclination: 180, azimuth: 0, color: 0xFFFFFF }]
-        },
-        postprocessing: {
-          occlusion: {
-            name: 'on',
-            params: {
-              multiScale: { name: 'on', params: { levels: [{ radius: 5, bias: 1.0 }, { radius: 20, bias: 1.0 }], blurKernelSize: 13 } },
-              samples: 32,
-              radius: 8,
-              bias: 0.8,
-              resolutionScale: 1,
-              color: colors.ambientColor
-            }
-          },
-          antialiasing: {
-            name: 'fxaa',
-            params: {
-              edgeThresholdMin: 0.125,
-              edgeThresholdMax: 0.25,
-              iterations: 2,
-              subpixelQuality: 0.75
-            }
-          },
-          outline: {
-            name: 'on',
-            params: {
-              scale: 0.5,
-              threshold: 0.35,
-              color: colors.backgroundColor
-            }
-          }
-        },
-        cameraFog: {
-          name: 'on',
-          params: {
-            intensity: 0.5,
-            color: colors.backgroundColor
-          }
-        },
-        marking: {
-          enabled: false,
-          edgeScale: 0,
-          ghostEdgeStrength: 0,
-          innerEdgeFactor: 0
-        }
-      });
     }
     
     function getCanvasProps() {
@@ -967,38 +906,17 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
       document.getElementById('theme-light').classList.toggle('active', theme === 'light');
       
       // Apply theme colors to viewer
-      if (plugin?.canvas3d) {
-        const colors = THEME_COLORS[theme];
-        plugin.canvas3d.setProps({
-          renderer: {
-            backgroundColor: colors.backgroundColor,
-            ambientColor: colors.ambientColor
-          },
-          postprocessing: {
-            occlusion: {
-              name: 'on',
-              params: { color: colors.ambientColor }
-            },
-            outline: {
-              name: 'on',
-              params: { color: colors.backgroundColor }
-            }
-          },
-          cameraFog: {
-            name: 'on',
-            params: { color: colors.backgroundColor }
-          }
-        });
-        
-        // Update pendingProps with new theme colors
-        if (pendingProps?.renderer) {
-          pendingProps.renderer.backgroundColor = colors.backgroundColor;
-          pendingProps.renderer.ambientColor = colors.ambientColor;
-        }
-        
-        renderParams();
-        setStatus('Switched to ' + theme + ' theme preview', 'success');
+      const colors = THEME_COLORS[theme];
+      applyThemePreview(theme);
+
+      // Update pendingProps with new theme colors (session-only until user explicitly saves/exports)
+      if (pendingProps?.renderer && colors) {
+        pendingProps.renderer.backgroundColor = colors.backgroundColor;
+        pendingProps.renderer.ambientColor = colors.ambientColor;
       }
+
+      renderParams();
+      setStatus('Switched to ' + theme + ' theme preview', 'success');
     }
     
     // ============ Event Bindings ============
@@ -1020,4 +938,4 @@ export const ADMIN_V2_HTML = `<!DOCTYPE html>
     });
   </script>
 </body>
-</html>`;
+</html>`

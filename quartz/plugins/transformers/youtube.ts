@@ -36,7 +36,7 @@ export const YouTubeAutoEmbed: QuartzTransformerPlugin = () => {
           if (m) {
             const videoId = m[2]
             out.push(
-              "<div class=\"external-embed youtube\">",
+              '<div class="external-embed youtube">',
               `  <iframe src=\"https://www.youtube.com/embed/${videoId}\" title=\"YouTube video\" frameborder=\"0\" loading=\"lazy\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen></iframe>`,
               "</div>",
             )
@@ -51,4 +51,3 @@ export const YouTubeAutoEmbed: QuartzTransformerPlugin = () => {
     },
   }
 }
-

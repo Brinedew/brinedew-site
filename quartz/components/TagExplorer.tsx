@@ -16,15 +16,15 @@ type Options = {
 
 // Hierarchical tag node structure
 type TagNode = {
-  name: string              // this segment only, e.g., "aging"  
-  path: string              // full path, e.g., "topic/aging"
-  count: number             // exact count for this path only
+  name: string // this segment only, e.g., "aging"
+  path: string // full path, e.g., "topic/aging"
+  count: number // exact count for this path only
   pages: { title: string; slug: string }[]
   children: Map<string, TagNode>
 }
 
 const defaultOpts: Required<Options> = {
-  title: "Tags", 
+  title: "Tags",
   minCount: 1,
   sort: "count",
   hierarchical: true,
@@ -55,8 +55,10 @@ function buildTagTree(allFiles: any[], opts: Required<Options>): TagNode {
     const slug = "/" + f.slug
 
     const tagsRaw = (f.frontmatter?.tags ?? []) as unknown[]
-    const tags = (Array.isArray(tagsRaw) ? tagsRaw : [tagsRaw]).map(normalizeTag).filter(Boolean) as string[]
-    
+    const tags = (Array.isArray(tagsRaw) ? tagsRaw : [tagsRaw])
+      .map(normalizeTag)
+      .filter(Boolean) as string[]
+
     // Dedupe tags per file to avoid double-counting
     const uniqueTags = Array.from(new Set(tags))
 
@@ -144,25 +146,25 @@ export default ((user?: Options) => {
   function TagExplorer({ allFiles, displayClass }: QuartzComponentProps) {
     // Build hierarchical tag tree
     const root = buildTagTree(allFiles, opts)
-    
+
     // Filter nodes by minimum count and sort
     function sortChildren(a: TagNode, b: TagNode): number {
       // Always put "untagged" at the bottom
       if (a.name === "untagged") return 1
       if (b.name === "untagged") return -1
-      
+
       const ca = opts.aggregateCounts ? aggregateCount(a) : a.count
       const cb = opts.aggregateCounts ? aggregateCount(b) : b.count
-      
+
       if (opts.sort === "alpha") return a.name.localeCompare(b.name)
       return cb - ca || a.name.localeCompare(b.name)
     }
-    
+
     function filterByCount(node: TagNode): boolean {
       const count = opts.aggregateCounts ? aggregateCount(node) : node.count
       return count >= opts.minCount
     }
-    
+
     const filteredChildren = Array.from(root.children.values())
       .filter(filterByCount)
       .sort(sortChildren)
@@ -173,23 +175,21 @@ export default ((user?: Options) => {
 
     // Hierarchical rendering function
     function renderNode(node: TagNode, depth: number): JSX.Element {
-      const children = Array.from(node.children.values())
-        .filter(filterByCount)
-        .sort(sortChildren)
-      
+      const children = Array.from(node.children.values()).filter(filterByCount).sort(sortChildren)
+
       const count = opts.aggregateCounts ? aggregateCount(node) : node.count
       const hasChildren = children.length > 0
       const hasPages = node.pages.length > 0
       // Show collapse arrow for all tags that have any content
       const shouldShowArrow = hasChildren || hasPages
-      
+
       // Determine if this node should be initially open based on depth
       const shouldDefaultOpen = depth < opts.defaultOpenDepth
-      
+
       return (
         <li class="tag-group" data-depth={depth}>
-          <div 
-            class="tag-container" 
+          <div
+            class="tag-container"
             data-tag={node.path}
             style={{ paddingLeft: `${depth * 12}px` }}
           >
@@ -220,7 +220,9 @@ export default ((user?: Options) => {
                 {node.pages
                   .sort((a, b) => a.title.localeCompare(b.title))
                   .map((p) => (
-                    <li><a href={p.slug}>{p.title}</a></li>
+                    <li>
+                      <a href={p.slug}>{p.title}</a>
+                    </li>
                   ))}
               </ul>
             )}
@@ -237,11 +239,7 @@ export default ((user?: Options) => {
     const id = `tag-explorer-${numTagExplorers++}`
     return (
       <div class={classNames(displayClass, "tag-explorer")}>
-        <button
-          type="button"
-          class="tag-explorer-header"
-          aria-controls={id}
-        >
+        <button type="button" class="tag-explorer-header" aria-controls={id}>
           <h3>{opts.title}</h3>
           <svg
             xmlns="http://www.w3.org/2000/svg"

@@ -37,10 +37,7 @@ function toggleExplorer(this: HTMLElement) {
   } else {
     // Desktop behavior (backwards compatibility)
     const explorerCollapsed = nearestExplorer.classList.toggle("collapsed")
-    nearestExplorer.setAttribute(
-      "aria-expanded", 
-      explorerCollapsed ? "false" : "true"
-    )
+    nearestExplorer.setAttribute("aria-expanded", explorerCollapsed ? "false" : "true")
   }
 }
 

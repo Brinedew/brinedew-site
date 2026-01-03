@@ -22,38 +22,40 @@ export const ImageCaptions: QuartzTransformerPlugin<Options> = (userOpts) => {
   return {
     name: "ImageCaptions",
     htmlPlugins() {
-      return [() => (tree: Root) => {
-        visit(tree, "element", (node, index, parent) => {
-          if (!parent || typeof index !== "number") return
-          const element = node as Element
-          if (element.tagName !== "img") return
+      return [
+        () => (tree: Root) => {
+          visit(tree, "element", (node, index, parent) => {
+            if (!parent || typeof index !== "number") return
+            const element = node as Element
+            if (element.tagName !== "img") return
 
-          // Skip if already inside a figure
-          if ((parent as Element).tagName === "figure") return
+            // Skip if already inside a figure
+            if ((parent as Element).tagName === "figure") return
 
-          const alt = (element.properties?.["alt"] as string | undefined) ?? ""
-          if (opts.requireAlt && alt.trim().length === 0) return
+            const alt = (element.properties?.["alt"] as string | undefined) ?? ""
+            if (opts.requireAlt && alt.trim().length === 0) return
 
-          const imgClone = clone(element) as Element
+            const imgClone = clone(element) as Element
 
-          const figure: Element = {
-            type: "element",
-            tagName: "figure",
-            properties: { class: opts.figureClass },
-            children: [
-              imgClone,
-              {
-                type: "element",
-                tagName: "figcaption",
-                properties: {},
-                children: [{ type: "text", value: alt }],
-              },
-            ],
-          }
+            const figure: Element = {
+              type: "element",
+              tagName: "figure",
+              properties: { class: opts.figureClass },
+              children: [
+                imgClone,
+                {
+                  type: "element",
+                  tagName: "figcaption",
+                  properties: {},
+                  children: [{ type: "text", value: alt }],
+                },
+              ],
+            }
 
-          parent.children.splice(index, 1, figure)
-        })
-      }]
+            parent.children.splice(index, 1, figure)
+          })
+        },
+      ]
     },
   }
 }

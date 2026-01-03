@@ -7,6 +7,23 @@
 # 3. Frontend (quartz/static/geneguessr/app.js) consumes the API
 #
 # Worker deployment: GitHub Actions runs `wrangler deploy` on push to main
+#
+# SECRETS (set via `wrangler secret put <NAME>`):
+# -----------------------------------------------
+# Discord OAuth (existing):
+#   DISCORD_CLIENT_ID        - OAuth app client ID
+#   DISCORD_CLIENT_SECRET    - OAuth app client secret
+#   DISCORD_GUILD_ID         - Server ID for membership check
+#
+# Discord Bot (for daily recap):
+#   DISCORD_PUBLIC_KEY             - Ed25519 public key for interactions validation
+#   DISCORD_APPLICATION_ID         - Discord app ID (same as client ID)
+#   DISCORD_BOT_TOKEN              - Bot token for REST API posting
+#   DISCORD_GENEGUESSR_CHANNEL_ID  - Channel ID for posting recaps
+#   BOT_CRON_TOKEN                 - Shared secret for GitHub Actions auth
+#
+# Other:
+#   DAILY_TARGET_SALT        - Salt for deterministic daily protein selection
 
 name = "geneguessr-api"
 main = "workers/index.js"

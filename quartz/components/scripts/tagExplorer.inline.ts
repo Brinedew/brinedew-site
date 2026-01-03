@@ -23,7 +23,11 @@ function migrateLegacy() {
   const raw = localStorage.getItem(LEGACY_KEY)
   if (!raw) return
   let arr: unknown
-  try { arr = JSON.parse(raw) } catch { arr = [] }
+  try {
+    arr = JSON.parse(raw)
+  } catch {
+    arr = []
+  }
   const state = loadState()
   if (Array.isArray(arr)) {
     for (const t of arr) {
@@ -41,14 +45,14 @@ function applyTagState(group: HTMLElement, outer: HTMLElement, open: boolean) {
     outer.style.display = "block"
     group.classList.add("tag-expanded")
     group.classList.remove("tag-collapsed")
-    group.setAttribute('aria-expanded', 'true')
+    group.setAttribute("aria-expanded", "true")
   } else {
     outer.classList.remove("open")
     outer.classList.add("closed")
     outer.style.display = "none"
     group.classList.add("tag-collapsed")
     group.classList.remove("tag-expanded")
-    group.setAttribute('aria-expanded', 'false')
+    group.setAttribute("aria-expanded", "false")
   }
 }
 
@@ -71,7 +75,7 @@ function toggleTagSection(tagGroup: HTMLElement, tagRaw: string, forceState?: bo
 function handleTagNameClick(event: Event) {
   event.preventDefault()
   event.stopPropagation()
-  
+
   const tagContainer = event.currentTarget as HTMLElement
   const tagGroup = tagContainer.closest(".tag-group") as HTMLElement
   const tag = tagContainer.getAttribute("data-tag")
@@ -79,12 +83,13 @@ function handleTagNameClick(event: Event) {
 
   const tagPagesOuter = tagGroup.querySelector(".tag-pages-outer") as HTMLElement
   if (!tagPagesOuter) return
-  
+
   // Check if currently expanded
-  const isOpen = tagPagesOuter.classList.contains("open") || 
-                 tagPagesOuter.style.display === "block" ||
-                 (!tagPagesOuter.style.display && !tagPagesOuter.classList.contains("closed"))
-  
+  const isOpen =
+    tagPagesOuter.classList.contains("open") ||
+    tagPagesOuter.style.display === "block" ||
+    (!tagPagesOuter.style.display && !tagPagesOuter.classList.contains("closed"))
+
   if (isOpen) {
     // If expanded, navigate to tag page
     const tagUrl = `/tags/${tag}`
@@ -98,7 +103,7 @@ function handleTagNameClick(event: Event) {
 function handleTagIconClick(event: Event) {
   event.preventDefault()
   event.stopPropagation()
-  
+
   const tagIcon = event.currentTarget as HTMLElement
   const tagContainer = tagIcon.closest(".tag-container") as HTMLElement
   const tagGroup = tagContainer?.closest(".tag-group") as HTMLElement
@@ -112,18 +117,20 @@ function handleTagIconClick(event: Event) {
 function toggleTagExplorer(event: Event) {
   event.preventDefault()
   event.stopPropagation()
-  
+
   const button = event.currentTarget as HTMLElement
   const nearestTagExplorer = button.closest(".tag-explorer") as HTMLElement
-  const tagExplorerContent = nearestTagExplorer?.querySelector(".tag-explorer-content") as HTMLElement
+  const tagExplorerContent = nearestTagExplorer?.querySelector(
+    ".tag-explorer-content",
+  ) as HTMLElement
   if (!nearestTagExplorer || !tagExplorerContent) return
 
   // Toggle the collapsed state
   const isCollapsed = nearestTagExplorer.classList.toggle("collapsed")
-  
+
   // Update ARIA attributes
   button.setAttribute("aria-expanded", String(!isCollapsed))
-  
+
   // Save state to localStorage
   const key = "TagExplorer.collapsed"
   localStorage.setItem(key, String(isCollapsed))
@@ -135,22 +142,22 @@ function setupTagExplorer() {
 
   migrateLegacy() // safe no-op after first run
 
-  // Set up main header toggle functionality  
+  // Set up main header toggle functionality
   const headerButton = root.querySelector(".tag-explorer-header") as HTMLElement
   if (headerButton) {
     // Load and restore collapsed state immediately to prevent flash
     const collapsedKey = "TagExplorer.collapsed"
     const isCollapsed = localStorage.getItem(collapsedKey) === "true"
-    
+
     // Apply state synchronously
     if (isCollapsed) {
       root.classList.add("collapsed")
       headerButton.setAttribute("aria-expanded", "false")
     } else {
-      root.classList.remove("collapsed")  
+      root.classList.remove("collapsed")
       headerButton.setAttribute("aria-expanded", "true")
     }
-    
+
     // Add click handler
     headerButton.addEventListener("click", toggleTagExplorer)
   }
@@ -159,7 +166,7 @@ function setupTagExplorer() {
   const seeded = localStorage.getItem(SEEDED_KEY) === "1"
   let mutated = false
 
-  root.querySelectorAll<HTMLElement>(".tag-group").forEach(group => {
+  root.querySelectorAll<HTMLElement>(".tag-group").forEach((group) => {
     const container = group.querySelector<HTMLElement>(".tag-container")
     if (!container) {
       return
@@ -185,18 +192,18 @@ function setupTagExplorer() {
     }
 
     applyTagState(group, outer, open)
-    
+
     // Add separate click handlers for tag name and icon
     const tagNameArea = container.querySelector(".tag-name-area") as HTMLElement
     const tagIcon = container.querySelector(".tag-icon") as HTMLElement
-    
+
     if (tagNameArea) {
       // Make the tag name area clickable by setting data-tag on it
       tagNameArea.setAttribute("data-tag", tag)
       tagNameArea.style.cursor = "pointer"
       tagNameArea.addEventListener("click", handleTagNameClick)
     }
-    
+
     if (tagIcon) {
       tagIcon.style.cursor = "pointer"
       tagIcon.addEventListener("click", handleTagIconClick)
@@ -210,7 +217,7 @@ function setupTagExplorer() {
 }
 
 // Guard against duplicate binding in SPA contexts
-(function bindOnce() {
+;(function bindOnce() {
   // @ts-ignore
   if ((window as any).__tagExplorerBound) return
   document.addEventListener("nav", setupTagExplorer, { passive: true })

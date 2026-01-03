@@ -127,7 +127,7 @@ export default ((opts?: Partial<TagContentOptions>) => {
       return (
         <div class="popover-hint">
           <article class={classes}>{content}</article>
-          
+
           {/* Show child tags if any exist */}
           {childTags.length > 0 && (
             <div class="child-tags">

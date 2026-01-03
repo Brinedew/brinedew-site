@@ -23,7 +23,8 @@ const SORT_OPTIONS = [
 ]
 
 const isString = (value: unknown): value is string => typeof value === "string"
-const toStringValue = (value: unknown): string => (typeof value === "string" ? value : value != null ? String(value) : "")
+const toStringValue = (value: unknown): string =>
+  typeof value === "string" ? value : value != null ? String(value) : ""
 
 export default ((userOpts?: ProteinGalleryOptions) => {
   const ProteinGallery: QuartzComponent = ({
@@ -75,7 +76,7 @@ export default ((userOpts?: ProteinGalleryOptions) => {
             <div class="gallery-sort-controls">
               <label for="protein-sort">Sort by:</label>
               <select id="protein-sort" class="protein-sort-select">
-                {SORT_OPTIONS.map(option => (
+                {SORT_OPTIONS.map((option) => (
                   <option value={option.value}>{option.label}</option>
                 ))}
               </select>
@@ -88,17 +89,19 @@ export default ((userOpts?: ProteinGalleryOptions) => {
             const fm = protein.frontmatter
             const sortAttrs = {
               "data-name":
-                toStringValue(fm?.gene_symbol) || toStringValue(fm?.symbol) || toStringValue(fm?.title),
+                toStringValue(fm?.gene_symbol) ||
+                toStringValue(fm?.symbol) ||
+                toStringValue(fm?.title),
               "data-mass": toStringValue(fm?.mass),
               "data-length": toStringValue(fm?.length),
               "data-percent-disordered": toStringValue(fm?.percent_disordered),
               "data-rvis": toStringValue(fm?.rvis_percentile),
               "data-tissue-tau": toStringValue(fm?.tissue_tau),
             }
-            
+
             return (
               <div class="gallery-item" {...sortAttrs}>
-                <InfoboxComponent 
+                <InfoboxComponent
                   fileData={protein}
                   displayClass={undefined}
                   cfg={cfg}
@@ -112,8 +115,11 @@ export default ((userOpts?: ProteinGalleryOptions) => {
             )
           })}
         </div>
-        
-        <script type="module" dangerouslySetInnerHTML={{__html: `
+
+        <script
+          type="module"
+          dangerouslySetInnerHTML={{
+            __html: `
           const sortSelect = document.getElementById('protein-sort');
           const galleryGrid = document.querySelector('.protein-gallery-grid');
           
@@ -170,13 +176,15 @@ export default ((userOpts?: ProteinGalleryOptions) => {
               items.forEach(item => galleryGrid.appendChild(item));
             });
           }
-        `}} />
+        `,
+          }}
+        />
       </div>
     )
   }
 
   ProteinGallery.displayName = "ProteinGallery"
-  
+
   ProteinGallery.css = `
   .protein-gallery {
     margin: 2rem 0;
@@ -254,6 +262,6 @@ export default ((userOpts?: ProteinGalleryOptions) => {
     }
   }
   `
-  
+
   return ProteinGallery
 }) satisfies QuartzComponentConstructor

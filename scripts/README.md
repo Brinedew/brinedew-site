@@ -3,6 +3,7 @@
 ## Protein data enrichment
 
 `enrich-proteins.py` - Enriches protein wiki pages with data from Cellulore.
+
 - Source: `../Datasets/cellulore/proteins_with_demographics.json`
 - Updates frontmatter in `content/wiki/*.md` files tagged as proteins
 - Generates image prompts for missing protein portraits
@@ -20,6 +21,7 @@
 The GeneGuessr data pipeline is in `D:\Coding\Datasets\GeneGuessr\` (separate project).
 
 Scripts in that pipeline:
+
 - `step_0_build_index.py` through `step_4_upload_to_d1.py`
 - Generates `proteins.json` for production D1
 

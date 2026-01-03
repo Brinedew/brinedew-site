@@ -1,47 +1,58 @@
 # Wikipedia Pageviews - Performance Optimization
 
 ## Problem
+
 Making 19,000+ Wikipedia API calls takes **~3 hours** (vs 10 seconds without it).
 
 ## Solution
+
 Wikipedia fetching is now **opt-in** via environment variable.
 
 ## Usage
 
 ### Fast Mode (Default) - Use Cache Only
+
 ```powershell
 # Normal run - uses cached Wikipedia data, no API calls
 python scripts/populate_local_database.py --batch-size 200
 ```
+
 - **Speed**: ~10 seconds (same as before)
 - **Wikipedia Data**: Uses cached values from previous runs
 - **New proteins**: Get `wikipedia_pageviews: 0` until cache is populated
 
 ### Slow Mode - Fetch Fresh Wikipedia Data
+
 ```powershell
 # Fetch Wikipedia data for all proteins (SLOW!)
 $env:FETCH_WIKIPEDIA="1"
 python scripts/populate_local_database.py --batch-size 200
 ```
+
 - **Speed**: ~3 hours (19k+ API calls with rate limiting)
 - **Use When**: You want to refresh Wikipedia data or fetch for new proteins
 
 ## Cache Location
+
 Cache location is configured in the data pipeline (see `Datasets/GeneGuessr/`).
 
 ## Workflow
 
 1. **Initial Run** (one-time, slow):
+
    ```powershell
    $env:FETCH_WIKIPEDIA="1"
    python scripts/populate_local_database.py --batch-size 200
    ```
+
    This populates the cache with Wikipedia data.
 
 2. **Subsequent Runs** (fast):
+
    ```powershell
    python scripts/populate_local_database.py --batch-size 200
    ```
+
    Uses cached data, runs in ~10 seconds.
 
 3. **Refresh Wikipedia Data** (occasional):

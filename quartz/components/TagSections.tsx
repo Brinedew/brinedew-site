@@ -40,12 +40,12 @@ export default (() => {
 
       const parts = normalized.split("/")
       const prefix = parts[0]
-      
+
       // Display name is the part after the prefix (or full tag if no prefix)
       const displayName = parts.length > 1 ? parts.slice(1).join("/") : normalized
 
       // Determine section key
-      const sectionKey = (parts.length > 1 && SECTION_CONFIG[prefix]) ? prefix : "general"
+      const sectionKey = parts.length > 1 && SECTION_CONFIG[prefix] ? prefix : "general"
 
       if (!sections.has(sectionKey)) {
         sections.set(sectionKey, [])
@@ -94,9 +94,10 @@ export default (() => {
       <nav class={classNames(displayClass, "tag-sections")}>
         {orderedSections.map((section) => {
           // Section header links to the parent tag (e.g., /tags/content)
-          const sectionHref = section.key !== "general" 
-            ? resolveRelative(fileData.slug!, `tags/${section.key}` as FullSlug)
-            : null
+          const sectionHref =
+            section.key !== "general"
+              ? resolveRelative(fileData.slug!, `tags/${section.key}` as FullSlug)
+              : null
 
           return (
             <div key={section.key} class="tag-section">
