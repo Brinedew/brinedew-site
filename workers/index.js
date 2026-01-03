@@ -805,22 +805,14 @@ export default {
         console.warn(`[CRON] Failed to cache structure for ${targetProtein.uniprot}`)
       }
 
-      // 5. Build structure token for bootstrap cache
-      const structureToken = {
-        sourceLabel: structureMeta.sourceLabel,
-        displayLabel: structureMeta.displayLabel,
-        format: structureMeta.format,
-        url: `/api/structure-cached?key=${encodeURIComponent(structureMeta.r2Key)}`,
-        cacheKey: structureMeta.r2Key,
-        chainLabels: structureMeta.chainLabels || [],
-        linkUrl: structureMeta.linkUrl,
-        upstreamUrl: structureMeta.upstreamUrl,
-        sizeBytes: structureMeta.sizeBytes,
-      }
-
-      // 6. Pre-warm bootstrap KV cache for tomorrow (for both origins)
+      // 5. Pre-warm bootstrap KV cache for tomorrow (for both origins)
       const origins = ["https://brinedew.bio", "https://geneguessr.brinedew.bio"]
       for (const origin of origins) {
+        const structureToken = await buildTargetStructureToken(targetProtein, env, {
+          practiceMode: false,
+          origin,
+        })
+        if (!structureToken) continue
         await setDailyBootstrapCache(env, tomorrowStr, origin, targetProtein, structureToken)
       }
       console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`)
@@ -1857,6 +1849,14 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     // ⚠️ PARALLEL EXECUTION - structure token + guess hydration run concurrently
     // This eliminates client-side /api/structure-token round-trip (~3s savings)
     let structureToken = cachedDaily?.structureToken || null
+    // Older cached tokens used a relative `url` (e.g. `/api/structure-cached?key=...`) which breaks
+    // when the client page is not on the same origin as the API host (e.g. brinedew.bio → geneguessr.brinedew.bio).
+    // They can also contain extra fields we no longer want to expose. Treat those as invalid and rebuild.
+    const cachedTokenUrl = typeof structureToken?.url === "string" ? structureToken.url : ""
+    const cachedTokenLooksLegacy = cachedTokenUrl.includes("/api/structure-cached?key=")
+    if (cachedTokenLooksLegacy) {
+      structureToken = null
+    }
     const needsStructureToken = !structureToken
 
     const [_, freshStructureToken] = await Promise.all([
@@ -1921,6 +1921,13 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     const payload = buildGamePayload(state, targetProtein)
     // Embed structure token in bootstrap response - client uses this instead of separate API call
     if (structureToken) {
+      try {
+        if (typeof structureToken.url === "string" && structureToken.url.startsWith("/")) {
+          structureToken = { ...structureToken, url: `${url.origin}${structureToken.url}` }
+        }
+      } catch {
+        // ignore; client will fall back if needed
+      }
       payload.targetStructureToken = structureToken
     }
     return Response.json(payload, { headers: responseHeaders })
