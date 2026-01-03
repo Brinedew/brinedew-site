@@ -1,6 +1,11 @@
 // CORS headers for frontend access - supports both main domain and subdomain
 function getCorsHeaders(origin, requestHost = "") {
   const allowedOrigins = ["https://brinedew.bio", "https://geneguessr.brinedew.bio"]
+  const stagingOrigins = [
+    "https://staging.brinedew.bio",
+    "https://brinedew-bio-staging.pages.dev",
+    "https://staging.brinedew-bio.pages.dev",
+  ]
   const lowerHost = String(requestHost || "").toLowerCase()
   const lowerOrigin = String(origin || "").toLowerCase()
   const isWorkersDev = lowerHost.endsWith(".workers.dev")
@@ -15,12 +20,15 @@ function getCorsHeaders(origin, requestHost = "") {
   // or on a workers.dev hostname (staging/dev). Do NOT allow localhost origins on prod custom domains.
   const allowLocalOrigin = isLocalOrigin && (isLocalHost || isWorkersDev)
   const corsOrigin =
-    allowedOrigins.includes(origin) || allowLocalOrigin ? origin : "https://brinedew.bio"
+    allowedOrigins.includes(origin) || (isWorkersDev && stagingOrigins.includes(origin)) || allowLocalOrigin
+      ? origin
+      : "https://brinedew.bio"
   return {
     "Access-Control-Allow-Origin": corsOrigin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Credentials": "true",
+    Vary: "Origin",
   }
 }
 
