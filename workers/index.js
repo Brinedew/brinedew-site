@@ -731,7 +731,11 @@ export default {
       const tomorrowStr = tomorrow.toISOString().slice(0, 10)
 
       // 1. Check for admin override first
-      const overrideId = await env.KV.get(`puzzle_override:${tomorrowStr}`)
+      const overrideKey = `puzzle_override:${tomorrowStr}`
+      let overrideId = await env.KV.get(overrideKey)
+      if (!overrideId && env.PROD_KV?.get) {
+        overrideId = await env.PROD_KV.get(overrideKey)
+      }
       let targetProtein
       let source
 
@@ -2264,7 +2268,11 @@ async function getDailyTargetProtein(env, options = {}) {
     if (audit) {
       audit.date = today
     }
-    const overrideId = await env.KV.get(`puzzle_override:${today}`)
+    const overrideKey = `puzzle_override:${today}`
+    let overrideId = await env.KV.get(overrideKey)
+    if (!overrideId && env.PROD_KV?.get) {
+      overrideId = await env.PROD_KV.get(overrideKey)
+    }
     if (overrideId) {
       const overrideProtein = await fetchProteinByUniprot(env.DB, overrideId)
       if (overrideProtein) {
