@@ -518,7 +518,28 @@ export default {
 
     // Public graphics settings endpoint (no auth required)
     if (url.pathname === "/api/graphics-settings" && request.method === "GET") {
-      const storedSettings = await env.KV.get("graphics_settings")
+      // When the prod frontend is pointed at the staging API via `?gg_api=...`, we want the same
+      // render characteristics as prod (otherwise we can get occlusion-heavy settings that freeze
+      // Mol* mid-render and make the viewer unresponsive).
+      //
+      // Staging pages/admin can still use staging KV by default; we only mirror prod settings when
+      // the request clearly originates from the prod site.
+      const requestOrigin = request.headers.get("Origin") || ""
+      const requestReferer = request.headers.get("Referer") || ""
+      const wantsProdGraphicsSettings =
+        Boolean(env.PROD_KV?.get) &&
+        (requestOrigin === "https://geneguessr.brinedew.bio" ||
+          requestOrigin === "https://brinedew.bio" ||
+          requestReferer.startsWith("https://geneguessr.brinedew.bio/") ||
+          requestReferer.startsWith("https://brinedew.bio/"))
+
+      let storedSettings = await env.KV.get("graphics_settings")
+      if (wantsProdGraphicsSettings) {
+        const prodSettings = await env.PROD_KV.get("graphics_settings")
+        if (prodSettings) {
+          storedSettings = prodSettings
+        }
+      }
       let graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
       if (storedSettings) {
         try {
