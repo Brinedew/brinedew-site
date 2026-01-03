@@ -2839,18 +2839,15 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         }
 
         applyViewerStylizationProfile(viewer, container)
-        // Render chain label callouts if available (B-189: includes Target labels for quiz cards)
-        // Use totalChainCount for target structures (where chainLabels only has target chains)
-        const effectiveCount =
-          structureInfo.totalChainCount || countTotalChains(structureInfo.chainLabels)
-        if (structureInfo.chainLabels && effectiveCount > 1) {
-          renderChainLabelCallouts(
-            container,
-            structureInfo.chainLabels,
-            structureInfo.totalChainCount,
-          )
-          // Start the position update loop for 3D callouts
-          initializeChainCallouts(containerId)
+        if (structureInfo.chainLabels && window.GeneguessrMolstar?.setFloatingLabels) {
+          const mode = structureInfo.chainLabels.some((label) => label && label.is_target)
+            ? "hidden name mode"
+            : "revealed name mode"
+          window.GeneguessrMolstar.setFloatingLabels(viewer, container, {
+            mode,
+            chainLabels: structureInfo.chainLabels,
+            totalChainCount: structureInfo.totalChainCount || null,
+          })
         }
         // B-201: Start auto-rotation (stops on first user interaction)
         // Use slow spin speed (0.1 = 10x slower than default)

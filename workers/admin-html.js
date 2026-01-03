@@ -1347,11 +1347,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
         <p class="helper-text viewer-preview__status" id="viewer-preview-status">Loading preview...</p>
         <div class="viewer-preview__canvas" id="graphics-preview">
-          <div class="pg-chain-callouts pg-chain-callouts-3d" id="graphics-preview-callouts" hidden style="display: flex;">
-            <div class="pg-chain-callout pg-chain-callout-3d pg-chain-callout-target" id="graphics-preview-target-callout" style="opacity: 1; left: 12px; top: 12px;">
-              <span class="pg-chain-label-gene">Target</span><span class="pg-chain-label-full">Target</span>
-            </div>
-          </div>
           <div class="viewer-placeholder" id="graphics-preview-placeholder">Select a date to view protein</div>
           <div class="viewer-loading" id="graphics-preview-loading" hidden>Loading viewer...</div>
           <div class="viewer-error" id="graphics-preview-error" hidden></div>
@@ -1598,12 +1593,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     const previewPlaceholderEl = document.getElementById('graphics-preview-placeholder');
     const previewLoadingEl = document.getElementById('graphics-preview-loading');
     const previewErrorEl = document.getElementById('graphics-preview-error');
-    const previewCalloutsEl = document.getElementById('graphics-preview-callouts');
-    const previewTargetCalloutEl = document.getElementById('graphics-preview-target-callout');
-
-    if (previewTargetCalloutEl) {
-      previewTargetCalloutEl.style.color = ACCENT_COLOR_HEX;
-    }
 
     // Inspector uses a hidden date field; set an initial ISO date value safely.
     {
@@ -3053,12 +3042,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       previewLoadingEl.hidden = false;
       previewErrorEl.hidden = true;
       previewPlaceholderEl.hidden = true;
-      if (previewCalloutsEl) {
-        previewCalloutsEl.hidden = false;
-      }
-      if (previewTargetCalloutEl) {
-        previewTargetCalloutEl.hidden = false;
-      }
 
       try {
         // Use the same API endpoint as the game for consistent structure rendering
@@ -3086,9 +3069,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewPlaceholderEl.hidden = false;
           previewPlaceholderEl.textContent = 'No 3D structure available for preview.';
           previewStatusEl.textContent = 'Preview unavailable';
-          if (previewCalloutsEl) {
-            previewCalloutsEl.hidden = true;
-          }
           return;
         }
 
@@ -3144,6 +3124,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewStatusEl.textContent = 'Showing ' + uniprot;
           refreshPreview({ immediate: true });
           applyPreviewChainColoring(viewer);
+          if (window.GeneguessrMolstar?.setFloatingLabels && representation.chainLabels) {
+            window.GeneguessrMolstar.setFloatingLabels(viewer, mountTarget, {
+              mode: 'revealed name mode',
+              chainLabels: representation.chainLabels
+            });
+          }
         };
 
         const result = await init.loadComplete;
@@ -3155,9 +3141,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewErrorEl.hidden = false;
           previewErrorEl.textContent = 'Failed to load ' + pendingLabel + ': ' + (err && err.message ? err.message : err);
           previewStatusEl.textContent = 'Error loading protein';
-          if (previewCalloutsEl) {
-            previewCalloutsEl.hidden = true;
-          }
         } else {
           console.warn('Admin preview: ignored stale protein load', err);
         }
@@ -3173,9 +3156,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       previewPlaceholderEl.hidden = false;
       previewPlaceholderEl.textContent = 'Select a date to view protein';
       previewStatusEl.textContent = 'Select a date to preview';
-      if (previewCalloutsEl) {
-        previewCalloutsEl.hidden = true;
-      }
     }
 
 

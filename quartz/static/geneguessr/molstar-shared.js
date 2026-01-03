@@ -733,11 +733,352 @@
     return { viewer, loadComplete }
   }
 
+  const FLOATING_LABEL_MODE_HIDDEN = "hidden name mode"
+  const FLOATING_LABEL_MODE_REVEALED = "revealed name mode"
+  const floatingLabelState = new WeakMap()
+  let floatingLabelCssInjected = false
+
+  // Mol*'s 'many-distinct' palette (chain-id default)
+  // Combines dark-2, set-1, and set-2 from ColorBrewer.
+  const CHAIN_COLORS = [
+    // dark-2 (8 colors)
+    "#1b9e77",
+    "#d95f02",
+    "#7570b3",
+    "#e7298a",
+    "#66a61e",
+    "#e6ab02",
+    "#a6761d",
+    "#666666",
+    // set-1 (9 colors)
+    "#e41a1c",
+    "#377eb8",
+    "#4daf4a",
+    "#984ea3",
+    "#ff7f00",
+    "#ffff33",
+    "#a65628",
+    "#f781bf",
+    "#999999",
+    // set-2 (8 colors)
+    "#66c2a5",
+    "#fc8d62",
+    "#8da0cb",
+    "#e78ac3",
+    "#a6d854",
+    "#ffd92f",
+    "#e5c494",
+    "#b3b3b3",
+  ]
+
+  function ensureFloatingLabelCssOnce() {
+    if (floatingLabelCssInjected) return
+    try {
+      const styleId = "gg-molstar-floating-labels"
+      if (document.getElementById(styleId)) {
+        floatingLabelCssInjected = true
+        return
+      }
+      const style = document.createElement("style")
+      style.id = styleId
+      style.type = "text/css"
+      style.textContent = `
+.pg-chain-callouts.pg-chain-callouts-3d {
+  position: absolute;
+  inset: 0;
+  max-width: none;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.pg-chain-callout.pg-chain-callout-3d {
+  position: absolute;
+  background: none !important;
+  border: none !important;
+  padding: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-shadow: none;
+  transition: opacity 0.15s ease-out;
+  pointer-events: auto;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.pg-chain-callout-3d .pg-chain-label-gene {
+  display: inline;
+}
+
+.pg-chain-callout-3d .pg-chain-label-full {
+  display: none;
+  margin-left: 0.25em;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.pg-chain-callout-3d:hover .pg-chain-label-full {
+  display: inline;
+}
+
+.pg-chain-callout-3d:hover .pg-chain-label-gene {
+  display: none;
+}
+
+.pg-chain-callout.pg-chain-callout-3d.pg-chain-callout-target {
+  font-size: 0.95rem;
+}
+      `.trim()
+      document.head.appendChild(style)
+      floatingLabelCssInjected = true
+    } catch {}
+  }
+
+  function isFloatingLabelMode(value) {
+    return value === FLOATING_LABEL_MODE_HIDDEN || value === FLOATING_LABEL_MODE_REVEALED
+  }
+
+  function countTotalChains(chainLabels) {
+    if (!Array.isArray(chainLabels)) return 0
+    return chainLabels.reduce((sum, label) => sum + (label && label.chains ? label.chains.length : 0), 0)
+  }
+
+  function getChainPos(viewer, chainId) {
+    const struct = viewer && viewer.getStructure ? viewer.getStructure(1)?.cell?.obj?.data : null
+    if (!struct || !struct.model || !struct.model.atomicHierarchy) return null
+
+    const hier = struct.model.atomicHierarchy
+    const conf = struct.model.atomicConformation
+
+    // Find chain by auth_asym_id
+    let chainIndex = -1
+    for (let i = 0; i < hier.chains._rowCount; i++) {
+      if (hier.chains.auth_asym_id.value(i) === chainId) {
+        chainIndex = i
+        break
+      }
+    }
+    if (chainIndex < 0) return null
+
+    const atomStart = hier.chainAtomSegments.offsets[chainIndex]
+    const atomEnd = hier.chainAtomSegments.offsets[chainIndex + 1]
+    if (atomStart >= atomEnd) return null
+
+    // Target 10th residue or middle
+    const firstRes = hier.residueAtomSegments.index[atomStart]
+    const lastRes = hier.residueAtomSegments.index[atomEnd - 1]
+    const resCount = lastRes - firstRes + 1
+    const targetRes = firstRes + Math.min(9, Math.floor(resCount / 2))
+
+    // Find CA in target residue
+    const resStart = hier.residueAtomSegments.offsets[targetRes]
+    const resEnd = hier.residueAtomSegments.offsets[targetRes + 1]
+    let atomIndex = resStart
+    for (let i = resStart; i < resEnd; i++) {
+      if (hier.atoms.label_atom_id.value(i) === "CA") {
+        atomIndex = i
+        break
+      }
+    }
+
+    return { x: conf.x[atomIndex], y: conf.y[atomIndex], z: conf.z[atomIndex] }
+  }
+
+  function getChainIndex(viewer, chainId) {
+    const struct = viewer && viewer.getStructure ? viewer.getStructure(1)?.cell?.obj?.data : null
+    if (!struct || !struct.model || !struct.model.atomicHierarchy) return -1
+    const hier = struct.model.atomicHierarchy
+    const entities = struct.model.entities
+
+    let polymerIndex = 0
+    for (let i = 0; i < hier.chains._rowCount; i++) {
+      const entityId = hier.chains.label_entity_id.value(i)
+      const entityIndex = entities.getEntityIndex(entityId)
+      const entityType = entities.data.type.value(entityIndex)
+      const authAsymId = hier.chains.auth_asym_id.value(i)
+      if (entityType === "polymer") {
+        if (authAsymId === chainId) return polymerIndex
+        polymerIndex++
+      }
+    }
+    return -1
+  }
+
+  function stopFloatingLabels(container) {
+    const state = container ? floatingLabelState.get(container) : null
+    if (state && state.rafId) {
+      cancelAnimationFrame(state.rafId)
+      state.rafId = null
+    }
+  }
+
+  function updateFloatingLabels(viewer, container) {
+    if (!viewer || !container || !container.isConnected) {
+      stopFloatingLabels(container)
+      return
+    }
+    if (!viewer.plugin || !viewer.plugin.canvas3d || !viewer.plugin.canvas3d.camera) return
+
+    const overlay = container.querySelector(".pg-chain-callouts")
+    if (!overlay) return
+
+    const state = floatingLabelState.get(container)
+    if (!state || !state.positions) return
+
+    const cam = viewer.plugin.canvas3d.camera
+    const m = cam.projectionView
+    const camKey = m[0] + m[5] + m[10] + m[12] + m[13] + m[14]
+    if (state.lastCamera === camKey) return
+    state.lastCamera = camKey
+
+    const rect = container.getBoundingClientRect()
+    const vp = { x: 0, y: 0, width: rect.width, height: rect.height }
+
+    overlay.querySelectorAll(".pg-chain-callout[data-chain-id]").forEach((el) => {
+      const p = state.positions.get(el.dataset.chainId)
+      if (!p) {
+        el.style.opacity = "0"
+        return
+      }
+
+      const w = m[3] * p.x + m[7] * p.y + m[11] * p.z + m[15]
+      if (w <= 0) {
+        el.style.opacity = "0"
+        return
+      }
+
+      const ndcX = (m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12]) / w
+      const ndcY = (m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13]) / w
+      let sx = (ndcX + 1) * 0.5 * vp.width + vp.x
+      let sy = (1 - ndcY) * 0.5 * vp.height + vp.y
+
+      const dx = sx - vp.width / 2
+      const dy = sy - vp.height / 2
+      const d = Math.sqrt(dx * dx + dy * dy) || 1
+      sx += (dx / d) * vp.width * 0.15
+      sy += (dy / d) * vp.height * 0.15
+
+      const pad = 10
+      const ew = el.offsetWidth || 80
+      const eh = el.offsetHeight || 24
+      el.style.left = Math.max(pad, Math.min(vp.width - ew - pad, sx - ew / 2)) + "px"
+      el.style.top = Math.max(pad, Math.min(vp.height - eh - pad, sy - eh / 2)) + "px"
+      el.style.opacity = "1"
+    })
+  }
+
+  function setFloatingLabels(viewer, container, options) {
+    if (!viewer || !container) return
+
+    const mode = options && options.mode
+    if (!isFloatingLabelMode(mode)) return
+
+    const chainLabels = options && Array.isArray(options.chainLabels) ? options.chainLabels : null
+    if (!chainLabels) return
+
+    ensureFloatingLabelCssOnce()
+
+    // Ensure our absolute-position overlay has a positioning context.
+    try {
+      const computed = window.getComputedStyle(container).position
+      if (!computed || computed === "static") {
+        container.style.position = "relative"
+      }
+    } catch {}
+
+    stopFloatingLabels(container)
+    container.querySelector(".pg-chain-callouts")?.remove()
+
+    const effectiveCount = options && options.totalChainCount != null ? Number(options.totalChainCount) : null
+    const totalChains = Number.isFinite(effectiveCount) && effectiveCount > 0 ? effectiveCount : countTotalChains(chainLabels)
+    if (totalChains <= 1) return
+
+    const expandedChains = []
+    chainLabels.forEach((label) => {
+      if (!label || !Array.isArray(label.chains) || !label.chains.length) return
+      label.chains.forEach((chainId) => {
+        expandedChains.push({
+          chainId,
+          gene: label.gene,
+          name: label.name,
+          is_target: Boolean(label.is_target),
+        })
+      })
+    })
+    if (!expandedChains.length) return
+
+    const targets = expandedChains.filter((c) => c.is_target)
+    const others = expandedChains.filter((c) => !c.is_target)
+    const display = [...targets, ...others]
+
+    const overlay = document.createElement("div")
+    overlay.className = "pg-chain-callouts pg-chain-callouts-3d"
+
+    const positions = new Map()
+
+    display.forEach((entry) => {
+      const chainId = entry.chainId
+      if (!chainId) return
+
+      const el = document.createElement("div")
+      el.className =
+        "pg-chain-callout pg-chain-callout-3d" + (entry.is_target ? " pg-chain-callout-target" : "")
+      el.dataset.chainId = chainId
+
+      const geneSpan = document.createElement("span")
+      geneSpan.className = "pg-chain-label-gene"
+      const fullSpan = document.createElement("span")
+      fullSpan.className = "pg-chain-label-full"
+
+      if (mode === FLOATING_LABEL_MODE_HIDDEN) {
+        geneSpan.textContent = "Target"
+        fullSpan.textContent = "Target"
+      } else {
+        const gene = entry.gene || (entry.name ? String(entry.name).split(" ")[0] : "") || "?"
+        const full = entry.name || entry.gene || "?"
+        geneSpan.textContent = gene
+        fullSpan.textContent = full
+      }
+
+      el.appendChild(geneSpan)
+      el.appendChild(fullSpan)
+
+      const chainIndex = getChainIndex(viewer, chainId)
+      if (chainIndex >= 0) {
+        el.style.color = CHAIN_COLORS[chainIndex % CHAIN_COLORS.length]
+      }
+
+      const pos = getChainPos(viewer, chainId)
+      if (pos) positions.set(chainId, pos)
+
+      el.style.opacity = "0"
+      overlay.appendChild(el)
+    })
+
+    if (!overlay.childNodes.length) return
+
+    container.appendChild(overlay)
+    floatingLabelState.set(container, { rafId: null, positions, lastCamera: null })
+
+    const loop = () => {
+      updateFloatingLabels(viewer, container)
+      const state = floatingLabelState.get(container)
+      if (!state) return
+      state.rafId = requestAnimationFrame(loop)
+    }
+
+    const state = floatingLabelState.get(container)
+    if (state) {
+      state.rafId = requestAnimationFrame(loop)
+    }
+    updateFloatingLabels(viewer, container)
+  }
+
   window.GeneguessrMolstar = {
     ensureMolstarAssets,
     getGraphicsSettings,
     applyViewerThemeColors,
     applyViewerStylizationProfile,
     initializeViewer,
+    setFloatingLabels,
   }
 })()
