@@ -1706,20 +1706,28 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     // matches it. This prevents a stale staging cache from masking the mirrored prod target.
     if (!practiceMode && cachedDaily && env.PROD_KV?.get) {
       try {
+        let prodUniprot = ""
         const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
         if (prodActualRaw) {
           const prodActual = JSON.parse(prodActualRaw)
-          const prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
-          const cachedUniprot = (cachedDaily?.targetProtein?.uniprot || "")
+          prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
+        }
+        if (!prodUniprot) {
+          const prodDailyCache = await env.PROD_KV.get(`${DAILY_BOOTSTRAP_CACHE_PREFIX}${today}`, {
+            type: "json",
+          })
+          prodUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
             .toString()
             .trim()
             .toUpperCase()
-          if (prodUniprot && cachedUniprot && prodUniprot !== cachedUniprot) {
-            console.log(
-              `[BOOTSTRAP] Staging cache mismatch with prod actual; ignoring cache (${cachedUniprot} != ${prodUniprot})`,
-            )
-            cachedDaily = null
-          }
+        }
+
+        const cachedUniprot = (cachedDaily?.targetProtein?.uniprot || "").toString().trim().toUpperCase()
+        if (prodUniprot && cachedUniprot && prodUniprot !== cachedUniprot) {
+          console.log(
+            `[BOOTSTRAP] Staging cache mismatch with prod; ignoring cache (${cachedUniprot} != ${prodUniprot})`,
+          )
+          cachedDaily = null
         }
       } catch (err) {
         console.warn("GeneGuessr: failed to validate staging bootstrap cache against prod", err?.message || err)
@@ -2327,6 +2335,27 @@ async function getDailyTargetProtein(env, options = {}) {
               }
               return audit ? { protein: prodProtein, audit } : prodProtein
             }
+          }
+        }
+
+        // Fallback: mirror prod's daily bootstrap cache if it exists (often available even when
+        // puzzle_actual hasn't been recorded yet).
+        const prodDailyCache = await env.PROD_KV.get(`${DAILY_BOOTSTRAP_CACHE_PREFIX}${today}`, {
+          type: "json",
+        })
+        const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
+          .toString()
+          .trim()
+          .toUpperCase()
+        if (prodDailyUniprot) {
+          const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
+          if (prodProtein) {
+            if (audit) {
+              audit.source = "prod_daily_cache"
+              audit.override_id = null
+              audit.skipped_alpha_fold = 0
+            }
+            return audit ? { protein: prodProtein, audit } : prodProtein
           }
         }
       } catch (err) {
