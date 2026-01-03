@@ -1701,6 +1701,30 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     if (!practiceMode) {
       cachedDaily = await getDailyBootstrapCache(env, today, url.origin)
     }
+
+    // Staging-only: If prod has already recorded today's actual pick, ensure our daily bootstrap cache
+    // matches it. This prevents a stale staging cache from masking the mirrored prod target.
+    if (!practiceMode && cachedDaily && env.PROD_KV?.get) {
+      try {
+        const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
+        if (prodActualRaw) {
+          const prodActual = JSON.parse(prodActualRaw)
+          const prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
+          const cachedUniprot = (cachedDaily?.targetProtein?.uniprot || "")
+            .toString()
+            .trim()
+            .toUpperCase()
+          if (prodUniprot && cachedUniprot && prodUniprot !== cachedUniprot) {
+            console.log(
+              `[BOOTSTRAP] Staging cache mismatch with prod actual; ignoring cache (${cachedUniprot} != ${prodUniprot})`,
+            )
+            cachedDaily = null
+          }
+        }
+      } catch (err) {
+        console.warn("GeneGuessr: failed to validate staging bootstrap cache against prod", err?.message || err)
+      }
+    }
     console.log(`[BOOTSTRAP] Cache checked: ${cachedDaily ? "HIT" : "MISS"}`)
 
     // ⚠️ PARALLEL FETCH - DO NOT SERIALIZE ⚠️
