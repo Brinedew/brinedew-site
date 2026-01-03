@@ -15,20 +15,20 @@ Source for my personal site. Wet lab biologist, interested in aging and cancer, 
 
 Obsidian vault in `content/`, push to GitHub, Quartz builds static HTML, GitHub Pages serves it. About 60 seconds from commit to live.
 
-## GeneGuessr dev (don’t hit prod by accident)
+## GeneGuessr dev
 
-GeneGuessr’s frontend can be pointed at a non-prod API worker via a URL override:
+**Staging**: Deploy the site from the `staging` branch.
 
-- Set API base for this browser: add `?gg_api=https://<your-worker-host>` to the GeneGuessr URL once (it persists in `localStorage`).
-- Clear the override: `?gg_api=clear`.
+- Target domain: `staging.brinedew.bio` (pending DNS/custom-domain hookup).
+- Current fallback: `https://brinedew-bio-staging.pages.dev/` (Pages).
+- API: staging pages hosts default to `https://geneguessr-api-staging.decap.workers.dev` (no `gg_api` needed).
 
-Recommended flows:
+**Local dev**:
+- Run `npx wrangler dev --env staging --remote --port 8787` for the API.
+- Run `npm run dev` for the frontend.
+- Open `http://localhost:<quartz-port>/apps/geneguessr/?gg_api=http://127.0.0.1:8787`.
 
-- Local API dev:
-  - Run `npx wrangler dev --env staging --remote --port 8787`.
-  - In another terminal, run `npm run dev`.
-  - Open `http://localhost:<quartz-port>/apps/geneguessr/?gg_api=http://127.0.0.1:8787`.
-- Online staging: deploy the staging worker and open GeneGuessr with `?gg_api=https://<staging-worker>.workers.dev`.
+The `?gg_api=<url>` override is for local dev only. It persists in localStorage; clear with `?gg_api=clear`.
 
 ## license
 

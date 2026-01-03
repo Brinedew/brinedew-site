@@ -50,6 +50,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
 
   // API host resolution
   // - Default: prod worker on https://geneguessr.brinedew.bio
+  // - Staging site: defaults to staging worker (no query param needed)
   // - Override: ?gg_api=https://... (persists into localStorage)
   // - Clear override: ?gg_api=clear
   const API_OVERRIDE_QUERY_KEY = "gg_api"
@@ -57,8 +58,21 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const PRACTICE_LIST_STORAGE_KEY = "geneguessr_practice_list_v1"
 
   function getDefaultApiBase() {
-    return window.location.hostname === "geneguessr.brinedew.bio"
-      ? window.location.origin
+    const host = String(window.location.hostname || "").toLowerCase()
+
+    if (host === "geneguessr.brinedew.bio") {
+      return window.location.origin
+    }
+
+    // Real staging lives under a single staging umbrella domain (staging.brinedew.bio),
+    // but we also support the Pages fallback domain(s) for when the custom domain is not set up yet.
+    const isStagingSite =
+      host === "staging.brinedew.bio" ||
+      host === "brinedew-bio-staging.pages.dev" ||
+      host === "staging.brinedew-bio.pages.dev"
+
+    return isStagingSite
+      ? "https://geneguessr-api-staging.decap.workers.dev"
       : "https://geneguessr.brinedew.bio"
   }
 

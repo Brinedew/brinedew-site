@@ -510,6 +510,11 @@
 }
 
 /* Hide remaining Molstar UI controls that can't be hidden via API */
+.pg-structure-viewer .msp-viewport-controls,
+.pg-card-structure-viewer .msp-viewport-controls {
+  display: none !important;
+}
+
 .pg-structure-viewer .msp-viewport-controls button[title="Reset Camera"],
 .pg-structure-viewer .msp-viewport-controls button[title*="Reset"],
 .pg-structure-viewer .msp-viewport-controls button[title*="Screenshot"],

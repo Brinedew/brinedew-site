@@ -510,10 +510,8 @@
       style.id = styleId
       style.type = "text/css"
       style.textContent = `
-[data-gg-molstar-root] .msp-viewport-controls button[title="Reset Camera"],
-[data-gg-molstar-root] .msp-viewport-controls button[title*="Reset"],
-[data-gg-molstar-root] .msp-viewport-controls button[title*="Screenshot"],
-[data-gg-molstar-root] .msp-viewport-controls button[title*="State"] {
+[data-gg-molstar-root] .msp-viewport-controls,
+[data-gg-molstar-root] .msp-viewport-controls * {
   display: none !important;
 }
 
