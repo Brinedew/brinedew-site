@@ -20,12 +20,11 @@ async function main() {
   console.log(`Taking screenshot of ${url}`)
 
   const browser = await chromium.launch({
+    headless: false, // Headful mode for WebGL under Xvfb
     args: [
-      "--use-gl=swiftshader",
-      "--enable-webgl",
-      "--ignore-gpu-blocklist",
       "--no-sandbox",
       "--disable-setuid-sandbox",
+      "--ignore-gpu-blocklist",
     ],
   })
 
