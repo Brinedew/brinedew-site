@@ -26,10 +26,10 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Playwright
+      - name: Install Playwright with OS deps
         run: |
           npm install playwright
-          npx playwright install chromium
+          npx playwright install --with-deps chromium
 
       - name: Determine day
         id: day

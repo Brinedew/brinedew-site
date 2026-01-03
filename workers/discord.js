@@ -559,22 +559,31 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
 
         // Signal ready when viewer finishes loading
         let loadCompleted = false;
-        const markReady = () => {
+
+        const markSuccess = () => {
           if (loadCompleted) return;
           loadCompleted = true;
           loading.style.display = 'none';
           applyPostLoadStyling();
           document.body.setAttribute('data-loaded', 'true');
-          console.log('Render page ready');
+          console.log('[molstar] loadComplete fired - render success');
         };
 
-        // Try loadComplete event if available
+        const markTimeout = () => {
+          if (loadCompleted) return;
+          loadCompleted = true;
+          loading.style.display = 'none';
+          document.body.setAttribute('data-loaded', 'timeout');
+          console.error('[molstar] loadComplete did not fire before timeout');
+        };
+
+        // Listen for loadComplete event
         if (viewer.events && viewer.events.loadComplete) {
-          viewer.events.loadComplete.subscribe(markReady);
+          viewer.events.loadComplete.subscribe(markSuccess);
         }
 
-        // Always set a fallback timeout (in case event never fires)
-        setTimeout(markReady, 8000);
+        // Timeout marks failure, not false success
+        setTimeout(markTimeout, 60000);
 
       } catch (err) {
         loading.style.display = 'none';

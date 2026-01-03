@@ -21,10 +21,11 @@ async function main() {
 
   const browser = await chromium.launch({
     args: [
-      "--use-gl=angle",
-      "--use-angle=swiftshader",
-      "--disable-gpu-sandbox",
+      "--use-gl=swiftshader",
+      "--enable-webgl",
       "--ignore-gpu-blocklist",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
     ],
   })
 
@@ -34,17 +35,59 @@ async function main() {
 
   const page = await context.newPage()
 
+  // Capture console and errors for debugging
+  page.on("console", (msg) => console.log(`[page:${msg.type()}] ${msg.text()}`))
+  page.on("pageerror", (err) => console.log(`[pageerror] ${err.stack || err}`))
+
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded" })
+    await page.goto(url, { waitUntil: "networkidle" })
     console.log("Page loaded, waiting for structure to render...")
 
-    // Wait for the data-loaded attribute or timeout after 15s
-    await page.waitForSelector("body[data-loaded='true']", { timeout: 15000 }).catch(() => {
-      console.log("data-loaded not found, using fallback wait")
+    // Wait for data-loaded attribute (true = success, timeout = failure)
+    const loadState = await page.waitForSelector("body[data-loaded]", { timeout: 70000 }).catch(() => null)
+
+    if (loadState) {
+      const state = await page.getAttribute("body", "data-loaded")
+      console.log(`Load state: ${state}`)
+
+      if (state === "timeout") {
+        console.error("Mol* loadComplete did not fire - structure may not have rendered")
+      }
+    } else {
+      console.error("data-loaded attribute never set")
+    }
+
+    // WebGL probe - diagnose what's happening
+    const glInfo = await page.evaluate(() => {
+      const canvas = document.querySelector("canvas")
+      if (!canvas) return { ok: false, reason: "no_canvas" }
+
+      const gl =
+        canvas.getContext("webgl2", { failIfMajorPerformanceCaveat: false }) ||
+        canvas.getContext("webgl", { failIfMajorPerformanceCaveat: false })
+
+      if (!gl) return { ok: false, reason: "no_webgl_context" }
+
+      const dbg = gl.getExtension("WEBGL_debug_renderer_info")
+      const renderer = dbg
+        ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)
+        : gl.getParameter(gl.RENDERER)
+
+      const vendor = dbg
+        ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)
+        : gl.getParameter(gl.VENDOR)
+
+      return { ok: true, vendor, renderer, w: canvas.width, h: canvas.height }
     })
 
-    // Additional wait to ensure rendering is complete
-    await page.waitForTimeout(2000)
+    console.log("WebGL probe:", JSON.stringify(glInfo))
+
+    if (!glInfo.ok) {
+      console.error(`WebGL failed: ${glInfo.reason}`)
+    }
+
+    // Small additional wait for final render
+    await page.waitForTimeout(1000)
 
     await page.screenshot({ path: outputFile, type: "png" })
     console.log(`Screenshot saved to ${outputFile}`)
