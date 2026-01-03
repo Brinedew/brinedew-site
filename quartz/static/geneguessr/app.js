@@ -64,16 +64,16 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       return window.location.origin
     }
 
-    // Real staging lives under a single staging umbrella domain (staging.brinedew.bio),
-    // but we also support the Pages fallback domain(s) for when the custom domain is not set up yet.
-    const isStagingSite =
-      host === "staging.brinedew.bio" ||
-      host === "brinedew-bio-staging.pages.dev" ||
-      host === "staging.brinedew-bio.pages.dev"
+    // Real staging lives under a single staging umbrella domain (staging.brinedew.bio).
+    // On that domain we route `/api/*` to the staging worker (same-origin), so we do not need `gg_api`.
+    if (host === "staging.brinedew.bio") {
+      return window.location.origin
+    }
 
-    return isStagingSite
-      ? "https://geneguessr-api-staging.decap.workers.dev"
-      : "https://geneguessr.brinedew.bio"
+    // Fallback: allow hitting the staging worker directly when we are on Pages preview domains.
+    const isPagesStaging = host === "brinedew-bio-staging.pages.dev" || host === "staging.brinedew-bio.pages.dev"
+
+    return isPagesStaging ? "https://geneguessr-api-staging.decap.workers.dev" : "https://geneguessr.brinedew.bio"
   }
 
   function normalizeApiBase(raw) {

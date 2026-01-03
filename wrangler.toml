@@ -72,8 +72,11 @@ name = "geneguessr-api-staging"
 workers_dev = true
 preview_urls = true
 
-# Do not claim the prod custom-domain route in staging.
-routes = []
+# Do not claim the prod custom-domain route in staging, but do provide same-origin
+# API routing for the staging site.
+routes = [
+  { pattern = "staging.brinedew.bio/api/*", zone_name = "brinedew.bio" }
+]
 
 # Reuse prod D1 for now (read-heavy; avoids duplicating the dataset).
 [[env.staging.d1_databases]]
