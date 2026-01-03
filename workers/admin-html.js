@@ -1291,7 +1291,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
         
         <div class="form-actions">
-          <button type="submit">Apply Graphics Settings</button>
+          <button type="submit">Preview in Admin</button>
+          <button type="button" id="graphics-push-live" class="btn-primary">Push to Live Site</button>
           <button type="button" id="graphics-reset">Reset to Defaults</button>
           <button type="button" id="graphics-revert">Use Saved Settings</button>
         </div>
@@ -1396,7 +1397,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       </div>
     </div>
     
-  
+    <script src="/static/geneguessr/molstar-shared.js?v=admin"></script>
     <script>
     const API_BASE = '';
 
@@ -1575,9 +1576,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     const LIGHT_NEUTRAL_GRAY_HEX = '#ab9b8f';
     const DARK_NEUTRAL_GRAY_HEX = '#87776d';
 
-    const MOLSTAR_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar-plugin.js';
-    const MOLSTAR_FALLBACK_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js';
-    const MOLSTAR_CSS_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@latest/build/pdbe-molstar.css';
+    const MOLSTAR_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar-plugin.js';
+    const MOLSTAR_FALLBACK_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.7.1/build/pdbe-molstar-plugin.js';
+    const MOLSTAR_CSS_URL = 'https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar.css';
     const MOLSTAR_PRECONNECT_URL = 'https://cdn.jsdelivr.net';
     let currentGraphicsSettings = deepClone(DEFAULT_GRAPHICS_SETTINGS);
     let pendingGraphicsSettings = deepClone(DEFAULT_GRAPHICS_SETTINGS);
@@ -2205,6 +2206,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         graphicsForm.addEventListener('submit', handleGraphicsSubmit);
       }
 
+      const graphicsPushLive = document.getElementById('graphics-push-live');
+      if (graphicsPushLive) {
+        graphicsPushLive.addEventListener('click', pushGraphicsSettingsLive);
+      }
+
       const graphicsReset = document.getElementById('graphics-reset');
       if (graphicsReset) {
         graphicsReset.addEventListener('click', () => {
@@ -2444,6 +2450,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       const payload = collectGraphicsSettingsFromForm();
       pendingGraphicsSettings = deepClone(payload);
       GRAPHICS_SETTINGS = deepClone(payload);
+      refreshPreview({ immediate: true });
+      showMessage('graphics-message', 'Preview updated for this admin session. Click "Push to Live Site" to publish.', 'success');
+    }
+
+    async function pushGraphicsSettingsLive() {
+      const payload = deepClone(pendingGraphicsSettings || collectGraphicsSettingsFromForm());
       try {
         const response = await fetch(API_BASE + '/api/admin/graphics-settings', {
           method: 'POST',
@@ -2456,10 +2468,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           throw new Error(data.error || 'Failed to update graphics');
         }
         currentGraphicsSettings = deepClone(payload);
-        showMessage('graphics-message', data.message || 'Graphics settings updated', 'success');
+        pendingGraphicsSettings = deepClone(payload);
+        GRAPHICS_SETTINGS = deepClone(payload);
+        showMessage('graphics-message', data.message || 'Graphics settings pushed live', 'success');
       } catch (err) {
-        console.error('Error updating graphics:', err);
-        showMessage('graphics-message', err.message || 'Failed to update graphics', 'error');
+        console.error('Error pushing graphics settings live:', err);
+        showMessage('graphics-message', err.message || 'Failed to push graphics settings live', 'error');
       }
     }
     function displayStatus(data) {
@@ -3086,37 +3100,33 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
 
         await destroyPreviewViewer();
-        await ensureMolstarAssets();
-        const viewer = new window.PDBeMolstarPlugin();
         const mountTarget = previewMountEl || previewContainer;
         if (!mountTarget) {
           throw new Error('Preview container unavailable');
         }
 
-        // Build render options matching the game's app.js
-        // This ensures admin preview looks identical to live site
+        if (!window.GeneguessrMolstar || !window.GeneguessrMolstar.initializeViewer) {
+          throw new Error('Mol* shared initializer not available');
+        }
+
+        // Build minimal render options; canonical defaults/stylization live in molstar-shared.js
         const isBinary = data.format === 'bcif';
-        const renderOptions = {
+        const init = await window.GeneguessrMolstar.initializeViewer(mountTarget, {
           moleculeId: data.displayLabel || uniprot,
           customData: {
             url: data.url,
             format: isBinary ? 'cif' : (data.format || 'cif'),
             binary: isBinary
-          },
-          visualStyle: 'cartoon',
-          lighting: 'glossy',
-          hideControls: true,
-          hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
-          pdbeLink: false,
-          loadMaps: false,
-          selectInteraction: false,
-          lowPrecisionCoords: false,
-          hideStructureSourceTooltip: true
-        };
+          }
+        }, {
+          apiBase: API_BASE,
+          graphicsSettings: pendingGraphicsSettings,
+          fetchGraphicsSettings: false,
+          interactive: false,
+          loadTimeoutMs: 60000,
+        });
 
-        viewer.render(mountTarget, renderOptions);
-        disableViewerUi(viewer);
-        suppressViewerInteractivity(viewer);
+        const viewer = init.viewer;
 
         // Store representation info for chain coloring
         const representation = {
@@ -3125,10 +3135,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           chainLabels: data.chainLabels
         };
 
-        const finalize = async () => {
+        const finalize = async (result) => {
           if (loadToken !== previewLoadToken) {
             await disposePreviewViewer(viewer);
             return;
+          }
+          if (!result || !result.ok) {
+            throw new Error('Mol* loadComplete did not fire before timeout');
           }
           previewViewer = viewer;
           previewStructureChoice = representation;
@@ -3140,11 +3153,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           applyPreviewChainColoring(viewer);
         };
 
-        if (viewer.events && viewer.events.loadComplete) {
-          viewer.events.loadComplete.subscribe(finalize);
-        } else {
-          setTimeout(finalize, 600);
-        }
+        const result = await init.loadComplete;
+        await finalize(result);
       } catch (err) {
         if (loadToken === previewLoadToken) {
           console.error('Failed to load protein in preview:', err);
@@ -3187,6 +3197,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     function ensureMolstarAssets() {
+      if (window.GeneguessrMolstar && window.GeneguessrMolstar.ensureMolstarAssets) {
+        return window.GeneguessrMolstar.ensureMolstarAssets();
+      }
       if (window.PDBeMolstarPlugin) {
         if (!molstarCssLoaded) {
           appendMolstarCssOnce();

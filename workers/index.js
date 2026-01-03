@@ -36,6 +36,10 @@ const DAILY_BOOTSTRAP_CACHE_PREFIX = "daily_bootstrap:"
 const DAILY_BOOTSTRAP_CACHE_TTL = 86400 // 24 hours
 
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
+const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
+  "/static/vendor/pdbe-molstar@3.8.0/",
+  "/static/vendor/pdbe-molstar@3.7.1/",
+]
 
 const PRACTICE_RESOLVE_MAX_INPUTS = 10000
 // Cloudflare D1 enforces a relatively small limit on bound parameters per query.
@@ -144,6 +148,7 @@ import {
 } from "./lib/protein-store.js"
 import { resolveStructureRepresentation } from "./lib/structure-utils.js"
 import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
+import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
 
 export default {
   async fetch(request, env, ctx) {
@@ -151,6 +156,44 @@ export default {
     console.log(`[WORKER] Incoming: ${request.method} ${url.pathname}`)
     const origin = request.headers.get("Origin") || ""
     const corsHeaders = getCorsHeaders(origin, url.hostname)
+
+    // Serve the shared Mol* initializer from the Worker so staging (workers.dev) can load it.
+    // Production can still proxy /static/* from the Quartz site, but this keeps staging self-contained.
+    if (
+      url.pathname === "/static/geneguessr/molstar-shared.js" &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      return new Response(request.method === "HEAD" ? null : getMolstarSharedSource(), {
+        headers: {
+          "Content-Type": "application/javascript; charset=utf-8",
+          // Keep this easy to update after deploys; avoid sticky CDN/browser caching of the initializer.
+          "Cache-Control": "no-cache, max-age=0",
+        },
+      })
+    }
+
+    // Proxy Mol* assets through the Worker so worker-served pages do not depend on the client being
+    // able to reach jsDelivr directly (helps CI screenshots and restrictive networks).
+    if (request.method === "GET" || request.method === "HEAD") {
+      const allowedPrefix = MOLSTAR_VENDOR_ALLOWED_PREFIXES.find((prefix) =>
+        url.pathname.startsWith(prefix),
+      )
+      if (allowedPrefix) {
+        const upstream = `https://cdn.jsdelivr.net/npm${url.pathname.replace("/static/vendor", "")}`
+        const upstreamResp = await fetch(upstream, {
+          cf: {
+            cacheEverything: true,
+            cacheTtl: 86400,
+          },
+        })
+        const headers = new Headers(upstreamResp.headers)
+        headers.set("Cache-Control", "public, max-age=86400")
+        return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+          status: upstreamResp.status,
+          headers,
+        })
+      }
+    }
 
     // Serve host-scoped robots/sitemap for the geneguessr subdomain.
     // This prevents Google Search Console from seeing a sitemap full of brinedew.bio URLs.

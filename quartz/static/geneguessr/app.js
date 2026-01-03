@@ -1448,6 +1448,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   }
 
   async function ensureMolstarAssets() {
+    if (window.GeneguessrMolstar?.ensureMolstarAssets) {
+      return window.GeneguessrMolstar.ensureMolstarAssets()
+    }
     addMolstarPreconnectOnce()
     appendMolstarCssOnce()
 
@@ -1933,6 +1936,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   }
 
   function applyViewerThemeColors(viewer, container) {
+    if (window.GeneguessrMolstar?.applyViewerThemeColors) {
+      window.GeneguessrMolstar.applyViewerThemeColors(viewer, container)
+      return
+    }
     const theme = resolveViewerColors(container)
     safeApplyCanvasProps(
       viewer,
@@ -2480,252 +2487,20 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       activeViewers.set(container.id, viewer)
     }
 
-    // Apply UI hiding and interactivity suppression immediately (these are safe)
+    if (window.GeneguessrMolstar?.applyViewerStylizationProfile) {
+      await window.GeneguessrMolstar.applyViewerStylizationProfile(viewer, container, {
+        graphicsSettings: GRAPHICS_SETTINGS,
+        debugStylization: DEBUG_STYLIZATION,
+        interactive: false,
+      })
+      return
+    }
+
+    // Fallback: keep the viewer usable even if molstar-shared.js fails to load.
     hideMolstarPanels(viewer)
     suppressViewerInteractivity(viewer)
     applyViewerThemeColors(viewer, container)
-
-    // Define stylization steps to apply sequentially with delays
-    const steps = [
-      {
-        name: "hideAxes",
-        enabled: DEBUG_STYLIZATION.hideAxes,
-        fn: () =>
-          safeApplyCanvasProps(
-            viewer,
-            { camera: { helper: { axes: { name: "off" } } } },
-            "axis helper",
-          ),
-        delay: 100,
-      },
-      {
-        name: "orthographic",
-        enabled: DEBUG_STYLIZATION.orthographic,
-        fn: () =>
-          safeApplyCanvasProps(viewer, { camera: { mode: "orthographic" } }, "orthographic camera"),
-        delay: 150,
-      },
-      {
-        name: "backgroundColor",
-        enabled: DEBUG_STYLIZATION.backgroundColor,
-        fn: () => applyViewerThemeColors(viewer, container),
-        delay: 150,
-      },
-      {
-        name: "lighting",
-        enabled: DEBUG_STYLIZATION.lighting,
-        fn: () => {
-          const lighting = GRAPHICS_SETTINGS?.lighting
-          if (!lighting || lighting.enabled === false) {
-            safeApplyCanvasProps(
-              viewer,
-              {
-                renderer: { light: [] },
-              },
-              "custom lighting (disabled)",
-            )
-            return
-          }
-          const exposure = numericOr(lighting.exposure, 1)
-          const lights = (lighting.lights || []).map((light, index) => {
-            const rgb = hexToRgb(light.color) || { r: 255, g: 255, b: 255 }
-            return {
-              inclination: numericOr(light.inclination, 160),
-              azimuth: numericOr(light.azimuth, index * 120),
-              color: toMolstarColor(rgb),
-              intensity: numericOr(light.intensity, 1) * exposure,
-            }
-          })
-          safeApplyCanvasProps(
-            viewer,
-            {
-              renderer: {
-                light: lights,
-              },
-            },
-            "custom lighting (profile-defined)",
-          )
-        },
-        delay: 200,
-      },
-      {
-        name: "occlusion",
-        enabled: DEBUG_STYLIZATION.occlusion,
-        fn: () => {
-          const occlusion = GRAPHICS_SETTINGS?.occlusion
-          if (!occlusion || occlusion.enabled === false) {
-            safeApplyCanvasProps(
-              viewer,
-              {
-                postprocessing: {
-                  occlusion: { name: "off" },
-                },
-              },
-              "ambient occlusion (disabled)",
-            )
-            return
-          }
-          safeApplyCanvasProps(
-            viewer,
-            {
-              postprocessing: {
-                occlusion: {
-                  name: "on",
-                  params: {
-                    samples: numericOr(occlusion.samples, 64),
-                    radius: numericOr(occlusion.radius, 6),
-                    bias: numericOr(occlusion.bias, 0.8),
-                    blurKernelSize: numericOr(occlusion.blurKernelSize, 7),
-                    resolutionScale: numericOr(occlusion.resolutionScale, 1),
-                  },
-                },
-              },
-            },
-            "ambient occlusion (custom)",
-          )
-        },
-        delay: 200,
-      },
-      {
-        name: "antialiasing",
-        enabled: DEBUG_STYLIZATION.antialiasing,
-        fn: () => {
-          const antialiasing = GRAPHICS_SETTINGS?.antialiasing
-          if (!antialiasing || antialiasing.mode !== "fxaa") {
-            safeApplyCanvasProps(
-              viewer,
-              {
-                postprocessing: {
-                  antialiasing: { name: "off" },
-                },
-              },
-              "antialiasing (off)",
-            )
-            return
-          }
-          safeApplyCanvasProps(
-            viewer,
-            {
-              postprocessing: {
-                antialiasing: {
-                  name: "fxaa",
-                  params: {
-                    edgeThresholdMin: numericOr(antialiasing.edgeThresholdMin, 0.125),
-                    edgeThresholdMax: numericOr(antialiasing.edgeThresholdMax, 0.25),
-                    iterations: numericOr(antialiasing.iterations, 2),
-                    subpixelQuality: numericOr(antialiasing.subpixelQuality, 0.75),
-                  },
-                },
-              },
-            },
-            "antialiasing (FXAA)",
-          )
-        },
-        delay: 150,
-      },
-      {
-        name: "fog",
-        enabled: DEBUG_STYLIZATION.fog,
-        fn: () => {
-          const fog = GRAPHICS_SETTINGS?.fog
-          if (!fog || fog.enabled === false) {
-            safeApplyCanvasProps(
-              viewer,
-              {
-                cameraFog: { name: "off" },
-              },
-              "camera fog (disabled)",
-            )
-            return
-          }
-          const fogColor = hexToRgb(fog.color) || resolveViewerColors(container).background
-          const intensity = numericOr(fog.intensity, 0.5)
-          safeApplyCanvasProps(
-            viewer,
-            {
-              cameraFog: {
-                name: "on",
-                params: {
-                  intensity,
-                  color: toMolstarColor(fogColor),
-                },
-              },
-            },
-            `camera fog (intensity: ${intensity.toFixed(2)})`,
-          )
-        },
-        delay: 150,
-      },
-      {
-        name: "outline",
-        enabled: DEBUG_STYLIZATION.outline,
-        fn: () => {
-          const outline = GRAPHICS_SETTINGS?.outline
-          if (!outline || outline.enabled === false) {
-            safeApplyCanvasProps(
-              viewer,
-              {
-                postprocessing: {
-                  outline: { name: "off" },
-                },
-              },
-              "outline (disabled)",
-            )
-            return
-          }
-          const color = hexToRgb(outline.color) || resolveViewerColors(container).background
-          const scale = numericOr(outline.scale, 0.5)
-          const threshold = numericOr(outline.threshold, 0.35)
-          safeApplyCanvasProps(
-            viewer,
-            {
-              postprocessing: {
-                outline: {
-                  name: "on",
-                  params: {
-                    scale,
-                    threshold,
-                    color: toMolstarColor(color),
-                  },
-                },
-              },
-            },
-            `outline (scale: ${scale.toFixed(2)}, threshold: ${threshold.toFixed(2)})`,
-          )
-        },
-        delay: 150,
-      },
-      {
-        name: "disableMarking",
-        enabled: DEBUG_STYLIZATION.disableMarking,
-        fn: () =>
-          safeApplyCanvasProps(
-            viewer,
-            {
-              marking: {
-                enabled: false,
-                edgeScale: 0,
-                ghostEdgeStrength: 0,
-                innerEdgeFactor: 0,
-              },
-            },
-            "marking disable",
-          ),
-        delay: 100,
-      },
-    ]
-
-    // Apply steps sequentially with delays to avoid overwhelming the renderer
-    for (const step of steps) {
-      if (!step.enabled) {
-        console.info(`[GeneGuessr] Skipping ${step.name} (debug disabled)`)
-        continue
-      }
-      await new Promise((resolve) => setTimeout(resolve, step.delay))
-      step.fn()
-    }
-
-    console.info("[GeneGuessr] Completed sequential stylization profile")
+    safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: "off" } } } }, "axis helper")
   }
 
   function suppressViewerInteractivity(viewer) {
@@ -3027,35 +2802,19 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       // Use the already-started Mol* load; it may already be warm after the structure fetch
       await molstarAssetsPromise
       timing("Mol* assets loaded")
-      if (!window.PDBeMolstarPlugin) {
-        throw new Error("PDBeMolstarPlugin missing after script load")
+      if (!window.GeneguessrMolstar?.initializeViewer) {
+        throw new Error("GeneguessrMolstar initializer missing after script load")
       }
       container.innerHTML = ""
-      timing("container cleared, creating viewer...")
-      const viewer = new window.PDBeMolstarPlugin()
-      timing("viewer instance created, calling render...")
-      viewer.render(container, {
-        ...options,
-        hideControls: true,
-        hideCanvasControls: [
-          "expand",
-          "controlToggle",
-          "controlInfo",
-          "selection",
-          "animation",
-          "trajectory",
-          "screenshot",
-          "reset",
-        ],
-        pdbeLink: false,
-        visualStyle: "cartoon",
-        lighting: "glossy",
-        loadMaps: false,
-        selectInteraction: false,
-        lowPrecisionCoords: false,
-        hideStructureSourceTooltip: true,
+      timing("container cleared, initializing viewer...")
+      const init = await window.GeneguessrMolstar.initializeViewer(container, options, {
+        skipStylization: true,
+        fetchGraphicsSettings: false,
+        interactive: false,
+        loadTimeoutMs: 60000,
       })
-      timing("render() called (async fetch starts)")
+      const viewer = init.viewer
+      timing("viewer initialized, waiting for loadComplete...")
 
       const finalizeViewerStyling = () => {
         timing("loadComplete fired - structure fully rendered")
@@ -3099,14 +2858,22 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         syncFeedbackContentHeights()
         timing("styling applied - DONE")
       }
-      if (viewer.events?.loadComplete) {
-        viewer.events.loadComplete.subscribe(finalizeViewerStyling)
-      } else {
-        setTimeout(() => {
-          timing("fallback timeout fired")
+      let finalizeOnce = false
+      init.loadComplete
+        .then((result) => {
+          if (finalizeOnce) return
+          finalizeOnce = true
+          if (!result?.ok) {
+            timing("loadComplete timeout (proceeding with fallback finalization)")
+          }
           finalizeViewerStyling()
-        }, 500)
-      }
+        })
+        .catch((err) => {
+          if (finalizeOnce) return
+          finalizeOnce = true
+          console.warn("Geneguessr: loadComplete wait failed", err)
+          finalizeViewerStyling()
+        })
 
       const metadata = {
         shortLabel: structureInfo.sourceLabel,
@@ -3169,7 +2936,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
 
   // Constants
   // Pinned Mol* version for consistent load times (avoids slow @latest npm lookups)
-  // Version 3.8.0 is current latest (published Nov 2024, confirmed via npm)
   const MOLSTAR_VERSION = "3.8.0"
   const MOLSTAR_SCRIPT_URL = `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar-plugin.js`
   const MOLSTAR_FALLBACK_SCRIPT_URL =

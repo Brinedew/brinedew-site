@@ -11,11 +11,6 @@
 import { getDailyGuessAggregates, getWinnersCount } from "./lib/guess-aggregates.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 
-// Mol* CDN URLs (same versions as main app)
-const MOLSTAR_VERSION = "3.8.0"
-const MOLSTAR_SCRIPT_URL = `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar-plugin.js`
-const MOLSTAR_CSS_URL = `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar.css`
-
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const DISCORD_SUMMARY_POSTED_PREFIX = "discord_summary_posted:"
 
@@ -324,6 +319,11 @@ export async function handleRenderPage(request, env) {
   const url = new URL(request.url)
   const day = url.searchParams.get("day")
   const mode = url.searchParams.get("mode") || "structure"
+  const allowDebugRender =
+    url.hostname.endsWith(".workers.dev") ||
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "0.0.0.0"
 
   // Validate day format
   if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
@@ -342,7 +342,7 @@ export async function handleRenderPage(request, env) {
   }
 
   // Try to get the daily bootstrap cache which contains the structure token
-  const origin = "https://geneguessr.brinedew.bio"
+  const origin = url.origin
   const bootstrapKey = `daily_bootstrap:${day}`
   const bootstrapData = await env.KV.get(bootstrapKey)
 
@@ -361,6 +361,29 @@ export async function handleRenderPage(request, env) {
     const puzzleData = await env.KV.get(puzzleKey)
 
     if (!puzzleData) {
+      // Staging/dev affordance: allow rendering an arbitrary structure URL so we can validate Mol*
+      // without pre-populating KV puzzle data.
+      const debugStructureUrl = url.searchParams.get("structure_url")
+      const debugFormat = url.searchParams.get("format") || "cif"
+      const debugMoleculeId = url.searchParams.get("molecule_id") || "debug"
+      const debugGene = url.searchParams.get("gene") || "Debug"
+      const debugFullName = url.searchParams.get("full_name") || "Debug render"
+      if (allowDebugRender && debugStructureUrl && /^https:\/\//i.test(debugStructureUrl)) {
+        const html = buildRenderHTML({
+          day,
+          gene: debugGene,
+          fullName: debugFullName,
+          structureUrl: debugStructureUrl,
+          structureFormat: debugFormat,
+          moleculeId: debugMoleculeId,
+        })
+        return new Response(html, {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache",
+          },
+        })
+      }
       return new Response(`No puzzle data for ${day}`, {
         status: 404,
         headers: { "Content-Type": "text/plain" },
@@ -466,13 +489,11 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <title>GeneGuessr - ${gene}</title>
-  <link rel="stylesheet" href="${MOLSTAR_CSS_URL}">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 800px;
       height: 600px;
-      background: #1a1a2e;
       overflow: hidden;
     }
     #viewer {
@@ -507,7 +528,6 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
     <div id="loading">Loading structure...</div>
     <div id="error"></div>
   </div>
-  <script src="${MOLSTAR_SCRIPT_URL}"></script>
   <script>
     (async function() {
       const container = document.getElementById('viewer');
@@ -515,78 +535,56 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
       const error = document.getElementById('error');
 
       try {
-        // Wait for PDBeMolstarPlugin to be available
-        let attempts = 0;
-        while (!window.PDBeMolstarPlugin && attempts < 50) {
-          await new Promise(r => setTimeout(r, 100));
-          attempts++;
+        function loadScript(src) {
+          return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload = () => resolve();
+            s.onerror = (e) => reject(e || new Error('Failed to load ' + src));
+            document.head.appendChild(s);
+          });
         }
 
-        if (!window.PDBeMolstarPlugin) {
-          throw new Error('Failed to load Mol* viewer');
+        // Avoid sticky caching on staging workers.dev during rapid deploy iterations.
+        const sharedSrc = location.hostname.endsWith('.workers.dev')
+          ? '/static/geneguessr/molstar-shared.js?v=' + Date.now()
+          : '/static/geneguessr/molstar-shared.js';
+
+        await loadScript(sharedSrc);
+
+        if (!window.GeneguessrMolstar || !window.GeneguessrMolstar.initializeViewer) {
+          throw new Error('Mol* shared initializer not available after load');
         }
 
-        const viewer = new window.PDBeMolstarPlugin();
-
-        await viewer.render(container, {
+        const { loadComplete } = await window.GeneguessrMolstar.initializeViewer(container, {
           moleculeId: ${JSON.stringify(moleculeId)},
           customData: {
             url: ${JSON.stringify(structureUrl)},
             format: ${JSON.stringify(structureFormat)},
           },
-          hideControls: true,
-          hideCanvasControls: ['expand', 'controlToggle', 'controlInfo', 'selection', 'animation', 'trajectory', 'screenshot', 'reset'],
-          pdbeLink: false,
-          visualStyle: 'cartoon',
-          lighting: 'glossy',
-          loadMaps: false,
-          selectInteraction: false,
-          lowPrecisionCoords: false,
-          hideStructureSourceTooltip: true,
-          bgColor: { r: 26, g: 26, b: 46 },
+        }, {
+          interactive: false,
+          loadTimeoutMs: 60000,
         });
 
-        // Apply post-load styling (matches main game's applyViewerStylizationProfile)
-        function applyPostLoadStyling() {
-          try {
-            // Hide axes (same as main game)
-            if (viewer.plugin?.canvas3d) {
-              viewer.plugin.canvas3d.setProps({
-                camera: { helper: { axes: { name: 'off' } } }
-              });
-            }
-          } catch (e) {
-            console.warn('Post-load styling failed:', e);
-          }
-        }
-
-        // Signal ready when viewer finishes loading
-        let loadCompleted = false;
-
         const markSuccess = () => {
-          if (loadCompleted) return;
-          loadCompleted = true;
           loading.style.display = 'none';
-          applyPostLoadStyling();
           document.body.setAttribute('data-loaded', 'true');
           console.log('[molstar] loadComplete fired - render success');
         };
 
         const markTimeout = () => {
-          if (loadCompleted) return;
-          loadCompleted = true;
           loading.style.display = 'none';
           document.body.setAttribute('data-loaded', 'timeout');
           console.error('[molstar] loadComplete did not fire before timeout');
         };
 
-        // Listen for loadComplete event
-        if (viewer.events && viewer.events.loadComplete) {
-          viewer.events.loadComplete.subscribe(markSuccess);
+        const result = await loadComplete;
+        if (result && result.ok) {
+          markSuccess();
+        } else {
+          markTimeout();
         }
-
-        // Timeout marks failure, not false success
-        setTimeout(markTimeout, 60000);
 
       } catch (err) {
         loading.style.display = 'none';

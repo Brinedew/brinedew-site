@@ -192,6 +192,10 @@ export default (() => {
                   ></script>
                   <script
                     defer
+                    src={joinSegments(root, "static", `geneguessr/molstar-shared.js?v=${CACHE_BUST}`)}
+                  ></script>
+                  <script
+                    defer
                     src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}
                   ></script>
                 </>
