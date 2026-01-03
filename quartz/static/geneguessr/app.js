@@ -2840,9 +2840,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
 
         applyViewerStylizationProfile(viewer, container)
         if (structureInfo.chainLabels && window.GeneguessrMolstar?.setFloatingLabels) {
-          const mode = structureInfo.chainLabels.some((label) => label && label.is_target)
-            ? "hidden name mode"
-            : "revealed name mode"
+          // Only the clue-card viewer should ever hide gene names.
+          // Feedback cards (guesses) must always use revealed names, even if chainLabels includes `is_target`
+          // for coloring/alignment purposes.
+          const mode = containerId === "pg-clue-structure" ? "hidden name mode" : "revealed name mode"
           window.GeneguessrMolstar.setFloatingLabels(viewer, container, {
             mode,
             chainLabels: structureInfo.chainLabels,
