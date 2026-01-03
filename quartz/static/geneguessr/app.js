@@ -2839,18 +2839,16 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         }
 
         applyViewerStylizationProfile(viewer, container)
-        // Render chain label callouts if available (B-189: includes Target labels for quiz cards)
-        // Use totalChainCount for target structures (where chainLabels only has target chains)
-        const effectiveCount =
-          structureInfo.totalChainCount || countTotalChains(structureInfo.chainLabels)
-        if (structureInfo.chainLabels && effectiveCount > 1) {
-          renderChainLabelCallouts(
-            container,
-            structureInfo.chainLabels,
-            structureInfo.totalChainCount,
-          )
-          // Start the position update loop for 3D callouts
-          initializeChainCallouts(containerId)
+        if (structureInfo.chainLabels && window.GeneguessrMolstar?.setFloatingLabels) {
+          // Only the clue-card viewer should ever hide gene names.
+          // Feedback cards (guesses) must always use revealed names, even if chainLabels includes `is_target`
+          // for coloring/alignment purposes.
+          const mode = containerId === "pg-clue-structure" ? "hidden name mode" : "revealed name mode"
+          window.GeneguessrMolstar.setFloatingLabels(viewer, container, {
+            mode,
+            chainLabels: structureInfo.chainLabels,
+            totalChainCount: structureInfo.totalChainCount || null,
+          })
         }
         // B-201: Start auto-rotation (stops on first user interaction)
         // Use slow spin speed (0.1 = 10x slower than default)
