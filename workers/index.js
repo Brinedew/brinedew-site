@@ -37,6 +37,9 @@ const CORS_HEADERS = getCorsHeaders("https://brinedew.bio", "brinedew.bio")
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const BYTES_PER_GB = 1024 * 1024 * 1024
 const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB)
+// Safety cap: refuse to stream/cache extremely large structure files.
+// Mol* can choke on multi-10MB models and Workers memory is not infinite.
+const MAX_STRUCTURE_FILE_BYTES = 20 * 1024 * 1024
 const STRUCTURE_CACHE_META_PREFIX = "structure_meta:"
 const STRUCTURE_CACHE_TARGET_RATIO = 0.9
 const DAILY_TARGET_SALT = "geneguessr-v2-939b5a0b"
@@ -1543,6 +1546,20 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       return Response.json(
         { error: "Upstream structure unavailable" },
         { status: 502, headers: corsHeaders },
+      )
+    }
+
+    const contentLengthHeader = upstreamResp.headers.get("Content-Length")
+    const contentLength = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : NaN
+    if (Number.isFinite(contentLength) && contentLength > MAX_STRUCTURE_FILE_BYTES) {
+      console.warn(
+        "GeneGuessr: upstream structure too large",
+        meta.upstreamUrl,
+        `${contentLength} bytes`,
+      )
+      return Response.json(
+        { error: "Structure too large", sizeBytes: contentLength },
+        { status: 413, headers: corsHeaders },
       )
     }
 
