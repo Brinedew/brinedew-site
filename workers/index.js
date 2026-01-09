@@ -109,6 +109,8 @@ const ESM2_WEIGHT = 0.25
 
 // Import auth handlers
 import { handleLogin, handleCallback, handleMe, handleLogout } from "./auth.js"
+// Import Iconoplasm handlers
+import { isIconoplasmRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 // Import Discord bot handlers
 import { handleDailySummary, handleInteractions, handleMarkPosted, handleRenderPage } from "./discord.js"
 // Import stats handlers
@@ -240,6 +242,11 @@ export default {
     // Discord render page for screenshots - served by worker, not proxied
     if (url.pathname === "/apps/geneguessr/render" && request.method === "GET") {
       return handleRenderPage(request, env)
+    }
+
+    // Iconoplasm subdomain - delegate to iconoplasm handler
+    if (isIconoplasmRequest(url.hostname)) {
+      return handleIconoplasmRequest(request, env, ctx)
     }
 
     // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site

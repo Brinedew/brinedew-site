@@ -36,7 +36,8 @@ preview_urls = false
 
 # Custom domain routes
 routes = [
-  { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" }
+  { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" },
+  { pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }
 ]
 
 [[d1_databases]]
