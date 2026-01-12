@@ -13,12 +13,22 @@ The [“new mechanist”](https://plato.stanford.edu/entries/science-mechanisms)
 
 ![[image-14.png|From SEP, adapted from Craver, 2007]]
 
-You explain a phenomenon by decomposing it into (i) entities, (ii) activities/operations those entities do, and (iii) the organisation that makes those activities jointly produce the phenomenon. You then show “productive continuity”: not just correlations, but a plausible causal chain (often across levels) that would still work under interventions.
+Explaining a phenomenon mechanistically means treating this phenomenon as a black box that can be opened up to reveal 
+1) material entities (x1, x2, x3...), 
+2) activities/operations those entities do (ф1, ф2, ф3...),
+3) the chain of interactions between the entities (the causal arrows).
+You then show “productive continuity”: not just correlations, but a plausible causal chain (often across levels) that would still work under interventions.
 
-Cell signaling pathway diagrams are a paradigmatic case of a biological mechanism. Let's look at the diagram explaining how JAK/STAT signalling pathway allows the cell to rapidly adapt its gene expression to respond to cytokine signals.
+Cell signaling pathway diagrams are a paradigmatic case of a biological mechanism. Let's look at the diagram explaining how cells can rapidly adapt their gene expression to respond to cytokine signals.
 
 ![[Jak_Stat_-_cytokine_signalling[1]_waifu2x_art_noise1_scale.png]]
 
+Here we have all the elements of a mechanistic model:
+1) Material entities: cell membrane, nuclear membrane, cytokines, cytokine recepor monomers, Janus kinase molecules (JAK), STAT protein monomers, DNA, tyrosine residues and phosphate residues.
+2) Activities: dimerization, phosphorylation, nuclear translocation, DNA binding, gene transcription.
+3) Causal chain: Cytokine signal -> 1 -> 2 -> 3 -> 4 -> 5 -> gene expression response
+
+JAK-STAT pathway is probably the simplest pathway in cell signalling, so a diagram has plenty of space to spell out the chain of events explicitly. Most cell signaling diagrams assume you're already familiar with the will compress this explanation
 
 Look at this mechanistic diagram of cell senescence. It's a list of molecules connected by interactions, that causally translate "stuff that causes cell senescence" (irradiation, chemotherapy, telomere shortening) into "observable effects of cell senescence" (cell cycle arrest, inflammation etc.).
 
