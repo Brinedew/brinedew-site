@@ -7,30 +7,35 @@ draft: true
 ---
 # Types of explanations in biology
 
-Much of classical philosophy of science was built on the language of  reduction and laws, following 20th century physics. In biology, we have a different explanatory toolkit.
+Much of classical philosophy of science I've read in my school years was built on the language of laws and reduction, following 20th century physics. As I entered biology, I found scientists working with an entirely different explanatory language. 
 
 1. Mechanistic models
 
-The [“new mechanist”](https://plato.stanford.edu/entries/science-mechanisms) program in philosophy of science is basically the claim that a big fraction of successful explanation in biology looks like this:
+The [“new mechanist”](https://plato.stanford.edu/entries/science-mechanisms) program in philosophy of science is basically the claim that a big fraction of successful explanations in life sciences looks less like a "law of nature", and more like this:
 
 ![[image-14.png|From SEP, adapted from Craver, 2007]]
+
 
 Explaining some phenomenon S mechanistically from beginning to end  means treating this phenomenon as a black box that can be opened up to reveal 
 1) material entities (x1, x2, x3...), 
 2) activities/operations those entities do (ф1, ф2, ф3...),
 3) the chain of interactions between the entities (the causal arrows).
-You then show “productive continuity”: the beginning and end of the phenomenon can be linked by a chain of cause-and-effect relationships without any "gaps" remaining. That's it, explaining done.
+You then show **productive continuity**: a chain of cause-and-effect relationships that links the beginning and end of the phenomenon without any "gaps" remaining. That's it, explaining done.
 
 Let's look at this diagram showing how cells can rapidly adapt their gene expression to respond to cytokine signals.
 
 ![[Jak_Stat_-_cytokine_signalling[1]_waifu2x_art_noise1_scale.png]]
 
 Here we have all the elements of a mechanistic model:
-1) Material entities: cell membrane, nuclear membrane, cytokines, cytokine recepor monomers, Janus kinase molecules (JAK), STAT protein monomers, DNA, tyrosine residues and phosphate residues.
+1) Material entities: cell membrane, nuclear membrane, cytokines, cytokine receptor monomers, Janus kinase molecules (JAK), STAT protein monomers, DNA, tyrosine residues and phosphate residues.
 2) Activities: dimerization, phosphorylation, nuclear translocation, DNA binding, gene transcription.
-3) Causal chain: Cytokine signal -> 1 -> 2 -> 3 -> 4 -> 5 -> gene expression response
+3) Causal chain: Cytokines as an input -> 1 -> 2 -> 3 -> 4 -> 5 -> gene expression response as an output
+
+
 
 JAK-STAT pathway is probably the simplest pathway in cell signalling, so a diagram has plenty of space to spell out the chain of events explicitly. Most cell signaling diagrams assume you're already familiar with the will compress this explanation
+
+
 
 Look at this mechanistic diagram of cell senescence. It's a list of molecules connected by interactions, that causally translate "stuff that causes cell senescence" (irradiation, chemotherapy, telomere shortening) into "observable effects of cell senescence" (cell cycle arrest, inflammation etc.).
 
@@ -67,7 +72,10 @@ Microbial genetics / metabolic regulation / many parts of microbiology.
 Regulons, operons, metabolic control: strongly mechanistic when interventions are feasible.
 
 A quick heuristic: if a subfield’s best papers are basically “here is the cartoon diagram of parts and arrows; here are the perturbations that force the arrows to be real; here is the reconstitution”, it’s the mechanist lens.
-		
+
+Let's get back to the JAK-STAT diagram. Here are some biological questions the mechanism above doesn't explain:
+1) Is the cell stuck in the "JAK-STAT on" state, or can it oscillate between being on and off?
+2) What did the ancestral versions of these molecules do, back before JAK-STAT pathway evolved?
 
 3. Dynamical-systems  / control theory models
 
