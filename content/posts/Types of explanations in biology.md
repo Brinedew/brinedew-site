@@ -21,7 +21,7 @@ Explaining some phenomenon S mechanistically from beginning to end  means treati
 3) the chain of interactions between the entities (the causal arrows).
 You then show “productive continuity”: the beginning and end of the phenomenon can be linked by a chain of cause-and-effect relationships without any "gaps" remaining. That's it, explaining done.
 
-As one example of a mechanistic explanation, let's look at the diagram showing how cells can rapidly adapt their gene expression to respond to cytokine signals.
+Let's look at this diagram showing how cells can rapidly adapt their gene expression to respond to cytokine signals.
 
 ![[Jak_Stat_-_cytokine_signalling[1]_waifu2x_art_noise1_scale.png]]
 
