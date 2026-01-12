@@ -7,19 +7,21 @@ draft: true
 ---
 # Types of explanations in biology
 
+Much of classical philosophy of science was built on the language of  reduction and laws, following 20th century physics. In biology, we have a different explanatory toolkit.
+
 1. Mechanistic models
 
 The [“new mechanist”](https://plato.stanford.edu/entries/science-mechanisms) program in philosophy of science is basically the claim that a big fraction of successful explanation in biology looks like this:
 
 ![[image-14.png|From SEP, adapted from Craver, 2007]]
 
-Explaining a phenomenon mechanistically means treating this phenomenon as a black box that can be opened up to reveal 
+Explaining some phenomenon S mechanistically from beginning to end  means treating this phenomenon as a black box that can be opened up to reveal 
 1) material entities (x1, x2, x3...), 
 2) activities/operations those entities do (ф1, ф2, ф3...),
 3) the chain of interactions between the entities (the causal arrows).
-You then show “productive continuity”: not just correlations, but a plausible causal chain (often across levels) that would still work under interventions.
+You then show “productive continuity”: the beginning and end of the phenomenon can be linked by a chain of cause-and-effect relationships without any "gaps" remaining. That's it, explaining done.
 
-Cell signaling pathway diagrams are a paradigmatic case of a biological mechanism. Let's look at the diagram explaining how cells can rapidly adapt their gene expression to respond to cytokine signals.
+As one example of a mechanistic explanation, let's look at the diagram showing how cells can rapidly adapt their gene expression to respond to cytokine signals.
 
 ![[Jak_Stat_-_cytokine_signalling[1]_waifu2x_art_noise1_scale.png]]
 
