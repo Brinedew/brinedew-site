@@ -5,7 +5,7 @@ tags:
 date: 2026-01-12
 draft: true
 ---
-# Types of models in biology
+# Types of explanations in biology
 
 1. Mechanistic models
 
@@ -14,6 +14,19 @@ The [“new mechanist”](https://plato.stanford.edu/entries/science-mechanisms)
 ![[image-14.png|From SEP, adapted from Craver, 2007]]
 
 You explain a phenomenon by decomposing it into (i) entities, (ii) activities/operations those entities do, and (iii) the organisation that makes those activities jointly produce the phenomenon. You then show “productive continuity”: not just correlations, but a plausible causal chain (often across levels) that would still work under interventions.
+
+Cell signaling pathway diagrams are a paradigmatic case of a biological mechanism. Let's look at the diagram explaining how JAK/STAT signalling pathway allows the cell to rapidly adapt its gene expression to respond to cytokine signals.
+
+![[Jak_Stat_-_cytokine_signalling[1]_waifu2x_art_noise1_scale.png]]
+
+
+Look at this mechanistic diagram of cell senescence. It's a list of molecules connected by interactions, that causally translate "stuff that causes cell senescence" (irradiation, chemotherapy, telomere shortening) into "observable effects of cell senescence" (cell cycle arrest, inflammation etc.).
+
+![[image-16.png|Simplified mechanism of cell senescence. Source: https://www.cellsignal.com/pathways/senescence-signaling-pathway]]
+
+![[image-17.png|Simplified mechanism of apoptosis. Source: https://www.abeomics.com/cellular-apoptosis-pathway]]
+
+Note that the arrows are not just "correlations"
 
 So: which areas of biology naturally “follow New Mechanism”? The ones where the central game is _intervenable causal story + parts list + organisation diagram_.
 
@@ -41,10 +54,25 @@ Even though physiology sometimes uses control theory and phenomenological models
 Microbial genetics / metabolic regulation / many parts of microbiology.  
 Regulons, operons, metabolic control: strongly mechanistic when interventions are feasible.
 
-A quick heuristic: if a subfield’s best papers are basically “here is the cartoon diagram of blobs and arrows; here are the perturbations that force the arrows to be real; here is the reconstitution”, it’s the new-mechanist-lens.
+A quick heuristic: if a subfield’s best papers are basically “here is the cartoon diagram of parts and arrows; here are the perturbations that force the arrows to be real; here is the reconstitution”, it’s the mechanist lens.
 		
 
-2. Statistical/associational models + causal inference mode  
+3. Dynamical-systems  / control theory models
+
+A lot of theoretical ecology, systems biology in its more mathematical form, some neuroscience, some developmental theory.  
+
+Here the “explanation” is not a parts list so much as a state-space landscape: feedback loops, attractors, bifurcations, stability, oscillations, robustness.
+
+
+![[image-15.png|Classic illustration of Waddington's landscape. Taken from Allen, M. (2015)]]
+
+
+Typical outputs: differential equations, phase portraits, stability analyses, control laws, attractor structure.  
+This is adjacent to New Mechanism but not identical: it can be mechanistic if states map cleanly to entities/activities; it becomes non-mechanistic when variables are abstract aggregates with no clean decomposition.
+
+[Alex M. Plum, Mattia Serra. Dynamical systems of fate and form in development, 2025](https://www.sciencedirect.com/science/article/pii/S1084952125000308)
+
+Statistical/associational models + causal inference mode  
     Genetic epidemiology, GWAS, much of human complex trait biology, and a lot of ecology/field biology.  
     The central objects are effects, associations, and identification strategies (instrumental variables, Mendelian randomization, natural experiments), not a parts-and-operations mechanism. You might later _attach_ a mechanism, but the workhorse is: estimate an effect under assumptions.
     
@@ -67,22 +95,6 @@ Why not just do mechanisms? You can do mechanisms of development, sure, but “w
 
 Typical outputs: allele frequency dynamics, ESS conditions, selection gradients, adaptive landscapes (carefully interpreted).  
 Why not just do mechanisms? Because the explanatory punchline is often about _why this design is favoured_ across many possible implementations.
-
-4. Dynamical-systems  / control theory models
-
-A lot of theoretical ecology, systems biology in its more mathematical form, some neuroscience, some developmental theory.  
-
-Here the “explanation” is not a parts list so much as a state-space landscape: feedback loops, attractors, bifurcations, stability, oscillations, robustness.
-
-Ask a mechanist why 
-
-![[image-15.png|Classic illustration of Waddington's landscape. Taken from Allen, M. (2015)]]
-
-
-Typical outputs: differential equations, phase portraits, stability analyses, control laws, attractor structure.  
-This is adjacent to New Mechanism but not identical: it can be mechanistic if states map cleanly to entities/activities; it becomes non-mechanistic when variables are abstract aggregates with no clean decomposition.
-
-[Alex M. Plum, Mattia Serra. Dynamical systems of fate and form in development, 2025](https://www.sciencedirect.com/science/article/pii/S1084952125000308)
 
 
 5. Phenomenological / predictive models (“shut up and fit the curve”)  
