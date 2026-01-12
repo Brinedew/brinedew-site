@@ -8,7 +8,6 @@ draft: true
 # Types of models in biology
 
 1. Mechanistic models
-Main mode of operation for much of molecular cell biology.
 
 The [“new mechanist”](https://plato.stanford.edu/entries/science-mechanisms) program in philosophy of science is basically the claim that a big fraction of successful explanation in biology looks like this:
 
@@ -70,12 +69,21 @@ Typical outputs: allele frequency dynamics, ESS conditions, selection gradients,
 Why not just do mechanisms? Because the explanatory punchline is often about _why this design is favoured_ across many possible implementations.
 
 4. Dynamical-systems  / control theory models
-    A lot of theoretical ecology, systems biology in its more mathematical form, some neuroscience, some developmental theory.  
-    Here the “mechanism” is not a parts list so much as a state-space model: feedback loops, attractors, bifurcations, stability, oscillations, robustness.
-    
+
+A lot of theoretical ecology, systems biology in its more mathematical form, some neuroscience, some developmental theory.  
+
+Here the “explanation” is not a parts list so much as a state-space landscape: feedback loops, attractors, bifurcations, stability, oscillations, robustness.
+
+Ask a mechanist why 
+
+![[image-15.png|Classic illustration of Waddington's landscape. Taken from Allen, M. (2015)]]
+
 
 Typical outputs: differential equations, phase portraits, stability analyses, control laws, attractor structure.  
 This is adjacent to New Mechanism but not identical: it can be mechanistic if states map cleanly to entities/activities; it becomes non-mechanistic when variables are abstract aggregates with no clean decomposition.
+
+[Alex M. Plum, Mattia Serra. Dynamical systems of fate and form in development, 2025](https://www.sciencedirect.com/science/article/pii/S1084952125000308)
+
 
 5. Phenomenological / predictive models (“shut up and fit the curve”)  
     A lot of omics-driven biology, biomarker work, some fMRI/EEG decoding, many “signatures”, and increasingly ML biology.  
