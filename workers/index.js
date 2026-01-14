@@ -1794,6 +1794,10 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : null
     console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || "null"}`)
 
+    // When set, `date` should override any existing practice session for today.
+    let dateOverrideUniprot = null
+    let dateOverrideProtein = null
+
     // Practice-list overrides:
     // - `date=YYYY-MM-DD` loads a historical daily puzzle for sharing with friends.
     // - `same_target=1&target_id=...` replays the same (already revealed) practice target.
@@ -1817,6 +1821,8 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
           console.log(`[BOOTSTRAP] Found puzzle_actual with uniprot_id=${puzzleActual.uniprot_id}`)
           const historicalProtein = await fetchProteinByUniprot(env.DB, puzzleActual.uniprot_id)
           if (historicalProtein) {
+            dateOverrideUniprot = historicalProtein.uniprot
+            dateOverrideProtein = historicalProtein
             targetSeed = historicalProtein
             console.log(`[BOOTSTRAP] Practice mode: loaded historical puzzle from ${dateParam}`)
           } else {
@@ -1836,7 +1842,9 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
         ? existingState.practicePool.filter(Boolean)
         : []
       let desiredUniprot = null
-      if (sameTargetRequested && requestedTargetId) {
+      if (dateOverrideUniprot) {
+        desiredUniprot = dateOverrideUniprot
+      } else if (sameTargetRequested && requestedTargetId) {
         desiredUniprot = requestedTargetId
       } else if (!practiceRestart && existingState?.targetId && existingState?.date === today) {
         desiredUniprot = existingState.targetId
@@ -1845,7 +1853,10 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       }
 
       if (desiredUniprot) {
-        const overrideProtein = await fetchProteinByUniprot(env.DB, desiredUniprot)
+        const overrideProtein =
+          dateOverrideProtein && desiredUniprot === dateOverrideUniprot
+            ? dateOverrideProtein
+            : await fetchProteinByUniprot(env.DB, desiredUniprot)
         if (overrideProtein) {
           targetSeed = overrideProtein
           console.log(
@@ -1863,13 +1874,17 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     }
 
     // Determine if session needs reset (uses pre-fetched existingState)
+    const forceReset =
+      practiceRestart ||
+      (practiceMode && dateOverrideUniprot && existingState?.targetId !== dateOverrideUniprot)
+
     const state = await ensureSessionForTodayWithState(env, sessionId, targetSeed, existingState, {
       practiceMode,
-      forceReset: practiceRestart,
+      forceReset,
       preservePracticePool: true,
     })
     console.log(
-      `[B-206] bootstrap: sessionId=${sessionId}, forceReset=${practiceRestart}, targetId=${state.targetId}, seedId=${targetSeed?.uniprot}`,
+      `[B-206] bootstrap: sessionId=${sessionId}, forceReset=${forceReset}, targetId=${state.targetId}, seedId=${targetSeed?.uniprot}`,
     )
     const targetProtein =
       targetSeed && state.targetId === targetSeed.uniprot
