@@ -1795,9 +1795,23 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || "null"}`)
 
     // Practice-list overrides:
+    // - `date=YYYY-MM-DD` loads a historical daily puzzle for sharing with friends.
     // - `same_target=1&target_id=...` replays the same (already revealed) practice target.
     // - If `existingState.practicePool` exists, restarts pick from that pool instead of global practice picking.
     if (practiceMode) {
+      // Historical puzzle sharing: ?practice=1&date=YYYY-MM-DD
+      const dateParam = url.searchParams.get("date")
+      if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+        const puzzleActual = await env.KV.get(`puzzle_actual:${dateParam}`, { type: "json" })
+        if (puzzleActual?.uniprot_id) {
+          const historicalProtein = await fetchProteinByUniprot(env.DB, puzzleActual.uniprot_id)
+          if (historicalProtein) {
+            targetSeed = historicalProtein
+            console.log(`[BOOTSTRAP] Practice mode: loaded historical puzzle from ${dateParam}`)
+          }
+        }
+      }
+
       const sameTargetRequested = url.searchParams.get("same_target") === "1"
       const requestedTargetId = sameTargetRequested
         ? (url.searchParams.get("target_id") || "").trim().toUpperCase() || null

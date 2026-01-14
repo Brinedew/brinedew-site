@@ -1930,10 +1930,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const urlParams = new URLSearchParams(window.location.search)
   const practiceParam = urlParams.get("practice")
   const restartParam = urlParams.get("restart")
+  const dateParam = urlParams.get("date")
   const initialPracticeMode =
     practiceParam === "1" || (practiceParam || "").toLowerCase() === "true"
   const initialPracticeRestart =
     initialPracticeMode && (restartParam === "1" || (restartParam || "").toLowerCase() === "true")
+  const initialPracticeDate = initialPracticeMode && dateParam ? dateParam : null
   const COLOR_CLAMPING_ENABLED = !urlParams.has("no_color_clamp")
 
   if (urlParams.has("debug_viewer")) {
@@ -3067,6 +3069,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     if (options.targetId) {
       params.push(`target_id=${encodeURIComponent(options.targetId)}`)
     }
+    if (options.date) {
+      params.push(`date=${encodeURIComponent(options.date)}`)
+    }
     return `?${params.join("&")}`
   }
 
@@ -3077,6 +3082,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         restart: options.restart,
         sameTarget: options.sameTarget,
         targetId: options.targetId,
+        date: options.date,
       })}`,
       {
         credentials: "include",
@@ -6041,7 +6047,7 @@ https://brinedew.bio/apps/geneguessr/`
     setStatus("loading-data")
 
     const initialBootstrapOptions = initialPracticeMode
-      ? { practice: true, restart: initialPracticeRestart }
+      ? { practice: true, restart: initialPracticeRestart, date: initialPracticeDate }
       : undefined
 
     try {
