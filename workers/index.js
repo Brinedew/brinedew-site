@@ -1800,9 +1800,16 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     // - If `existingState.practicePool` exists, restarts pick from that pool instead of global practice picking.
     if (practiceMode) {
       // Historical puzzle sharing: ?practice=1&date=YYYY-MM-DD
+      // Check PROD_KV first (for staging), fall back to local KV
       const dateParam = url.searchParams.get("date")
       if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-        const puzzleActual = await env.KV.get(`puzzle_actual:${dateParam}`, { type: "json" })
+        let puzzleActual = null
+        if (env.PROD_KV?.get) {
+          puzzleActual = await env.PROD_KV.get(`puzzle_actual:${dateParam}`, { type: "json" })
+        }
+        if (!puzzleActual) {
+          puzzleActual = await env.KV.get(`puzzle_actual:${dateParam}`, { type: "json" })
+        }
         if (puzzleActual?.uniprot_id) {
           const historicalProtein = await fetchProteinByUniprot(env.DB, puzzleActual.uniprot_id)
           if (historicalProtein) {
