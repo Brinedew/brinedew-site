@@ -2097,7 +2097,9 @@ async function handleGuessSubmission(request, env, corsHeaders) {
       guessId: crypto.randomUUID(),
       uniprot,
       correct,
-      score: correct ? 100 : null, // 100% if correct, null (pending) otherwise
+      // scoreGuess() returns a structured score object expected by the client.
+      // Using a raw number here causes the UI to display N/A for correct guesses.
+      score: correct ? scoreGuess(guessProtein, targetProtein, { similarity: 100 }) : null,
       similarityPending: !correct, // Client should fetch similarity
       createdAt: Date.now(),
       protein: {
