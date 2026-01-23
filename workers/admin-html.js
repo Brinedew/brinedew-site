@@ -528,6 +528,66 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       margin-top: 0.25rem;
     }
 
+    /* Previously scheduled warning in autocomplete */
+    .protein-suggestion.previously-scheduled {
+      border-left: 3px solid #f59e0b;
+    }
+
+    .protein-suggestion-prev-date {
+      font-size: 0.7rem;
+      color: #f59e0b;
+      margin-top: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .protein-suggestion-prev-date::before {
+      content: '!';
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      background: #f59e0b;
+      color: #000;
+      border-radius: 50%;
+      font-size: 0.65rem;
+      font-weight: bold;
+    }
+
+    /* Callout for selected protein that was previously scheduled */
+    .duplicate-warning-callout {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid #f59e0b;
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: #fbbf24;
+      display: none;
+    }
+
+    .duplicate-warning-callout.show {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .duplicate-warning-callout .warning-icon {
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+
+    .duplicate-warning-callout .warning-text {
+      flex: 1;
+    }
+
+    .duplicate-warning-callout .warning-dates {
+      font-weight: 600;
+      color: #fcd34d;
+    }
+
     .form-subsection {
       border: 1px solid #2c3a52;
       border-radius: 8px;
@@ -1363,6 +1423,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             <div class="protein-selector-wrapper">
               <input type="text" id="override-uniprot" placeholder="Enter gene symbol (e.g. WEE1) to override" autocomplete="off">
               <div class="protein-suggestions" id="protein-suggestions"></div>
+            </div>
+            <div class="duplicate-warning-callout" id="duplicate-warning-callout">
+              <span class="warning-icon">&#9888;</span>
+              <span class="warning-text">This protein was previously scheduled on: <span class="warning-dates" id="duplicate-warning-dates"></span></span>
             </div>
           </div>
           <div class="form-actions" style="margin-top: 0.5rem;">
@@ -2880,10 +2944,55 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       clearPreviewMount();
     }
 
+    // Check if a protein (by UniProt ID) was previously scheduled and return the date(s)
+    function findPreviousScheduleDates(uniprotId) {
+      if (!uniprotId || !scheduleData) return [];
+      const targetId = String(uniprotId).toUpperCase();
+      const dates = [];
+      for (const [date, data] of Object.entries(scheduleData)) {
+        if (data && String(data.uniprot || '').toUpperCase() === targetId) {
+          // Exclude future dates (only care about history and past scheduled days)
+          const dateObj = new Date(date);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (dateObj < today) {
+            dates.push(date);
+          }
+        }
+      }
+      // Sort by date descending (most recent first)
+      dates.sort((a, b) => b.localeCompare(a));
+      return dates;
+    }
+
+    // Show or hide the duplicate warning callout
+    function updateDuplicateWarning(uniprotId, geneName) {
+      const callout = document.getElementById('duplicate-warning-callout');
+      const datesEl = document.getElementById('duplicate-warning-dates');
+      if (!callout || !datesEl) return;
+
+      const prevDates = findPreviousScheduleDates(uniprotId);
+      if (prevDates.length > 0) {
+        // Format dates nicely
+        const formatted = prevDates.slice(0, 3).map(d => {
+          return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        });
+        let text = formatted.join(', ');
+        if (prevDates.length > 3) {
+          text += ' (+' + (prevDates.length - 3) + ' more)';
+        }
+        datesEl.textContent = text;
+        callout.classList.add('show');
+      } else {
+        callout.classList.remove('show');
+      }
+    }
+
     function setupProteinSelector() {
       // Autocomplete for the override input in the inspector.
       const inputEl = document.getElementById('override-uniprot');
       const suggestionsEl = document.getElementById('protein-suggestions');
+      const duplicateCallout = document.getElementById('duplicate-warning-callout');
       if (!inputEl || !suggestionsEl) return;
 
       let pendingTimer = null;
@@ -2899,6 +3008,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         overrideSelectedSuggestionUniprot = null;
         overrideSelectedSuggestionGene = null;
+        // Hide duplicate warning when typing
+        if (duplicateCallout) duplicateCallout.classList.remove('show');
 
         if (pendingTimer) {
           clearTimeout(pendingTimer);
@@ -2942,10 +3053,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               const title = escapeHtml(p.full_name || '');
               const gene = escapeHtml(p.hgnc || p.gene || '');
               const fullName = escapeHtml(p.full_name || p.hgnc || p.gene || '');
+              // Check if this protein was previously scheduled
+              const prevDates = findPreviousScheduleDates(p.uniprot);
+              const hasPrev = prevDates.length > 0;
+              const prevDateStr = hasPrev ? new Date(prevDates[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+              const prevExtra = prevDates.length > 1 ? ' (+' + (prevDates.length - 1) + ' more)' : '';
               return ''
-                + '<div class="protein-suggestion" data-uniprot="' + p.uniprot + '" data-index="' + idx + '" title="' + title + '">' 
+                + '<div class="protein-suggestion' + (hasPrev ? ' previously-scheduled' : '') + '" data-uniprot="' + p.uniprot + '" data-index="' + idx + '" title="' + title + '">' 
                 + '<div class="protein-suggestion-title">' + gene + '</div>'
                 + '<div class="protein-suggestion-sub">' + fullName + '</div>'
+                + (hasPrev ? '<div class="protein-suggestion-prev-date">Scheduled: ' + prevDateStr + prevExtra + '</div>' : '')
                 + '</div>';
             }).join('');
             suggestionsEl.classList.add('show');
@@ -2963,6 +3080,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                   inputEl.value = gene || uniprot;
                   suggestionsEl.classList.remove('show');
                   loadProteinInPreview(uniprot);
+                  // Show duplicate warning if previously scheduled
+                  updateDuplicateWarning(uniprot, gene);
                 }
               });
             });
@@ -2999,6 +3118,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               inputEl.value = gene || uniprot;
               suggestionsEl.classList.remove('show');
               loadProteinInPreview(uniprot);
+              // Show duplicate warning if previously scheduled
+              updateDuplicateWarning(uniprot, gene);
             }
           }
         } else if (e.key === 'Escape') {
@@ -3568,6 +3689,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         renderCalendar(currentDate); // Re-render to show selection highlight
       
       const data = scheduleData[date];
+      
+      // Hide any duplicate warning from previous selection
+      const duplicateCallout = document.getElementById('duplicate-warning-callout');
+      if (duplicateCallout) duplicateCallout.classList.remove('show');
       
       // Update Inspector Header
       document.getElementById('inspector-date').textContent = new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
