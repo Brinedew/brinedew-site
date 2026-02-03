@@ -91,12 +91,21 @@ Sitemap: https://${GENEGUESSR_HOST}/sitemap.xml
 }
 
 function buildGeneguessrSubdomainSitemapXml() {
-  const now = new Date().toISOString()
+  // Keep `lastmod` stable within a day to avoid thrashing crawlers with a constantly-changing sitemap.
+  const now = new Date().toISOString().slice(0, 10)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://${GENEGUESSR_HOST}/</loc>
     <lastmod>${now}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://${GENEGUESSR_HOST}/apps/geneguessr/privacy</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
   </url>
 </urlset>`
 }
@@ -257,6 +266,26 @@ export default {
       url.pathname !== "/admin" &&
       url.pathname !== "/admin-v2"
     ) {
+      // Avoid duplicate content at multiple paths on the subdomain.
+      // Keep the canonical entrypoint at `/` and normalize a few common variants.
+      if (request.method === "GET" || request.method === "HEAD") {
+        if (
+          url.pathname === "/apps/geneguessr" ||
+          url.pathname === "/apps/geneguessr/" ||
+          url.pathname === "/apps/geneguessr/index" ||
+          url.pathname === "/apps/geneguessr/index/"
+        ) {
+          return Response.redirect(`https://${GENEGUESSR_HOST}/`, 301)
+        }
+
+        if (url.pathname === "/apps/geneguessr/privacy/") {
+          return Response.redirect(
+            `https://${GENEGUESSR_HOST}/apps/geneguessr/privacy`,
+            301,
+          )
+        }
+      }
+
       // For root path, fetch the geneguessr app page
       let targetPath = url.pathname === "/" ? "/apps/geneguessr/index" : url.pathname
 
