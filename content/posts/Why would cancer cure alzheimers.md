@@ -18,7 +18,7 @@ Why would a cancer do this?
 
 II.
 
-Nick Bostrom talks about Vulnerable World Hypothesis: a state of affairs where microwaving some sand gets you a homemade giganuke. In these worlds, any one individual can bring down the entire world. The only way to survive such a scenario is a pervasive surveillance state with draconian limits on freedom.
+Nick Bostrom talks about Vulnerable World Hypothesis: a state of affairs where microwaving some sand gets you a homemade giganuke. In these worlds, any one individual can bring down the entire world. The only way to survive such a scenario is an omnipresent surveillance state with draconian curtailment of freedom.
 
 This is how I think about multicellular organisms.
 
@@ -30,11 +30,15 @@ The cells with three out of five tumor suppressor locks already broken get anoth
 
 If you die of cancer at 60, your body leaned toward option 1. Degenerative disease at 80, option 2. 110, you split the difference and got lucky. Evolutionary biologists call this antagonistic pleiotropy — genes that help you survive to reproduction hurt you later because natural selection stops caring once you've passed on your DNA. Suppressing somatic mosaicism causes cardiovascular disease, frailty, neurodegeneration, and likely a dozen other things we file under "aging." Cancer avoidance is expensive.
 
-If this tradeoff is real — if aging is substantially tumor suppression — you'd expect the diseases of old age to look like side effects of cancer containment. Chronic inflammation, extracellular matrix stiffening, suppressed regeneration. Which is more or less what we see. You'd also expect molecules that participate in cancer biology to show up in neurodegeneration, not because the brain is cancerous but because it's downstream of systems that are managing cancer risk everywhere else. Which is what the Li paper found. A group looking at tumor biology stumbled onto a secreted protein that activates the exact receptor geneticists had independently identified as one of the strongest Alzheimer's risk genes. Nobody predicted cystatin C specifically. But if the tradeoff is real, something like this had to exist.
+If this tradeoff is real — if aging is substantially tumor suppression — you'd expect the diseases of old age to look like side effects of cancer containment. Chronic inflammation, extracellular matrix stiffening, suppressed regeneration. Which is more or less what we see. 
 
-You'd think the brain would be exempt from this tradeoff. Neurons don't divide. You basically can't get neuron-derived brain cancer (gliomas come from glial cells). The proliferation-vs-lockdown choice shouldn't directly touch them. Why would Alzheimer's be part of this story?
+You'd also expect molecules that participate in cancer biology to show up in neurodegeneration, not because the brain is cancerous but because it's downstream of systems that are managing cancer risk everywhere else. 
 
-Because the brain isn't sealed off from a body at war with cheater cells in every other tissue. The blood-brain barrier gets leakier with age — tight junctions loosen, transport proteins change expression — and IL-6 and TNF-alpha from the SASP cross into the CNS and activate microglia. The extracellular matrix stiffening that encapsulates nascent tumors also solidifies matrix around amyloid aggregates in the brain. The neurons aren't in the line of fire. They're in the building next to it.
+{Which is what the Li paper found. A secreted protein that activates the exact receptor geneticists had independently identified as one of the strongest Alzheimer's risk genes. Nobody predicted cystatin C specifically. But if the tradeoff is real, something like this had to exist.}{this is turning my brain to mush to read}
+
+Wouldn't the brain be exempt from this tradeoff? Neurons don't divide. You basically can't get neuron-derived brain cancer (gliomas come from glial cells). The proliferation-vs-lockdown choice shouldn't directly touch them. Why would Alzheimer's be part of this story?
+
+The brain isn't sealed off from a body at war with cheater cells in every other tissue. The blood-brain barrier gets leakier with age — tight junctions loosen, transport proteins change expression — and IL-6 and TNF-alpha from the SASP cross into the CNS and activate microglia. The extracellular matrix stiffening that encapsulates nascent tumors also solidifies matrix around amyloid aggregates in the brain. The neurons aren't in the line of fire. They're in the building next to it.
 
 And when a tumor breaks through containment, it produces matrix metalloproteinases, cathepsins, and cystatin C to dissolve the tissue barriers in its way. The same chemicals loosen the rigid matrix that traps amyloid plaques in the brain. The invading army's battle engineers, repairing bridges the defending country blew up itself.
 
