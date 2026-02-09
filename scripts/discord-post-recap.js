@@ -62,9 +62,14 @@ async function main() {
   const formatDate = (dateStr) => {
     const date = new Date(dateStr + "T00:00:00Z")
     const dayNum = date.getUTCDate()
-    const suffix = dayNum === 1 || dayNum === 21 || dayNum === 31 ? "st"
-      : dayNum === 2 || dayNum === 22 ? "nd"
-      : dayNum === 3 || dayNum === 23 ? "rd" : "th"
+    const suffix =
+      dayNum === 1 || dayNum === 21 || dayNum === 31
+        ? "st"
+        : dayNum === 2 || dayNum === 22
+          ? "nd"
+          : dayNum === 3 || dayNum === 23
+            ? "rd"
+            : "th"
     const month = date.toLocaleString("en-US", { month: "long", timeZone: "UTC" })
     const year = date.getUTCFullYear()
     return `${dayNum}${suffix} of ${month}, ${year}`

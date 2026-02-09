@@ -3,11 +3,11 @@ name: Discord Daily Recap
 on:
   schedule:
     # Run at 00:05 UTC daily (5 minutes after day change)
-    - cron: '5 0 * * *'
+    - cron: "5 0 * * *"
   workflow_dispatch:
     inputs:
       day:
-        description: 'Override day (YYYY-MM-DD). Leave empty for yesterday.'
+        description: "Override day (YYYY-MM-DD). Leave empty for yesterday."
         required: false
         type: string
 
@@ -19,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 

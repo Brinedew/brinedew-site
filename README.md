@@ -24,6 +24,7 @@ Obsidian vault in `content/`, push to GitHub, Quartz builds static HTML, GitHub 
 - API: staging pages hosts default to `https://geneguessr-api-staging.decap.workers.dev` (no `gg_api` needed).
 
 **Local dev**:
+
 - Run `npx wrangler dev --env staging --remote --port 8787` for the API.
 - Run `npm run dev` for the frontend.
 - Open `http://localhost:<quartz-port>/apps/geneguessr/?gg_api=http://127.0.0.1:8787`.

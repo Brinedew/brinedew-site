@@ -38,8 +38,21 @@
     version: 2,
     camera: { mode: "perspective" },
     lighting: { enabled: true, exposure: 1, lights: [] },
-    occlusion: { enabled: false, samples: 64, radius: 6, bias: 0.8, blurKernelSize: 7, resolutionScale: 1 },
-    antialiasing: { mode: "fxaa", edgeThresholdMin: 0.125, edgeThresholdMax: 0.25, iterations: 2, subpixelQuality: 0.75 },
+    occlusion: {
+      enabled: false,
+      samples: 64,
+      radius: 6,
+      bias: 0.8,
+      blurKernelSize: 7,
+      resolutionScale: 1,
+    },
+    antialiasing: {
+      mode: "fxaa",
+      edgeThresholdMin: 0.125,
+      edgeThresholdMax: 0.25,
+      iterations: 2,
+      subpixelQuality: 0.75,
+    },
     fog: { enabled: true, intensity: 0.5, color: "#110c0a" },
     outline: { enabled: true, threshold: 0.33, scale: 1, color: "#110c0a" },
     extras: { hideAxes: true, disableMarking: true },
@@ -163,14 +176,18 @@
         : null
       if (viewer.plugin && viewer.plugin.managers && viewer.plugin.managers.interactivity) {
         const m = viewer.plugin.managers.interactivity
-        m.lociHighlights && m.lociHighlights.setProps ? m.lociHighlights.setProps({ enabled: false }) : null
+        m.lociHighlights && m.lociHighlights.setProps
+          ? m.lociHighlights.setProps({ enabled: false })
+          : null
         m.lociSelects && m.lociSelects.setProps ? m.lociSelects.setProps({ enabled: false }) : null
       }
     } catch (err) {
       console.warn("[MolstarShared] Unable to set interactivity props", err)
     }
 
-    if (!(viewer && viewer.plugin && viewer.plugin.behaviors && viewer.plugin.behaviors.interaction)) {
+    if (
+      !(viewer && viewer.plugin && viewer.plugin.behaviors && viewer.plugin.behaviors.interaction)
+    ) {
       return
     }
 
@@ -230,7 +247,8 @@
     const start = Date.now()
     while (Date.now() - start < timeout) {
       try {
-        const props = viewer && viewer.plugin && viewer.plugin.canvas3d && viewer.plugin.canvas3d.props
+        const props =
+          viewer && viewer.plugin && viewer.plugin.canvas3d && viewer.plugin.canvas3d.props
         if (props && required.every((k) => props[k])) {
           return true
         }
@@ -251,11 +269,15 @@
       antialiasing: graphicsSettings.antialiasing && graphicsSettings.antialiasing.mode === "fxaa",
       fog: !(graphicsSettings.fog && graphicsSettings.fog.enabled === false),
       outline: !(graphicsSettings.outline && graphicsSettings.outline.enabled === false),
-      disableMarking: !(graphicsSettings.extras && graphicsSettings.extras.disableMarking === false),
+      disableMarking: !(
+        graphicsSettings.extras && graphicsSettings.extras.disableMarking === false
+      ),
     }
     const debug = Object.assign(computedDebug, (options && options.debugStylization) || {})
     try {
-      const params = new URLSearchParams(globalThis.location && globalThis.location.search ? globalThis.location.search : "")
+      const params = new URLSearchParams(
+        globalThis.location && globalThis.location.search ? globalThis.location.search : "",
+      )
       if (params.has("molstar_debug")) {
         Object.keys(debug).forEach((key) => {
           if (params.has("no_" + key)) debug[key] = false
@@ -293,7 +315,11 @@
         enabled: Boolean(debug.orthographic),
         fn: function () {
           if (camera && camera.mode === "orthographic") {
-            safeApplyCanvasProps(viewer, { camera: { mode: "orthographic" } }, "orthographic camera")
+            safeApplyCanvasProps(
+              viewer,
+              { camera: { mode: "orthographic" } },
+              "orthographic camera",
+            )
           }
         },
         delay: 150,
@@ -336,10 +362,17 @@
         name: "occlusion",
         enabled: Boolean(debug.occlusion),
         fn: function () {
-          const pp = viewer && viewer.plugin && viewer.plugin.canvas3d && viewer.plugin.canvas3d.props && viewer.plugin.canvas3d.props.postprocessing
+          const pp =
+            viewer &&
+            viewer.plugin &&
+            viewer.plugin.canvas3d &&
+            viewer.plugin.canvas3d.props &&
+            viewer.plugin.canvas3d.props.postprocessing
           const baseOcclusion = pp && pp.occlusion ? pp.occlusion : { name: "off", params: {} }
           const baseParams =
-            baseOcclusion && baseOcclusion.params && typeof baseOcclusion.params === "object" ? baseOcclusion.params : {}
+            baseOcclusion && baseOcclusion.params && typeof baseOcclusion.params === "object"
+              ? baseOcclusion.params
+              : {}
           if (!occlusion || occlusion.enabled === false) {
             safeApplyCanvasProps(
               viewer,
@@ -382,7 +415,11 @@
         enabled: Boolean(debug.antialiasing),
         fn: function () {
           if (!antialiasing || antialiasing.mode !== "fxaa") {
-            safeApplyCanvasProps(viewer, { postprocessing: { antialiasing: { name: "off" } } }, "aa off")
+            safeApplyCanvasProps(
+              viewer,
+              { postprocessing: { antialiasing: { name: "off" } } },
+              "aa off",
+            )
             return
           }
           safeApplyCanvasProps(
@@ -439,7 +476,11 @@
         enabled: Boolean(debug.outline),
         fn: function () {
           if (!outline || outline.enabled === false) {
-            safeApplyCanvasProps(viewer, { postprocessing: { outline: { name: "off" } } }, "outline off")
+            safeApplyCanvasProps(
+              viewer,
+              { postprocessing: { outline: { name: "off" } } },
+              "outline off",
+            )
             return
           }
           const outlineColor = hexToRgb(outline.color) || resolveViewerColors(container).outline
@@ -588,7 +629,8 @@
   }
 
   function normalizeGraphicsSettings(raw) {
-    if (!raw || typeof raw !== "object") return JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
+    if (!raw || typeof raw !== "object")
+      return JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
     // Keep this intentionally conservative: prefer defaults over trusting malformed payloads.
     const base = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
     const merged = Object.assign(base, raw)
@@ -606,7 +648,9 @@
     if (cachedGraphicsSettings) return Promise.resolve(cachedGraphicsSettings)
     if (cachedGraphicsSettingsPromise) return cachedGraphicsSettingsPromise
     const base = apiBase || ""
-    const url = base.endsWith("/") ? base + "api/graphics-settings" : base + "/api/graphics-settings"
+    const url = base.endsWith("/")
+      ? base + "api/graphics-settings"
+      : base + "/api/graphics-settings"
     cachedGraphicsSettingsPromise = fetch(url, { credentials: "include" })
       .then((res) => (res && res.ok ? res.json() : null))
       .then((json) => {
@@ -637,7 +681,12 @@
       }, timeout)
 
       try {
-        if (viewer && viewer.events && viewer.events.loadComplete && viewer.events.loadComplete.subscribe) {
+        if (
+          viewer &&
+          viewer.events &&
+          viewer.events.loadComplete &&
+          viewer.events.loadComplete.subscribe
+        ) {
           viewer.events.loadComplete.subscribe(function () {
             clearTimeout(timer)
             done(true)
@@ -705,7 +754,9 @@
     await viewer.render(container, canonicalRenderOptions)
 
     try {
-      const params = new URLSearchParams(globalThis.location && globalThis.location.search ? globalThis.location.search : "")
+      const params = new URLSearchParams(
+        globalThis.location && globalThis.location.search ? globalThis.location.search : "",
+      )
       if (params.has("molstar_debug")) {
         globalThis.__GeneguessrMolstarDebug = { viewer }
       }
@@ -719,7 +770,9 @@
         }
         const graphicsSettings =
           (options && options.graphicsSettings) ||
-          (options && options.fetchGraphicsSettings === false ? DEFAULT_GRAPHICS_SETTINGS : await getGraphicsSettings(options && options.apiBase))
+          (options && options.fetchGraphicsSettings === false
+            ? DEFAULT_GRAPHICS_SETTINGS
+            : await getGraphicsSettings(options && options.apiBase))
         await applyViewerStylizationProfile(viewer, container, {
           graphicsSettings,
           debugStylization: options && options.debugStylization,
@@ -839,7 +892,10 @@
 
   function countTotalChains(chainLabels) {
     if (!Array.isArray(chainLabels)) return 0
-    return chainLabels.reduce((sum, label) => sum + (label && label.chains ? label.chains.length : 0), 0)
+    return chainLabels.reduce(
+      (sum, label) => sum + (label && label.chains ? label.chains.length : 0),
+      0,
+    )
   }
 
   function getChainPos(viewer, chainId) {
@@ -988,8 +1044,12 @@
     stopFloatingLabels(container)
     container.querySelector(".pg-chain-callouts")?.remove()
 
-    const effectiveCount = options && options.totalChainCount != null ? Number(options.totalChainCount) : null
-    const totalChains = Number.isFinite(effectiveCount) && effectiveCount > 0 ? effectiveCount : countTotalChains(chainLabels)
+    const effectiveCount =
+      options && options.totalChainCount != null ? Number(options.totalChainCount) : null
+    const totalChains =
+      Number.isFinite(effectiveCount) && effectiveCount > 0
+        ? effectiveCount
+        : countTotalChains(chainLabels)
     if (totalChains <= 1) return
 
     const expandedChains = []
