@@ -71,9 +71,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     }
 
     // Fallback: allow hitting the staging worker directly when we are on Pages preview domains.
-    const isPagesStaging = host === "brinedew-bio-staging.pages.dev" || host === "staging.brinedew-bio.pages.dev"
+    const isPagesStaging =
+      host === "brinedew-bio-staging.pages.dev" || host === "staging.brinedew-bio.pages.dev"
 
-    return isPagesStaging ? "https://geneguessr-api-staging.decap.workers.dev" : "https://geneguessr.brinedew.bio"
+    return isPagesStaging
+      ? "https://geneguessr-api-staging.decap.workers.dev"
+      : "https://geneguessr.brinedew.bio"
   }
 
   function normalizeApiBase(raw) {
@@ -2845,7 +2848,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
           // Only the clue-card viewer should ever hide gene names.
           // Feedback cards (guesses) must always use revealed names, even if chainLabels includes `is_target`
           // for coloring/alignment purposes.
-          const mode = containerId === "pg-clue-structure" ? "hidden name mode" : "revealed name mode"
+          const mode =
+            containerId === "pg-clue-structure" ? "hidden name mode" : "revealed name mode"
           window.GeneguessrMolstar.setFloatingLabels(viewer, container, {
             mode,
             chainLabels: structureInfo.chainLabels,

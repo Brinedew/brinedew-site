@@ -21,11 +21,7 @@ async function main() {
 
   const browser = await chromium.launch({
     headless: false, // Headful mode for WebGL under Xvfb
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--ignore-gpu-blocklist",
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--ignore-gpu-blocklist"],
   })
 
   const context = await browser.newContext({
@@ -43,7 +39,9 @@ async function main() {
     console.log("Page loaded, waiting for structure to render...")
 
     // Wait for data-loaded attribute (true = success, timeout = failure)
-    const loadState = await page.waitForSelector("body[data-loaded]", { timeout: 70000 }).catch(() => null)
+    const loadState = await page
+      .waitForSelector("body[data-loaded]", { timeout: 70000 })
+      .catch(() => null)
 
     if (loadState) {
       const state = await page.getAttribute("body", "data-loaded")
@@ -72,9 +70,7 @@ async function main() {
         ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)
         : gl.getParameter(gl.RENDERER)
 
-      const vendor = dbg
-        ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)
-        : gl.getParameter(gl.VENDOR)
+      const vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR)
 
       return { ok: true, vendor, renderer, w: canvas.width, h: canvas.height }
     })
