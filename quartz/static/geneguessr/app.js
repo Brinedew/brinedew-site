@@ -64,6 +64,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       return window.location.origin
     }
 
+    // Production site: route `/api/*` on brinedew.bio to the worker so auth/cookies stay same-origin.
+    if (host === "brinedew.bio" || host === "www.brinedew.bio") {
+      return window.location.origin
+    }
+
     // Real staging lives under a single staging umbrella domain (staging.brinedew.bio).
     // On that domain we route `/api/*` to the staging worker (same-origin), so we do not need `gg_api`.
     if (host === "staging.brinedew.bio") {

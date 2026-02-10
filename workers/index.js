@@ -444,7 +444,11 @@ export default {
     }
 
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {
-      return handleLogout(request, env)
+      const response = await handleLogout(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
     }
 
     // Discord bot endpoints
