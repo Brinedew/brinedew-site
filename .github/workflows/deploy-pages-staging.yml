@@ -1,0 +1,56 @@
+name: Deploy Staging Site (Cloudflare Pages)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["staging"]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-staging-pages:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          pip install pandas pyyaml python-frontmatter requests
+
+      - name: Enrich protein pages
+        run: python scripts/enrich-proteins.py
+
+      - name: Setup Node.js (22.x) with npm cache
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verify Node/npm and bump npm to >=10.9.2
+        run: |
+          node -v
+          npm -v
+          npm i -g npm@10.9.2
+          npm -v
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Quartz site
+        run: node quartz/bootstrap-cli.mjs build -d content
+
+      - name: Install Wrangler CLI
+        run: npm install -g wrangler@4
+
+      - name: Deploy staging build to Cloudflare Pages
+        run: wrangler pages deploy public --project-name brinedew-bio-staging --branch staging
