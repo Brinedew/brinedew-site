@@ -5149,8 +5149,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     }
 
     // Kick off structure token hydration (guess + optional target reveal)
-    const tokenTasks = [ensureStructureTokenForProtein(uniprot)]
     const reachedEndOfRound = gameState.won || gameState.guesses.length >= gameState.maxGuesses
+    if (reachedEndOfRound) {
+      await recordStatsOnce(gameState.won)
+    }
+
+    const tokenTasks = [ensureStructureTokenForProtein(uniprot)]
     if (reachedEndOfRound && targetReveal?.uniprot) {
       tokenTasks.push(ensureStructureTokenForProtein(targetReveal.uniprot))
     }
