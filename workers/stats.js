@@ -422,7 +422,7 @@ export async function handleUpdateStats(request, env) {
 
 /**
  * GET /api/stats/leaderboard?limit=5
- * Public top streak leaderboard (opt-in users only).
+ * Public top streak leaderboard (opt-in users only), ranked by current streak.
  */
 export async function handleGetLeaderboard(request, env) {
   try {
@@ -435,15 +435,15 @@ export async function handleGetLeaderboard(request, env) {
         users.discord_id AS user_id,
         users.username AS username,
         users.avatar_url AS avatar_url,
-        stats.best_streak AS best_streak,
+        stats.current_streak AS best_streak,
         stats.total_wins AS total_wins,
         stats.last_played_date AS last_played_date
       FROM stats
       INNER JOIN users ON users.discord_id = stats.user_id
       WHERE COALESCE(users.leaderboard_opt_in, 0) = 1
-        AND COALESCE(stats.best_streak, 0) > 0
+        AND COALESCE(stats.current_streak, 0) > 0
       ORDER BY
-        stats.best_streak DESC,
+        stats.current_streak DESC,
         stats.total_wins DESC,
         COALESCE(stats.last_played_date, '9999-12-31') ASC,
         users.discord_id ASC
