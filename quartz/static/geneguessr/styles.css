@@ -214,10 +214,14 @@
   --pg-switch-track-height: 24px;
   --pg-switch-track-border: 1px;
   --pg-switch-thumb-size: 16px;
-  --pg-switch-thumb-inset: 2px;
+  --pg-switch-thumb-inset-x: 3px;
+  --pg-switch-thumb-inset-y: calc(
+    (var(--pg-switch-track-height) - var(--pg-switch-thumb-size)) / 2 -
+      var(--pg-switch-track-border)
+  );
   --pg-switch-thumb-travel: calc(
     var(--pg-switch-track-width) - (var(--pg-switch-track-border) * 2) -
-      var(--pg-switch-thumb-size) - (var(--pg-switch-thumb-inset) * 2)
+      var(--pg-switch-thumb-size) - (var(--pg-switch-thumb-inset-x) * 2)
   );
   position: relative;
   display: inline-flex;
@@ -236,6 +240,7 @@
 .pg-auth-switch-slider {
   position: relative;
   display: block;
+  box-sizing: border-box;
   width: var(--pg-switch-track-width);
   height: var(--pg-switch-track-height);
   border-radius: 999px;
@@ -250,8 +255,8 @@
 .pg-auth-switch-slider::before {
   content: "";
   position: absolute;
-  top: var(--pg-switch-thumb-inset);
-  left: var(--pg-switch-thumb-inset);
+  top: var(--pg-switch-thumb-inset-y);
+  left: var(--pg-switch-thumb-inset-x);
   width: var(--pg-switch-thumb-size);
   height: var(--pg-switch-thumb-size);
   box-sizing: border-box;
