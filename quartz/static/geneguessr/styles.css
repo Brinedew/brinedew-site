@@ -139,6 +139,10 @@
   min-height: 1.94rem;
 }
 
+.pg-auth-profile.is-guest .pg-auth-avatar {
+  margin-block: 1rem;
+}
+
 .pg-auth-username {
   font-weight: 650;
   font-size: 0.9rem;
