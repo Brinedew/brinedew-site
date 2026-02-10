@@ -210,13 +210,14 @@
 }
 
 .pg-auth-switch {
-  --pg-switch-track-width: 42px;
+  --pg-switch-track-width: 44px;
   --pg-switch-track-height: 24px;
-  --pg-switch-thumb-size: 14px;
-  --pg-switch-thumb-inset: 3px;
+  --pg-switch-track-border: 1px;
+  --pg-switch-thumb-size: 16px;
+  --pg-switch-thumb-inset: 2px;
   --pg-switch-thumb-travel: calc(
-    var(--pg-switch-track-width) - var(--pg-switch-thumb-size) -
-      (var(--pg-switch-thumb-inset) * 2)
+    var(--pg-switch-track-width) - (var(--pg-switch-track-border) * 2) -
+      var(--pg-switch-thumb-size) - (var(--pg-switch-thumb-inset) * 2)
   );
   position: relative;
   display: inline-flex;
@@ -239,7 +240,8 @@
   height: var(--pg-switch-track-height);
   border-radius: 999px;
   background: color-mix(in srgb, var(--ui-border) 90%, var(--ui-bg));
-  border: 1px solid color-mix(in srgb, var(--ui-border) 80%, transparent);
+  border: var(--pg-switch-track-border) solid
+    color-mix(in srgb, var(--ui-border) 80%, transparent);
   transition:
     background 0.2s ease,
     border-color 0.2s ease;
@@ -252,6 +254,7 @@
   left: var(--pg-switch-thumb-inset);
   width: var(--pg-switch-thumb-size);
   height: var(--pg-switch-thumb-size);
+  box-sizing: border-box;
   border-radius: 50%;
   background: var(--light);
   border: 1px solid color-mix(in srgb, var(--ui-border) 75%, transparent);
@@ -268,7 +271,7 @@
 
 .pg-auth-switch input:checked + .pg-auth-switch-slider::before {
   transform: translateX(var(--pg-switch-thumb-travel));
-  border-color: color-mix(in srgb, var(--light) 75%, var(--accent));
+  border-color: color-mix(in srgb, var(--ui-border) 75%, transparent);
   background: var(--light);
 }
 
