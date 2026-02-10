@@ -135,6 +135,10 @@
   min-width: 0;
 }
 
+.pg-auth-profile.is-guest .pg-auth-identity {
+  min-height: 1.94rem;
+}
+
 .pg-auth-username {
   font-weight: 650;
   font-size: 0.9rem;
@@ -208,6 +212,18 @@
   font-size: 0.82rem;
   line-height: 1.3;
   font-weight: 500;
+}
+
+.pg-auth-consent-feedback {
+  display: none;
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: color-mix(in srgb, var(--accent) 75%, var(--dark));
+}
+
+.pg-auth-consent-feedback.is-visible {
+  display: block;
 }
 
 .pg-auth-switch {

@@ -5367,6 +5367,7 @@ https://brinedew.bio/apps/geneguessr/`
   let leaderboardLoading = false
   const LEADERBOARD_LIMIT = 5
   const LEADERBOARD_CONSENT_STORAGE_KEY = "geneguessr_leaderboard_consent"
+  let leaderboardConsentFeedbackTimer = null
 
   function isLeaderboardConsentEnabled() {
     const raw = localStorage.getItem(LEADERBOARD_CONSENT_STORAGE_KEY)
@@ -5375,6 +5376,36 @@ https://brinedew.bio/apps/geneguessr/`
 
   function setLeaderboardConsentEnabled(enabled) {
     localStorage.setItem(LEADERBOARD_CONSENT_STORAGE_KEY, enabled ? "1" : "0")
+  }
+
+  function showLeaderboardConsentFeedback(message) {
+    const feedbackEls = Array.from(document.querySelectorAll(".pg-auth-consent-feedback"))
+    if (feedbackEls.length === 0) {
+      return
+    }
+
+    if (leaderboardConsentFeedbackTimer) {
+      window.clearTimeout(leaderboardConsentFeedbackTimer)
+      leaderboardConsentFeedbackTimer = null
+    }
+
+    const text = String(message || "").trim()
+    feedbackEls.forEach((el) => {
+      el.textContent = text
+      el.classList.toggle("is-visible", Boolean(text))
+    })
+
+    if (!text) {
+      return
+    }
+
+    leaderboardConsentFeedbackTimer = window.setTimeout(() => {
+      feedbackEls.forEach((el) => {
+        el.textContent = ""
+        el.classList.remove("is-visible")
+      })
+      leaderboardConsentFeedbackTimer = null
+    }, 3200)
   }
 
   function getCurrentSidebarStats() {
@@ -5510,9 +5541,7 @@ https://brinedew.bio/apps/geneguessr/`
     }
     const tierLabel = currentUser ? formatTierLabel(currentUser.tier) : ""
     const discordInvite = "https://discord.com/invite/kx8FVzUrpf"
-    const leaderboardOptIn = currentUser
-      ? Boolean(currentUser.leaderboard_opt_in)
-      : isLeaderboardConsentEnabled()
+    const leaderboardOptIn = currentUser ? Boolean(currentUser.leaderboard_opt_in) : false
     const rawUsername = currentUser ? String(currentUser.username || "") : "Guest"
     const safeUsername = escapeHtml(rawUsername || "Guest")
     const avatarUrl = currentUser ? String(currentUser.avatar_url || "").trim() : ""
@@ -5544,7 +5573,7 @@ https://brinedew.bio/apps/geneguessr/`
       <div class="pg-sidebar-section pg-auth-section">
         <div class="pg-sidebar-label">Account</div>
         <div class="pg-auth-header">
-          <div class="pg-auth-profile">
+          <div class="pg-auth-profile${currentUser ? "" : " is-guest"}">
             ${avatarMarkup}
             <div class="pg-auth-identity">
               <div class="pg-auth-username">${safeUsername}</div>
@@ -5573,6 +5602,7 @@ https://brinedew.bio/apps/geneguessr/`
             <span class="pg-auth-switch-slider" aria-hidden="true"></span>
           </label>
         </div>
+        <div class="pg-auth-consent-feedback" role="status" aria-live="polite"></div>
       `
 
     const practiceList = loadPracticeList()
@@ -6087,11 +6117,25 @@ https://brinedew.bio/apps/geneguessr/`
   }
 
   window.geneguessrSetLeaderboardConsent = function (enabled) {
+    if (!currentUser) {
+      const toggleEls = Array.from(document.querySelectorAll(".pg-auth-consent-input"))
+      toggleEls.forEach((el) => {
+        if (el instanceof HTMLInputElement) {
+          el.checked = false
+        }
+      })
+      setLeaderboardConsentEnabled(false)
+      showLeaderboardConsentFeedback(
+        "Log in with Discord first to enable leaderboard visibility.",
+      )
+      return
+    }
+
     setLeaderboardConsentEnabled(Boolean(enabled))
   }
 
   window.geneguessrLoginWithDiscord = function () {
-    const consent = isLeaderboardConsentEnabled()
+    const consent = false
     window.location.href = `${API_BASE}/api/auth/login?leaderboard_opt_in=${consent ? "1" : "0"}`
   }
 
@@ -6236,8 +6280,8 @@ https://brinedew.bio/apps/geneguessr/`
     }
 
     const consentInput = document.querySelector(".pg-auth-consent-input")
-    if (consentInput && consentInput instanceof HTMLInputElement) {
-      consentInput.checked = isLeaderboardConsentEnabled()
+    if (consentInput && consentInput instanceof HTMLInputElement && !currentUser) {
+      consentInput.checked = false
     }
 
     const visibilityInput = document.querySelector(".pg-auth-visibility-input")
