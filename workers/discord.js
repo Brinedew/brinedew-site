@@ -10,6 +10,7 @@
 
 import { getDailyGuessAggregates, getWinnersCount } from "./lib/guess-aggregates.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
+import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
 
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const DISCORD_SUMMARY_POSTED_PREFIX = "discord_summary_posted:"
@@ -404,6 +405,7 @@ export async function handleRenderPage(request, env) {
   // Build structure URL from cache key (same approach as main app)
   let structureUrl
   let structureFormat = "cif"
+  let moleculeId = protein.pdb_id || protein.uniprot || "structure"
 
   if (structureToken && structureToken.cacheKey) {
     // Use cached structure endpoint (same as main app)
@@ -412,17 +414,19 @@ export async function handleRenderPage(request, env) {
       structureUrl += `&upstream=${encodeURIComponent(structureToken.upstreamUrl)}`
     }
     structureFormat = structureToken.format || "cif"
+    moleculeId = structureToken.moleculeId || moleculeId
   } else {
-    // Fallback to direct URLs if no cache
-    const info = getStructureInfo(protein)
-    if (!info) {
+    // Fallback to the same canonical metadata resolver used by the main app.
+    const storedMeta = buildStructureMetaFromStoredSource(protein)
+    if (!storedMeta || !storedMeta.upstreamUrl) {
       return new Response(`No structure available for ${protein.gene}`, {
         status: 404,
         headers: { "Content-Type": "text/plain" },
       })
     }
-    structureUrl = info.url
-    structureFormat = info.format
+    structureUrl = storedMeta.upstreamUrl
+    structureFormat = storedMeta.format || "cif"
+    moleculeId = storedMeta.moleculeId || moleculeId
   }
 
   // Generate the render HTML with injected structure data
@@ -432,7 +436,7 @@ export async function handleRenderPage(request, env) {
     fullName: protein.full_name,
     structureUrl,
     structureFormat,
-    moleculeId: protein.pdb_id || protein.uniprot || "structure",
+    moleculeId,
   })
 
   return new Response(html, {
@@ -441,41 +445,6 @@ export async function handleRenderPage(request, env) {
       "Cache-Control": "no-cache",
     },
   })
-}
-
-/**
- * Get structure info for a protein
- */
-function getStructureInfo(protein) {
-  // Priority: PDB > SWISS-MODEL > AlphaFold
-  if (protein.structure_source === "pdb" && protein.pdb_id) {
-    return {
-      url: `https://files.rcsb.org/download/${protein.pdb_id}.cif`,
-      format: "cif",
-      moleculeId: protein.pdb_id,
-    }
-  }
-
-  if (protein.structure_source === "swissmodel" && protein.swissmodel_url) {
-    // SwissModel URLs end in .pdb - detect from URL like main app does
-    const url = protein.swissmodel_url
-    const format = url.toLowerCase().includes(".pdb") ? "pdb" : "cif"
-    return {
-      url,
-      format,
-      moleculeId: protein.swissmodel_template || "SWISS",
-    }
-  }
-
-  if (protein.structure_source === "alphafold" && protein.alphafold_url) {
-    return {
-      url: protein.alphafold_url,
-      format: "cif",
-      moleculeId: protein.uniprot,
-    }
-  }
-
-  return null
 }
 
 /**

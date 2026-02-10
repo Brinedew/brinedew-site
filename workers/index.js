@@ -187,7 +187,10 @@ import {
   markStructureFailure,
   clearStructureFailure,
 } from "./lib/protein-store.js"
-import { resolveStructureRepresentation } from "./lib/structure-utils.js"
+import {
+  resolveStructureRepresentation,
+  buildStructureMetaFromStoredSource,
+} from "./lib/structure-utils.js"
 import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
 
@@ -3633,70 +3636,7 @@ async function handleAdminPurgeUnreferencedStructures(request, env, corsHeaders)
  * Returns null if structure data is missing or incomplete.
  */
 function buildMetaFromStoredStructure(protein) {
-  if (!protein) {
-    return null
-  }
-
-  const primarySource = protein.structure_source
-  if (!primarySource) {
-    return null
-  }
-
-  // Build meta based on the preferred source
-  if (primarySource === "pdb" && protein.pdb_id) {
-    const pdbId = protein.pdb_id.toUpperCase()
-    // Use RCSB ModelServer with BCIF encoding - much smaller than raw CIF
-    // e.g. 8J07: 337MB as CIF vs 42MB as BCIF (8x reduction)
-    // copy_all_categories=false strips metadata we don't need for visualization
-    const upstreamUrl = `https://models.rcsb.org/v1/${pdbId}/full?encoding=bcif&copy_all_categories=false`
-    const r2Key = `pdb/${pdbId}.bcif`
-
-    return {
-      source: "pdb",
-      r2Key,
-      upstreamUrl,
-      shortLabel: "RCSB PDB",
-      displayLabel: `RCSB PDB (${pdbId})`,
-      format: "bcif",
-      linkUrl: `https://www.rcsb.org/structure/${pdbId}`,
-    }
-  }
-
-  if (primarySource === "swissmodel" && protein.swissmodel_url) {
-    const template = protein.swissmodel_template || "model"
-    const modelId = `${protein.uniprot}_${template}`
-    const url = protein.swissmodel_url
-    // Check for format in URL (handles query strings like .pdb?range=...)
-    const ext = url.includes(".pdb") ? "pdb" : url.includes(".bcif") ? "bcif" : "cif"
-    return {
-      source: "swissmodel",
-      r2Key: `swissmodel/${sanitizeKeySegment(modelId)}.${ext}`,
-      upstreamUrl: url,
-      shortLabel: "SWISS-MODEL",
-      displayLabel: `SWISS-MODEL (${modelId})`,
-      format: ext,
-      linkUrl: null, // SWISS-MODEL URLs are direct downloads, not webpages
-    }
-  }
-
-  if (primarySource === "alphafold" && protein.alphafold_url) {
-    const url = protein.alphafold_url
-    // Check for format in URL (handles query strings)
-    const format = url.includes(".pdb") ? "pdb" : "cif"
-    return {
-      source: "alphafold",
-      r2Key: `alphafold/${sanitizeKeySegment(protein.uniprot)}.${format}`,
-      upstreamUrl: url,
-      shortLabel: "AlphaFold",
-      displayLabel: `AlphaFold (${protein.uniprot})`,
-      format,
-      linkUrl: `https://alphafold.ebi.ac.uk/entry/${protein.uniprot}`,
-    }
-  }
-
-  // All proteins with structure data have structure_source set
-  // No fallback paths needed (verified via database query 2025-12-10)
-  return null
+  return buildStructureMetaFromStoredSource(protein)
 }
 
 const STRUCTURE_SOURCE_CACHE_PREFIX = "structure_source:"
