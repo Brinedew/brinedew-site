@@ -5,6 +5,59 @@
 
 import { parseCookies } from "./auth.js"
 
+const LEADERBOARD_DEFAULT_LIMIT = 5
+const LEADERBOARD_MAX_LIMIT = 25
+
+function parseLeaderboardLimit(raw, fallback = LEADERBOARD_DEFAULT_LIMIT) {
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(1, Math.min(parsed, LEADERBOARD_MAX_LIMIT))
+}
+
+function parseLeaderboardOptInValue(value) {
+  if (value === true || value === 1 || value === "1" || value === "true") return 1
+  if (value === false || value === 0 || value === "0" || value === "false") return 0
+  return null
+}
+
+function sanitizeDiscordAvatarUrl(raw) {
+  const value = String(raw || "").trim()
+  if (!value) return null
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== "https:") return null
+    if (parsed.hostname !== "cdn.discordapp.com") return null
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+async function requireAuthenticatedSession(request, env) {
+  const cookies = parseCookies(request.headers.get("Cookie") || "")
+  const sessionId = cookies.session
+  if (!sessionId) {
+    return { ok: false, response: Response.json({ error: "Unauthorized" }, { status: 401 }) }
+  }
+
+  const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
+  const sessionStub = env.GAME_SESSIONS.get(id)
+  const sessionResp = await sessionStub.fetch("http://internal/get")
+  const session = await sessionResp.json()
+  if (!session || !session.user_id) {
+    return { ok: false, response: Response.json({ error: "Invalid session" }, { status: 401 }) }
+  }
+
+  return {
+    ok: true,
+    cookies,
+    sessionId,
+    session,
+    sessionStub,
+    userId: session.user_id,
+  }
+}
+
 function getGuestSessionTokenFromCookies(cookies) {
   const token = cookies.geneguessr_session
   if (!token) return null
@@ -85,25 +138,11 @@ async function tryLoadAuthoritativeDailyResultFromGuest(env, cookies) {
  * Migrate localStorage stats to D1 (one-time operation)
  */
 export async function handleMigrateStats(request, env) {
-  // Require authentication
-  const cookies = parseCookies(request.headers.get("Cookie") || "")
-  const sessionId = cookies.session
-
-  if (!sessionId) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  const auth = await requireAuthenticatedSession(request, env)
+  if (!auth.ok) {
+    return auth.response
   }
-
-  // Get user from session
-  const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-  const stub = env.GAME_SESSIONS.get(id)
-  const sessionResp = await stub.fetch("http://internal/get")
-  const session = await sessionResp.json()
-
-  if (!session || !session.user_id) {
-    return Response.json({ error: "Invalid session" }, { status: 401 })
-  }
-
-  const userId = session.user_id
+  const userId = auth.userId
 
   // Check if already migrated
   const existing = await env.DB.prepare(
@@ -174,25 +213,11 @@ export async function handleMigrateStats(request, env) {
  * Get current user stats from D1
  */
 export async function handleGetStats(request, env) {
-  // Require authentication
-  const cookies = parseCookies(request.headers.get("Cookie") || "")
-  const sessionId = cookies.session
-
-  if (!sessionId) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  const auth = await requireAuthenticatedSession(request, env)
+  if (!auth.ok) {
+    return auth.response
   }
-
-  // Get user from session
-  const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-  const stub = env.GAME_SESSIONS.get(id)
-  const sessionResp = await stub.fetch("http://internal/get")
-  const session = await sessionResp.json()
-
-  if (!session || !session.user_id) {
-    return Response.json({ error: "Invalid session" }, { status: 401 })
-  }
-
-  const userId = session.user_id
+  const userId = auth.userId
 
   // Fetch stats from D1
   const stats = await env.DB.prepare(
@@ -235,25 +260,12 @@ export async function handleGetStats(request, env) {
  * Update stats after game completion
  */
 export async function handleUpdateStats(request, env) {
-  // Require authentication
-  const cookies = parseCookies(request.headers.get("Cookie") || "")
-  const sessionId = cookies.session
-
-  if (!sessionId) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  const auth = await requireAuthenticatedSession(request, env)
+  if (!auth.ok) {
+    return auth.response
   }
-
-  // Get user from session
-  const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-  const stub = env.GAME_SESSIONS.get(id)
-  const sessionResp = await stub.fetch("http://internal/get")
-  const session = await sessionResp.json()
-
-  if (!session || !session.user_id) {
-    return Response.json({ error: "Invalid session" }, { status: 401 })
-  }
-
-  const userId = session.user_id
+  const userId = auth.userId
+  const cookies = auth.cookies
 
   // Parse update payload (kept for backwards compatibility; we prefer server-derived result).
   let payload
@@ -406,4 +418,111 @@ export async function handleUpdateStats(request, env) {
       maxStreak: bestStreak,
     },
   })
+}
+
+/**
+ * GET /api/stats/leaderboard?limit=5
+ * Public top streak leaderboard (opt-in users only).
+ */
+export async function handleGetLeaderboard(request, env) {
+  try {
+    const url = new URL(request.url)
+    const limit = parseLeaderboardLimit(url.searchParams.get("limit"))
+
+    const query = await env.DB.prepare(
+      `
+      SELECT
+        users.discord_id AS user_id,
+        users.username AS username,
+        users.avatar_url AS avatar_url,
+        stats.best_streak AS best_streak,
+        stats.total_wins AS total_wins,
+        stats.last_played_date AS last_played_date
+      FROM stats
+      INNER JOIN users ON users.discord_id = stats.user_id
+      WHERE COALESCE(users.leaderboard_opt_in, 0) = 1
+        AND COALESCE(stats.best_streak, 0) > 0
+      ORDER BY
+        stats.best_streak DESC,
+        stats.total_wins DESC,
+        COALESCE(stats.last_played_date, '9999-12-31') ASC,
+        users.discord_id ASC
+      LIMIT ?
+    `,
+    )
+      .bind(limit)
+      .all()
+
+    const rows = Array.isArray(query?.results) ? query.results : []
+    const entries = rows.map((row, idx) => ({
+      rank: idx + 1,
+      username: String(row?.username || "Player"),
+      avatarUrl: sanitizeDiscordAvatarUrl(row?.avatar_url),
+      bestStreak: Math.max(0, Number.parseInt(row?.best_streak, 10) || 0),
+    }))
+
+    return Response.json({ entries })
+  } catch (err) {
+    console.error("Error in handleGetLeaderboard:", err)
+    return Response.json({ error: "Failed to load leaderboard" }, { status: 500 })
+  }
+}
+
+/**
+ * POST /api/stats/leaderboard-visibility
+ * Update whether the authenticated user appears on the public leaderboard.
+ */
+export async function handleSetLeaderboardVisibility(request, env) {
+  const auth = await requireAuthenticatedSession(request, env)
+  if (!auth.ok) {
+    return auth.response
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 })
+  }
+
+  const parsed = parseLeaderboardOptInValue(body?.optIn)
+  if (parsed == null) {
+    return Response.json({ error: "optIn must be a boolean" }, { status: 400 })
+  }
+
+  try {
+    await env.DB.prepare(
+      `
+      UPDATE users
+      SET leaderboard_opt_in = ?, updated_at = ?
+      WHERE discord_id = ?
+    `,
+    )
+      .bind(parsed, Date.now(), auth.userId)
+      .run()
+
+    try {
+      const updatedSession = {
+        ...auth.session,
+        leaderboard_opt_in: parsed === 1,
+      }
+      await auth.sessionStub.fetch(
+        new Request("http://internal/store", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedSession),
+        }),
+      )
+    } catch (sessionErr) {
+      console.warn("Failed to update session leaderboard visibility cache:", sessionErr)
+    }
+
+    return Response.json({
+      success: true,
+      leaderboardOptIn: parsed === 1,
+    })
+  } catch (err) {
+    console.error("Error in handleSetLeaderboardVisibility:", err)
+    return Response.json({ error: "Failed to update leaderboard visibility" }, { status: 500 })
+  }
 }

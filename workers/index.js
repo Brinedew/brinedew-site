@@ -20,7 +20,9 @@ function getCorsHeaders(origin, requestHost = "") {
   // or on a workers.dev hostname (staging/dev). Do NOT allow localhost origins on prod custom domains.
   const allowLocalOrigin = isLocalOrigin && (isLocalHost || isWorkersDev)
   const corsOrigin =
-    allowedOrigins.includes(origin) || (isWorkersDev && stagingOrigins.includes(origin)) || allowLocalOrigin
+    allowedOrigins.includes(origin) ||
+    (isWorkersDev && stagingOrigins.includes(origin)) ||
+    allowLocalOrigin
       ? origin
       : "https://brinedew.bio"
   return {
@@ -112,9 +114,20 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from "./auth.js"
 // Import Iconoplasm handlers
 import { isIconoplasmRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 // Import Discord bot handlers
-import { handleDailySummary, handleInteractions, handleMarkPosted, handleRenderPage } from "./discord.js"
+import {
+  handleDailySummary,
+  handleInteractions,
+  handleMarkPosted,
+  handleRenderPage,
+} from "./discord.js"
 // Import stats handlers
-import { handleMigrateStats, handleGetStats, handleUpdateStats } from "./stats.js"
+import {
+  handleMigrateStats,
+  handleGetStats,
+  handleUpdateStats,
+  handleGetLeaderboard,
+  handleSetLeaderboardVisibility,
+} from "./stats.js"
 // Import admin handlers
 import {
   handleOverrideProtein,
@@ -432,6 +445,22 @@ export default {
 
     if (url.pathname === "/api/stats" && request.method === "GET") {
       const response = await handleGetStats(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (url.pathname === "/api/stats/leaderboard" && request.method === "GET") {
+      const response = await handleGetLeaderboard(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (url.pathname === "/api/stats/leaderboard-visibility" && request.method === "POST") {
+      const response = await handleSetLeaderboardVisibility(request, env)
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
@@ -1767,7 +1796,10 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
             .toUpperCase()
         }
 
-        const cachedUniprot = (cachedDaily?.targetProtein?.uniprot || "").toString().trim().toUpperCase()
+        const cachedUniprot = (cachedDaily?.targetProtein?.uniprot || "")
+          .toString()
+          .trim()
+          .toUpperCase()
         if (prodUniprot && cachedUniprot && prodUniprot !== cachedUniprot) {
           console.log(
             `[BOOTSTRAP] Staging cache mismatch with prod; ignoring cache (${cachedUniprot} != ${prodUniprot})`,
@@ -1775,7 +1807,10 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
           cachedDaily = null
         }
       } catch (err) {
-        console.warn("GeneGuessr: failed to validate staging bootstrap cache against prod", err?.message || err)
+        console.warn(
+          "GeneGuessr: failed to validate staging bootstrap cache against prod",
+          err?.message || err,
+        )
       }
     }
     console.log(`[BOOTSTRAP] Cache checked: ${cachedDaily ? "HIT" : "MISS"}`)
@@ -1802,16 +1837,22 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       // Historical puzzle sharing: ?practice=1&date=YYYY-MM-DD
       // Check PROD_KV first (for staging), fall back to local KV
       const dateParam = url.searchParams.get("date")
-      console.log(`[BOOTSTRAP] Practice mode: dateParam=${dateParam}, hasProdKV=${!!env.PROD_KV?.get}`)
+      console.log(
+        `[BOOTSTRAP] Practice mode: dateParam=${dateParam}, hasProdKV=${!!env.PROD_KV?.get}`,
+      )
       if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
         let puzzleActual = null
         if (env.PROD_KV?.get) {
           puzzleActual = await env.PROD_KV.get(`puzzle_actual:${dateParam}`, { type: "json" })
-          console.log(`[BOOTSTRAP] PROD_KV lookup: key=puzzle_actual:${dateParam}, found=${!!puzzleActual}`)
+          console.log(
+            `[BOOTSTRAP] PROD_KV lookup: key=puzzle_actual:${dateParam}, found=${!!puzzleActual}`,
+          )
         }
         if (!puzzleActual) {
           puzzleActual = await env.KV.get(`puzzle_actual:${dateParam}`, { type: "json" })
-          console.log(`[BOOTSTRAP] Local KV lookup: key=puzzle_actual:${dateParam}, found=${!!puzzleActual}`)
+          console.log(
+            `[BOOTSTRAP] Local KV lookup: key=puzzle_actual:${dateParam}, found=${!!puzzleActual}`,
+          )
         }
         if (puzzleActual?.uniprot_id) {
           console.log(`[BOOTSTRAP] Found puzzle_actual with uniprot_id=${puzzleActual.uniprot_id}`)
@@ -1820,7 +1861,9 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
             targetSeed = historicalProtein
             console.log(`[BOOTSTRAP] Practice mode: loaded historical puzzle from ${dateParam}`)
           } else {
-            console.log(`[BOOTSTRAP] Failed to fetch protein for uniprot_id=${puzzleActual.uniprot_id}`)
+            console.log(
+              `[BOOTSTRAP] Failed to fetch protein for uniprot_id=${puzzleActual.uniprot_id}`,
+            )
           }
         } else {
           console.log(`[BOOTSTRAP] No puzzle_actual found for date=${dateParam}`)

@@ -1,13 +1,13 @@
 ---
 title: "Privacy Policy"
 description: "How GeneGuessr handles your data"
-date: 2025-12-25
+date: 2026-02-10
 draft: false
 ---
 
 # Privacy Policy
 
-**Last updated:** December 25, 2025
+**Last updated:** February 10, 2026
 
 This Privacy Policy describes how GeneGuessr ("we", "us", or "our") collects, uses, and protects your information when you use our website at geneguessr.brinedew.bio.
 
@@ -20,6 +20,7 @@ This Privacy Policy describes how GeneGuessr ("we", "us", or "our") collects, us
 - Username
 - Avatar URL
 - Discord server membership status (whether you're in our Discord server)
+- Leaderboard visibility preference (opt in/out)
 
 We request the Discord OAuth scopes `identify` and `guilds.members.read`. We do not receive your email address.
 
@@ -45,6 +46,7 @@ We request the Discord OAuth scopes `identify` and `guilds.members.read`. We do 
 - Game statistics (games played, wins, streaks) in localStorage
 - Current game state in sessionStorage
 - Tutorial progress
+- Leaderboard visibility preference used during sign-in
 - Session cookies for authentication
 
 ## How We Use Your Information
@@ -53,6 +55,7 @@ We use collected information to:
 
 - **Provide the game**: Track your daily game progress, calculate similarity scores, display hints
 - **Sync your stats**: If signed in, save your statistics across devices
+- **Run the public streak leaderboard**: If you opt in, show your Discord username, avatar, and best streak publicly
 - **Prevent abuse**: Use IP hashes to limit daily game attempts per person
 - **Improve the game**: Analyze aggregated guess patterns to tune puzzle difficulty
 - **Authenticate you**: Manage login sessions via Discord OAuth
@@ -62,7 +65,7 @@ We use collected information to:
 We process your data based on:
 
 - **Legitimate interest**: Operating the game, preventing abuse, improving difficulty balance
-- **Consent**: When you sign in with Discord, you consent to us receiving your Discord profile data
+- **Consent**: When you sign in with Discord, you consent to us receiving your Discord profile data, and if enabled, to showing your profile on the public leaderboard
 - **Contract performance**: Providing the game service you've chosen to use
 
 ## Cookies and Tracking Technologies
@@ -84,6 +87,7 @@ We do not sell your data.
 We share data only with:
 
 - **Cloudflare**: Our infrastructure provider (see "Where Data Is Stored" below). Cloudflare processes data on our behalf under their [privacy policy](https://www.cloudflare.com/privacypolicy/).
+- **Public leaderboard viewers**: If you opt in, your Discord username, avatar, and best streak are visible to visitors in the in-app leaderboard.
 
 We do not share your data with advertisers, data brokers, or other third parties.
 
@@ -104,6 +108,8 @@ Cloudflare operates data centers globally. For EU users, this may involve data t
 - **Account data**: Retained until you request deletion
 - **Game history**: Retained until you request deletion
 - **Statistics**: Retained until you request deletion
+- **Leaderboard visibility preference**: Retained until you change it or request deletion
+- **Public leaderboard entries**: Visible only while your visibility preference is enabled
 - **Session data**: Automatically expires (10 minutes for OAuth, 30 days for login sessions)
 - **Aggregated analytics**: Retained indefinitely (contains no personal data)
 
@@ -116,7 +122,7 @@ Under GDPR and similar laws, you have the right to:
 - **Erasure**: Request deletion of your data ("right to be forgotten")
 - **Portability**: Request your data in a machine-readable format
 - **Object**: Object to processing based on legitimate interest
-- **Withdraw consent**: Revoke consent for Discord data sharing (by logging out)
+- **Withdraw consent**: Revoke consent for leaderboard display by turning visibility off, or revoke Discord data sharing by logging out
 
 To exercise these rights, email **support@brinedew.bio**. We will respond within 30 days.
 
