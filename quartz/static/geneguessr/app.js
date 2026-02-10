@@ -5527,7 +5527,7 @@ https://brinedew.bio/apps/geneguessr/`
         <div class="pg-auth-actions">
           <a href="${discordInvite}" class="pg-auth-discord" target="_blank" rel="noopener noreferrer">
             ${discordIcon}
-            Join
+            Join the community
           </a>
           <button class="pg-auth-logout" onclick="window.geneguessrLogout()">Sign Out</button>
         </div>
@@ -5558,7 +5558,7 @@ https://brinedew.bio/apps/geneguessr/`
     const consentRow = currentUser
       ? `
         <div class="pg-auth-consent-row">
-          <span class="pg-auth-consent-label">show me on leaderboard</span>
+          <span class="pg-auth-consent-label">Show me on leaderboard</span>
           <label class="pg-auth-switch" title="Public top-streak leaderboard visibility">
             <input class="pg-auth-visibility-input" type="checkbox" ${leaderboardOptIn ? "checked" : ""} onchange="window.geneguessrUpdateLeaderboardVisibility(this.checked)" />
             <span class="pg-auth-switch-slider" aria-hidden="true"></span>
@@ -5567,7 +5567,7 @@ https://brinedew.bio/apps/geneguessr/`
       `
       : `
         <div class="pg-auth-consent-row">
-          <span class="pg-auth-consent-label">show me on leaderboard</span>
+          <span class="pg-auth-consent-label">Show me on leaderboard</span>
           <label class="pg-auth-switch" title="Public top-streak leaderboard visibility">
             <input class="pg-auth-consent-input" type="checkbox" ${leaderboardOptIn ? "checked" : ""} onchange="window.geneguessrSetLeaderboardConsent(this.checked)" />
             <span class="pg-auth-switch-slider" aria-hidden="true"></span>

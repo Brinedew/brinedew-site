@@ -165,6 +165,7 @@
 .pg-auth-discord,
 .pg-auth-logout {
   display: inline-flex;
+  box-sizing: border-box;
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
