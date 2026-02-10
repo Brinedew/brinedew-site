@@ -130,7 +130,13 @@ import {
   handleRenderPage,
 } from "./discord.js"
 // Import stats handlers
-import { handleMigrateStats, handleGetStats, handleUpdateStats } from "./stats.js"
+import {
+  handleMigrateStats,
+  handleGetStats,
+  handleUpdateStats,
+  handleGetLeaderboard,
+  handleSetLeaderboardVisibility,
+} from "./stats.js"
 // Import admin handlers
 import {
   handleOverrideProtein,
@@ -465,6 +471,22 @@ export default {
 
     if (url.pathname === "/api/stats" && request.method === "GET") {
       const response = await handleGetStats(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (url.pathname === "/api/stats/leaderboard" && request.method === "GET") {
+      const response = await handleGetLeaderboard(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (url.pathname === "/api/stats/leaderboard-visibility" && request.method === "POST") {
+      const response = await handleSetLeaderboardVisibility(request, env)
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders },

@@ -32,12 +32,20 @@ function base64UrlEncode(buffer) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
 }
 
+function parseLeaderboardOptInFromUrl(url) {
+  const raw = String(url.searchParams.get("leaderboard_opt_in") || "")
+    .trim()
+    .toLowerCase()
+  return raw === "1" || raw === "true" || raw === "on" || raw === "yes"
+}
+
 /**
  * GET /api/auth/login
  * Initiate Discord OAuth flow with PKCE
  */
 export async function handleLogin(request, env) {
   const url = new URL(request.url)
+  const leaderboardOptIn = parseLeaderboardOptInFromUrl(url)
 
   // Generate PKCE values
   const codeVerifier = generateRandomString(128)
@@ -56,6 +64,7 @@ export async function handleLogin(request, env) {
       body: JSON.stringify({
         code_verifier: codeVerifier,
         state: state,
+        leaderboard_opt_in: leaderboardOptIn ? 1 : 0,
         expires_at: Date.now() + 600000, // 10 minutes
       }),
     }),
@@ -179,6 +188,7 @@ export async function handleCallback(request, env) {
   })
 
   const isMember = guildResp.ok
+  const leaderboardOptIn = Number.parseInt(oauthData?.leaderboard_opt_in, 10) === 1 ? 1 : 0
 
   // Create or update user in D1
   const avatarUrl = user.avatar
@@ -188,15 +198,16 @@ export async function handleCallback(request, env) {
   const now = Date.now()
   await env.DB.prepare(
     `
-    INSERT INTO users (discord_id, username, avatar_url, tier, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO users (discord_id, username, avatar_url, tier, leaderboard_opt_in, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(discord_id) DO UPDATE SET
       username = excluded.username,
       avatar_url = excluded.avatar_url,
+      leaderboard_opt_in = excluded.leaderboard_opt_in,
       updated_at = excluded.updated_at
   `,
   )
-    .bind(user.id, user.username, avatarUrl, "registered", now, now)
+    .bind(user.id, user.username, avatarUrl, "registered", leaderboardOptIn, now, now)
     .run()
 
   // Create persistent session
@@ -213,6 +224,7 @@ export async function handleCallback(request, env) {
         username: user.username,
         avatar_url: avatarUrl,
         tier: "registered",
+        leaderboard_opt_in: leaderboardOptIn === 1,
         is_guild_member: isMember,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -271,6 +283,7 @@ export async function handleMe(request, env) {
       username: session.username,
       avatar_url: session.avatar_url,
       tier: session.tier,
+      leaderboard_opt_in: Boolean(session.leaderboard_opt_in),
       is_guild_member: session.is_guild_member,
     },
   })
