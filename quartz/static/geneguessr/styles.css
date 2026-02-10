@@ -2254,14 +2254,9 @@ body:has(#geneguessr-root) .sidebar.right > .tags {
 /* Quartz non-desktop sidebar sets `max-height: 24rem` on right-sidebar children.
    For GeneGuessr this clips the injected stats card and causes leaderboard rows to spill out. */
 @media (max-width: 1199px) {
-  body:has(#geneguessr-root) .sidebar.right {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  body:has(#geneguessr-root) .sidebar.right > * {
-    flex: 0 0 auto;
-    max-height: none;
+  .sidebar.right > #pg-sidebar-stats {
+    flex: 0 0 auto !important;
+    max-height: none !important;
   }
 }
 
