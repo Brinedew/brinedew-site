@@ -77,3 +77,30 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: wrangler deploy --env staging
+
+      - name: Smoke test Discord OAuth bootstrap (staging)
+        run: |
+          set -euo pipefail
+          headers_file="$(mktemp)"
+          curl -sS -D "$headers_file" -o /dev/null "https://staging.brinedew.bio/api/auth/login?leaderboard_opt_in=0"
+
+          status="$(awk 'NR==1 { print $2 }' "$headers_file")"
+          location="$(awk 'BEGIN{IGNORECASE=1} /^Location:/ { sub(/^Location:[[:space:]]*/, \"\"); gsub(/\\r/, \"\"); print; exit }' "$headers_file")"
+
+          echo "OAuth login status: $status"
+          echo "OAuth redirect location: $location"
+
+          if [ "$status" != "302" ]; then
+            echo "Expected 302 from staging /api/auth/login but got $status" >&2
+            exit 1
+          fi
+
+          if [[ "$location" != https://discord.com/oauth2/authorize* ]]; then
+            echo "Expected Discord OAuth redirect URL, got: $location" >&2
+            exit 1
+          fi
+
+          if echo "$location" | grep -Eq 'client_id=(|undefined|null)($|&)'; then
+            echo "Discord OAuth redirect has invalid client_id in staging." >&2
+            exit 1
+          fi

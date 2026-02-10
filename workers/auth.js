@@ -5,6 +5,40 @@
 const DISCORD_API = "https://discord.com/api/v10"
 const DISCORD_OAUTH = "https://discord.com/oauth2/authorize"
 const DISCORD_TOKEN = "https://discord.com/api/v10/oauth2/token"
+const DISCORD_CLIENT_ID_FALLBACK = "1438111252730875984"
+const INVALID_ENV_MARKERS = new Set(["", "undefined", "null"])
+
+function readEnvString(value) {
+  if (typeof value !== "string") return ""
+  const trimmed = value.trim()
+  if (!trimmed) return ""
+  if (INVALID_ENV_MARKERS.has(trimmed.toLowerCase())) return ""
+  return trimmed
+}
+
+function resolveDiscordClientId(env) {
+  return (
+    readEnvString(env.DISCORD_CLIENT_ID) ||
+    readEnvString(env.DISCORD_APPLICATION_ID) ||
+    DISCORD_CLIENT_ID_FALLBACK
+  )
+}
+
+export function getDiscordAuthConfigStatus(env) {
+  const clientId = resolveDiscordClientId(env)
+  const clientSecret = readEnvString(env.DISCORD_CLIENT_SECRET)
+  const guildId = readEnvString(env.DISCORD_GUILD_ID)
+  const missing = []
+
+  if (!clientId) missing.push("DISCORD_CLIENT_ID")
+  if (!clientSecret) missing.push("DISCORD_CLIENT_SECRET")
+  if (!guildId) missing.push("DISCORD_GUILD_ID")
+
+  return {
+    loginReady: missing.length === 0,
+    missing,
+  }
+}
 
 // PKCE helper functions
 function generateRandomString(length) {
@@ -68,10 +102,23 @@ function resolveDiscordRedirectUri(url, env) {
  */
 export async function handleLogin(request, env) {
   const url = new URL(request.url)
+  const configStatus = getDiscordAuthConfigStatus(env)
+  if (!configStatus.loginReady) {
+    console.error("Discord OAuth config missing for login:", configStatus.missing)
+    return Response.json(
+      {
+        error: "Discord OAuth is not configured",
+        missing: configStatus.missing,
+      },
+      { status: 503 },
+    )
+  }
+
   const leaderboardOptIn = parseLeaderboardOptInFromUrl(url)
   const redirectUri = resolveDiscordRedirectUri(url, env)
   const cookieDomain = getSharedCookieDomain(url.hostname)
   const cookieDomainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
+  const clientId = resolveDiscordClientId(env)
 
   // Generate PKCE values
   const codeVerifier = generateRandomString(128)
@@ -100,7 +147,7 @@ export async function handleLogin(request, env) {
 
   // Build Discord OAuth URL
   const params = new URLSearchParams({
-    client_id: env.DISCORD_CLIENT_ID,
+    client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
     scope: "identify guilds.members.read",
@@ -127,6 +174,18 @@ export async function handleLogin(request, env) {
  */
 export async function handleCallback(request, env) {
   const url = new URL(request.url)
+  const configStatus = getDiscordAuthConfigStatus(env)
+  if (!configStatus.loginReady) {
+    console.error("Discord OAuth config missing for callback:", configStatus.missing)
+    return Response.json(
+      {
+        error: "Discord OAuth is not configured",
+        missing: configStatus.missing,
+      },
+      { status: 503 },
+    )
+  }
+
   const code = url.searchParams.get("code")
   const state = url.searchParams.get("state")
 
@@ -177,11 +236,14 @@ export async function handleCallback(request, env) {
       ? oauthData.cookie_domain.trim()
       : getSharedCookieDomain(url.hostname)
   const cookieDomainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
+  const clientId = resolveDiscordClientId(env)
+  const clientSecret = readEnvString(env.DISCORD_CLIENT_SECRET)
+  const guildId = readEnvString(env.DISCORD_GUILD_ID)
 
   // Exchange code for token
   const tokenParams = new URLSearchParams({
-    client_id: env.DISCORD_CLIENT_ID,
-    client_secret: env.DISCORD_CLIENT_SECRET,
+    client_id: clientId,
+    client_secret: clientSecret,
     grant_type: "authorization_code",
     code: code,
     redirect_uri: redirectUri,
@@ -220,7 +282,7 @@ export async function handleCallback(request, env) {
   const user = await userResp.json()
 
   // Check guild membership
-  const guildResp = await fetch(`${DISCORD_API}/users/@me/guilds/${env.DISCORD_GUILD_ID}/member`, {
+  const guildResp = await fetch(`${DISCORD_API}/users/@me/guilds/${guildId}/member`, {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   })
 

@@ -119,7 +119,13 @@ const SIMILARITY_MODE = "blended"
 const ESM2_WEIGHT = 0.25
 
 // Import auth handlers
-import { handleLogin, handleCallback, handleMe, handleLogout } from "./auth.js"
+import {
+  getDiscordAuthConfigStatus,
+  handleLogin,
+  handleCallback,
+  handleMe,
+  handleLogout,
+} from "./auth.js"
 // Import Iconoplasm handlers
 import { isIconoplasmRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 // Import Discord bot handlers
@@ -400,6 +406,7 @@ export default {
 
     // Health check endpoint
     if (url.pathname === "/api/health") {
+      const authConfig = getDiscordAuthConfigStatus(env)
       return Response.json(
         {
           status: "ok",
@@ -407,6 +414,7 @@ export default {
           database: await checkD1Health(env.DB),
           kv: await checkKVHealth(env.KV),
           durableObjects: "configured",
+          auth: authConfig,
         },
         {
           headers: corsHeaders,
@@ -429,6 +437,12 @@ export default {
     // Auth endpoints
     if (url.pathname === "/api/auth/login" && request.method === "GET") {
       return handleLogin(request, env)
+    }
+
+    if (url.pathname === "/api/auth/config" && request.method === "GET") {
+      return Response.json(getDiscordAuthConfigStatus(env), {
+        headers: corsHeaders,
+      })
     }
 
     if (url.pathname === "/api/auth/callback" && request.method === "GET") {
