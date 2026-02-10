@@ -39,6 +39,29 @@ function parseLeaderboardOptInFromUrl(url) {
   return raw === "1" || raw === "true" || raw === "on" || raw === "yes"
 }
 
+function getSharedCookieDomain(hostname) {
+  const host = String(hostname || "").toLowerCase()
+  if (host === "brinedew.bio" || host === "www.brinedew.bio" || host === "geneguessr.brinedew.bio") {
+    return ".brinedew.bio"
+  }
+  return ""
+}
+
+function resolveDiscordRedirectUri(url, env) {
+  const configured = String(env.DISCORD_REDIRECT_URI || "").trim()
+  if (configured) {
+    return configured
+  }
+
+  // Keep production OAuth callback stable even when app is served from the apex domain.
+  const host = String(url.hostname || "").toLowerCase()
+  if (host === "brinedew.bio" || host === "www.brinedew.bio" || host === "geneguessr.brinedew.bio") {
+    return "https://geneguessr.brinedew.bio/api/auth/callback"
+  }
+
+  return `${url.origin}/api/auth/callback`
+}
+
 /**
  * GET /api/auth/login
  * Initiate Discord OAuth flow with PKCE
@@ -46,6 +69,9 @@ function parseLeaderboardOptInFromUrl(url) {
 export async function handleLogin(request, env) {
   const url = new URL(request.url)
   const leaderboardOptIn = parseLeaderboardOptInFromUrl(url)
+  const redirectUri = resolveDiscordRedirectUri(url, env)
+  const cookieDomain = getSharedCookieDomain(url.hostname)
+  const cookieDomainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
 
   // Generate PKCE values
   const codeVerifier = generateRandomString(128)
@@ -65,13 +91,14 @@ export async function handleLogin(request, env) {
         code_verifier: codeVerifier,
         state: state,
         leaderboard_opt_in: leaderboardOptIn ? 1 : 0,
+        redirect_uri: redirectUri,
+        cookie_domain: cookieDomain,
         expires_at: Date.now() + 600000, // 10 minutes
       }),
     }),
   )
 
   // Build Discord OAuth URL
-  const redirectUri = `${url.origin}/api/auth/callback`
   const params = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -89,7 +116,7 @@ export async function handleLogin(request, env) {
     status: 302,
     headers: {
       Location: discordUrl,
-      "Set-Cookie": `oauth_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`,
+      "Set-Cookie": `oauth_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${cookieDomainAttr}`,
     },
   })
 }
@@ -141,13 +168,23 @@ export async function handleCallback(request, env) {
     return Response.json({ error: "OAuth session expired" }, { status: 400 })
   }
 
+  const redirectUri =
+    typeof oauthData?.redirect_uri === "string" && oauthData.redirect_uri.trim()
+      ? oauthData.redirect_uri.trim()
+      : resolveDiscordRedirectUri(url, env)
+  const cookieDomain =
+    typeof oauthData?.cookie_domain === "string" && oauthData.cookie_domain.trim()
+      ? oauthData.cookie_domain.trim()
+      : getSharedCookieDomain(url.hostname)
+  const cookieDomainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
+
   // Exchange code for token
   const tokenParams = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
     client_secret: env.DISCORD_CLIENT_SECRET,
     grant_type: "authorization_code",
     code: code,
-    redirect_uri: `${url.origin}/api/auth/callback`,
+    redirect_uri: redirectUri,
     code_verifier: oauthData.code_verifier,
   })
 
@@ -235,10 +272,13 @@ export async function handleCallback(request, env) {
 
   // Clear OAuth session and set persistent session cookie
   const headers = new Headers()
-  headers.set("Set-Cookie", `oauth_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`)
+  headers.set(
+    "Set-Cookie",
+    `oauth_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
+  )
   headers.append(
     "Set-Cookie",
-    `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}`,
+    `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}${cookieDomainAttr}`,
   ) // 30 days
   // Normalize to trailing-slash to avoid hitting non-directory origin routes
   headers.set("Location", "https://brinedew.bio/apps/geneguessr/")
@@ -294,6 +334,9 @@ export async function handleMe(request, env) {
  * Clear session
  */
 export async function handleLogout(request, env) {
+  const url = new URL(request.url)
+  const cookieDomain = getSharedCookieDomain(url.hostname)
+  const cookieDomainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
   const cookies = parseCookies(request.headers.get("Cookie") || "")
   const sessionId = cookies.session
 
@@ -305,12 +348,17 @@ export async function handleLogout(request, env) {
   }
 
   // Clear session cookie
+  const headers = new Headers({
+    Location: "https://brinedew.bio/apps/geneguessr/",
+  })
+  headers.set(
+    "Set-Cookie",
+    `session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0${cookieDomainAttr}`,
+  )
+
   return new Response(null, {
     status: 302,
-    headers: {
-      Location: "https://brinedew.bio/apps/geneguessr/",
-      "Set-Cookie": `session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`,
-    },
+    headers,
   })
 }
 
