@@ -99,6 +99,28 @@ function resolveDiscordRedirectUri(url, env) {
   return `${url.origin}/api/auth/callback`
 }
 
+function resolvePostAuthAppUrl(requestUrl, cookieDomain) {
+  const host = String(requestUrl.hostname || "").toLowerCase()
+  const hasSharedCookieDomain = typeof cookieDomain === "string" && cookieDomain.trim().length > 0
+
+  // When cookies are shared across brinedew subdomains, keep the canonical app URL.
+  if (hasSharedCookieDomain) {
+    return "https://brinedew.bio/apps/geneguessr/"
+  }
+
+  // For staging/dev hosts without shared cookie domain, stay on the same origin so
+  // the session cookie remains visible after callback redirect.
+  if (
+    host.endsWith(".workers.dev") ||
+    host === "staging.brinedew.bio" ||
+    host.endsWith(".pages.dev")
+  ) {
+    return `${requestUrl.origin}/apps/geneguessr/`
+  }
+
+  return `${requestUrl.origin}/apps/geneguessr/`
+}
+
 /**
  * GET /api/auth/login
  * Initiate Discord OAuth flow with PKCE
@@ -352,8 +374,9 @@ export async function handleCallback(request, env) {
     "Set-Cookie",
     `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}${cookieDomainAttr}`,
   ) // 30 days
-  // Normalize to trailing-slash to avoid hitting non-directory origin routes
-  headers.set("Location", "https://brinedew.bio/apps/geneguessr/")
+  // Normalize to trailing-slash and preserve cookie visibility across environments.
+  // Staging/dev must stay same-origin to retain host-only session cookies.
+  headers.set("Location", resolvePostAuthAppUrl(url, cookieDomain))
 
   return new Response(null, {
     status: 302,
