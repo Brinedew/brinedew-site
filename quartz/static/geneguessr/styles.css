@@ -99,10 +99,9 @@
 }
 
 .pg-auth-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.55rem;
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
 }
 
 .pg-auth-profile {
@@ -156,11 +155,10 @@
 .pg-auth-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.3rem;
-  flex-wrap: nowrap;
-  flex: 0 0 auto;
-  white-space: nowrap;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
 }
 
 .pg-auth-signin,

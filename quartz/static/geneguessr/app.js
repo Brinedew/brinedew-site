@@ -5546,8 +5546,8 @@ https://brinedew.bio/apps/geneguessr/`
               ${safeTierLabel ? `<div class="pg-auth-tier">${safeTierLabel}</div>` : ""}
             </div>
           </div>
-          ${accountActions}
         </div>
+        ${accountActions}
       </div>
     `
     const consentRow = currentUser
