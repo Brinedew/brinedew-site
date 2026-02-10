@@ -422,7 +422,7 @@ export async function handleUpdateStats(request, env) {
 
 /**
  * GET /api/stats/leaderboard?limit=5
- * Public top streak leaderboard (opt-in users only), ranked by current streak.
+ * Public current streak leaderboard (opt-in users only).
  */
 export async function handleGetLeaderboard(request, env) {
   try {
@@ -435,7 +435,7 @@ export async function handleGetLeaderboard(request, env) {
         users.discord_id AS user_id,
         users.username AS username,
         users.avatar_url AS avatar_url,
-        stats.current_streak AS best_streak,
+        stats.current_streak AS current_streak,
         stats.total_wins AS total_wins,
         stats.last_played_date AS last_played_date
       FROM stats
@@ -458,7 +458,7 @@ export async function handleGetLeaderboard(request, env) {
       rank: idx + 1,
       username: String(row?.username || "Player"),
       avatarUrl: sanitizeDiscordAvatarUrl(row?.avatar_url),
-      bestStreak: Math.max(0, Number.parseInt(row?.best_streak, 10) || 0),
+      currentStreak: Math.max(0, Number.parseInt(row?.current_streak, 10) || 0),
     }))
 
     return Response.json({ entries })
