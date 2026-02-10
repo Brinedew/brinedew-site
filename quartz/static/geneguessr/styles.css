@@ -2257,6 +2257,7 @@ body:has(#geneguessr-root) .sidebar.right > .tags {
   .sidebar.right > #pg-sidebar-stats {
     flex: 0 0 auto !important;
     max-height: none !important;
+    width: 100%;
   }
 }
 
