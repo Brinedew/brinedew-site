@@ -2258,6 +2258,7 @@ body:has(#geneguessr-root) .sidebar.right > .tags {
     flex: 0 0 auto !important;
     max-height: none !important;
     width: 100%;
+    box-sizing: border-box;
   }
 }
 
