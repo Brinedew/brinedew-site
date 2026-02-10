@@ -210,10 +210,18 @@
 }
 
 .pg-auth-switch {
+  --pg-switch-track-width: 42px;
+  --pg-switch-track-height: 24px;
+  --pg-switch-thumb-size: 14px;
+  --pg-switch-thumb-inset: 3px;
+  --pg-switch-thumb-travel: calc(
+    var(--pg-switch-track-width) - var(--pg-switch-thumb-size) -
+      (var(--pg-switch-thumb-inset) * 2)
+  );
   position: relative;
   display: inline-flex;
-  width: 38px;
-  height: 22px;
+  width: var(--pg-switch-track-width);
+  height: var(--pg-switch-track-height);
   flex-shrink: 0;
 }
 
@@ -227,8 +235,8 @@
 .pg-auth-switch-slider {
   position: relative;
   display: block;
-  width: 38px;
-  height: 22px;
+  width: var(--pg-switch-track-width);
+  height: var(--pg-switch-track-height);
   border-radius: 999px;
   background: color-mix(in srgb, var(--ui-border) 90%, var(--ui-bg));
   border: 1px solid color-mix(in srgb, var(--ui-border) 80%, transparent);
@@ -240,10 +248,10 @@
 .pg-auth-switch-slider::before {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
+  top: var(--pg-switch-thumb-inset);
+  left: var(--pg-switch-thumb-inset);
+  width: var(--pg-switch-thumb-size);
+  height: var(--pg-switch-thumb-size);
   border-radius: 50%;
   background: var(--light);
   border: 1px solid color-mix(in srgb, var(--ui-border) 75%, transparent);
@@ -259,7 +267,7 @@
 }
 
 .pg-auth-switch input:checked + .pg-auth-switch-slider::before {
-  transform: translateX(16px);
+  transform: translateX(var(--pg-switch-thumb-travel));
   border-color: color-mix(in srgb, var(--light) 75%, var(--accent));
   background: var(--light);
 }
