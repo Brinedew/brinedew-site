@@ -99,11 +99,10 @@
 }
 
 .pg-auth-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .pg-auth-profile {
@@ -158,9 +157,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.4rem;
-  flex-wrap: wrap;
+  gap: 0.3rem;
+  flex-wrap: nowrap;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .pg-auth-signin,
@@ -170,10 +170,10 @@
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  min-height: 30px;
-  padding: 0.3rem 0.75rem;
+  min-height: 28px;
+  padding: 0.28rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
@@ -211,17 +211,11 @@
   font-weight: 500;
 }
 
-.pg-auth-consent-help {
-  color: var(--secondary);
-  font-size: 0.74rem;
-  line-height: 1.35;
-}
-
 .pg-auth-switch {
   position: relative;
   display: inline-flex;
-  width: 42px;
-  height: 24px;
+  width: 38px;
+  height: 22px;
   flex-shrink: 0;
 }
 
@@ -235,11 +229,11 @@
 .pg-auth-switch-slider {
   position: relative;
   display: block;
-  width: 44px;
-  height: 24px;
+  width: 38px;
+  height: 22px;
   border-radius: 999px;
-  background: var(--ui-bg);
-  border: 1px solid var(--ui-border);
+  background: color-mix(in srgb, var(--ui-border) 90%, var(--ui-bg));
+  border: 1px solid color-mix(in srgb, var(--ui-border) 80%, transparent);
   transition:
     background 0.2s ease,
     border-color 0.2s ease;
@@ -250,14 +244,15 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: #fff;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--ui-border));
+  background: var(--light);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 75%, transparent);
   transition:
     transform 0.2s ease,
-    border-color 0.2s ease;
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .pg-auth-switch input:checked + .pg-auth-switch-slider {
@@ -266,8 +261,9 @@
 }
 
 .pg-auth-switch input:checked + .pg-auth-switch-slider::before {
-  transform: translateX(20px);
-  border-color: var(--accent);
+  transform: translateX(16px);
+  border-color: color-mix(in srgb, var(--light) 75%, var(--accent));
+  background: var(--light);
 }
 
 .pg-auth-switch input:focus-visible + .pg-auth-switch-slider {
@@ -281,7 +277,13 @@
 
 .pg-auth-signin-btn {
   width: auto;
-  max-width: 100%;
+  max-width: none;
+}
+
+.pg-sidebar-stats-consent {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
 }
 
 .pg-auth-discord {
