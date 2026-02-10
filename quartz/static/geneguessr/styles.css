@@ -204,13 +204,13 @@
 }
 
 .pg-auth-switch input:checked + .pg-auth-switch-slider {
-  background: color-mix(in srgb, #5865f2 22%, transparent);
-  border-color: #5865f2;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--accent);
 }
 
 .pg-auth-switch input:checked + .pg-auth-switch-slider::before {
   transform: translateX(18px);
-  border-color: #5865f2;
+  border-color: var(--accent);
 }
 
 .pg-auth-switch input:disabled + .pg-auth-switch-slider {
