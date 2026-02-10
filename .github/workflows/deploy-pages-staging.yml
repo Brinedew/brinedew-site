@@ -1,4 +1,4 @@
-name: Deploy Staging Site (Cloudflare Pages)
+name: Deploy Staging (Pages + Worker)
 
 on:
   workflow_dispatch:
@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
 
 jobs:
   deploy-staging-pages:
@@ -54,3 +58,22 @@ jobs:
 
       - name: Deploy staging build to Cloudflare Pages
         run: wrangler pages deploy public --project-name brinedew-bio-staging --branch staging
+
+  deploy-staging-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install Wrangler CLI
+        run: npm install -g wrangler@4
+
+      - name: Deploy Worker (staging)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy --env staging
