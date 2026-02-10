@@ -5394,7 +5394,8 @@ https://brinedew.bio/apps/geneguessr/`
       .map((entry, idx) => {
         const rank = Number.parseInt(entry?.rank, 10) || idx + 1
         const username = String(entry?.username || "Player")
-        const streak = Math.max(0, Number.parseInt(entry?.bestStreak, 10) || 0)
+        const streakValue = entry?.currentStreak ?? entry?.bestStreak
+        const streak = Math.max(0, Number.parseInt(streakValue, 10) || 0)
         const avatarUrl = String(entry?.avatarUrl || "").trim()
         const avatarMarkup = avatarUrl
           ? `<img class="pg-leaderboard-avatar" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
