@@ -8,6 +8,8 @@ import { parseCookies } from "./auth.js"
 const LEADERBOARD_DEFAULT_LIMIT = 5
 const LEADERBOARD_MAX_LIMIT = 25
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
 function parseLeaderboardLimit(raw, fallback = LEADERBOARD_DEFAULT_LIMIT) {
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed)) return fallback
@@ -31,6 +33,34 @@ function sanitizeDiscordAvatarUrl(raw) {
   } catch {
     return null
   }
+}
+
+function parseUtcDateOnly(value) {
+  const raw = String(value || "").trim()
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const year = Number.parseInt(match[1], 10)
+  const month = Number.parseInt(match[2], 10)
+  const day = Number.parseInt(match[3], 10)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+  return Date.UTC(year, month - 1, day)
+}
+
+function getUtcDateGapDays(fromDate, toDate) {
+  const fromTs = parseUtcDateOnly(fromDate)
+  const toTs = parseUtcDateOnly(toDate)
+  if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return null
+  return Math.floor((toTs - fromTs) / MS_PER_DAY)
+}
+
+function getEffectiveCurrentStreak(currentStreak, lastPlayedDate, today) {
+  const streak = Math.max(0, Number.parseInt(currentStreak, 10) || 0)
+  if (streak === 0) return 0
+  const gapDays = getUtcDateGapDays(lastPlayedDate, today)
+  if (!Number.isFinite(gapDays)) return streak
+  // If the user has not played for at least one full missed day, streak is broken.
+  if (gapDays > 1) return 0
+  return streak
 }
 
 async function requireAuthenticatedSession(request, env) {
@@ -243,12 +273,18 @@ export async function handleGetStats(request, env) {
   }
 
   const winRate = stats.total_played > 0 ? stats.total_wins / stats.total_played : 0
+  const today = new Date().toISOString().split("T")[0]
+  const effectiveCurrentStreak = getEffectiveCurrentStreak(
+    stats.current_streak,
+    stats.last_played_date,
+    today,
+  )
 
   return Response.json({
     played: stats.total_played,
     won: stats.total_wins,
     winRate: winRate,
-    currentStreak: stats.current_streak,
+    currentStreak: effectiveCurrentStreak,
     maxStreak: stats.best_streak,
     lastPlayedDate: stats.last_played_date,
     migratedAt: stats.migrated_at,
@@ -331,6 +367,14 @@ export async function handleUpdateStats(request, env) {
   let wins = current ? current.total_wins : 0
   let currentStreak = current ? current.current_streak : 0
   let bestStreak = current ? current.best_streak : 0
+
+  // Break streak if one or more full days were missed since last played date.
+  if (current?.last_played_date) {
+    const gapDays = getUtcDateGapDays(current.last_played_date, today)
+    if (Number.isFinite(gapDays) && gapDays > 1) {
+      currentStreak = 0
+    }
+  }
 
   // Idempotence guard: allow at most one stats record per user per day.
   if (current?.last_played_date === today) {
@@ -442,6 +486,7 @@ export async function handleGetLeaderboard(request, env) {
       INNER JOIN users ON users.discord_id = stats.user_id
       WHERE COALESCE(users.leaderboard_opt_in, 0) = 1
         AND COALESCE(stats.current_streak, 0) > 0
+        AND date(stats.last_played_date) >= date('now', '-1 day')
       ORDER BY
         stats.current_streak DESC,
         stats.total_wins DESC,
