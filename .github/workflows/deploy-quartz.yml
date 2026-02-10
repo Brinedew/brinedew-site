@@ -74,7 +74,7 @@ jobs:
           curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0"
 
           status="$(awk 'NR==1 { print $2 }' "$headers_file")"
-          location="$(awk 'BEGIN{IGNORECASE=1} /^Location:/ { sub(/^Location:[[:space:]]*/, \"\"); gsub(/\\r/, \"\"); print; exit }' "$headers_file")"
+          location="$(grep -i '^Location:' "$headers_file" | head -n1 | sed 's/^Location:[[:space:]]*//' | tr -d '\r')"
 
           echo "OAuth login status: $status"
           echo "OAuth redirect location: $location"

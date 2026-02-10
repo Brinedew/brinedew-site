@@ -28,15 +28,18 @@ export function getDiscordAuthConfigStatus(env) {
   const clientId = resolveDiscordClientId(env)
   const clientSecret = readEnvString(env.DISCORD_CLIENT_SECRET)
   const guildId = readEnvString(env.DISCORD_GUILD_ID)
-  const missing = []
+  const missingRequired = []
+  const missingOptional = []
 
-  if (!clientId) missing.push("DISCORD_CLIENT_ID")
-  if (!clientSecret) missing.push("DISCORD_CLIENT_SECRET")
-  if (!guildId) missing.push("DISCORD_GUILD_ID")
+  if (!clientId) missingRequired.push("DISCORD_CLIENT_ID")
+  if (!clientSecret) missingOptional.push("DISCORD_CLIENT_SECRET")
+  if (!guildId) missingOptional.push("DISCORD_GUILD_ID")
 
   return {
-    loginReady: missing.length === 0,
-    missing,
+    loginReady: missingRequired.length === 0,
+    missingRequired,
+    missingOptional,
+    missing: [...missingRequired, ...missingOptional],
   }
 }
 
@@ -104,11 +107,11 @@ export async function handleLogin(request, env) {
   const url = new URL(request.url)
   const configStatus = getDiscordAuthConfigStatus(env)
   if (!configStatus.loginReady) {
-    console.error("Discord OAuth config missing for login:", configStatus.missing)
+    console.error("Discord OAuth config missing required values for login:", configStatus.missingRequired)
     return Response.json(
       {
         error: "Discord OAuth is not configured",
-        missing: configStatus.missing,
+        missing: configStatus.missingRequired,
       },
       { status: 503 },
     )
@@ -176,11 +179,14 @@ export async function handleCallback(request, env) {
   const url = new URL(request.url)
   const configStatus = getDiscordAuthConfigStatus(env)
   if (!configStatus.loginReady) {
-    console.error("Discord OAuth config missing for callback:", configStatus.missing)
+    console.error(
+      "Discord OAuth config missing required values for callback:",
+      configStatus.missingRequired,
+    )
     return Response.json(
       {
         error: "Discord OAuth is not configured",
-        missing: configStatus.missing,
+        missing: configStatus.missingRequired,
       },
       { status: 503 },
     )
@@ -243,12 +249,14 @@ export async function handleCallback(request, env) {
   // Exchange code for token
   const tokenParams = new URLSearchParams({
     client_id: clientId,
-    client_secret: clientSecret,
     grant_type: "authorization_code",
     code: code,
     redirect_uri: redirectUri,
     code_verifier: oauthData.code_verifier,
   })
+  if (clientSecret) {
+    tokenParams.set("client_secret", clientSecret)
+  }
 
   let tokens
   try {
@@ -281,12 +289,14 @@ export async function handleCallback(request, env) {
 
   const user = await userResp.json()
 
-  // Check guild membership
-  const guildResp = await fetch(`${DISCORD_API}/users/@me/guilds/${guildId}/member`, {
-    headers: { Authorization: `Bearer ${tokens.access_token}` },
-  })
-
-  const isMember = guildResp.ok
+  // Check guild membership when configured; otherwise default to false.
+  let isMember = false
+  if (guildId) {
+    const guildResp = await fetch(`${DISCORD_API}/users/@me/guilds/${guildId}/member`, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    })
+    isMember = guildResp.ok
+  }
   const leaderboardOptIn = Number.parseInt(oauthData?.leaderboard_opt_in, 10) === 1 ? 1 : 0
 
   // Create or update user in D1
