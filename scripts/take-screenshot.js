@@ -81,8 +81,9 @@ async function main() {
       console.error(`WebGL failed: ${glInfo.reason}`)
     }
 
-    // Small additional wait for final render
-    await page.waitForTimeout(1000)
+    // Additional settle time to reduce partially rendered captures.
+    // We keep posting even on failures, but this gives Mol* more time to paint.
+    await page.waitForTimeout(11000)
 
     await page.screenshot({ path: outputFile, type: "png" })
     console.log(`Screenshot saved to ${outputFile}`)
