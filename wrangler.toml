@@ -20,7 +20,7 @@
 #   DISCORD_APPLICATION_ID         - Discord app ID (same as client ID)
 #   DISCORD_BOT_TOKEN              - Bot token for REST API posting
 #   DISCORD_GENEGUESSR_CHANNEL_ID  - Channel ID for posting recaps
-#   BOT_CRON_TOKEN                 - Shared secret for GitHub Actions auth
+#   BOT_CRON_TOKEN                 - Shared secret for protected recap/admin endpoints
 #
 # Other:
 #   DAILY_TARGET_SALT        - Salt for deterministic daily protein selection
@@ -63,9 +63,11 @@ new_sqlite_classes = ["GameSession"]
 binding = "STRUCTURES_BUCKET"
 bucket_name = "geneguessr-structures"
 
-# Daily pre-warm cron: runs at 23:55 UTC to warm next day's target structure
+# Worker cron jobs:
+# - 23:55 UTC pre-warm next day structure/bootstrap cache
+# - 00:03 UTC post Discord recap for yesterday
 [triggers]
-crons = ["55 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
