@@ -45,6 +45,14 @@ function getYesterdayUtcDay() {
   return date.toISOString().slice(0, 10)
 }
 
+function inferStructureFormatFromCacheKey(cacheKey, fallback = "cif") {
+  const key = typeof cacheKey === "string" ? cacheKey.trim().toLowerCase() : ""
+  if (key.endsWith(".bcif")) return "bcif"
+  if (key.endsWith(".pdb")) return "pdb"
+  if (key.endsWith(".cif")) return "cif"
+  return fallback
+}
+
 /**
  * Worker cron helper: dispatch recap GitHub workflow.
  * Keeps recap content/attachment logic unchanged (workflow still does screenshot + post).
@@ -481,7 +489,11 @@ export async function handleRenderPage(request, env) {
     if (structureToken.upstreamUrl) {
       structureUrl += `&upstream=${encodeURIComponent(structureToken.upstreamUrl)}`
     }
-    structureFormat = structureToken.format || "cif"
+    // Guard against stale bootstrap tokens where format drifted from cacheKey extension.
+    structureFormat = inferStructureFormatFromCacheKey(
+      structureToken.cacheKey,
+      structureToken.format || "cif",
+    )
     moleculeId = structureToken.moleculeId || moleculeId
   } else {
     // Fallback to the same canonical metadata resolver used by the main app.
@@ -492,8 +504,23 @@ export async function handleRenderPage(request, env) {
         headers: { "Content-Type": "text/plain" },
       })
     }
-    structureUrl = storedMeta.upstreamUrl
-    structureFormat = storedMeta.format || "cif"
+    // Always proxy through /api/structure-cached so all sources get consistent handling:
+    // - content-type normalization
+    // - SwissModel PDB header fix
+    // - lazy cache + source-specific upstream rules
+    if (storedMeta.r2Key) {
+      structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(storedMeta.r2Key)}`
+      if (
+        storedMeta.upstreamUrl &&
+        (storedMeta.source === "swissmodel" || storedMeta.source === "alphafold")
+      ) {
+        structureUrl += `&upstream=${encodeURIComponent(storedMeta.upstreamUrl)}`
+      }
+      structureFormat = inferStructureFormatFromCacheKey(storedMeta.r2Key, storedMeta.format || "cif")
+    } else {
+      structureUrl = storedMeta.upstreamUrl
+      structureFormat = storedMeta.format || "cif"
+    }
     moleculeId = storedMeta.moleculeId || moleculeId
   }
 
