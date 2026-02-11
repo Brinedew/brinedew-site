@@ -14,179 +14,7 @@ import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
 
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const DISCORD_SUMMARY_POSTED_PREFIX = "discord_summary_posted:"
-const DISCORD_API_BASE = "https://discord.com/api/v10"
-
-function isValidDay(day) {
-  return Boolean(day && /^\d{4}-\d{2}-\d{2}$/.test(day))
-}
-
-function getYesterdayUtcDay(now = new Date()) {
-  const date = new Date(now)
-  date.setUTCDate(date.getUTCDate() - 1)
-  return date.toISOString().slice(0, 10)
-}
-
-async function getPostedMarker(env, day) {
-  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
-  const postedRaw = await env.KV.get(postedKey)
-  if (!postedRaw) {
-    return null
-  }
-  try {
-    return JSON.parse(postedRaw)
-  } catch {
-    return null
-  }
-}
-
-async function setPostedMarker(env, day, messageId) {
-  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
-  const postedData = {
-    message_id: messageId,
-    posted_at: Date.now(),
-    channel_id: env.DISCORD_GENEGUESSR_CHANNEL_ID,
-  }
-  await env.KV.put(postedKey, JSON.stringify(postedData))
-  return postedData
-}
-
-function formatDate(day) {
-  const date = new Date(day + "T00:00:00Z")
-  const dayNum = date.getUTCDate()
-  const suffix =
-    dayNum === 1 || dayNum === 21 || dayNum === 31
-      ? "st"
-      : dayNum === 2 || dayNum === 22
-        ? "nd"
-        : dayNum === 3 || dayNum === 23
-          ? "rd"
-          : "th"
-  const month = date.toLocaleString("en-US", { month: "long", timeZone: "UTC" })
-  const year = date.getUTCFullYear()
-  return `${dayNum}${suffix} of ${month}, ${year}`
-}
-
-function buildRecapMessage(summary) {
-  const { target, winners_count, top_guesses, day, links } = summary
-  const gene = target?.gene || "Unknown"
-  const fullName = target?.full_name || ""
-
-  let content = `GeneGuessr for ${formatDate(day)}\n**${gene}**`
-  if (fullName) {
-    content += `\n${fullName}`
-  }
-  content += "\n\n"
-
-  if (winners_count > 0) {
-    content += `${winners_count} player${winners_count === 1 ? "" : "s"} solved it!\n\n`
-  } else {
-    content += "No one solved it!\n\n"
-  }
-
-  if (top_guesses && top_guesses.length > 0) {
-    content += "Top guesses:\n"
-    for (const guess of top_guesses) {
-      content += `${guess.rank}. ${guess.gene}\n`
-    }
-    content += "\n"
-  }
-
-  content += `Play today's puzzle: <${links?.play_url || "https://geneguessr.brinedew.bio"}>`
-  if (links?.render_url) {
-    content += `\nStructure: <${links.render_url}>`
-  }
-  return content
-}
-
-async function postDiscordMessage({ channelId, botToken, content }) {
-  const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bot ${botToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ content }),
-  })
-
-  const raw = await response.text()
-  let json = null
-  try {
-    json = raw ? JSON.parse(raw) : null
-  } catch {
-    json = null
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      error: json?.message || raw || "Discord API request failed",
-      response: json || raw,
-    }
-  }
-
-  return {
-    ok: true,
-    id: json?.id || "",
-  }
-}
-
-async function buildDailySummary(env, day) {
-  const puzzleKey = `puzzle_actual:${day}`
-  const puzzleData = await env.KV.get(puzzleKey)
-
-  if (!puzzleData) {
-    return {
-      ok: false,
-      status: 404,
-      error: "No puzzle data for this day",
-      day,
-      hint: "Either no one played, or the day hasn't happened yet",
-    }
-  }
-
-  const puzzle = JSON.parse(puzzleData)
-  const targetUniprot = puzzle.uniprot_id
-
-  const targetProtein = await fetchProteinByUniprot(env.DB, targetUniprot)
-  if (!targetProtein) {
-    return {
-      ok: false,
-      status: 404,
-      error: "Target protein not found in database",
-      uniprot_id: targetUniprot,
-    }
-  }
-
-  const winnersResult = await getWinnersCount(env.DB, { day })
-  const winnersCount = winnersResult.ok ? winnersResult.winnersCount : 0
-
-  const guessResult = await getDailyGuessAggregates(env.DB, { day, limit: 5 })
-  const topGuesses = guessResult.ok
-    ? guessResult.guesses.map((g, idx) => ({
-        rank: idx + 1,
-        gene: g.gene || g.uniprot,
-      }))
-    : []
-  const totalGuesses = guessResult.ok ? guessResult.totalGuesses : 0
-
-  return {
-    ok: true,
-    day,
-    target: {
-      uniprot_id: targetUniprot,
-      gene: targetProtein.gene,
-      full_name: targetProtein.full_name,
-    },
-    winners_count: winnersCount,
-    total_guesses: totalGuesses,
-    top_guesses: topGuesses,
-    links: {
-      play_url: "https://geneguessr.brinedew.bio",
-      render_url: `https://geneguessr.brinedew.bio/apps/geneguessr/render?day=${day}&mode=structure`,
-    },
-  }
-}
+const GITHUB_API_BASE = "https://api.github.com"
 
 /**
  * Validate Bearer token for bot authentication
@@ -209,6 +37,73 @@ function validateBotToken(request, env) {
   }
 
   return { valid: true }
+}
+
+function getYesterdayUtcDay() {
+  const date = new Date()
+  date.setUTCDate(date.getUTCDate() - 1)
+  return date.toISOString().slice(0, 10)
+}
+
+/**
+ * Worker cron helper: dispatch recap GitHub workflow.
+ * Keeps recap content/attachment logic unchanged (workflow still does screenshot + post).
+ */
+export async function handleDispatchDailyRecapWorkflow(env) {
+  const day = getYesterdayUtcDay()
+  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
+  const alreadyPosted = await env.KV.get(postedKey)
+  if (alreadyPosted) {
+    console.log(`[CRON] Recap already posted for ${day}; skipping workflow dispatch`)
+    return { ok: true, skipped: "already_posted", day }
+  }
+
+  const token = env.GITHUB_RECAP_DISPATCH_TOKEN
+  if (!token) {
+    console.error("[CRON] Missing GITHUB_RECAP_DISPATCH_TOKEN; cannot trigger recap workflow")
+    return { ok: false, error: "missing_github_token", day }
+  }
+
+  const repo = env.GITHUB_RECAP_REPO || "Brinedew/brinedew-site"
+  const workflowId = env.GITHUB_RECAP_WORKFLOW || "discord-daily-recap.yml"
+  const ref = env.GITHUB_RECAP_REF || "main"
+  const [owner, repoName] = repo.split("/")
+  if (!owner || !repoName) {
+    console.error(`[CRON] Invalid GITHUB_RECAP_REPO: ${repo}`)
+    return { ok: false, error: "invalid_repo", day, repo }
+  }
+
+  const dispatchUrl = `${GITHUB_API_BASE}/repos/${owner}/${repoName}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`
+  const dispatchBody = {
+    ref,
+    inputs: { day },
+  }
+
+  const response = await fetch(dispatchUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "geneguessr-worker-cron",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify(dispatchBody),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`[CRON] GitHub workflow dispatch failed (${response.status}): ${errorText}`)
+    return {
+      ok: false,
+      error: "dispatch_failed",
+      day,
+      status: response.status,
+    }
+  }
+
+  console.log(`[CRON] Dispatched ${workflowId} for ${day} on ${repo}@${ref}`)
+  return { ok: true, day, repo, workflowId, ref }
 }
 
 /**
@@ -236,7 +131,7 @@ export async function handleDailySummary(request, env) {
   const day = url.searchParams.get("day")
 
   // Validate day format
-  if (!isValidDay(day)) {
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     return new Response(JSON.stringify({ error: "Invalid day format. Use YYYY-MM-DD" }), {
       status: 400,
       headers: JSON_HEADERS,
@@ -244,8 +139,10 @@ export async function handleDailySummary(request, env) {
   }
 
   // Check if already posted (idempotency)
-  const posted = await getPostedMarker(env, day)
-  if (posted) {
+  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
+  const alreadyPosted = await env.KV.get(postedKey)
+  if (alreadyPosted) {
+    const posted = JSON.parse(alreadyPosted)
     return new Response(
       JSON.stringify({
         already_posted: true,
@@ -256,15 +153,68 @@ export async function handleDailySummary(request, env) {
     )
   }
 
-  const summary = await buildDailySummary(env, day)
-  if (!summary.ok) {
-    return new Response(JSON.stringify(summary), { status: summary.status || 500, headers: JSON_HEADERS })
+  // Get the puzzle_actual for this day
+  const puzzleKey = `puzzle_actual:${day}`
+  const puzzleData = await env.KV.get(puzzleKey)
+
+  if (!puzzleData) {
+    return new Response(
+      JSON.stringify({
+        error: "No puzzle data for this day",
+        day,
+        hint: "Either no one played, or the day hasn't happened yet",
+      }),
+      { status: 404, headers: JSON_HEADERS },
+    )
   }
+
+  const puzzle = JSON.parse(puzzleData)
+  const targetUniprot = puzzle.uniprot_id
+
+  // Fetch target protein details
+  const targetProtein = await fetchProteinByUniprot(env.DB, targetUniprot)
+  if (!targetProtein) {
+    return new Response(
+      JSON.stringify({
+        error: "Target protein not found in database",
+        uniprot_id: targetUniprot,
+      }),
+      { status: 404, headers: JSON_HEADERS },
+    )
+  }
+
+  // Get winners count
+  const winnersResult = await getWinnersCount(env.DB, { day })
+  const winnersCount = winnersResult.ok ? winnersResult.winnersCount : 0
+
+  // Get top guesses (just gene names, no counts/similarities per user request)
+  const guessResult = await getDailyGuessAggregates(env.DB, { day, limit: 5 })
+  const topGuesses = guessResult.ok
+    ? guessResult.guesses.map((g, idx) => ({
+        rank: idx + 1,
+        gene: g.gene || g.uniprot,
+      }))
+    : []
+
+  const totalGuesses = guessResult.ok ? guessResult.totalGuesses : 0
 
   return new Response(
     JSON.stringify({
-      ...summary,
+      ok: true,
+      day,
       already_posted: false,
+      target: {
+        uniprot_id: targetUniprot,
+        gene: targetProtein.gene,
+        full_name: targetProtein.full_name,
+      },
+      winners_count: winnersCount,
+      total_guesses: totalGuesses,
+      top_guesses: topGuesses,
+      links: {
+        play_url: "https://geneguessr.brinedew.bio",
+        render_url: `https://geneguessr.brinedew.bio/apps/geneguessr/render?day=${day}&mode=structure`,
+      },
     }),
     { headers: JSON_HEADERS },
   )
@@ -392,7 +342,7 @@ export async function handleMarkPosted(request, env) {
   const { day, message_id } = body
 
   // Validate day format
-  if (!isValidDay(day)) {
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     return new Response(JSON.stringify({ error: "Invalid day format. Use YYYY-MM-DD" }), {
       status: 400,
       headers: JSON_HEADERS,
@@ -406,7 +356,15 @@ export async function handleMarkPosted(request, env) {
     })
   }
 
-  const postedData = await setPostedMarker(env, day, message_id)
+  // Store the posted marker in KV
+  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
+  const postedData = {
+    message_id,
+    posted_at: Date.now(),
+    channel_id: env.DISCORD_GENEGUESSR_CHANNEL_ID,
+  }
+
+  await env.KV.put(postedKey, JSON.stringify(postedData))
 
   return new Response(
     JSON.stringify({
@@ -417,59 +375,6 @@ export async function handleMarkPosted(request, env) {
     }),
     { headers: JSON_HEADERS },
   )
-}
-
-/**
- * Worker cron handler for daily Discord recap posting.
- * Posts recap for yesterday (UTC) and stores idempotency marker in KV.
- */
-export async function handleDailyRecapCron(env) {
-  const day = getYesterdayUtcDay()
-  console.log(`[CRON] Discord recap run started for day=${day}`)
-
-  const posted = await getPostedMarker(env, day)
-  if (posted?.message_id) {
-    console.log(`[CRON] Discord recap already posted for ${day}: ${posted.message_id}`)
-    return { ok: true, day, skipped: "already_posted", message_id: posted.message_id }
-  }
-
-  const botToken = env.DISCORD_BOT_TOKEN
-  const channelId = env.DISCORD_GENEGUESSR_CHANNEL_ID
-  if (!botToken || !channelId) {
-    console.error("[CRON] Discord recap skipped: missing DISCORD_BOT_TOKEN or channel ID")
-    return { ok: false, day, error: "discord_config_missing" }
-  }
-
-  const summary = await buildDailySummary(env, day)
-  if (!summary.ok) {
-    if (summary.status === 404 && summary.error === "No puzzle data for this day") {
-      console.log(`[CRON] Discord recap skipped for ${day}: no puzzle data yet`)
-      return { ok: true, day, skipped: "no_puzzle_data" }
-    }
-    console.error(`[CRON] Discord recap failed to build summary for ${day}:`, summary)
-    return {
-      ok: false,
-      day,
-      error: "summary_build_failed",
-      details: summary.error || "unknown",
-    }
-  }
-
-  const content = buildRecapMessage(summary)
-  const postResult = await postDiscordMessage({ channelId, botToken, content })
-  if (!postResult.ok || !postResult.id) {
-    console.error(`[CRON] Discord recap post failed for ${day}:`, postResult)
-    return {
-      ok: false,
-      day,
-      error: "discord_post_failed",
-      details: postResult.error || "unknown",
-    }
-  }
-
-  await setPostedMarker(env, day, postResult.id)
-  console.log(`[CRON] Discord recap posted for ${day}: ${postResult.id}`)
-  return { ok: true, day, message_id: postResult.id }
 }
 
 /**

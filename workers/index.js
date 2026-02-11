@@ -130,8 +130,8 @@ import {
 import { isIconoplasmRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 // Import Discord bot handlers
 import {
+  handleDispatchDailyRecapWorkflow,
   handleDailySummary,
-  handleDailyRecapCron,
   handleInteractions,
   handleMarkPosted,
   handleRenderPage,
@@ -833,9 +833,9 @@ export default {
   },
 
   /**
-   * Scheduled handler.
-   * - 23:55 UTC: pre-warm next day structure/bootstrap cache
-   * - 00:03 UTC: post Discord recap for yesterday
+   * Scheduled handler:
+   * - 23:55 UTC: pre-warm next day's target structure/bootstrap cache
+   * - 00:03 UTC: dispatch Discord recap workflow for yesterday
    */
   async scheduled(event, env, ctx) {
     const cronExpr = event?.cron || ""
@@ -843,18 +843,20 @@ export default {
 
     if (cronExpr === "3 0 * * *") {
       try {
-        const recapResult = await handleDailyRecapCron(env)
-        console.log("[CRON] Discord recap result:", recapResult)
+        const result = await handleDispatchDailyRecapWorkflow(env)
+        console.log("[CRON] Recap workflow dispatch result:", result)
       } catch (err) {
-        console.error("[CRON] Discord recap failed:", err)
+        console.error("[CRON] Recap workflow dispatch failed:", err)
       }
       return
     }
 
-    if (cronExpr !== "55 23 * * *") {
+    if (cronExpr && cronExpr !== "55 23 * * *") {
       console.warn(`[CRON] No handler for cron expression "${cronExpr}"`)
       return
     }
+
+    console.log("[CRON] Daily pre-warm triggered at", new Date().toISOString())
 
     try {
       // Get tomorrow's date

@@ -20,7 +20,11 @@
 #   DISCORD_APPLICATION_ID         - Discord app ID (same as client ID)
 #   DISCORD_BOT_TOKEN              - Bot token for REST API posting
 #   DISCORD_GENEGUESSR_CHANNEL_ID  - Channel ID for posting recaps
-#   BOT_CRON_TOKEN                 - Shared secret for protected recap/admin endpoints
+#   BOT_CRON_TOKEN                 - Shared secret for GitHub Actions auth
+#   GITHUB_RECAP_DISPATCH_TOKEN    - GitHub token with Actions write permission
+#   GITHUB_RECAP_REPO              - Optional "owner/repo" (default: Brinedew/brinedew-site)
+#   GITHUB_RECAP_WORKFLOW          - Optional workflow file name (default: discord-daily-recap.yml)
+#   GITHUB_RECAP_REF               - Optional git ref (default: main)
 #
 # Other:
 #   DAILY_TARGET_SALT        - Salt for deterministic daily protein selection
@@ -63,9 +67,9 @@ new_sqlite_classes = ["GameSession"]
 binding = "STRUCTURES_BUCKET"
 bucket_name = "geneguessr-structures"
 
-# Worker cron jobs:
-# - 23:55 UTC pre-warm next day structure/bootstrap cache
-# - 00:03 UTC post Discord recap for yesterday
+# Daily cron jobs:
+# - 23:55 UTC pre-warm next day's target structure
+# - 00:03 UTC dispatch Discord recap GitHub workflow
 [triggers]
 crons = ["55 23 * * *", "3 0 * * *"]
 
