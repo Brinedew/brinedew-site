@@ -27,6 +27,7 @@ function buildAttemptUrl(baseUrl, attempt) {
 async function captureAttempt(browser, attempt) {
   const attemptUrl = buildAttemptUrl(url, attempt)
   const runtimeErrors = []
+  const issues = []
   const context = await browser.newContext({
     viewport: { width: 800, height: 600 },
   })
@@ -44,9 +45,16 @@ async function captureAttempt(browser, attempt) {
     runtimeErrors.push(text)
   })
 
+  let probe = null
+  let state = null
+  let captured = false
   try {
-    await page.goto(attemptUrl, { waitUntil: "networkidle" })
-    console.log(`Page loaded for attempt ${attempt}, waiting for structure to render...`)
+    try {
+      await page.goto(attemptUrl, { waitUntil: "networkidle" })
+      console.log(`Page loaded for attempt ${attempt}, waiting for structure to render...`)
+    } catch (err) {
+      issues.push(`navigation_failed:${String(err?.message || err)}`)
+    }
 
     // Wait for data-loaded attribute (true = success, timeout = failure)
     const loadState = await page
@@ -54,18 +62,18 @@ async function captureAttempt(browser, attempt) {
       .catch(() => null)
 
     if (loadState) {
-      const state = await page.getAttribute("body", "data-loaded")
+      state = await page.getAttribute("body", "data-loaded")
       console.log(`Load state: ${state}`)
-
       if (state !== "true") {
-        throw new Error(`Render did not complete successfully (data-loaded=${state || "missing"})`)
+        issues.push(`render_state:${state || "missing"}`)
       }
     } else {
-      throw new Error("Render did not complete (data-loaded attribute never set)")
+      issues.push("render_state:missing")
+      console.warn("data-loaded attribute never set")
     }
 
-    // WebGL + pixel probe. Reject fully-black/empty frames.
-    const probe = await page.evaluate(() => {
+    // WebGL + pixel probe. Keep as signal, but do not block posting.
+    probe = await page.evaluate(() => {
       const canvas = document.querySelector("canvas")
       if (!canvas) return { ok: false, reason: "no_canvas" }
 
@@ -107,36 +115,47 @@ async function captureAttempt(browser, attempt) {
         sampleError = String(err?.message || err)
       }
 
-      return { ok: true, vendor, renderer, w: canvas.width, h: canvas.height, nonDarkRatio, sampleError }
+      return {
+        ok: true,
+        vendor,
+        renderer,
+        w: canvas.width,
+        h: canvas.height,
+        nonDarkRatio,
+        sampleError,
+      }
     })
 
     console.log("WebGL/pixel probe:", JSON.stringify(probe))
 
     if (!probe.ok) {
-      throw new Error(`WebGL failed: ${probe.reason}`)
+      issues.push(`webgl:${probe.reason}`)
     }
 
-    // Hard-fail on parser/runtime errors that are known to yield black captures.
     const hasCriticalRuntimeError = runtimeErrors.some((line) =>
       /Unexpected token\. Expected data_|reading 'transform'|Failed to load structure/i.test(line),
     )
     if (hasCriticalRuntimeError) {
-      throw new Error("Mol* runtime/parsing error detected while rendering structure")
+      issues.push("runtime:molstar_parsing_or_transform_error")
     }
 
     if (typeof probe.nonDarkRatio === "number" && probe.nonDarkRatio < 0.01) {
-      throw new Error(`Rendered frame appears empty/black (nonDarkRatio=${probe.nonDarkRatio})`)
+      issues.push(`pixels:black_like:${probe.nonDarkRatio}`)
     }
 
     // Additional settle time to reduce partially rendered captures.
-    // We keep posting even on failures, but this gives Mol* more time to paint.
     await page.waitForTimeout(3000)
 
     await page.screenshot({ path: outputFile, type: "png" })
+    captured = true
     console.log(`Screenshot saved to ${outputFile} (attempt ${attempt})`)
+  } catch (err) {
+    issues.push(`attempt_exception:${String(err?.message || err)}`)
   } finally {
     await context.close()
   }
+
+  return { captured, issues, probe, state }
 }
 
 async function main() {
@@ -155,12 +174,31 @@ async function main() {
   })
 
   let lastError = null
+  let lastResult = null
   try {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
-        await captureAttempt(browser, attempt)
-        lastError = null
-        break
+        const result = await captureAttempt(browser, attempt)
+        lastResult = result
+
+        if (result.captured && result.issues.length === 0) {
+          console.log(`Render validated on attempt ${attempt}`)
+          lastError = null
+          break
+        }
+
+        if (result.captured) {
+          console.warn(
+            `Attempt ${attempt} captured screenshot with issues: ${result.issues.join(", ")}`,
+          )
+        } else {
+          console.warn(`Attempt ${attempt} did not capture screenshot: ${result.issues.join(", ")}`)
+          lastError = new Error(`capture_failed_attempt_${attempt}`)
+        }
+
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+        }
       } catch (err) {
         lastError = err
         console.error(`Screenshot attempt ${attempt} failed:`, err)
@@ -169,9 +207,20 @@ async function main() {
         }
       }
     }
+
+    if (lastResult?.captured) {
+      if (lastResult.issues.length) {
+        console.warn(
+          `Proceeding despite render issues to preserve daily posting: ${lastResult.issues.join(", ")}`,
+        )
+      }
+      return
+    }
+
     if (lastError) {
       throw lastError
     }
+    throw new Error("Unable to capture screenshot output")
   } finally {
     await browser.close()
   }

@@ -620,11 +620,17 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
           throw new Error('Mol* shared initializer not available after load');
         }
 
+        // PDBe Mol* expects BCIF as format='cif' with binary=true.
+        // Passing format='bcif' can route through text parser and intermittently fail.
+        const sourceFormat = ${JSON.stringify(structureFormat)};
+        const isBinary = sourceFormat === 'bcif';
+
         const { loadComplete } = await window.GeneguessrMolstar.initializeViewer(container, {
           moleculeId: ${JSON.stringify(moleculeId)},
           customData: {
             url: ${JSON.stringify(structureUrl)},
-            format: ${JSON.stringify(structureFormat)},
+            format: isBinary ? 'cif' : sourceFormat,
+            binary: isBinary,
           },
         }, {
           interactive: false,
