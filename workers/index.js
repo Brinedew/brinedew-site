@@ -838,8 +838,20 @@ export default {
    * - 00:03 UTC: dispatch Discord recap workflow for yesterday
    */
   async scheduled(event, env, ctx) {
-    const cronExpr = event?.cron || ""
-    console.log(`[CRON] Triggered at ${new Date().toISOString()} via "${cronExpr}"`)
+    const cronExprRaw = event?.cron || ""
+    const cronExpr = cronExprRaw
+      .trim()
+      .split(/\s+/)
+      .map((part, idx) => {
+        if ((idx === 0 || idx === 1) && /^\d+$/.test(part)) {
+          return String(Number(part))
+        }
+        return part
+      })
+      .join(" ")
+    console.log(
+      `[CRON] Triggered at ${new Date().toISOString()} via "${cronExprRaw}" -> "${cronExpr}"`,
+    )
 
     if (cronExpr === "3 0 * * *") {
       try {
@@ -852,7 +864,9 @@ export default {
     }
 
     if (cronExpr && cronExpr !== "55 23 * * *") {
-      console.warn(`[CRON] No handler for cron expression "${cronExpr}"`)
+      console.warn(
+        `[CRON] No handler for cron expression "${cronExprRaw}" (normalized: "${cronExpr}")`,
+      )
       return
     }
 

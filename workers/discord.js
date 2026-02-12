@@ -14,7 +14,11 @@ import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
 
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const DISCORD_SUMMARY_POSTED_PREFIX = "discord_summary_posted:"
+const DISCORD_SUMMARY_DISPATCH_FAILURE_PREFIX = "discord_summary_dispatch_failure:"
 const GITHUB_API_BASE = "https://api.github.com"
+const GITHUB_DISPATCH_TIMEOUT_MS = 20000
+const GITHUB_DISPATCH_MAX_ATTEMPTS = 3
+const GITHUB_DISPATCH_FAILURE_TTL = 14 * 24 * 60 * 60
 
 /**
  * Validate Bearer token for bot authentication
@@ -45,6 +49,48 @@ function getYesterdayUtcDay() {
   return date.toISOString().slice(0, 10)
 }
 
+function isValidDay(day) {
+  return Boolean(day && /^\d{4}-\d{2}-\d{2}$/.test(day))
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableDispatchStatus(status) {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function getDispatchFailureKey(day) {
+  return `${DISCORD_SUMMARY_DISPATCH_FAILURE_PREFIX}${day}`
+}
+
+async function setDispatchFailure(env, payload) {
+  try {
+    const day = payload?.day
+    if (!isValidDay(day)) {
+      return
+    }
+    const key = getDispatchFailureKey(day)
+    await env.KV.put(key, JSON.stringify(payload), {
+      expirationTtl: GITHUB_DISPATCH_FAILURE_TTL,
+    })
+  } catch (err) {
+    console.warn("[CRON] Failed to persist recap dispatch failure payload:", err)
+  }
+}
+
+async function clearDispatchFailure(env, day) {
+  try {
+    if (!isValidDay(day)) {
+      return
+    }
+    await env.KV.delete(getDispatchFailureKey(day))
+  } catch (err) {
+    console.warn("[CRON] Failed to clear recap dispatch failure payload:", err)
+  }
+}
+
 function inferStructureFormatFromCacheKey(cacheKey, fallback = "cif") {
   const key = typeof cacheKey === "string" ? cacheKey.trim().toLowerCase() : ""
   if (key.endsWith(".bcif")) return "bcif"
@@ -57,8 +103,13 @@ function inferStructureFormatFromCacheKey(cacheKey, fallback = "cif") {
  * Worker cron helper: dispatch recap GitHub workflow.
  * Keeps recap content/attachment logic unchanged (workflow still does screenshot + post).
  */
-export async function handleDispatchDailyRecapWorkflow(env) {
-  const day = getYesterdayUtcDay()
+export async function handleDispatchDailyRecapWorkflow(env, options = {}) {
+  const day = options?.day || getYesterdayUtcDay()
+  if (!isValidDay(day)) {
+    return { ok: false, error: "invalid_day", day }
+  }
+
+  const nowIso = new Date().toISOString()
   const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
   const alreadyPosted = await env.KV.get(postedKey)
   if (alreadyPosted) {
@@ -72,10 +123,10 @@ export async function handleDispatchDailyRecapWorkflow(env) {
     return { ok: false, error: "missing_github_token", day }
   }
 
-  const repo = env.GITHUB_RECAP_REPO || "Brinedew/brinedew-site"
+  const repo = (env.GITHUB_RECAP_REPO || "Brinedew/brinedew-site").trim()
   const workflowId = env.GITHUB_RECAP_WORKFLOW || "discord-daily-recap.yml"
   const ref = env.GITHUB_RECAP_REF || "main"
-  const [owner, repoName] = repo.split("/")
+  const [owner, repoName] = repo.split("/").map((s) => s.trim())
   if (!owner || !repoName) {
     console.error(`[CRON] Invalid GITHUB_RECAP_REPO: ${repo}`)
     return { ok: false, error: "invalid_repo", day, repo }
@@ -87,31 +138,107 @@ export async function handleDispatchDailyRecapWorkflow(env) {
     inputs: { day },
   }
 
-  const response = await fetch(dispatchUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "Content-Type": "application/json",
-      "User-Agent": "geneguessr-worker-cron",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    body: JSON.stringify(dispatchBody),
-  })
+  let lastStatus = null
+  let lastError = null
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error(`[CRON] GitHub workflow dispatch failed (${response.status}): ${errorText}`)
-    return {
-      ok: false,
-      error: "dispatch_failed",
-      day,
-      status: response.status,
+  for (let attempt = 1; attempt <= GITHUB_DISPATCH_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(
+      () => controller.abort("dispatch_timeout"),
+      GITHUB_DISPATCH_TIMEOUT_MS,
+    )
+    try {
+      const response = await fetch(dispatchUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+          "User-Agent": "geneguessr-worker-cron",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify(dispatchBody),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+
+      if (response.ok) {
+        await clearDispatchFailure(env, day)
+        console.log(
+          `[CRON] Dispatched ${workflowId} for ${day} on ${repo}@${ref} (attempt ${attempt})`,
+        )
+        return { ok: true, day, repo, workflowId, ref, attempt }
+      }
+
+      const errorText = await response.text()
+      lastStatus = response.status
+      lastError = errorText || "empty_error_body"
+      const retryable = isRetryableDispatchStatus(response.status)
+
+      if (!retryable || attempt === GITHUB_DISPATCH_MAX_ATTEMPTS) {
+        const failure = {
+          day,
+          failed_at: nowIso,
+          status: response.status,
+          error: errorText || "empty_error_body",
+          attempt,
+          max_attempts: GITHUB_DISPATCH_MAX_ATTEMPTS,
+          repo,
+          workflowId,
+          ref,
+        }
+        console.error(`[CRON] GitHub workflow dispatch failed (${response.status}): ${errorText}`)
+        await setDispatchFailure(env, failure)
+        return {
+          ok: false,
+          error: "dispatch_failed",
+          day,
+          status: response.status,
+        }
+      }
+
+      console.warn(
+        `[CRON] Transient dispatch failure (${response.status}) for ${day}, retrying (${attempt}/${GITHUB_DISPATCH_MAX_ATTEMPTS})`,
+      )
+      await sleep(attempt * 1000)
+    } catch (err) {
+      clearTimeout(timeout)
+      lastError = err?.message || String(err)
+      if (attempt === GITHUB_DISPATCH_MAX_ATTEMPTS) {
+        const failure = {
+          day,
+          failed_at: nowIso,
+          status: lastStatus,
+          error: lastError,
+          attempt,
+          max_attempts: GITHUB_DISPATCH_MAX_ATTEMPTS,
+          repo,
+          workflowId,
+          ref,
+        }
+        console.error(
+          `[CRON] GitHub workflow dispatch request threw on final attempt: ${lastError}`,
+        )
+        await setDispatchFailure(env, failure)
+        return {
+          ok: false,
+          error: "dispatch_exception",
+          day,
+        }
+      }
+
+      console.warn(
+        `[CRON] Dispatch request error for ${day}, retrying (${attempt}/${GITHUB_DISPATCH_MAX_ATTEMPTS}): ${lastError}`,
+      )
+      await sleep(attempt * 1000)
     }
   }
 
-  console.log(`[CRON] Dispatched ${workflowId} for ${day} on ${repo}@${ref}`)
-  return { ok: true, day, repo, workflowId, ref }
+  return {
+    ok: false,
+    error: "dispatch_unknown_failure",
+    day,
+  }
 }
 
 /**
@@ -516,7 +643,10 @@ export async function handleRenderPage(request, env) {
       ) {
         structureUrl += `&upstream=${encodeURIComponent(storedMeta.upstreamUrl)}`
       }
-      structureFormat = inferStructureFormatFromCacheKey(storedMeta.r2Key, storedMeta.format || "cif")
+      structureFormat = inferStructureFormatFromCacheKey(
+        storedMeta.r2Key,
+        storedMeta.format || "cif",
+      )
     } else {
       structureUrl = storedMeta.upstreamUrl
       structureFormat = storedMeta.format || "cif"
