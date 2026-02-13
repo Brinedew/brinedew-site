@@ -15,7 +15,11 @@ Young bodies are very good at repairing themselves through regeneration. Old bod
 
 Each cell in a multicellular body has the ability to bring down the entire organism by hotwiring its "multiply right now" button to always be switched on. And as we know from Bostrom's [Vulnerable World Hypothesis](https://nickbostrom.com/papers/vulnerable.pdf) (the "easy nukes" scenario), if a single agent's defection carries existential risk to the entire system, those systems will feature draconian levels of surveillance and resource control, or be very short-lived.
 
-This is exactly what we find when we compare cells in multicellular organisms to their unicellular siblings. As a result of pressure towards defection reduction, the evolution of multicellularity produced all sorts of mechanisms that strictly control when replication is allowed: growth factors, surveillance checkpoints, and tumor suppressors. Some of them are permission-slip-style signals that result in slower, more legible cell division. Others are internal damage sensors, prompting defectors to commit suicide when their loyalty is uncertain (this is why your skin itches after a sunburn). Still others act as "endogenous chemo", dialing down cell division across the entire organism in response to various stressors and signals associated with high cheater load.
+This is exactly what we find when we compare cells in multicellular organisms to their unicellular siblings. As a result of pressure towards defection reduction, the evolution of multicellularity produced all sorts of mechanisms that strictly control when replication is allowed: growth factors, surveillance checkpoints, and tumor suppressors. 
+
+Some of them are permission-slip-style signals that result in slower, more legible cell division. 
+Others are internal damage sensors, prompting defectors to commit suicide when their loyalty is uncertain (this is why your skin itches after a sunburn). 
+Still others act as "endogenous chemo", dialing down cell division across the entire organism in response to various stressors and signals associated with high cheater load.
 
 Young bodies have the same genome and the full set of defection control genes in all cells. It's a high-trust society where the risk of having a cheater cell is low. If tissue gets damaged and some cells get lost, it's pretty straightforward to command surviving cells to proliferate and close the wound. The young body's cells are rightly expected to proliferate in a responsible, orderly manner.
 
@@ -29,7 +33,9 @@ So evolution encounters a trade-off between "being healthy" and "surviving longe
 
 2) The old body could enter the "coup-proof" curfew state, and restrict cell regeneration by triggering cell senescence or tissue inflammation. This "low trust" tissue state protects from cancer, but leads to the frailty and tissue loss common in many diseases of old age.
 
-To massively oversimplify, if you die of cancer at 60, your body chose option 1. If you die of degenerative disease at 80, your body chose option 2. If you live to 110, you were somewhere in the middle, plus were lucky enough to avoid a cancerous cell mutating all of its tumor-suppressor locks.
+If you die of cancer at 60, your body chose option 1. 
+If you die of degenerative disease at 80, your body chose option 2. 
+If you live to 110, you were somewhere in the middle, plus were lucky enough to avoid a cancerous cell mutating all of its tumor-suppressor locks.
 
 ![[image-20.png|The dual fate of cells acquiring oncogenic mutations. (Wolf, 2021)]]
 
@@ -49,7 +55,10 @@ One question is "Why would this regeneration-cancer trade-off apply to Alzheimer
 
 **Local effects:** Plaque growth is regulated by non-neuronal cells, so local suppression (e.g. SASP-like paracrine signaling) can matter too. Brain blood-vessel cells and glial cells might react to increased cheater cell load by "hardening" brain extracellular matrix (ECM) to prevent metastasis, which can prolong organismal lifespan, with the side effect of increased plaque susceptibility. This, too, would be adaptive and would be selected for.
 
-More relevantly to Cystatin C, making ECM more rigid in old age helps encapsulate nascent tumors, but also solidifies all sorts of plaques. Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
+In the [Li et al.](https://doi.org/10.1016/j.cell.2025.12.020) paper that started this post, tumor cells secrete Cystatin C, which binds to TREM2 receptors on microglia and prompts the microglial cells to degrade amyloid plaques. This, in fact, doesn't clearly map to either tradeoff story. 
+
+
+making ECM more rigid in old age helps encapsulate nascent tumors, but also solidifies all sorts of plaques. Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
 
  As I hope is clear by now, in situations like this the concepts of "damage" and "repair" are blurred to the point of being unusable. I think of it like watching the battle engineers of an invading military force repair bridges that were blown up by the country's own defenders. Just because it's "damage", doesn't mean it's bad. Just because it's "repair", doesn't mean it's good.
 
