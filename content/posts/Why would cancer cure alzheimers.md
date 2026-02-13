@@ -58,11 +58,18 @@ One question is "Why would this regeneration-cancer trade-off apply to Alzheimer
 
 In the [Li et al.](https://doi.org/10.1016/j.cell.2025.12.020) paper that started this post, tumor cells secrete Cystatin C, which binds to TREM2 receptors on microglia and prompts the microglial cells to degrade amyloid plaques. Which category of degeneration does this evidence lead us towards?
 
-Not category 2. Category 2 predicts the brain becoming less functional in response to increase in cheater cells, but the latest paper shows it's more functional
+Not category 2. Category 2 predicts the brain becoming less functional in response to increase in cheater cells, but the latest paper shows the brain is becoming *more* functional when cancer cells are introduced.
 
+Not category 3. Category 3 predicts degenerative responses to arise as a consequence of defection among cells resident in the brain tissue. However, in Li et al. cancer cells were located outside the brain.
 
+The best fit to this specific mechanism seems to be something like category 1.  
 
-making ECM more rigid in old age helps encapsulate nascent tumors, but also solidifies all sorts of plaques. Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
+Category 1 predicts that we would find metabolic programs that downregulate circulating Cystatin C in old age as a part of a ramping anti-defector effort, and this has an unfortunate side effect of preventing CysC doing its job in the brain (where it helps clear plaques). Could it be that CysC have any pro-tumor effects?
+
+![[image-22.png|Various effects of Type 2 cystatins. From Zhang & Zhan, 2023]]
+It appears it has both pro-tumor and anti-tumor effects! Cystatin C is a protease inhibitor and an immunosuppressant. High levels of CysC can inhibit the immune system and allow tumors to metastasize (by protecting them from immune destruction or enabling invasion). CysC
+
+Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
 
 > **Peter Mernyei:** Would there really be any evolutionary pressure to keep the body alive longer in old age at the cost of increased frailty? I'd have thought in an ancestral environment you're likely to die anyway if you're making either choice, and in any case you're very likely not reproducing anymore. So my naive expectation would be that evolution just programs whatever works for younger bodies that it actually "sees clearly" and it "doesn't think about" what happens to older bodies very much.
 
