@@ -34,13 +34,18 @@ To massively oversimplify, if you die of cancer at 60, your body chose option 1.
 
 This "aging as a tumor suppressor" idea is rearing its head in biogerontology from time to time, usually when the new crop of anti-aging therapeutics fails to deliver results. To be clear, it's far from a consensus view - but to be fair, there's almost nothing in biogerontology that's consensus.
 
-One common term used in biogerontology for all sorts of age-related tradeoffs is [Antagonistic Pleiotropy](https://en.wikipedia.org/wiki/Antagonistic_pleiotropy_hypothesis), but its usage is [contested](https://pubmed.ncbi.nlm.nih.gov/22329645/) in the specific case of cancer-senescence relationship. To sum up the debate, AP-style relationships involve "sign flipping" behavior, when the same trait is beneficial early-life and detrimental late-life. With "sign flipping", you would expect that an intervention "deleting" the trait in late-life would extend the organism's lifespan. Deleting tumor-suppressing senescence in late life, however, would be catastrophic for the organism on account of all the accumulated precancerous cells: no matter how severe the costs of suppression get, cancer protection is worth paying for, so the "sign" never flips. On the contrary, it's in early life (when you don't have m)
 
-==[molecular angle](https://pubmed.ncbi.nlm.nih.gov/31062469/)).==
+> [!note]- Is this Antagonistic Pleiotropy?
+ [Antagonistic Pleiotropy](https://en.wikipedia.org/wiki/Antagonistic_pleiotropy_hypothesis) (AP) is a concept commonly used in biogerontology to refer to all sorts of age-related tradeoffs, but its usage is [contested](https://pubmed.ncbi.nlm.nih.gov/22329645/) in the specific case of cancer-senescence relationship. 
+>  
+ To sum up the contention, AP-style selection involves evolution selecting for traits with "sign flipping" behavior, when the same trait is beneficial early-life and detrimental late-life. However, this "sign flipping" implies you would expect that "deleting" the AP trait in late-life would extend the organism's lifespan. 
+ >
+ But it's clear that deleting most tumor-suppressing senescence programs in late life would be catastrophic for the organism on account of all the accumulated precancerous cells: no matter how severe the costs of suppression get, cancer protection is worth paying for, so the "sign" never flips. From this lens, while cancer-senescence tradeoffs could be real and very important, they are not best modelled as a classic AP-style tradeoff.
 
-One question is "Why would this regeneration-cancer trade-off apply to Alzheimer's when neurons don't proliferate anyway?" ==My best guess is that any bridge is indirect: immune signaling, vascular state, and extracellular-matrix (ECM) remodeling can still push neurodegeneration risk around even if neurons are mostly post-mitotic ([ECM in brain aging and dementia](https://pubmed.ncbi.nlm.nih.gov/25410360/), [ECM review in AD](https://pubmed.ncbi.nlm.nih.gov/34512308/)).==
 
-==So treat this as a mechanism sketch, not a settled human pathway.==
+One question is "Why would this regeneration-cancer trade-off apply to Alzheimer's when neurons don't proliferate anyway?". I'm not sure.
+
+==My best guess is that any bridge is indirect: immune signaling, vascular state, and extracellular-matrix (ECM) remodeling can still push neurodegeneration risk around even if neurons are mostly post-mitotic ==
 
 More relevantly to Cystatin C, remodeling of extracellular matrix is another surface for a trade-off: making ECM more rigid in old age helps encapsulate nascent tumors, but also solidifies all sorts of plaques. ==More defensible version: some tumor-associated factors can look anti-plaque in specific contexts, which is very different from saying "cancer is good for your brain."== That's like having battle engineers of the invading military force repair bridges that were blown up by the country's own defenders.
 
