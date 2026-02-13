@@ -69,9 +69,9 @@ Category 1 predicts that we would find metabolic programs that downregulate circ
 ![[image-22.png|Various effects of Type 2 cystatins. From Zhang & Zhan, 2023]]
 It appears it has both pro-tumor and anti-tumor effects! Cystatin C is a protease inhibitor and an immunosuppressant. High levels of CysC can inhibit the immune system and allow tumors to metastasize (by protecting them from immune destruction or enabling invasion). CysC
 
-Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
+Tumors secrete molecules that cut, loosen, or remodel extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
 
-longitudinal studies observe that **low serum Cystatin C predicts Alzheimer's risk**. Elderly individuals with lower Cystatin C are significantly more likely to develop AD than their peers with higher levels.
+Longitudinal studies find that low serum Cystatin C predicts Alzheimer's risk. Elderly individuals with lower Cystatin C are more likely to develop AD than their peers with higher levels.
 
 The "Anti-Defector Program" in this context is likely **Inflammaging** (chronic, low-grade inflammation).
 
