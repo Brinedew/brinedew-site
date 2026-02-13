@@ -9,21 +9,25 @@ draft: true
 
 > **Scott Alexander:**  [Do some cancers prevent Alzheimers?](https://medicalxpress.com/news/2026-01-cancer-tumors-alzheimer-protein-clumps.html) There’s some evidence that people with cancer are less likely to develop Alzheimers (even adjusting for age/mortality/etc). Why? Some cancers produce large amounts of weird chemicals. One of those chemicals, cystatin c, appears to reverse Alzheimers in mouse models, maybe by dissolving [amyloid plaques](https://www.astralcodexten.com/p/in-defense-of-the-amyloid-hypothesis). And here’s [me asking Claude](https://claude.ai/share/2a23736a-0d49-4b0c-ac02-dda685afff7b) some of the obvious followup questions.
 
-Trade-offs between cancer and degenerative disease [crop](https://doi.org/10.1016/j.exger.2004.10.001) [up](https://doi.org/10.1016/j.mad.2008.03.006) [fairly](https://doi.org/10.1073/pnas.1610020113) [often](https://doi.org/10.1016/j.celrep.2014.08.069). Both conditions are consequences of an increased cheater-cell load in old age.
+Trade-offs between cancer and degenerative disease [crop](https://doi.org/10.1016/j.exger.2004.10.001) [up](https://doi.org/10.1016/j.mad.2008.03.006) [fairly](https://doi.org/10.1073/pnas.1610020113) [often](https://doi.org/10.1016/j.celrep.2014.08.069). Both sets of conditions are thought to be consequences of an increased cheater-cell load in old age. Cancers, obviously so. But how does degenerative disease result from cellular defection? And why would it trade-off with cancer?
 
-Young bodies are very good at repairing themselves through regeneration. Old bodies tend to have much weaker regeneration. There are reasons to think this could be adaptive: weaker old-age regeneration can result in longer overall lifespans.
+Young bodies are very good at repairing themselves through regeneration. Old bodies tend to have much weaker regeneration. There are reasons to speculate this transition could be adaptive: weaker old-age regeneration can result in longer overall lifespans.
 
-Each cell in a multicellular body has the ability to bring down the entire organism by hotwiring its "multiply right now" button to always be switched on. As a result, the evolution of multicellularity produced all sorts of permission-slip-style systems that strictly control when replication is allowed: tumor suppressors.
+Each cell in a multicellular body has the ability to bring down the entire organism by hotwiring its "multiply right now" button to always be switched on. And from Bostrom's [Vulnerable World Hypothesis](https://nickbostrom.com/papers/vulnerable.pdf) (the "easy nukes" scenario), if a single agent's defection carries existential risk to the entire system, those systems will either be very short-lived, or feature draconian levels of surveillance and resource control are implemented. 
 
-Young bodies have the same genome and the full set of tumor suppressors in all cells. It's a high-trust society where the risk of having a cheater cell is low. If tissue gets damaged and some cells get lost, it's pretty straightforward to tell surviving cells to proliferate to close the gap and expect that they will proliferate in a responsible, orderly manner.
+This is exactly what we find when we compare cells in multicellular organisms to their unicellular siblings. As a result of pressure towards defection reduction, the evolution of multicellularity produced all sorts of mechanisms that strictly control when replication is allowed: growth factors, surveillance checkpoints, and tumor suppressors. Some of them are permission-slip-style signals that result in slower, more legible cell division. Others are internal damage sensors, prompting defectors to commit suicide when their loyalty is uncertain (this is why your skin itches after a sunburn). Still others act as "endogenous chemo", dialing down cell division across the entire organism in response to various stressors and signals associated with high cheater load.
+
+Young bodies have the same genome and the full set of defection control genes in all cells. It's a high-trust society where the risk of having a cheater cell is low. If tissue gets damaged and some cells get lost, it's pretty straightforward to tell surviving cells to proliferate to close the wound. The cells are rightly expected to proliferate in a responsible, orderly manner.
 
 Old bodies are riddled with mutated precancerous cells - cells that have some of the locks removed. The term for this state is somatic mosaicism. Somatic evolution pushes precancerous cells to out-compete and out-multiply normal cells, so over time their number is constantly growing. Mosaicism is pervasive in proliferating tissues like skin and intestines, but is also detectable in largely post-mitotic organs like the brain.
 
+![[image-21.png|Mutant cell colonization of healthy esophageal epithelium with age. Each panel is a schematic illustration of a representative 1 cm2 area of normal esophagus from three donors. Mutant clones are shown as circles randomly distributed in space. (Marticonera, 2019)]]
+
 So evolution encounters a trade-off between "being healthy" and "surviving longer":
 
-1) The old body could give cells permission to proliferate and repair the tissue. This keeps the body functional, but at the same time it's removing locks that prevent the precancerous cells from going "all in" and destroying the body by forming tumors.
+1) The old body could give cells permission to proliferate and repair the tissue as normal. This keeps the body functional, but at the same time it's not using any locks that prevent the precancerous cells from going "all in" and destroying the body by forming tumors.
 
-2) The old body could enter the "coup-proof" curfew state, and prevent all cells from regenerating by triggering cell senescence or tissue inflammation. This "low trust" tissue state protects from cancer, but leads to the frailty and tissue loss common in many diseases of old age.
+2) The old body could enter the "coup-proof" curfew state, and restrict cell regeneration by triggering cell senescence or tissue inflammation. This "low trust" tissue state protects from cancer, but leads to the frailty and tissue loss common in many diseases of old age.
 
 To massively oversimplify, if you die of cancer at 60, your body chose option 1. If you die of degenerative disease at 80, your body chose option 2. If you live to 110, you were somewhere in the middle, plus were lucky enough to avoid a cancerous cell mutating all of its tumor-suppressor locks.
 
@@ -33,11 +37,11 @@ This "[tumor suppressor theory of aging](https://doi.org/10.1016/j.mad.2021.1115
 
 
 > [!note]- Is this Antagonistic Pleiotropy?
- [Antagonistic Pleiotropy](https://en.wikipedia.org/wiki/Antagonistic_pleiotropy_hypothesis) (AP) is a concept commonly used in biogerontology to refer to all sorts of age-related tradeoffs, but its usage is [contested](https://pubmed.ncbi.nlm.nih.gov/22329645/) in the specific case of ==the cancer-senescence relationship==. 
+ [Antagonistic Pleiotropy](https://en.wikipedia.org/wiki/Antagonistic_pleiotropy_hypothesis) (AP) is a concept commonly used in biogerontology to refer to all sorts of age-related tradeoffs, but its usage is [contested](https://pubmed.ncbi.nlm.nih.gov/22329645/) in the specific case of the cancer-senescence relationship. 
 >  
- To sum up the contention, AP-style selection involves evolution selecting for traits with "sign flipping" behavior, when the same trait is beneficial ==in== early life and detrimental ==in== late life. However, this "sign flipping" implies ==that== "deleting" the AP trait in late life would extend the organism's lifespan. 
+ To sum up the contention, AP-style selection involves evolution selecting for traits with "sign flipping" behavior, when the same trait is beneficial in early life and detrimental in late life. However, this "sign flipping" implies that "deleting" the AP trait in late life would extend the organism's lifespan. 
  >
- But it's clear that deleting most tumor-suppressing senescence programs in late life would be catastrophic for the organism on account of all the accumulated precancerous cells: no matter how severe the costs of suppression get, cancer protection is worth paying for, so the "sign" never flips. ==Through== this lens, while cancer-senescence tradeoffs could be real and very important, they are not best ==modeled== as a classic AP-style tradeoff.
+ But it's clear that deleting most tumor-suppressing senescence programs in late life would be catastrophic for the organism on account of all the accumulated precancerous cells: no matter how severe the costs of suppression get, cancer protection is worth paying for, so the "sign" never flips. Through this lens, while cancer-senescence tradeoffs could be real and very important, they are not best modeled as a classic AP-style tradeoff.
 
 One question is "Why would this regeneration-cancer trade-off apply to Alzheimer's when neurons don't proliferate anyway?". I'm not sure. I welcome any brain specialists to elaborate, but here are the mechanisms I find plausible.
 
