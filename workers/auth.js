@@ -442,17 +442,16 @@ export async function handleLogout(request, env) {
     await stub.fetch(new Request("http://internal/reset", { method: "POST" }))
   }
 
-  // Clear session cookie
-  const headers = new Headers({
-    Location: "https://brinedew.bio/apps/geneguessr/",
-  })
+  // Clear session cookie. Do not redirect from this API endpoint because
+  // `fetch(..., { credentials: "include" })` callers can hit CORS on cross-origin 302 follow.
+  const headers = new Headers()
   headers.set(
     "Set-Cookie",
     `session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0${cookieDomainAttr}`,
   )
 
   return new Response(null, {
-    status: 302,
+    status: 204,
     headers,
   })
 }

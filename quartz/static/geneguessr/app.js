@@ -56,6 +56,17 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const API_OVERRIDE_QUERY_KEY = "gg_api"
   const API_OVERRIDE_STORAGE_KEY = "gg_api_base"
   const PRACTICE_LIST_STORAGE_KEY = "geneguessr_practice_list_v1"
+  const PROD_AUTH_HOSTS = new Set([
+    "geneguessr.brinedew.bio",
+    "brinedew.bio",
+    "www.brinedew.bio",
+  ])
+
+  function shouldPersistApiOverride(host, apiOrigin) {
+    if (!apiOrigin) return false
+    if (!PROD_AUTH_HOSTS.has(host)) return true
+    return apiOrigin === window.location.origin
+  }
 
   function getDefaultApiBase() {
     const host = String(window.location.hostname || "").toLowerCase()
@@ -99,6 +110,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   }
 
   function resolveApiBase() {
+    const host = String(window.location.hostname || "").toLowerCase()
     const params = new URLSearchParams(window.location.search)
     const queryOverride = params.get(API_OVERRIDE_QUERY_KEY)
     if (queryOverride != null) {
@@ -111,7 +123,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       }
       if (normalized) {
         try {
-          localStorage.setItem(API_OVERRIDE_STORAGE_KEY, normalized)
+          if (shouldPersistApiOverride(host, normalized)) {
+            localStorage.setItem(API_OVERRIDE_STORAGE_KEY, normalized)
+          } else {
+            localStorage.removeItem(API_OVERRIDE_STORAGE_KEY)
+          }
         } catch {}
         return normalized
       }
@@ -120,6 +136,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     try {
       const stored = normalizeApiBase(localStorage.getItem(API_OVERRIDE_STORAGE_KEY))
       if (stored && stored !== "clear") {
+        if (!shouldPersistApiOverride(host, stored)) {
+          localStorage.removeItem(API_OVERRIDE_STORAGE_KEY)
+          return getDefaultApiBase()
+        }
         return stored
       }
     } catch {

@@ -5,7 +5,7 @@ tags:
 date: 2026-02-09
 draft: true
 ---
-*This was originally posted as a [comment](https://www.astralcodexten.com/p/links-for-february-2026/comment/210341389) on Scott Alexander's blog. Scott [recommended the comment](https://www.astralcodexten.com/p/open-thread-420) in Open Thread 420. I reproduce it here with minimal edits.*
+*This was originally posted as a [comment](https://www.astralcodexten.com/p/links-for-february-2026/comment/210341389) on Scott Alexander's blog. Scott [recommended the comment](https://www.astralcodexten.com/p/open-thread-420) in Open Thread 420. I reproduce it here with some edits.*
 
 > **Scott Alexander:**  [Do some cancers prevent Alzheimers?](https://medicalxpress.com/news/2026-01-cancer-tumors-alzheimer-protein-clumps.html) There’s some evidence that people with cancer are less likely to develop Alzheimers (even adjusting for age/mortality/etc). Why? Some cancers produce large amounts of weird chemicals. One of those chemicals, cystatin c, appears to reverse Alzheimers in mouse models, maybe by dissolving [amyloid plaques](https://www.astralcodexten.com/p/in-defense-of-the-amyloid-hypothesis). And here’s [me asking Claude](https://claude.ai/share/2a23736a-0d49-4b0c-ac02-dda685afff7b) some of the obvious followup questions.
 
@@ -13,19 +13,19 @@ Trade-offs between cancer and degenerative disease [crop](https://doi.org/10.101
 
 Young bodies are very good at repairing themselves through regeneration. Old bodies tend to have much weaker regeneration. There are reasons to speculate this transition could be adaptive: weaker old-age regeneration can result in longer overall lifespans.
 
-Each cell in a multicellular body has the ability to bring down the entire organism by hotwiring its "multiply right now" button to always be switched on. And from Bostrom's [Vulnerable World Hypothesis](https://nickbostrom.com/papers/vulnerable.pdf) (the "easy nukes" scenario), if a single agent's defection carries existential risk to the entire system, those systems will either be very short-lived, or feature draconian levels of surveillance and resource control are implemented. 
+Each cell in a multicellular body has the ability to bring down the entire organism by hotwiring its "multiply right now" button to always be switched on. And as we know from Bostrom's [Vulnerable World Hypothesis](https://nickbostrom.com/papers/vulnerable.pdf) (the "easy nukes" scenario), if a single agent's defection carries existential risk to the entire system, those systems will feature draconian levels of surveillance and resource control, or be very short-lived.
 
 This is exactly what we find when we compare cells in multicellular organisms to their unicellular siblings. As a result of pressure towards defection reduction, the evolution of multicellularity produced all sorts of mechanisms that strictly control when replication is allowed: growth factors, surveillance checkpoints, and tumor suppressors. Some of them are permission-slip-style signals that result in slower, more legible cell division. Others are internal damage sensors, prompting defectors to commit suicide when their loyalty is uncertain (this is why your skin itches after a sunburn). Still others act as "endogenous chemo", dialing down cell division across the entire organism in response to various stressors and signals associated with high cheater load.
 
-Young bodies have the same genome and the full set of defection control genes in all cells. It's a high-trust society where the risk of having a cheater cell is low. If tissue gets damaged and some cells get lost, it's pretty straightforward to command surviving cells to proliferate and close the wound. The cells are rightly expected to proliferate in a responsible, orderly manner.
+Young bodies have the same genome and the full set of defection control genes in all cells. It's a high-trust society where the risk of having a cheater cell is low. If tissue gets damaged and some cells get lost, it's pretty straightforward to command surviving cells to proliferate and close the wound. The young body's cells are rightly expected to proliferate in a responsible, orderly manner.
 
-Old bodies are riddled with mutated precancerous cells - cells that have some of the locks removed. The term for this state is somatic mosaicism. Somatic evolution pushes precancerous cells to out-compete and out-multiply normal cells, so over time their number is constantly growing. Mosaicism is pervasive in proliferating tissues like skin and intestines, but is also detectable in largely post-mitotic organs like the brain.
+Old bodies are riddled with mutated precancerous cells - cells that have some of the defector controls broken. The term for this state is somatic mosaicism. Somatic evolution pushes precancerous cells to out-compete and out-multiply normal cells, so over time their number is constantly growing. Mosaicism is pervasive in proliferating tissues like skin and intestines, but is also detectable in largely post-mitotic organs like the brain.
 
 ![[image-21.png|Mutant cell colonization of healthy esophageal epithelium with age. Each panel is a schematic illustration of a representative 1 cm2 area of normal esophagus from three donors. Mutant clones are shown as circles randomly distributed in space. (Marticonera, 2019)]]
 
 So evolution encounters a trade-off between "being healthy" and "surviving longer":
 
-1) The old body could give cells permission to proliferate and repair the tissue as normal. This keeps the body functional, but at the same time it's not using any locks that prevent the precancerous cells from going "all in" and destroying the body by forming tumors.
+1) The old body could give its cells permission to proliferate and repair the tissue as normal. This keeps the body functional, but at the same time it's not using any locks that prevent the precancerous cells from going "all in" and destroying the body by forming tumors.
 
 2) The old body could enter the "coup-proof" curfew state, and restrict cell regeneration by triggering cell senescence or tissue inflammation. This "low trust" tissue state protects from cancer, but leads to the frailty and tissue loss common in many diseases of old age.
 
@@ -33,7 +33,7 @@ To massively oversimplify, if you die of cancer at 60, your body chose option 1.
 
 ![[image-20.png|The dual fate of cells acquiring oncogenic mutations. (Wolf, 2021)]]
 
-This "[tumor suppressor theory of aging](https://doi.org/10.1016/j.mad.2021.111583)" is rearing its head in biogerontology from time to time, usually when the new crop of anti-aging therapeutics [fails to deliver results](https://www.science.org/content/blog-post/senolytic-update). To be clear, it's far from a consensus view - but to be fair, there's almost nothing in biogerontology that's consensus.
+This "[tumor suppressor theory of aging](https://doi.org/10.1016/j.mad.2021.111583)" is rearing its head in biogerontology from time to time, usually when the new crop of anti-aging therapeutics [fails to deliver results](https://www.science.org/content/blog-post/senolytic-update). To be clear, it's far from a consensus view - but to be fair, there's [almost nothing](https://doi.org/10.1016/j.mad.2020.111316) in biogerontology that's consensus.
 
 
 > [!note]- Is this Antagonistic Pleiotropy?
@@ -47,11 +47,11 @@ One question is "Why would this regeneration-cancer trade-off apply to Alzheimer
 
 **Whole-body effects:** pro-inflammatory endocrine factors clamp down on somatic mosaicism in rapidly proliferating tissues like skin, the hematopoietic system, and the digestive system. The detrimental effects of this endocrine state on the brain are likely not adaptive, but the same state can be adaptive elsewhere and therefore remain under selection.
 
-**Local effects:** Plaque kinetics are driven by non-neuronal tissues, so local suppression (e.g. SASP-like paracrine signaling) can matter too. Brain blood-vessel cells and glial cells might react to increased cheater cell load by "hardening" brain extracellular matrix (ECM) to prevent metastasis, which can prolong organismal lifespan, with the side effect of increased plaque susceptibility. This, too, would be adaptive and would be selected for.
+**Local effects:** Plaque growth is regulated by non-neuronal cells, so local suppression (e.g. SASP-like paracrine signaling) can matter too. Brain blood-vessel cells and glial cells might react to increased cheater cell load by "hardening" brain extracellular matrix (ECM) to prevent metastasis, which can prolong organismal lifespan, with the side effect of increased plaque susceptibility. This, too, would be adaptive and would be selected for.
 
 More relevantly to Cystatin C, making ECM more rigid in old age helps encapsulate nascent tumors, but also solidifies all sorts of plaques. Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
 
- As I hope is clear by now, in situations like this the concepts of "damage" and "repair" are blurred to the point of being unusable. I think of it like watching the battle engineers of an invading military force repair bridges that were blown up by the country's own defenders.
+ As I hope is clear by now, in situations like this the concepts of "damage" and "repair" are blurred to the point of being unusable. I think of it like watching the battle engineers of an invading military force repair bridges that were blown up by the country's own defenders. Just because it's "damage", doesn't mean it's bad. Just because it's "repair", doesn't mean it's good.
 
 > **Peter Mernyei:** Would there really be any evolutionary pressure to keep the body alive longer in old age at the cost of increased frailty? I'd have thought in an ancestral environment you're likely to die anyway if you're making either choice, and in any case you're very likely not reproducing anymore. So my naive expectation would be that evolution just programs whatever works for younger bodies that it actually "sees clearly" and it "doesn't think about" what happens to older bodies very much.
 
