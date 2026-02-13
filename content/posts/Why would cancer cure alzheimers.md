@@ -41,7 +41,6 @@ If you live to 110, you were somewhere in the middle, plus were lucky enough to 
 
 This "[tumor suppressor theory of aging](https://doi.org/10.1016/j.mad.2021.111583)" is rearing its head in biogerontology from time to time, usually when the new crop of anti-aging therapeutics [fails to deliver results](https://www.science.org/content/blog-post/senolytic-update). To be clear, it's far from a consensus view - but to be fair, there's [almost nothing](https://doi.org/10.1016/j.mad.2020.111316) in biogerontology that's consensus.
 
-
 > [!note]- Is this Antagonistic Pleiotropy?
  [Antagonistic Pleiotropy](https://en.wikipedia.org/wiki/Antagonistic_pleiotropy_hypothesis) (AP) is a concept commonly used in biogerontology to refer to all sorts of age-related tradeoffs, but its usage is [contested](https://pubmed.ncbi.nlm.nih.gov/22329645/) in the specific case of the cancer-senescence relationship. 
 >  
@@ -49,18 +48,17 @@ This "[tumor suppressor theory of aging](https://doi.org/10.1016/j.mad.2021.1115
  >
  But it's clear that deleting most tumor-suppressing senescence programs in late life would be catastrophic for the organism on account of all the accumulated precancerous cells: no matter how severe the costs of suppression get, cancer protection is worth paying for, so the "sign" never flips. Through this lens, while cancer-senescence tradeoffs could be real and very important, they are not best modeled as a classic AP-style tradeoff.
 
-One question is "Why would this regeneration-cancer trade-off apply to Alzheimer's when neurons don't proliferate anyway?". I'm not sure. I welcome any brain specialists to elaborate, but here are the mechanisms I find plausible.
+One question is "Why would this regeneration-cancer trade-off apply to Alzheimer's when neurons don't proliferate anyway?". I'm not sure. I welcome any brain specialists to elaborate. Here are the types of degeneration mechanisms I would expect to find in post-mitotic tissues under age-related defector cell load.
 
-**Whole-body effects:** pro-inflammatory endocrine factors clamp down on somatic mosaicism in rapidly proliferating tissues like skin, the hematopoietic system, and the digestive system. The detrimental effects of this endocrine state on the brain are likely not adaptive, but the same state can be adaptive elsewhere and therefore remain under selection.
+**Non-adaptive side effect of an adaptive whole-body program:** pro-inflammatory endocrine factors are secreted into the bloodstream to clamp down on somatic mosaicism in rapidly proliferating tissues like skin, the hematopoietic system, and the digestive system. The detrimental effects of this endocrine state on the brain are not adaptive, but the same state can be adaptive elsewhere and therefore remain under selection.
 
-**Local effects:** Plaque growth is regulated by non-neuronal cells, so local suppression (e.g. SASP-like paracrine signaling) can matter too. Brain blood-vessel cells and glial cells might react to increased cheater cell load by "hardening" brain extracellular matrix (ECM) to prevent metastasis, which can prolong organismal lifespan, with the side effect of increased plaque susceptibility. This, too, would be adaptive and would be selected for.
+**Local adaptive response to distal defection signals:** Brain blood-vessel cells and glial cells might react to increased cheater cell load elsewhere by "hardening" brain extracellular matrix (ECM) to prevent metastasis into the brain. This prolongs organismal lifespan, with the side effect of increased plaque susceptibility. As opposed to the previous case, here reversing the pro-degenerative brain conditions would make things worse off for the brain.
 
-In the [Li et al.](https://doi.org/10.1016/j.cell.2025.12.020) paper that started this post, tumor cells secrete Cystatin C, which binds to TREM2 receptors on microglia and prompts the microglial cells to degrade amyloid plaques. This, in fact, doesn't clearly map to either tradeoff story. 
+**Local responses to local defection signals:** Plaque growth is regulated by non-neuronal cells, so local defector suppression (e.g. SASP-like paracrine signaling) can also be a trigger for localized microenvironment changes contributing to plaque formation.
 
+In the [Li et al.](https://doi.org/10.1016/j.cell.2025.12.020) paper that started this post, tumor cells secrete Cystatin C, which binds to TREM2 receptors on microglia and prompts the microglial cells to degrade amyloid plaques. To find which category this slots into, we have to find out why TREM2 and microglia haven't been selected to remain perma-active in old age.
 
 making ECM more rigid in old age helps encapsulate nascent tumors, but also solidifies all sorts of plaques. Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
-
- As I hope is clear by now, in situations like this the concepts of "damage" and "repair" are blurred to the point of being unusable. I think of it like watching the battle engineers of an invading military force repair bridges that were blown up by the country's own defenders. Just because it's "damage", doesn't mean it's bad. Just because it's "repair", doesn't mean it's good.
 
 > **Peter Mernyei:** Would there really be any evolutionary pressure to keep the body alive longer in old age at the cost of increased frailty? I'd have thought in an ancestral environment you're likely to die anyway if you're making either choice, and in any case you're very likely not reproducing anymore. So my naive expectation would be that evolution just programs whatever works for younger bodies that it actually "sees clearly" and it "doesn't think about" what happens to older bodies very much.
 
