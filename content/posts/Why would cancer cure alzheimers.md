@@ -9,7 +9,7 @@ draft: true
 
 > **Scott Alexander:**  [Do some cancers prevent Alzheimers?](https://medicalxpress.com/news/2026-01-cancer-tumors-alzheimer-protein-clumps.html) There’s some evidence that people with cancer are less likely to develop Alzheimers (even adjusting for age/mortality/etc). Why? Some cancers produce large amounts of weird chemicals. One of those chemicals, cystatin c, appears to reverse Alzheimers in mouse models, maybe by dissolving [amyloid plaques](https://www.astralcodexten.com/p/in-defense-of-the-amyloid-hypothesis). And here’s [me asking Claude](https://claude.ai/share/2a23736a-0d49-4b0c-ac02-dda685afff7b) some of the obvious followup questions.
 
-Trade-offs between cancer and degenerative disease crop up fairly [often](https://doi.org/10.1016/j.celrep.2014.08.069). Both are manifestations of an increased cheater-cell load in old age.
+Trade-offs between cancer and degenerative disease [crop](https://doi.org/10.1016/j.exger.2004.10.001) [up](https://doi.org/10.1016/j.mad.2008.03.006) [fairly](https://doi.org/10.1073/pnas.1610020113) [often](https://doi.org/10.1016/j.celrep.2014.08.069). Both conditions are consequences of an increased cheater-cell load in old age.
 
 Young bodies are very good at repairing themselves through regeneration. Old bodies tend to have much weaker regeneration. There are reasons to think this could be adaptive: weaker old-age regeneration can result in longer overall lifespans.
 
