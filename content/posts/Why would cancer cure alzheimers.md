@@ -50,13 +50,17 @@ This "[tumor suppressor theory of aging](https://doi.org/10.1016/j.mad.2021.1115
 
 One question is "Why would this regeneration-cancer trade-off apply to Alzheimer's when neurons don't proliferate anyway?". I'm not sure. I welcome any brain specialists to elaborate. Here are the types of degeneration mechanisms I would expect to find in post-mitotic tissues under age-related defector cell load.
 
-**Non-adaptive side effect of an adaptive whole-body program:** pro-inflammatory endocrine factors are secreted into the bloodstream to clamp down on somatic mosaicism in rapidly proliferating tissues like skin, the hematopoietic system, and the digestive system. The detrimental effects of this endocrine state on the brain are not adaptive, but the same state can be adaptive elsewhere and therefore remain under selection.
+1) **Non-adaptive degenerative side effect of an adaptive whole-body anti-defector program:** pro-inflammatory endocrine factors are secreted into the bloodstream to clamp down on somatic mosaicism in rapidly proliferating tissues like skin, the hematopoietic system, and the digestive system. The detrimental effects of this endocrine state on the brain are not adaptive, but the same state can be adaptive elsewhere and therefore remain under selection.
 
-**Local adaptive response to distal defection signals:** Brain blood-vessel cells and glial cells might react to increased cheater cell load elsewhere by "hardening" brain extracellular matrix (ECM) to prevent metastasis into the brain. This prolongs organismal lifespan, with the side effect of increased plaque susceptibility. As opposed to the previous case, here reversing the pro-degenerative brain conditions would make things worse off for the brain.
+2) **Local adaptive degenerative response to distal defection signals:** Brain blood-vessel cells and glial cells might react to increased cheater cell load elsewhere by "hardening" brain extracellular matrix (ECM) to prevent metastasis into the brain. This prolongs organismal lifespan, with the side effect of increased plaque susceptibility. As opposed to the previous case, here reversing the pro-degenerative brain conditions would make things worse off for the brain.
 
-**Local responses to local defection signals:** Plaque growth is regulated by non-neuronal cells, so local defector suppression (e.g. SASP-like paracrine signaling) can also be a trigger for localized microenvironment changes contributing to plaque formation.
+3) **Local degenerative responses to local defection signals:** Plaque growth is regulated by non-neuronal cells, so local defector suppression (e.g. SASP-like paracrine signaling) can also be a trigger for localized microenvironment changes contributing to plaque formation.
 
-In the [Li et al.](https://doi.org/10.1016/j.cell.2025.12.020) paper that started this post, tumor cells secrete Cystatin C, which binds to TREM2 receptors on microglia and prompts the microglial cells to degrade amyloid plaques. To find which category this slots into, we have to find out why TREM2 and microglia haven't been selected to remain perma-active in old age.
+In the [Li et al.](https://doi.org/10.1016/j.cell.2025.12.020) paper that started this post, tumor cells secrete Cystatin C, which binds to TREM2 receptors on microglia and prompts the microglial cells to degrade amyloid plaques. Which category of degeneration does this evidence lead us towards?
+
+Not category 2. Category 2 predicts the brain becoming less functional in response to increase in cheater cells, but the latest paper shows it's more functional
+
+
 
 making ECM more rigid in old age helps encapsulate nascent tumors, but also solidifies all sorts of plaques. Tumors often win by secreting molecules that cut, loosen, or re-pattern extracellular scaffolding. In the tumor setting that helps invasion. In a plaque-heavy brain setting, the same class of matrix-remodeling factors can make aggregates less stable or open more routes for clearance. So the same biochemical signature can be pro-metastatic in one context and anti-plaque in another.
 
