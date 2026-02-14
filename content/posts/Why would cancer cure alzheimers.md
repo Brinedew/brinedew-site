@@ -5,7 +5,7 @@ tags:
 date: 2026-02-09
 draft: true
 ---
-*This was originally posted as a [comment](https://www.astralcodexten.com/p/links-for-february-2026/comment/210341389) on Scott Alexander's blog. Scott [recommended the comment](https://www.astralcodexten.com/p/open-thread-420) in Open Thread 420. I reproduce it here with some edits.*
+*This was originally posted as a [comment](https://www.astralcodexten.com/p/links-for-february-2026/comment/210341389) on Scott Alexander's blog. Scott [recommended the comment](https://www.astralcodexten.com/p/open-thread-420) in Open Thread 420. I reproduce it here with edits.*
 
 > **Scott Alexander:**  [Do some cancers prevent Alzheimers?](https://medicalxpress.com/news/2026-01-cancer-tumors-alzheimer-protein-clumps.html) There’s some evidence that people with cancer are less likely to develop Alzheimers (even adjusting for age/mortality/etc). Why? Some cancers produce large amounts of weird chemicals. One of those chemicals, cystatin c, appears to reverse Alzheimers in mouse models, maybe by dissolving [amyloid plaques](https://www.astralcodexten.com/p/in-defense-of-the-amyloid-hypothesis). And here’s [me asking Claude](https://claude.ai/share/2a23736a-0d49-4b0c-ac02-dda685afff7b) some of the obvious followup questions.
 
