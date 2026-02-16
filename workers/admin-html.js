@@ -3164,12 +3164,46 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       previewErrorEl.hidden = true;
       previewPlaceholderEl.hidden = true;
 
+      // Always destroy the old viewer up front, before the API call.
+      // This prevents WebGL context leaks when the API returns an error
+      // (previously the old viewer survived because destroyPreviewViewer
+      // was only called after a successful API response).
+      await destroyPreviewViewer();
+
+      // Track the viewer created during THIS call so we can dispose it
+      // in the catch block if anything goes wrong after creation.
+      let localViewer = null;
+
       try {
-        // Use the same API endpoint as the game for consistent structure rendering
-        const response = await fetch(API_BASE + '/api/structure-token?uniprot=' + encodeURIComponent(uniprot), {
-          credentials: 'include'
-        });
-        const data = await response.json();
+        // Fetch structure token, retry once on transient server errors
+        let response, data;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          response = await fetch(API_BASE + '/api/structure-token?uniprot=' + encodeURIComponent(uniprot), {
+            credentials: 'include'
+          });
+          data = await response.json();
+          if (response.ok || response.status < 500) break;
+          // Server error — wait briefly and retry once
+          if (attempt === 0) {
+            console.warn('Admin preview: structure-token returned ' + response.status + ' for ' + uniprot + ', retrying...');
+            await new Promise(r => setTimeout(r, 1500));
+            if (loadToken !== previewLoadToken) return; // bail if superseded
+          }
+        }
+
+        // Handle "structure unavailable" (404) gracefully — not an error
+        if (response.status === 404 || (!response.ok && data && data.error === 'Structure unavailable')) {
+          if (loadToken !== previewLoadToken) return;
+          previewStructureChoice = null;
+          previewReady = false;
+          previewLoadingEl.hidden = true;
+          previewErrorEl.hidden = true;
+          previewPlaceholderEl.hidden = false;
+          previewPlaceholderEl.textContent = 'No 3D structure available for ' + pendingLabel + '.';
+          previewStatusEl.textContent = 'No structure';
+          return;
+        }
+
         if (!response.ok) {
           throw new Error(data.error || 'Failed to load structure data');
         }
@@ -3182,7 +3216,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         // Check if structure is available
         if (!data.url) {
-          await destroyPreviewViewer();
           previewStructureChoice = null;
           previewReady = false;
           previewLoadingEl.hidden = true;
@@ -3193,7 +3226,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           return;
         }
 
-        await destroyPreviewViewer();
         const mountTarget = previewMountEl || previewContainer;
         if (!mountTarget) {
           throw new Error('Preview container unavailable');
@@ -3221,6 +3253,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         });
 
         const viewer = init.viewer;
+        localViewer = viewer;
 
         // Store representation info for chain coloring
         const representation = {
@@ -3229,33 +3262,46 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           chainLabels: data.chainLabels
         };
 
-        const finalize = async (result) => {
-          if (loadToken !== previewLoadToken) {
-            await disposePreviewViewer(viewer);
-            return;
-          }
-          if (!result || !result.ok) {
-            throw new Error('Mol* loadComplete did not fire before timeout');
-          }
-          previewViewer = viewer;
-          previewStructureChoice = representation;
-          previewReady = true;
-          previewLoadingEl.hidden = true;
-
-          previewStatusEl.textContent = 'Showing ' + uniprot;
-          refreshPreview({ immediate: true });
-          applyPreviewChainColoring(viewer);
-          if (window.GeneguessrMolstar?.setFloatingLabels && representation.chainLabels) {
-            window.GeneguessrMolstar.setFloatingLabels(viewer, mountTarget, {
-              mode: 'revealed name mode',
-              chainLabels: representation.chainLabels
-            });
-          }
-        };
-
         const result = await init.loadComplete;
-        await finalize(result);
+
+        if (loadToken !== previewLoadToken) {
+          await disposePreviewViewer(viewer);
+          localViewer = null;
+          return;
+        }
+
+        if (!result || !result.ok) {
+          // Dispose the viewer that was created but failed to load
+          await disposePreviewViewer(viewer);
+          clearPreviewMount();
+          localViewer = null;
+          throw new Error('Mol* loadComplete did not fire before timeout');
+        }
+
+        previewViewer = viewer;
+        localViewer = null; // ownership transferred to previewViewer
+        previewStructureChoice = representation;
+        previewReady = true;
+        previewLoadingEl.hidden = true;
+
+        previewStatusEl.textContent = 'Showing ' + uniprot;
+        refreshPreview({ immediate: true });
+        applyPreviewChainColoring(viewer);
+        if (window.GeneguessrMolstar?.setFloatingLabels && representation.chainLabels) {
+          const mountRef = previewMountEl || previewContainer;
+          window.GeneguessrMolstar.setFloatingLabels(viewer, mountRef, {
+            mode: 'revealed name mode',
+            chainLabels: representation.chainLabels
+          });
+        }
       } catch (err) {
+        // Dispose any viewer created during this call that wasn't
+        // transferred to previewViewer — prevents WebGL context leaks.
+        if (localViewer) {
+          try { await disposePreviewViewer(localViewer); } catch (_) {}
+          clearPreviewMount();
+          localViewer = null;
+        }
         if (loadToken === previewLoadToken) {
           console.error('Failed to load protein in preview:', err);
           previewLoadingEl.hidden = true;
