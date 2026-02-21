@@ -6154,31 +6154,9 @@ https://brinedew.bio/apps/geneguessr/`
     setLeaderboardConsentEnabled(Boolean(enabled))
   }
 
-  window.geneguessrLoginWithDiscord = async function () {
+  window.geneguessrLoginWithDiscord = function () {
     const consent = false
     const loginUrl = `${API_BASE}/api/auth/login?leaderboard_opt_in=${consent ? "1" : "0"}`
-
-    try {
-      const configResponse = await fetch(`${API_BASE}/api/auth/config`, {
-        method: "GET",
-        credentials: "include",
-      })
-      const config = await configResponse.json().catch(() => null)
-      if (!configResponse.ok || !config?.loginReady) {
-        const missing = Array.isArray(config?.missing) ? config.missing.join(", ") : "unknown"
-        console.error("Discord OAuth unavailable before login redirect", {
-          status: configResponse.status,
-          missing,
-        })
-        alert("Discord login is temporarily unavailable. Please try again in a few minutes.")
-        return
-      }
-    } catch (err) {
-      console.error("Failed to verify Discord OAuth configuration:", err)
-      alert("Discord login is temporarily unavailable. Please try again in a few minutes.")
-      return
-    }
-
     window.location.href = loginUrl
   }
 

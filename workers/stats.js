@@ -4,6 +4,7 @@
  */
 
 import { parseCookies } from "./auth.js"
+import { buildAvatarProxyPath } from "./lib/avatar-proxy.js"
 
 const LEADERBOARD_DEFAULT_LIMIT = 5
 const LEADERBOARD_MAX_LIMIT = 25
@@ -20,19 +21,6 @@ function parseLeaderboardOptInValue(value) {
   if (value === true || value === 1 || value === "1" || value === "true") return 1
   if (value === false || value === 0 || value === "0" || value === "false") return 0
   return null
-}
-
-function sanitizeDiscordAvatarUrl(raw) {
-  const value = String(raw || "").trim()
-  if (!value) return null
-  try {
-    const parsed = new URL(value)
-    if (parsed.protocol !== "https:") return null
-    if (parsed.hostname !== "cdn.discordapp.com") return null
-    return parsed.toString()
-  } catch {
-    return null
-  }
 }
 
 function parseUtcDateOnly(value) {
@@ -502,7 +490,7 @@ export async function handleGetLeaderboard(request, env) {
     const entries = rows.map((row, idx) => ({
       rank: idx + 1,
       username: String(row?.username || "Player"),
-      avatarUrl: sanitizeDiscordAvatarUrl(row?.avatar_url),
+      avatarUrl: buildAvatarProxyPath(row?.avatar_url),
       currentStreak: Math.max(0, Number.parseInt(row?.current_streak, 10) || 0),
     }))
 

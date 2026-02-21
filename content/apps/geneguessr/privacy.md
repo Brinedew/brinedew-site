@@ -79,6 +79,7 @@ We use the following cookies:
 | `oauth_session` | Temporary cookie during Discord login flow | 10 minutes |
 
 We do not use third-party analytics, advertising cookies, or tracking pixels.
+All cookies above are strictly necessary for authentication and game session continuity.
 
 ## Data Sharing
 
@@ -88,6 +89,7 @@ We share data only with:
 
 - **Cloudflare**: Our infrastructure provider (see "Where Data Is Stored" below). Cloudflare processes data on our behalf under their [privacy policy](https://www.cloudflare.com/privacypolicy/).
 - **Public leaderboard viewers**: If you opt in, your Discord username, avatar, and best streak are visible to visitors in the in-app leaderboard.
+- **Discord CDN (server-side only)**: Avatar images may be fetched by our backend and served via our own domain. Visitors do not request avatar images directly from Discord.
 
 We do not share your data with advertisers, data brokers, or other third parties.
 

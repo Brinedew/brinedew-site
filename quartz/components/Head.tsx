@@ -61,7 +61,6 @@ export default (() => {
             )}
           </>
         )}
-        <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossOrigin="anonymous" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
         <meta name="og:site_name" content={cfg.pageTitle}></meta>
@@ -109,8 +108,6 @@ export default (() => {
           href={joinSegments(baseDir, "static/apple-touch-icon.png")}
         />
         <meta name="description" content={description} />
-        <meta name="generator" content="Quartz" />
-        <meta name="geneguessr-build" content="head-tsx-patched" />
 
         {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
         <script
@@ -178,7 +175,6 @@ export default (() => {
               )}
               {isGeneguessr && (
                 <>
-                  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
                   <link
                     rel="stylesheet"
                     href={joinSegments(root, "static", `geneguessr/styles.css?v=${CACHE_BUST}`)}

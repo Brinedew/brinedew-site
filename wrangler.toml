@@ -40,6 +40,7 @@ preview_urls = false
 
 # Custom domain routes
 routes = [
+  { pattern = "brinedew.bio/*", zone_name = "brinedew.bio" },
   { pattern = "brinedew.bio/api/*", zone_name = "brinedew.bio" },
   { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" },
   { pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }

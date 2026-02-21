@@ -1,6 +1,7 @@
 /**
  * Discord OAuth with PKCE implementation
  */
+import { buildAvatarProxyPath, sanitizeDiscordAvatarUrl } from "./lib/avatar-proxy.js"
 
 const DISCORD_API = "https://discord.com/api/v10"
 const DISCORD_OAUTH = "https://discord.com/oauth2/authorize"
@@ -82,6 +83,11 @@ function getSharedCookieDomain(hostname) {
     return ".brinedew.bio"
   }
   return ""
+}
+
+function toClientAvatarUrl(raw) {
+  const proxied = buildAvatarProxyPath(raw)
+  return proxied || null
 }
 
 function resolveDiscordRedirectUri(url, env) {
@@ -188,7 +194,7 @@ export async function handleLogin(request, env) {
     status: 302,
     headers: {
       Location: discordUrl,
-      "Set-Cookie": `oauth_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${cookieDomainAttr}`,
+      "Set-Cookie": `oauth_session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600${cookieDomainAttr}`,
     },
   })
 }
@@ -322,9 +328,10 @@ export async function handleCallback(request, env) {
   const leaderboardOptIn = Number.parseInt(oauthData?.leaderboard_opt_in, 10) === 1 ? 1 : 0
 
   // Create or update user in D1
-  const avatarUrl = user.avatar
+  const avatarUrlRaw = user.avatar
     ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
     : null
+  const avatarUrl = sanitizeDiscordAvatarUrl(avatarUrlRaw)
 
   const now = Date.now()
   await env.DB.prepare(
@@ -353,7 +360,7 @@ export async function handleCallback(request, env) {
       body: JSON.stringify({
         user_id: user.id,
         username: user.username,
-        avatar_url: avatarUrl,
+        avatar_url: toClientAvatarUrl(avatarUrl),
         tier: "registered",
         leaderboard_opt_in: leaderboardOptIn === 1,
         is_guild_member: isMember,
@@ -368,7 +375,7 @@ export async function handleCallback(request, env) {
   const headers = new Headers()
   headers.set(
     "Set-Cookie",
-    `oauth_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
+    `oauth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
   )
   headers.append(
     "Set-Cookie",
@@ -416,7 +423,7 @@ export async function handleMe(request, env) {
     user: {
       id: session.user_id,
       username: session.username,
-      avatar_url: session.avatar_url,
+      avatar_url: toClientAvatarUrl(session.avatar_url) || session.avatar_url || null,
       tier: session.tier,
       leaderboard_opt_in: Boolean(session.leaderboard_opt_in),
       is_guild_member: session.is_guild_member,

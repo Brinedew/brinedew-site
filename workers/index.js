@@ -194,6 +194,93 @@ import {
 } from "./lib/structure-utils.js"
 import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
+import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
+
+const SECURITY_HEADERS = {
+  "Content-Security-Policy":
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy":
+    "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), browsing-topics=()",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-site",
+}
+
+const STRIP_RESPONSE_HEADERS = [
+  "x-powered-by",
+  "x-github-request-id",
+  "x-proxy-cache",
+  "x-served-by",
+  "x-cache",
+  "x-cache-hits",
+  "x-timer",
+  "x-fastly-request-id",
+  "via",
+]
+
+function cloneHeadersPreservingCookies(sourceHeaders) {
+  const headers = new Headers()
+  for (const [name, value] of sourceHeaders.entries()) {
+    if (name.toLowerCase() === "set-cookie") continue
+    headers.append(name, value)
+  }
+  if (typeof sourceHeaders.getSetCookie === "function") {
+    const cookies = sourceHeaders.getSetCookie()
+    for (const cookie of cookies) {
+      headers.append("Set-Cookie", cookie)
+    }
+  } else {
+    const cookie = sourceHeaders.get("set-cookie")
+    if (cookie) headers.append("Set-Cookie", cookie)
+  }
+  return headers
+}
+
+function applySecurityHeaders(response, request) {
+  const headers = cloneHeadersPreservingCookies(response.headers)
+  for (const name of STRIP_RESPONSE_HEADERS) {
+    headers.delete(name)
+  }
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(name, value)
+  }
+  try {
+    const reqUrl = new URL(request.url)
+    if (reqUrl.protocol === "https:") {
+      headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+    }
+  } catch {
+    // Ignore malformed request URL.
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+function isStagingOrDevHost(hostname) {
+  const host = String(hostname || "").toLowerCase()
+  return (
+    host.endsWith(".workers.dev") ||
+    host.endsWith(".pages.dev") ||
+    host === "staging.brinedew.bio" ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0"
+  )
+}
+
+function isHealthCheckAuthorized(request, env, url) {
+  if (isStagingOrDevHost(url.hostname)) return true
+  const token = String(env?.HEALTHCHECK_TOKEN || "").trim()
+  if (!token) return false
+  const headerToken = String(request.headers.get("X-Health-Token") || "").trim()
+  const authHeader = String(request.headers.get("Authorization") || "").trim()
+  return headerToken === token || authHeader === `Bearer ${token}`
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -201,6 +288,7 @@ export default {
     console.log(`[WORKER] Incoming: ${request.method} ${url.pathname}`)
     const origin = request.headers.get("Origin") || ""
     const corsHeaders = getCorsHeaders(origin, url.hostname)
+    const routeRequest = async () => {
 
     // Serve the shared Mol* initializer from the Worker so staging (workers.dev) can load it.
     // Production can still proxy /static/* from the Quartz site, but this keeps staging self-contained.
@@ -279,6 +367,20 @@ export default {
     // Iconoplasm subdomain - delegate to iconoplasm handler
     if (isIconoplasmRequest(url.hostname)) {
       return handleIconoplasmRequest(request, env, ctx)
+    }
+
+    // Route all non-API apex requests through the worker so we can enforce
+    // consistent security headers for the static site.
+    if (
+      (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
+      !url.pathname.startsWith("/api/")
+    ) {
+      const upstreamResp = await fetch(request)
+      return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+        status: upstreamResp.status,
+        statusText: upstreamResp.statusText,
+        headers: upstreamResp.headers,
+      })
     }
 
     // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
@@ -410,7 +512,9 @@ export default {
 
     // Health check endpoint
     if (url.pathname === "/api/health") {
-      const authConfig = getDiscordAuthConfigStatus(env)
+      if (!isHealthCheckAuthorized(request, env, url)) {
+        return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+      }
       return Response.json(
         {
           status: "ok",
@@ -418,7 +522,6 @@ export default {
           database: await checkD1Health(env.DB),
           kv: await checkKVHealth(env.KV),
           durableObjects: "configured",
-          auth: authConfig,
         },
         {
           headers: corsHeaders,
@@ -444,6 +547,9 @@ export default {
     }
 
     if (url.pathname === "/api/auth/config" && request.method === "GET") {
+      if (!(await isAdmin(request, env))) {
+        return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+      }
       return Response.json(getDiscordAuthConfigStatus(env), {
         headers: corsHeaders,
       })
@@ -466,6 +572,30 @@ export default {
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    // Proxy Discord avatars through same-origin to avoid leaking visitor IPs to third-party CDNs.
+    if (url.pathname === "/api/avatar" && (request.method === "GET" || request.method === "HEAD")) {
+      const upstreamUrl = extractAvatarUpstreamFromRequest(url)
+      if (!upstreamUrl) {
+        return Response.json({ error: "Invalid avatar URL" }, { status: 400, headers: corsHeaders })
+      }
+      const upstreamResp = await fetch(upstreamUrl, {
+        cf: {
+          cacheEverything: true,
+          cacheTtl: 86400,
+        },
+      })
+      if (!upstreamResp.ok) {
+        return Response.json({ error: "Avatar not found" }, { status: 404, headers: corsHeaders })
+      }
+      const headers = new Headers(corsHeaders)
+      headers.set("Content-Type", upstreamResp.headers.get("Content-Type") || "image/png")
+      headers.set("Cache-Control", "public, max-age=86400")
+      return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+        status: upstreamResp.status,
+        headers,
       })
     }
 
@@ -710,6 +840,9 @@ export default {
 
     // Debug endpoint for cache stats (no sensitive data)
     if (url.pathname === "/api/debug/cache-stats" && request.method === "GET") {
+      if (!(await isAdmin(request, env))) {
+        return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+      }
       const usage = await getStructureBucketUsage(env)
       return Response.json(
         {
@@ -830,6 +963,9 @@ export default {
         headers: corsHeaders,
       },
     )
+    }
+    const response = await routeRequest()
+    return applySecurityHeaders(response, request)
   },
 
   /**
