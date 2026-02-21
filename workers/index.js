@@ -53,6 +53,8 @@ const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
   "/static/vendor/pdbe-molstar@3.8.0/",
   "/static/vendor/pdbe-molstar@3.7.1/",
 ]
+const KATEX_VENDOR_PREFIX = "/static/vendor/katex/"
+const KATEX_VENDOR_VERSION = "0.16.21"
 
 const PRACTICE_RESOLVE_MAX_INPUTS = 10000
 // Cloudflare D1 enforces a relatively small limit on bound parameters per query.
@@ -197,8 +199,6 @@ import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
 
 const SECURITY_HEADERS = {
-  "Content-Security-Policy":
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -206,6 +206,45 @@ const SECURITY_HEADERS = {
     "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), browsing-topics=()",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-site",
+}
+
+// Hard-path rationale:
+// Mol* uses dynamic evaluation/WASM bootstrap patterns that require `unsafe-eval`
+// and `data:`/`blob:` fetches. We intentionally scope that CSP relaxation to the
+// smallest GeneGuessr surface instead of weakening CSP for the whole site.
+function shouldAllowUnsafeEval(url) {
+  const host = String(url?.hostname || "").toLowerCase()
+  const path = String(url?.pathname || "")
+  if (host === GENEGUESSR_HOST && path === "/") {
+    return true
+  }
+  if (path.startsWith("/static/geneguessr/") || path.startsWith("/static/vendor/pdbe-molstar@")) {
+    return true
+  }
+  return (
+    path === "/apps/geneguessr" ||
+    path === "/apps/geneguessr/" ||
+    path === "/apps/geneguessr/index" ||
+    path === "/apps/geneguessr/index/"
+  )
+}
+
+function buildContentSecurityPolicy(request) {
+  let allowUnsafeEval = false
+  try {
+    allowUnsafeEval = shouldAllowUnsafeEval(new URL(request.url))
+  } catch {
+    allowUnsafeEval = false
+  }
+
+  const scriptSrc = allowUnsafeEval
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com"
+    : "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com"
+  const connectSrc = allowUnsafeEval
+    ? "connect-src 'self' data: blob: https://brinedew.bio https://geneguessr.brinedew.bio"
+    : "connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio"
+
+  return `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; ${scriptSrc}; ${connectSrc}; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
 }
 
 const STRIP_RESPONSE_HEADERS = [
@@ -238,11 +277,37 @@ function cloneHeadersPreservingCookies(sourceHeaders) {
   return headers
 }
 
+function appendCacheControlDirective(cacheControl, directive) {
+  const existing = String(cacheControl || "").trim()
+  const normalizedDirective = String(directive || "").trim().toLowerCase()
+  if (!existing) return directive
+  const hasDirective = existing
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .includes(normalizedDirective)
+  return hasDirective ? existing : `${existing}, ${directive}`
+}
+
+function enforceNoTransformForHtml(headers) {
+  const contentType = String(headers.get("content-type") || "").toLowerCase()
+  if (!contentType.includes("text/html")) {
+    return
+  }
+  // Hard-path rationale:
+  // Cloudflare can mutate HTML responses by injecting Browser Insights JS.
+  // That silently reintroduces third-party scripts and trips our strict CSP.
+  // `no-transform` keeps HTML deterministic so CSP remains the single source of truth.
+  const updated = appendCacheControlDirective(headers.get("cache-control"), "no-transform")
+  headers.set("Cache-Control", updated)
+}
+
 function applySecurityHeaders(response, request) {
   const headers = cloneHeadersPreservingCookies(response.headers)
   for (const name of STRIP_RESPONSE_HEADERS) {
     headers.delete(name)
   }
+  enforceNoTransformForHtml(headers)
+  headers.set("Content-Security-Policy", buildContentSecurityPolicy(request))
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     headers.set(name, value)
   }
@@ -326,6 +391,35 @@ export default {
           headers,
         })
       }
+    }
+
+    // Serve KaTeX assets from same-origin vendor paths.
+    // Hard-path rationale:
+    // We rewrite stale upstream HTML from jsDelivr URLs to `/static/vendor/katex/*` to keep CSP strict.
+    // Some upstream builds don't yet contain those local files, so the worker must backfill them.
+    if (
+      (request.method === "GET" || request.method === "HEAD") &&
+      url.pathname.startsWith(KATEX_VENDOR_PREFIX)
+    ) {
+      const relativePath = url.pathname.slice(KATEX_VENDOR_PREFIX.length)
+      const normalized = relativePath.replace(/^\/+/, "")
+      if (normalized.length === 0) {
+        return new Response("Not found", { status: 404 })
+      }
+      const upstream = `https://cdn.jsdelivr.net/npm/katex@${KATEX_VENDOR_VERSION}/dist/${normalized}`
+      const upstreamResp = await fetch(upstream, {
+        cf: {
+          cacheEverything: true,
+          cacheTtl: 86400,
+        },
+      })
+      const headers = new Headers(upstreamResp.headers)
+      headers.set("Cache-Control", "public, max-age=86400")
+      return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+        status: upstreamResp.status,
+        statusText: upstreamResp.statusText,
+        headers,
+      })
     }
 
     // Serve host-scoped robots/sitemap for the geneguessr subdomain.
@@ -491,6 +585,30 @@ export default {
         html = html.replace(
           /<meta\b[^>]*\b(?:property|name)=["']twitter:domain["'][^>]*>/gi,
           `<meta name="twitter:domain" content="${GENEGUESSR_HOST}">`,
+        )
+
+        // Hard-path rationale:
+        // Upstream static deploys can lag behind worker deploys. When stale HTML still references
+        // jsDelivr KaTeX assets, strict CSP blocks them and math rendering regresses.
+        // We normalize legacy CDN URLs to self-hosted vendored assets at the edge so behavior
+        // stays stable without globally loosening CSP.
+        html = html.replace(
+          /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/katex\.min\.css/gi,
+          `/static/vendor/katex/katex.min.css?v=${KATEX_VENDOR_VERSION}`,
+        )
+        html = html.replace(
+          /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/contrib\/copy-tex\.min\.js/gi,
+          `/static/vendor/katex/contrib/copy-tex.min.js?v=${KATEX_VENDOR_VERSION}`,
+        )
+        html = html.replace(
+          /<link\b[^>]*rel=["']preconnect["'][^>]*href=["']https:\/\/cdn\.jsdelivr\.net["'][^>]*>/gi,
+          "",
+        )
+        // Defensive cleanup: if a beacon script is already present upstream, strip it here so
+        // privacy/CSP posture doesn't depend on origin or edge-side injection settings.
+        html = html.replace(
+          /<script\b[^>]*src=["']https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js[^"']*["'][^>]*>\s*<\/script>/gi,
+          "",
         )
 
         return new Response(html, {
