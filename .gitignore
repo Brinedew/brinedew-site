@@ -28,6 +28,10 @@ scripts/uniprot_cache/
 **/*.excalidraw.svg
 
 .wrangler/
+
+# Environment files (API keys etc)
+.env
+.env.*
 .dev.vars
 
 # Binary executables (download separately)

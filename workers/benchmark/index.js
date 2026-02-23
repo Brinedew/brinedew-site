@@ -571,7 +571,7 @@ async function executeRevealHint(db, state, payload) {
       error: "Not enough hint credits",
       hint_credits: state.hintCredits,
       cost: DEFAULT_HINT_COST,
-      message: "Make a wrong guess to earn hint credits",
+      message: "Make a guess to earn hint credits",
     }
   }
 

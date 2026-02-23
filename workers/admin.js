@@ -828,17 +828,31 @@ export async function handleAdminSchedule(request, env) {
       .sort((a, b) => (a.date < b.date ? 1 : -1))
 
     // Fetch protein data for history rows to get gene symbols
+    // Also cross-reference with override keys to fix source for days where
+    // the bootstrap cache caused source to be recorded as "unknown"
     const history = await Promise.all(
       historyRaw.map(async (row) => {
-        if (row.uniprot_id) {
-          try {
-            const protein = await loadProtein(env.DB, row.uniprot_id)
-            return { ...row, protein: protein ? sanitizeProteinSummary(protein) : null }
-          } catch {
-            return row
+        // If source is missing/unknown but an override key exists for this date,
+        // it was an override — fix the source retroactively
+        let source = row.source
+        if ((!source || source === "unknown" || source === "actual") && overrideByDate.has(row.date)) {
+          const ovr = overrideByDate.get(row.date)
+          // Verify the override uniprot matches the actual pick
+          if (!row.uniprot_id || ovr.uniprot_id === row.uniprot_id) {
+            source = "override"
           }
         }
-        return row
+        const patched = { ...row, source }
+
+        if (patched.uniprot_id) {
+          try {
+            const protein = await loadProtein(env.DB, patched.uniprot_id)
+            return { ...patched, protein: protein ? sanitizeProteinSummary(protein) : null }
+          } catch {
+            return patched
+          }
+        }
+        return patched
       }),
     )
 

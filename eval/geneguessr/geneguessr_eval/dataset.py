@@ -12,23 +12,23 @@ from inspect_ai.dataset import MemoryDataset, Sample
 
 
 # Curated test set: (uniprot_id, gene_symbol)
-# Spans well-known targets, mid-range, and obscure proteins.
+# Drawn from January 2026 daily picks. Mix of famous, moderate, and obscure.
 CURATED_PROTEINS = [
-    ("P04637", "TP53"),       # tumor protein p53
-    ("P00533", "EGFR"),       # epidermal growth factor receptor
-    ("P38398", "BRCA1"),      # breast cancer type 1 susceptibility
-    ("P01308", "INS"),        # insulin
-    ("P68871", "HBB"),        # hemoglobin subunit beta
-    ("Q9NZC2", "TREM2"),      # triggering receptor on myeloid cells 2
-    ("Q14764", "MVP"),        # major vault protein
-    ("O43526", "KCNQ2"),      # potassium channel subfamily Q member 2
-    ("P05556", "ITGB1"),      # integrin subunit beta 1
-    ("P07949", "RET"),        # ret proto-oncogene
-    ("Q9Y5Y9", "NTRK2"),      # neurotrophic receptor tyrosine kinase 2
-    ("Q8N3R9", "MPP5"),       # membrane palmitoylated protein 5
-    ("O94986", "CEP152"),     # centrosomal protein 152
-    ("Q86VP6", "CAND1"),      # cullin-associated NEDD8-dissociated 1
-    ("Q9UPN3", "MACF1"),      # microtubule-actin crosslinking factor 1
+    ("O14746", "TERT"),       # telomerase reverse transcriptase
+    ("Q92731", "ESR2"),       # estrogen receptor beta
+    ("P43220", "GLP1R"),      # glucagon-like peptide 1 receptor
+    ("P02042", "HBD"),        # hemoglobin subunit delta
+    ("P04156", "PRNP"),       # prion protein
+    ("Q92918", "MAP4K1"),     # mitogen-activated protein kinase kinase kinase kinase 1
+    ("Q71U36", "TUBA1A"),     # tubulin alpha-1A chain
+    ("P11387", "TOP1"),       # DNA topoisomerase 1
+    ("Q8N3U4", "STAG2"),      # cohesin subunit SA-2
+    ("P49711", "CTCF"),       # transcriptional repressor CTCF
+    ("Q9HCK5", "AGO4"),       # protein argonaute-4
+    ("P48039", "MTNR1A"),     # melatonin receptor type 1A
+    ("A6ND01", "IZUMO1R"),    # IZUMO1 receptor (JUNO)
+    ("P43320", "CRYBB2"),     # beta-crystallin B2
+    ("P00742", "F10"),        # coagulation factor X
 ]
 
 

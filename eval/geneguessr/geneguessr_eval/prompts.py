@@ -14,13 +14,14 @@ guessing wrong).
 
 ## Your tools
 
-- **view_structure()**: See the protein's 3D structure from 6 angles. Multi-chain structures \
-have colored chain labels; the target chain is labeled "Target".
+- **view_structure()**: The protein's 3D structure from 6 angles is shown at the start \
+of the conversation. Multi-chain structures have colored chain labels; the target chain \
+is labeled "Target". Call this tool if you need a reminder about what the structure showed.
 
 - **search_proteins(query)**: Search by gene name, protein name, or keyword. Returns up to \
 10 matches.
 
-- **guess_protein(gene_name)**: Submit a guess by gene symbol (e.g. "TP53"). Returns a \
+- **guess_protein(gene_name)**: Submit a guess by gene symbol (e.g. "WEE1"). Returns a \
 similarity score and shows which of the target's revealed properties your guess shares.
 
 - **reveal_hint(hint_id)**: Spend a hint credit to unmask a hidden clue section. Use \

@@ -221,6 +221,10 @@ function shouldAllowUnsafeEval(url) {
   if (path.startsWith("/static/geneguessr/") || path.startsWith("/static/vendor/pdbe-molstar@")) {
     return true
   }
+  // Admin panel also loads Mol* for protein preview
+  if (path === "/admin" || path === "/admin-v2") {
+    return true
+  }
   return (
     path === "/apps/geneguessr" ||
     path === "/apps/geneguessr/" ||
@@ -1178,13 +1182,19 @@ export default {
 
       // 5. Pre-warm bootstrap KV cache for tomorrow (for both origins)
       const origins = ["https://brinedew.bio", "https://geneguessr.brinedew.bio"]
+      const cronAudit = {
+        date: tomorrowStr,
+        source: source === "admin_override" ? "override" : "computed",
+        override_id: overrideId || null,
+        rejected: [],
+      }
       for (const origin of origins) {
         const structureToken = await buildTargetStructureToken(targetProtein, env, {
           practiceMode: false,
           origin,
         })
         if (!structureToken) continue
-        await setDailyBootstrapCache(env, tomorrowStr, origin, targetProtein, structureToken)
+        await setDailyBootstrapCache(env, tomorrowStr, origin, targetProtein, structureToken, cronAudit)
       }
       console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`)
 
@@ -2057,12 +2067,13 @@ async function getDailyBootstrapCache(env, date, origin) {
   return null
 }
 
-async function setDailyBootstrapCache(env, date, origin, targetProtein, structureToken) {
+async function setDailyBootstrapCache(env, date, origin, targetProtein, structureToken, audit) {
   const cacheKey = `${DAILY_BOOTSTRAP_CACHE_PREFIX}${date}`
   const payload = {
     origin,
     targetProtein,
     structureToken,
+    audit: audit || null,
     cachedAt: Date.now(),
   }
   try {
@@ -2161,7 +2172,8 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       getGameState(env, sessionId).catch(() => null), // Graceful fallback if session doesn't exist
     ])
     let targetSeed = targetSeedRaw?.protein ? targetSeedRaw.protein : targetSeedRaw
-    const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : null
+    // Prefer audit from the API response, but fall back to cached audit from bootstrap cache
+    const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : (cachedDaily?.audit || null)
     console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || "null"}`)
 
     // When set, `date` should override any existing practice session for today.
@@ -2306,15 +2318,6 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       structureToken = freshStructureToken
     }
 
-    // ⚠️ POPULATE CACHE FOR NEXT REQUEST (daily mode only) ⚠️
-    if (!practiceMode && !cachedDaily && targetProtein && structureToken) {
-      ctx.waitUntil(
-        setDailyBootstrapCache(env, today, url.origin, targetProtein, structureToken).catch((e) =>
-          console.warn("Cache population failed:", e),
-        ),
-      )
-    }
-
     // Record what was actually shown to players (daily mode only).
     // Uses waitUntil so we don't add latency to bootstrap.
     if (!practiceMode && targetProtein?.uniprot) {
@@ -2323,6 +2326,16 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
           ? targetAudit
           : { date: today, source: "unknown", rejected: [] }
       ctx.waitUntil(recordDailyPickOnce(env, today, targetProtein.uniprot, audit))
+
+      // ⚠️ POPULATE CACHE FOR NEXT REQUEST (daily mode only) ⚠️
+      // Include audit so future cache hits preserve override source info.
+      if (!cachedDaily && targetProtein && structureToken) {
+        ctx.waitUntil(
+          setDailyBootstrapCache(env, today, url.origin, targetProtein, structureToken, audit).catch((e) =>
+            console.warn("Cache population failed:", e),
+          ),
+        )
+      }
     }
 
     // If a completed daily game never got recorded (retry/crash), backfill aggregates in the background.

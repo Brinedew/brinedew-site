@@ -185,8 +185,8 @@ def search_proteins():
         Returns up to 10 matching proteins.
 
         Args:
-            query: Search query -- gene symbol (e.g. "BRCA1"), protein name
-                (e.g. "insulin"), or keyword (e.g. "kinase"). Minimum 2 characters.
+            query: Search query -- gene symbol (e.g. "FOXP2"), protein name
+                (e.g. "collagen"), or keyword (e.g. "kinase"). Minimum 2 characters.
 
         Returns:
             Search results with gene symbol and full name for each match.
@@ -228,25 +228,21 @@ def search_proteins():
 def guess_protein():
     """Submit a protein guess."""
 
-    async def execute(gene_name: str) -> str | list:
+    async def execute(gene_name: str) -> str:
         """Guess which protein is the target by gene symbol.
 
-        You get back a similarity score, full protein info for your guess
-        (the same feedback card a human player sees), and a 3D structure
-        collage of the guessed protein so you can visually compare it to
-        the target.
+        You get back a similarity score and full protein info for your guess
+        (the same feedback card a human player sees) so you can compare
+        properties with the target.
 
         Args:
-            gene_name: Gene symbol of your guess (e.g. "TP53", "BRCA1").
+            gene_name: Gene symbol of your guess (e.g. "WEE1", "FOXP2").
                 Use search_proteins() to find gene names.
 
         Returns:
             Whether the guess was correct, similarity score, full protein
-            sections for the guessed protein, matching properties, and a
-            6-view 3D structure image of the guess.
+            sections for the guessed protein, and matching properties.
         """
-        from inspect_ai.model import ContentImage, ContentText
-
         session_id = await _ensure_session(
             store_as(GameSession).protein_id
         )
@@ -322,7 +318,12 @@ def guess_protein():
                     items = section.get("items", [])
                     if not items:
                         continue
+                    # Gene summary is a prose paragraph, render it differently
                     if section_id == "summary":
+                        summary_text = items[0].get("text", "") if items else ""
+                        if summary_text:
+                            lines.append(f"\n  Gene summary:")
+                            lines.append(f"    {summary_text}")
                         continue
                     if label:
                         lines.append(f"\n  {label}:")
@@ -348,11 +349,16 @@ def guess_protein():
                             lines.append(f"    - {text}")
 
         lines.append(f"\nGuesses used: {game_state.get('guesses_used', '?')}/{game_state.get('guesses_used', 0) + game_state.get('guesses_remaining', 0)}")
-        lines.append(f"Hint credits: {game_state.get('hint_credits', '?')}")
+        hint_credits = game_state.get('hint_credits', 0)
+        lines.append(f"Hint credits: {hint_credits}")
         lines.append(f"Hints revealed: {game_state.get('hints_revealed', 0)}")
 
         remaining = data.get("remaining_actions", "?")
         lines.append(f"({remaining} actions remaining)")
+
+        # Nudge the model to spend hint credits when available
+        if not correct and hint_credits and hint_credits > 0:
+            lines.append(f"\n>> You have {hint_credits} hint credit(s) to spend! Use reveal_hint() before guessing again.")
 
         if data.get("game_over"):
             lines.append("\n** Game over **")
@@ -362,26 +368,6 @@ def guess_protein():
         game_session.hints_used = game_state.get("hints_revealed", 0)
 
         text_output = "\n".join(lines)
-
-        # Render 3D structure of the guessed protein (same as human feedback card)
-        guess_uniprot = guess_info.get("uniprot", "")
-        if not correct and guess_uniprot:
-            try:
-                structure_image = await _render_structure_collage(guess_uniprot)
-                if structure_image:
-                    return [
-                        ContentText(text=text_output),
-                        ContentText(
-                            text=(
-                                f"3D structure of your guess ({guess_info.get('gene', '?')}) "
-                                "shown below for visual comparison with the target."
-                            )
-                        ),
-                        ContentImage(image=f"data:image/png;base64,{structure_image}"),
-                    ]
-            except Exception:
-                pass  # Fall through to text-only output
-
         return text_output
 
     return execute
@@ -397,7 +383,9 @@ async def _render_structure_collage(protein_id: str) -> str | None:
 
     try:
         ctx = await _get_browser_context()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Browser launch failed: {e}")
         return None
 
     page = await ctx.new_page()
@@ -457,7 +445,9 @@ async def _render_structure_collage(protein_id: str) -> str | None:
         buf = io.BytesIO()
         collage.save(buf, format="PNG", optimize=True)
         return base64.b64encode(buf.getvalue()).decode()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Structure collage failed: {e}")
         return None
     finally:
         await page.close()
@@ -516,12 +506,15 @@ def reveal_hint():
         game_session.hints_used = result.get("hints_revealed", 0)
 
         remaining = data.get("remaining_actions", "?")
-        return (
+        msg = (
             f"Revealed '{hint_id}':\n{text}\n\n"
             f"(Hint credits remaining: {remaining_credits}, "
             f"total hints revealed: {total_hints}, "
             f"{remaining} actions remaining)"
         )
+        if isinstance(remaining_credits, int) and remaining_credits > 0:
+            msg += f"\n\n>> You still have {remaining_credits} hint credit(s)! Use reveal_hint() to unmask another clue."
+        return msg
 
     return execute
 
@@ -565,24 +558,37 @@ def get_current_clues():
         lines = [game_info, "=" * 60]
 
         for section in clues:
-            title = section.get("title", "Unknown Section")
-            lines.append(f"\n## {title}")
+            # Sections use "label" for display name, "id" as fallback
+            section_label = section.get("label") or section.get("id", "Unknown Section")
+            lines.append(f"\n## {section_label}")
 
             items = section.get("items", [])
             for item in items:
                 item_id = item.get("id", "")
-                masked = item.get("masked", False)
-                label = item.get("label", "")
-                text = item.get("text", "")
+                # An item is masked if text is None/null and it hasn't been revealed
+                revealed = item.get("revealed", False)
+                locked = item.get("locked", False)
+                text = item.get("text")  # None when masked, string when revealed
 
-                if masked:
-                    lines.append(f"  [{label}] -- MASKED (hint_id: \"{item_id}\")")
+                if text is None and not revealed:
+                    # Masked hint — show the hint_id so the agent can reveal it
+                    if item_id:
+                        lines.append(f"  [HIDDEN] (hint_id: \"{item_id}\")")
+                    elif locked:
+                        lines.append(f"  [LOCKED - contains spoiler]")
                 else:
                     display_text = text if text else "(empty)"
-                    lines.append(f"  [{label}]: {display_text}")
+                    lines.append(f"  {display_text}")
 
         remaining = data.get("remaining_actions", "?")
         lines.append(f"\n({remaining} actions remaining)")
+
+        # Remind about hint credits so the model doesn't forget to use them
+        hint_credits = result.get("hint_credits", 0)
+        hints_revealed = result.get("hints_revealed", 0)
+        if hint_credits > 0:
+            lines.append(f"\n>> You have {hint_credits} hint credit(s) to spend! Use reveal_hint() to unmask a clue.")
+
         return "\n".join(lines)
 
     return execute
@@ -592,39 +598,27 @@ def get_current_clues():
 def view_structure():
     """View the mystery protein's 3D structure from six angles."""
 
-    async def execute() -> list:
+    async def execute() -> str:
         """View the 3D structure of the mystery protein as a 6-view collage.
 
-        Shows the protein from front, back, left, right, top, and bottom.
-        Multi-chain structures have colored labels; the target chain shows "Target".
-        This is the same 3D view a human player sees when playing GeneGuessr.
+        The structure image was already shown at the start of this conversation.
+        Calling this tool again will re-describe the structure.
 
         Returns:
-            A labeled 6-view collage image of the protein structure.
+            A reminder that the structure image was shown at the start.
         """
-        from inspect_ai.model import ContentImage, ContentText
-
         session = store_as(GameSession)
         protein_id = session.protein_id
 
         if not protein_id:
             return "Structure viewing requires a specified protein (not random mode)."
 
-        image_b64 = await _render_structure_collage(protein_id)
-        if not image_b64:
-            return "Structure failed to render (timeout or Mol* error)."
-
-        return [
-            ContentText(
-                text=(
-                    "6-view 3D structure of the mystery protein "
-                    "(front, back, left, right, top, bottom). "
-                    "Colored labels mark protein chains; "
-                    "'Target' = the mystery protein's chains."
-                )
-            ),
-            ContentImage(image=f"data:image/png;base64,{image_b64}"),
-        ]
+        return (
+            "The 6-view 3D structure collage of the mystery protein was shown "
+            "at the start of this conversation (front, back, left, right, top, "
+            "bottom views). Colored labels mark protein chains; 'Target' = "
+            "the mystery protein's chain. Scroll up to review it."
+        )
 
     return execute
 
@@ -769,9 +763,31 @@ def setup_game():
 
         clue_text = "\n".join(clue_lines)
 
-        # Prepend the clues as a user message
-        from inspect_ai.model import ChatMessageUser
-        state.messages.append(ChatMessageUser(content=clue_text))
+        # Pre-render the target structure and include in initial message
+        # This avoids image-in-tool-response ordering issues with OpenAI API
+        from inspect_ai.model import ChatMessageUser, ContentImage, ContentText
+
+        if session.protein_id:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("Pre-rendering structure collage for %s...", session.protein_id)
+            image_b64 = await _render_structure_collage(session.protein_id)
+            if image_b64:
+                state.messages.append(ChatMessageUser(content=[
+                    ContentText(text=clue_text),
+                    ContentText(text=(
+                        "\n\nBelow is the 6-view 3D structure of the mystery protein "
+                        "(front, back, left, right, top, bottom). "
+                        "Colored labels mark protein chains; "
+                        "'Target' = the mystery protein's chain."
+                    )),
+                    ContentImage(image=f"data:image/png;base64,{image_b64}"),
+                ]))
+            else:
+                logger.warning("Structure pre-render failed; sending clues without image")
+                state.messages.append(ChatMessageUser(content=clue_text))
+        else:
+            state.messages.append(ChatMessageUser(content=clue_text))
 
         return state
 
@@ -786,7 +802,7 @@ def setup_game():
 @task
 def geneguessr(
     n_samples: int | None = None,
-    protein_ids: str | None = None,
+    protein_ids: str | list[str] | None = None,
     random_mode: bool = False,
     message_limit: int = 80,
     token_limit: int = 500_000,
@@ -802,7 +818,10 @@ def geneguessr(
     """
     # Build dataset
     if protein_ids:
-        id_list = [p.strip() for p in protein_ids.split(",") if p.strip()]
+        if isinstance(protein_ids, str):
+            id_list = [p.strip() for p in protein_ids.split(",") if p.strip()]
+        else:
+            id_list = list(protein_ids)
         dataset = make_dataset(protein_ids=id_list)
     elif random_mode:
         dataset = make_random_dataset(n_samples or 10)
