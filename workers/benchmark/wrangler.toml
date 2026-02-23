@@ -1,0 +1,56 @@
+# GeneGuessr Benchmark API Worker
+#
+# Separate Worker from the main geneguessr-api to isolate benchmark traffic.
+# Shares the same D1 database (reads protein data, writes benchmark tables).
+#
+# Deploy: wrangler deploy --config workers/benchmark/wrangler.toml
+# Dev:    wrangler dev --config workers/benchmark/wrangler.toml
+#
+# Secrets (set via `wrangler secret put <NAME> --config workers/benchmark/wrangler.toml`):
+#   (none yet — API keys live in D1 benchmark_api_keys table)
+
+name = "geneguessr-benchmark"
+main = "index.js"
+compatibility_date = "2025-11-12"
+
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "benchmark.geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" }
+]
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+# Same D1 database as the main Worker — reads proteins, writes benchmark tables.
+# Migrations are managed from the repo root (Website/migrations/) and applied
+# by the main deploy pipeline or via:
+#   wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml
+[[d1_databases]]
+binding = "DB"
+database_name = "geneguessr"
+database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
+migrations_dir = "migrations"
+
+# --- Staging ---
+[env.staging]
+name = "geneguessr-benchmark-staging"
+workers_dev = true
+preview_urls = true
+
+routes = []
+
+# Reuse prod D1 (read-heavy protein data; benchmark tables are low-write).
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "geneguessr"
+database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
+migrations_dir = "migrations"

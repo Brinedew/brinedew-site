@@ -1,0 +1,57 @@
+name: Deploy Benchmark Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/benchmark/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install Wrangler CLI
+        run: npm install -g wrangler@4
+
+      - name: Apply D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "Applying D1 migrations..."
+          wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml
+
+      - name: Deploy Benchmark Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "Deploying geneguessr-benchmark..."
+          wrangler deploy --config workers/benchmark/wrangler.toml
+
+      - name: Smoke test health endpoint
+        run: |
+          set -euo pipefail
+          echo "Waiting 10s for Worker to propagate..."
+          sleep 10
+
+          RESP=$(curl -sf "https://benchmark.geneguessr.brinedew.bio/health" || echo '{"ok":false}')
+          echo "Health response: $RESP"
+
+          OK=$(echo "$RESP" | jq -r '.ok')
+          if [ "$OK" != "true" ]; then
+            echo "Health check failed"
+            exit 1
+          fi
+
+          echo "Benchmark Worker is healthy"

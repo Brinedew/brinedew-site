@@ -28,6 +28,7 @@ scripts/uniprot_cache/
 **/*.excalidraw.svg
 
 .wrangler/
+.dev.vars
 
 # Binary executables (download separately)
 scripts/datasets.exe
