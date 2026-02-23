@@ -18,7 +18,7 @@
 
 const MAX_ACTIONS_PER_SESSION = 30
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
-const CORS_ORIGIN = "https://benchmark.geneguessr.brinedew.bio"
+const CORS_ORIGIN = "https://geneguessr-bench.brinedew.bio"
 const JSON_HEADERS = { "Content-Type": "application/json" }
 
 // ---------------------------------------------------------------------------

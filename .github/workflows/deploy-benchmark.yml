@@ -45,7 +45,7 @@ jobs:
           echo "Waiting 10s for Worker to propagate..."
           sleep 10
 
-          RESP=$(curl -sf "https://benchmark.geneguessr.brinedew.bio/health" || echo '{"ok":false}')
+          RESP=$(curl -sf "https://geneguessr-bench.brinedew.bio/health" || echo '{"ok":false}')
           echo "Health response: $RESP"
 
           OK=$(echo "$RESP" | jq -r '.ok')

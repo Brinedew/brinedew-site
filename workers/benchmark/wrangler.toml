@@ -17,7 +17,7 @@ workers_dev = false
 preview_urls = false
 
 routes = [
-  { pattern = "benchmark.geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" }
+  { pattern = "geneguessr-bench.brinedew.bio/*", zone_name = "brinedew.bio" }
 ]
 
 [observability]
