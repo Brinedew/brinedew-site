@@ -1,35 +1,51 @@
 /**
- * GeneGuessr Benchmark API Worker
+ * GeneGuessr Benchmark API Worker — Phase 1
  *
- * Handles benchmark session lifecycle and action logging.
- * Shares D1 with the main geneguessr-api Worker but runs independently.
+ * Real game logic wired up. An LLM agent can play a full game through this API:
+ *   1. POST /sessions         — start a game (picks a protein)
+ *   2. POST /actions           — search, guess, reveal hints, get clues
+ *   3. GET  /sessions/:id      — check current state
+ *   4. POST /sessions/:id/end  — close session, get final score
  *
- * Endpoints:
- *   GET  /health          — connectivity check (no auth)
- *   POST /sessions        — create a benchmark session
- *   POST /actions         — log a benchmark action
- *   GET  /sessions/:id    — get session state
- *   POST /sessions/:id/end — end a session, compute final scores
+ * State is stored as a JSON blob in benchmark_sessions.state.
+ * Shares D1 with the main geneguessr-api Worker.
  */
+
+import {
+  scoreGuess,
+  buildClueSections,
+  maskClueSections,
+  extractHintData,
+  collectMatchedHintTexts,
+  sanitizeTargetProtein,
+  MAX_GUESSES,
+  DEFAULT_HINT_COST,
+  HINT_REWARD_ON_INCORRECT,
+} from "../lib/game-engine.js"
+
+import {
+  searchProteins,
+  fetchProteinByUniprot,
+  getBlendedSimilarity,
+  pickRandomProteinBalanced,
+} from "../lib/protein-store.js"
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_ACTIONS_PER_SESSION = 30
-const SESSION_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+const MAX_ACTIONS_PER_SESSION = 50 // bumped from 30 — agents need search + guess + hint cycles
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes (agents are slower than humans)
 const CORS_ORIGIN = "https://geneguessr-bench.brinedew.bio"
 const JSON_HEADERS = { "Content-Type": "application/json" }
+
+// Valid action types that the benchmark accepts
+const VALID_ACTIONS = new Set(["search", "guess", "reveal_hint", "get_clues"])
 
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
-/**
- * Extract Bearer token from Authorization header, SHA-256 hash it,
- * and look up the hash in benchmark_api_keys.
- * Returns { ok: true, keyHash, name } or { ok: false, status, message }.
- */
 async function verifyApiKey(request, db) {
   const authHeader = request.headers.get("Authorization") || ""
   const match = authHeader.match(/^Bearer\s+(\S+)$/i)
@@ -48,12 +64,8 @@ async function verifyApiKey(request, db) {
     .bind(keyHash)
     .first()
 
-  if (!row) {
-    return { ok: false, status: 401, message: "Invalid API key" }
-  }
-  if (!row.active) {
-    return { ok: false, status: 403, message: "API key is deactivated" }
-  }
+  if (!row) return { ok: false, status: 401, message: "Invalid API key" }
+  if (!row.active) return { ok: false, status: 403, message: "API key is deactivated" }
 
   return { ok: true, keyHash: row.key_hash, name: row.name }
 }
@@ -64,7 +76,6 @@ async function verifyApiKey(request, db) {
 
 function corsHeaders(request) {
   const origin = request.headers.get("Origin") || ""
-  // Allow the benchmark subdomain and localhost for dev
   const allowed =
     origin === CORS_ORIGIN ||
     origin.startsWith("http://localhost:") ||
@@ -111,6 +122,31 @@ function generateId(prefix) {
 }
 
 // ---------------------------------------------------------------------------
+// Game state helpers
+// ---------------------------------------------------------------------------
+
+function makeInitialState(targetProtein) {
+  return {
+    targetUniprot: targetProtein.uniprot,
+    targetGene: targetProtein.gene,
+    guesses: [],
+    hintCredits: 1,
+    revealedHints: [],
+    won: false,
+    guessCount: 0,
+  }
+}
+
+function parseState(stateStr) {
+  if (!stateStr) return null
+  try {
+    return JSON.parse(stateStr)
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Route: GET /health
 // ---------------------------------------------------------------------------
 
@@ -119,7 +155,6 @@ async function handleHealth(request, db) {
     const result = await db.prepare("SELECT 1 as ok").first()
     if (!result?.ok) throw new Error("D1 ping failed")
 
-    // Check benchmark tables exist
     const tables = await db
       .prepare(
         `SELECT name FROM sqlite_master
@@ -133,6 +168,7 @@ async function handleHealth(request, db) {
     return jsonResponse(
       {
         ok: true,
+        phase: 1,
         tables: tableNames,
         timestamp: new Date().toISOString(),
       },
@@ -145,21 +181,43 @@ async function handleHealth(request, db) {
 }
 
 // ---------------------------------------------------------------------------
-// Route: POST /sessions
+// Route: POST /sessions — start a new game
 // ---------------------------------------------------------------------------
 
 async function handleCreateSession(request, db, auth) {
   const body = await safeJson(request)
+  const corpusVersion = body?.corpus_version || "v1"
+
+  let targetProtein = null
+
+  if (body?.protein_id) {
+    // Specific protein requested (for reproducible evals)
+    targetProtein = await fetchProteinByUniprot(db, body.protein_id.toUpperCase())
+    if (!targetProtein) {
+      return jsonResponse({ error: `Protein ${body.protein_id} not found` }, 404, request)
+    }
+  } else {
+    // Random balanced pick
+    const pick = await pickRandomProteinBalanced(db)
+    if (!pick?.protein) {
+      return jsonResponse({ error: "Failed to pick a target protein" }, 500, request)
+    }
+    targetProtein = pick.protein
+  }
 
   const sessionId = generateId("bench")
-  const corpusVersion = body?.corpus_version || "v0"
+  const state = makeInitialState(targetProtein)
+
+  // Build initial clues so the agent knows what sections exist
+  const clueSections = buildClueSections(targetProtein)
+  const maskedClues = maskClueSections(clueSections, new Set())
 
   await db
     .prepare(
-      `INSERT INTO benchmark_sessions (id, api_key_hash, status, corpus_version)
-       VALUES (?, ?, 'active', ?)`,
+      `INSERT INTO benchmark_sessions (id, api_key_hash, protein_id, status, corpus_version, state)
+       VALUES (?, ?, ?, 'active', ?, ?)`,
     )
-    .bind(sessionId, auth.keyHash, corpusVersion)
+    .bind(sessionId, auth.keyHash, targetProtein.uniprot, corpusVersion, JSON.stringify(state))
     .run()
 
   return jsonResponse(
@@ -167,8 +225,12 @@ async function handleCreateSession(request, db, auth) {
       session_id: sessionId,
       status: "active",
       corpus_version: corpusVersion,
+      max_guesses: MAX_GUESSES,
       max_actions: MAX_ACTIONS_PER_SESSION,
       timeout_ms: SESSION_TIMEOUT_MS,
+      hint_credits: state.hintCredits,
+      clues: maskedClues,
+      available_actions: ["search", "guess", "reveal_hint", "get_clues"],
     },
     201,
     request,
@@ -176,10 +238,10 @@ async function handleCreateSession(request, db, auth) {
 }
 
 // ---------------------------------------------------------------------------
-// Route: POST /actions
+// Route: POST /actions — the main game loop
 // ---------------------------------------------------------------------------
 
-async function handleLogAction(request, db, auth) {
+async function handleAction(request, db, auth) {
   const body = await safeJson(request)
   if (!body) {
     return jsonResponse({ error: "Invalid JSON body" }, 400, request)
@@ -189,18 +251,23 @@ async function handleLogAction(request, db, auth) {
   if (!session_id || !action) {
     return jsonResponse({ error: "Missing session_id or action" }, 400, request)
   }
+  if (!VALID_ACTIONS.has(action)) {
+    return jsonResponse(
+      { error: `Unknown action "${action}". Valid: ${[...VALID_ACTIONS].join(", ")}` },
+      400,
+      request,
+    )
+  }
 
-  // Verify session exists and belongs to this API key
+  // Load session
   const session = await db
     .prepare(
-      "SELECT id, api_key_hash, status, action_count, started_at FROM benchmark_sessions WHERE id = ?",
+      "SELECT id, api_key_hash, status, action_count, started_at, state FROM benchmark_sessions WHERE id = ?",
     )
     .bind(session_id)
     .first()
 
-  if (!session) {
-    return jsonResponse({ error: "Session not found" }, 404, request)
-  }
+  if (!session) return jsonResponse({ error: "Session not found" }, 404, request)
   if (session.api_key_hash !== auth.keyHash) {
     return jsonResponse({ error: "Session belongs to a different API key" }, 403, request)
   }
@@ -208,7 +275,7 @@ async function handleLogAction(request, db, auth) {
     return jsonResponse({ error: `Session is ${session.status}, not active` }, 409, request)
   }
 
-  // Check action budget
+  // Budget check
   if (session.action_count >= MAX_ACTIONS_PER_SESSION) {
     return jsonResponse(
       {
@@ -221,35 +288,57 @@ async function handleLogAction(request, db, auth) {
     )
   }
 
-  // Check session timeout
+  // Timeout check
   const elapsed = Date.now() - new Date(session.started_at + "Z").getTime()
   if (elapsed > SESSION_TIMEOUT_MS) {
-    // Auto-close expired session
     await db
       .prepare(
         "UPDATE benchmark_sessions SET status = 'expired', ended_at = datetime('now') WHERE id = ?",
       )
       .bind(session_id)
       .run()
+    return jsonResponse({ error: "Session expired", session_id, elapsed_ms: elapsed }, 410, request)
+  }
 
-    return jsonResponse(
-      { error: "Session expired", session_id, elapsed_ms: elapsed },
-      410,
-      request,
-    )
+  const state = parseState(session.state)
+  if (!state) {
+    return jsonResponse({ error: "Corrupt session state" }, 500, request)
   }
 
   const actionSeq = session.action_count + 1
   const startTime = Date.now()
 
-  // For now, we only log. Game logic (executing the action) comes in Phase 1.
-  // The result will be populated once we wire up game-engine imports.
-  const result = { logged: true, note: "Action logging only (Phase 0). Game logic not yet wired." }
+  // Dispatch to the right handler
+  let result
+  try {
+    switch (action) {
+      case "search":
+        result = await executeSearch(db, state, payload)
+        break
+      case "guess":
+        result = await executeGuess(db, state, payload)
+        break
+      case "reveal_hint":
+        result = await executeRevealHint(db, state, payload)
+        break
+      case "get_clues":
+        result = await executeGetClues(db, state)
+        break
+      default:
+        result = { error: `Unhandled action: ${action}` }
+    }
+  } catch (err) {
+    console.error(`Action ${action} failed:`, err)
+    result = { error: `Action failed: ${err.message}` }
+  }
 
   const latencyMs = Date.now() - startTime
 
-  // Write action log and update session in a batch
-  await db.batch([
+  // Check if game just ended
+  const gameOver = state.won || state.guessCount >= MAX_GUESSES
+
+  // Persist updated state + action log in one batch
+  const batchOps = [
     db
       .prepare(
         `INSERT INTO benchmark_actions (session_id, action_seq, action, payload, result, latency_ms)
@@ -264,9 +353,20 @@ async function handleLogAction(request, db, auth) {
         latencyMs,
       ),
     db
-      .prepare("UPDATE benchmark_sessions SET action_count = ? WHERE id = ?")
-      .bind(actionSeq, session_id),
-  ])
+      .prepare("UPDATE benchmark_sessions SET action_count = ?, state = ? WHERE id = ?")
+      .bind(actionSeq, JSON.stringify(state), session_id),
+  ]
+
+  // Track hints_used on every action so it stays current
+  if (state.revealedHints.length > 0) {
+    batchOps.push(
+      db
+        .prepare("UPDATE benchmark_sessions SET hints_used = ? WHERE id = ?")
+        .bind(state.revealedHints.length, session_id),
+    )
+  }
+
+  await db.batch(batchOps)
 
   return jsonResponse(
     {
@@ -276,6 +376,8 @@ async function handleLogAction(request, db, auth) {
       result,
       latency_ms: latencyMs,
       remaining_actions: MAX_ACTIONS_PER_SESSION - actionSeq,
+      game_over: gameOver,
+      won: state.won,
     },
     200,
     request,
@@ -283,7 +385,224 @@ async function handleLogAction(request, db, auth) {
 }
 
 // ---------------------------------------------------------------------------
-// Route: GET /sessions/:id
+// Action: search — autocomplete protein search
+// ---------------------------------------------------------------------------
+
+async function executeSearch(db, state, payload) {
+  const query = (payload?.query || "").trim()
+  if (!query) {
+    return { error: "Missing payload.query" }
+  }
+  if (query.length < 2) {
+    return { error: "Query too short (min 2 chars)" }
+  }
+
+  const guessedUniprots = state.guesses.map((g) => g.uniprot)
+  const results = await searchProteins(db, query, 10, guessedUniprots)
+
+  return {
+    query,
+    results: results.map((r) => ({
+      uniprot: r.uniprot,
+      gene: r.gene,
+      full_name: r.full_name,
+    })),
+    count: results.length,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Action: guess — submit a protein guess
+// ---------------------------------------------------------------------------
+
+async function executeGuess(db, state, payload) {
+  const uniprot = (payload?.uniprot || "").toUpperCase().trim()
+  if (!uniprot) {
+    return { error: "Missing payload.uniprot" }
+  }
+
+  if (state.won) {
+    return { error: "Already won -- game is over" }
+  }
+  if (state.guessCount >= MAX_GUESSES) {
+    return { error: `Out of guesses (max ${MAX_GUESSES})` }
+  }
+  if (state.guesses.some((g) => g.uniprot === uniprot)) {
+    return { error: `Already guessed ${uniprot}` }
+  }
+
+  // Fetch both proteins in parallel
+  const [guessProtein, targetProtein] = await Promise.all([
+    fetchProteinByUniprot(db, uniprot),
+    fetchProteinByUniprot(db, state.targetUniprot),
+  ])
+
+  if (!guessProtein) {
+    return { error: `Protein ${uniprot} not found` }
+  }
+  if (!targetProtein) {
+    return { error: "Target protein unavailable (internal error)" }
+  }
+
+  const correct = guessProtein.uniprot === targetProtein.uniprot
+
+  // Calculate similarity synchronously (benchmark needs deterministic results)
+  let similarity = null
+  let isLadder = false
+  let ladderRank = null
+
+  if (!correct) {
+    const simResult = await getBlendedSimilarity(db, guessProtein.gene, targetProtein.gene, {
+      targetNeighbors: targetProtein.neighbors,
+    })
+    similarity = simResult.blended
+    isLadder = simResult.isLadder
+    ladderRank = simResult.ladderRank
+  } else {
+    similarity = 100
+  }
+
+  const score = scoreGuess(guessProtein, targetProtein, { similarity, isLadder, ladderRank })
+  const matchedHints = collectMatchedHintTexts(targetProtein, guessProtein, score)
+
+  // Update state
+  state.guesses.push({
+    uniprot,
+    gene: guessProtein.gene,
+    correct,
+    similarity,
+    isLadder,
+    ladderRank,
+  })
+  state.guessCount = state.guesses.length
+
+  if (correct) {
+    state.won = true
+  } else {
+    state.hintCredits = (state.hintCredits || 0) + HINT_REWARD_ON_INCORRECT
+  }
+
+  const response = {
+    correct,
+    guess: {
+      uniprot: guessProtein.uniprot,
+      gene: guessProtein.gene,
+      full_name: guessProtein.full_name,
+    },
+    score: {
+      similarity: score.similarity,
+      percent: score.percent,
+      isLadder: score.isLadder,
+      ladderRank: score.ladderRank,
+      domainMatches: score.domainMatches,
+      lengthBinMatch: score.lengthBinMatch,
+      tmMatch: score.tmMatch,
+      secretedMatch: score.secretedMatch,
+      tissueMatch: score.tissueMatch,
+    },
+    matched_hints: matchedHints,
+    game_state: {
+      guesses_used: state.guessCount,
+      guesses_remaining: MAX_GUESSES - state.guessCount,
+      hint_credits: state.hintCredits,
+      hints_revealed: state.revealedHints.length,
+      won: state.won,
+    },
+  }
+
+  if (correct) {
+    response.target = {
+      uniprot: targetProtein.uniprot,
+      gene: targetProtein.gene,
+      full_name: targetProtein.full_name,
+    }
+  }
+
+  return response
+}
+
+// ---------------------------------------------------------------------------
+// Action: reveal_hint — spend a hint credit to reveal a clue section
+// ---------------------------------------------------------------------------
+
+async function executeRevealHint(db, state, payload) {
+  const hintId = payload?.hint_id || payload?.hintId
+  if (!hintId) {
+    return { error: "Missing payload.hint_id" }
+  }
+
+  if (state.revealedHints.includes(hintId)) {
+    return { error: `Hint "${hintId}" already revealed` }
+  }
+
+  const targetProtein = await fetchProteinByUniprot(db, state.targetUniprot)
+  if (!targetProtein) {
+    return { error: "Target protein unavailable (internal error)" }
+  }
+
+  const clueSections = buildClueSections(targetProtein)
+  const hintData = extractHintData(clueSections, hintId)
+
+  if (!hintData || !hintData.text) {
+    const availableIds = clueSections.flatMap((s) =>
+      (s.items || []).map((item) => item.id).filter(Boolean),
+    )
+    return { error: `Hint "${hintId}" not found`, available_hint_ids: availableIds }
+  }
+
+  if (hintData.locked) {
+    return {
+      locked: true,
+      hint_id: hintId,
+      message: "This hint is locked because it would reveal the answer",
+    }
+  }
+
+  if ((state.hintCredits || 0) < DEFAULT_HINT_COST) {
+    return {
+      error: "Not enough hint credits",
+      hint_credits: state.hintCredits,
+      cost: DEFAULT_HINT_COST,
+      message: "Make a wrong guess to earn hint credits",
+    }
+  }
+
+  state.revealedHints.push(hintId)
+  state.hintCredits = Math.max(0, (state.hintCredits || 0) - DEFAULT_HINT_COST)
+
+  return {
+    hint_id: hintId,
+    text: hintData.text,
+    hint_credits_remaining: state.hintCredits,
+    hints_revealed: state.revealedHints.length,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Action: get_clues — get the current masked clue state
+// ---------------------------------------------------------------------------
+
+async function executeGetClues(db, state) {
+  const targetProtein = await fetchProteinByUniprot(db, state.targetUniprot)
+  if (!targetProtein) {
+    return { error: "Target protein unavailable (internal error)" }
+  }
+
+  const clueSections = buildClueSections(targetProtein)
+  const maskedClues = maskClueSections(clueSections, new Set(state.revealedHints))
+
+  return {
+    clues: maskedClues,
+    hint_credits: state.hintCredits,
+    hints_revealed: state.revealedHints.length,
+    guesses_used: state.guessCount,
+    guesses_remaining: MAX_GUESSES - state.guessCount,
+    won: state.won,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Route: GET /sessions/:id — get session state + action history
 // ---------------------------------------------------------------------------
 
 async function handleGetSession(request, db, auth, sessionId) {
@@ -292,11 +611,25 @@ async function handleGetSession(request, db, auth, sessionId) {
     .bind(sessionId)
     .first()
 
-  if (!session) {
-    return jsonResponse({ error: "Session not found" }, 404, request)
-  }
+  if (!session) return jsonResponse({ error: "Session not found" }, 404, request)
   if (session.api_key_hash !== auth.keyHash) {
     return jsonResponse({ error: "Session belongs to a different API key" }, 403, request)
+  }
+
+  const state = parseState(session.state)
+
+  // Build current clues if session has state
+  let clues = null
+  if (state?.targetUniprot) {
+    try {
+      const targetProtein = await fetchProteinByUniprot(db, state.targetUniprot)
+      if (targetProtein) {
+        const clueSections = buildClueSections(targetProtein)
+        clues = maskClueSections(clueSections, new Set(state?.revealedHints || []))
+      }
+    } catch {
+      // Non-fatal
+    }
   }
 
   const actions = await db
@@ -306,12 +639,16 @@ async function handleGetSession(request, db, auth, sessionId) {
     .bind(sessionId)
     .all()
 
+  // Only reveal target protein_id after session is completed or expired.
+  // During active play, showing it would let the agent cheat.
+  const isFinished = session.status !== "active"
+
   return jsonResponse(
     {
       session: {
         id: session.id,
         status: session.status,
-        protein_id: session.protein_id,
+        protein_id: isFinished ? session.protein_id : undefined,
         corpus_version: session.corpus_version,
         action_count: session.action_count,
         hints_used: session.hints_used,
@@ -321,6 +658,17 @@ async function handleGetSession(request, db, auth, sessionId) {
         ended_at: session.ended_at,
         checksum: session.checksum,
       },
+      game_state: state
+        ? {
+            guesses_used: state.guessCount,
+            guesses_remaining: MAX_GUESSES - (state.guessCount || 0),
+            hint_credits: state.hintCredits,
+            hints_revealed: (state.revealedHints || []).length,
+            won: state.won,
+            guesses: state.guesses,
+          }
+        : null,
+      clues,
       actions: (actions?.results || []).map((a) => ({
         ...a,
         payload: JSON.parse(a.payload || "{}"),
@@ -333,18 +681,16 @@ async function handleGetSession(request, db, auth, sessionId) {
 }
 
 // ---------------------------------------------------------------------------
-// Route: POST /sessions/:id/end
+// Route: POST /sessions/:id/end — finalize session
 // ---------------------------------------------------------------------------
 
 async function handleEndSession(request, db, auth, sessionId) {
   const session = await db
-    .prepare("SELECT id, api_key_hash, status FROM benchmark_sessions WHERE id = ?")
+    .prepare("SELECT id, api_key_hash, status, state FROM benchmark_sessions WHERE id = ?")
     .bind(sessionId)
     .first()
 
-  if (!session) {
-    return jsonResponse({ error: "Session not found" }, 404, request)
-  }
+  if (!session) return jsonResponse({ error: "Session not found" }, 404, request)
   if (session.api_key_hash !== auth.keyHash) {
     return jsonResponse({ error: "Session belongs to a different API key" }, 403, request)
   }
@@ -352,7 +698,9 @@ async function handleEndSession(request, db, auth, sessionId) {
     return jsonResponse({ error: `Session is already ${session.status}` }, 409, request)
   }
 
-  // Compute checksum over all actions for reproducibility
+  const state = parseState(session.state)
+
+  // Compute checksum over all actions
   const actions = await db
     .prepare(
       "SELECT action_seq, action, payload FROM benchmark_actions WHERE session_id = ? ORDER BY action_seq",
@@ -372,25 +720,46 @@ async function handleEndSession(request, db, auth, sessionId) {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
 
+  const won = state?.won || false
+  const guessCount = state?.guessCount || 0
+  const hintsUsed = (state?.revealedHints || []).length
+
+  // Score: higher is better. Perfect = 1.0 (guess 1, 0 hints). Lost = 0.0.
+  let finalScore = 0
+  if (won && guessCount > 0) {
+    finalScore = Math.max(0, 1 / guessCount - 0.02 * hintsUsed)
+    finalScore = Math.round(finalScore * 1000) / 1000
+  }
+
   await db
     .prepare(
       `UPDATE benchmark_sessions
-       SET status = 'completed', ended_at = datetime('now'), checksum = ?
+       SET status = 'completed', ended_at = datetime('now'),
+           checksum = ?, final_score = ?, exact_match = ?, hints_used = ?
        WHERE id = ?`,
     )
-    .bind(checksum, sessionId)
+    .bind(checksum, finalScore, won ? 1 : 0, hintsUsed, sessionId)
     .run()
 
-  return jsonResponse(
-    {
-      session_id: sessionId,
-      status: "completed",
-      checksum,
-      action_count: (actions?.results || []).length,
-    },
-    200,
-    request,
-  )
+  const response = {
+    session_id: sessionId,
+    status: "completed",
+    checksum,
+    action_count: (actions?.results || []).length,
+    final_score: finalScore,
+    exact_match: won,
+    guesses_used: guessCount,
+    hints_used: hintsUsed,
+  }
+
+  if (state?.targetUniprot) {
+    response.target = {
+      uniprot: state.targetUniprot,
+      gene: state.targetGene,
+    }
+  }
+
+  return jsonResponse(response, 200, request)
 }
 
 // ---------------------------------------------------------------------------
@@ -403,39 +772,32 @@ export default {
     const path = url.pathname
     const method = request.method
 
-    // CORS preflight
     if (method === "OPTIONS") {
       return handleOptions(request)
     }
 
-    // Health check — no auth required
     if (path === "/health" && method === "GET") {
       return handleHealth(request, env.DB)
     }
 
-    // Everything below requires auth
     const auth = await verifyApiKey(request, env.DB)
     if (!auth.ok) {
       return jsonResponse({ error: auth.message }, auth.status, request)
     }
 
-    // POST /sessions — create a new benchmark session
     if (path === "/sessions" && method === "POST") {
       return handleCreateSession(request, env.DB, auth)
     }
 
-    // POST /actions — log a benchmark action
     if (path === "/actions" && method === "POST") {
-      return handleLogAction(request, env.DB, auth)
+      return handleAction(request, env.DB, auth)
     }
 
-    // GET /sessions/:id — get session state + action history
     const sessionMatch = path.match(/^\/sessions\/([a-z0-9_]+)$/)
     if (sessionMatch && method === "GET") {
       return handleGetSession(request, env.DB, auth, sessionMatch[1])
     }
 
-    // POST /sessions/:id/end — close a session
     const endMatch = path.match(/^\/sessions\/([a-z0-9_]+)\/end$/)
     if (endMatch && method === "POST") {
       return handleEndSession(request, env.DB, auth, endMatch[1])
