@@ -724,12 +724,11 @@ async function handleEndSession(request, db, auth, sessionId) {
   const guessCount = state?.guessCount || 0
   const hintsUsed = (state?.revealedHints || []).length
 
-  // Score: higher is better. Perfect = 1.0 (guess 1, 0 hints). Lost = 0.0.
-  let finalScore = 0
-  if (won && guessCount > 0) {
-    finalScore = Math.max(0, 1 / guessCount - 0.02 * hintsUsed)
-    finalScore = Math.round(finalScore * 1000) / 1000
-  }
+  // Score = max similarity achieved across all guesses, as a 0-1 float.
+  // Correct guess = 100% similarity = 1.0. Never guessed = 0.0.
+  const similarities = (state?.guesses || []).map((g) => g.similarity ?? 0)
+  let finalScore = similarities.length ? Math.max(...similarities) / 100 : 0
+  finalScore = Math.round(finalScore * 1000) / 1000
 
   await db
     .prepare(
