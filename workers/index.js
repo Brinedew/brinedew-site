@@ -225,7 +225,8 @@ function shouldAllowUnsafeEval(url) {
     path === "/apps/geneguessr" ||
     path === "/apps/geneguessr/" ||
     path === "/apps/geneguessr/index" ||
-    path === "/apps/geneguessr/index/"
+    path === "/apps/geneguessr/index/" ||
+    path === "/apps/geneguessr/render"
   )
 }
 
