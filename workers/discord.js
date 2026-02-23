@@ -514,14 +514,18 @@ export async function handleMarkPosted(request, env) {
 
 /**
  * GET /apps/geneguessr/render?day=YYYY-MM-DD&mode=structure
+ * GET /apps/geneguessr/render?protein_id=UNIPROT_ID&mode=structure
  *
  * Minimal structure viewer page for Playwright screenshots.
- * Public endpoint - no auth required (displays past puzzles).
- * Uses the same cached structure approach as the main game.
+ * Public endpoint - no auth required.
+ * Accepts either ?day= (daily puzzle) or ?protein_id= (direct protein lookup).
+ * When chain labels are available, adds floating "Target" callouts.
+ * Exposes window.setCameraView(name) for automated multi-angle capture.
  */
 export async function handleRenderPage(request, env) {
   const url = new URL(request.url)
   const day = url.searchParams.get("day")
+  const proteinId = url.searchParams.get("protein_id")
   const mode = url.searchParams.get("mode") || "structure"
   const allowDebugRender =
     url.hostname.endsWith(".workers.dev") ||
@@ -529,8 +533,15 @@ export async function handleRenderPage(request, env) {
     url.hostname === "127.0.0.1" ||
     url.hostname === "0.0.0.0"
 
-  // Validate day format
-  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+  // Need either day or protein_id
+  if (!day && !proteinId) {
+    return new Response("Provide ?day=YYYY-MM-DD or ?protein_id=UNIPROT_ID", {
+      status: 400,
+      headers: { "Content-Type": "text/plain" },
+    })
+  }
+
+  if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     return new Response("Invalid day format. Use ?day=YYYY-MM-DD", {
       status: 400,
       headers: { "Content-Type": "text/plain" },
@@ -545,63 +556,72 @@ export async function handleRenderPage(request, env) {
     })
   }
 
-  // Try to get the daily bootstrap cache which contains the structure token
   const origin = url.origin
-  const bootstrapKey = `daily_bootstrap:${day}`
-  const bootstrapData = await env.KV.get(bootstrapKey)
-
   let structureToken = null
   let protein = null
 
-  if (bootstrapData) {
-    const bootstrap = JSON.parse(bootstrapData)
-    structureToken = bootstrap.structureToken
-    protein = bootstrap.targetProtein
-  }
-
-  // Fallback: Get from puzzle_actual if no bootstrap cache
-  if (!protein) {
-    const puzzleKey = `puzzle_actual:${day}`
-    const puzzleData = await env.KV.get(puzzleKey)
-
-    if (!puzzleData) {
-      // Staging/dev affordance: allow rendering an arbitrary structure URL so we can validate Mol*
-      // without pre-populating KV puzzle data.
-      const debugStructureUrl = url.searchParams.get("structure_url")
-      const debugFormat = url.searchParams.get("format") || "cif"
-      const debugMoleculeId = url.searchParams.get("molecule_id") || "debug"
-      const debugGene = url.searchParams.get("gene") || "Debug"
-      const debugFullName = url.searchParams.get("full_name") || "Debug render"
-      if (allowDebugRender && debugStructureUrl && /^https:\/\//i.test(debugStructureUrl)) {
-        const html = buildRenderHTML({
-          day,
-          gene: debugGene,
-          fullName: debugFullName,
-          structureUrl: debugStructureUrl,
-          structureFormat: debugFormat,
-          moleculeId: debugMoleculeId,
-        })
-        return new Response(html, {
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "no-cache",
-          },
-        })
-      }
-      return new Response(`No puzzle data for ${day}`, {
+  if (proteinId) {
+    // Direct protein lookup by UniProt ID (used by benchmark screenshot tool)
+    protein = await fetchProteinByUniprot(env.DB, proteinId)
+    if (!protein) {
+      return new Response(`Protein ${proteinId} not found`, {
         status: 404,
         headers: { "Content-Type": "text/plain" },
       })
     }
+  } else {
+    // Day-based path: try bootstrap cache, then puzzle_actual
+    const bootstrapKey = `daily_bootstrap:${day}`
+    const bootstrapData = await env.KV.get(bootstrapKey)
 
-    const puzzle = JSON.parse(puzzleData)
-    protein = await fetchProteinByUniprot(env.DB, puzzle.uniprot_id)
+    if (bootstrapData) {
+      const bootstrap = JSON.parse(bootstrapData)
+      structureToken = bootstrap.structureToken
+      protein = bootstrap.targetProtein
+    }
 
     if (!protein) {
-      return new Response(`Protein ${puzzle.uniprot_id} not found`, {
-        status: 404,
-        headers: { "Content-Type": "text/plain" },
-      })
+      const puzzleKey = `puzzle_actual:${day}`
+      const puzzleData = await env.KV.get(puzzleKey)
+
+      if (!puzzleData) {
+        // Staging/dev affordance: render arbitrary structure URL for Mol* validation
+        const debugStructureUrl = url.searchParams.get("structure_url")
+        const debugFormat = url.searchParams.get("format") || "cif"
+        const debugMoleculeId = url.searchParams.get("molecule_id") || "debug"
+        const debugGene = url.searchParams.get("gene") || "Debug"
+        const debugFullName = url.searchParams.get("full_name") || "Debug render"
+        if (allowDebugRender && debugStructureUrl && /^https:\/\//i.test(debugStructureUrl)) {
+          const html = buildRenderHTML({
+            day,
+            gene: debugGene,
+            fullName: debugFullName,
+            structureUrl: debugStructureUrl,
+            structureFormat: debugFormat,
+            moleculeId: debugMoleculeId,
+          })
+          return new Response(html, {
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "no-cache",
+            },
+          })
+        }
+        return new Response(`No puzzle data for ${day}`, {
+          status: 404,
+          headers: { "Content-Type": "text/plain" },
+        })
+      }
+
+      const puzzle = JSON.parse(puzzleData)
+      protein = await fetchProteinByUniprot(env.DB, puzzle.uniprot_id)
+
+      if (!protein) {
+        return new Response(`Protein ${puzzle.uniprot_id} not found`, {
+          status: 404,
+          headers: { "Content-Type": "text/plain" },
+        })
+      }
     }
   }
 
@@ -654,14 +674,36 @@ export async function handleRenderPage(request, env) {
     moleculeId = storedMeta.moleculeId || moleculeId
   }
 
+  // Build chain labels for floating callouts (multi-chain structures only)
+  let chainLabelsData = null
+  let totalChainCount = 0
+  const chainLabelsRaw =
+    protein.structure_source === "alphafold"
+      ? null
+      : protein.structure_source === "swissmodel"
+        ? protein.swissmodel_chain_labels
+        : protein.pdb_chain_labels
+  if (chainLabelsRaw) {
+    try {
+      chainLabelsData =
+        typeof chainLabelsRaw === "string" ? JSON.parse(chainLabelsRaw) : chainLabelsRaw
+      totalChainCount =
+        chainLabelsData?.reduce((sum, l) => sum + (l.chains?.length || 0), 0) || 0
+    } catch (e) {
+      console.warn("Failed to parse chain_labels for render:", e)
+    }
+  }
+
   // Generate the render HTML with injected structure data
   const html = buildRenderHTML({
-    day,
+    day: day || proteinId,
     gene: protein.gene,
     fullName: protein.full_name,
     structureUrl,
     structureFormat,
     moleculeId,
+    chainLabels: chainLabelsData,
+    totalChainCount,
   })
 
   return new Response(html, {
@@ -675,7 +717,7 @@ export async function handleRenderPage(request, env) {
 /**
  * Build minimal HTML for structure rendering
  */
-function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, moleculeId }) {
+function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, moleculeId, chainLabels, totalChainCount }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -755,7 +797,7 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
         const sourceFormat = ${JSON.stringify(structureFormat)};
         const isBinary = sourceFormat === 'bcif';
 
-        const { loadComplete } = await window.GeneguessrMolstar.initializeViewer(container, {
+        const { viewer, loadComplete } = await window.GeneguessrMolstar.initializeViewer(container, {
           moleculeId: ${JSON.stringify(moleculeId)},
           customData: {
             url: ${JSON.stringify(structureUrl)},
@@ -782,6 +824,46 @@ function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, m
         const result = await loadComplete;
         if (result && result.ok) {
           markSuccess();
+
+          // Floating chain labels (multi-chain structures)
+          const injectedChainLabels = ${JSON.stringify(chainLabels || null)};
+          const injectedTotalChainCount = ${JSON.stringify(totalChainCount || 0)};
+          if (injectedChainLabels && injectedTotalChainCount > 1 &&
+              window.GeneguessrMolstar.setFloatingLabels) {
+            window.GeneguessrMolstar.setFloatingLabels(viewer, container, {
+              mode: 'hidden',
+              chainLabels: injectedChainLabels,
+              totalChainCount: injectedTotalChainCount,
+            });
+          }
+
+          // Camera control for automated multi-view screenshots
+          window.setCameraView = async function(viewName) {
+            if (!viewer || !viewer.plugin) return false;
+            const canvas3d = viewer.plugin.canvas3d;
+            if (!canvas3d || !canvas3d.camera) return false;
+            const cam = canvas3d.camera;
+            const snap = typeof cam.getSnapshot === 'function' ? cam.getSnapshot() : cam.snapshot;
+            const cx = snap.target[0], cy = snap.target[1], cz = snap.target[2];
+            const dx = snap.position[0] - cx, dy = snap.position[1] - cy, dz = snap.position[2] - cz;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const views = {
+              front:  { p: [cx, cy, cz + dist],  u: [0, 1, 0] },
+              back:   { p: [cx, cy, cz - dist],  u: [0, 1, 0] },
+              left:   { p: [cx - dist, cy, cz],  u: [0, 1, 0] },
+              right:  { p: [cx + dist, cy, cz],  u: [0, 1, 0] },
+              top:    { p: [cx, cy + dist, cz],  u: [0, 0, -1] },
+              bottom: { p: [cx, cy - dist, cz],  u: [0, 0, 1] },
+            };
+            const v = views[viewName];
+            if (!v) return false;
+            cam.setState({ ...snap, position: v.p, target: [cx, cy, cz], up: v.u }, 0);
+            if (canvas3d.requestDraw) canvas3d.requestDraw(true);
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            await new Promise(r => setTimeout(r, 300));
+            return true;
+          };
+          window.viewReady = true;
         } else {
           markTimeout();
         }

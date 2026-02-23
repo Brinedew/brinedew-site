@@ -269,6 +269,30 @@ export async function fetchProteinByUniprot(db, uniprot) {
   return protein || null
 }
 
+export async function fetchProteinByGene(db, gene) {
+  if (!gene || typeof gene !== "string") return null
+  const key = gene.toUpperCase().trim()
+  if (!key) return null
+  // Check cache by gene
+  for (const p of proteinCache.values()) {
+    if (p && (p.gene || p.hgnc || "").toUpperCase() === key) return p
+  }
+  let protein = null
+  try {
+    const row = await db
+      .prepare(`SELECT * FROM proteins WHERE upper(gene) = ? LIMIT 1`)
+      .bind(key)
+      .first()
+    protein = toProteinObject(row)
+  } catch (err) {
+    console.warn("GeneGuessr: D1 fetchProteinByGene failed", err)
+  }
+  if (protein) {
+    rememberProtein(normalizeKey(protein.uniprot), protein)
+  }
+  return protein || null
+}
+
 export async function fetchProteinSummaries(db, limit = 100) {
   const { results } = await db
     .prepare(

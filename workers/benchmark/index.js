@@ -14,6 +14,7 @@
 import {
   scoreGuess,
   buildClueSections,
+  buildFeedbackSections,
   maskClueSections,
   extractHintData,
   collectMatchedHintTexts,
@@ -26,6 +27,7 @@ import {
 import {
   searchProteins,
   fetchProteinByUniprot,
+  fetchProteinByGene,
   getBlendedSimilarity,
   pickRandomProteinBalanced,
 } from "../lib/protein-store.js"
@@ -403,8 +405,7 @@ async function executeSearch(db, state, payload) {
   return {
     query,
     results: results.map((r) => ({
-      uniprot: r.uniprot,
-      gene: r.gene,
+      gene: r.gene || r.hgnc,
       full_name: r.full_name,
     })),
     count: results.length,
@@ -416,9 +417,10 @@ async function executeSearch(db, state, payload) {
 // ---------------------------------------------------------------------------
 
 async function executeGuess(db, state, payload) {
+  const gene = (payload?.gene || "").toUpperCase().trim()
   const uniprot = (payload?.uniprot || "").toUpperCase().trim()
-  if (!uniprot) {
-    return { error: "Missing payload.uniprot" }
+  if (!gene && !uniprot) {
+    return { error: "Missing payload.gene (gene symbol)" }
   }
 
   if (state.won) {
@@ -427,18 +429,22 @@ async function executeGuess(db, state, payload) {
   if (state.guessCount >= MAX_GUESSES) {
     return { error: `Out of guesses (max ${MAX_GUESSES})` }
   }
-  if (state.guesses.some((g) => g.uniprot === uniprot)) {
-    return { error: `Already guessed ${uniprot}` }
+  if (state.guesses.some((g) => (gene && g.gene === gene) || (uniprot && g.uniprot === uniprot))) {
+    return { error: `Already guessed ${gene || uniprot}` }
   }
 
-  // Fetch both proteins in parallel
-  const [guessProtein, targetProtein] = await Promise.all([
-    fetchProteinByUniprot(db, uniprot),
-    fetchProteinByUniprot(db, state.targetUniprot),
-  ])
+  // Resolve protein: prefer gene lookup, fall back to uniprot
+  let guessProtein = null
+  if (gene) {
+    guessProtein = await fetchProteinByGene(db, gene)
+  }
+  if (!guessProtein && uniprot) {
+    guessProtein = await fetchProteinByUniprot(db, uniprot)
+  }
+  const targetProtein = await fetchProteinByUniprot(db, state.targetUniprot)
 
   if (!guessProtein) {
-    return { error: `Protein ${uniprot} not found` }
+    return { error: `Protein '${gene || uniprot}' not found` }
   }
   if (!targetProtein) {
     return { error: "Target protein unavailable (internal error)" }
@@ -464,11 +470,12 @@ async function executeGuess(db, state, payload) {
 
   const score = scoreGuess(guessProtein, targetProtein, { similarity, isLadder, ladderRank })
   const matchedHints = collectMatchedHintTexts(targetProtein, guessProtein, score)
+  const guessSections = buildFeedbackSections(guessProtein)
 
   // Update state
   state.guesses.push({
-    uniprot,
-    gene: guessProtein.gene,
+    uniprot: guessProtein.uniprot,
+    gene: guessProtein.gene || guessProtein.hgnc,
     correct,
     similarity,
     isLadder,
@@ -501,6 +508,7 @@ async function executeGuess(db, state, payload) {
       tissueMatch: score.tissueMatch,
     },
     matched_hints: matchedHints,
+    guess_sections: guessSections,
     game_state: {
       guesses_used: state.guessCount,
       guesses_remaining: MAX_GUESSES - state.guessCount,
