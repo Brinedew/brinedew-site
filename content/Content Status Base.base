@@ -40,7 +40,7 @@ views:
       - title
       - file.mtime
     sort:
-      - property: file.size
+      - property: file.mtime
         direction: DESC
     imageFit: ""
     cardSize: 190
