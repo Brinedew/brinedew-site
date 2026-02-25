@@ -1,8 +1,6 @@
 name: Deploy Quartz to GitHub Pages
 
 on:
-  push:
-    branches: ["v2-quartz-migration", "main"]
   workflow_dispatch:
 
 permissions:

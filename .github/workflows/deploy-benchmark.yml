@@ -30,7 +30,19 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           echo "Applying D1 migrations..."
-          wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml
+          set +e
+          OUTPUT=$(wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml --yes 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          if [ "$STATUS" -ne 0 ]; then
+            if echo "$OUTPUT" | grep -qi "duplicate column name: state"; then
+              echo "Migration already applied on remote DB; continuing."
+            else
+              echo "Migration apply failed with unexpected error."
+              exit "$STATUS"
+            fi
+          fi
 
       - name: Deploy Benchmark Worker
         env:
