@@ -22,6 +22,8 @@ function addDaysISO(dateIso, days) {
 }
 
 const DISCORD_RECAP_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+const ADMIN_SCHEDULE_CACHE_PREFIX = "admin_schedule:v1:"
+const ADMIN_SCHEDULE_CACHE_TTL_SECONDS = 10 * 60
 
 async function listAllKvKeys(env, prefix) {
   const keys = []
@@ -36,6 +38,22 @@ async function listAllKvKeys(env, prefix) {
     break
   } while (cursor)
   return keys
+}
+
+function buildAdminScheduleCacheKey(today, futureDays) {
+  return `${ADMIN_SCHEDULE_CACHE_PREFIX}${today}:${futureDays}`
+}
+
+async function invalidateAdminScheduleCache(env) {
+  try {
+    const keys = await listAllKvKeys(env, ADMIN_SCHEDULE_CACHE_PREFIX)
+    if (!keys.length) {
+      return
+    }
+    await Promise.all(keys.map((entry) => env.KV.delete(entry.name)))
+  } catch (err) {
+    console.warn("Failed to invalidate admin schedule cache", err)
+  }
 }
 
 function decodeBase64Png(value) {
@@ -676,6 +694,7 @@ export async function handleOverrideProtein(request, env) {
       set_at: Date.now(),
     },
   })
+  await invalidateAdminScheduleCache(env)
 
   // Override changed the target protein; invalidate previously cached recap image for this day.
   if (env.STRUCTURES_BUCKET) {
@@ -821,6 +840,15 @@ export async function handleAdminSchedule(request, env) {
     const futureDays = Math.max(0, Math.min(370, Number(futureDaysRaw ?? 30) || 30))
 
     const today = new Date().toISOString().slice(0, 10)
+    const scheduleCacheKey = buildAdminScheduleCacheKey(today, futureDays)
+    try {
+      const cached = await env.KV.get(scheduleCacheKey, { type: "json" })
+      if (cached?.today && Array.isArray(cached?.history) && Array.isArray(cached?.upcoming)) {
+        return Response.json(cached)
+      }
+    } catch (err) {
+      console.warn("Admin schedule cache read failed; recomputing", err)
+    }
 
     // Overrides map (we'll use it for upcoming rows)
     const overrideKeys = await listAllKvKeys(env, "puzzle_override:")
@@ -917,11 +945,19 @@ export async function handleAdminSchedule(request, env) {
       })
     }
 
-    return Response.json({
+    const payload = {
       today,
       history,
       upcoming,
-    })
+    }
+    try {
+      await env.KV.put(scheduleCacheKey, JSON.stringify(payload), {
+        expirationTtl: ADMIN_SCHEDULE_CACHE_TTL_SECONDS,
+      })
+    } catch (err) {
+      console.warn("Admin schedule cache write failed; serving uncached", err)
+    }
+    return Response.json(payload)
   } catch (err) {
     console.error("Error in handleAdminSchedule:", err)
     return Response.json({ error: "Internal server error", details: err.message }, { status: 500 })
@@ -1184,6 +1220,7 @@ export async function handleDeleteOverride(request, env) {
 
   const key = `puzzle_override:${date}`
   await env.KV.delete(key)
+  await invalidateAdminScheduleCache(env)
 
   // Override removal can change the selected protein; invalidate day image cache.
   if (env.STRUCTURES_BUCKET) {

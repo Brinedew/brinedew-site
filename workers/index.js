@@ -2149,10 +2149,10 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
  * KV lookup: ~1-5ms vs full computation: ~500-2000ms
  */
 async function getDailyBootstrapCache(env, date, origin) {
-  const cacheKey = `${DAILY_BOOTSTRAP_CACHE_PREFIX}${date}`
+  const cacheKey = buildDailyBootstrapCacheKey(date, origin)
   try {
     const cached = await env.KV.get(cacheKey, { type: "json" })
-    if (cached && cached.origin === origin) {
+    if (cached) {
       console.log(`[PERF] Daily bootstrap cache HIT for ${date}`)
       return cached
     }
@@ -2163,7 +2163,7 @@ async function getDailyBootstrapCache(env, date, origin) {
 }
 
 async function setDailyBootstrapCache(env, date, origin, targetProtein, structureToken, audit) {
-  const cacheKey = `${DAILY_BOOTSTRAP_CACHE_PREFIX}${date}`
+  const cacheKey = buildDailyBootstrapCacheKey(date, origin)
   const payload = {
     origin,
     targetProtein,
@@ -2181,6 +2181,41 @@ async function setDailyBootstrapCache(env, date, origin, targetProtein, structur
   } catch (e) {
     console.warn("Daily bootstrap cache write failed:", e)
   }
+}
+
+function buildDailyBootstrapCacheKey(date, origin) {
+  const safeDate = String(date || "").trim()
+  let hostKey = "unknown"
+  try {
+    hostKey = new URL(String(origin || "")).host.toLowerCase() || hostKey
+  } catch {
+    hostKey = String(origin || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]/g, "") || hostKey
+  }
+  return `${DAILY_BOOTSTRAP_CACHE_PREFIX}${safeDate}:${hostKey}`
+}
+
+async function getProdDailyBootstrapCache(env, date) {
+  if (!env?.PROD_KV?.get) {
+    return null
+  }
+
+  const candidateOrigins = [`https://${GENEGUESSR_HOST}`, "https://brinedew.bio", "https://www.brinedew.bio"]
+  for (const origin of candidateOrigins) {
+    const keyed = await env.PROD_KV.get(buildDailyBootstrapCacheKey(date, origin), {
+      type: "json",
+    })
+    if (keyed) {
+      return keyed
+    }
+  }
+
+  // Legacy single-origin key fallback (pre origin-scoped cache keys).
+  return env.PROD_KV.get(`${DAILY_BOOTSTRAP_CACHE_PREFIX}${date}`, {
+    type: "json",
+  })
 }
 
 /**
@@ -2228,9 +2263,7 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
           prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
         }
         if (!prodUniprot) {
-          const prodDailyCache = await env.PROD_KV.get(`${DAILY_BOOTSTRAP_CACHE_PREFIX}${today}`, {
-            type: "json",
-          })
+          const prodDailyCache = await getProdDailyBootstrapCache(env, today)
           prodUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
             .toString()
             .trim()
@@ -2937,9 +2970,7 @@ async function getDailyTargetProtein(env, options = {}) {
 
         // Fallback: mirror prod's daily bootstrap cache if it exists (often available even when
         // puzzle_actual hasn't been recorded yet).
-        const prodDailyCache = await env.PROD_KV.get(`${DAILY_BOOTSTRAP_CACHE_PREFIX}${today}`, {
-          type: "json",
-        })
+        const prodDailyCache = await getProdDailyBootstrapCache(env, today)
         const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
           .toString()
           .trim()
