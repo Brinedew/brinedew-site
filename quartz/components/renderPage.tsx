@@ -248,19 +248,27 @@ export function renderPage(
                     <HeaderComponent {...componentData} />
                   ))}
                 </Header>
-                {isDraftPage && (
-                  <div class="popover-hint">
-                    <div class="draft-disclaimer" role="status" aria-live="polite">
-                      draft on
-                    </div>
-                  </div>
-                )}
                 <div class="popover-hint">
                   {beforeBody.map((BodyComponent) => (
                     <BodyComponent {...componentData} />
                   ))}
                 </div>
               </div>
+              {isDraftPage && (
+                <div class="draft-warning-wrap popover-hint">
+                  <div class="draft-warning-banner" role="status" aria-live="polite">
+                    <div class="draft-warning-banner__badge" aria-hidden="true">
+                      !
+                    </div>
+                    <div class="draft-warning-banner__content">
+                      <p class="draft-warning-banner__title">draft on</p>
+                      <p class="draft-warning-banner__body">
+                        This page is unpublished and visible only to logged-in admin users.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <Content {...componentData} />
               <hr />
               <div class="page-footer">
