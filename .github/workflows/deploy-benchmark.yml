@@ -1,10 +1,6 @@
 name: Deploy Benchmark Worker
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'workers/benchmark/**'
   workflow_dispatch:
 
 permissions:
