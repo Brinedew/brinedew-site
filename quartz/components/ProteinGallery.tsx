@@ -25,6 +25,7 @@ const SORT_OPTIONS = [
 const isString = (value: unknown): value is string => typeof value === "string"
 const toStringValue = (value: unknown): string =>
   typeof value === "string" ? value : value != null ? String(value) : ""
+const isDraftFlag = (value: unknown): boolean => value === true || value === "true"
 
 export default ((userOpts?: ProteinGalleryOptions) => {
   const ProteinGallery: QuartzComponent = ({
@@ -53,7 +54,7 @@ export default ((userOpts?: ProteinGalleryOptions) => {
         }
         const tags = Array.isArray(file.frontmatter?.tags) ? file.frontmatter?.tags : []
         const hasProteinTag = tags.includes("protein")
-        const isDraft = Boolean(file.frontmatter?.draft)
+        const isDraft = isDraftFlag(file.frontmatter?.draft)
         return hasProteinTag && (userOpts?.showDrafts || !isDraft)
       })
       .sort((a, b) => {

@@ -231,10 +231,13 @@ export function renderPage(
   )
 
   const lang = componentData.fileData.frontmatter?.lang ?? cfg.locale?.split("-")[0] ?? "en"
+  const isDraftPage =
+    componentData.fileData.frontmatter?.draft === true ||
+    componentData.fileData.frontmatter?.draft === "true"
   const doc = (
     <html lang={lang}>
       <Head {...componentData} />
-      <body data-slug={slug}>
+      <body data-slug={slug} data-page-draft={isDraftPage ? "true" : undefined}>
         <div id="quartz-root" class="page">
           <Body {...componentData}>
             {LeftComponent}
@@ -245,6 +248,13 @@ export function renderPage(
                     <HeaderComponent {...componentData} />
                   ))}
                 </Header>
+                {isDraftPage && (
+                  <div class="popover-hint">
+                    <div class="draft-disclaimer" role="status" aria-live="polite">
+                      draft on
+                    </div>
+                  </div>
+                )}
                 <div class="popover-hint">
                   {beforeBody.map((BodyComponent) => (
                     <BodyComponent {...componentData} />

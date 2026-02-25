@@ -24,6 +24,10 @@ const defaultOptions: FolderContentOptions = {
   showSubfolders: true,
 }
 
+function isDraftFile(file: QuartzPluginData): boolean {
+  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
+}
+
 export default ((opts?: Partial<FolderContentOptions>) => {
   const options: FolderContentOptions = { ...defaultOptions, ...opts }
 
@@ -36,7 +40,7 @@ export default ((opts?: Partial<FolderContentOptions>) => {
       return null
     }
 
-    const allPagesInFolder: QuartzPluginData[] =
+    const allPagesInFolder =
       folder.children
         .map((node) => {
           // regular file, proceed
@@ -87,13 +91,13 @@ export default ((opts?: Partial<FolderContentOptions>) => {
             }
           }
         })
-        .filter((page) => page !== undefined) ?? []
+        .filter((page) => page !== undefined && !isDraftFile(page as QuartzPluginData)) ?? []
     const cssClasses: string[] = fileData.frontmatter?.cssclasses ?? []
     const classes = cssClasses.join(" ")
     const listProps = {
       ...props,
       sort: options.sort,
-      allFiles: allPagesInFolder,
+      allFiles: allPagesInFolder as QuartzPluginData[],
     }
 
     const content = (

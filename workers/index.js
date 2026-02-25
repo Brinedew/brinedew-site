@@ -310,7 +310,9 @@ function cloneHeadersPreservingCookies(sourceHeaders) {
 
 function appendCacheControlDirective(cacheControl, directive) {
   const existing = String(cacheControl || "").trim()
-  const normalizedDirective = String(directive || "").trim().toLowerCase()
+  const normalizedDirective = String(directive || "")
+    .trim()
+    .toLowerCase()
   if (!existing) return directive
   const hasDirective = existing
     .split(",")
@@ -378,6 +380,18 @@ function isHealthCheckAuthorized(request, env, url) {
   return headerToken === token || authHeader === `Bearer ${token}`
 }
 
+function isDraftHtmlDocument(html) {
+  const source = String(html || "")
+  return (
+    /\bdata-page-draft=["']true["']/i.test(source) ||
+    /<article\b[^>]*\bdata-draft=["']true["']/i.test(source)
+  )
+}
+
+function draftNotFoundResponse(method) {
+  return new Response(method === "HEAD" ? null : "Not found", { status: 404 })
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
@@ -385,30 +399,58 @@ export default {
     const origin = request.headers.get("Origin") || ""
     const corsHeaders = getCorsHeaders(origin, url.hostname)
     const routeRequest = async () => {
+      // Serve the shared Mol* initializer from the Worker so staging (workers.dev) can load it.
+      // Production can still proxy /static/* from the Quartz site, but this keeps staging self-contained.
+      if (
+        url.pathname === "/static/geneguessr/molstar-shared.js" &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        return new Response(request.method === "HEAD" ? null : getMolstarSharedSource(), {
+          headers: {
+            "Content-Type": "application/javascript; charset=utf-8",
+            // Keep this easy to update after deploys; avoid sticky CDN/browser caching of the initializer.
+            "Cache-Control": "no-cache, max-age=0",
+          },
+        })
+      }
 
-    // Serve the shared Mol* initializer from the Worker so staging (workers.dev) can load it.
-    // Production can still proxy /static/* from the Quartz site, but this keeps staging self-contained.
-    if (
-      url.pathname === "/static/geneguessr/molstar-shared.js" &&
-      (request.method === "GET" || request.method === "HEAD")
-    ) {
-      return new Response(request.method === "HEAD" ? null : getMolstarSharedSource(), {
-        headers: {
-          "Content-Type": "application/javascript; charset=utf-8",
-          // Keep this easy to update after deploys; avoid sticky CDN/browser caching of the initializer.
-          "Cache-Control": "no-cache, max-age=0",
-        },
-      })
-    }
+      // Proxy Mol* assets through the Worker so worker-served pages do not depend on the client being
+      // able to reach jsDelivr directly (helps CI screenshots and restrictive networks).
+      if (request.method === "GET" || request.method === "HEAD") {
+        const allowedPrefix = MOLSTAR_VENDOR_ALLOWED_PREFIXES.find((prefix) =>
+          url.pathname.startsWith(prefix),
+        )
+        if (allowedPrefix) {
+          const upstream = `https://cdn.jsdelivr.net/npm${url.pathname.replace("/static/vendor", "")}`
+          const upstreamResp = await fetch(upstream, {
+            cf: {
+              cacheEverything: true,
+              cacheTtl: 86400,
+            },
+          })
+          const headers = new Headers(upstreamResp.headers)
+          headers.set("Cache-Control", "public, max-age=86400")
+          return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+            status: upstreamResp.status,
+            headers,
+          })
+        }
+      }
 
-    // Proxy Mol* assets through the Worker so worker-served pages do not depend on the client being
-    // able to reach jsDelivr directly (helps CI screenshots and restrictive networks).
-    if (request.method === "GET" || request.method === "HEAD") {
-      const allowedPrefix = MOLSTAR_VENDOR_ALLOWED_PREFIXES.find((prefix) =>
-        url.pathname.startsWith(prefix),
-      )
-      if (allowedPrefix) {
-        const upstream = `https://cdn.jsdelivr.net/npm${url.pathname.replace("/static/vendor", "")}`
+      // Serve KaTeX assets from same-origin vendor paths.
+      // Hard-path rationale:
+      // We rewrite stale upstream HTML from jsDelivr URLs to `/static/vendor/katex/*` to keep CSP strict.
+      // Some upstream builds don't yet contain those local files, so the worker must backfill them.
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        url.pathname.startsWith(KATEX_VENDOR_PREFIX)
+      ) {
+        const relativePath = url.pathname.slice(KATEX_VENDOR_PREFIX.length)
+        const normalized = relativePath.replace(/^\/+/, "")
+        if (normalized.length === 0) {
+          return new Response("Not found", { status: 404 })
+        }
+        const upstream = `https://cdn.jsdelivr.net/npm/katex@${KATEX_VENDOR_VERSION}/dist/${normalized}`
         const upstreamResp = await fetch(upstream, {
           cf: {
             cacheEverything: true,
@@ -419,724 +461,719 @@ export default {
         headers.set("Cache-Control", "public, max-age=86400")
         return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
           status: upstreamResp.status,
+          statusText: upstreamResp.statusText,
           headers,
         })
       }
-    }
 
-    // Serve KaTeX assets from same-origin vendor paths.
-    // Hard-path rationale:
-    // We rewrite stale upstream HTML from jsDelivr URLs to `/static/vendor/katex/*` to keep CSP strict.
-    // Some upstream builds don't yet contain those local files, so the worker must backfill them.
-    if (
-      (request.method === "GET" || request.method === "HEAD") &&
-      url.pathname.startsWith(KATEX_VENDOR_PREFIX)
-    ) {
-      const relativePath = url.pathname.slice(KATEX_VENDOR_PREFIX.length)
-      const normalized = relativePath.replace(/^\/+/, "")
-      if (normalized.length === 0) {
-        return new Response("Not found", { status: 404 })
-      }
-      const upstream = `https://cdn.jsdelivr.net/npm/katex@${KATEX_VENDOR_VERSION}/dist/${normalized}`
-      const upstreamResp = await fetch(upstream, {
-        cf: {
-          cacheEverything: true,
-          cacheTtl: 86400,
-        },
-      })
-      const headers = new Headers(upstreamResp.headers)
-      headers.set("Cache-Control", "public, max-age=86400")
-      return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
-        status: upstreamResp.status,
-        statusText: upstreamResp.statusText,
-        headers,
-      })
-    }
-
-    // Serve host-scoped robots/sitemap for the geneguessr subdomain.
-    // This prevents Google Search Console from seeing a sitemap full of brinedew.bio URLs.
-    if (
-      url.hostname === GENEGUESSR_HOST &&
-      (request.method === "GET" || request.method === "HEAD")
-    ) {
-      if (url.pathname === "/robots.txt") {
-        return new Response(
-          request.method === "HEAD" ? null : buildGeneguessrSubdomainRobotsTxt(),
-          {
-            headers: {
-              "Content-Type": "text/plain; charset=utf-8",
-              "Cache-Control": "max-age=600",
-            },
-          },
-        )
-      }
-
-      if (url.pathname === "/sitemap.xml") {
-        return new Response(
-          request.method === "HEAD" ? null : buildGeneguessrSubdomainSitemapXml(),
-          {
-            headers: {
-              "Content-Type": "application/xml; charset=utf-8",
-              "Cache-Control": "max-age=600",
-            },
-          },
-        )
-      }
-    }
-
-    // Discord render page for screenshots - served by worker, not proxied
-    if (url.pathname === "/apps/geneguessr/render" && request.method === "GET") {
-      return handleRenderPage(request, env)
-    }
-
-    // Iconoplasm subdomain - delegate to iconoplasm handler
-    if (isIconoplasmRequest(url.hostname)) {
-      return handleIconoplasmRequest(request, env, ctx)
-    }
-
-    // Route all non-API apex requests through the worker so we can enforce
-    // consistent security headers for the static site.
-    if (
-      (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
-      !url.pathname.startsWith("/api/")
-    ) {
-      const upstreamUrl = buildStaticSiteUrl(url)
-      const upstreamResp = await fetch(upstreamUrl.toString(), {
-        method: request.method,
-        headers: request.headers,
-        body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
-      })
-      return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
-        status: upstreamResp.status,
-        statusText: upstreamResp.statusText,
-        headers: upstreamResp.headers,
-      })
-    }
-
-    // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
-    // NOTE: /admin and /admin-v2 are served by the Worker and must NOT be proxied.
-    if (
-      url.hostname === GENEGUESSR_HOST &&
-      !url.pathname.startsWith("/api/") &&
-      url.pathname !== "/admin" &&
-      url.pathname !== "/admin-v2"
-    ) {
-      // Avoid duplicate content at multiple paths on the subdomain.
-      // Keep the canonical entrypoint at `/` and normalize a few common variants.
-      if (request.method === "GET" || request.method === "HEAD") {
-        if (
-          url.pathname === "/apps/geneguessr" ||
-          url.pathname === "/apps/geneguessr/" ||
-          url.pathname === "/apps/geneguessr/index" ||
-          url.pathname === "/apps/geneguessr/index/"
-        ) {
-          return Response.redirect(`https://${GENEGUESSR_HOST}/`, 301)
-        }
-
-        if (url.pathname === "/apps/geneguessr/privacy/") {
-          return Response.redirect(`https://${GENEGUESSR_HOST}/apps/geneguessr/privacy`, 301)
-        }
-      }
-
-      // For root path, fetch the geneguessr app page
-      let targetPath = url.pathname === "/" ? "/apps/geneguessr/index" : url.pathname
-
-      const targetUrl = buildStaticSiteUrl(url, targetPath)
-
-      // GeneGuessr bundle hotfix removed:
-      // The app bundle now avoids global `const` redeclarations, so we can serve it directly and allow caching.
-
-      const response = await fetch(targetUrl.toString(), {
-        method: request.method,
-        headers: request.headers,
-        body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
-      })
-
-      // For versioned GeneGuessr static assets, extend cache lifetime aggressively.
-      // The upstream build emits `?v=<timestamp>` for cache busting, so `immutable` is safe here.
+      // Serve host-scoped robots/sitemap for the geneguessr subdomain.
+      // This prevents Google Search Console from seeing a sitemap full of brinedew.bio URLs.
       if (
-        url.pathname.startsWith("/static/geneguessr/") &&
-        url.searchParams.has("v") &&
+        url.hostname === GENEGUESSR_HOST &&
         (request.method === "GET" || request.method === "HEAD")
       ) {
-        const headers = new Headers(response.headers)
-        headers.set("Cache-Control", "public, max-age=31536000, immutable")
-        return new Response(request.method === "HEAD" ? null : response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
+        if (url.pathname === "/robots.txt") {
+          return new Response(
+            request.method === "HEAD" ? null : buildGeneguessrSubdomainRobotsTxt(),
+            {
+              headers: {
+                "Content-Type": "text/plain; charset=utf-8",
+                "Cache-Control": "max-age=600",
+              },
+            },
+          )
+        }
+
+        if (url.pathname === "/sitemap.xml") {
+          return new Response(
+            request.method === "HEAD" ? null : buildGeneguessrSubdomainSitemapXml(),
+            {
+              headers: {
+                "Content-Type": "application/xml; charset=utf-8",
+                "Cache-Control": "max-age=600",
+              },
+            },
+          )
+        }
+      }
+
+      // Discord render page for screenshots - served by worker, not proxied
+      if (url.pathname === "/apps/geneguessr/render" && request.method === "GET") {
+        return handleRenderPage(request, env)
+      }
+
+      // Iconoplasm subdomain - delegate to iconoplasm handler
+      if (isIconoplasmRequest(url.hostname)) {
+        return handleIconoplasmRequest(request, env, ctx)
+      }
+
+      // Route all non-API apex requests through the worker so we can enforce
+      // consistent security headers for the static site.
+      if (
+        (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
+        !url.pathname.startsWith("/api/")
+      ) {
+        const upstreamUrl = buildStaticSiteUrl(url)
+        const upstreamResp = await fetch(upstreamUrl.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+        })
+        const contentType = String(upstreamResp.headers.get("content-type") || "").toLowerCase()
+        if (contentType.includes("text/html")) {
+          const html = await upstreamResp.text()
+          if (isDraftHtmlDocument(html) && !(await isAdmin(request, env))) {
+            return draftNotFoundResponse(request.method)
+          }
+          return new Response(request.method === "HEAD" ? null : html, {
+            status: upstreamResp.status,
+            statusText: upstreamResp.statusText,
+            headers: upstreamResp.headers,
+          })
+        }
+        return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+          status: upstreamResp.status,
+          statusText: upstreamResp.statusText,
+          headers: upstreamResp.headers,
         })
       }
 
-      // For HTML, rewrite links so navigation goes to main site, not subdomain
-      if (response.headers.get("content-type")?.includes("text/html")) {
-        let html = await response.text()
-        // Rewrite site-brand/home links to absolute main site URL.
-        // Quartz renders: <a href={baseDir} class="site-brand"> where baseDir may be "/" or "../..".
-        // If left relative on the subdomain, client-side navigation can re-inject scripts and
-        // cause reload-time errors (e.g., redeclared top-level consts in app bundles).
-        html = html.replace(
-          /<a\b[^>]*\bclass=["'][^"']*\bsite-brand\b[^"']*["'][^>]*>/gi,
-          (tag) => {
-            if (!/\bhref\s*=/i.test(tag)) {
-              return tag
-            }
-            return tag.replace(/\bhref=["'][^"']*["']/i, 'href="https://brinedew.bio/"')
+      // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
+      // NOTE: /admin and /admin-v2 are served by the Worker and must NOT be proxied.
+      if (
+        url.hostname === GENEGUESSR_HOST &&
+        !url.pathname.startsWith("/api/") &&
+        url.pathname !== "/admin" &&
+        url.pathname !== "/admin-v2"
+      ) {
+        // Avoid duplicate content at multiple paths on the subdomain.
+        // Keep the canonical entrypoint at `/` and normalize a few common variants.
+        if (request.method === "GET" || request.method === "HEAD") {
+          if (
+            url.pathname === "/apps/geneguessr" ||
+            url.pathname === "/apps/geneguessr/" ||
+            url.pathname === "/apps/geneguessr/index" ||
+            url.pathname === "/apps/geneguessr/index/"
+          ) {
+            return Response.redirect(`https://${GENEGUESSR_HOST}/`, 301)
+          }
+
+          if (url.pathname === "/apps/geneguessr/privacy/") {
+            return Response.redirect(`https://${GENEGUESSR_HOST}/apps/geneguessr/privacy`, 301)
+          }
+        }
+
+        // For root path, fetch the geneguessr app page
+        let targetPath = url.pathname === "/" ? "/apps/geneguessr/index" : url.pathname
+
+        const targetUrl = buildStaticSiteUrl(url, targetPath)
+
+        // GeneGuessr bundle hotfix removed:
+        // The app bundle now avoids global `const` redeclarations, so we can serve it directly and allow caching.
+
+        const response = await fetch(targetUrl.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+        })
+
+        // For versioned GeneGuessr static assets, extend cache lifetime aggressively.
+        // The upstream build emits `?v=<timestamp>` for cache busting, so `immutable` is safe here.
+        if (
+          url.pathname.startsWith("/static/geneguessr/") &&
+          url.searchParams.has("v") &&
+          (request.method === "GET" || request.method === "HEAD")
+        ) {
+          const headers = new Headers(response.headers)
+          headers.set("Cache-Control", "public, max-age=31536000, immutable")
+          return new Response(request.method === "HEAD" ? null : response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          })
+        }
+
+        // For HTML, rewrite links so navigation goes to main site, not subdomain
+        if (response.headers.get("content-type")?.includes("text/html")) {
+          let html = await response.text()
+          if (isDraftHtmlDocument(html) && !(await isAdmin(request, env))) {
+            return draftNotFoundResponse(request.method)
+          }
+          // Rewrite site-brand/home links to absolute main site URL.
+          // Quartz renders: <a href={baseDir} class="site-brand"> where baseDir may be "/" or "../..".
+          // If left relative on the subdomain, client-side navigation can re-inject scripts and
+          // cause reload-time errors (e.g., redeclared top-level consts in app bundles).
+          html = html.replace(
+            /<a\b[^>]*\bclass=["'][^"']*\bsite-brand\b[^"']*["'][^>]*>/gi,
+            (tag) => {
+              if (!/\bhref\s*=/i.test(tag)) {
+                return tag
+              }
+              return tag.replace(/\bhref=["'][^"']*["']/i, 'href="https://brinedew.bio/"')
+            },
+          )
+
+          // Rewrite all internal navigation links to point to main domain
+          // This prevents SPA navigation on the subdomain from going to wrong paths
+          // Match href="/tags/...", href="/posts/...", href="/wiki/...", etc.
+          html = html.replace(
+            /href=["']\/(tags|posts|wiki|About|index)([^"']*)["']/g,
+            'href="https://brinedew.bio/$1$2"',
+          )
+
+          // Keep share/debug metadata consistent with the subdomain host.
+          if (url.pathname === "/") {
+            html = html.replace(
+              /<meta\b[^>]*\b(?:property|name)=["']og:url["'][^>]*>/gi,
+              `<meta property="og:url" content="https://${GENEGUESSR_HOST}/">`,
+            )
+            html = html.replace(
+              /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/gi,
+              `<meta name="twitter:url" content="https://${GENEGUESSR_HOST}/">`,
+            )
+            // Use GeneGuessr-specific og:image for Discord/social embeds
+            const geneGuessrOgImage = "https://brinedew.bio/static/geneguessr/og-image.png"
+            html = html.replace(
+              /<meta\b[^>]*\b(?:property)=["']og:image["'][^>]*>/gi,
+              `<meta property="og:image" content="${geneGuessrOgImage}">`,
+            )
+            html = html.replace(
+              /<meta\b[^>]*\b(?:property)=["']og:image:url["'][^>]*>/gi,
+              `<meta property="og:image:url" content="${geneGuessrOgImage}">`,
+            )
+            html = html.replace(
+              /<meta\b[^>]*\b(?:name)=["']twitter:image["'][^>]*>/gi,
+              `<meta name="twitter:image" content="${geneGuessrOgImage}">`,
+            )
+          }
+          html = html.replace(
+            /<meta\b[^>]*\b(?:property|name)=["']twitter:domain["'][^>]*>/gi,
+            `<meta name="twitter:domain" content="${GENEGUESSR_HOST}">`,
+          )
+
+          // Hard-path rationale:
+          // Upstream static deploys can lag behind worker deploys. When stale HTML still references
+          // jsDelivr KaTeX assets, strict CSP blocks them and math rendering regresses.
+          // We normalize legacy CDN URLs to self-hosted vendored assets at the edge so behavior
+          // stays stable without globally loosening CSP.
+          html = html.replace(
+            /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/katex\.min\.css/gi,
+            `/static/vendor/katex/katex.min.css?v=${KATEX_VENDOR_VERSION}`,
+          )
+          html = html.replace(
+            /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/contrib\/copy-tex\.min\.js/gi,
+            `/static/vendor/katex/contrib/copy-tex.min.js?v=${KATEX_VENDOR_VERSION}`,
+          )
+          html = html.replace(
+            /<link\b[^>]*rel=["']preconnect["'][^>]*href=["']https:\/\/cdn\.jsdelivr\.net["'][^>]*>/gi,
+            "",
+          )
+          // Defensive cleanup: if a beacon script is already present upstream, strip it here so
+          // privacy/CSP posture doesn't depend on origin or edge-side injection settings.
+          html = html.replace(
+            /<script\b[^>]*src=["']https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js[^"']*["'][^>]*>\s*<\/script>/gi,
+            "",
+          )
+
+          return new Response(html, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          })
+        }
+
+        return response
+      }
+
+      // Handle CORS preflight requests
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          headers: corsHeaders,
+        })
+      }
+
+      // Health check endpoint
+      if (url.pathname === "/api/health") {
+        if (!isHealthCheckAuthorized(request, env, url)) {
+          return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+        }
+        return Response.json(
+          {
+            status: "ok",
+            timestamp: Date.now(),
+            database: await checkD1Health(env.DB),
+            kv: await checkKVHealth(env.KV),
+            durableObjects: "configured",
+          },
+          {
+            headers: corsHeaders,
           },
         )
+      }
 
-        // Rewrite all internal navigation links to point to main domain
-        // This prevents SPA navigation on the subdomain from going to wrong paths
-        // Match href="/tags/...", href="/posts/...", href="/wiki/...", etc.
-        html = html.replace(
-          /href=["']\/(tags|posts|wiki|About|index)([^"']*)["']/g,
-          'href="https://brinedew.bio/$1$2"',
-        )
-
-        // Keep share/debug metadata consistent with the subdomain host.
-        if (url.pathname === "/") {
-          html = html.replace(
-            /<meta\b[^>]*\b(?:property|name)=["']og:url["'][^>]*>/gi,
-            `<meta property="og:url" content="https://${GENEGUESSR_HOST}/">`,
-          )
-          html = html.replace(
-            /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/gi,
-            `<meta name="twitter:url" content="https://${GENEGUESSR_HOST}/">`,
-          )
-          // Use GeneGuessr-specific og:image for Discord/social embeds
-          const geneGuessrOgImage = "https://brinedew.bio/static/geneguessr/og-image.png"
-          html = html.replace(
-            /<meta\b[^>]*\b(?:property)=["']og:image["'][^>]*>/gi,
-            `<meta property="og:image" content="${geneGuessrOgImage}">`,
-          )
-          html = html.replace(
-            /<meta\b[^>]*\b(?:property)=["']og:image:url["'][^>]*>/gi,
-            `<meta property="og:image:url" content="${geneGuessrOgImage}">`,
-          )
-          html = html.replace(
-            /<meta\b[^>]*\b(?:name)=["']twitter:image["'][^>]*>/gi,
-            `<meta name="twitter:image" content="${geneGuessrOgImage}">`,
-          )
-        }
-        html = html.replace(
-          /<meta\b[^>]*\b(?:property|name)=["']twitter:domain["'][^>]*>/gi,
-          `<meta name="twitter:domain" content="${GENEGUESSR_HOST}">`,
-        )
-
-        // Hard-path rationale:
-        // Upstream static deploys can lag behind worker deploys. When stale HTML still references
-        // jsDelivr KaTeX assets, strict CSP blocks them and math rendering regresses.
-        // We normalize legacy CDN URLs to self-hosted vendored assets at the edge so behavior
-        // stays stable without globally loosening CSP.
-        html = html.replace(
-          /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/katex\.min\.css/gi,
-          `/static/vendor/katex/katex.min.css?v=${KATEX_VENDOR_VERSION}`,
-        )
-        html = html.replace(
-          /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/contrib\/copy-tex\.min\.js/gi,
-          `/static/vendor/katex/contrib/copy-tex.min.js?v=${KATEX_VENDOR_VERSION}`,
-        )
-        html = html.replace(
-          /<link\b[^>]*rel=["']preconnect["'][^>]*href=["']https:\/\/cdn\.jsdelivr\.net["'][^>]*>/gi,
-          "",
-        )
-        // Defensive cleanup: if a beacon script is already present upstream, strip it here so
-        // privacy/CSP posture doesn't depend on origin or edge-side injection settings.
-        html = html.replace(
-          /<script\b[^>]*src=["']https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js[^"']*["'][^>]*>\s*<\/script>/gi,
-          "",
-        )
-
-        return new Response(html, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
+      // Normalize directory-style app path to include trailing slash.
+      // This avoids edge/origin mismatches where a non-trailing-slash request
+      // could resolve to an upstream origin that serves a 503/GitHub outage page.
+      if (url.pathname === "/apps/geneguessr" && request.method === "GET") {
+        return new Response(null, {
+          status: 301,
+          headers: {
+            Location: `${url.origin}/apps/geneguessr/`,
+          },
         })
       }
 
-      return response
-    }
-
-    // Handle CORS preflight requests
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: corsHeaders,
-      })
-    }
-
-    // Health check endpoint
-    if (url.pathname === "/api/health") {
-      if (!isHealthCheckAuthorized(request, env, url)) {
-        return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+      // Auth endpoints
+      if (url.pathname === "/api/auth/login" && request.method === "GET") {
+        return handleLogin(request, env)
       }
-      return Response.json(
-        {
-          status: "ok",
-          timestamp: Date.now(),
-          database: await checkD1Health(env.DB),
-          kv: await checkKVHealth(env.KV),
-          durableObjects: "configured",
-        },
-        {
+
+      if (url.pathname === "/api/auth/config" && request.method === "GET") {
+        if (!(await isAdmin(request, env))) {
+          return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+        }
+        return Response.json(getDiscordAuthConfigStatus(env), {
           headers: corsHeaders,
-        },
-      )
-    }
-
-    // Normalize directory-style app path to include trailing slash.
-    // This avoids edge/origin mismatches where a non-trailing-slash request
-    // could resolve to an upstream origin that serves a 503/GitHub outage page.
-    if (url.pathname === "/apps/geneguessr" && request.method === "GET") {
-      return new Response(null, {
-        status: 301,
-        headers: {
-          Location: `${url.origin}/apps/geneguessr/`,
-        },
-      })
-    }
-
-    // Auth endpoints
-    if (url.pathname === "/api/auth/login" && request.method === "GET") {
-      return handleLogin(request, env)
-    }
-
-    if (url.pathname === "/api/auth/config" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+        })
       }
-      return Response.json(getDiscordAuthConfigStatus(env), {
-        headers: corsHeaders,
-      })
-    }
 
-    if (url.pathname === "/api/auth/callback" && request.method === "GET") {
-      return handleCallback(request, env)
-    }
-
-    if (url.pathname === "/api/auth/me" && request.method === "GET") {
-      const response = await handleMe(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/auth/logout" && request.method === "POST") {
-      const response = await handleLogout(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    // Proxy Discord avatars through same-origin to avoid leaking visitor IPs to third-party CDNs.
-    if (url.pathname === "/api/avatar" && (request.method === "GET" || request.method === "HEAD")) {
-      const upstreamUrl = extractAvatarUpstreamFromRequest(url)
-      if (!upstreamUrl) {
-        return Response.json({ error: "Invalid avatar URL" }, { status: 400, headers: corsHeaders })
+      if (url.pathname === "/api/auth/callback" && request.method === "GET") {
+        return handleCallback(request, env)
       }
-      const upstreamResp = await fetch(upstreamUrl, {
-        cf: {
-          cacheEverything: true,
-          cacheTtl: 86400,
-        },
-      })
-      if (!upstreamResp.ok) {
-        return Response.json({ error: "Avatar not found" }, { status: 404, headers: corsHeaders })
+
+      if (url.pathname === "/api/auth/me" && request.method === "GET") {
+        const response = await handleMe(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
       }
-      const headers = new Headers(corsHeaders)
-      headers.set("Content-Type", upstreamResp.headers.get("Content-Type") || "image/png")
-      headers.set("Cache-Control", "public, max-age=86400")
-      return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
-        status: upstreamResp.status,
-        headers,
-      })
-    }
 
-    // Discord bot endpoints
-    if (url.pathname === "/api/discord/daily-summary" && request.method === "GET") {
-      return handleDailySummary(request, env)
-    }
-
-    if (url.pathname === "/api/discord/interactions" && request.method === "POST") {
-      return handleInteractions(request, env)
-    }
-
-    if (url.pathname === "/api/discord/mark-posted" && request.method === "POST") {
-      return handleMarkPosted(request, env)
-    }
-
-    if (url.pathname === "/api/discord/post-recap" && request.method === "POST") {
-      return handlePostRecap(request, env)
-    }
-
-    // Stats endpoints
-    if (url.pathname === "/api/migrate-stats" && request.method === "POST") {
-      const response = await handleMigrateStats(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/stats" && request.method === "GET") {
-      const response = await handleGetStats(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/stats/leaderboard" && request.method === "GET") {
-      const response = await handleGetLeaderboard(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/stats/leaderboard-visibility" && request.method === "POST") {
-      const response = await handleSetLeaderboardVisibility(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/stats/update" && request.method === "POST") {
-      const response = await handleUpdateStats(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    // Admin panel UI (restricted to admin Discord session)
-    if (url.pathname === "/admin" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return new Response("Unauthorized", { status: 403 })
+      if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+        const response = await handleLogout(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
       }
-      return new Response(ADMIN_HTML, {
-        headers: {
-          "Content-Type": "text/html;charset=UTF-8",
-        },
-      })
-    }
 
-    // Admin panel v2 - auto-generated controls from Mol* runtime
-    if (url.pathname === "/admin-v2" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return new Response("Unauthorized", { status: 403 })
-      }
-      return new Response(ADMIN_V2_HTML, {
-        headers: {
-          "Content-Type": "text/html;charset=UTF-8",
-        },
-      })
-    }
-
-    // Admin endpoints (protected by Cloudflare Access)
-    if (url.pathname === "/api/admin/override-protein" && request.method === "POST") {
-      const response = await handleOverrideProtein(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/override-protein" && request.method === "DELETE") {
-      const response = await handleDeleteOverride(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/discord-recap-image" && request.method === "POST") {
-      const response = await handleAdminDiscordRecapImageUpload(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/discord-recap-image" && request.method === "GET") {
-      const response = await handleAdminDiscordRecapImageStatus(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/feature-flags" && request.method === "POST") {
-      const response = await handleFeatureFlags(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/graphics-settings" && request.method === "POST") {
-      const response = await handleGraphicsSettings(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    // Graphics profiles for v2 admin panel - full Mol* props snapshots
-    if (url.pathname === "/api/admin/graphics-profiles" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-      }
-      const stored = await env.KV.get("graphics_profiles_v2")
-      const profiles = stored ? JSON.parse(stored) : {}
-      return Response.json({ profiles }, { headers: corsHeaders })
-    }
-
-    if (url.pathname === "/api/admin/graphics-profiles" && request.method === "POST") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-      }
-      try {
-        const body = await request.json()
-        await env.KV.put("graphics_profiles_v2", JSON.stringify(body.profiles || {}))
-        return Response.json({ success: true }, { headers: corsHeaders })
-      } catch (err) {
-        return Response.json({ error: err.message }, { status: 400, headers: corsHeaders })
-      }
-    }
-
-    if (url.pathname === "/api/admin/similarity" && request.method === "GET") {
-      const response = await handleAdminSimilarity(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    // Public graphics settings endpoint (no auth required)
-    if (url.pathname === "/api/graphics-settings" && request.method === "GET") {
-      // When the prod frontend is pointed at the staging API via `?gg_api=...`, we want the same
-      // render characteristics as prod (otherwise we can get occlusion-heavy settings that freeze
-      // Mol* mid-render and make the viewer unresponsive).
-      //
-      // Staging pages/admin can still use staging KV by default; we only mirror prod settings when
-      // the request clearly originates from the prod site.
-      const requestOrigin = request.headers.get("Origin") || ""
-      const requestReferer = request.headers.get("Referer") || ""
-      const wantsProdGraphicsSettings =
-        Boolean(env.PROD_KV?.get) &&
-        (requestOrigin === "https://geneguessr.brinedew.bio" ||
-          requestOrigin === "https://brinedew.bio" ||
-          requestReferer.startsWith("https://geneguessr.brinedew.bio/") ||
-          requestReferer.startsWith("https://brinedew.bio/"))
-
-      let storedSettings = await env.KV.get("graphics_settings")
-      if (wantsProdGraphicsSettings) {
-        const prodSettings = await env.PROD_KV.get("graphics_settings")
-        if (prodSettings) {
-          storedSettings = prodSettings
-        }
-      }
-      let graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
-      if (storedSettings) {
-        try {
-          graphicsPayload = normalizeGraphicsSettings(JSON.parse(storedSettings))
-        } catch (err) {
-          console.error("Failed to parse stored graphics settings, serving defaults", err)
-          graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
-        }
-      }
-      return Response.json(graphicsPayload, {
-        headers: corsHeaders,
-      })
-    }
-
-    if (url.pathname === "/api/admin/status" && request.method === "GET") {
-      const response = await handleAdminStatus(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/schedule" && request.method === "GET") {
-      const response = await handleAdminSchedule(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/cards" && request.method === "GET") {
-      const response = await handleAdminCards(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/guess-stats" && request.method === "GET") {
-      const response = await handleAdminGuessStats(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    if (url.pathname === "/api/admin/guess-analytics" && request.method === "GET") {
-      const response = await handleAdminGuessAnalytics(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
-    // Maintenance: purge orphaned structure objects from R2.
-    // Orphan = object exists in R2 but KV has no structure_meta:<key> record.
-    // Cursor-based so it can be run repeatedly without timing out.
-    if (url.pathname === "/api/admin/purge-orphan-structures" && request.method === "POST") {
-      return handleAdminPurgeOrphanStructures(request, env, corsHeaders)
-    }
-
-    // Maintenance: delete a specific structure object from R2 by key.
-    // This is for removing large or problematic cached blobs even when they are not orphans.
-    if (url.pathname === "/api/admin/delete-structure" && request.method === "POST") {
-      return handleAdminDeleteStructure(request, env, corsHeaders)
-    }
-
-    // Maintenance: purge any structure objects that are no longer referenced by the current DB.
-    // This cleans up blobs that became obsolete after reseeding/rebuilding structure columns.
-    if (url.pathname === "/api/admin/purge-unreferenced-structures" && request.method === "POST") {
-      return handleAdminPurgeUnreferencedStructures(request, env, corsHeaders)
-    }
-
-    // Debug endpoint for cache stats (no sensitive data)
-    if (url.pathname === "/api/debug/cache-stats" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
-      }
-      const usage = await getStructureBucketUsage(env)
-      return Response.json(
-        {
-          structures: usage.objects,
-          bytes: usage.bytes,
-          megabytes: Math.round(usage.bytes / 1024 / 1024),
-          capMegabytes: Math.round(STRUCTURE_BUCKET_CAP_BYTES / 1024 / 1024),
-          percentFull: Math.round((usage.bytes / STRUCTURE_BUCKET_CAP_BYTES) * 100),
-        },
-        { headers: corsHeaders },
-      )
-    }
-
-    if (url.pathname === "/api/structure-token" && request.method === "GET") {
-      return handleStructureToken(request, env, corsHeaders)
-    }
-
-    // Direct structure access by cacheKey - stable URLs for client-side caching
-    // Safe because cacheKey (e.g., "pdb/8J07.bcif") doesn't reveal protein identity
-    // Support both GET (fetch) and HEAD (validation) requests
-    if (
-      url.pathname === "/api/structure-cached" &&
-      (request.method === "GET" || request.method === "HEAD")
-    ) {
-      return handleCachedStructureFetch(request, env, ctx, corsHeaders)
-    }
-
-    if (url.pathname === "/api/game/bootstrap" && request.method === "GET") {
-      return handleGameBootstrap(request, env, ctx, corsHeaders)
-    }
-
-    // Practice mode helpers: bulk HGNC validation + start from a user-provided pool.
-    if (url.pathname === "/api/game/practice/resolve" && request.method === "POST") {
-      return handlePracticeResolve(request, env, corsHeaders)
-    }
-
-    if (url.pathname === "/api/game/practice/start" && request.method === "POST") {
-      return handlePracticeStart(request, env, ctx, corsHeaders)
-    }
-
-    if (url.pathname === "/api/game/guess" && request.method === "POST") {
-      return handleGuessSubmission(request, env, corsHeaders)
-    }
-
-    if (url.pathname === "/api/game/reveal-hint" && request.method === "POST") {
-      return handleHintReveal(request, env, corsHeaders)
-    }
-
-    // Lazy similarity calculation - called after guess card is shown
-    if (url.pathname === "/api/game/guess-similarity" && request.method === "POST") {
-      return handleGuessSimilarity(request, env, corsHeaders)
-    }
-
-    // Public proteins endpoint for autocomplete
-    if (url.pathname === "/api/protein" && request.method === "GET") {
-      try {
-        const uniprot = (url.searchParams.get("uniprot") || "").toUpperCase()
-        if (!uniprot) {
+      // Proxy Discord avatars through same-origin to avoid leaking visitor IPs to third-party CDNs.
+      if (
+        url.pathname === "/api/avatar" &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        const upstreamUrl = extractAvatarUpstreamFromRequest(url)
+        if (!upstreamUrl) {
           return Response.json(
-            { error: "Missing uniprot parameter" },
+            { error: "Invalid avatar URL" },
             { status: 400, headers: corsHeaders },
           )
         }
-        const protein = await fetchProteinByUniprot(env.DB, uniprot)
-        if (!protein) {
-          return Response.json(
-            { error: "Protein not found" },
-            { status: 404, headers: corsHeaders },
-          )
+        const upstreamResp = await fetch(upstreamUrl, {
+          cf: {
+            cacheEverything: true,
+            cacheTtl: 86400,
+          },
+        })
+        if (!upstreamResp.ok) {
+          return Response.json({ error: "Avatar not found" }, { status: 404, headers: corsHeaders })
         }
-        return Response.json(sanitizeTargetProtein(protein, { revealIdentity: true }), {
+        const headers = new Headers(corsHeaders)
+        headers.set("Content-Type", upstreamResp.headers.get("Content-Type") || "image/png")
+        headers.set("Cache-Control", "public, max-age=86400")
+        return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+          status: upstreamResp.status,
+          headers,
+        })
+      }
+
+      // Discord bot endpoints
+      if (url.pathname === "/api/discord/daily-summary" && request.method === "GET") {
+        return handleDailySummary(request, env)
+      }
+
+      if (url.pathname === "/api/discord/interactions" && request.method === "POST") {
+        return handleInteractions(request, env)
+      }
+
+      if (url.pathname === "/api/discord/mark-posted" && request.method === "POST") {
+        return handleMarkPosted(request, env)
+      }
+
+      if (url.pathname === "/api/discord/post-recap" && request.method === "POST") {
+        return handlePostRecap(request, env)
+      }
+
+      // Stats endpoints
+      if (url.pathname === "/api/migrate-stats" && request.method === "POST") {
+        const response = await handleMigrateStats(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/stats" && request.method === "GET") {
+        const response = await handleGetStats(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/stats/leaderboard" && request.method === "GET") {
+        const response = await handleGetLeaderboard(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/stats/leaderboard-visibility" && request.method === "POST") {
+        const response = await handleSetLeaderboardVisibility(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/stats/update" && request.method === "POST") {
+        const response = await handleUpdateStats(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      // Admin panel UI (restricted to admin Discord session)
+      if (url.pathname === "/admin" && request.method === "GET") {
+        if (!(await isAdmin(request, env))) {
+          return new Response("Unauthorized", { status: 403 })
+        }
+        return new Response(ADMIN_HTML, {
+          headers: {
+            "Content-Type": "text/html;charset=UTF-8",
+          },
+        })
+      }
+
+      // Admin panel v2 - auto-generated controls from Mol* runtime
+      if (url.pathname === "/admin-v2" && request.method === "GET") {
+        if (!(await isAdmin(request, env))) {
+          return new Response("Unauthorized", { status: 403 })
+        }
+        return new Response(ADMIN_V2_HTML, {
+          headers: {
+            "Content-Type": "text/html;charset=UTF-8",
+          },
+        })
+      }
+
+      // Admin endpoints (protected by Cloudflare Access)
+      if (url.pathname === "/api/admin/override-protein" && request.method === "POST") {
+        const response = await handleOverrideProtein(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/override-protein" && request.method === "DELETE") {
+        const response = await handleDeleteOverride(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/discord-recap-image" && request.method === "POST") {
+        const response = await handleAdminDiscordRecapImageUpload(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/discord-recap-image" && request.method === "GET") {
+        const response = await handleAdminDiscordRecapImageStatus(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/feature-flags" && request.method === "POST") {
+        const response = await handleFeatureFlags(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/graphics-settings" && request.method === "POST") {
+        const response = await handleGraphicsSettings(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      // Graphics profiles for v2 admin panel - full Mol* props snapshots
+      if (url.pathname === "/api/admin/graphics-profiles" && request.method === "GET") {
+        if (!(await isAdmin(request, env))) {
+          return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
+        }
+        const stored = await env.KV.get("graphics_profiles_v2")
+        const profiles = stored ? JSON.parse(stored) : {}
+        return Response.json({ profiles }, { headers: corsHeaders })
+      }
+
+      if (url.pathname === "/api/admin/graphics-profiles" && request.method === "POST") {
+        if (!(await isAdmin(request, env))) {
+          return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
+        }
+        try {
+          const body = await request.json()
+          await env.KV.put("graphics_profiles_v2", JSON.stringify(body.profiles || {}))
+          return Response.json({ success: true }, { headers: corsHeaders })
+        } catch (err) {
+          return Response.json({ error: err.message }, { status: 400, headers: corsHeaders })
+        }
+      }
+
+      if (url.pathname === "/api/admin/similarity" && request.method === "GET") {
+        const response = await handleAdminSimilarity(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      // Public graphics settings endpoint (no auth required)
+      if (url.pathname === "/api/graphics-settings" && request.method === "GET") {
+        // When the prod frontend is pointed at the staging API via `?gg_api=...`, we want the same
+        // render characteristics as prod (otherwise we can get occlusion-heavy settings that freeze
+        // Mol* mid-render and make the viewer unresponsive).
+        //
+        // Staging pages/admin can still use staging KV by default; we only mirror prod settings when
+        // the request clearly originates from the prod site.
+        const requestOrigin = request.headers.get("Origin") || ""
+        const requestReferer = request.headers.get("Referer") || ""
+        const wantsProdGraphicsSettings =
+          Boolean(env.PROD_KV?.get) &&
+          (requestOrigin === "https://geneguessr.brinedew.bio" ||
+            requestOrigin === "https://brinedew.bio" ||
+            requestReferer.startsWith("https://geneguessr.brinedew.bio/") ||
+            requestReferer.startsWith("https://brinedew.bio/"))
+
+        let storedSettings = await env.KV.get("graphics_settings")
+        if (wantsProdGraphicsSettings) {
+          const prodSettings = await env.PROD_KV.get("graphics_settings")
+          if (prodSettings) {
+            storedSettings = prodSettings
+          }
+        }
+        let graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
+        if (storedSettings) {
+          try {
+            graphicsPayload = normalizeGraphicsSettings(JSON.parse(storedSettings))
+          } catch (err) {
+            console.error("Failed to parse stored graphics settings, serving defaults", err)
+            graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
+          }
+        }
+        return Response.json(graphicsPayload, {
           headers: corsHeaders,
         })
-      } catch (error) {
-        console.error("Failed to load protein details", error)
-        return Response.json(
-          { error: "Failed to load protein" },
-          {
-            status: 500,
-            headers: corsHeaders,
-          },
-        )
       }
-    }
 
-    if (url.pathname === "/api/proteins" && request.method === "GET") {
-      try {
-        const query = (url.searchParams.get("query") || "").trim()
-        if (!query) {
-          return Response.json([], { headers: corsHeaders })
+      if (url.pathname === "/api/admin/status" && request.method === "GET") {
+        const response = await handleAdminStatus(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/schedule" && request.method === "GET") {
+        const response = await handleAdminSchedule(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/cards" && request.method === "GET") {
+        const response = await handleAdminCards(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/guess-stats" && request.method === "GET") {
+        const response = await handleAdminGuessStats(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/guess-analytics" && request.method === "GET") {
+        const response = await handleAdminGuessAnalytics(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      // Maintenance: purge orphaned structure objects from R2.
+      // Orphan = object exists in R2 but KV has no structure_meta:<key> record.
+      // Cursor-based so it can be run repeatedly without timing out.
+      if (url.pathname === "/api/admin/purge-orphan-structures" && request.method === "POST") {
+        return handleAdminPurgeOrphanStructures(request, env, corsHeaders)
+      }
+
+      // Maintenance: delete a specific structure object from R2 by key.
+      // This is for removing large or problematic cached blobs even when they are not orphans.
+      if (url.pathname === "/api/admin/delete-structure" && request.method === "POST") {
+        return handleAdminDeleteStructure(request, env, corsHeaders)
+      }
+
+      // Maintenance: purge any structure objects that are no longer referenced by the current DB.
+      // This cleans up blobs that became obsolete after reseeding/rebuilding structure columns.
+      if (
+        url.pathname === "/api/admin/purge-unreferenced-structures" &&
+        request.method === "POST"
+      ) {
+        return handleAdminPurgeUnreferencedStructures(request, env, corsHeaders)
+      }
+
+      // Debug endpoint for cache stats (no sensitive data)
+      if (url.pathname === "/api/debug/cache-stats" && request.method === "GET") {
+        if (!(await isAdmin(request, env))) {
+          return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
         }
-        const limit = Math.min(parseInt(url.searchParams.get("limit")) || 20, 100)
-        const excludeRaw = url.searchParams.get("exclude") || ""
-        const exclude = excludeRaw
-          ? excludeRaw
-              .split(",")
-              .map((id) => id.trim().toUpperCase())
-              .filter(Boolean)
-          : []
-        const matches = await searchProteins(env.DB, query, limit, exclude)
-        return Response.json(matches, { headers: corsHeaders })
-      } catch (error) {
-        console.error("Failed to load protein search results", error)
+        const usage = await getStructureBucketUsage(env)
         return Response.json(
-          { error: "Failed to load protein database" },
           {
-            status: 500,
-            headers: corsHeaders,
+            structures: usage.objects,
+            bytes: usage.bytes,
+            megabytes: Math.round(usage.bytes / 1024 / 1024),
+            capMegabytes: Math.round(STRUCTURE_BUCKET_CAP_BYTES / 1024 / 1024),
+            percentFull: Math.round((usage.bytes / STRUCTURE_BUCKET_CAP_BYTES) * 100),
           },
+          { headers: corsHeaders },
         )
       }
-    }
 
-    return Response.json(
-      { error: "Not found" },
-      {
-        status: 404,
-        headers: corsHeaders,
-      },
-    )
+      if (url.pathname === "/api/structure-token" && request.method === "GET") {
+        return handleStructureToken(request, env, corsHeaders)
+      }
+
+      // Direct structure access by cacheKey - stable URLs for client-side caching
+      // Safe because cacheKey (e.g., "pdb/8J07.bcif") doesn't reveal protein identity
+      // Support both GET (fetch) and HEAD (validation) requests
+      if (
+        url.pathname === "/api/structure-cached" &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        return handleCachedStructureFetch(request, env, ctx, corsHeaders)
+      }
+
+      if (url.pathname === "/api/game/bootstrap" && request.method === "GET") {
+        return handleGameBootstrap(request, env, ctx, corsHeaders)
+      }
+
+      // Practice mode helpers: bulk HGNC validation + start from a user-provided pool.
+      if (url.pathname === "/api/game/practice/resolve" && request.method === "POST") {
+        return handlePracticeResolve(request, env, corsHeaders)
+      }
+
+      if (url.pathname === "/api/game/practice/start" && request.method === "POST") {
+        return handlePracticeStart(request, env, ctx, corsHeaders)
+      }
+
+      if (url.pathname === "/api/game/guess" && request.method === "POST") {
+        return handleGuessSubmission(request, env, corsHeaders)
+      }
+
+      if (url.pathname === "/api/game/reveal-hint" && request.method === "POST") {
+        return handleHintReveal(request, env, corsHeaders)
+      }
+
+      // Lazy similarity calculation - called after guess card is shown
+      if (url.pathname === "/api/game/guess-similarity" && request.method === "POST") {
+        return handleGuessSimilarity(request, env, corsHeaders)
+      }
+
+      // Public proteins endpoint for autocomplete
+      if (url.pathname === "/api/protein" && request.method === "GET") {
+        try {
+          const uniprot = (url.searchParams.get("uniprot") || "").toUpperCase()
+          if (!uniprot) {
+            return Response.json(
+              { error: "Missing uniprot parameter" },
+              { status: 400, headers: corsHeaders },
+            )
+          }
+          const protein = await fetchProteinByUniprot(env.DB, uniprot)
+          if (!protein) {
+            return Response.json(
+              { error: "Protein not found" },
+              { status: 404, headers: corsHeaders },
+            )
+          }
+          return Response.json(sanitizeTargetProtein(protein, { revealIdentity: true }), {
+            headers: corsHeaders,
+          })
+        } catch (error) {
+          console.error("Failed to load protein details", error)
+          return Response.json(
+            { error: "Failed to load protein" },
+            {
+              status: 500,
+              headers: corsHeaders,
+            },
+          )
+        }
+      }
+
+      if (url.pathname === "/api/proteins" && request.method === "GET") {
+        try {
+          const query = (url.searchParams.get("query") || "").trim()
+          if (!query) {
+            return Response.json([], { headers: corsHeaders })
+          }
+          const limit = Math.min(parseInt(url.searchParams.get("limit")) || 20, 100)
+          const excludeRaw = url.searchParams.get("exclude") || ""
+          const exclude = excludeRaw
+            ? excludeRaw
+                .split(",")
+                .map((id) => id.trim().toUpperCase())
+                .filter(Boolean)
+            : []
+          const matches = await searchProteins(env.DB, query, limit, exclude)
+          return Response.json(matches, { headers: corsHeaders })
+        } catch (error) {
+          console.error("Failed to load protein search results", error)
+          return Response.json(
+            { error: "Failed to load protein database" },
+            {
+              status: 500,
+              headers: corsHeaders,
+            },
+          )
+        }
+      }
+
+      return Response.json(
+        { error: "Not found" },
+        {
+          status: 404,
+          headers: corsHeaders,
+        },
+      )
     }
     const response = await routeRequest()
     return applySecurityHeaders(response, request)
@@ -1245,7 +1282,14 @@ export default {
           origin,
         })
         if (!structureToken) continue
-        await setDailyBootstrapCache(env, tomorrowStr, origin, targetProtein, structureToken, cronAudit)
+        await setDailyBootstrapCache(
+          env,
+          tomorrowStr,
+          origin,
+          targetProtein,
+          structureToken,
+          cronAudit,
+        )
       }
       console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`)
 
@@ -2224,7 +2268,7 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     ])
     let targetSeed = targetSeedRaw?.protein ? targetSeedRaw.protein : targetSeedRaw
     // Prefer audit from the API response, but fall back to cached audit from bootstrap cache
-    const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : (cachedDaily?.audit || null)
+    const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : cachedDaily?.audit || null
     console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || "null"}`)
 
     // When set, `date` should override any existing practice session for today.
@@ -2382,9 +2426,14 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       // Include audit so future cache hits preserve override source info.
       if (!cachedDaily && targetProtein && structureToken) {
         ctx.waitUntil(
-          setDailyBootstrapCache(env, today, url.origin, targetProtein, structureToken, audit).catch((e) =>
-            console.warn("Cache population failed:", e),
-          ),
+          setDailyBootstrapCache(
+            env,
+            today,
+            url.origin,
+            targetProtein,
+            structureToken,
+            audit,
+          ).catch((e) => console.warn("Cache population failed:", e)),
         )
       }
     }

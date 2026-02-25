@@ -32,6 +32,10 @@ const defaultOpts: Required<Options> = {
   defaultOpenDepth: 1,
 }
 
+function isDraftFile(file: any): boolean {
+  return file?.frontmatter?.draft === true || file?.frontmatter?.draft === "true"
+}
+
 function normalizeTag(t: unknown): string | null {
   if (typeof t !== "string") return null
   const s = t.trim()
@@ -50,7 +54,7 @@ function splitTagPath(path: string): string[] {
 function buildTagTree(allFiles: any[], opts: Required<Options>): TagNode {
   const root: TagNode = { name: "", path: "", count: 0, pages: [], children: new Map() }
 
-  for (const f of allFiles) {
+  for (const f of allFiles.filter((file) => !isDraftFile(file))) {
     const title = f.frontmatter?.title ?? f.slug
     const slug = "/" + f.slug
 

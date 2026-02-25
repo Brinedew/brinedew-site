@@ -17,11 +17,15 @@ interface Options {
   sort: (f1: QuartzPluginData, f2: QuartzPluginData) => number
 }
 
+function isDraftFile(file: QuartzPluginData): boolean {
+  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
+}
+
 const defaultOptions = (cfg: GlobalConfiguration): Options => ({
   limit: 3,
   linkToMore: false,
   showTags: true,
-  filter: () => true,
+  filter: (file) => !isDraftFile(file),
   sort: byDateAndAlphabetical(cfg),
 })
 

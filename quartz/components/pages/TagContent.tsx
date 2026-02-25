@@ -18,6 +18,10 @@ const defaultOptions: TagContentOptions = {
   numPages: 10,
 }
 
+function isDraftFile(file: QuartzPluginData): boolean {
+  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
+}
+
 export default ((opts?: Partial<TagContentOptions>) => {
   const options: TagContentOptions = { ...defaultOptions, ...opts }
 
@@ -31,8 +35,10 @@ export default ((opts?: Partial<TagContentOptions>) => {
 
     const tag = simplifySlug(slug.slice("tags/".length) as FullSlug)
     const allPagesWithTag = (tag: string) =>
-      allFiles.filter((file) =>
-        (file.frontmatter?.tags ?? []).flatMap(getAllSegmentPrefixes).includes(tag),
+      allFiles.filter(
+        (file) =>
+          !isDraftFile(file) &&
+          (file.frontmatter?.tags ?? []).flatMap(getAllSegmentPrefixes).includes(tag),
       )
 
     const content = (
@@ -45,7 +51,10 @@ export default ((opts?: Partial<TagContentOptions>) => {
     if (tag === "/") {
       const tags = [
         ...new Set(
-          allFiles.flatMap((data) => data.frontmatter?.tags ?? []).flatMap(getAllSegmentPrefixes),
+          allFiles
+            .filter((data) => !isDraftFile(data))
+            .flatMap((data) => data.frontmatter?.tags ?? [])
+            .flatMap(getAllSegmentPrefixes),
         ),
       ].sort((a, b) => a.localeCompare(b))
       const tagItemMap: Map<string, QuartzPluginData[]> = new Map()
@@ -117,7 +126,10 @@ export default ((opts?: Partial<TagContentOptions>) => {
       // Find child tags (tags that start with this tag + "/")
       const allTags = [
         ...new Set(
-          allFiles.flatMap((data) => data.frontmatter?.tags ?? []).flatMap(getAllSegmentPrefixes),
+          allFiles
+            .filter((data) => !isDraftFile(data))
+            .flatMap((data) => data.frontmatter?.tags ?? [])
+            .flatMap(getAllSegmentPrefixes),
         ),
       ]
       const childTags = allTags

@@ -7,6 +7,7 @@ import { QuartzEmitterPlugin } from "../types"
 import { toHtml } from "hast-util-to-html"
 import { write } from "./helpers"
 import { i18n } from "../../i18n"
+import { QuartzPluginData } from "../vfile"
 
 export type ContentIndexMap = Map<FullSlug, ContentDetails>
 export type ContentDetails = {
@@ -43,6 +44,10 @@ const defaultOptions: Options = {
 // URLs starting with these prefixes will use the subdomain instead
 const subdomainMappings: Record<string, string> = {
   "apps/geneguessr": "geneguessr.brinedew.bio",
+}
+
+function isDraftFile(file: QuartzPluginData): boolean {
+  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
 }
 
 function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
@@ -124,6 +129,9 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
       const cfg = ctx.cfg.configuration
       const linkIndex: ContentIndexMap = new Map()
       for (const [tree, file] of content) {
+        if (isDraftFile(file.data)) {
+          continue
+        }
         const slug = file.data.slug!
         const date = getDate(ctx.cfg.configuration, file.data) ?? new Date()
         if (opts?.includeEmptyFiles || (file.data.text && file.data.text !== "")) {

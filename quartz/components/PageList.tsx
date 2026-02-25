@@ -6,6 +6,10 @@ import { GlobalConfiguration } from "../cfg"
 
 export type SortFn = (f1: QuartzPluginData, f2: QuartzPluginData) => number
 
+function isDraftFile(file: QuartzPluginData): boolean {
+  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
+}
+
 export function byDateAndAlphabetical(cfg: GlobalConfiguration): SortFn {
   return (f1, f2) => {
     // Sort by date/alphabetical
@@ -59,7 +63,7 @@ type Props = {
 
 export const PageList: QuartzComponent = ({ cfg, fileData, allFiles, limit, sort }: Props) => {
   const sorter = sort ?? byDateAndAlphabeticalFolderFirst(cfg)
-  let list = allFiles.sort(sorter)
+  let list = allFiles.filter((file) => !isDraftFile(file)).sort(sorter)
   if (limit) {
     list = list.slice(0, limit)
   }

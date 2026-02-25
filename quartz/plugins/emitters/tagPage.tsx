@@ -17,6 +17,10 @@ interface TagPageOptions extends FullPageLayout {
   sort?: (f1: QuartzPluginData, f2: QuartzPluginData) => number
 }
 
+function isDraftFile(file: QuartzPluginData): boolean {
+  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
+}
+
 function computeTagInfo(
   allFiles: QuartzPluginData[],
   content: ProcessedContent[],
@@ -122,7 +126,7 @@ export const TagPage: QuartzEmitterPlugin<Partial<TagPageOptions>> = (userOpts) 
       ]
     },
     async *emit(ctx, content, resources) {
-      const allFiles = content.map((c) => c[1].data)
+      const allFiles = content.map((c) => c[1].data).filter((file) => !isDraftFile(file))
       const cfg = ctx.cfg.configuration
       const [tags, tagDescriptions] = computeTagInfo(allFiles, content, cfg.locale)
 
@@ -131,7 +135,7 @@ export const TagPage: QuartzEmitterPlugin<Partial<TagPageOptions>> = (userOpts) 
       }
     },
     async *partialEmit(ctx, content, resources, changeEvents) {
-      const allFiles = content.map((c) => c[1].data)
+      const allFiles = content.map((c) => c[1].data).filter((file) => !isDraftFile(file))
       const cfg = ctx.cfg.configuration
 
       // Find all tags that need to be updated based on changed files

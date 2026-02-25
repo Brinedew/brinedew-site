@@ -13,6 +13,10 @@ const defaultOptions: BacklinksOptions = {
   hideWhenEmpty: true,
 }
 
+function isDraftFile(file: QuartzComponentProps["allFiles"][number]): boolean {
+  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
+}
+
 export default ((opts?: Partial<BacklinksOptions>) => {
   const options: BacklinksOptions = { ...defaultOptions, ...opts }
   const { OverflowList, overflowListAfterDOMLoaded } = OverflowListFactory()
@@ -24,7 +28,9 @@ export default ((opts?: Partial<BacklinksOptions>) => {
     cfg,
   }: QuartzComponentProps) => {
     const slug = simplifySlug(fileData.slug!)
-    const backlinkFiles = allFiles.filter((file) => file.links?.includes(slug))
+    const backlinkFiles = allFiles.filter(
+      (file) => !isDraftFile(file) && file.links?.includes(slug),
+    )
     if (options.hideWhenEmpty && backlinkFiles.length == 0) {
       return null
     }

@@ -197,6 +197,21 @@ article p {
   color: var(--dark);
 }
 
+article .draft-disclaimer {
+  margin: 0 0 1rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--dark);
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
 /* Links: swap base/hover (base = accent teal, hover = gray) */
 a {
   color: var(--accent);
