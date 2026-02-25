@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+set -eu
+
+# Skip hook logic when explicitly requested.
+if [ "${BRINEDEW_SKIP_DEPLOY_HOOK:-0}" = "1" ]; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$repo_root"
+
+current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+
+# Only auto-deploy production from main pushes.
+if [ "$current_branch" != "main" ]; then
+  exit 0
+fi
+
+echo "[pre-push] Building site for Cloudflare Pages..."
+
+# Install deps only when missing to keep sync fast.
+if [ ! -d node_modules ]; then
+  npm ci --no-audit --no-fund
+fi
+
+node quartz/bootstrap-cli.mjs build -d content
+
+echo "[pre-push] Deploying to Cloudflare Pages project: brinedew-bio"
+npx wrangler pages deploy public --project-name brinedew-bio --branch main
+
+echo "[pre-push] Pages deploy finished."
