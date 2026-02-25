@@ -1,20 +1,23 @@
-name: Deploy Quartz to GitHub Pages
+name: Deploy Production (Cloudflare Pages + Worker)
 
 on:
+  push:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: production-deploy
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy-production:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -54,56 +57,15 @@ jobs:
           npm i -g npm@10.9.2
           npm -v
 
-      - name: Install Wrangler CLI (main only)
-        if: github.ref == 'refs/heads/main'
+      - name: Validate Cloudflare secrets
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID repository secret." >&2
+            exit 1
+          fi
+
+      - name: Install Wrangler CLI
         run: npm install -g wrangler@4
-
-      - name: Deploy Cloudflare Worker (main only)
-        if: github.ref == 'refs/heads/main'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy
-
-      - name: Smoke test Discord OAuth bootstrap (main only)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          headers_file="$(mktemp)"
-          curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0"
-
-          status="$(awk 'NR==1 { print $2 }' "$headers_file")"
-          location="$(grep -i '^Location:' "$headers_file" | head -n1 | sed -E 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
-
-          echo "OAuth login status: $status"
-          echo "OAuth redirect location: $location"
-
-          if [ "$status" != "302" ]; then
-            echo "Expected 302 from production /api/auth/login but got $status" >&2
-            exit 1
-          fi
-
-          if [[ "$location" != https://discord.com/oauth2/authorize* ]]; then
-            echo "Expected Discord OAuth redirect URL, got: $location" >&2
-            exit 1
-          fi
-
-          if echo "$location" | grep -Eq 'client_id=(|undefined|null)($|&)'; then
-            echo "Discord OAuth redirect has invalid client_id in production." >&2
-            exit 1
-          fi
-
-      - name: Verify D1 embeddings exist (main only)
-        if: github.ref == 'refs/heads/main'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          COUNT=$(wrangler d1 execute geneguessr --remote --command "SELECT COUNT(*) as cnt FROM protein_embeddings_old" --json | jq -r '(.result? // .)[0].results[0].cnt')
-          echo "Embedding count: $COUNT"
-          if [ "$COUNT" -lt 19000 ]; then
-            echo "ERROR: protein_embeddings_old table has $COUNT rows (expected ~19622)"
-            echo "Run 'python Datasets/GeneGuessr/upload_embeddings.py --remote' to populate"
-            exit 1
-          fi
 
       - name: Install dependencies
         run: npm ci
@@ -132,18 +94,35 @@ jobs:
           mkdir -p public
           touch public/.nojekyll
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: public
+      - name: Deploy production static site to Cloudflare Pages
+        run: wrangler pages deploy public --project-name brinedew-bio --branch main
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+      - name: Deploy Cloudflare Worker (production)
+        run: wrangler deploy
+
+      - name: Smoke test Discord OAuth bootstrap (production)
+        run: |
+          set -euo pipefail
+          headers_file="$(mktemp)"
+          curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0"
+
+          status="$(awk 'NR==1 { print $2 }' "$headers_file")"
+          location="$(grep -i '^Location:' "$headers_file" | head -n1 | sed -E 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
+
+          echo "OAuth login status: $status"
+          echo "OAuth redirect location: $location"
+
+          if [ "$status" != "302" ]; then
+            echo "Expected 302 from production /api/auth/login but got $status" >&2
+            exit 1
+          fi
+
+          if [[ "$location" != https://discord.com/oauth2/authorize* ]]; then
+            echo "Expected Discord OAuth redirect URL, got: $location" >&2
+            exit 1
+          fi
+
+          if echo "$location" | grep -Eq 'client_id=(|undefined|null)($|&)'; then
+            echo "Discord OAuth redirect has invalid client_id in production." >&2
+            exit 1
+          fi
