@@ -49,6 +49,8 @@ const DAILY_BOOTSTRAP_CACHE_PREFIX = "daily_bootstrap:"
 const DAILY_BOOTSTRAP_CACHE_TTL = 86400 // 24 hours
 
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
+const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
+const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
   "/static/vendor/pdbe-molstar@3.8.0/",
   "/static/vendor/pdbe-molstar@3.7.1/",
@@ -112,6 +114,27 @@ function buildGeneguessrSubdomainSitemapXml() {
     <priority>0.3</priority>
   </url>
 </urlset>`
+}
+
+function resolveStaticSiteOrigin(hostname) {
+  const host = String(hostname || "").toLowerCase()
+  if (
+    host === "staging.brinedew.bio" ||
+    host.endsWith(".workers.dev") ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0"
+  ) {
+    return STATIC_SITE_ORIGIN_STAGING
+  }
+  return STATIC_SITE_ORIGIN_PROD
+}
+
+function buildStaticSiteUrl(url, pathOverride = null) {
+  const targetPath = pathOverride ?? url.pathname
+  const upstreamUrl = new URL(targetPath, resolveStaticSiteOrigin(url.hostname))
+  upstreamUrl.search = url.search
+  return upstreamUrl
 }
 
 // Similarity configuration
@@ -477,7 +500,12 @@ export default {
       (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
       !url.pathname.startsWith("/api/")
     ) {
-      const upstreamResp = await fetch(request)
+      const upstreamUrl = buildStaticSiteUrl(url)
+      const upstreamResp = await fetch(upstreamUrl.toString(), {
+        method: request.method,
+        headers: request.headers,
+        body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+      })
       return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
         status: upstreamResp.status,
         statusText: upstreamResp.statusText,
@@ -513,7 +541,7 @@ export default {
       // For root path, fetch the geneguessr app page
       let targetPath = url.pathname === "/" ? "/apps/geneguessr/index" : url.pathname
 
-      const targetUrl = new URL("https://brinedew.bio" + targetPath + url.search)
+      const targetUrl = buildStaticSiteUrl(url, targetPath)
 
       // GeneGuessr bundle hotfix removed:
       // The app bundle now avoids global `const` redeclarations, so we can serve it directly and allow caching.

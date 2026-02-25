@@ -13,7 +13,11 @@ Source for my personal site. Wet lab biologist, interested in aging and cancer, 
 
 ## how it works
 
-Obsidian vault in `content/`, push to GitHub, Quartz builds static HTML, GitHub Pages serves it. About 60 seconds from commit to live.
+Obsidian vault in `content/`, Quartz builds static HTML, Cloudflare Pages serves static assets, and the Cloudflare Worker handles API + cron.
+
+- Static origin (prod): `https://brinedew-bio.pages.dev`
+- Static origin (staging): `https://brinedew-bio-staging.pages.dev`
+- Runtime daily recap posting is Worker cron-based (no local machine dependency).
 
 ## GeneGuessr dev
 
@@ -30,6 +34,12 @@ Obsidian vault in `content/`, push to GitHub, Quartz builds static HTML, GitHub 
 - Open `http://localhost:<quartz-port>/apps/geneguessr/?gg_api=http://127.0.0.1:8787`.
 
 The `?gg_api=<url>` override is for local dev only. It persists in localStorage; clear with `?gg_api=clear`.
+
+## deployment
+
+Cloudflare-first deploy (no GitHub Actions required):
+
+- `powershell -File scripts/deploy-cloudflare-prod.ps1`
 
 ## license
 
