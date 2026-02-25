@@ -31,7 +31,7 @@ jobs:
         run: |
           echo "Applying D1 migrations..."
           set +e
-          OUTPUT=$(wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml --yes 2>&1)
+          OUTPUT=$(wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
