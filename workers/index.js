@@ -132,10 +132,11 @@ import {
 import { isIconoplasmRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 // Import Discord bot handlers
 import {
-  handleDispatchDailyRecapWorkflow,
   handleDailySummary,
   handleInteractions,
   handleMarkPosted,
+  handlePostDailyRecap,
+  handlePostRecap,
   handleRenderPage,
 } from "./discord.js"
 // Import stats handlers
@@ -152,6 +153,8 @@ import {
   handleFeatureFlags,
   handleAdminStatus,
   handleDeleteOverride,
+  handleAdminDiscordRecapImageUpload,
+  handleAdminDiscordRecapImageStatus,
   handleGraphicsSettings,
   DEFAULT_GRAPHICS_SETTINGS,
   normalizeGraphicsSettings,
@@ -735,6 +738,10 @@ export default {
       return handleMarkPosted(request, env)
     }
 
+    if (url.pathname === "/api/discord/post-recap" && request.method === "POST") {
+      return handlePostRecap(request, env)
+    }
+
     // Stats endpoints
     if (url.pathname === "/api/migrate-stats" && request.method === "POST") {
       const response = await handleMigrateStats(request, env)
@@ -811,6 +818,22 @@ export default {
 
     if (url.pathname === "/api/admin/override-protein" && request.method === "DELETE") {
       const response = await handleDeleteOverride(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (url.pathname === "/api/admin/discord-recap-image" && request.method === "POST") {
+      const response = await handleAdminDiscordRecapImageUpload(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (url.pathname === "/api/admin/discord-recap-image" && request.method === "GET") {
+      const response = await handleAdminDiscordRecapImageStatus(request, env)
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
@@ -1094,7 +1117,7 @@ export default {
   /**
    * Scheduled handler:
    * - 23:55 UTC: pre-warm next day's target structure/bootstrap cache
-   * - 00:03 UTC: dispatch Discord recap workflow for yesterday
+   * - 00:03 UTC: post Discord recap for yesterday using pre-rendered day image from R2 cache
    */
   async scheduled(event, env, ctx) {
     const cronExprRaw = event?.cron || ""
@@ -1114,10 +1137,10 @@ export default {
 
     if (cronExpr === "3 0 * * *") {
       try {
-        const result = await handleDispatchDailyRecapWorkflow(env)
-        console.log("[CRON] Recap workflow dispatch result:", result)
+        const result = await handlePostDailyRecap(env)
+        console.log("[CRON] Recap post result:", result)
       } catch (err) {
-        console.error("[CRON] Recap workflow dispatch failed:", err)
+        console.error("[CRON] Recap posting failed:", err)
       }
       return
     }

@@ -5,6 +5,7 @@
 
 import { parseCookies } from "./auth.js"
 import { sanitizeProteinSummary } from "./lib/structure-utils.js"
+import { buildDiscordRecapImageKey, isValidIsoDay } from "./lib/discord-recap-images.js"
 import {
   fetchProteinByUniprot as loadProtein,
   getEligibleProteinIds,
@@ -20,6 +21,8 @@ function addDaysISO(dateIso, days) {
   return base.toISOString().slice(0, 10)
 }
 
+const DISCORD_RECAP_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+
 async function listAllKvKeys(env, prefix) {
   const keys = []
   let cursor = undefined
@@ -33,6 +36,25 @@ async function listAllKvKeys(env, prefix) {
     break
   } while (cursor)
   return keys
+}
+
+function decodeBase64Png(value) {
+  const input = String(value || "").trim()
+  if (!input) return null
+
+  const cleaned = input.replace(/^data:image\/png;base64,/i, "").replace(/\s+/g, "")
+  if (!cleaned) return null
+
+  try {
+    const binary = atob(cleaned)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes.byteLength > 0 ? bytes : null
+  } catch {
+    return null
+  }
 }
 
 const CAMERA_MODES = ["perspective", "orthographic"]
@@ -655,6 +677,15 @@ export async function handleOverrideProtein(request, env) {
     },
   })
 
+  // Override changed the target protein; invalidate previously cached recap image for this day.
+  if (env.STRUCTURES_BUCKET) {
+    try {
+      await env.STRUCTURES_BUCKET.delete(buildDiscordRecapImageKey(date))
+    } catch (err) {
+      console.warn("Failed to delete stale recap image after override update", err)
+    }
+  }
+
   return Response.json({
     success: true,
     message: `Protein override set for ${date}`,
@@ -787,7 +818,7 @@ export async function handleAdminSchedule(request, env) {
   try {
     const url = new URL(request.url)
     const futureDaysRaw = url.searchParams.get("futureDays")
-    const futureDays = Math.max(0, Math.min(90, Number(futureDaysRaw ?? 30) || 30))
+    const futureDays = Math.max(0, Math.min(370, Number(futureDaysRaw ?? 30) || 30))
 
     const today = new Date().toISOString().slice(0, 10)
 
@@ -1154,9 +1185,115 @@ export async function handleDeleteOverride(request, env) {
   const key = `puzzle_override:${date}`
   await env.KV.delete(key)
 
+  // Override removal can change the selected protein; invalidate day image cache.
+  if (env.STRUCTURES_BUCKET) {
+    try {
+      await env.STRUCTURES_BUCKET.delete(buildDiscordRecapImageKey(date))
+    } catch (err) {
+      console.warn("Failed to delete recap image after override removal", err)
+    }
+  }
+
   return Response.json({
     success: true,
     message: `Protein override removed for ${date}`,
+  })
+}
+
+/**
+ * POST /api/admin/discord-recap-image
+ * Upload a rendered PNG for a specific day (used by admin panel pre-rendering).
+ * Body: { day: "YYYY-MM-DD", image_base64: "..." }
+ */
+export async function handleAdminDiscordRecapImageUpload(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: "Unauthorized" }, { status: 403 })
+  }
+  if (!env.STRUCTURES_BUCKET) {
+    return Response.json({ error: "STRUCTURES_BUCKET binding is not configured" }, { status: 500 })
+  }
+
+  let payload
+  try {
+    payload = await request.json()
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 })
+  }
+
+  const day = String(payload?.day || "").trim()
+  if (!isValidIsoDay(day)) {
+    return Response.json({ error: "Invalid day format. Use YYYY-MM-DD" }, { status: 400 })
+  }
+
+  const bytes = decodeBase64Png(payload?.image_base64)
+  if (!bytes) {
+    return Response.json({ error: "image_base64 must contain a valid PNG payload" }, { status: 400 })
+  }
+  if (bytes.byteLength > DISCORD_RECAP_IMAGE_MAX_BYTES) {
+    return Response.json(
+      {
+        error: `Image too large (${bytes.byteLength} bytes). Max is ${DISCORD_RECAP_IMAGE_MAX_BYTES} bytes.`,
+      },
+      { status: 400 },
+    )
+  }
+
+  const key = buildDiscordRecapImageKey(day)
+  await env.STRUCTURES_BUCKET.put(key, bytes, {
+    httpMetadata: {
+      contentType: "image/png",
+      cacheControl: "public, max-age=31536000, immutable",
+    },
+    customMetadata: {
+      day,
+      uploadedBy: "admin",
+      uploadedAt: new Date().toISOString(),
+    },
+  })
+
+  return Response.json({
+    success: true,
+    day,
+    key,
+    bytes: bytes.byteLength,
+  })
+}
+
+/**
+ * GET /api/admin/discord-recap-image?day=YYYY-MM-DD
+ * Returns cache status for a day-specific recap image.
+ */
+export async function handleAdminDiscordRecapImageStatus(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: "Unauthorized" }, { status: 403 })
+  }
+  if (!env.STRUCTURES_BUCKET) {
+    return Response.json({ error: "STRUCTURES_BUCKET binding is not configured" }, { status: 500 })
+  }
+
+  const url = new URL(request.url)
+  const day = String(url.searchParams.get("day") || "").trim()
+  if (!isValidIsoDay(day)) {
+    return Response.json({ error: "Invalid day format. Use YYYY-MM-DD" }, { status: 400 })
+  }
+
+  const key = buildDiscordRecapImageKey(day)
+  const head = await env.STRUCTURES_BUCKET.head(key)
+  if (!head) {
+    return Response.json({
+      day,
+      key,
+      exists: false,
+    })
+  }
+
+  return Response.json({
+    day,
+    key,
+    exists: true,
+    size: head.size || null,
+    uploadedAt: head.uploaded ? head.uploaded.toISOString() : null,
+    metadata: head.customMetadata || {},
   })
 }
 

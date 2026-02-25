@@ -1435,6 +1435,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           </div>
         </form>
         <div id="override-message"></div>
+        <div class="form-actions" style="margin-top: 0.5rem;">
+          <button type="button" id="btn-upload-day-image">Upload Selected Day Image</button>
+          <button type="button" id="btn-upload-year-images">Upload Next 365 Days</button>
+        </div>
+        <div id="discord-image-message"></div>
       </div>
 
       <!-- Cards / Details -->
@@ -1679,6 +1684,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     initializePreview();
 
     let scheduleData = {};
+    const DISCORD_IMAGE_UPLOAD_DAYS = 365;
+    let recapUploadRunning = false;
 
     // Override picker state: keep the UI gene-first, but keep the selected UniProt ID as the internal key.
     let overrideSelectedSuggestionUniprot = null;
@@ -1691,8 +1698,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     async function loadSchedule() {
       try {
-        // Fetch enough days to cover the calendar view (e.g. 60 days)
-        const response = await fetch(API_BASE + '/api/admin/schedule?futureDays=60', { credentials: 'include' });
+        // Keep one full year of future targets in memory for recap-image pre-render uploads.
+        const response = await fetch(API_BASE + '/api/admin/schedule?futureDays=370', { credentials: 'include' });
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.error || 'Failed to load schedule');
@@ -2277,6 +2284,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         });
       }
 
+      const uploadDayButton = document.getElementById('btn-upload-day-image');
+      if (uploadDayButton) {
+        uploadDayButton.addEventListener('click', uploadSelectedDayImage);
+      }
+
+      const uploadYearButton = document.getElementById('btn-upload-year-images');
+      if (uploadYearButton) {
+        uploadYearButton.addEventListener('click', uploadNextYearImages);
+      }
+
       const profileSelect = document.getElementById('profile-select');
       if (profileSelect) {
         profileSelect.addEventListener('change', (event) => {
@@ -2460,6 +2477,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         overrideSelectedSuggestionGene = null;
         await loadStatus();
         await loadSchedule();
+        selectDate(date);
+        // Keep daily posting path single and deterministic: update the cached recap image immediately.
+        await uploadSelectedDayImage();
       } catch (err) {
         console.error('Error setting override:', err);
         showMessage('override-message', err.message || 'Failed to set override', 'error');
@@ -3608,6 +3628,231 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           el.innerHTML = '';
         }
       }, 5000);
+    }
+
+    function setRecapImageMessage(message, type) {
+      const el = document.getElementById('discord-image-message');
+      if (!el) return;
+      const safe = escapeHtml(String(message || ''));
+      if (!safe) {
+        el.innerHTML = '';
+        return;
+      }
+      if (type === 'success' || type === 'error') {
+        el.innerHTML = '<div class="message ' + type + '">' + safe + '</div>';
+        return;
+      }
+      el.innerHTML = '<p class="helper-text">' + safe + '</p>';
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function setRecapButtonsBusy(isBusy) {
+      recapUploadRunning = !!isBusy;
+      const dayBtn = document.getElementById('btn-upload-day-image');
+      const yearBtn = document.getElementById('btn-upload-year-images');
+      if (dayBtn) dayBtn.disabled = recapUploadRunning;
+      if (yearBtn) yearBtn.disabled = recapUploadRunning;
+    }
+
+    async function waitForPreviewCanvas(timeoutMs) {
+      const timeout = Number(timeoutMs || 90000);
+      const start = Date.now();
+      while (Date.now() - start < timeout) {
+        const canvas = previewMountEl ? previewMountEl.querySelector('canvas') : null;
+        if (previewReady && canvas && canvas.width > 0 && canvas.height > 0) {
+          return canvas;
+        }
+        await sleep(250);
+      }
+      throw new Error('Preview did not become ready in time');
+    }
+
+    function getCanvasNonDarkRatio(canvas) {
+      const sample = document.createElement('canvas');
+      sample.width = 96;
+      sample.height = 72;
+      const ctx = sample.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(canvas, 0, 0, sample.width, sample.height);
+      const data = ctx.getImageData(0, 0, sample.width, sample.height).data;
+      let visible = 0;
+      let nonDark = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+        if (a <= 8) continue;
+        visible += 1;
+        if (r + g + b > 24) nonDark += 1;
+      }
+      return visible > 0 ? nonDark / visible : 0;
+    }
+
+    async function capturePreviewImageBase64() {
+      const canvas = await waitForPreviewCanvas(90000);
+      const ratio = getCanvasNonDarkRatio(canvas);
+      if (ratio < 0.01) {
+        throw new Error('Preview canvas appears blank/too dark');
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+      const marker = 'base64,';
+      const idx = dataUrl.indexOf(marker);
+      if (idx === -1) {
+        throw new Error('Failed to encode preview image');
+      }
+      return dataUrl.slice(idx + marker.length);
+    }
+
+    async function uploadRecapImage(day, imageBase64) {
+      const response = await fetch(API_BASE + '/api/admin/discord-recap-image', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ day, image_base64: imageBase64 })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to upload recap image');
+      }
+      return payload;
+    }
+
+    async function renderAndUploadDayImage(day, options) {
+      const opts = options || {};
+      const row = scheduleData[day];
+      if (!row || !row.uniprot) {
+        throw new Error('No scheduled protein for ' + day);
+      }
+
+      if (opts.bulk === true) {
+        await loadProteinInPreview(row.uniprot);
+      } else if (selectedDate !== day) {
+        selectDate(day);
+      } else if (previewReady !== true) {
+        await loadProteinInPreview(row.uniprot);
+      }
+
+      const statusText = String(previewStatusEl && previewStatusEl.textContent ? previewStatusEl.textContent : '').toLowerCase();
+      const placeholderText = String(previewPlaceholderEl && previewPlaceholderEl.textContent ? previewPlaceholderEl.textContent : '').toLowerCase();
+      if (statusText.includes('no structure') || placeholderText.includes('no 3d structure available')) {
+        throw new Error('No structure available for ' + row.uniprot);
+      }
+
+      await waitForPreviewCanvas(90000);
+      await sleep(800); // Let Mol* settle before pixel capture.
+      const base64 = await capturePreviewImageBase64();
+      const uploaded = await uploadRecapImage(day, base64);
+      if (!opts.silent) {
+        setRecapImageMessage('Uploaded recap image for ' + day + ' (' + row.symbol + ')', 'success');
+      }
+      return { uploaded, base64, uniprot: row.uniprot, symbol: row.symbol || row.uniprot };
+    }
+
+    async function uploadSelectedDayImage() {
+      if (recapUploadRunning) {
+        return;
+      }
+      const day = selectedDate || document.getElementById('override-date')?.value;
+      if (!day) {
+        setRecapImageMessage('Select a calendar day first.', 'error');
+        return;
+      }
+      setRecapButtonsBusy(true);
+      setRecapImageMessage('Rendering and uploading image for ' + day + '...', 'info');
+      try {
+        await renderAndUploadDayImage(day);
+      } catch (err) {
+        console.error('Failed to upload selected-day recap image:', err);
+        setRecapImageMessage(err?.message || 'Failed to upload selected-day image.', 'error');
+      } finally {
+        setRecapButtonsBusy(false);
+      }
+    }
+
+    async function uploadNextYearImages() {
+      if (recapUploadRunning) {
+        return;
+      }
+
+      const proceed = confirm('Render and upload recap images for the next 365 days? This can take a while.');
+      if (!proceed) return;
+
+      setRecapButtonsBusy(true);
+      setRecapImageMessage('Loading schedule for yearly upload...', 'info');
+
+      try {
+        await loadSchedule();
+        const today = new Date().toISOString().slice(0, 10);
+        const days = Object.keys(scheduleData)
+          .filter((day) => day >= today && scheduleData[day]?.uniprot)
+          .sort()
+          .slice(0, DISCORD_IMAGE_UPLOAD_DAYS);
+
+        if (days.length === 0) {
+          throw new Error('No upcoming scheduled proteins to upload.');
+        }
+
+        const imageByUniprot = new Map();
+        let uploaded = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (let i = 0; i < days.length; i += 1) {
+          const day = days[i];
+          const row = scheduleData[day];
+          const label = row?.symbol || row?.uniprot || day;
+          setRecapImageMessage(
+            'Processing ' + (i + 1) + '/' + days.length + ' (' + day + ' • ' + label + ')',
+            'info'
+          );
+
+          if (!row?.uniprot) {
+            skipped += 1;
+            continue;
+          }
+
+          try {
+            let base64 = imageByUniprot.get(row.uniprot);
+            if (!base64) {
+              const rendered = await renderAndUploadDayImage(day, { silent: true, bulk: true });
+              base64 = rendered.base64;
+              imageByUniprot.set(row.uniprot, base64);
+            } else {
+              await uploadRecapImage(day, base64);
+            }
+            uploaded += 1;
+          } catch (err) {
+            const msg = String(err && err.message ? err.message : err);
+            if (msg.toLowerCase().includes('no structure available')) {
+              skipped += 1;
+            } else {
+              failed += 1;
+            }
+            console.error('Yearly recap-image upload failed for ' + day + ':', err);
+          }
+          await sleep(250);
+        }
+
+        if (failed > 0) {
+          setRecapImageMessage(
+            'Yearly upload finished with errors. Uploaded: ' + uploaded + ', failed: ' + failed + ', skipped: ' + skipped,
+            'error'
+          );
+        } else {
+          setRecapImageMessage(
+            'Yearly upload complete. Uploaded: ' + uploaded + ', skipped: ' + skipped + '.',
+            'success'
+          );
+        }
+      } catch (err) {
+        console.error('Failed yearly recap-image upload:', err);
+        setRecapImageMessage(err?.message || 'Failed yearly recap-image upload.', 'error');
+      } finally {
+        setRecapButtonsBusy(false);
+      }
     }
 
     window.deleteOverride = async function deleteOverride(date) {

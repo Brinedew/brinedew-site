@@ -4,6 +4,7 @@
  * Endpoints:
  * - GET  /api/discord/daily-summary  - Returns recap data for a given day
  * - POST /api/discord/interactions   - Discord webhook verification
+ * - POST /api/discord/post-recap     - Trigger recap post from cached day image (auth required)
  * - POST /api/discord/mark-posted    - Sets idempotency key after posting
  * - GET  /apps/geneguessr/render     - Minimal structure viewer for screenshots
  */
@@ -11,14 +12,15 @@
 import { getDailyGuessAggregates, getWinnersCount } from "./lib/guess-aggregates.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
+import { buildDiscordRecapImageKey, isValidIsoDay } from "./lib/discord-recap-images.js"
 
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const DISCORD_SUMMARY_POSTED_PREFIX = "discord_summary_posted:"
-const DISCORD_SUMMARY_DISPATCH_FAILURE_PREFIX = "discord_summary_dispatch_failure:"
-const GITHUB_API_BASE = "https://api.github.com"
-const GITHUB_DISPATCH_TIMEOUT_MS = 20000
-const GITHUB_DISPATCH_MAX_ATTEMPTS = 3
-const GITHUB_DISPATCH_FAILURE_TTL = 14 * 24 * 60 * 60
+const DISCORD_SUMMARY_POST_FAILURE_PREFIX = "discord_summary_post_failure:"
+const DISCORD_POST_FAILURE_TTL = 14 * 24 * 60 * 60
+const DISCORD_POST_TIMEOUT_MS = 20000
+const PLAY_URL = "https://geneguessr.brinedew.bio"
+const RENDER_BASE_URL = "https://geneguessr.brinedew.bio/apps/geneguessr/render"
 
 /**
  * Validate Bearer token for bot authentication
@@ -50,45 +52,388 @@ function getYesterdayUtcDay() {
 }
 
 function isValidDay(day) {
-  return Boolean(day && /^\d{4}-\d{2}-\d{2}$/.test(day))
+  return isValidIsoDay(day)
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function getPostedKey(day) {
+  return `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
 }
 
-function isRetryableDispatchStatus(status) {
-  return status === 408 || status === 429 || status >= 500
+function getPostFailureKey(day) {
+  return `${DISCORD_SUMMARY_POST_FAILURE_PREFIX}${day}`
 }
 
-function getDispatchFailureKey(day) {
-  return `${DISCORD_SUMMARY_DISPATCH_FAILURE_PREFIX}${day}`
+async function readPostedMarker(env, day) {
+  const raw = await env.KV.get(getPostedKey(day))
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== "object") return null
+    return parsed
+  } catch {
+    return null
+  }
 }
 
-async function setDispatchFailure(env, payload) {
+async function setPostFailure(env, payload) {
   try {
     const day = payload?.day
-    if (!isValidDay(day)) {
-      return
-    }
-    const key = getDispatchFailureKey(day)
-    await env.KV.put(key, JSON.stringify(payload), {
-      expirationTtl: GITHUB_DISPATCH_FAILURE_TTL,
+    if (!isValidDay(day)) return
+    await env.KV.put(getPostFailureKey(day), JSON.stringify(payload), {
+      expirationTtl: DISCORD_POST_FAILURE_TTL,
     })
   } catch (err) {
-    console.warn("[CRON] Failed to persist recap dispatch failure payload:", err)
+    console.warn("[CRON] Failed to persist recap post failure payload:", err)
   }
 }
 
-async function clearDispatchFailure(env, day) {
+async function clearPostFailure(env, day) {
   try {
-    if (!isValidDay(day)) {
-      return
-    }
-    await env.KV.delete(getDispatchFailureKey(day))
+    if (!isValidDay(day)) return
+    await env.KV.delete(getPostFailureKey(day))
   } catch (err) {
-    console.warn("[CRON] Failed to clear recap dispatch failure payload:", err)
+    console.warn("[CRON] Failed to clear recap post failure payload:", err)
   }
+}
+
+async function setPostedMarker(env, day, messageId) {
+  const postedData = {
+    message_id: String(messageId),
+    posted_at: Date.now(),
+    channel_id: env.DISCORD_GENEGUESSR_CHANNEL_ID || null,
+  }
+  await env.KV.put(getPostedKey(day), JSON.stringify(postedData))
+  return postedData
+}
+
+function formatRecapDate(day) {
+  const date = new Date(`${day}T00:00:00Z`)
+  const dayNum = date.getUTCDate()
+  const suffix =
+    dayNum === 1 || dayNum === 21 || dayNum === 31
+      ? "st"
+      : dayNum === 2 || dayNum === 22
+        ? "nd"
+        : dayNum === 3 || dayNum === 23
+          ? "rd"
+          : "th"
+  const month = date.toLocaleString("en-US", { month: "long", timeZone: "UTC" })
+  const year = date.getUTCFullYear()
+  return `${dayNum}${suffix} of ${month}, ${year}`
+}
+
+function buildDiscordRecapContent(recap) {
+  const { target, winners_count: winnersCount, top_guesses: topGuesses, day } = recap
+  const gene = target?.gene || "Unknown"
+  const fullName = target?.full_name || ""
+
+  let content = `GeneGuessr for ${formatRecapDate(day)}\n**${gene}**`
+  if (fullName) {
+    content += `\n${fullName}`
+  }
+  content += "\n\n"
+
+  if (winnersCount > 0) {
+    content += `${winnersCount} player${winnersCount === 1 ? "" : "s"} solved it!\n\n`
+  } else {
+    content += "No one solved it!\n\n"
+  }
+
+  if (Array.isArray(topGuesses) && topGuesses.length > 0) {
+    content += "Top guesses:\n"
+    for (const guess of topGuesses) {
+      content += `${guess.rank}. ${guess.gene}\n`
+    }
+    content += "\n"
+  }
+
+  content += `Play today's puzzle: <${PLAY_URL}>`
+  return content
+}
+
+async function buildDailySummaryData(env, day) {
+  if (!isValidDay(day)) {
+    return {
+      ok: false,
+      status: 400,
+      body: { error: "Invalid day format. Use YYYY-MM-DD" },
+    }
+  }
+
+  const alreadyPosted = await readPostedMarker(env, day)
+  if (alreadyPosted) {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        already_posted: true,
+        message_id: alreadyPosted.message_id || null,
+        posted_at: alreadyPosted.posted_at || null,
+      },
+    }
+  }
+
+  const puzzleData = await env.KV.get(`puzzle_actual:${day}`)
+  if (!puzzleData) {
+    return {
+      ok: false,
+      status: 404,
+      body: {
+        error: "No puzzle data for this day",
+        day,
+        hint: "Either no one played, or the day hasn't happened yet",
+      },
+    }
+  }
+
+  const puzzle = JSON.parse(puzzleData)
+  const targetUniprot = puzzle.uniprot_id
+  const targetProtein = await fetchProteinByUniprot(env.DB, targetUniprot)
+  if (!targetProtein) {
+    return {
+      ok: false,
+      status: 404,
+      body: {
+        error: "Target protein not found in database",
+        uniprot_id: targetUniprot,
+      },
+    }
+  }
+
+  const winnersResult = await getWinnersCount(env.DB, { day })
+  const winnersCount = winnersResult.ok ? winnersResult.winnersCount : 0
+
+  const guessResult = await getDailyGuessAggregates(env.DB, { day, limit: 5 })
+  const topGuesses = guessResult.ok
+    ? guessResult.guesses.map((g, idx) => ({
+        rank: idx + 1,
+        gene: g.gene || g.uniprot,
+      }))
+    : []
+  const totalGuesses = guessResult.ok ? guessResult.totalGuesses : 0
+
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      ok: true,
+      day,
+      already_posted: false,
+      target: {
+        uniprot_id: targetUniprot,
+        gene: targetProtein.gene,
+        full_name: targetProtein.full_name,
+      },
+      winners_count: winnersCount,
+      total_guesses: totalGuesses,
+      top_guesses: topGuesses,
+      links: {
+        play_url: PLAY_URL,
+        render_url: `${RENDER_BASE_URL}?day=${day}&mode=structure`,
+      },
+    },
+  }
+}
+
+async function loadCachedRecapImage(env, day) {
+  if (!env.STRUCTURES_BUCKET) {
+    throw new Error("STRUCTURES_BUCKET binding is not configured")
+  }
+  const key = buildDiscordRecapImageKey(day)
+  const object = await env.STRUCTURES_BUCKET.get(key)
+  if (!object) return null
+  const imageData = await object.arrayBuffer()
+  if (!imageData || imageData.byteLength <= 0) return null
+  return {
+    key,
+    uploadedAt: object.uploaded ? object.uploaded.toISOString() : null,
+    bytes: new Uint8Array(imageData),
+  }
+}
+
+function decodeBase64Png(value) {
+  const input = String(value || "").trim()
+  if (!input) return null
+
+  const cleaned = input.replace(/^data:image\/png;base64,/i, "").replace(/\s+/g, "")
+  if (!cleaned) return null
+
+  try {
+    const binary = atob(cleaned)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes.byteLength > 0 ? bytes : null
+  } catch {
+    return null
+  }
+}
+
+function toErrorMessage(err) {
+  if (err instanceof Error) return err.message
+  return String(err)
+}
+
+async function postRecapToDiscord(env, { day, content, screenshotBytes }) {
+  const botToken = env.DISCORD_BOT_TOKEN
+  const channelId = env.DISCORD_GENEGUESSR_CHANNEL_ID
+  if (!botToken) throw new Error("DISCORD_BOT_TOKEN not configured")
+  if (!channelId) throw new Error("DISCORD_GENEGUESSR_CHANNEL_ID not configured")
+
+  const payload = { content }
+  const form = new FormData()
+  form.append("payload_json", JSON.stringify(payload))
+  form.append(
+    "files[0]",
+    new Blob([screenshotBytes], { type: "image/png" }),
+    `structure-${day}.png`,
+  )
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort("discord_post_timeout"), DISCORD_POST_TIMEOUT_MS)
+  let response
+  try {
+    response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${botToken}` },
+      body: form,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  const bodyText = await response.text()
+  let parsed = null
+  try {
+    parsed = bodyText ? JSON.parse(bodyText) : null
+  } catch {
+    parsed = null
+  }
+  if (!response.ok) {
+    throw new Error(`Discord API ${response.status}: ${bodyText || "empty_response"}`)
+  }
+  const messageId = parsed?.id
+  if (!messageId) {
+    throw new Error("Discord response missing message id")
+  }
+  return {
+    messageId,
+    raw: parsed,
+  }
+}
+
+/**
+ * Worker cron helper: post daily recap directly from Cloudflare Worker.
+ */
+export async function handlePostDailyRecap(env, options = {}) {
+  const day = options?.day || getYesterdayUtcDay()
+  if (!isValidDay(day)) {
+    return { ok: false, error: "invalid_day", day }
+  }
+
+  const summary = await buildDailySummaryData(env, day)
+  if (!summary.ok) {
+    if (summary.status === 404 && summary.body?.error === "No puzzle data for this day") {
+      return { ok: true, skipped: "no_puzzle_data", day }
+    }
+    return {
+      ok: false,
+      error: "summary_failed",
+      day,
+      status: summary.status,
+      details: summary.body?.error || "unknown_error",
+    }
+  }
+
+  const recap = summary.body
+  if (recap.already_posted) {
+    return { ok: true, skipped: "already_posted", day, message_id: recap.message_id || null }
+  }
+
+  let stage = "load_cached_image"
+  try {
+    const providedScreenshotBytes = options?.screenshotBytes
+    let screenshotBytes = null
+    let imageSource = "cached_r2"
+
+    if (providedScreenshotBytes instanceof Uint8Array && providedScreenshotBytes.byteLength > 0) {
+      screenshotBytes = providedScreenshotBytes
+      imageSource = "request_body"
+    } else {
+      const cached = await loadCachedRecapImage(env, day)
+      if (!cached?.bytes) {
+        throw new Error(
+          `Missing cached recap image for ${day}. Upload ${buildDiscordRecapImageKey(day)} via admin panel.`,
+        )
+      }
+      screenshotBytes = cached.bytes
+    }
+    stage = "discord_post"
+    const content = buildDiscordRecapContent(recap)
+    const post = await postRecapToDiscord(env, {
+      day,
+      content,
+      screenshotBytes,
+    })
+    stage = "mark_posted"
+    const marker = await setPostedMarker(env, day, post.messageId)
+    await clearPostFailure(env, day)
+    return {
+      ok: true,
+      day,
+      message_id: post.messageId,
+      posted_at: marker.posted_at,
+      screenshot_bytes: screenshotBytes.byteLength,
+      image_source: imageSource,
+    }
+  } catch (err) {
+    const failure = {
+      day,
+      failed_at: new Date().toISOString(),
+      stage,
+      error: toErrorMessage(err),
+    }
+    await setPostFailure(env, failure)
+    return { ok: false, error: "post_failed", day, stage, details: failure.error }
+  }
+}
+
+/**
+ * POST /api/discord/post-recap
+ * Optional body: { day: "YYYY-MM-DD" }.
+ */
+export async function handlePostRecap(request, env) {
+  const auth = validateBotToken(request, env)
+  if (!auth.valid) {
+    return new Response(JSON.stringify({ error: auth.error }), {
+      status: 401,
+      headers: JSON_HEADERS,
+    })
+  }
+
+  let day = new URL(request.url).searchParams.get("day")
+  let screenshotBytes = null
+  if (!day) {
+    try {
+      const body = await request.json()
+      if (typeof body?.day === "string") day = body.day
+      if (typeof body?.image_base64 === "string" && body.image_base64.trim()) {
+        screenshotBytes = decodeBase64Png(body.image_base64)
+      }
+    } catch {
+      // Optional JSON body; ignore parse errors.
+    }
+  }
+  const result = await handlePostDailyRecap(env, {
+    day: day || undefined,
+    screenshotBytes: screenshotBytes || undefined,
+  })
+  return new Response(JSON.stringify(result), {
+    status: result.ok ? 200 : 500,
+    headers: JSON_HEADERS,
+  })
 }
 
 function inferStructureFormatFromCacheKey(cacheKey, fallback = "cif") {
@@ -97,148 +442,6 @@ function inferStructureFormatFromCacheKey(cacheKey, fallback = "cif") {
   if (key.endsWith(".pdb")) return "pdb"
   if (key.endsWith(".cif")) return "cif"
   return fallback
-}
-
-/**
- * Worker cron helper: dispatch recap GitHub workflow.
- * Keeps recap content/attachment logic unchanged (workflow still does screenshot + post).
- */
-export async function handleDispatchDailyRecapWorkflow(env, options = {}) {
-  const day = options?.day || getYesterdayUtcDay()
-  if (!isValidDay(day)) {
-    return { ok: false, error: "invalid_day", day }
-  }
-
-  const nowIso = new Date().toISOString()
-  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
-  const alreadyPosted = await env.KV.get(postedKey)
-  if (alreadyPosted) {
-    console.log(`[CRON] Recap already posted for ${day}; skipping workflow dispatch`)
-    return { ok: true, skipped: "already_posted", day }
-  }
-
-  const token = env.GITHUB_RECAP_DISPATCH_TOKEN
-  if (!token) {
-    console.error("[CRON] Missing GITHUB_RECAP_DISPATCH_TOKEN; cannot trigger recap workflow")
-    return { ok: false, error: "missing_github_token", day }
-  }
-
-  const repo = (env.GITHUB_RECAP_REPO || "Brinedew/brinedew-site").trim()
-  const workflowId = env.GITHUB_RECAP_WORKFLOW || "discord-daily-recap.yml"
-  const ref = env.GITHUB_RECAP_REF || "main"
-  const [owner, repoName] = repo.split("/").map((s) => s.trim())
-  if (!owner || !repoName) {
-    console.error(`[CRON] Invalid GITHUB_RECAP_REPO: ${repo}`)
-    return { ok: false, error: "invalid_repo", day, repo }
-  }
-
-  const dispatchUrl = `${GITHUB_API_BASE}/repos/${owner}/${repoName}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`
-  const dispatchBody = {
-    ref,
-    inputs: { day },
-  }
-
-  let lastStatus = null
-  let lastError = null
-
-  for (let attempt = 1; attempt <= GITHUB_DISPATCH_MAX_ATTEMPTS; attempt++) {
-    const controller = new AbortController()
-    const timeout = setTimeout(
-      () => controller.abort("dispatch_timeout"),
-      GITHUB_DISPATCH_TIMEOUT_MS,
-    )
-    try {
-      const response = await fetch(dispatchUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
-          "User-Agent": "geneguessr-worker-cron",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        body: JSON.stringify(dispatchBody),
-        signal: controller.signal,
-      })
-      clearTimeout(timeout)
-
-      if (response.ok) {
-        await clearDispatchFailure(env, day)
-        console.log(
-          `[CRON] Dispatched ${workflowId} for ${day} on ${repo}@${ref} (attempt ${attempt})`,
-        )
-        return { ok: true, day, repo, workflowId, ref, attempt }
-      }
-
-      const errorText = await response.text()
-      lastStatus = response.status
-      lastError = errorText || "empty_error_body"
-      const retryable = isRetryableDispatchStatus(response.status)
-
-      if (!retryable || attempt === GITHUB_DISPATCH_MAX_ATTEMPTS) {
-        const failure = {
-          day,
-          failed_at: nowIso,
-          status: response.status,
-          error: errorText || "empty_error_body",
-          attempt,
-          max_attempts: GITHUB_DISPATCH_MAX_ATTEMPTS,
-          repo,
-          workflowId,
-          ref,
-        }
-        console.error(`[CRON] GitHub workflow dispatch failed (${response.status}): ${errorText}`)
-        await setDispatchFailure(env, failure)
-        return {
-          ok: false,
-          error: "dispatch_failed",
-          day,
-          status: response.status,
-        }
-      }
-
-      console.warn(
-        `[CRON] Transient dispatch failure (${response.status}) for ${day}, retrying (${attempt}/${GITHUB_DISPATCH_MAX_ATTEMPTS})`,
-      )
-      await sleep(attempt * 1000)
-    } catch (err) {
-      clearTimeout(timeout)
-      lastError = err?.message || String(err)
-      if (attempt === GITHUB_DISPATCH_MAX_ATTEMPTS) {
-        const failure = {
-          day,
-          failed_at: nowIso,
-          status: lastStatus,
-          error: lastError,
-          attempt,
-          max_attempts: GITHUB_DISPATCH_MAX_ATTEMPTS,
-          repo,
-          workflowId,
-          ref,
-        }
-        console.error(
-          `[CRON] GitHub workflow dispatch request threw on final attempt: ${lastError}`,
-        )
-        await setDispatchFailure(env, failure)
-        return {
-          ok: false,
-          error: "dispatch_exception",
-          day,
-        }
-      }
-
-      console.warn(
-        `[CRON] Dispatch request error for ${day}, retrying (${attempt}/${GITHUB_DISPATCH_MAX_ATTEMPTS}): ${lastError}`,
-      )
-      await sleep(attempt * 1000)
-    }
-  }
-
-  return {
-    ok: false,
-    error: "dispatch_unknown_failure",
-    day,
-  }
 }
 
 /**
@@ -264,95 +467,11 @@ export async function handleDailySummary(request, env) {
 
   const url = new URL(request.url)
   const day = url.searchParams.get("day")
-
-  // Validate day format
-  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    return new Response(JSON.stringify({ error: "Invalid day format. Use YYYY-MM-DD" }), {
-      status: 400,
-      headers: JSON_HEADERS,
-    })
-  }
-
-  // Check if already posted (idempotency)
-  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
-  const alreadyPosted = await env.KV.get(postedKey)
-  if (alreadyPosted) {
-    const posted = JSON.parse(alreadyPosted)
-    return new Response(
-      JSON.stringify({
-        already_posted: true,
-        message_id: posted.message_id,
-        posted_at: posted.posted_at,
-      }),
-      { headers: JSON_HEADERS },
-    )
-  }
-
-  // Get the puzzle_actual for this day
-  const puzzleKey = `puzzle_actual:${day}`
-  const puzzleData = await env.KV.get(puzzleKey)
-
-  if (!puzzleData) {
-    return new Response(
-      JSON.stringify({
-        error: "No puzzle data for this day",
-        day,
-        hint: "Either no one played, or the day hasn't happened yet",
-      }),
-      { status: 404, headers: JSON_HEADERS },
-    )
-  }
-
-  const puzzle = JSON.parse(puzzleData)
-  const targetUniprot = puzzle.uniprot_id
-
-  // Fetch target protein details
-  const targetProtein = await fetchProteinByUniprot(env.DB, targetUniprot)
-  if (!targetProtein) {
-    return new Response(
-      JSON.stringify({
-        error: "Target protein not found in database",
-        uniprot_id: targetUniprot,
-      }),
-      { status: 404, headers: JSON_HEADERS },
-    )
-  }
-
-  // Get winners count
-  const winnersResult = await getWinnersCount(env.DB, { day })
-  const winnersCount = winnersResult.ok ? winnersResult.winnersCount : 0
-
-  // Get top guesses (just gene names, no counts/similarities per user request)
-  const guessResult = await getDailyGuessAggregates(env.DB, { day, limit: 5 })
-  const topGuesses = guessResult.ok
-    ? guessResult.guesses.map((g, idx) => ({
-        rank: idx + 1,
-        gene: g.gene || g.uniprot,
-      }))
-    : []
-
-  const totalGuesses = guessResult.ok ? guessResult.totalGuesses : 0
-
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      day,
-      already_posted: false,
-      target: {
-        uniprot_id: targetUniprot,
-        gene: targetProtein.gene,
-        full_name: targetProtein.full_name,
-      },
-      winners_count: winnersCount,
-      total_guesses: totalGuesses,
-      top_guesses: topGuesses,
-      links: {
-        play_url: "https://geneguessr.brinedew.bio",
-        render_url: `https://geneguessr.brinedew.bio/apps/geneguessr/render?day=${day}&mode=structure`,
-      },
-    }),
-    { headers: JSON_HEADERS },
-  )
+  const summary = await buildDailySummaryData(env, day)
+  return new Response(JSON.stringify(summary.body), {
+    status: summary.status,
+    headers: JSON_HEADERS,
+  })
 }
 
 /**
@@ -491,15 +610,7 @@ export async function handleMarkPosted(request, env) {
     })
   }
 
-  // Store the posted marker in KV
-  const postedKey = `${DISCORD_SUMMARY_POSTED_PREFIX}${day}`
-  const postedData = {
-    message_id,
-    posted_at: Date.now(),
-    channel_id: env.DISCORD_GENEGUESSR_CHANNEL_ID,
-  }
-
-  await env.KV.put(postedKey, JSON.stringify(postedData))
+  const postedData = await setPostedMarker(env, day, message_id)
 
   return new Response(
     JSON.stringify({
