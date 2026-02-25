@@ -15,6 +15,7 @@
 - `uniprot-fetcher.py` - Fetches data from UniProt API
 - `clean_tags.py` - Tag cleanup utilities
 - `generate_favicon.py` - Generates site favicon
+- `manage-quickadd-content-vault.ps1` - Hard-cutover QuickAdd setup for `content/` vault
 
 ## GeneGuessr pipeline
 
