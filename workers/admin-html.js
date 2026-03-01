@@ -1685,7 +1685,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     let scheduleData = {};
     const DISCORD_IMAGE_UPLOAD_DAYS = 365;
+    const DEFAULT_SCHEDULE_FUTURE_DAYS = 120;
     let recapUploadRunning = false;
+    let scheduleRefreshInFlight = null;
 
     // Override picker state: keep the UI gene-first, but keep the selected UniProt ID as the internal key.
     let overrideSelectedSuggestionUniprot = null;
@@ -1693,13 +1695,73 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     function setupSchedule() {
       // No controls needed anymore, auto-load on init
-      loadSchedule();
+      loadSchedule({ futureDays: 120 });
     }
 
-    async function loadSchedule() {
+    function applyLocalOverride(date, uniprotId, symbolHint) {
+      if (!date || !uniprotId) return;
+      const existing = scheduleData[date] || {};
+      const fallbackSymbol = String(symbolHint || uniprotId || '').trim();
+      scheduleData[date] = {
+        type: existing.type || 'upcoming',
+        source: 'override',
+        uniprot: uniprotId,
+        symbol: existing.symbol || fallbackSymbol || uniprotId,
+        fullName: existing.fullName || null,
+        rejected: existing.rejected
+      };
+      renderCalendar(currentDate);
+    }
+
+    function clearLocalOverride(date) {
+      if (!date) return;
+      const existing = scheduleData[date];
+      if (!existing) return;
+      if (existing.type === 'history') {
+        scheduleData[date] = {
+          ...existing,
+          source: 'actual'
+        };
+      } else {
+        scheduleData[date] = {
+          ...existing,
+          source: 'computed'
+        };
+      }
+      renderCalendar(currentDate);
+    }
+
+    function queueBackgroundScheduleRefresh(options = {}) {
+      if (scheduleRefreshInFlight) return scheduleRefreshInFlight;
+      const dateToReselect = options.date || selectedDate || document.getElementById('override-date')?.value || null;
+      const futureDays = options.futureDays ?? DEFAULT_SCHEDULE_FUTURE_DAYS;
+
+      scheduleRefreshInFlight = (async () => {
+        await Promise.allSettled([
+          loadStatus(),
+          loadSchedule({ futureDays })
+        ]);
+        if (dateToReselect) {
+          selectDate(dateToReselect);
+        }
+      })()
+      .catch((err) => {
+        console.error('Background schedule refresh failed:', err);
+      })
+      .finally(() => {
+        scheduleRefreshInFlight = null;
+      });
+
+      return scheduleRefreshInFlight;
+    }
+
+    async function loadSchedule(options = {}) {
       try {
-        // Keep one full year of future targets in memory for recap-image pre-render uploads.
-        const response = await fetch(API_BASE + '/api/admin/schedule?futureDays=370', { credentials: 'include' });
+        const requestedFutureDays = Number(options.futureDays);
+        const futureDays = Number.isFinite(requestedFutureDays)
+          ? Math.max(0, Math.min(370, Math.floor(requestedFutureDays)))
+          : DEFAULT_SCHEDULE_FUTURE_DAYS;
+        const response = await fetch(API_BASE + '/api/admin/schedule?futureDays=' + futureDays, { credentials: 'include' });
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.error || 'Failed to load schedule');
@@ -2471,15 +2533,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         if (!response.ok) {
           throw new Error(data.error || 'Failed to set override');
         }
-        showMessage('override-message', data.message || 'Override updated', 'success');
+        const optimisticSymbol = overrideSelectedSuggestionGene || typed || resolvedUniprotId;
+        applyLocalOverride(date, resolvedUniprotId, optimisticSymbol);
+        selectDate(date);
+        showMessage('override-message', (data.message || 'Override updated') + ' (syncing details in background)', 'success');
         document.getElementById('override-uniprot').value = '';
         overrideSelectedSuggestionUniprot = null;
         overrideSelectedSuggestionGene = null;
-        await loadStatus();
-        await loadSchedule();
-        selectDate(date);
-        // Keep daily posting path single and deterministic: update the cached recap image immediately.
-        await uploadSelectedDayImage();
+        // Refresh expensive schedule/status queries in background so override is instant in UI.
+        queueBackgroundScheduleRefresh({ date });
+        // Recap image upload is useful but should not block the admin interaction flow.
+        uploadSelectedDayImage().catch((err) => {
+          console.error('Background recap image upload failed after override:', err);
+        });
       } catch (err) {
         console.error('Error setting override:', err);
         showMessage('override-message', err.message || 'Failed to set override', 'error');
@@ -3784,7 +3850,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       setRecapImageMessage('Loading schedule for yearly upload...', 'info');
 
       try {
-        await loadSchedule();
+        await loadSchedule({ futureDays: DISCORD_IMAGE_UPLOAD_DAYS });
         const today = new Date().toISOString().slice(0, 10);
         const days = Object.keys(scheduleData)
           .filter((day) => day >= today && scheduleData[day]?.uniprot)
@@ -3869,12 +3935,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           throw new Error(data.error || 'Failed to delete override');
         }
         showMessage('override-message', data.message || 'Override removed', 'success');
-        await loadStatus();
-        await loadSchedule();
-        // Re-select to update UI state
+        clearLocalOverride(date);
         if (selectedDate === date) {
           selectDate(date);
         }
+        queueBackgroundScheduleRefresh({ date });
       } catch (err) {
         console.error('Error deleting override:', err);
         showMessage('override-message', err.message || 'Failed to delete override', 'error');
