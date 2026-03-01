@@ -22,8 +22,11 @@ function addDaysISO(dateIso, days) {
 }
 
 const DISCORD_RECAP_IMAGE_MAX_BYTES = 2 * 1024 * 1024
-const ADMIN_SCHEDULE_CACHE_PREFIX = "admin_schedule:v1:"
-const ADMIN_SCHEDULE_CACHE_TTL_SECONDS = 10 * 60
+const ADMIN_SCHEDULE_DAY_CACHE_PREFIX = "admin_schedule_day:v2:"
+const ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
+const ADMIN_SCHEDULE_MAX_FUTURE_DAYS = 370
+const ADMIN_SCHEDULE_CACHE_VERSION = 2
+const DAILY_TARGET_SALT_FALLBACK = "geneguessr-v2-939b5a0b"
 
 async function listAllKvKeys(env, prefix) {
   const keys = []
@@ -40,19 +43,101 @@ async function listAllKvKeys(env, prefix) {
   return keys
 }
 
-function buildAdminScheduleCacheKey(today, futureDays) {
-  return `${ADMIN_SCHEDULE_CACHE_PREFIX}${today}:${futureDays}`
+function buildAdminScheduleDayCacheKey(date) {
+  return `${ADMIN_SCHEDULE_DAY_CACHE_PREFIX}${date}`
 }
 
-async function invalidateAdminScheduleCache(env) {
+async function deleteAdminScheduleDayCacheEntry(env, date) {
+  if (!isValidIsoDay(date)) {
+    return
+  }
   try {
-    const keys = await listAllKvKeys(env, ADMIN_SCHEDULE_CACHE_PREFIX)
-    if (!keys.length) {
-      return
-    }
-    await Promise.all(keys.map((entry) => env.KV.delete(entry.name)))
+    await env.KV.delete(buildAdminScheduleDayCacheKey(date))
   } catch (err) {
-    console.warn("Failed to invalidate admin schedule cache", err)
+    console.warn("Failed to delete admin schedule day cache entry", err)
+  }
+}
+
+function normalizeUniprotId(value) {
+  const raw = String(value || "").trim().toUpperCase()
+  return raw || null
+}
+
+function isScheduleDayCacheEntryValid(entry, { date, overrideUniprotId, salt }) {
+  if (!entry || typeof entry !== "object") {
+    return false
+  }
+  if (entry.cache_version !== ADMIN_SCHEDULE_CACHE_VERSION) {
+    return false
+  }
+  if (entry.date !== date) {
+    return false
+  }
+  if (entry.salt !== salt) {
+    return false
+  }
+  const cachedOverride = normalizeUniprotId(entry.override_uniprot_id)
+  if (cachedOverride !== normalizeUniprotId(overrideUniprotId)) {
+    return false
+  }
+  const computedUniprot = normalizeUniprotId(entry.computed_uniprot_id)
+  const computedProteinUniprot = normalizeUniprotId(entry?.computed?.uniprot)
+  if (!computedUniprot || !computedProteinUniprot || computedUniprot !== computedProteinUniprot) {
+    return false
+  }
+  return true
+}
+
+function toScheduleUpcomingRow(entry) {
+  return {
+    date: entry?.date || null,
+    override_uniprot_id: normalizeUniprotId(entry?.override_uniprot_id),
+    override_protein: entry?.override_protein || null,
+    computed: entry?.computed || null,
+    skipped_alpha_fold: Number.isFinite(entry?.skipped_alpha_fold) ? entry.skipped_alpha_fold : null,
+  }
+}
+
+async function buildScheduleDayCacheEntry(env, { date, overrideByDate, eligibleIds, salt }) {
+  const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
+  const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date)
+  const computedProtein = selection?.protein ? sanitizeProteinSummary(selection.protein) : null
+  const computedUniprot = normalizeUniprotId(computedProtein?.uniprot || selection?.protein?.uniprot)
+
+  let overrideProtein = null
+  if (plannedOverride) {
+    try {
+      const protein = await loadProtein(env.DB, plannedOverride)
+      overrideProtein = protein ? sanitizeProteinSummary(protein) : null
+    } catch {
+      overrideProtein = null
+    }
+  }
+
+  return {
+    cache_version: ADMIN_SCHEDULE_CACHE_VERSION,
+    date,
+    salt,
+    computed_uniprot_id: computedUniprot,
+    computed: computedProtein,
+    override_uniprot_id: plannedOverride,
+    override_protein: overrideProtein,
+    skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold) ? selection.skippedAlphaFold : null,
+    generated_at: Date.now(),
+  }
+}
+
+async function putScheduleDayCacheEntry(env, entry) {
+  const date = entry?.date
+  if (!isValidIsoDay(date)) {
+    return
+  }
+  try {
+    await env.KV.put(buildAdminScheduleDayCacheKey(date), JSON.stringify(entry), {
+      expirationTtl: ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS,
+    })
+  } catch (err) {
+    console.warn(`Admin schedule day cache write failed for ${date}; serving uncached`, err)
   }
 }
 
@@ -677,7 +762,7 @@ export async function handleOverrideProtein(request, env) {
   }
 
   // Validate date format (YYYY-MM-DD)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!isValidIsoDay(date)) {
     return Response.json(
       {
         error: "Invalid date format. Use YYYY-MM-DD",
@@ -694,7 +779,7 @@ export async function handleOverrideProtein(request, env) {
       set_at: Date.now(),
     },
   })
-  await invalidateAdminScheduleCache(env)
+  await deleteAdminScheduleDayCacheEntry(env, date)
 
   // Override changed the target protein; invalidate previously cached recap image for this day.
   if (env.STRUCTURES_BUCKET) {
@@ -837,18 +922,16 @@ export async function handleAdminSchedule(request, env) {
   try {
     const url = new URL(request.url)
     const futureDaysRaw = url.searchParams.get("futureDays")
-    const futureDays = Math.max(0, Math.min(370, Number(futureDaysRaw ?? 30) || 30))
+    const parsedFutureDays = Number(futureDaysRaw ?? 30)
+    const futureDays = Math.max(
+      0,
+      Math.min(
+        ADMIN_SCHEDULE_MAX_FUTURE_DAYS,
+        Number.isFinite(parsedFutureDays) ? Math.floor(parsedFutureDays) : 30,
+      ),
+    )
 
     const today = new Date().toISOString().slice(0, 10)
-    const scheduleCacheKey = buildAdminScheduleCacheKey(today, futureDays)
-    try {
-      const cached = await env.KV.get(scheduleCacheKey, { type: "json" })
-      if (cached?.today && Array.isArray(cached?.history) && Array.isArray(cached?.upcoming)) {
-        return Response.json(cached)
-      }
-    } catch (err) {
-      console.warn("Admin schedule cache read failed; recomputing", err)
-    }
 
     // Overrides map (we'll use it for upcoming rows)
     const overrideKeys = await listAllKvKeys(env, "puzzle_override:")
@@ -858,7 +941,7 @@ export async function handleAdminSchedule(request, env) {
           const value = await env.KV.get(key.name)
           return {
             date: key.name.replace("puzzle_override:", ""),
-            uniprot_id: value,
+            uniprot_id: normalizeUniprotId(value),
             metadata: key.metadata || {},
           }
         } catch {
@@ -916,46 +999,82 @@ export async function handleAdminSchedule(request, env) {
     )
 
     // Upcoming (planned)
-    const eligibleIds = await getEligibleProteinIds(env.DB)
-    const salt = env?.DAILY_TARGET_SALT || "geneguessr-v2-939b5a0b"
-    const upcoming = []
+    const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT_FALLBACK
+    const dates = []
     for (let offset = 0; offset <= futureDays; offset += 1) {
-      const date = addDaysISO(today, offset)
-      const plannedOverride = overrideByDate.get(date)?.uniprot_id || null
-      const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date)
-      const computedProtein = selection?.protein || null
+      dates.push(addDaysISO(today, offset))
+    }
 
-      let overrideProtein = null
-      if (plannedOverride) {
+    const cachedRowsByDate = new Map()
+    await Promise.all(
+      dates.map(async (date) => {
         try {
-          const protein = await loadProtein(env.DB, plannedOverride)
-          overrideProtein = protein ? sanitizeProteinSummary(protein) : null
-        } catch {
-          overrideProtein = null
+          const cached = await env.KV.get(buildAdminScheduleDayCacheKey(date), { type: "json" })
+          if (cached && typeof cached === "object") {
+            cachedRowsByDate.set(date, cached)
+          }
+        } catch (err) {
+          console.warn(`Admin schedule day cache read failed for ${date}; recomputing`, err)
+        }
+      }),
+    )
+
+    const upcomingByDate = new Map()
+    const missingDates = []
+    for (const date of dates) {
+      const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
+      const cachedEntry = cachedRowsByDate.get(date)
+      if (isScheduleDayCacheEntryValid(cachedEntry, { date, overrideUniprotId: plannedOverride, salt })) {
+        upcomingByDate.set(date, cachedEntry)
+        continue
+      }
+      missingDates.push(date)
+    }
+
+    if (missingDates.length) {
+      const eligibleIds = await getEligibleProteinIds(env.DB)
+      const BATCH_SIZE = 16
+      for (let i = 0; i < missingDates.length; i += BATCH_SIZE) {
+        const batchDates = missingDates.slice(i, i + BATCH_SIZE)
+        const builtEntries = await Promise.all(
+          batchDates.map((date) =>
+            buildScheduleDayCacheEntry(env, {
+              date,
+              overrideByDate,
+              eligibleIds,
+              salt,
+            }),
+          ),
+        )
+
+        builtEntries.forEach((entry) => {
+          if (entry?.date) {
+            upcomingByDate.set(entry.date, entry)
+          }
+        })
+
+        await Promise.allSettled(builtEntries.map((entry) => putScheduleDayCacheEntry(env, entry)))
+      }
+    }
+
+    const upcoming = dates.map((date) => {
+      const entry = upcomingByDate.get(date)
+      if (!entry) {
+        return {
+          date,
+          override_uniprot_id: normalizeUniprotId(overrideByDate.get(date)?.uniprot_id),
+          override_protein: null,
+          computed: null,
+          skipped_alpha_fold: null,
         }
       }
-      upcoming.push({
-        date,
-        override_uniprot_id: plannedOverride,
-        override_protein: overrideProtein,
-        computed: computedProtein ? sanitizeProteinSummary(computedProtein) : null,
-        skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold)
-          ? selection.skippedAlphaFold
-          : null,
-      })
-    }
+      return toScheduleUpcomingRow(entry)
+    })
 
     const payload = {
       today,
       history,
       upcoming,
-    }
-    try {
-      await env.KV.put(scheduleCacheKey, JSON.stringify(payload), {
-        expirationTtl: ADMIN_SCHEDULE_CACHE_TTL_SECONDS,
-      })
-    } catch (err) {
-      console.warn("Admin schedule cache write failed; serving uncached", err)
     }
     return Response.json(payload)
   } catch (err) {
@@ -1217,10 +1336,13 @@ export async function handleDeleteOverride(request, env) {
       { status: 400 },
     )
   }
+  if (!isValidIsoDay(date)) {
+    return Response.json({ error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 })
+  }
 
   const key = `puzzle_override:${date}`
   await env.KV.delete(key)
-  await invalidateAdminScheduleCache(env)
+  await deleteAdminScheduleDayCacheEntry(env, date)
 
   // Override removal can change the selected protein; invalidate day image cache.
   if (env.STRUCTURES_BUCKET) {
