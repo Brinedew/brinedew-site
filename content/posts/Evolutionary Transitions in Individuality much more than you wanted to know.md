@@ -7,57 +7,44 @@ draft: true
 ---
 # Evolutionary Transitions in Individuality: much more than you wanted to know
 
-1. Steelman classical evo-devo
-2. Problems that classical evo-devo runs into
-3. The founding MET text and its concepts
-4. Problems that it ran into
-5. Plugging the holes
+## I.
 
+For the first half of the 20th century, evolutionary biology was dominated by the Modern Synthesis—the triumphant, mathematically rigorous fusion of Darwinian natural selection with Mendelian genetics. It was a beautiful theory, clean and legible in the exact way that neoclassical economics is clean and legible. Allele frequencies exist in a population; the environment applies a selection pressure; the frequencies update via a localized algorithm. 
 
+But the Modern Synthesis treated the actual, physical organism as a black box. A genotype goes into the box, a phenotype comes out, selection acts upon the phenotype, and the ledger of allele frequencies is adjusted. It offered almost no mechanistic explanation for the box itself. If you asked a mid-century population geneticist how a linear string of nucleotides actually reliably constructs a three-dimensional metazoan, they would politely change the subject to fruit fly mutation rates.
 
+Evolutionary developmental biology (evo-devo) emerged in the 1980s and 1990s to pry open that box. 
 
-**Major Evolutionary Transitions: much more than you wanted to know**
+The foundational shock of evo-devo was the discovery of "deep homology." Before the 1980s, biologists mostly assumed that morphologically disparate animals were built using entirely different genetic blueprints. Instead, they discovered that almost all bilaterian animals share the exact same core toolkit of master regulatory genes.
 
-*[Epistemic Status: I am merely a spectator to the vast and mathematically terrifying literature of evolutionary biology. I have read the foundational texts and the subsequent thirty years of retractions, but if a phylogenomicist wants to inform me that my understanding of the basal metazoan split is outdated by six months, I preemptively concede.]*
+The canonical example is the *Hox* gene cluster, which determines the anterior-posterior axis of a developing embryo. A fruit fly and a mouse are separated by roughly 600 million years of evolutionary divergence. Yet, their spatial organization is dictated by strictly homologous genetic switches. This compatibility is so absolute that you can take the *Pax6* gene—the master switch for eye development in a mouse—insert it into the genome of a *Drosophila* embryo, trigger it in the fly’s leg tissue, and the fly will successfully execute the cascade to grow a structurally functional (albeit completely useless) fly eye on its leg.
 
-In the mid-20th century, evolutionary biology achieved the "Modern Synthesis," successfully fusing Darwinian selection with Mendelian genetics. The resulting paradigm was mathematically rigorous but biologically austere: it formally defined evolution as the change in allele frequencies within a population over time.
+Evo-devo elegantly resolved the agonizing tension between the gradualism of the Modern Synthesis and the fossil record’s sudden morphological shifts. Critics of Darwin had long pointed out the "half a wing" problem: what is the selective advantage of an intermediate, non-functional limb? 
 
-This was a triumph, but it treated the organism itself as a black box. A genotype goes into the box, a phenotype comes out, selection acts upon the phenotype, and the allele frequencies are updated. The Synthesis offered no mechanistic explanation for the box itself—how a linear string of nucleotides actually dictates the reliable construction of a three-dimensional metazoan. 
+Evo-devo answered: biology is object-oriented programming. Macroevolution is not driven by the agonizingly slow invention of novel structural proteins. It is driven by tweaking the *regulatory* networks that control when and where existing modules are deployed. To evolve a snake from a lizard, you don’t wait for a million point mutations to gradually degrade the leg; you just alter the embryonic expression gradient of the *Hox* genes that suppress limb formation, copy-pasting the thoracic rib-module down the length of the body. You don't rewrite the code; you just swap a variable in the UI framework.
 
-### 1. Steelman classical evo-devo
+The problem with classical evo-devo is that it is a victim of its own restricted scope. It is an exceptionally powerful explanatory framework for understanding how to alter an animal's morphology, provided you already have an animal.
 
-Evolutionary developmental biology (evo-devo) emerged in the 1980s and 1990s to open that box. 
+Evo-devo essentially assumes the existence of a perfectly obedient command economy. It assumes a centralized organism, executing a developmental program, where trillions of cells flawlessly coordinate to build a liver, a femur, or a neocortex. It explains variations *on* a body plan, but it cannot explain the origin of the organismal paradigm itself.
 
-The foundational discovery of evo-devo was that morphological macroevolution is not primarily driven by the invention of new structural genes (the genes that code for the actual proteins building the body). Instead, morphological diversity is driven by changes in gene regulatory networks (GRNs)—the switches that control *when* and *where* those highly conserved structural genes are expressed during embryogenesis.
+And this is a massive problem, because if you take Richard Dawkins' *The Selfish Gene* seriously, the organism shouldn't exist. 
 
-The canonical example is the *Hox* gene cluster, a set of master regulatory genes that determine the anterior-posterior axis of bilaterian animals. A fruit fly and a mouse are separated by roughly 600 million years of phylogenetic divergence, yet they rely on homologous genetic switches to dictate their spatial organization. This "deep homology" is so pervasive that the *Pax6* gene, which controls eye development in mammals, can be inserted into the genome of a *Drosophila* embryo and triggered in its leg tissue, successfully initiating the developmental cascade for a structurally functional fly eye.
+Evolution is a Hobbesian war of all against all, driven by the ruthless maximization of inclusive fitness. So how do you get trillions of independent, reproducing entities (cells) to permanently suppress their own reproductive potential without defecting? Why does a somatic skin cell accept a fitness of exactly zero, voluntarily dying just so a tiny privileged minority of cells (the germline) can be passed on? 
 
-Evo-devo elegantly resolved the tension between gradualist population genetics and the fossil record's rapid morphological shifts. To evolve a snake from a lizard, you do not need to wait for thousands of point mutations to gradually degrade the structural proteins of the leg. You simply alter the expression gradient of the *Hox* genes that suppress limb formation, extending the thoracic developmental program down the length of the body. Evolution operates via the modular recombination of existing regulatory sequences. By treating embryonic development as a highly conserved but flexibly deployed toolkit, evo-devo successfully explains how drastic morphological shifts can occur without requiring an implausible concurrent explosion of novel genes.
+Evo-devo ignores the principal-agent problem of biology. It assumes the existence of unified evolutionary agents. It cannot map the transition from a population of free-living, single-celled protozoa to an obligate multicellular metazoan, because that isn't a shift in morphological space. That is a game-theoretic nightmare. For that, biology needed a different paradigm.
 
-### 2. Problems that classical evo-devo runs into
+## II. 
 
-The primary limitation of classical evo-devo is that it is a victim of its own restricted scope. It is an exceptionally powerful explanatory framework for understanding how to alter an animal's morphology, provided you already have an animal.
+In 1995, John Maynard Smith (the biologist who, alongside George Price, formally introduced game theory to evolutionary biology) and biochemist Eörs Szathmáry published a blockbuster book titled *The Major Transitions in Evolution*. It was a sweeping attempt to provide a unified theoretical framework for the structural leaps that evo-devo took for granted.
 
-Evo-devo structurally relies on the pre-existence of a complex developmental scaffolding. To explain the morphological radiation of the Cambrian explosion, it assumes the prior existence of obligate multicellularity, a fixed axis of embryonic development, and an integrated genomic architecture. It explains variations *on* a body plan, but it cannot explain the origin of the organismal paradigm itself.
+Maynard Smith and Szathmáry proposed that the history of life is not a smooth curve of increasing complexity, but is instead punctuated by a series of distinct, radical reorganizations in the very nature of how evolution operates. 
 
-Consequently, evo-devo struggles when confronted with the fundamental structural reorganizations in the history of life. It can map the transition from fins to tetrapod limbs, but it cannot map the transition from a population of free-living, single-celled prokaryotes to a eukaryotic cell, or from solitary flagellates to an obligate multicellular metazoan. 
-
-These are not merely changes in morphological space; they are changes in the fundamental unit of selection. When single cells aggregate into a multicellular organism, the individual cells must surrender their independent reproductive autonomy. They must submit to a reproductive division of labor, where the vast majority of cells (the soma) accept a fitness of zero and die, purely to support the replication of a tiny minority of cells (the germline).
-
-Classical evo-devo lacks the conceptual vocabulary to explain this. Its models assume a centralized organism reliably executing a developmental program. It does not address the game-theoretic nightmare of convincing billions of independent replicators to permanently suppress their own reproductive potential without defecting. For that, biology needed a different paradigm.
-
-### 3. The founding MET text and its concepts
-
-In 1995, evolutionary biologist John Maynard Smith (who had previously been instrumental in introducing game theory to biology) and biochemist Eörs Szathmáry published *The Major Transitions in Evolution*. It was a sweeping attempt to provide a unified theoretical framework for the structural leaps that evo-devo took for granted.
-
-Maynard Smith and Szathmáry proposed that the history of life is not a smooth curve of increasing complexity, but is instead punctuated by a series of distinct, radical reorganizations in the way information is stored, transmitted, and replicated.
-
-They identified a recurring pattern across these transitions, characterized by three core features:
+They identified a recurring pattern across these transitions:
 1. Smaller entities that were previously capable of independent replication come together to form a larger, higher-level entity.
-2. The smaller entities become highly differentiated, specialize, and irreversibly lose their ability to replicate independently of the larger whole (obligate interdependence).
+2. The smaller entities specialize, and irreversibly lose their ability to replicate independently (obligate interdependence).
 3. The transition introduces a fundamentally new mechanism for storing and transmitting information.
 
-Their canonical list of major transitions consisted of eight events:
+Their canonical list consisted of eight transitions:
 1. Replicating molecules → Populations of molecules in compartments (protocells).
 2. Independent replicators → Chromosomes.
 3. RNA as both gene and enzyme → DNA as genetic storage and protein as enzyme.
@@ -67,32 +54,34 @@ Their canonical list of major transitions consisted of eight events:
 7. Solitary individuals → Eusocial colonies (ants, bees, termites).
 8. Primate societies → Human societies with language.
 
-The brilliance of this framework was that it reframed evolutionary history as a series of solved coordination problems. The transition to multicellularity or eusociality was no longer viewed simply as the acquisition of a new trait, but as the establishment of a new biological individual. The unit of selection shifted upwards.
+The brilliance of this framework was that it reframed evolutionary history as a series of solved coordination problems. The transition to multicellularity or eusociality was no longer viewed simply as the acquisition of a new trait. It was the establishment of a new biological individual. The lower-level units successfully navigated the Molochian trap of defection, and in doing so, the unit of selection shifted upwards. 
 
-### 4. Problems that it ran into
+*The Major Transitions in Evolution* essentially created a subfield overnight, but almost immediately, the philosophers of biology started tearing it apart. 
 
-*The Major Transitions in Evolution* was a foundational text, but almost immediately, the framework began buckling under its own conceptual weight. The primary issue was that the list of eight transitions was a philosophical hodgepodge.
+The primary issue was that the list of eight transitions was an absolute mess. In a brutal 2011 critique, Daniel McShea and Carl Simpson accused the Maynard Smith and Szathmáry framework of being a "heterogeneous grab bag" that was "philosophically muddled and scientifically casual".
 
-As critics like Daniel McShea and Carl Simpson later pointed out, the Maynard Smith and Szathmáry framework conflated two entirely distinct categories of evolutionary events. Some items on the list were "Evolutionary Transitions in Individuality" (ETIs)—events where lower-level units merge to form a higher-level organism, such as the origin of eukaryotes or multicellularity. Other items were simply major technological breakthroughs in information processing, such as the origin of the genetic code, the invention of sex, or human language.
+The core problem was that the 1995 book conflated two completely different categories of evolutionary events:
+1. **Technological upgrades in information processing:** The invention of DNA, the invention of sex, and human language.
+2. **Evolutionary Transitions in Individuality (ETIs):** The origin of chromosomes, eukaryotic cells, multicellularity, and eusociality.
 
-If the defining feature of a major transition is that independent entities obligately lose their reproductive autonomy to form a higher-level unit, then human language (Transition 8) is a bizarre inclusion. Humans do not permanently surrender their independent reproductive capacity to the tribe just because they acquire syntax. Including language made the entire framework look suspiciously teleological—a ladder of progress conveniently designed to culminate at the exact apex of *Homo sapiens*.
+If the defining feature of a major transition is that independent entities obligately lose their reproductive autonomy to form a higher-level unit, then human language (Transition 8) is an incredibly embarrassing inclusion. Humans do not permanently surrender their independent reproductive capacity to the tribe just because they acquire syntax. We are not a eusocial hive mind. Including language made the entire framework look suspiciously like a Great Chain of Being teleology, conveniently designed to culminate at the exact apex of *Homo sapiens* writing books about evolution.
 
-Furthermore, the original framework suffered from an extreme informational bias, largely ignoring the ecological and metabolic drivers of complexity. Philosopher of biology Maureen O'Malley heavily critiqued the MET framework for entirely missing arguably the most significant turning points in evolutionary history: the biological oxygenation of the Earth and the acquisition of plastids (chloroplasts). By prioritizing the mechanics of genetic information, the framework ignored the energetic and metabolic breakthroughs that actually permitted those higher levels of organization to exist.
+As philosopher Peter Godfrey-Smith later pointed out, "inventing DNA" is a profound shift, but it is fundamentally a hardware upgrade for an existing Darwinian population. Conversely, "inventing a multicellular organism" is a change in the *nature of the player itself*. You are taking a population of Darwinian individuals and fusing them to create a single, macro-level Darwinian individual. Grouping these two phenomena under the same umbrella term rendered the theory incoherent. 
 
-Finally, the 1995 model struggled to clearly differentiate the mechanisms of the transitions. It treated the origin of the eukaryotic cell and the origin of multicellularity as roughly analogous examples of "entities coming together". But the evolutionary dynamics of these two events are fundamentally different, requiring entirely different solutions to the problem of defection.
+## III.
 
-### 5. Plugging the holes
+Over the last two decades, the field has undergone a rigorous process of clarification, resulting in what is sometimes informally called "MET 2.0". The modern consensus has largely abandoned the vague "information processing" criteria and focused squarely on Evolutionary Transitions in Individuality (ETIs).
 
-Over the last thirty years, the field has undergone a rigorous process of clarification, resulting in what is sometimes informally called "MET 2.0". The modern consensus has largely abandoned the vague "information processing" criteria and focused squarely on Evolutionary Transitions in Individuality (ETIs).
+The most crucial theoretical update came from theorists like David Queller, who pointed out that the 1995 framework lumped together two completely different pathways to higher-level individuality: *Fraternal* transitions and *Egalitarian* transitions.
 
-The most crucial theoretical update (championed by theorists like David Queller) was the formal distinction between two separate pathways to higher-level individuality: *Fraternal* transitions and *Egalitarian* transitions.
+**Fraternal transitions** occur when a single lineage of genetically identical (or highly related) individuals stays together. Multicellularity and eusociality are fraternal transitions. Because the individuals (the cells in an embryo, or the workers in a beehive) are highly related, the principal-agent problem is largely solved by inclusive fitness (kin selection). It's a family business. A somatic cell accepts a fitness of zero because it shares its alleles with the germ cell. The primary threat to a fraternal transition is a mutation that causes a unit to defect, abandon the family business, and replicate selfishly. We call this defection "cancer."
 
-**Fraternal transitions** occur when a single lineage of genetically identical (or highly related) individuals stays together. Multicellularity and eusociality are fraternal transitions. Because the individuals (the cells in an embryo, or the workers in a beehive) are highly related, the principal-agent problem is largely solved by inclusive fitness (kin selection). A somatic cell accepts a fitness of zero because it shares its alleles with the germ cell. The primary threat to a fraternal transition is a mutation that causes a unit to defect and replicate selfishly—a phenomenon we call cancer. 
+**Egalitarian transitions**, on the other hand, occur when entirely different, unrelated species merge to form a new individual. The origin of the eukaryotic cell (the merger of an archaeon and a bacterium to form the mitochondrion) is the archetypal egalitarian transition. Inclusive fitness cannot explain this, because the relatedness between the two original species is exactly zero. This is a corporate merger between two hostile alien species. They stay together because of extreme metabolic synergies (trade), but egalitarian transitions are notoriously difficult to stabilize because they are highly vulnerable to parasitism. They require draconian policing contracts—such as enforcing strict vertical transmission (which is why your mitochondria are strictly maternally inherited, preventing deadly competition among mitochondrial lineages within your cells).
 
-**Egalitarian transitions**, on the other hand, occur when entirely different, unrelated species merge to form a new individual. The origin of the eukaryotic cell (the merger of an archaeon and a bacterium to form the mitochondrion) is the archetypal egalitarian transition. Inclusive fitness cannot explain this, because the relatedness between the two original species is zero. Instead, these transitions are driven by extreme synergistic mutualism, usually involving complementary metabolic functions. Egalitarian transitions are notoriously difficult to stabilize because they are highly vulnerable to parasitism. They require draconian policing mechanisms, such as "fairness in reproduction" (ensuring both genomes replicate in lockstep) or enforcing strict vertical transmission (which is why your mitochondria are strictly maternally inherited, preventing competition among mitochondrial lineages).
+Theoretical biologist Richard Michod provided the mathematical rigor for this new paradigm with his concept of the "export of fitness". 
 
-Modern ETI theory, significantly advanced by researchers like Richard Michod, models these transitions as a literal "reorganization of fitness". A transition is only complete when the fitness of the lower-level particles is entirely decoupled from their independent replication, and transferred to the macroscopic collective. 
+Michod argued that you can mathematically define exactly when an evolutionary transition is complete. A transition is finished when the lower-level entities literally *cannot* be assigned a standalone fitness value anymore. Their independent fecundity drops to zero, and the viability of the whole completely depends on their specialized somatic labor. Fitness has been successfully exported to the macro-level.
 
-To achieve this, the new organism must evolve "conflict modifiers" to suppress lower-level selection. In eusocial insects, this takes the form of worker policing (workers aggressively destroying the unauthorized eggs laid by other workers). In multicellular eukaryotes, it takes the form of a strictly sequestered germline, programmed cell death (apoptosis), and an adaptive immune system that destroys rogue somatic lineages.
+We have moved far beyond classical evo-devo’s assumption of a smoothly unified organism, and we have discarded the 1995 framework’s poetic but messy fixation on human language. The modern study of major transitions is a rigorous, game-theoretic analysis of multi-level selection. 
 
-We have moved away from classical evo-devo's assumption of a smoothly unified organism, and we have discarded the 1995 framework's poetic but messy fixation on human language and informational epochs. Instead, the modern study of major transitions is a rigorous, game-theoretic analysis of multi-level selection. It views the organism not as a given baseline, but as a hard-won, highly policed coalition of former rivals, perpetually managing the tension between cooperation and defection.
+It leaves us with a profound, slightly unsettling view of biology. An "individual" is not a fundamental unit of nature. An individual is a treaty. It is a highly policed coalition of former rivals, a monument to a coordination problem that we managed, against all odds, to permanently solve.
