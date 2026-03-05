@@ -89,7 +89,14 @@ function portraitBase(url, env) {
   if (typeof env.ICONOPLASM_PORTRAIT_BASE_URL === "string" && env.ICONOPLASM_PORTRAIT_BASE_URL.trim()) {
     return env.ICONOPLASM_PORTRAIT_BASE_URL.trim()
   }
-  return `${url.origin}/portraits`
+  // R2 keys include the `portraits/` prefix, so the base is just the origin.
+  return url.origin
+}
+
+// Canonical R2 key for a portrait rendition.
+// rendition: 'full' (<=1MP, gene page hero), 'medium' (512px long edge, extension/grid), 'thumb' (256x256 crop)
+function r2PortraitKey(sha256, rendition) {
+  return `portraits/v1/${sha256.slice(0, 2)}/${sha256}/${rendition}.webp`
 }
 
 function extVersion(request) {
@@ -221,11 +228,11 @@ async function resolveGene(env, rawId) {
 }
 
 async function portraitState(env, symbol, base) {
-  if (!env.DB) return { status: "missing", hero_url: null, thumb_url: null, asset_sha256: null }
+  if (!env.ICONOPLASM_DB) return { status: "missing", hero_url: null, medium_url: null, thumb_url: null, asset_sha256: null }
   try {
-    const row = await env.DB
+    const row = await env.ICONOPLASM_DB
       .prepare(
-        `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_hero, pa.r2_key_thumb
+        `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
            ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
@@ -235,15 +242,16 @@ async function portraitState(env, symbol, base) {
       )
       .bind(symbol)
       .first()
-    if (!row?.asset_sha256) return { status: "missing", hero_url: null, thumb_url: null, asset_sha256: null }
+    if (!row?.asset_sha256) return { status: "missing", hero_url: null, medium_url: null, thumb_url: null, asset_sha256: null }
     return {
       status: "published",
-      hero_url: row.r2_key_hero ? joinUrl(base, row.r2_key_hero) : null,
+      hero_url: row.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+      medium_url: row.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
       thumb_url: row.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
       asset_sha256: row.asset_sha256,
     }
   } catch {
-    return { status: "unavailable", hero_url: null, thumb_url: null, asset_sha256: null }
+    return { status: "unavailable", hero_url: null, medium_url: null, thumb_url: null, asset_sha256: null }
   }
 }
 
@@ -456,11 +464,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const where = status === "all" ? "" : "WHERE lower(status)=?"
       const stmt =
         status === "all"
-          ? env.DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_hero, r2_key_thumb, status, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(limit)
-          : env.DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_hero, r2_key_thumb, status, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(status, limit)
+          ? env.ICONOPLASM_DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(limit)
+          : env.ICONOPLASM_DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(status, limit)
       const { results } = await stmt.all()
       const base = portraitBase(url, env)
-      const assets = (results || []).map((r) => ({ ...r, hero_url: r.r2_key_hero ? joinUrl(base, r.r2_key_hero) : null, thumb_url: r.r2_key_thumb ? joinUrl(base, r.r2_key_thumb) : null }))
+      const assets = (results || []).map((r) => ({ ...r, hero_url: r.r2_key_full ? joinUrl(base, r.r2_key_full) : null, medium_url: r.r2_key_medium ? joinUrl(base, r.r2_key_medium) : null, thumb_url: r.r2_key_thumb ? joinUrl(base, r.r2_key_thumb) : null }))
       return done("admin_assets", json({ assets, count: assets.length }, 200, { "Cache-Control": "no-store" }))
     }
 
@@ -479,32 +487,32 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (path.endsWith("/publish")) {
         const asset = String(p?.asset_sha256 || "").trim()
         if (!asset) return done("publish_400", json({ error: "Missing asset_sha256" }, 400))
-        const cur = await env.DB.prepare("SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1").bind(symbol).first()
-        await env.DB.prepare(`INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(gene_symbol) DO UPDATE SET current_asset_sha256=excluded.current_asset_sha256, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP`).bind(symbol, asset, actorId).run()
-        await env.DB.prepare("UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?").bind(symbol, asset).run()
-        await env.DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, cur?.current_asset_sha256 || null, asset, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
+        const cur = await env.ICONOPLASM_DB.prepare("SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1").bind(symbol).first()
+        await env.ICONOPLASM_DB.prepare(`INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(gene_symbol) DO UPDATE SET current_asset_sha256=excluded.current_asset_sha256, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP`).bind(symbol, asset, actorId).run()
+        await env.ICONOPLASM_DB.prepare("UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?").bind(symbol, asset).run()
+        await env.ICONOPLASM_DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, cur?.current_asset_sha256 || null, asset, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
         return done("publish", json({ ok: true, action: "publish", symbol, to_asset_sha256: asset }))
       }
 
       if (path.endsWith("/reject")) {
         const asset = String(p?.asset_sha256 || "").trim()
         if (!asset) return done("reject_400", json({ error: "Missing asset_sha256" }, 400))
-        await env.DB.prepare("UPDATE icono_portrait_assets SET status='rejected' WHERE upper(gene_symbol)=? AND asset_sha256=?").bind(symbol, asset).run()
-        await env.DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'reject', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, asset, asset, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
+        await env.ICONOPLASM_DB.prepare("UPDATE icono_portrait_assets SET status='rejected' WHERE upper(gene_symbol)=? AND asset_sha256=?").bind(symbol, asset).run()
+        await env.ICONOPLASM_DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'reject', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, asset, asset, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
         return done("reject", json({ ok: true, action: "reject", symbol, asset_sha256: asset }))
       }
 
-      const current = await env.DB.prepare("SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1").bind(symbol).first()
+      const current = await env.ICONOPLASM_DB.prepare("SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1").bind(symbol).first()
       const from = current?.current_asset_sha256 || null
       if (!from) return done("rollback_400", json({ error: "No published state to roll back" }, 400))
       let target = String(p?.target_asset_sha256 || "").trim() || null
       if (!target) {
-        const prev = await env.DB.prepare("SELECT to_asset_sha256 FROM icono_publish_events WHERE upper(gene_symbol)=? AND action='publish' AND to_asset_sha256 IS NOT NULL AND to_asset_sha256 != ? ORDER BY id DESC LIMIT 1").bind(symbol, from).first()
+        const prev = await env.ICONOPLASM_DB.prepare("SELECT to_asset_sha256 FROM icono_publish_events WHERE upper(gene_symbol)=? AND action='publish' AND to_asset_sha256 IS NOT NULL AND to_asset_sha256 != ? ORDER BY id DESC LIMIT 1").bind(symbol, from).first()
         target = prev?.to_asset_sha256 || null
       }
       if (!target) return done("rollback_400", json({ error: "No prior published asset to roll back to" }, 400))
-      await env.DB.prepare("UPDATE icono_publish_state SET current_asset_sha256=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?").bind(target, actorId, symbol).run()
-      await env.DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'rollback', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, from, target, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
+      await env.ICONOPLASM_DB.prepare("UPDATE icono_publish_state SET current_asset_sha256=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?").bind(target, actorId, symbol).run()
+      await env.ICONOPLASM_DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'rollback', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, from, target, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
       return done("rollback", json({ ok: true, action: "rollback", symbol, from_asset_sha256: from, to_asset_sha256: target }))
     }
 
