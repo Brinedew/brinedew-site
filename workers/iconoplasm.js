@@ -162,6 +162,13 @@ function optionalInt(raw) {
   return rounded
 }
 
+function optionalFloat(raw, { min = 0 } = {}) {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  if (n < min) return null
+  return n
+}
+
 function coerceBoolean(raw, fallback = false) {
   if (typeof raw === "boolean") return raw
   if (typeof raw === "number") return raw !== 0
@@ -177,6 +184,85 @@ function normalizeAssetStatus(raw, fallback = "draft") {
   const v = String(raw || "").trim().toLowerCase()
   if (["draft", "approved", "rejected"].includes(v)) return v
   return fallback
+}
+
+function normalizeHexColor(raw) {
+  const v = String(raw || "").trim()
+  if (!v) return null
+  if (/^#[a-f0-9]{6}$/i.test(v)) return v.toLowerCase()
+  return null
+}
+
+function sanitizeText(raw, maxLen) {
+  const v = String(raw || "").trim()
+  if (!v) return null
+  return v.slice(0, maxLen)
+}
+
+function normalizeAestheticsList(raw) {
+  const out = []
+  const seen = new Set()
+  const pushValue = (value) => {
+    const cleaned = sanitizeText(value, 128)
+    if (!cleaned) return
+    if (seen.has(cleaned)) return
+    seen.add(cleaned)
+    out.push(cleaned)
+  }
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      pushValue(item)
+      if (out.length >= 32) break
+    }
+    return out
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    for (const part of raw.split(",")) {
+      pushValue(part)
+      if (out.length >= 32) break
+    }
+  }
+  return out
+}
+
+function normalizeEssencePayload(rawEssence, fallbackSymbol) {
+  const payload = rawEssence && typeof rawEssence === "object" ? rawEssence : null
+  if (!payload) return null
+  const symbol = normalizeSymbol(payload.symbol || payload.gene_symbol || fallbackSymbol || "")
+  if (!symbol) return null
+
+  const fullName = sanitizeText(payload.name || payload.full_name, 255)
+  const weightKgRaw = optionalFloat(payload.weight_kg, { min: 0 })
+  const weightKg = Number.isFinite(weightKgRaw) && weightKgRaw > 0 ? Math.round(weightKgRaw * 10) / 10 : null
+  const heightCm = optionalInt(payload.height_cm)
+  const ageYears = optionalInt(payload.age_years)
+  const ageTextRaw = sanitizeText(payload.age || payload.age_text, 64)
+  const ageText = ageTextRaw || (ageYears != null ? String(ageYears) : null)
+  const sex = sanitizeText(payload.sex, 32)
+  const faction = sanitizeText(payload.faction || payload.politics, 64)
+  const skinHex = normalizeHexColor(payload.skin_hex)
+  const skinName = sanitizeText(payload.skin_name, 64)
+  const aesthetics = normalizeAestheticsList(payload.aesthetics)
+  const familySurname = sanitizeText(payload.family_surname || payload.gene_surname, 64)
+  const familyMembers = optionalInt(payload.family_members)
+  const familyFeature = sanitizeText(payload.family_feature, 255)
+
+  return {
+    gene_symbol: symbol,
+    full_name: fullName,
+    weight_kg: weightKg,
+    height_cm: heightCm,
+    sex,
+    age: ageText,
+    age_years: ageYears,
+    faction,
+    skin_hex: skinHex,
+    skin_name: skinName,
+    aesthetics_json: JSON.stringify(aesthetics),
+    family_surname: familySurname,
+    family_members: familyMembers,
+    family_feature: familyFeature,
+  }
 }
 
 function decodeBase64Bytes(raw) {
@@ -393,6 +479,60 @@ async function portraitState(env, symbol, base) {
   }
 }
 
+async function essenceState(env, symbol) {
+  if (!env.ICONOPLASM_DB) return { exists: false, essence: {} }
+  try {
+    const row = await env.ICONOPLASM_DB
+      .prepare(
+        `SELECT
+           full_name,
+           weight_kg,
+           height_cm,
+           sex,
+           age,
+           age_years,
+           faction,
+           skin_hex,
+           skin_name,
+           aesthetics_json,
+           family_surname,
+           family_members,
+           family_feature,
+           updated_at
+         FROM icono_gene_essence
+         WHERE upper(gene_symbol) = ?
+         LIMIT 1`,
+      )
+      .bind(symbol)
+      .first()
+    if (!row) return { exists: false, essence: {} }
+    let aesthetics = []
+    try {
+      const parsed = JSON.parse(String(row?.aesthetics_json || "[]"))
+      if (Array.isArray(parsed)) aesthetics = parsed.map((v) => String(v || "").trim()).filter(Boolean)
+    } catch {}
+    const essence = {
+      ...(row?.weight_kg != null ? { weight_kg: Number(row.weight_kg) } : {}),
+      ...(row?.height_cm != null ? { height_cm: Number(row.height_cm) } : {}),
+      ...(row?.sex ? { sex: String(row.sex) } : {}),
+      ...(row?.age ? { age: String(row.age) } : {}),
+      ...(row?.age_years != null ? { age_years: Number(row.age_years) } : {}),
+      ...(row?.faction ? { faction: String(row.faction) } : {}),
+      ...(row?.skin_hex ? { skin_hex: String(row.skin_hex) } : {}),
+      ...(row?.skin_name ? { skin_name: String(row.skin_name) } : {}),
+      ...(aesthetics.length ? { aesthetics } : {}),
+      ...(row?.family_surname ? { family_surname: String(row.family_surname) } : {}),
+      ...(row?.family_members != null ? { family_members: Number(row.family_members) } : {}),
+      ...(row?.family_feature ? { family_feature: String(row.family_feature) } : {}),
+      ...(row?.updated_at ? { updated_at: String(row.updated_at) } : {}),
+      ...(row?.full_name ? { name: String(row.full_name) } : {}),
+    }
+    return { exists: true, essence, full_name: row?.full_name ? String(row.full_name) : null }
+  } catch {
+    return { exists: false, essence: {} }
+  }
+}
+
 function sourceLinks(symbol, uniprot) {
   const sym = encodeURIComponent(symbol)
   return {
@@ -408,11 +548,14 @@ async function geneRecord(env, url, rawId) {
   const entry = colorsCache.bySymbol.get(r.symbol)
   const base = portraitBase(url, env)
   const portrait = await portraitState(env, r.symbol, base)
+  const syncedEssenceState = await essenceState(env, r.symbol)
+  const syncedEssence = syncedEssenceState?.essence && typeof syncedEssenceState.essence === "object" ? syncedEssenceState.essence : {}
   const uniprot = normalizeUniprot(r?.protein?.uniprot || entry?.u || null)
-  const fullName = (r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol
-  const weightKg = weightKgFromProteinMass(r?.protein?.mass)
-  const essence = {}
-  if (weightKg != null) essence.weight_kg = weightKg
+  const fullName =
+    sanitizeText(syncedEssenceState?.full_name, 255) ||
+    ((r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol)
+  const weightKgValue = Number(syncedEssence?.weight_kg)
+  const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
   return {
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
@@ -422,7 +565,7 @@ async function geneRecord(env, url, rawId) {
     color: entry?.c || null,
     ...(uniprot ? { uniprot } : {}),
     ...(weightKg != null ? { weight_kg: weightKg } : {}),
-    essence,
+    essence: syncedEssence,
     portrait,
     source_links: sourceLinks(r.symbol, uniprot),
     page_url: `${url.origin}/gene/${encodeURIComponent(r.symbol)}`,
@@ -1340,6 +1483,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           const width = optionalInt(item?.width ?? fullPayload?.width)
           const height = optionalInt(item?.height ?? fullPayload?.height)
           const bytes = optionalInt(item?.bytes ?? fullPayload?.bytes ?? fullBytes?.byteLength)
+          const essence = normalizeEssencePayload(item?.essence, symbol)
 
           const existingAsset = await env.ICONOPLASM_DB.prepare(
             "SELECT status FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND asset_sha256=? LIMIT 1",
@@ -1371,6 +1515,71 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             )
               .bind(symbol, assetSha, keys.full, keys.medium, keys.thumb, width, height, bytes, finalStatus, createdBy)
               .run()
+          }
+
+          let essenceResult = "not_provided"
+          if (essence) {
+            if (dryRun) {
+              essenceResult = "would_update"
+            } else {
+              await env.ICONOPLASM_DB.prepare(
+                `INSERT INTO icono_gene_essence (
+                   gene_symbol,
+                   full_name,
+                   weight_kg,
+                   height_cm,
+                   sex,
+                   age,
+                   age_years,
+                   faction,
+                   skin_hex,
+                   skin_name,
+                   aesthetics_json,
+                   family_surname,
+                   family_members,
+                   family_feature,
+                   source,
+                   updated_by,
+                   updated_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nicegui_sync', ?, CURRENT_TIMESTAMP)
+                 ON CONFLICT(gene_symbol) DO UPDATE SET
+                   full_name=excluded.full_name,
+                   weight_kg=excluded.weight_kg,
+                   height_cm=excluded.height_cm,
+                   sex=excluded.sex,
+                   age=excluded.age,
+                   age_years=excluded.age_years,
+                   faction=excluded.faction,
+                   skin_hex=excluded.skin_hex,
+                   skin_name=excluded.skin_name,
+                   aesthetics_json=excluded.aesthetics_json,
+                   family_surname=excluded.family_surname,
+                   family_members=excluded.family_members,
+                   family_feature=excluded.family_feature,
+                   source=excluded.source,
+                   updated_by=excluded.updated_by,
+                   updated_at=CURRENT_TIMESTAMP`,
+              )
+                .bind(
+                  symbol,
+                  essence.full_name,
+                  essence.weight_kg,
+                  essence.height_cm,
+                  essence.sex,
+                  essence.age,
+                  essence.age_years,
+                  essence.faction,
+                  essence.skin_hex,
+                  essence.skin_name,
+                  essence.aesthetics_json,
+                  essence.family_surname,
+                  essence.family_members,
+                  essence.family_feature,
+                  createdBy,
+                )
+                .run()
+              essenceResult = "updated"
+            }
           }
 
           let publishResult = "not_requested"
@@ -1424,6 +1633,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             uploads,
             publish: publishResult,
             from_asset_sha256: fromAssetSha256,
+            essence: essenceResult,
             hero_url: joinUrl(base, keys.full),
             medium_url: joinUrl(base, keys.medium),
             thumb_url: joinUrl(base, keys.thumb),
