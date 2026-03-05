@@ -669,6 +669,37 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       align-items: center;
       margin-bottom: 1rem;
     }
+    .calendar-month-tools {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+    #current-month-label {
+      margin: 0;
+    }
+    #btn-upload-month-images {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.78rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .calendar-upload-message {
+      min-height: 1.25rem;
+      margin: -0.25rem 0 0.75rem;
+    }
+    @media (max-width: 780px) {
+      .calendar-header {
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .calendar-month-tools {
+        width: 100%;
+        justify-content: flex-start;
+        order: 3;
+      }
+    }
     .calendar-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
@@ -1034,9 +1065,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       <h2>Calendar & Overrides</h2>
       <div class="calendar-header">
         <button id="prev-month">&lt; Prev</button>
-        <h3 id="current-month-label"></h3>
+        <div class="calendar-month-tools">
+          <h3 id="current-month-label"></h3>
+          <button type="button" id="btn-upload-month-images">Fill Displayed Month's Image Previews</button>
+        </div>
         <button id="next-month">Next &gt;</button>
       </div>
+      <div id="calendar-image-message" class="calendar-upload-message"></div>
       <div class="calendar-grid" id="calendar-grid">
         <!-- Days will be injected here -->
       </div>
@@ -2363,6 +2398,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       const uploadDayButton = document.getElementById('btn-upload-day-image');
       if (uploadDayButton) {
         uploadDayButton.addEventListener('click', uploadSelectedDayImage);
+      }
+
+      const uploadMonthButton = document.getElementById('btn-upload-month-images');
+      if (uploadMonthButton) {
+        uploadMonthButton.addEventListener('click', uploadDisplayedMonthImages);
       }
 
       const uploadYearButton = document.getElementById('btn-upload-year-images');
@@ -3726,6 +3766,21 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       el.innerHTML = '<p class="helper-text">' + safe + '</p>';
     }
 
+    function setCalendarImageMessage(message, type) {
+      const el = document.getElementById('calendar-image-message');
+      if (!el) return;
+      const safe = escapeHtml(String(message || ''));
+      if (!safe) {
+        el.innerHTML = '';
+        return;
+      }
+      if (type === 'success' || type === 'error') {
+        el.innerHTML = '<div class="message ' + type + '">' + safe + '</div>';
+        return;
+      }
+      el.innerHTML = '<p class="helper-text">' + safe + '</p>';
+    }
+
     function setRecapWarningMessage(message, type) {
       const el = document.getElementById('discord-image-warning');
       if (!el) return;
@@ -3872,8 +3927,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
     function setRecapButtonsBusy(isBusy) {
       recapUploadRunning = !!isBusy;
+      const monthBtn = document.getElementById('btn-upload-month-images');
       const dayBtn = document.getElementById('btn-upload-day-image');
       const yearBtn = document.getElementById('btn-upload-year-images');
+      if (monthBtn) monthBtn.disabled = recapUploadRunning;
       if (dayBtn) dayBtn.disabled = recapUploadRunning;
       if (yearBtn) yearBtn.disabled = recapUploadRunning;
     }
@@ -3958,7 +4015,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
       const statusText = String(previewStatusEl && previewStatusEl.textContent ? previewStatusEl.textContent : '').toLowerCase();
       const placeholderText = String(previewPlaceholderEl && previewPlaceholderEl.textContent ? previewPlaceholderEl.textContent : '').toLowerCase();
-      if (statusText.includes('no structure') || placeholderText.includes('no 3d structure available')) {
+      const placeholderShowsNoStructure =
+        !!previewPlaceholderEl &&
+        previewPlaceholderEl.hidden === false &&
+        placeholderText.includes('no 3d structure available');
+      if (statusText.includes('no structure') || placeholderShowsNoStructure) {
         throw new Error('No structure available for ' + row.uniprot);
       }
 
@@ -3994,6 +4055,123 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         console.error('Failed to upload selected-day recap image:', err);
         setRecapImageKnownState(day, false);
         setRecapImageMessage(err?.message || 'Failed to upload selected-day image.', 'error');
+      } finally {
+        setRecapButtonsBusy(false);
+      }
+    }
+
+    function getDisplayedMonthIsoDays(dateObj) {
+      const target = dateObj || currentDate || new Date();
+      const year = target.getFullYear();
+      const month = target.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const days = [];
+      for (let i = 1; i <= daysInMonth; i += 1) {
+        days.push(
+          year + '-' + String(month + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0')
+        );
+      }
+      return days;
+    }
+
+    async function uploadDisplayedMonthImages() {
+      if (recapUploadRunning) {
+        return;
+      }
+
+      const monthLabel = document.getElementById('current-month-label')?.textContent || 'displayed month';
+      const monthDays = getDisplayedMonthIsoDays(currentDate);
+
+      setCalendarImageMessage('Checking missing image previews for ' + monthLabel + '...', 'info');
+      try {
+        await refreshRecapStatusesForVisibleDays(monthDays, { force: true });
+      } catch (err) {
+        console.error('Failed to refresh month recap statuses before upload:', err);
+      }
+
+      const days = monthDays
+        .filter((day) => !!scheduleData[day]?.uniprot)
+        .filter((day) => recapImageExistsByDay[day] !== true);
+
+      if (days.length === 0) {
+        setCalendarImageMessage('No missing previews in ' + monthLabel + '.', 'success');
+        return;
+      }
+
+      const proceed = confirm(
+        'Fill image previews for ' + monthLabel + '?\\n\\nMissing or unknown days: ' + days.length
+      );
+      if (!proceed) {
+        setCalendarImageMessage('Month fill cancelled for ' + monthLabel + '.', 'info');
+        return;
+      }
+
+      setRecapButtonsBusy(true);
+      setCalendarImageMessage('Filling ' + days.length + ' day(s) for ' + monthLabel + '...', 'info');
+      setRecapImageMessage('Month fill started for ' + monthLabel + '.', 'info');
+
+      try {
+        const imageByUniprot = new Map();
+        let uploaded = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (let i = 0; i < days.length; i += 1) {
+          const day = days[i];
+          const row = scheduleData[day];
+          const label = row?.symbol || row?.uniprot || day;
+          setCalendarImageMessage(
+            'Processing ' + (i + 1) + '/' + days.length + ' (' + day + ' • ' + label + ')',
+            'info'
+          );
+
+          if (!row?.uniprot) {
+            skipped += 1;
+            continue;
+          }
+
+          try {
+            let base64 = imageByUniprot.get(row.uniprot);
+            if (!base64) {
+              const rendered = await renderAndUploadDayImage(day, { silent: true, bulk: true });
+              base64 = rendered.base64;
+              imageByUniprot.set(row.uniprot, base64);
+            } else {
+              await uploadRecapImage(day, base64);
+              recapImageExistsByDay[day] = true;
+            }
+            uploaded += 1;
+          } catch (err) {
+            const msg = String(err && err.message ? err.message : err);
+            if (msg.toLowerCase().includes('no structure available')) {
+              skipped += 1;
+            } else {
+              failed += 1;
+            }
+            setRecapImageKnownState(day, false);
+            console.error('Month recap-image upload failed for ' + day + ':', err);
+          }
+        }
+
+        renderCalendar(currentDate);
+        refreshRecapWarning().catch((err) => {
+          console.error('Failed to refresh recap warning after month fill:', err);
+        });
+
+        if (failed > 0) {
+          setCalendarImageMessage(
+            'Month fill finished with errors. Uploaded: ' + uploaded + ', failed: ' + failed + ', skipped: ' + skipped + '.',
+            'error'
+          );
+        } else {
+          setCalendarImageMessage(
+            'Month fill complete. Uploaded: ' + uploaded + ', skipped: ' + skipped + '.',
+            'success'
+          );
+        }
+      } catch (err) {
+        console.error('Failed month recap-image upload:', err);
+        setCalendarImageMessage(err?.message || 'Failed month image fill.', 'error');
       } finally {
         setRecapButtonsBusy(false);
       }
