@@ -6,478 +6,329 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <title>Iconoplasm Admin</title>
   <style>
     :root {
-      --bg: #0f172a;
-      --panel: #111827;
-      --panel-2: #1f2937;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --line: #374151;
-      --ok: #22c55e;
-      --warn: #f59e0b;
-      --bad: #ef4444;
-      --accent: #3b82f6;
+      --bg: #0b1220;
+      --surface: #111a2b;
+      --surface-2: #0d1626;
+      --line: #26354d;
+      --text: #e8edf6;
+      --muted: #9eb0cf;
+      --accent: #2d6bff;
+      --warn: #e8a63f;
+      --danger: #ef5d5d;
+      --ok: #4fcf83;
     }
 
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      background: linear-gradient(135deg, #0b1220, #111827 45%, #0f172a);
+      background: radial-gradient(circle at 0% 0%, #0f1d38, #0b1220 55%);
       color: var(--text);
-      line-height: 1.5;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+    .wrap {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 22px;
+      display: grid;
+      gap: 14px;
     }
 
-    .wrap {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 24px;
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(20, 33, 56, 0.86), rgba(13, 22, 38, 0.96));
+      padding: 14px;
     }
 
     h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 40px; line-height: 1.1; letter-spacing: -0.02em; }
+    h2 { font-size: 20px; }
+    h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    p { color: var(--muted); }
 
-    .header {
-      margin-bottom: 32px;
-    }
-
-    .header h1 {
-      font-size: 22px;
-      margin-bottom: 4px;
-    }
-
-    .header .subtitle {
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    /* Workflow guide */
-    .guide {
+    .hero {
+      display: grid;
+      gap: 8px;
+      padding: 18px;
       border: 1px solid var(--line);
-      border-radius: 12px;
-      background: color-mix(in hsl, var(--panel) 88%, black 12%);
-      padding: 20px;
-      margin-bottom: 24px;
-    }
-
-    .guide h2 {
-      font-size: 15px;
-      margin-bottom: 12px;
-      color: var(--text);
+      border-radius: 14px;
+      background: linear-gradient(140deg, rgba(45, 107, 255, 0.08), rgba(17, 26, 43, 0.8));
     }
 
     .steps {
       display: grid;
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
     }
 
     .step {
-      display: grid;
-      grid-template-columns: 32px 1fr;
-      gap: 12px;
-      align-items: start;
-    }
-
-    .step-num {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
-
-    .step-num.once { background: #1e3a5f; color: #93c5fd; border: 1px solid #2563eb; }
-    .step-num.repeat { background: #1a3329; color: #86efac; border: 1px solid #22c55e; }
-
-    .step-body h3 {
-      font-size: 14px;
-      margin-bottom: 2px;
-    }
-
-    .step-body p {
-      font-size: 13px;
-      color: var(--muted);
-    }
-
-    .freq {
-      display: inline-block;
-      font-size: 11px;
-      padding: 1px 6px;
-      border-radius: 4px;
-      margin-left: 6px;
-    }
-
-    .freq-once { background: #1e3a5f; color: #93c5fd; }
-    .freq-every { background: #1a3329; color: #86efac; }
-
-    /* Sections */
-    .section {
       border: 1px solid var(--line);
-      border-radius: 12px;
-      background: color-mix(in hsl, var(--panel) 88%, black 12%);
-      padding: 20px;
-      margin-bottom: 16px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      padding: 10px;
+      display: grid;
+      gap: 6px;
     }
 
-    .section h2 {
-      font-size: 16px;
-      margin-bottom: 4px;
-    }
-
-    .section .desc {
-      font-size: 13px;
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      width: fit-content;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 12px;
       color: var(--muted);
-      margin-bottom: 14px;
+      background: rgba(0, 0, 0, 0.15);
     }
 
-    .row {
-      display: flex;
-      flex-wrap: wrap;
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 10px;
       align-items: end;
+      margin-top: 10px;
     }
 
-    .field {
+    label {
       display: grid;
-      gap: 4px;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
 
-    .field-label {
+    input, select, button {
+      font: inherit;
+      color: var(--text);
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      padding: 9px 10px;
+    }
+
+    button { cursor: pointer; }
+    button:hover { border-color: #3b5176; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); border-color: #4b7fff; }
+    .btn-warn { background: #92682a; border-color: #b58639; }
+    .btn-danger { background: #9a3535; border-color: #bc4343; }
+    .btn-flat { background: transparent; }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
       font-size: 12px;
       color: var(--muted);
     }
 
-    input, select, textarea, button {
-      font: inherit;
-    }
-
-    input, select {
-      border: 1px solid var(--line);
-      background: var(--panel-2);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 8px 10px;
-      font-size: 14px;
-    }
-
-    input.wide { width: 280px; }
-
-    button {
-      border: 1px solid var(--line);
-      background: var(--panel-2);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 8px 14px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-
-    button:hover { border-color: #4b5563; }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
-    .btn-primary { background: #1d4ed8; border-color: #2563eb; }
-    .btn-warn { background: #b45309; border-color: #d97706; }
-    .btn-bad { background: #b91c1c; border-color: #dc2626; }
-
-    .msg-box {
-      background: #0b1220;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 12px;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      font-size: 13px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      min-height: 60px;
-      max-height: 300px;
-      overflow: auto;
-      margin-top: 12px;
-    }
-
-    .ok { color: var(--ok); }
-    .warn { color: var(--warn); }
-    .bad { color: var(--bad); }
-
-    /* Asset table */
     .table-wrap {
-      overflow: auto;
+      margin-top: 10px;
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: #0b1220;
-      margin-top: 12px;
+      overflow: auto;
+      background: rgba(8, 14, 24, 0.6);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 620px;
+      min-width: 980px;
     }
 
     th, td {
       border-bottom: 1px solid var(--line);
-      padding: 10px 12px;
-      font-size: 13px;
+      padding: 8px;
+      font-size: 12px;
       text-align: left;
-      vertical-align: middle;
+      vertical-align: top;
     }
 
     th {
       position: sticky;
       top: 0;
       z-index: 1;
-      background: #111827;
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .gene-name {
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .status-pill {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
+      background: #0e1a2f;
       font-size: 11px;
-      border: 1px solid var(--line);
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
+      color: var(--muted);
     }
 
-    .status-draft { color: #93c5fd; }
-    .status-approved { color: #86efac; }
-    .status-rejected { color: #fca5a5; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .sha { word-break: break-all; font-size: 11px; }
 
-    .preview-img {
-      width: 48px;
-      height: 48px;
-      border-radius: 6px;
+    .status {
+      display: inline-block;
+      border-radius: 999px;
       border: 1px solid var(--line);
+      padding: 2px 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 11px;
+    }
+    .status-draft { color: #8cb4ff; }
+    .status-approved { color: #8ee5af; }
+    .status-rejected { color: #f6a7a7; }
+
+    .thumbs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .thumbs a {
+      display: inline-flex;
+      width: 46px;
+      height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #0a1322;
+    }
+    .thumbs img {
+      width: 46px;
+      height: 46px;
       object-fit: cover;
-      background: #111827;
-      cursor: pointer;
     }
 
     .actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
     }
-
     .actions button {
-      padding: 5px 10px;
-      font-size: 12px;
+      padding: 4px 8px;
+      font-size: 11px;
     }
 
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--muted);
-    }
-
-    .empty-state p {
-      margin-bottom: 8px;
-    }
-
-    textarea.payload {
-      width: 100%;
-      min-height: 160px;
-      resize: vertical;
+    .log {
+      margin-top: 10px;
       border: 1px solid var(--line);
-      background: var(--panel-2);
-      color: var(--text);
-      border-radius: 8px;
+      border-radius: 10px;
+      background: rgba(8, 14, 24, 0.7);
       padding: 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      min-height: 120px;
+      max-height: 340px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
       font-size: 12px;
-      line-height: 1.4;
+      color: #d6e0f1;
     }
 
     details summary {
       cursor: pointer;
-      color: var(--muted);
-      font-size: 13px;
-      margin-top: 12px;
+      color: var(--warn);
+      font-weight: 600;
+      margin-bottom: 8px;
     }
 
-    details summary:hover { color: var(--text); }
-
-    .collapsible-content {
-      margin-top: 12px;
-    }
-
-    @media (max-width: 700px) {
-      input.wide { width: 100%; }
-      .row { flex-direction: column; }
-    }
+    .small { font-size: 12px; color: var(--muted); }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <header class="header">
+    <section class="hero">
       <h1>Iconoplasm Admin</h1>
-      <p class="subtitle">Manage which gene portraits are live on the website.</p>
-    </header>
-
-    <!-- Workflow guide -->
-    <section class="guide" id="guide">
-      <h2>How this works</h2>
+      <p>Upload/sync is now owned by NiceGUI. This page is for verification and emergency fixes only.</p>
       <div class="steps">
-        <div class="step">
-          <div class="step-num once">1</div>
-          <div class="step-body">
-            <h3>Portraits generate overnight <span class="freq freq-once">automatic</span></h3>
-            <p>ComfyUI generates portraits while you sleep. In the NiceGUI dashboard, you browse, vote, and click "Set as Canon" to pick the best one for each gene.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num once">2</div>
-          <div class="step-body">
-            <h3>Run the publish script <span class="freq freq-once">once per batch</span></h3>
-            <p>One command on your machine reads all your canonical picks and pushes them to the website.
-               They go live immediately -- no need to approve anything here afterwards.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num repeat">3</div>
-          <div class="step-body">
-            <h3>Check what went live <span class="freq freq-every">this page</span></h3>
-            <p>The table below shows everything that's currently live. Scroll through, open any preview.
-               If something looks wrong -- bad image, wrong gene -- click <strong>Rollback</strong> to revert it.</p>
-          </div>
-        </div>
+        <article class="step">
+          <div class="badge"><span class="dot"></span>1. Curate locally</div>
+          <p class="small">Delete bad images in NiceGUI. Keep the ones you want to remain in circulation.</p>
+        </article>
+        <article class="step">
+          <div class="badge"><span class="dot"></span>2. Click Sync to Website</div>
+          <p class="small">NiceGUI uploads all non-deleted local images and reconciles removals automatically.</p>
+        </article>
+        <article class="step">
+          <div class="badge"><span class="dot"></span>3. Verify here</div>
+          <p class="small">Refresh this table to confirm state. Use emergency actions only when needed.</p>
+        </article>
       </div>
     </section>
 
-    <!-- Portraits table -->
-    <section class="section">
-      <h2>Portraits on the website</h2>
-      <p class="desc">Everything currently live. If something looks wrong, roll it back.</p>
-      <div class="row">
-        <div class="field">
-          <span class="field-label">Show</span>
+    <section class="card">
+      <h2>Website Portrait Inventory</h2>
+      <p>Read-only by default. Emergency actions are hidden below.</p>
+
+      <div class="controls">
+        <label>Show
           <select id="assets-status">
-            <option value="approved">Currently live</option>
-            <option value="draft">Waiting to publish (drafts)</option>
-            <option value="rejected">Rejected</option>
-            <option value="all">Everything</option>
+            <option value="approved" selected>currently live</option>
+            <option value="draft">draft (awaiting publish)</option>
+            <option value="rejected">rejected</option>
+            <option value="all">all</option>
           </select>
-        </div>
-        <div class="field">
-          <span class="field-label">Filter by gene</span>
-          <input id="assets-search" type="text" placeholder="e.g. TP53" class="wide" />
-        </div>
+        </label>
+        <label>Limit
+          <input id="assets-limit" type="number" min="1" max="250" value="120" />
+        </label>
+        <label>Filter by gene
+          <input id="assets-search" type="text" placeholder="TP53" />
+        </label>
+        <label>Admin token (optional)
+          <input id="admin-token" type="password" placeholder="Only needed if no session cookie" />
+        </label>
         <button class="btn-primary" id="assets-refresh">Refresh</button>
-        <button id="publish-all-btn" style="display:none">Publish all drafts</button>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:8px" id="assets-meta">Loading...</div>
+
+      <div class="stats" id="assets-meta">Not loaded.</div>
+
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Gene</th>
+              <th>Asset SHA256</th>
               <th>Status</th>
               <th>Preview</th>
               <th>Uploaded</th>
-              <th></th>
+              <th>Emergency</th>
             </tr>
           </thead>
-          <tbody id="assets-body">
-            <tr><td colspan="5" class="empty-state"><p>Loading portraits...</p></td></tr>
-          </tbody>
+          <tbody id="assets-body"></tbody>
         </table>
       </div>
-    </section>
 
-    <!-- Quick actions -->
-    <section class="section">
-      <h2>Quick actions</h2>
-      <p class="desc">If you already know the gene name, you can act without scrolling through the table.</p>
-      <div class="row">
-        <div class="field">
-          <span class="field-label">Gene name</span>
-          <input id="manual-symbol" type="text" placeholder="e.g. TP53" />
-        </div>
-        <div class="field">
-          <span class="field-label">Image&nbsp;ID <span style="color:var(--muted);font-weight:normal">(for publish/reject)</span></span>
-          <input id="manual-asset" type="text" placeholder="from the table or upload log" class="wide" />
-        </div>
-      </div>
-      <div class="row" style="margin-top: 8px;">
-        <div class="field">
-          <span class="field-label">Note (optional)</span>
-          <input id="action-reason" type="text" placeholder="Why you're making this change" class="wide" />
-        </div>
-      </div>
-      <div class="actions" style="margin-top: 12px;">
-        <button class="btn-primary" id="manual-publish">Publish</button>
-        <button class="btn-warn" id="manual-rollback">Rollback to previous</button>
-        <button class="btn-bad" id="manual-reject">Reject</button>
-      </div>
-      <div class="msg-box" id="action-log">No actions yet. Results appear here when you click a button.</div>
-    </section>
-
-    <!-- Batch upload (advanced, collapsed) -->
-    <section class="section">
       <details>
-        <summary>Advanced: batch upload from local machine</summary>
-        <div class="collapsible-content">
-          <p class="desc">Sends portrait images directly to the website and registers them in the database. You probably don't need this -- the publish script does it for you.</p>
-          <div class="row">
-            <div class="field">
-              <span class="field-label">Mode</span>
-              <select id="ingest-endpoint">
-                <option value="/ingest">Upload (as draft)</option>
-                <option value="/publish-local">Upload + publish immediately</option>
-              </select>
-            </div>
-            <div class="field">
-              <span class="field-label">Test first?</span>
-              <select id="ingest-dry-run">
-                <option value="true">Yes, dry run (don't actually upload)</option>
-                <option value="false">No, do it for real</option>
-              </select>
-            </div>
-            <button class="btn-primary" id="ingest-run">Run</button>
-          </div>
-          <div style="margin-top: 12px;">
-            <span class="field-label">JSON data (the publish script fills this in automatically)</span>
-            <textarea class="payload" id="ingest-payload"></textarea>
-          </div>
-          <div class="msg-box" id="ingest-log">No uploads yet.</div>
+        <summary>Emergency actions (manual override)</summary>
+        <div class="controls">
+          <label>Reason for audit log
+            <input id="action-reason" type="text" placeholder="Why this emergency change is needed" />
+          </label>
         </div>
       </details>
-    </section>
 
+      <pre class="log" id="action-log">No actions yet.</pre>
+    </section>
   </div>
 
   <script>
     (function () {
-      var state = { assets: [] };
       var API_BASE = '/api/iconoplasm/admin';
+      var state = { assets: [] };
 
       var els = {
         status: document.getElementById('assets-status'),
+        limit: document.getElementById('assets-limit'),
         search: document.getElementById('assets-search'),
+        token: document.getElementById('admin-token'),
         refresh: document.getElementById('assets-refresh'),
-        publishAll: document.getElementById('publish-all-btn'),
         meta: document.getElementById('assets-meta'),
         body: document.getElementById('assets-body'),
-        reason: document.getElementById('action-reason'),
-        manualSymbol: document.getElementById('manual-symbol'),
-        manualAsset: document.getElementById('manual-asset'),
-        manualPublish: document.getElementById('manual-publish'),
-        manualReject: document.getElementById('manual-reject'),
-        manualRollback: document.getElementById('manual-rollback'),
-        actionLog: document.getElementById('action-log'),
-        ingestEndpoint: document.getElementById('ingest-endpoint'),
-        ingestDryRun: document.getElementById('ingest-dry-run'),
-        ingestRun: document.getElementById('ingest-run'),
-        ingestPayload: document.getElementById('ingest-payload'),
-        ingestLog: document.getElementById('ingest-log')
+        actionReason: document.getElementById('action-reason'),
+        actionLog: document.getElementById('action-log')
       };
 
       function esc(v) {
@@ -489,45 +340,45 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           .replaceAll("'", '&#39;');
       }
 
-      function statusLabel(s) {
-        var labels = { draft: 'draft', approved: 'live', rejected: 'rejected' };
-        return labels[String(s || '').toLowerCase()] || s;
+      function shortSha(sha) {
+        var s = String(sha || '');
+        if (s.length <= 20) return s;
+        return s.slice(0, 10) + '...' + s.slice(-8);
       }
 
       function statusPill(status) {
         var s = String(status || 'unknown').toLowerCase();
-        return '<span class="status-pill status-' + esc(s) + '">' + esc(statusLabel(s)) + '</span>';
+        return '<span class="status status-' + esc(s) + '">' + esc(s) + '</span>';
       }
 
       function previewCell(asset) {
-        var url = asset.thumb_url || asset.medium_url || asset.hero_url;
-        if (!url) return '<span style="color:var(--muted)">--</span>';
-        var fullUrl = asset.hero_url || url;
-        return '<img class="preview-img" src="' + esc(url) + '" alt="' + esc(asset.gene_symbol) + '" loading="lazy" title="Click to see full size" onclick="window.open(\\'' + esc(fullUrl) + '\\',\\'_blank\\')" />';
+        function thumb(url, label) {
+          if (!url) return '';
+          var safe = esc(url);
+          return '<a href="' + safe + '" target="_blank" rel="noreferrer" title="' + esc(label) + '"><img src="' + safe + '" alt="' + esc(label) + '" loading="lazy" /></a>';
+        }
+        var html = [
+          thumb(asset.hero_url, 'full'),
+          thumb(asset.medium_url, 'medium'),
+          thumb(asset.thumb_url, 'thumb')
+        ].filter(Boolean).join('');
+        return html ? '<div class="thumbs">' + html + '</div>' : '<span class="small">No image</span>';
       }
 
-      function timeAgo(dateStr) {
-        if (!dateStr) return '--';
-        try {
-          var d = new Date(dateStr);
-          var now = new Date();
-          var mins = Math.floor((now - d) / 60000);
-          if (mins < 1) return 'just now';
-          if (mins < 60) return mins + 'm ago';
-          var hrs = Math.floor(mins / 60);
-          if (hrs < 24) return hrs + 'h ago';
-          var days = Math.floor(hrs / 24);
-          if (days < 30) return days + 'd ago';
-          return d.toLocaleDateString();
-        } catch (e) { return dateStr; }
+      function authHeaders() {
+        var out = {};
+        var token = String(els.token.value || '').trim();
+        if (token) out['X-Iconoplasm-Admin-Token'] = token;
+        return out;
       }
 
-      async function apiJson(url, options) {
+      async function apiJson(path, options) {
         var opts = options || {};
-        var resp = await fetch(url, Object.assign({}, opts, { credentials: 'include' }));
+        var headers = Object.assign({}, opts.headers || {}, authHeaders());
+        var resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers: headers, credentials: 'include' }));
         var text = await resp.text();
         var data = null;
-        try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text }; }
+        try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
         if (!resp.ok) {
           var err = new Error('HTTP ' + resp.status);
           err.response = data;
@@ -536,57 +387,34 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return data;
       }
 
-      function showResult(el, value) {
-        if (typeof value === 'object' && value && value.ok) {
-          el.innerHTML = '<span class="ok">Done.</span> ' + esc(value.action || '') + ' ' + esc(value.symbol || '');
-        } else if (typeof value === 'object' && value && value.error) {
-          el.innerHTML = '<span class="bad">Error:</span> ' + esc(value.error);
-        } else {
-          el.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-        }
+      function setLog(v) {
+        els.actionLog.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
       }
 
       function filteredAssets() {
         var q = String(els.search.value || '').trim().toUpperCase();
         if (!q) return state.assets.slice();
         return state.assets.filter(function (a) {
-          return String(a.gene_symbol || '').toUpperCase().indexOf(q) !== -1;
+          return String(a.gene_symbol || '').toUpperCase().includes(q);
         });
       }
 
-      function renderAssets() {
+      function renderTable() {
         var assets = filteredAssets();
-        var isDraftView = String(els.status.value || '').toLowerCase() === 'draft';
-        els.publishAll.style.display = isDraftView && state.assets.length > 0 ? '' : 'none';
-        if (assets.length === 0) {
-          var emptyMsgs = {
-            approved: 'Nothing live yet. Run the publish script on your machine to push your canonical picks.',
-            draft: 'No drafts. Run the publish script -- portraits go live automatically.',
-            rejected: 'No rejected portraits.',
-            all: 'No portraits uploaded yet.'
-          };
-          var msg = state.assets.length === 0
-            ? (emptyMsgs[els.status.value] || 'Nothing here.')
-            : 'No portraits match your filter.';
-          els.body.innerHTML = '<tr><td colspan="5" class="empty-state"><p>' + esc(msg) + '</p></td></tr>';
-          return;
-        }
         els.body.innerHTML = assets.map(function (a) {
-          var sym = esc(a.gene_symbol || '');
-          var sha = esc(a.asset_sha256 || '');
-          var isLive = String(a.status || '').toLowerCase() === 'approved';
           return [
             '<tr>',
-            '<td><span class="gene-name">' + sym + '</span></td>',
+            '<td><strong>' + esc(a.gene_symbol || '') + '</strong></td>',
+            '<td class="mono sha" title="' + esc(a.asset_sha256 || '') + '">' + esc(shortSha(a.asset_sha256 || '')) + '</td>',
             '<td>' + statusPill(a.status) + '</td>',
             '<td>' + previewCell(a) + '</td>',
-            '<td>' + esc(timeAgo(a.created_at)) + '</td>',
+            '<td><div>' + esc(a.created_at || '-') + '</div><div class="small">' + esc(a.created_by || '-') + '</div></td>',
             '<td>',
             '<div class="actions">',
-            isLive
-              ? '<button class="btn-warn" data-action="rollback" data-symbol="' + sym + '" data-sha="' + sha + '">Rollback</button>'
-              : '<button class="btn-primary" data-action="publish" data-symbol="' + sym + '" data-sha="' + sha + '">Publish</button>',
-            '<button class="btn-bad" data-action="reject" data-symbol="' + sym + '" data-sha="' + sha + '">Reject</button>',
+            '<button class="btn-flat" data-action="copy" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Copy SHA</button>',
+            '<button class="btn-warn" data-action="rollback" data-symbol="' + esc(a.gene_symbol || '') + '">Rollback gene</button>',
+            '<button class="btn-flat" data-action="unpublish" data-symbol="' + esc(a.gene_symbol || '') + '">Unpublish gene</button>',
+            '<button class="btn-danger" data-action="reject" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Reject image</button>',
             '</div>',
             '</td>',
             '</tr>'
@@ -598,176 +426,111 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         try {
           els.refresh.disabled = true;
           els.meta.textContent = 'Loading...';
-          var statusVal = encodeURIComponent(String(els.status.value || 'draft').toLowerCase());
-          var data = await apiJson(API_BASE + '/assets?status=' + statusVal + '&limit=250', { method: 'GET' });
+          var status = encodeURIComponent(String(els.status.value || 'approved').toLowerCase());
+          var limit = Math.max(1, Math.min(250, Number.parseInt(els.limit.value || '120', 10) || 120));
+          var data = await apiJson('/assets?status=' + status + '&limit=' + limit, { method: 'GET' });
           state.assets = Array.isArray(data.assets) ? data.assets : [];
-          var labels = { draft: 'drafts (publish script should have already made these live -- run it again or use "Publish all" below)', approved: 'live portraits', rejected: 'rejected', all: 'portraits total' };
-          els.meta.textContent = state.assets.length + ' ' + (labels[els.status.value] || 'portraits') + '.';
-          renderAssets();
+
+          var counts = { draft: 0, approved: 0, rejected: 0 };
+          state.assets.forEach(function (row) {
+            var s = String(row.status || '').toLowerCase();
+            if (Object.prototype.hasOwnProperty.call(counts, s)) counts[s] += 1;
+          });
+          els.meta.innerHTML = [
+            '<span>' + state.assets.length + ' shown</span>',
+            '<span>live ' + counts.approved + '</span>',
+            '<span>draft ' + counts.draft + '</span>',
+            '<span>rejected ' + counts.rejected + '</span>'
+          ].join(' · ');
+          renderTable();
         } catch (err) {
-          els.meta.innerHTML = '<span class="bad">Could not load portraits. Are you logged in?</span>';
-          showResult(els.actionLog, { error: String(err.message || err) });
+          els.meta.innerHTML = '<span style="color: var(--danger)">Failed to load assets.</span>';
+          setLog({ error: String(err.message || err), details: err.response || null });
         } finally {
           els.refresh.disabled = false;
         }
       }
 
+      function reasonOrUndefined() {
+        var r = String(els.actionReason.value || '').trim();
+        return r || undefined;
+      }
+
       async function runMutation(path, payload) {
-        return apiJson(API_BASE + path, {
+        return apiJson(path, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload || {})
         });
       }
 
-      function buildReason() {
-        var r = String(els.reason.value || '').trim();
-        return r || undefined;
-      }
+      async function handleTableAction(action, symbol, sha) {
+        if (action === 'copy') {
+          await navigator.clipboard.writeText(String(sha || ''));
+          setLog('Copied SHA for ' + symbol + ': ' + sha);
+          return;
+        }
 
-      async function doPublish(symbol, assetSha) {
-        var body = { symbol: symbol, asset_sha256: assetSha };
-        var reason = buildReason();
-        if (reason) body.reason = reason;
-        var data = await runMutation('/publish', body);
-        showResult(els.actionLog, data);
-        await refreshAssets();
-      }
-
-      async function doReject(symbol, assetSha) {
-        if (!confirm('Reject this portrait for ' + symbol + '? You can re-upload it later if you change your mind.')) return;
-        var body = { symbol: symbol, asset_sha256: assetSha };
-        var reason = buildReason();
-        if (reason) body.reason = reason;
-        var data = await runMutation('/reject', body);
-        showResult(els.actionLog, data);
-        await refreshAssets();
-      }
-
-      async function doRollback(symbol) {
-        if (!confirm('Roll back ' + symbol + ' to the previous portrait?')) return;
-        var body = { symbol: symbol };
-        var reason = buildReason();
-        if (reason) body.reason = reason;
-        var data = await runMutation('/rollback', body);
-        showResult(els.actionLog, data);
-        await refreshAssets();
-      }
-
-      async function runIngest() {
-        try {
-          els.ingestRun.disabled = true;
-          var payloadText = String(els.ingestPayload.value || '').trim();
-          if (!payloadText) throw new Error('The JSON field is empty.');
-          var payload = JSON.parse(payloadText);
-          if (!payload || typeof payload !== 'object') throw new Error('Must be a JSON object.');
-          if (!Object.prototype.hasOwnProperty.call(payload, 'dry_run')) {
-            payload.dry_run = String(els.ingestDryRun.value) === 'true';
-          }
-          var endpoint = String(els.ingestEndpoint.value || '/ingest');
-          var data = await runMutation(endpoint, payload);
-          showResult(els.ingestLog, data);
+        var reason = reasonOrUndefined();
+        if (action === 'reject') {
+          if (!sha) throw new Error('Missing SHA for reject');
+          if (!window.confirm('Reject this image for ' + symbol + '?')) return;
+          var rejectBody = { symbol: symbol, asset_sha256: sha };
+          if (reason) rejectBody.reason = reason;
+          setLog(await runMutation('/reject', rejectBody));
           await refreshAssets();
-        } catch (err) {
-          showResult(els.ingestLog, { error: String(err.message || err) });
-        } finally {
-          els.ingestRun.disabled = false;
+          return;
+        }
+
+        if (action === 'unpublish') {
+          if (!window.confirm('Unpublish current live image for ' + symbol + '?')) return;
+          var unpublishBody = { symbol: symbol };
+          if (reason) unpublishBody.reason = reason;
+          setLog(await runMutation('/unpublish', unpublishBody));
+          await refreshAssets();
+          return;
+        }
+
+        if (action === 'rollback') {
+          if (!window.confirm('Rollback live image for ' + symbol + ' to previous publish?')) return;
+          var rollbackBody = { symbol: symbol };
+          if (reason) rollbackBody.reason = reason;
+          setLog(await runMutation('/rollback', rollbackBody));
+          await refreshAssets();
+          return;
         }
       }
 
-      // Table button clicks
-      els.body.addEventListener('click', async function (ev) {
-        var btn = ev.target.closest('button[data-action]');
-        if (!btn) return;
-        var action = btn.getAttribute('data-action');
-        var symbol = btn.getAttribute('data-symbol') || '';
-        var sha = btn.getAttribute('data-sha') || '';
-        try {
-          btn.disabled = true;
-          if (action === 'publish') await doPublish(symbol, sha);
-          else if (action === 'reject') await doReject(symbol, sha);
-          else if (action === 'rollback') await doRollback(symbol);
-        } catch (err) {
-          showResult(els.actionLog, { error: String(err.message || err) });
-        } finally {
-          btn.disabled = false;
-        }
-      });
-
-      // Manual action buttons
-      els.manualPublish.addEventListener('click', async function () {
-        var symbol = String(els.manualSymbol.value || '').trim();
-        var sha = String(els.manualAsset.value || '').trim();
-        if (!symbol || !sha) { showResult(els.actionLog, { error: 'Enter the gene name and image ID.' }); return; }
-        try { els.manualPublish.disabled = true; await doPublish(symbol, sha); }
-        catch (err) { showResult(els.actionLog, { error: String(err.message || err) }); }
-        finally { els.manualPublish.disabled = false; }
-      });
-
-      els.manualReject.addEventListener('click', async function () {
-        var symbol = String(els.manualSymbol.value || '').trim();
-        var sha = String(els.manualAsset.value || '').trim();
-        if (!symbol || !sha) { showResult(els.actionLog, { error: 'Enter the gene name and image ID.' }); return; }
-        try { els.manualReject.disabled = true; await doReject(symbol, sha); }
-        catch (err) { showResult(els.actionLog, { error: String(err.message || err) }); }
-        finally { els.manualReject.disabled = false; }
-      });
-
-      els.manualRollback.addEventListener('click', async function () {
-        var symbol = String(els.manualSymbol.value || '').trim();
-        if (!symbol) { showResult(els.actionLog, { error: 'Enter the gene name.' }); return; }
-        try { els.manualRollback.disabled = true; await doRollback(symbol); }
-        catch (err) { showResult(els.actionLog, { error: String(err.message || err) }); }
-        finally { els.manualRollback.disabled = false; }
-      });
-
-      // Publish all drafts
-      els.publishAll.addEventListener('click', async function () {
-        var count = state.assets.length;
-        if (!confirm('Publish all ' + count + ' drafts? They will all go live immediately.')) return;
-        try {
-          els.publishAll.disabled = true;
-          els.publishAll.textContent = 'Publishing...';
-          var results = [];
-          for (var i = 0; i < state.assets.length; i += 1) {
-            var a = state.assets[i];
-            try {
-              await runMutation('/publish', { symbol: a.gene_symbol, asset_sha256: a.asset_sha256 });
-              results.push(a.gene_symbol + ': ok');
-            } catch (e) {
-              results.push(a.gene_symbol + ': ERROR ' + e.message);
-            }
+      function bindActions() {
+        els.body.addEventListener('click', async function (ev) {
+          var btn = ev.target.closest('button[data-action]');
+          if (!btn) return;
+          var action = String(btn.getAttribute('data-action') || '');
+          var symbol = String(btn.getAttribute('data-symbol') || '');
+          var sha = String(btn.getAttribute('data-sha') || '');
+          try {
+            btn.disabled = true;
+            await handleTableAction(action, symbol, sha);
+          } catch (err) {
+            setLog({ error: String(err.message || err), details: err.response || null });
+          } finally {
+            btn.disabled = false;
           }
-          showResult(els.actionLog, results.join('\\n'));
-          await refreshAssets();
-        } finally {
-          els.publishAll.disabled = false;
-          els.publishAll.textContent = 'Publish all drafts';
-        }
-      });
+        });
+      }
 
-      // Ingest
-      els.ingestRun.addEventListener('click', runIngest);
-      els.ingestPayload.value = JSON.stringify({
-        dry_run: true,
-        items: [{
-          symbol: "TP53",
-          asset_sha256: "<from your local database>",
-          publish: false,
-          renditions: {
-            full: { base64: "<image data>" },
-            medium: { base64: "<image data>" },
-            thumb: { base64: "<image data>" }
-          }
-        }]
-      }, null, 2);
+      function init() {
+        els.refresh.addEventListener('click', refreshAssets);
+        els.status.addEventListener('change', refreshAssets);
+        els.limit.addEventListener('change', refreshAssets);
+        els.search.addEventListener('input', renderTable);
+        bindActions();
+        refreshAssets();
+      }
 
-      // Events
-      els.search.addEventListener('input', renderAssets);
-      els.status.addEventListener('change', refreshAssets);
-      refreshAssets(); // defaults to 'approved' view
+      init();
     })();
   </script>
 </body>
 </html>
-`;
+`

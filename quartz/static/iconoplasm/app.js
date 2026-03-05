@@ -18,10 +18,26 @@
 
   var API = apiBase()
 
-  function fetchJSON(path) {
-    return fetch(API + path).then(function (r) {
-      if (!r.ok) throw new Error("HTTP " + r.status)
-      return r.json()
+  function fetchJSON(path, init) {
+    var requestInit = init || {}
+    return fetch(API + path, requestInit).then(function (r) {
+      return r.text().then(function (raw) {
+        var payload = null
+        if (raw) {
+          try {
+            payload = JSON.parse(raw)
+          } catch (_err) {
+            payload = null
+          }
+        }
+        if (!r.ok) {
+          var err = new Error((payload && payload.error) || ("HTTP " + r.status))
+          err.status = r.status
+          err.payload = payload
+          throw err
+        }
+        return payload
+      })
     })
   }
 
@@ -43,6 +59,144 @@
 
   function textColorFor(hex) {
     return isLightColor(hex) ? "rgba(0,0,0,0.7)" : "#fff"
+  }
+
+  function showVoteLoginPopup() {
+    window.alert("Please log-in first to vote.")
+  }
+
+  function voteSummaryText(snapshot) {
+    var data = snapshot || {}
+    var up = Number(data.image_upvotes || 0)
+    var down = Number(data.image_downvotes || 0)
+    var score = Number(data.image_score || 0)
+    var sign = score > 0 ? "+" : ""
+    return "Score " + sign + score + " (" + up + "↑/" + down + "↓)"
+  }
+
+  function setVoteBoxState(box, opts) {
+    if (!box) return
+    var statsEl = box.querySelector("[data-icono-vote-stats]")
+    var noteEl = box.querySelector("[data-icono-vote-note]")
+    var upBtn = box.querySelector("[data-icono-vote-up]")
+    var downBtn = box.querySelector("[data-icono-vote-down]")
+    var snapshot = (opts && opts.snapshot) || {}
+    var authenticated = !!(opts && opts.authenticated)
+    var pending = !!(opts && opts.pending)
+    var userVote = Number(snapshot.user_vote || 0)
+    if (statsEl) statsEl.textContent = voteSummaryText(snapshot)
+    if (noteEl) {
+      noteEl.textContent = authenticated
+        ? "Voting with your website account."
+        : "Log in with Discord to vote."
+    }
+    if (upBtn) {
+      upBtn.disabled = pending
+      upBtn.classList.toggle("active", userVote === 1)
+    }
+    if (downBtn) {
+      downBtn.disabled = pending
+      downBtn.classList.toggle("active", userVote === -1)
+    }
+  }
+
+  function wireGeneVoteBox(container, genePayload) {
+    var box = container.querySelector("[data-icono-vote-box]")
+    if (!box) return
+    var symbol = String(genePayload && genePayload.symbol || "").trim().toUpperCase()
+    var portrait = (genePayload && genePayload.portrait) || {}
+    var assetSha = String(portrait.asset_sha256 || "").trim().toLowerCase()
+    if (!symbol || !assetSha) return
+    var candidateRef = "a:" + symbol + "|" + assetSha
+    var upBtn = box.querySelector("[data-icono-vote-up]")
+    var downBtn = box.querySelector("[data-icono-vote-down]")
+    var state = {
+      authenticated: false,
+      pending: false,
+      snapshot: {
+        image_upvotes: 0,
+        image_downvotes: 0,
+        image_score: 0,
+        user_vote: 0,
+      },
+    }
+
+    function render() {
+      setVoteBoxState(box, state)
+    }
+
+    function refreshSnapshot() {
+      state.pending = true
+      render()
+      return fetchJSON("/api/iconoplasm/votes/snapshot", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidate_ref: candidateRef,
+          symbol: symbol,
+          asset_sha256: assetSha,
+          vision_id: "",
+        }),
+      })
+        .then(function (data) {
+          state.authenticated = !!(data && data.authenticated)
+          state.snapshot = (data && data.snapshot) || state.snapshot
+        })
+        .catch(function (err) {
+          console.error("[Iconoplasm] vote snapshot error:", err)
+        })
+        .finally(function () {
+          state.pending = false
+          render()
+        })
+    }
+
+    function submitVote(voteValue) {
+      state.pending = true
+      render()
+      fetchJSON("/api/iconoplasm/votes/set", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidate_ref: candidateRef,
+          symbol: symbol,
+          asset_sha256: assetSha,
+          vision_id: "",
+          vote_value: voteValue,
+        }),
+      })
+        .then(function (data) {
+          state.authenticated = true
+          state.snapshot = (data && data.snapshot) || state.snapshot
+        })
+        .catch(function (err) {
+          if (Number(err && err.status || 0) === 401 || (err && err.payload && err.payload.code === "AUTH_REQUIRED")) {
+            state.authenticated = false
+            showVoteLoginPopup()
+            return
+          }
+          console.error("[Iconoplasm] vote set error:", err)
+        })
+        .finally(function () {
+          state.pending = false
+          render()
+        })
+    }
+
+    if (upBtn) {
+      upBtn.addEventListener("click", function () {
+        submitVote(1)
+      })
+    }
+    if (downBtn) {
+      downBtn.addEventListener("click", function () {
+        submitVote(-1)
+      })
+    }
+    render()
+    refreshSnapshot()
   }
 
   /* ─── Client-side router ─── */
@@ -237,6 +391,22 @@
       ? ""
       : '<p class="icono-portrait-status">Portrait not yet published</p>'
 
+    var voteBox = (hasPortrait && g.portrait && g.portrait.asset_sha256)
+      ? (
+          '<div class="icono-vote-box" data-icono-vote-box>' +
+            '<div class="icono-vote-top">' +
+              '<span class="icono-vote-title">Community vote</span>' +
+              '<span class="icono-vote-stats" data-icono-vote-stats>Score +0 (0↑/0↓)</span>' +
+            '</div>' +
+            '<div class="icono-vote-actions">' +
+              '<button type="button" class="icono-vote-btn" data-icono-vote-up>Upvote</button>' +
+              '<button type="button" class="icono-vote-btn" data-icono-vote-down>Downvote</button>' +
+            '</div>' +
+            '<p class="icono-vote-note" data-icono-vote-note>Log in with Discord to vote.</p>' +
+          '</div>'
+        )
+      : ""
+
     var links = []
     if (g.source_links) {
       if (g.source_links.uniprot) links.push('<a href="' + esc(g.source_links.uniprot) + '">UniProt</a>')
@@ -257,6 +427,7 @@
             ? '<div class="icono-color-chip"><span class="icono-color-dot" style="background:' + esc(g.color) + '"></span>' + esc(g.color) + '</div>'
             : "") +
           portraitNote +
+          voteBox +
           '<div class="icono-links">' + links.join(" ") + '</div>' +
         '</div>' +
       '</div>'
@@ -287,6 +458,7 @@
     }
 
     container.innerHTML = html
+    wireGeneVoteBox(container, g)
   }
 
   /* ─── Rendering: 404 ─── */

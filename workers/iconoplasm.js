@@ -71,6 +71,44 @@ function normalizeUniprot(raw) {
   return v
 }
 
+function normalizeUserId(raw) {
+  const v = String(raw || "").trim()
+  if (!v) return "local"
+  return v.slice(0, 255)
+}
+
+function isGuestUserId(raw) {
+  const v = String(raw || "")
+    .trim()
+    .toLowerCase()
+  if (!v) return true
+  if (["local", "guest", "anonymous", "anon"].includes(v)) return true
+  return v.startsWith("guest_")
+}
+
+function normalizeVisionId(raw) {
+  const v = String(raw || "").trim()
+  if (!v) return ""
+  return v.slice(0, 255)
+}
+
+function normalizeVoteValue(raw) {
+  const n = Number.parseInt(String(raw ?? ""), 10)
+  if (n === 1) return 1
+  if (n === -1) return -1
+  if (n === 0) return 0
+  return null
+}
+
+function normalizeCandidateRef(raw, symbol = null, assetSha256 = null) {
+  const explicit = String(raw || "").trim()
+  if (explicit) return explicit.slice(0, 255)
+  const sym = normalizeSymbol(symbol)
+  const sha = normalizeSha256(assetSha256)
+  if (!sym || !sha) return null
+  return `a:${sym}|${sha}`
+}
+
 function esc(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")
@@ -401,6 +439,110 @@ async function actor(request, env) {
   }
 }
 
+async function iconoplasmSessionUser(request, env) {
+  if (!env.GAME_SESSIONS) return null
+  try {
+    const cookies = parseCookies(request.headers.get("Cookie") || "")
+    const sessionId = String(cookies.session || "").trim()
+    if (!sessionId) return null
+    const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
+    const stub = env.GAME_SESSIONS.get(id)
+    const resp = await stub.fetch("http://internal/get")
+    if (!resp.ok) return null
+    const session = await resp.json()
+    const userId = String(session?.user_id || "").trim()
+    if (!userId) return null
+    return {
+      user_id: userId,
+      username: String(session?.username || "").trim() || null,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visionId, userId }) {
+  if (!env.ICONOPLASM_DB) {
+    return {
+      image_upvotes: 0,
+      image_downvotes: 0,
+      image_score: 0,
+      user_vote: 0,
+      vision_upvotes: 0,
+      vision_downvotes: 0,
+      vision_score: 0,
+      candidate_ref: String(candidateRef || ""),
+      vision_id: String(visionId || ""),
+    }
+  }
+
+  const symbolNorm = normalizeSymbol(symbol)
+  const assetShaNorm = normalizeSha256(assetSha256)
+  const candidateRefNorm = normalizeCandidateRef(candidateRef, symbolNorm, assetShaNorm)
+  const visionNorm = normalizeVisionId(visionId)
+  const userNorm = normalizeUserId(userId)
+  if (!candidateRefNorm) {
+    return {
+      image_upvotes: 0,
+      image_downvotes: 0,
+      image_score: 0,
+      user_vote: 0,
+      vision_upvotes: 0,
+      vision_downvotes: 0,
+      vision_score: 0,
+      candidate_ref: "",
+      vision_id: visionNorm,
+    }
+  }
+
+  const imageAgg = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+       COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+       COALESCE(SUM(vote_value), 0) AS score
+     FROM icono_image_votes
+     WHERE candidate_ref = ?`,
+  )
+    .bind(candidateRefNorm)
+    .first()
+
+  const userVoteRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT vote_value
+     FROM icono_image_votes
+     WHERE candidate_ref = ?
+       AND user_id = ?
+     LIMIT 1`,
+  )
+    .bind(candidateRefNorm, userNorm)
+    .first()
+
+  let visionAgg = null
+  if (visionNorm) {
+    visionAgg = await env.ICONOPLASM_DB.prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+         COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+         COALESCE(SUM(vote_value), 0) AS score
+       FROM icono_image_votes
+       WHERE vision_id = ?`,
+    )
+      .bind(visionNorm)
+      .first()
+  }
+
+  return {
+    image_upvotes: Number(imageAgg?.upvotes || 0),
+    image_downvotes: Number(imageAgg?.downvotes || 0),
+    image_score: Number(imageAgg?.score || 0),
+    user_vote: Number(userVoteRow?.vote_value || 0),
+    vision_upvotes: Number(visionAgg?.upvotes || 0),
+    vision_downvotes: Number(visionAgg?.downvotes || 0),
+    vision_score: Number(visionAgg?.score || 0),
+    candidate_ref: candidateRefNorm,
+    vision_id: visionNorm,
+  }
+}
+
 async function handleLegacyColorsManifest(request, env) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const manifest = await env.KV.get(KV_COLORS_MANIFEST)
@@ -539,6 +681,536 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             "Access-Control-Allow-Origin": "*",
           },
         }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/votes/me" && request.method === "GET") {
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "votes_me_guest",
+          json(
+            {
+              authenticated: false,
+              user: null,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      return done(
+        "votes_me",
+        json(
+          {
+            authenticated: true,
+            user: {
+              id: sessionUser.user_id,
+              username: sessionUser.username || null,
+            },
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/votes/set" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB) return done("votes_set_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "votes_set_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log-in first to vote." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("votes_set_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
+      const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
+      const candidateRef = normalizeCandidateRef(
+        p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
+        symbol,
+        assetSha,
+      )
+      const visionId = normalizeVisionId(p?.vision_id || "")
+      const requested = normalizeVoteValue(p?.vote_value)
+      if (!candidateRef) return done("votes_set_400", json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400))
+      if (!symbol) return done("votes_set_400", json({ error: "Missing or invalid symbol" }, 400))
+      if (!assetSha) return done("votes_set_400", json({ error: "Missing or invalid asset_sha256" }, 400))
+      if (requested === null) return done("votes_set_400", json({ error: "vote_value must be -1, 0, or 1" }, 400))
+
+      const userId = normalizeUserId(sessionUser.user_id)
+      const existing = await env.ICONOPLASM_DB.prepare(
+        `SELECT vote_value
+         FROM icono_image_votes
+         WHERE candidate_ref = ?
+           AND user_id = ?
+         LIMIT 1`,
+      )
+        .bind(candidateRef, userId)
+        .first()
+      const current = Number(existing?.vote_value || 0)
+
+      if (requested === 0 || current === requested) {
+        await env.ICONOPLASM_DB.prepare(
+          `DELETE FROM icono_image_votes
+           WHERE candidate_ref = ?
+             AND user_id = ?`,
+        )
+          .bind(candidateRef, userId)
+          .run()
+      } else {
+        await env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_image_votes (
+             candidate_ref, gene_symbol, asset_sha256, vision_id, user_id, vote_value, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
+             gene_symbol = excluded.gene_symbol,
+             asset_sha256 = excluded.asset_sha256,
+             vision_id = excluded.vision_id,
+             vote_value = excluded.vote_value,
+             updated_at = CURRENT_TIMESTAMP`,
+        )
+          .bind(candidateRef, symbol, assetSha, visionId, userId, requested)
+          .run()
+      }
+
+      const snapshot = await iconoVoteSnapshot(env, {
+        candidateRef,
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        userId,
+      })
+      return done(
+        "votes_set",
+        json(
+          {
+            ok: true,
+            candidate_ref: candidateRef,
+            symbol,
+            asset_sha256: assetSha,
+            user_id: userId,
+            snapshot,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB) return done("votes_snapshot_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("votes_snapshot_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
+      const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
+      const candidateRef = normalizeCandidateRef(
+        p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
+        symbol,
+        assetSha,
+      )
+      const visionId = normalizeVisionId(p?.vision_id || "")
+      if (!candidateRef) return done("votes_snapshot_400", json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400))
+      if (!symbol) return done("votes_snapshot_400", json({ error: "Missing or invalid symbol" }, 400))
+      if (!assetSha) return done("votes_snapshot_400", json({ error: "Missing or invalid asset_sha256" }, 400))
+
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const userId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : "__guest__"
+      const snapshot = await iconoVoteSnapshot(env, {
+        candidateRef,
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        userId,
+      })
+      return done(
+        "votes_snapshot",
+        json(
+          {
+            ok: true,
+            authenticated: Boolean(sessionUser?.user_id),
+            candidate_ref: candidateRef,
+            symbol,
+            asset_sha256: assetSha,
+            snapshot,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/import" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_votes_import_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_votes_import_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_votes_import_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const items = Array.isArray(p?.items) ? p.items : []
+      if (!items.length) return done("admin_votes_import_400", json({ error: "No items provided" }, 400))
+      if (items.length > 20000) return done("admin_votes_import_400", json({ error: "Too many items (max 20000)" }, 400))
+
+      let upserted = 0
+      let deleted = 0
+      let invalid = 0
+      for (const raw of items) {
+        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
+        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
+        const candidateRef = normalizeCandidateRef(
+          raw?.candidate_ref || (raw?.candidate_image_id ? `c:${String(raw.candidate_image_id)}` : ""),
+          symbol,
+          assetSha,
+        )
+        const visionId = normalizeVisionId(raw?.vision_id || "")
+        const userId = normalizeUserId(raw?.user_id || raw?.user || "local")
+        const voteValue = normalizeVoteValue(raw?.vote_value)
+        if (!candidateRef || !symbol || !assetSha || !userId || voteValue === null) {
+          invalid += 1
+          continue
+        }
+        if (voteValue === 0) {
+          await env.ICONOPLASM_DB.prepare(
+            `DELETE FROM icono_image_votes
+             WHERE candidate_ref = ?
+               AND user_id = ?`,
+          )
+            .bind(candidateRef, userId)
+            .run()
+          deleted += 1
+          continue
+        }
+        await env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_image_votes (
+             candidate_ref, gene_symbol, asset_sha256, vision_id, user_id, vote_value, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
+             gene_symbol = excluded.gene_symbol,
+             asset_sha256 = excluded.asset_sha256,
+             vision_id = excluded.vision_id,
+             vote_value = excluded.vote_value,
+             updated_at = CURRENT_TIMESTAMP`,
+        )
+          .bind(candidateRef, symbol, assetSha, visionId, userId, voteValue)
+          .run()
+        upserted += 1
+      }
+
+      return done(
+        "admin_votes_import",
+        json(
+          {
+            ok: true,
+            total: items.length,
+            upserted,
+            deleted,
+            invalid,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/set" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_votes_set_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_votes_set_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_votes_set_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
+      const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
+      const candidateRef = normalizeCandidateRef(
+        p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
+        symbol,
+        assetSha,
+      )
+      const visionId = normalizeVisionId(p?.vision_id || "")
+      const userId = normalizeUserId(p?.user_id || p?.user || "local")
+      const requested = normalizeVoteValue(p?.vote_value)
+      if (!candidateRef) return done("admin_votes_set_400", json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400))
+      if (!symbol) return done("admin_votes_set_400", json({ error: "Missing or invalid symbol" }, 400))
+      if (!assetSha) return done("admin_votes_set_400", json({ error: "Missing or invalid asset_sha256" }, 400))
+      if (requested === null) return done("admin_votes_set_400", json({ error: "vote_value must be -1, 0, or 1" }, 400))
+      if (isGuestUserId(userId)) {
+        return done(
+          "admin_votes_set_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log-in first to vote." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+
+      const existing = await env.ICONOPLASM_DB.prepare(
+        `SELECT vote_value
+         FROM icono_image_votes
+         WHERE candidate_ref = ?
+           AND user_id = ?
+         LIMIT 1`,
+      )
+        .bind(candidateRef, userId)
+        .first()
+      const current = Number(existing?.vote_value || 0)
+
+      if (requested === 0 || current === requested) {
+        await env.ICONOPLASM_DB.prepare(
+          `DELETE FROM icono_image_votes
+           WHERE candidate_ref = ?
+             AND user_id = ?`,
+        )
+          .bind(candidateRef, userId)
+          .run()
+      } else {
+        await env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_image_votes (
+             candidate_ref, gene_symbol, asset_sha256, vision_id, user_id, vote_value, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
+             gene_symbol = excluded.gene_symbol,
+             asset_sha256 = excluded.asset_sha256,
+             vision_id = excluded.vision_id,
+             vote_value = excluded.vote_value,
+             updated_at = CURRENT_TIMESTAMP`,
+        )
+          .bind(candidateRef, symbol, assetSha, visionId, userId, requested)
+          .run()
+      }
+
+      const snapshot = await iconoVoteSnapshot(env, {
+        candidateRef,
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        userId,
+      })
+      return done(
+        "admin_votes_set",
+        json(
+          {
+            ok: true,
+            candidate_ref: candidateRef,
+            symbol,
+            asset_sha256: assetSha,
+            user_id: userId,
+            snapshot,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/snapshot" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_votes_snapshot_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_votes_snapshot_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_votes_snapshot_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
+      const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
+      const candidateRef = normalizeCandidateRef(
+        p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
+        symbol,
+        assetSha,
+      )
+      const visionId = normalizeVisionId(p?.vision_id || "")
+      const userId = normalizeUserId(p?.user_id || p?.user || "local")
+      if (!candidateRef) return done("admin_votes_snapshot_400", json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400))
+      if (!symbol) return done("admin_votes_snapshot_400", json({ error: "Missing or invalid symbol" }, 400))
+      if (!assetSha) return done("admin_votes_snapshot_400", json({ error: "Missing or invalid asset_sha256" }, 400))
+
+      const snapshot = await iconoVoteSnapshot(env, {
+        candidateRef,
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        userId,
+      })
+      return done(
+        "admin_votes_snapshot",
+        json(
+          {
+            ok: true,
+            candidate_ref: candidateRef,
+            symbol,
+            asset_sha256: assetSha,
+            user_id: userId,
+            snapshot,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/snapshots" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_votes_snapshots_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_votes_snapshots_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_votes_snapshots_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const items = Array.isArray(p?.items) ? p.items : []
+      if (!items.length) return done("admin_votes_snapshots_400", json({ error: "No items provided" }, 400))
+      if (items.length > 5000) return done("admin_votes_snapshots_400", json({ error: "Too many items (max 5000)" }, 400))
+      const userId = normalizeUserId(p?.user_id || p?.user || "local")
+
+      const deduped = []
+      const seen = new Set()
+      for (const raw of items) {
+        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
+        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
+        const candidateRef = normalizeCandidateRef(
+          raw?.candidate_ref || (raw?.candidate_image_id ? `c:${String(raw.candidate_image_id)}` : ""),
+          symbol,
+          assetSha,
+        )
+        const visionId = normalizeVisionId(raw?.vision_id || "")
+        if (!candidateRef || !symbol || !assetSha) continue
+        const key = `${candidateRef}|${visionId}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        deduped.push({
+          candidate_ref: candidateRef,
+          symbol,
+          asset_sha256: assetSha,
+          vision_id: visionId,
+        })
+      }
+
+      const snapshots = []
+      for (const item of deduped) {
+        const snapshot = await iconoVoteSnapshot(env, {
+          candidateRef: item.candidate_ref,
+          symbol: item.symbol,
+          assetSha256: item.asset_sha256,
+          visionId: item.vision_id,
+          userId,
+        })
+        snapshots.push({
+          candidate_ref: item.candidate_ref,
+          symbol: item.symbol,
+          asset_sha256: item.asset_sha256,
+          vision_id: item.vision_id,
+          snapshot,
+        })
+      }
+
+      return done(
+        "admin_votes_snapshots",
+        json(
+          {
+            ok: true,
+            user_id: userId,
+            count: snapshots.length,
+            snapshots,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/vision-stats" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_votes_vision_stats_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_votes_vision_stats_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_votes_vision_stats_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const visionIdsRaw = Array.isArray(p?.vision_ids) ? p.vision_ids : []
+      const visionIds = []
+      const seenVision = new Set()
+      for (const raw of visionIdsRaw) {
+        const visionId = normalizeVisionId(raw)
+        if (!visionId || seenVision.has(visionId)) continue
+        seenVision.add(visionId)
+        visionIds.push(visionId)
+      }
+      if (visionIds.length > 2000) {
+        return done("admin_votes_vision_stats_400", json({ error: "Too many vision_ids (max 2000)" }, 400))
+      }
+
+      let results = []
+      if (!visionIds.length) {
+        const resp = await env.ICONOPLASM_DB.prepare(
+          `SELECT
+             vision_id,
+             COUNT(DISTINCT candidate_ref) AS image_count,
+             COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+             COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+             COALESCE(SUM(vote_value), 0) AS score
+           FROM icono_image_votes
+           WHERE COALESCE(vision_id, '') <> ''
+           GROUP BY vision_id
+           ORDER BY score DESC, upvotes DESC, image_count DESC, vision_id ASC`,
+        ).all()
+        results = Array.isArray(resp?.results) ? resp.results : []
+      } else {
+        const placeholders = visionIds.map(() => "?").join(",")
+        const resp = await env.ICONOPLASM_DB.prepare(
+          `SELECT
+             vision_id,
+             COUNT(DISTINCT candidate_ref) AS image_count,
+             COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+             COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+             COALESCE(SUM(vote_value), 0) AS score
+           FROM icono_image_votes
+           WHERE COALESCE(vision_id, '') <> ''
+             AND vision_id IN (${placeholders})
+           GROUP BY vision_id
+           ORDER BY score DESC, upvotes DESC, image_count DESC, vision_id ASC`,
+        )
+          .bind(...visionIds)
+          .all()
+        results = Array.isArray(resp?.results) ? resp.results : []
+      }
+
+      const rows = (results || []).map((row) => ({
+        vision_id: String(row?.vision_id || ""),
+        image_count: Number(row?.image_count || 0),
+        upvotes: Number(row?.upvotes || 0),
+        downvotes: Number(row?.downvotes || 0),
+        score: Number(row?.score || 0),
+      }))
+      return done(
+        "admin_votes_vision_stats",
+        json(
+          {
+            ok: true,
+            count: rows.length,
+            rows,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
       )
     }
 
@@ -773,7 +1445,162 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
-    if (["/api/iconoplasm/admin/publish", "/api/iconoplasm/admin/reject", "/api/iconoplasm/admin/rollback"].includes(path) && request.method === "POST") {
+    if (path === "/api/iconoplasm/admin/reconcile" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_reconcile_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_reconcile_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_reconcile_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const keepRaw = Array.isArray(p?.keep) ? p.keep : []
+      const publishRaw = Array.isArray(p?.publish) ? p.publish : []
+      if (keepRaw.length > 50000) return done("admin_reconcile_400", json({ error: "Too many keep entries (max 50000)" }, 400))
+      if (publishRaw.length > 20000) return done("admin_reconcile_400", json({ error: "Too many publish entries (max 20000)" }, 400))
+
+      const keep = []
+      const keepSet = new Set()
+      for (const raw of keepRaw) {
+        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
+        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
+        if (!symbol || !assetSha) continue
+        const key = `${symbol}|${assetSha}`
+        if (keepSet.has(key)) continue
+        keepSet.add(key)
+        keep.push({ symbol, asset_sha256: assetSha, key })
+      }
+
+      const publishBySymbol = new Map()
+      for (const raw of publishRaw) {
+        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
+        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
+        if (!symbol || !assetSha) continue
+        const key = `${symbol}|${assetSha}`
+        if (!keepSet.has(key)) continue
+        if (publishBySymbol.has(symbol)) continue
+        publishBySymbol.set(symbol, assetSha)
+      }
+
+      const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
+      const actorId = await actor(request, env)
+      const reason = String(p?.reason || "").slice(0, 2000) || "local_sync_reconcile"
+
+      const { results: existingAssets = [] } = await env.ICONOPLASM_DB
+        .prepare("SELECT gene_symbol, asset_sha256, status FROM icono_portrait_assets")
+        .all()
+
+      const { results: existingStateRows = [] } = await env.ICONOPLASM_DB
+        .prepare("SELECT gene_symbol, current_asset_sha256 FROM icono_publish_state")
+        .all()
+      const existingState = new Map()
+      for (const row of existingStateRows) {
+        const symbol = normalizeSymbol(row?.gene_symbol || "")
+        if (!symbol) continue
+        const assetSha = normalizeSha256(row?.current_asset_sha256 || "") || null
+        existingState.set(symbol, assetSha)
+      }
+
+      let rejected = 0
+      let published = 0
+      let unpublished = 0
+      let alreadyCurrent = 0
+      let ignoredInvalid = 0
+
+      for (const row of existingAssets) {
+        const symbol = normalizeSymbol(row?.gene_symbol || "")
+        const assetSha = normalizeSha256(row?.asset_sha256 || "")
+        if (!symbol || !assetSha) {
+          ignoredInvalid += 1
+          continue
+        }
+        const key = `${symbol}|${assetSha}`
+        if (keepSet.has(key)) continue
+        rejected += 1
+        if (dryRun) continue
+        await env.ICONOPLASM_DB
+          .prepare("UPDATE icono_portrait_assets SET status='rejected' WHERE upper(gene_symbol)=? AND asset_sha256=?")
+          .bind(symbol, assetSha)
+          .run()
+        await env.ICONOPLASM_DB
+          .prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'reject', ?, ?, CURRENT_TIMESTAMP)",
+          )
+          .bind(symbol, assetSha, assetSha, actorId, reason)
+          .run()
+      }
+
+      for (const [symbol, targetAssetSha] of publishBySymbol.entries()) {
+        const currentAssetSha = existingState.has(symbol) ? existingState.get(symbol) : null
+        if (currentAssetSha === targetAssetSha) {
+          alreadyCurrent += 1
+          continue
+        }
+        published += 1
+        if (dryRun) continue
+        await env.ICONOPLASM_DB
+          .prepare(
+            `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at)
+             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(gene_symbol) DO UPDATE SET
+               current_asset_sha256=excluded.current_asset_sha256,
+               updated_by=excluded.updated_by,
+               updated_at=CURRENT_TIMESTAMP`,
+          )
+          .bind(symbol, targetAssetSha, actorId)
+          .run()
+        await env.ICONOPLASM_DB
+          .prepare("UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?")
+          .bind(symbol, targetAssetSha)
+          .run()
+        await env.ICONOPLASM_DB
+          .prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)",
+          )
+          .bind(symbol, currentAssetSha, targetAssetSha, actorId, reason)
+          .run()
+      }
+
+      for (const [symbol, currentAssetSha] of existingState.entries()) {
+        if (!currentAssetSha) continue
+        if (publishBySymbol.has(symbol)) continue
+        unpublished += 1
+        if (dryRun) continue
+        await env.ICONOPLASM_DB
+          .prepare("UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?")
+          .bind(actorId, symbol)
+          .run()
+        await env.ICONOPLASM_DB
+          .prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unpublish', ?, ?, CURRENT_TIMESTAMP)",
+          )
+          .bind(symbol, currentAssetSha, null, actorId, reason)
+          .run()
+      }
+
+      return done(
+        "admin_reconcile",
+        json(
+          {
+            ok: true,
+            dry_run: dryRun,
+            keep_count: keep.length,
+            publish_count: publishBySymbol.size,
+            rejected,
+            published,
+            unpublished,
+            already_current: alreadyCurrent,
+            ignored_invalid: ignoredInvalid,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (["/api/iconoplasm/admin/publish", "/api/iconoplasm/admin/reject", "/api/iconoplasm/admin/rollback", "/api/iconoplasm/admin/unpublish"].includes(path) && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env))) return done("admin_mut_403", json({ error: "Unauthorized" }, 403))
       let p
       try {
@@ -801,6 +1628,15 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         await env.ICONOPLASM_DB.prepare("UPDATE icono_portrait_assets SET status='rejected' WHERE upper(gene_symbol)=? AND asset_sha256=?").bind(symbol, asset).run()
         await env.ICONOPLASM_DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'reject', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, asset, asset, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
         return done("reject", json({ ok: true, action: "reject", symbol, asset_sha256: asset }))
+      }
+
+      if (path.endsWith("/unpublish")) {
+        const current = await env.ICONOPLASM_DB.prepare("SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1").bind(symbol).first()
+        const from = current?.current_asset_sha256 || null
+        if (!from) return done("unpublish_400", json({ error: "No published state to clear" }, 400))
+        await env.ICONOPLASM_DB.prepare("UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?").bind(actorId, symbol).run()
+        await env.ICONOPLASM_DB.prepare("INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unpublish', ?, ?, CURRENT_TIMESTAMP)").bind(symbol, from, null, actorId, String(p?.reason || "").slice(0, 2000) || null).run()
+        return done("unpublish", json({ ok: true, action: "unpublish", symbol, from_asset_sha256: from }))
       }
 
       const current = await env.ICONOPLASM_DB.prepare("SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1").bind(symbol).first()
