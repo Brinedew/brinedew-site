@@ -444,6 +444,18 @@
     if (g.chromosome) {
       sections.push({ label: "Chromosome", value: g.chromosome })
     }
+    var weightKgRaw = null
+    if (g.essence && g.essence.weight_kg != null) {
+      weightKgRaw = Number(g.essence.weight_kg)
+    } else if (g.weight_kg != null) {
+      weightKgRaw = Number(g.weight_kg)
+    }
+    if (Number.isFinite(weightKgRaw) && weightKgRaw > 0) {
+      var weightText = (Math.abs(weightKgRaw - Math.round(weightKgRaw)) < 0.05)
+        ? String(Math.round(weightKgRaw))
+        : weightKgRaw.toFixed(1)
+      sections.push({ label: "Weight (kg)", value: weightText + " kg" })
+    }
 
     if (sections.length) {
       html += '<div class="icono-gene-sections">'

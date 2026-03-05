@@ -124,6 +124,16 @@ function joinUrl(base, key) {
   return `${b}/${k}`
 }
 
+// Iconoplasm convention: Weight (kg) == molecular weight (kDa).
+// `mass` is stored in daltons, so always convert Da -> kDa.
+function weightKgFromProteinMass(rawMass) {
+  const mass = Number(rawMass)
+  if (!Number.isFinite(mass) || mass <= 0) return null
+  const kda = mass / 1000
+  if (!Number.isFinite(kda) || kda <= 0) return null
+  return Math.round(kda * 10) / 10
+}
+
 function portraitBase(url, env) {
   if (typeof env.ICONOPLASM_PORTRAIT_BASE_URL === "string" && env.ICONOPLASM_PORTRAIT_BASE_URL.trim()) {
     return env.ICONOPLASM_PORTRAIT_BASE_URL.trim()
@@ -400,6 +410,9 @@ async function geneRecord(env, url, rawId) {
   const portrait = await portraitState(env, r.symbol, base)
   const uniprot = normalizeUniprot(r?.protein?.uniprot || entry?.u || null)
   const fullName = (r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol
+  const weightKg = weightKgFromProteinMass(r?.protein?.mass)
+  const essence = {}
+  if (weightKg != null) essence.weight_kg = weightKg
   return {
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
@@ -408,6 +421,8 @@ async function geneRecord(env, url, rawId) {
     full_name: fullName,
     color: entry?.c || null,
     ...(uniprot ? { uniprot } : {}),
+    ...(weightKg != null ? { weight_kg: weightKg } : {}),
+    essence,
     portrait,
     source_links: sourceLinks(r.symbol, uniprot),
     page_url: `${url.origin}/gene/${encodeURIComponent(r.symbol)}`,
