@@ -506,10 +506,18 @@ export default {
       // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
       // delegate API/portrait/admin to the iconoplasm handler.
       if (isIconoplasmRequest(url.hostname)) {
+        // Clean cutover: old admin path is removed.
+        if (url.pathname === "/admin/iconoplasm" || url.pathname === "/admin/iconoplasm/") {
+          return new Response("Not found", {
+            status: 404,
+            headers: { "Cache-Control": "no-store" },
+          })
+        }
+
         const isApiOrWorker =
           url.pathname.startsWith("/api/") ||
           url.pathname.startsWith("/portraits/") ||
-          url.pathname === "/admin/iconoplasm" ||
+          url.pathname === "/admin" ||
           url.pathname === "/health"
 
         if (isApiOrWorker) {

@@ -1,6 +1,7 @@
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByGene, fetchProteinByUniprot } from "./lib/protein-store.js"
+import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const API_SCHEMA_VERSION = 2
@@ -28,7 +29,7 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "If-None-Match, Content-Type, X-Iconoplasm-Extension-Version",
+    "Access-Control-Allow-Headers": "If-None-Match, Content-Type, X-Iconoplasm-Extension-Version, Authorization, X-Iconoplasm-Admin-Token",
     Vary: "Origin",
   }
 }
@@ -97,6 +98,95 @@ function portraitBase(url, env) {
 // rendition: 'full' (<=1MP, gene page hero), 'medium' (512px long edge, extension/grid), 'thumb' (256x256 crop)
 function r2PortraitKey(sha256, rendition) {
   return `portraits/v1/${sha256.slice(0, 2)}/${sha256}/${rendition}.webp`
+}
+
+function normalizeSha256(raw) {
+  const v = String(raw || "").trim().toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(v)) return null
+  return v
+}
+
+function optionalInt(raw) {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  const rounded = Math.round(n)
+  if (rounded < 0) return null
+  return rounded
+}
+
+function coerceBoolean(raw, fallback = false) {
+  if (typeof raw === "boolean") return raw
+  if (typeof raw === "number") return raw !== 0
+  if (typeof raw === "string") {
+    const v = raw.trim().toLowerCase()
+    if (["1", "true", "yes", "on"].includes(v)) return true
+    if (["0", "false", "no", "off"].includes(v)) return false
+  }
+  return fallback
+}
+
+function normalizeAssetStatus(raw, fallback = "draft") {
+  const v = String(raw || "").trim().toLowerCase()
+  if (["draft", "approved", "rejected"].includes(v)) return v
+  return fallback
+}
+
+function decodeBase64Bytes(raw) {
+  const input = String(raw || "").trim()
+  if (!input) return null
+  const cleaned = input.replace(/^data:[^;]+;base64,/i, "").replace(/\s+/g, "")
+  if (!cleaned) return null
+  try {
+    const binary = atob(cleaned)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes
+  } catch {
+    return null
+  }
+}
+
+function extractRenditionPayload(item, rendition) {
+  const fromRenditions = item?.renditions?.[rendition]
+  if (typeof fromRenditions === "string") return { base64: fromRenditions }
+  if (fromRenditions && typeof fromRenditions === "object") return fromRenditions
+
+  const fromRoot = item?.[rendition]
+  if (typeof fromRoot === "string") return { base64: fromRoot }
+  if (fromRoot && typeof fromRoot === "object") return fromRoot
+
+  const rootBase64 = item?.[`${rendition}_base64`]
+  if (typeof rootBase64 === "string" && rootBase64.trim()) return { base64: rootBase64 }
+  return null
+}
+
+function extractRenditionBytes(payload) {
+  if (!payload || typeof payload !== "object") return null
+  const b64 =
+    payload.base64 ||
+    payload.data ||
+    payload.body ||
+    payload.content_base64 ||
+    payload.image_base64 ||
+    payload.bytes_base64 ||
+    ""
+  return decodeBase64Bytes(b64)
+}
+
+function hasAdminToken(request, env) {
+  const configured = String(env.ICONOPLASM_ADMIN_TOKEN || "").trim()
+  if (!configured) return false
+  const fromHeader = String(request.headers.get("x-iconoplasm-admin-token") || "").trim()
+  const authHeader = String(request.headers.get("Authorization") || "").trim()
+  const fromBearer = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : ""
+  return fromHeader === configured || fromBearer === configured
+}
+
+async function isIconoplasmAdmin(request, env) {
+  if (await isAdmin(request, env)) return true
+  return hasAdminToken(request, env)
 }
 
 function extVersion(request) {
@@ -452,13 +542,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
-    if (path === "/admin/iconoplasm") {
+    if (path === "/admin") {
       if (!(await isAdmin(request, env))) return done("admin_403", html("<h1>403 Unauthorized</h1>", 403))
-      return done("admin", html("<!doctype html><html><body><h1>Iconoplasm Admin</h1><p>Use /api/iconoplasm/admin/* endpoints.</p></body></html>", 200, { "Cache-Control": "no-store" }))
+      return done("admin", html(ICONOPLASM_ADMIN_HTML, 200, { "Cache-Control": "no-store" }))
     }
 
     if (path === "/api/iconoplasm/admin/assets" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) return done("admin_assets_403", json({ error: "Unauthorized" }, 403))
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_assets_403", json({ error: "Unauthorized" }, 403))
       const status = (url.searchParams.get("status") || "draft").toLowerCase()
       const limit = Math.max(1, Math.min(250, Number.parseInt(url.searchParams.get("limit") || "50", 10)))
       const where = status === "all" ? "" : "WHERE lower(status)=?"
@@ -472,8 +562,219 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       return done("admin_assets", json({ assets, count: assets.length }, 200, { "Cache-Control": "no-store" }))
     }
 
+    if (["/api/iconoplasm/admin/ingest", "/api/iconoplasm/admin/publish-local"].includes(path) && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_ingest_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_ingest_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      if (!env.ICONOPLASM_PORTRAITS) return done("admin_ingest_500", json({ error: "ICONOPLASM_PORTRAITS binding missing" }, 500))
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_ingest_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const itemsRaw = Array.isArray(p?.items) ? p.items : [p]
+      if (!itemsRaw.length) return done("admin_ingest_400", json({ error: "No items provided" }, 400))
+      if (itemsRaw.length > 100) return done("admin_ingest_400", json({ error: "Too many items (max 100 per request)" }, 400))
+
+      const actorId = await actor(request, env)
+      const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
+      const defaultPublish = path.endsWith("/publish-local") || coerceBoolean(p?.publish, false)
+      const reasonDefault = String(p?.reason || "").slice(0, 2000) || null
+      const createdByDefault = String(p?.created_by || p?.createdBy || actorId || "unknown").slice(0, 255)
+      const base = portraitBase(url, env)
+
+      const results = []
+      let processed = 0
+      let failed = 0
+
+      for (const rawItem of itemsRaw) {
+        try {
+          const item = rawItem && typeof rawItem === "object" ? rawItem : {}
+          const symbol = normalizeSymbol(item?.symbol || item?.gene_symbol || "")
+          const assetSha = normalizeSha256(item?.asset_sha256 || item?.sha256 || "")
+          if (!symbol) throw new Error("Missing or invalid symbol")
+          if (!assetSha) throw new Error("Missing or invalid asset_sha256")
+
+          const publishNow = coerceBoolean(item?.publish, defaultPublish)
+          const statusRequested = normalizeAssetStatus(item?.status, publishNow ? "approved" : "draft")
+          const reason = String(item?.reason || reasonDefault || "").slice(0, 2000) || null
+          const createdBy = String(item?.created_by || item?.createdBy || createdByDefault || "unknown").slice(0, 255)
+
+          const keys = {
+            full: r2PortraitKey(assetSha, "full"),
+            medium: r2PortraitKey(assetSha, "medium"),
+            thumb: r2PortraitKey(assetSha, "thumb"),
+          }
+
+          const [headFull, headMedium, headThumb] = await Promise.all([
+            env.ICONOPLASM_PORTRAITS.head(keys.full),
+            env.ICONOPLASM_PORTRAITS.head(keys.medium),
+            env.ICONOPLASM_PORTRAITS.head(keys.thumb),
+          ])
+          const exists = {
+            full: Boolean(headFull),
+            medium: Boolean(headMedium),
+            thumb: Boolean(headThumb),
+          }
+
+          const fullPayload = extractRenditionPayload(item, "full")
+          const mediumPayload = extractRenditionPayload(item, "medium")
+          const thumbPayload = extractRenditionPayload(item, "thumb")
+          const fullBytes = extractRenditionBytes(fullPayload)
+          const mediumBytes = extractRenditionBytes(mediumPayload)
+          const thumbBytes = extractRenditionBytes(thumbPayload)
+
+          if (!dryRun) {
+            if (!exists.full) {
+              if (!fullBytes) throw new Error("Missing full rendition payload for new upload")
+              await env.ICONOPLASM_PORTRAITS.put(keys.full, fullBytes, {
+                httpMetadata: { contentType: "image/webp" },
+                customMetadata: { gene_symbol: symbol, asset_sha256: assetSha, rendition: "full" },
+              })
+            }
+            if (!exists.medium) {
+              if (!mediumBytes) throw new Error("Missing medium rendition payload for new upload")
+              await env.ICONOPLASM_PORTRAITS.put(keys.medium, mediumBytes, {
+                httpMetadata: { contentType: "image/webp" },
+                customMetadata: { gene_symbol: symbol, asset_sha256: assetSha, rendition: "medium" },
+              })
+            }
+            if (!exists.thumb) {
+              if (!thumbBytes) throw new Error("Missing thumb rendition payload for new upload")
+              await env.ICONOPLASM_PORTRAITS.put(keys.thumb, thumbBytes, {
+                httpMetadata: { contentType: "image/webp" },
+                customMetadata: { gene_symbol: symbol, asset_sha256: assetSha, rendition: "thumb" },
+              })
+            }
+          }
+
+          const width = optionalInt(item?.width ?? fullPayload?.width)
+          const height = optionalInt(item?.height ?? fullPayload?.height)
+          const bytes = optionalInt(item?.bytes ?? fullPayload?.bytes ?? fullBytes?.byteLength)
+
+          const existingAsset = await env.ICONOPLASM_DB.prepare(
+            "SELECT status FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND asset_sha256=? LIMIT 1",
+          )
+            .bind(symbol, assetSha)
+            .first()
+          const existingStatus = normalizeAssetStatus(existingAsset?.status || "", "draft")
+          let finalStatus = statusRequested
+          if (!publishNow && finalStatus === "draft" && (existingStatus === "approved" || existingStatus === "rejected")) {
+            finalStatus = existingStatus
+          }
+
+          if (!dryRun) {
+            await env.ICONOPLASM_DB.prepare(
+              `INSERT INTO icono_portrait_assets (
+                 gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
+                 mime, width, height, bytes, status, created_by, created_at
+               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+                 r2_key_full=excluded.r2_key_full,
+                 r2_key_medium=excluded.r2_key_medium,
+                 r2_key_thumb=excluded.r2_key_thumb,
+                 mime=excluded.mime,
+                 width=COALESCE(excluded.width, icono_portrait_assets.width),
+                 height=COALESCE(excluded.height, icono_portrait_assets.height),
+                 bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
+                 status=excluded.status,
+                 created_by=COALESCE(excluded.created_by, icono_portrait_assets.created_by)`,
+            )
+              .bind(symbol, assetSha, keys.full, keys.medium, keys.thumb, width, height, bytes, finalStatus, createdBy)
+              .run()
+          }
+
+          let publishResult = "not_requested"
+          let fromAssetSha256 = null
+          if (publishNow) {
+            const current = await env.ICONOPLASM_DB.prepare(
+              "SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1",
+            )
+              .bind(symbol)
+              .first()
+            fromAssetSha256 = current?.current_asset_sha256 || null
+            if (dryRun) {
+              publishResult = fromAssetSha256 === assetSha ? "already_current" : "would_publish"
+            } else if (fromAssetSha256 === assetSha) {
+              publishResult = "already_current"
+              await env.ICONOPLASM_DB.prepare("UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?").bind(symbol, assetSha).run()
+            } else {
+              await env.ICONOPLASM_DB.prepare(
+                `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at)
+                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                 ON CONFLICT(gene_symbol) DO UPDATE SET
+                   current_asset_sha256=excluded.current_asset_sha256,
+                   updated_by=excluded.updated_by,
+                   updated_at=CURRENT_TIMESTAMP`,
+              )
+                .bind(symbol, assetSha, actorId)
+                .run()
+              await env.ICONOPLASM_DB.prepare("UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?").bind(symbol, assetSha).run()
+              await env.ICONOPLASM_DB.prepare(
+                "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)",
+              )
+                .bind(symbol, fromAssetSha256, assetSha, actorId, reason)
+                .run()
+              publishResult = "published"
+            }
+          }
+
+          const uploads = {
+            full: exists.full ? "skipped_existing" : fullBytes ? (dryRun ? "would_upload" : "uploaded") : "missing_payload",
+            medium: exists.medium ? "skipped_existing" : mediumBytes ? (dryRun ? "would_upload" : "uploaded") : "missing_payload",
+            thumb: exists.thumb ? "skipped_existing" : thumbBytes ? (dryRun ? "would_upload" : "uploaded") : "missing_payload",
+          }
+
+          processed += 1
+          results.push({
+            ok: true,
+            symbol,
+            asset_sha256: assetSha,
+            dry_run: dryRun,
+            status: finalStatus,
+            uploads,
+            publish: publishResult,
+            from_asset_sha256: fromAssetSha256,
+            hero_url: joinUrl(base, keys.full),
+            medium_url: joinUrl(base, keys.medium),
+            thumb_url: joinUrl(base, keys.thumb),
+            r2_keys: keys,
+          })
+        } catch (err) {
+          failed += 1
+          const rawSymbol = rawItem && typeof rawItem === "object" ? rawItem.symbol || rawItem.gene_symbol || null : null
+          const rawSha = rawItem && typeof rawItem === "object" ? rawItem.asset_sha256 || rawItem.sha256 || null : null
+          results.push({
+            ok: false,
+            symbol: rawSymbol,
+            asset_sha256: rawSha,
+            error: String(err?.message || err || "Unknown ingest error"),
+          })
+        }
+      }
+
+      const statusCode = failed > 0 && processed === 0 ? 400 : 200
+      return done(
+        "admin_ingest",
+        json(
+          {
+            ok: failed === 0,
+            dry_run: dryRun,
+            processed,
+            failed,
+            total: itemsRaw.length,
+            results,
+          },
+          statusCode,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (["/api/iconoplasm/admin/publish", "/api/iconoplasm/admin/reject", "/api/iconoplasm/admin/rollback"].includes(path) && request.method === "POST") {
-      if (!(await isAdmin(request, env))) return done("admin_mut_403", json({ error: "Unauthorized" }, 403))
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_mut_403", json({ error: "Unauthorized" }, 403))
       let p
       try {
         p = await request.json()
