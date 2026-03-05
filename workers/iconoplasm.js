@@ -124,16 +124,6 @@ function joinUrl(base, key) {
   return `${b}/${k}`
 }
 
-// Iconoplasm convention: Weight (kg) == molecular weight (kDa).
-// `mass` is stored in daltons, so always convert Da -> kDa.
-function weightKgFromProteinMass(rawMass) {
-  const mass = Number(rawMass)
-  if (!Number.isFinite(mass) || mass <= 0) return null
-  const kda = mass / 1000
-  if (!Number.isFinite(kda) || kda <= 0) return null
-  return Math.round(kda * 10) / 10
-}
-
 function portraitBase(url, env) {
   if (typeof env.ICONOPLASM_PORTRAIT_BASE_URL === "string" && env.ICONOPLASM_PORTRAIT_BASE_URL.trim()) {
     return env.ICONOPLASM_PORTRAIT_BASE_URL.trim()

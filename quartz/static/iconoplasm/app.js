@@ -444,9 +444,10 @@
     if (g.chromosome) {
       sections.push({ label: "Chromosome", value: g.chromosome })
     }
+    var essence = g.essence && typeof g.essence === "object" ? g.essence : {}
     var weightKgRaw = null
-    if (g.essence && g.essence.weight_kg != null) {
-      weightKgRaw = Number(g.essence.weight_kg)
+    if (essence.weight_kg != null) {
+      weightKgRaw = Number(essence.weight_kg)
     } else if (g.weight_kg != null) {
       weightKgRaw = Number(g.weight_kg)
     }
@@ -455,6 +456,45 @@
         ? String(Math.round(weightKgRaw))
         : weightKgRaw.toFixed(1)
       sections.push({ label: "Weight (kg)", value: weightText + " kg" })
+    }
+
+    var heightCmRaw = Number(essence.height_cm)
+    if (Number.isFinite(heightCmRaw) && heightCmRaw > 0) {
+      sections.push({ label: "Height", value: String(Math.round(heightCmRaw)) + " cm" })
+    }
+    if (essence.sex) {
+      sections.push({ label: "Sex", value: String(essence.sex) })
+    }
+    var ageText = ""
+    if (essence.age) {
+      ageText = String(essence.age)
+    } else if (essence.age_years != null && Number.isFinite(Number(essence.age_years))) {
+      ageText = String(Math.round(Number(essence.age_years)))
+    }
+    if (ageText) {
+      sections.push({ label: "Age", value: ageText })
+    }
+    if (essence.faction) {
+      sections.push({ label: "Faction", value: String(essence.faction) })
+    }
+    if (essence.skin_hex || essence.skin_name) {
+      var skinBits = []
+      if (essence.skin_name) skinBits.push(String(essence.skin_name))
+      if (essence.skin_hex) skinBits.push("(" + String(essence.skin_hex) + ")")
+      sections.push({ label: "Skin", value: skinBits.join(" ") })
+    }
+    if (Array.isArray(essence.aesthetics) && essence.aesthetics.length) {
+      sections.push({ label: "Aesthetics", value: essence.aesthetics.map(String).join(", ") })
+    }
+    if (essence.family_surname) {
+      var familyText = String(essence.family_surname)
+      if (Number.isFinite(Number(essence.family_members)) && Number(essence.family_members) > 0) {
+        familyText += " (" + String(Math.round(Number(essence.family_members))) + " members)"
+      }
+      sections.push({ label: "Family", value: familyText })
+    }
+    if (essence.family_feature) {
+      sections.push({ label: "Family Feature", value: String(essence.family_feature) })
     }
 
     if (sections.length) {
