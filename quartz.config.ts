@@ -97,7 +97,7 @@ const config: QuartzConfig = {
       Plugin.ComponentResources(),
       Plugin.ContentPage(),
       Plugin.FolderPage({
-        excludeFolders: ["apps/geneguessr" as SimpleSlug],
+        excludeFolders: ["apps/geneguessr" as SimpleSlug, "apps/iconoplasm" as SimpleSlug],
       }),
       Plugin.TagPage(),
       Plugin.ContentIndex({

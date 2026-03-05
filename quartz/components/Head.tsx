@@ -154,8 +154,11 @@ export default (() => {
             fileData.frontmatter?.title === "Scriptotic — YouTube Transcript Generator"
           const isGeneguessr =
             normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr"
+          const isIconoplasm =
+            normalizedSlug === "apps/iconoplasm" ||
+            fileData.frontmatter?.title === "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
 
-          if (!isScriptotic && !isGeneguessr) {
+          if (!isScriptotic && !isGeneguessr && !isIconoplasm) {
             return null
           }
 
@@ -197,6 +200,18 @@ export default (() => {
                   <script
                     defer
                     src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}
+                  ></script>
+                </>
+              )}
+              {isIconoplasm && (
+                <>
+                  <link
+                    rel="stylesheet"
+                    href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
+                  />
+                  <script
+                    defer
+                    src={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}
                   ></script>
                 </>
               )}

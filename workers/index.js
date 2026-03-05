@@ -49,6 +49,7 @@ const DAILY_BOOTSTRAP_CACHE_PREFIX = "daily_bootstrap:"
 const DAILY_BOOTSTRAP_CACHE_TTL = 86400 // 24 hours
 
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
+const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
@@ -502,9 +503,132 @@ export default {
         return handleRenderPage(request, env)
       }
 
-      // Iconoplasm subdomain - delegate to iconoplasm handler
+      // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
+      // delegate API/portrait/admin to the iconoplasm handler.
       if (isIconoplasmRequest(url.hostname)) {
-        return handleIconoplasmRequest(request, env, ctx)
+        const isApiOrWorker =
+          url.pathname.startsWith("/api/") ||
+          url.pathname.startsWith("/portraits/") ||
+          url.pathname === "/admin/iconoplasm" ||
+          url.pathname === "/health"
+
+        if (isApiOrWorker) {
+          return handleIconoplasmRequest(request, env, ctx)
+        }
+
+        // Normalize stale paths that might leak from the content structure
+        if (
+          (request.method === "GET" || request.method === "HEAD") &&
+          (url.pathname === "/apps/iconoplasm" ||
+           url.pathname === "/apps/iconoplasm/" ||
+           url.pathname === "/apps/iconoplasm/index" ||
+           url.pathname === "/apps/iconoplasm/index/")
+        ) {
+          return Response.redirect(`https://${ICONOPLASM_HOST}/`, 301)
+        }
+
+        // All non-API routes serve the same Quartz HTML shell (client-side app handles routing).
+        // For root, /gene/*, or any other path, fetch the iconoplasm content page from Pages.
+        const targetPath = "/apps/iconoplasm/index"
+        const targetUrl = buildStaticSiteUrl(url, targetPath)
+
+        const response = await fetch(targetUrl.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+        })
+
+        // Versioned iconoplasm static assets: extend cache aggressively
+        if (
+          url.pathname.startsWith("/static/iconoplasm/") &&
+          url.searchParams.has("v") &&
+          (request.method === "GET" || request.method === "HEAD")
+        ) {
+          const headers = new Headers(response.headers)
+          headers.set("Cache-Control", "public, max-age=31536000, immutable")
+          return new Response(request.method === "HEAD" ? null : response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          })
+        }
+
+        // For other static assets under /static/* or CSS, proxy directly from Pages
+        if (
+          (url.pathname.startsWith("/static/") || url.pathname === "/index.css") &&
+          !url.pathname.startsWith("/static/iconoplasm/")
+        ) {
+          const assetUrl = buildStaticSiteUrl(url)
+          const assetResp = await fetch(assetUrl.toString(), {
+            method: request.method,
+            headers: request.headers,
+          })
+          return new Response(request.method === "HEAD" ? null : assetResp.body, {
+            status: assetResp.status,
+            statusText: assetResp.statusText,
+            headers: assetResp.headers,
+          })
+        }
+
+        // For HTML responses, rewrite links for subdomain context
+        if (response.headers.get("content-type")?.includes("text/html")) {
+          let html = await response.text()
+          if (isDraftHtmlDocument(html) && !(await isAdmin(request, env))) {
+            return draftNotFoundResponse(request.method)
+          }
+          // Rewrite site-brand/home links to main site
+          html = html.replace(
+            /<a\b[^>]*\bclass=["'][^"']*\bsite-brand\b[^"']*["'][^>]*>/gi,
+            (tag) => {
+              if (!/\bhref\s*=/i.test(tag)) return tag
+              return tag.replace(/\bhref=["'][^"']*["']/i, 'href="https://brinedew.bio/"')
+            },
+          )
+          // Rewrite internal navigation links to main domain
+          html = html.replace(
+            /href=["']\/(tags|posts|wiki|About|index)([^"']*)["']/g,
+            'href="https://brinedew.bio/$1$2"',
+          )
+          // Update OG metadata for subdomain
+          if (url.pathname === "/" || url.pathname === "") {
+            html = html.replace(
+              /<meta\b[^>]*\b(?:property|name)=["']og:url["'][^>]*>/gi,
+              `<meta property="og:url" content="https://${ICONOPLASM_HOST}/">`,
+            )
+            html = html.replace(
+              /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/gi,
+              `<meta name="twitter:url" content="https://${ICONOPLASM_HOST}/">`,
+            )
+          }
+          html = html.replace(
+            /<meta\b[^>]*\b(?:property|name)=["']twitter:domain["'][^>]*>/gi,
+            `<meta name="twitter:domain" content="${ICONOPLASM_HOST}">`,
+          )
+          // Normalize KaTeX CDN URLs to self-hosted assets
+          html = html.replace(
+            /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/katex\.min\.css/gi,
+            `/static/vendor/katex/katex.min.css?v=${KATEX_VENDOR_VERSION}`,
+          )
+          html = html.replace(
+            /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/contrib\/copy-tex\.min\.js/gi,
+            `/static/vendor/katex/contrib/copy-tex.min.js?v=${KATEX_VENDOR_VERSION}`,
+          )
+          html = html.replace(
+            /<link\b[^>]*rel=["']preconnect["'][^>]*href=["']https:\/\/cdn\.jsdelivr\.net["'][^>]*>/gi,
+            "",
+          )
+          html = html.replace(
+            /<script\b[^>]*src=["']https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js[^"']*["'][^>]*>\s*<\/script>/gi,
+            "",
+          )
+          return new Response(html, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          })
+        }
+
+        return response
       }
 
       // Route all non-API apex requests through the worker so we can enforce
