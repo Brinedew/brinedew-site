@@ -1694,6 +1694,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let scheduleData = {};
     const recapImageExistsByDay = Object.create(null);
     let recapStatusRefreshInFlight = null;
+    const recapStatusQueuedDays = new Set();
     const DISCORD_IMAGE_UPLOAD_DAYS = 365;
     const DEFAULT_SCHEDULE_FUTURE_DAYS = 120;
     let recapUploadRunning = false;
@@ -3779,7 +3780,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         new Set(
           (Array.isArray(visibleDays) ? visibleDays : [])
             .map((day) => String(day || '').trim())
-            .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day))
+            .filter((day) => /^\\d{4}-\\d{2}-\\d{2}$/.test(day))
             .filter((day) => !!scheduleData[day]?.uniprot)
         )
       );
@@ -3792,31 +3793,38 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
 
       if (recapStatusRefreshInFlight) {
+        daysToFetch.forEach((day) => recapStatusQueuedDays.add(day));
         return recapStatusRefreshInFlight;
       }
 
       recapStatusRefreshInFlight = (async () => {
-        const response = await fetch(
-          API_BASE + '/api/admin/discord-recap-images?days=' + encodeURIComponent(daysToFetch.join(',')),
-          { credentials: 'include' }
-        );
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload?.error || 'Failed to load recap image statuses');
-        }
-
-        const byDay = payload?.days || {};
-        let changed = false;
-        daysToFetch.forEach((day) => {
-          const exists = !!byDay?.[day]?.exists;
-          if (recapImageExistsByDay[day] !== exists) {
-            recapImageExistsByDay[day] = exists;
-            changed = true;
+        let pendingDays = Array.from(new Set(daysToFetch));
+        while (pendingDays.length > 0) {
+          const response = await fetch(
+            API_BASE + '/api/admin/discord-recap-images?days=' + encodeURIComponent(pendingDays.join(',')),
+            { credentials: 'include' }
+          );
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload?.error || 'Failed to load recap image statuses');
           }
-        });
 
-        if (changed) {
-          renderCalendar(currentDate);
+          const byDay = payload?.days || {};
+          let changed = false;
+          pendingDays.forEach((day) => {
+            const exists = !!byDay?.[day]?.exists;
+            if (recapImageExistsByDay[day] !== exists) {
+              recapImageExistsByDay[day] = exists;
+              changed = true;
+            }
+          });
+
+          if (changed) {
+            renderCalendar(currentDate);
+          }
+
+          pendingDays = Array.from(recapStatusQueuedDays);
+          recapStatusQueuedDays.clear();
         }
       })()
         .catch((err) => {
@@ -3994,16 +4002,18 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     async function uploadOverrideDayImage(day) {
       if (!day) return;
 
-      // If another upload is running (for example yearly bulk), wait briefly so
-      // override-driven uploads still happen automatically instead of being dropped.
-      let waited = 0;
-      while (recapUploadRunning && waited < 120) {
+      // Wait for any active upload to finish, then run this override refresh.
+      // This guarantees override-driven image updates are never dropped.
+      let announcedWait = false;
+      while (recapUploadRunning) {
+        if (!announcedWait) {
+          setRecapImageMessage(
+            'Override saved. Waiting for the current upload to finish before refreshing ' + day + '...',
+            'info'
+          );
+          announcedWait = true;
+        }
         await sleep(250);
-        waited += 1;
-      }
-      if (recapUploadRunning) {
-        setRecapImageMessage('Override saved, but image refresh is queued behind an active upload.', 'info');
-        return;
       }
 
       setRecapButtonsBusy(true);
