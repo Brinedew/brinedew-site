@@ -329,34 +329,24 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <div class="step">
           <div class="step-num once">1</div>
           <div class="step-body">
-            <h3>Pick your portraits locally <span class="freq freq-once">you already did this</span></h3>
-            <p>In the NiceGUI dashboard, you browse generated images, vote on them, and click "Set as Canon" to pick the official portrait for each gene. That part happens on your computer.</p>
+            <h3>Portraits generate overnight <span class="freq freq-once">automatic</span></h3>
+            <p>ComfyUI generates portraits while you sleep. In the NiceGUI dashboard, you browse, vote, and click "Set as Canon" to pick the best one for each gene.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num once">2</div>
           <div class="step-body">
-            <h3>Upload to the website <span class="freq freq-once">once per portrait</span></h3>
-            <p>The publish script reads your canonical picks from the local database and pushes them here.
-               Once uploaded, they show up in the table below as "draft" -- visible to you but not live on gene pages yet.</p>
+            <h3>Run the publish script <span class="freq freq-once">once per batch</span></h3>
+            <p>One command on your machine reads all your canonical picks and pushes them to the website.
+               They go live immediately -- no need to approve anything here afterwards.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num repeat">3</div>
           <div class="step-body">
-            <h3>Make them live <span class="freq freq-every">this page</span></h3>
-            <p>Find the portrait in the table below and click <strong>Publish</strong>.
-               That's it -- the portrait now shows up on the gene's page
-               and in the browser extension.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num repeat">4</div>
-          <div class="step-body">
-            <h3>Change your mind? <span class="freq freq-every">whenever</span></h3>
-            <p><strong>Rollback</strong> swaps back to the previous portrait.
-               <strong>Reject</strong> takes a portrait out of the queue entirely.
-               Neither deletes the image file -- you can always re-upload later.</p>
+            <h3>Check what went live <span class="freq freq-every">this page</span></h3>
+            <p>The table below shows everything that's currently live. Scroll through, open any preview.
+               If something looks wrong -- bad image, wrong gene -- click <strong>Rollback</strong> to revert it.</p>
           </div>
         </div>
       </div>
@@ -364,14 +354,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
     <!-- Portraits table -->
     <section class="section">
-      <h2>Uploaded portraits</h2>
-      <p class="desc">These are the portraits pushed from your local machine. Click a button to make one live or take it down.</p>
+      <h2>Portraits on the website</h2>
+      <p class="desc">Everything currently live. If something looks wrong, roll it back.</p>
       <div class="row">
         <div class="field">
           <span class="field-label">Show</span>
           <select id="assets-status">
-            <option value="draft">Waiting to publish (drafts)</option>
             <option value="approved">Currently live</option>
+            <option value="draft">Waiting to publish (drafts)</option>
             <option value="rejected">Rejected</option>
             <option value="all">Everything</option>
           </select>
@@ -381,6 +371,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <input id="assets-search" type="text" placeholder="e.g. TP53" class="wide" />
         </div>
         <button class="btn-primary" id="assets-refresh">Refresh</button>
+        <button id="publish-all-btn" style="display:none">Publish all drafts</button>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:8px" id="assets-meta">Loading...</div>
       <div class="table-wrap">
@@ -472,6 +463,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         status: document.getElementById('assets-status'),
         search: document.getElementById('assets-search'),
         refresh: document.getElementById('assets-refresh'),
+        publishAll: document.getElementById('publish-all-btn'),
         meta: document.getElementById('assets-meta'),
         body: document.getElementById('assets-body'),
         reason: document.getElementById('action-reason'),
@@ -564,9 +556,17 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function renderAssets() {
         var assets = filteredAssets();
+        var isDraftView = String(els.status.value || '').toLowerCase() === 'draft';
+        els.publishAll.style.display = isDraftView && state.assets.length > 0 ? '' : 'none';
         if (assets.length === 0) {
+          var emptyMsgs = {
+            approved: 'Nothing live yet. Run the publish script on your machine to push your canonical picks.',
+            draft: 'No drafts. Run the publish script -- portraits go live automatically.',
+            rejected: 'No rejected portraits.',
+            all: 'No portraits uploaded yet.'
+          };
           var msg = state.assets.length === 0
-            ? 'No portraits uploaded yet. Run the publish script on your machine to push your canonical picks here.'
+            ? (emptyMsgs[els.status.value] || 'Nothing here.')
             : 'No portraits match your filter.';
           els.body.innerHTML = '<tr><td colspan="5" class="empty-state"><p>' + esc(msg) + '</p></td></tr>';
           return;
@@ -601,7 +601,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var statusVal = encodeURIComponent(String(els.status.value || 'draft').toLowerCase());
           var data = await apiJson(API_BASE + '/assets?status=' + statusVal + '&limit=250', { method: 'GET' });
           state.assets = Array.isArray(data.assets) ? data.assets : [];
-          var labels = { draft: 'drafts', approved: 'live portraits', rejected: 'rejected', all: 'portraits total' };
+          var labels = { draft: 'drafts (publish script should have already made these live -- run it again or use "Publish all" below)', approved: 'live portraits', rejected: 'rejected', all: 'portraits total' };
           els.meta.textContent = state.assets.length + ' ' + (labels[els.status.value] || 'portraits') + '.';
           renderAssets();
         } catch (err) {
@@ -721,6 +721,31 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         finally { els.manualRollback.disabled = false; }
       });
 
+      // Publish all drafts
+      els.publishAll.addEventListener('click', async function () {
+        var count = state.assets.length;
+        if (!confirm('Publish all ' + count + ' drafts? They will all go live immediately.')) return;
+        try {
+          els.publishAll.disabled = true;
+          els.publishAll.textContent = 'Publishing...';
+          var results = [];
+          for (var i = 0; i < state.assets.length; i += 1) {
+            var a = state.assets[i];
+            try {
+              await runMutation('/publish', { symbol: a.gene_symbol, asset_sha256: a.asset_sha256 });
+              results.push(a.gene_symbol + ': ok');
+            } catch (e) {
+              results.push(a.gene_symbol + ': ERROR ' + e.message);
+            }
+          }
+          showResult(els.actionLog, results.join('\\n'));
+          await refreshAssets();
+        } finally {
+          els.publishAll.disabled = false;
+          els.publishAll.textContent = 'Publish all drafts';
+        }
+      });
+
       // Ingest
       els.ingestRun.addEventListener('click', runIngest);
       els.ingestPayload.value = JSON.stringify({
@@ -740,7 +765,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       // Events
       els.search.addEventListener('input', renderAssets);
       els.status.addEventListener('change', refreshAssets);
-      refreshAssets();
+      refreshAssets(); // defaults to 'approved' view
     })();
   </script>
 </body>
