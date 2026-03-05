@@ -731,6 +731,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     .calendar-day.is-history {
       opacity: 0.7;
     }
+    .calendar-day.missing-recap-image {
+      border-color: #ef4444;
+      box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.75);
+    }
+    .calendar-day.missing-recap-image.selected {
+      box-shadow: 0 0 0 2px #38bdf8, inset 0 0 0 1px rgba(239, 68, 68, 0.8);
+    }
     
     .day-number {
       font-weight: 600;
@@ -1435,6 +1442,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           </div>
         </form>
         <div id="override-message"></div>
+        <div id="discord-image-warning"></div>
         <div class="form-actions" style="margin-top: 0.5rem;">
           <button type="button" id="btn-upload-day-image">Upload Selected Day Image</button>
           <button type="button" id="btn-upload-year-images">Upload Next 365 Days</button>
@@ -1684,6 +1692,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     initializePreview();
 
     let scheduleData = {};
+    const recapImageExistsByDay = Object.create(null);
+    let recapStatusRefreshInFlight = null;
     const DISCORD_IMAGE_UPLOAD_DAYS = 365;
     const DEFAULT_SCHEDULE_FUTURE_DAYS = 120;
     let recapUploadRunning = false;
@@ -1696,6 +1706,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     function setupSchedule() {
       // No controls needed anymore, auto-load on init
       loadSchedule({ futureDays: 120 });
+      refreshRecapWarning().catch((err) => {
+        console.error('Failed initial recap warning refresh:', err);
+      });
     }
 
     function applyLocalOverride(date, uniprotId, symbolHint) {
@@ -2540,11 +2553,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         document.getElementById('override-uniprot').value = '';
         overrideSelectedSuggestionUniprot = null;
         overrideSelectedSuggestionGene = null;
+        markRecapImageUnknown(date);
         // Refresh expensive schedule/status queries in background so override is instant in UI.
         queueBackgroundScheduleRefresh({ date });
-        // Recap image upload is useful but should not block the admin interaction flow.
-        uploadSelectedDayImage().catch((err) => {
-          console.error('Background recap image upload failed after override:', err);
+        // Keep recap image in sync with override automatically.
+        uploadOverrideDayImage(date).catch((err) => {
+          console.error('Background recap image upload failed after override update:', err);
         });
       } catch (err) {
         console.error('Error setting override:', err);
@@ -3711,6 +3725,139 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       el.innerHTML = '<p class="helper-text">' + safe + '</p>';
     }
 
+    function setRecapWarningMessage(message, type) {
+      const el = document.getElementById('discord-image-warning');
+      if (!el) return;
+      const safe = escapeHtml(String(message || ''));
+      if (!safe) {
+        el.innerHTML = '';
+        return;
+      }
+      if (type === 'error') {
+        el.innerHTML = '<div class="message error">' + safe + '</div>';
+        return;
+      }
+      if (type === 'success') {
+        el.innerHTML = '<div class="message success">' + safe + '</div>';
+        return;
+      }
+      el.innerHTML = '<p class="helper-text">' + safe + '</p>';
+    }
+
+    function getUtcIsoDay(offsetDays) {
+      const now = new Date();
+      now.setUTCDate(now.getUTCDate() + Number(offsetDays || 0));
+      return now.toISOString().slice(0, 10);
+    }
+
+    async function fetchRecapImageStatus(day) {
+      const response = await fetch(API_BASE + '/api/admin/discord-recap-image?day=' + encodeURIComponent(day), {
+        credentials: 'include'
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to check recap image status for ' + day);
+      }
+      return payload;
+    }
+
+    function setRecapImageKnownState(day, exists) {
+      if (!day) return;
+      recapImageExistsByDay[day] = !!exists;
+      renderCalendar(currentDate);
+    }
+
+    function markRecapImageUnknown(day) {
+      if (!day) return;
+      delete recapImageExistsByDay[day];
+      renderCalendar(currentDate);
+    }
+
+    async function refreshRecapStatusesForVisibleDays(visibleDays, options = {}) {
+      const force = options.force === true;
+      const normalizedDays = Array.from(
+        new Set(
+          (Array.isArray(visibleDays) ? visibleDays : [])
+            .map((day) => String(day || '').trim())
+            .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day))
+            .filter((day) => !!scheduleData[day]?.uniprot)
+        )
+      );
+      const daysToFetch = force
+        ? normalizedDays
+        : normalizedDays.filter((day) => recapImageExistsByDay[day] === undefined);
+
+      if (daysToFetch.length === 0) {
+        return;
+      }
+
+      if (recapStatusRefreshInFlight) {
+        return recapStatusRefreshInFlight;
+      }
+
+      recapStatusRefreshInFlight = (async () => {
+        const response = await fetch(
+          API_BASE + '/api/admin/discord-recap-images?days=' + encodeURIComponent(daysToFetch.join(',')),
+          { credentials: 'include' }
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Failed to load recap image statuses');
+        }
+
+        const byDay = payload?.days || {};
+        let changed = false;
+        daysToFetch.forEach((day) => {
+          const exists = !!byDay?.[day]?.exists;
+          if (recapImageExistsByDay[day] !== exists) {
+            recapImageExistsByDay[day] = exists;
+            changed = true;
+          }
+        });
+
+        if (changed) {
+          renderCalendar(currentDate);
+        }
+      })()
+        .catch((err) => {
+          console.error('Failed to refresh recap image status map:', err);
+        })
+        .finally(() => {
+          recapStatusRefreshInFlight = null;
+        });
+
+      return recapStatusRefreshInFlight;
+    }
+
+    async function refreshRecapWarning() {
+      const yesterday = getUtcIsoDay(-1);
+      const today = getUtcIsoDay(0);
+      try {
+        const [yesterdayStatus, todayStatus] = await Promise.all([
+          fetchRecapImageStatus(yesterday),
+          fetchRecapImageStatus(today)
+        ]);
+        if (!yesterdayStatus?.exists) {
+          setRecapWarningMessage(
+            'Warning: Missing recap image for ' + yesterday + '. The 00:03 UTC recap post for that day will fail until you upload it.',
+            'error'
+          );
+          return;
+        }
+        if (!todayStatus?.exists) {
+          setRecapWarningMessage(
+            'Heads up: Missing recap image for ' + today + '. Tomorrow\\'s 00:03 UTC recap post may fail if this day has puzzle data.',
+            'info'
+          );
+          return;
+        }
+        setRecapWarningMessage('Recap image checks look good for yesterday and today (UTC).', 'success');
+      } catch (err) {
+        console.error('Failed to refresh recap warning:', err);
+        setRecapWarningMessage('Could not verify recap-image coverage right now.', 'error');
+      }
+    }
+
     function sleep(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
     }
@@ -3811,9 +3958,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       await sleep(800); // Let Mol* settle before pixel capture.
       const base64 = await capturePreviewImageBase64();
       const uploaded = await uploadRecapImage(day, base64);
+      recapImageExistsByDay[day] = true;
+      renderCalendar(currentDate);
       if (!opts.silent) {
         setRecapImageMessage('Uploaded recap image for ' + day + ' (' + row.symbol + ')', 'success');
       }
+      refreshRecapWarning().catch((err) => {
+        console.error('Failed to refresh recap warning after upload:', err);
+      });
       return { uploaded, base64, uniprot: row.uniprot, symbol: row.symbol || row.uniprot };
     }
 
@@ -3832,7 +3984,39 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         await renderAndUploadDayImage(day);
       } catch (err) {
         console.error('Failed to upload selected-day recap image:', err);
+        setRecapImageKnownState(day, false);
         setRecapImageMessage(err?.message || 'Failed to upload selected-day image.', 'error');
+      } finally {
+        setRecapButtonsBusy(false);
+      }
+    }
+
+    async function uploadOverrideDayImage(day) {
+      if (!day) return;
+
+      // If another upload is running (for example yearly bulk), wait briefly so
+      // override-driven uploads still happen automatically instead of being dropped.
+      let waited = 0;
+      while (recapUploadRunning && waited < 120) {
+        await sleep(250);
+        waited += 1;
+      }
+      if (recapUploadRunning) {
+        setRecapImageMessage('Override saved, but image refresh is queued behind an active upload.', 'info');
+        return;
+      }
+
+      setRecapButtonsBusy(true);
+      try {
+        await renderAndUploadDayImage(day, { silent: true });
+        setRecapImageMessage('Override saved and recap image refreshed for ' + day + '.', 'success');
+      } catch (err) {
+        console.error('Failed override recap-image refresh for ' + day + ':', err);
+        setRecapImageKnownState(day, false);
+        setRecapImageMessage(
+          'Override saved, but recap image refresh failed for ' + day + '. Use "Upload Selected Day Image".',
+          'error'
+        );
       } finally {
         setRecapButtonsBusy(false);
       }
@@ -3888,6 +4072,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               imageByUniprot.set(row.uniprot, base64);
             } else {
               await uploadRecapImage(day, base64);
+              recapImageExistsByDay[day] = true;
             }
             uploaded += 1;
           } catch (err) {
@@ -3901,6 +4086,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           }
           await sleep(250);
         }
+
+        renderCalendar(currentDate);
+        refreshRecapWarning().catch((err) => {
+          console.error('Failed to refresh recap warning after yearly upload:', err);
+        });
 
         if (failed > 0) {
           setRecapImageMessage(
@@ -3936,10 +4126,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
         showMessage('override-message', data.message || 'Override removed', 'success');
         clearLocalOverride(date);
+        markRecapImageUnknown(date);
         if (selectedDate === date) {
           selectDate(date);
         }
         queueBackgroundScheduleRefresh({ date });
+        uploadOverrideDayImage(date).catch((err) => {
+          console.error('Background recap image upload failed after override removal:', err);
+        });
       } catch (err) {
         console.error('Error deleting override:', err);
         showMessage('override-message', err.message || 'Failed to delete override', 'error');
@@ -4001,9 +4195,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       
       // Days
       const todayStr = new Date().toISOString().split('T')[0];
+      const visibleDays = [];
       
       for (let i = 1; i <= daysInMonth; i++) {
         const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0');
+        visibleDays.push(dateStr);
         const el = document.createElement('div');
         el.className = 'calendar-day';
         
@@ -4016,6 +4212,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           if (data.type === 'history') el.classList.add('is-history');
           if (data.source === 'override') el.classList.add('is-override');
           else if (data.source === 'computed') el.classList.add('is-computed');
+          if (data.uniprot && recapImageExistsByDay[dateStr] === false) {
+            el.classList.add('missing-recap-image');
+          }
         }
         
         let content = '<div class="day-number">' + i + '</div>';
@@ -4038,6 +4237,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         el.addEventListener('click', () => selectDate(dateStr));
         grid.appendChild(el);
       }
+
+      refreshRecapStatusesForVisibleDays(visibleDays).catch((err) => {
+        console.error('Failed to refresh visible recap image statuses:', err);
+      });
     }
 
       function selectDate(date) {

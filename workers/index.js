@@ -179,6 +179,7 @@ import {
   handleDeleteOverride,
   handleAdminDiscordRecapImageUpload,
   handleAdminDiscordRecapImageStatus,
+  handleAdminDiscordRecapImageStatuses,
   handleGraphicsSettings,
   DEFAULT_GRAPHICS_SETTINGS,
   normalizeGraphicsSettings,
@@ -1041,6 +1042,14 @@ export default {
 
       if (url.pathname === "/api/admin/discord-recap-image" && request.method === "GET") {
         const response = await handleAdminDiscordRecapImageStatus(request, env)
+        return new Response(response.body, {
+          status: response.status,
+          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+        })
+      }
+
+      if (url.pathname === "/api/admin/discord-recap-images" && request.method === "GET") {
+        const response = await handleAdminDiscordRecapImageStatuses(request, env)
         return new Response(response.body, {
           status: response.status,
           headers: { ...Object.fromEntries(response.headers), ...corsHeaders },

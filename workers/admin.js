@@ -1457,6 +1457,65 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
 }
 
 /**
+ * GET /api/admin/discord-recap-images?days=YYYY-MM-DD,YYYY-MM-DD,...
+ * Returns cache status for multiple day-specific recap images.
+ */
+export async function handleAdminDiscordRecapImageStatuses(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: "Unauthorized" }, { status: 403 })
+  }
+  if (!env.STRUCTURES_BUCKET) {
+    return Response.json({ error: "STRUCTURES_BUCKET binding is not configured" }, { status: 500 })
+  }
+
+  const url = new URL(request.url)
+  const rawDays = String(url.searchParams.get("days") || "")
+  const uniqueDays = Array.from(
+    new Set(
+      rawDays
+        .split(",")
+        .map((day) => String(day || "").trim())
+        .filter((day) => isValidIsoDay(day)),
+    ),
+  ).slice(0, 370)
+
+  if (uniqueDays.length === 0) {
+    return Response.json(
+      { error: "Provide at least one valid day in days=YYYY-MM-DD,..." },
+      { status: 400 },
+    )
+  }
+
+  const statuses = Object.create(null)
+  await Promise.all(
+    uniqueDays.map(async (day) => {
+      const key = buildDiscordRecapImageKey(day)
+      const head = await env.STRUCTURES_BUCKET.head(key)
+      statuses[day] = head
+        ? {
+            day,
+            key,
+            exists: true,
+            size: head.size || null,
+            uploadedAt: head.uploaded ? head.uploaded.toISOString() : null,
+            metadata: head.customMetadata || {},
+          }
+        : {
+            day,
+            key,
+            exists: false,
+          }
+    }),
+  )
+
+  return Response.json({
+    ok: true,
+    count: uniqueDays.length,
+    days: statuses,
+  })
+}
+
+/**
  * GET /api/admin/similarity?gene1=PKP1&gene2=PKP2
  * Compute cosine similarity between two genes' embeddings.
  */
