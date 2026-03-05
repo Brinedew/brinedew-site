@@ -527,36 +527,38 @@ export default {
           return Response.redirect(`https://${ICONOPLASM_HOST}/`, 301)
         }
 
-        // All non-API routes serve the same Quartz HTML shell (client-side app handles routing).
-        // For root, /gene/*, or any other path, fetch the iconoplasm content page from Pages.
-        const targetPath = "/apps/iconoplasm/index"
-        const targetUrl = buildStaticSiteUrl(url, targetPath)
-
-        const response = await fetch(targetUrl.toString(), {
-          method: request.method,
-          headers: request.headers,
-          body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
-        })
-
         // Versioned iconoplasm static assets: extend cache aggressively
         if (
           url.pathname.startsWith("/static/iconoplasm/") &&
           url.searchParams.has("v") &&
           (request.method === "GET" || request.method === "HEAD")
         ) {
-          const headers = new Headers(response.headers)
+          const assetUrl = buildStaticSiteUrl(url)
+          const assetResp = await fetch(assetUrl.toString(), {
+            method: request.method,
+            headers: request.headers,
+          })
+          const headers = new Headers(assetResp.headers)
           headers.set("Cache-Control", "public, max-age=31536000, immutable")
-          return new Response(request.method === "HEAD" ? null : response.body, {
-            status: response.status,
-            statusText: response.statusText,
+          return new Response(request.method === "HEAD" ? null : assetResp.body, {
+            status: assetResp.status,
+            statusText: assetResp.statusText,
             headers,
           })
         }
 
-        // For other static assets under /static/* or CSS, proxy directly from Pages
+        // For other static assets (CSS, JS, fonts, Quartz runtime files), proxy directly from Pages
         if (
-          (url.pathname.startsWith("/static/") || url.pathname === "/index.css") &&
-          !url.pathname.startsWith("/static/iconoplasm/")
+          url.pathname.startsWith("/static/") ||
+          url.pathname === "/index.css" ||
+          url.pathname.endsWith(".js") ||
+          url.pathname.endsWith(".json") ||
+          url.pathname.endsWith(".css") ||
+          url.pathname.endsWith(".woff2") ||
+          url.pathname.endsWith(".png") ||
+          url.pathname.endsWith(".svg") ||
+          url.pathname.endsWith(".ico") ||
+          url.pathname.endsWith(".xml")
         ) {
           const assetUrl = buildStaticSiteUrl(url)
           const assetResp = await fetch(assetUrl.toString(), {
@@ -569,6 +571,17 @@ export default {
             headers: assetResp.headers,
           })
         }
+
+        // All non-API, non-static routes serve the same Quartz HTML shell (client-side app handles routing).
+        // For root, /gene/*, or any other path, fetch the iconoplasm content page from Pages.
+        const targetPath = "/apps/iconoplasm/index"
+        const targetUrl = buildStaticSiteUrl(url, targetPath)
+
+        const response = await fetch(targetUrl.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+        })
 
         // For HTML responses, rewrite links for subdomain context
         if (response.headers.get("content-type")?.includes("text/html")) {

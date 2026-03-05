@@ -81,6 +81,10 @@ new_sqlite_classes = ["GameSession"]
 binding = "STRUCTURES_BUCKET"
 bucket_name = "geneguessr-structures"
 
+[[r2_buckets]]
+binding = "ICONOPLASM_PORTRAITS"
+bucket_name = "iconoplasm-portraits"
+
 # Daily cron jobs:
 # - 23:55 UTC pre-warm next day's target structure
 # - 00:03 UTC post Discord recap (image + text) directly from Worker
@@ -129,6 +133,10 @@ new_sqlite_classes = ["GameSession"]
 [[env.staging.r2_buckets]]
 binding = "STRUCTURES_BUCKET"
 bucket_name = "geneguessr-structures-staging"
+
+[[env.staging.r2_buckets]]
+binding = "ICONOPLASM_PORTRAITS"
+bucket_name = "iconoplasm-portraits-staging"
 
 [env.staging.triggers]
 crons = []
