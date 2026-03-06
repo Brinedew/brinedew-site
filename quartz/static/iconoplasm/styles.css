@@ -47,9 +47,16 @@
   margin: 0 auto 1.5rem;
 }
 
+.icono-search--toolbar {
+  max-width: none;
+  margin: 0;
+  flex: 1 1 30rem;
+}
+
 .icono-search input {
   width: 100%;
-  padding: 0.6rem 0.9rem;
+  min-height: 2.9rem;
+  padding: 0.72rem 0.95rem;
   font-family: inherit;
   font-size: 1rem;
   color: var(--dark);
@@ -134,12 +141,10 @@
 /* ───────── Gallery toolbar ───────── */
 .icono-gallery-toolbar {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin: 0 auto 1rem;
-  padding-bottom: 0.9rem;
-  border-bottom: 1px solid var(--ui-border);
+  margin: 0 auto 1.2rem;
 }
 
 .icono-gallery-intro {
@@ -171,7 +176,7 @@
 }
 
 .icono-gallery-order select {
-  min-height: 2.4rem;
+  min-height: 2.8rem;
   padding: 0.45rem 2rem 0.45rem 0.8rem;
   font: inherit;
   color: var(--dark);
@@ -190,7 +195,7 @@
   display: grid;
   overflow: hidden;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 18px;
+  gap: 16px;
 }
 
 .icono-grid--masonry > * {
@@ -328,9 +333,12 @@
 }
 
 .icono-gene-portrait-shell {
-  position: relative;
   width: min(240px, 100%);
   flex-shrink: 0;
+}
+
+.icono-gene-media-wrap {
+  position: relative;
 }
 
 .icono-gene-swatch {
@@ -354,11 +362,17 @@
   width: 100%;
   min-height: 0;
   padding: 0;
+  display: block;
   align-items: stretch;
   justify-content: stretch;
   background: color-mix(in srgb, var(--accent) 7%, white);
   cursor: zoom-in;
   appearance: none;
+}
+
+.icono-gene-media-link {
+  position: relative;
+  display: block;
 }
 
 .icono-gene-swatch img {
@@ -438,7 +452,7 @@
 }
 
 .icono-gene-portrait-footer {
-  margin-top: 0.65rem;
+  margin-top: 0.78rem;
   display: flex;
   justify-content: flex-start;
 }
@@ -447,39 +461,45 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.28rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--ui-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--light) 90%, var(--ui-bg));
-  box-shadow: 0 8px 22px rgba(45, 33, 20, 0.09);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .icono-vote-stats {
   font-family: var(--codeFont, monospace);
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   font-weight: 700;
-  min-width: 2.6rem;
+  min-width: 2.5rem;
   text-align: center;
   color: var(--dark);
+  padding: 0.46rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--accent) 10%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--light) 90%, white);
+  box-shadow: 0 8px 18px rgba(45, 33, 20, 0.08);
 }
 
 .icono-vote-btn {
-  border: 1px solid color-mix(in srgb, var(--ui-border) 80%, black 6%);
-  background: rgba(255,255,255,0.96);
+  border: 1px solid transparent;
+  background: var(--light);
   color: var(--darkgray);
   border-radius: 999px;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 2.3rem;
+  height: 2.3rem;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
+  box-shadow: 0 8px 18px rgba(45, 33, 20, 0.08);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .icono-vote-btn svg {
@@ -488,23 +508,29 @@
 }
 
 .icono-vote-btn--approve {
-  color: color-mix(in srgb, var(--accent) 88%, black 18%);
+  color: color-mix(in srgb, var(--accent) 88%, black 20%);
+  background: color-mix(in srgb, var(--accent) 14%, var(--light));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--ui-border));
 }
 
 .icono-vote-btn--reject {
-  color: color-mix(in srgb, var(--icono-reject) 88%, black 10%);
+  color: color-mix(in srgb, var(--icono-reject) 88%, black 12%);
+  background: color-mix(in srgb, var(--icono-reject) 12%, var(--light));
+  border-color: color-mix(in srgb, var(--icono-reject) 30%, var(--ui-border));
 }
 
 .icono-vote-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--light) 92%, white);
+  transform: translateY(-1px);
 }
 
 .icono-vote-btn--approve:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--light));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--ui-border));
 }
 
 .icono-vote-btn--reject:hover:not(:disabled) {
-  border-color: var(--icono-reject);
+  background: color-mix(in srgb, var(--icono-reject) 18%, var(--light));
+  border-color: color-mix(in srgb, var(--icono-reject) 48%, var(--ui-border));
 }
 
 .icono-vote-btn:disabled {
@@ -513,19 +539,17 @@
 }
 
 .icono-vote-btn.active {
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 10px 18px rgba(45, 33, 20, 0.12);
 }
 
 .icono-vote-btn--approve.active {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 62%, white);
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent) 24%, var(--light));
 }
 
 .icono-vote-btn--reject.active {
-  border-color: var(--icono-reject);
-  background: color-mix(in srgb, var(--icono-reject) 16%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icono-reject) 60%, white);
+  border-color: color-mix(in srgb, var(--icono-reject) 62%, var(--ui-border));
+  background: color-mix(in srgb, var(--icono-reject) 22%, var(--light));
 }
 
 .icono-links {
@@ -554,7 +578,7 @@
 }
 
 .icono-candidate-gallery-heading {
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.55rem;
 }
 
 .icono-candidate-gallery-heading h2 {
@@ -563,16 +587,13 @@
   color: var(--dark);
 }
 
-.icono-candidate-gallery-heading p {
-  margin: 0.2rem 0 0;
-  color: var(--secondary, var(--darkgray));
-  font-size: 0.92rem;
-}
-
-.icono-candidate-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.9rem;
+.icono-candidate-strip {
+  display: flex;
+  gap: 0.8rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0 0.6rem;
+  scrollbar-width: thin;
 }
 
 .icono-candidate-card {
@@ -583,14 +604,16 @@
   text-align: left;
   cursor: zoom-in;
   color: inherit;
+  text-decoration: none;
+  flex: 0 0 clamp(96px, 15vw, 132px);
 }
 
 .icono-candidate-media {
   display: block;
   overflow: hidden;
-  border-radius: 16px;
-  border: 1px solid var(--ui-border);
-  box-shadow: 0 10px 26px rgba(45, 33, 20, 0.08);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--accent) 10%);
+  box-shadow: 0 10px 24px rgba(45, 33, 20, 0.08);
   background: var(--ui-bg);
 }
 
@@ -602,86 +625,47 @@
 }
 
 .icono-candidate-card.is-current .icono-candidate-media {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--ui-border));
-  box-shadow: 0 12px 30px rgba(45, 33, 20, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--ui-border));
+  box-shadow: 0 12px 24px rgba(45, 33, 20, 0.12);
 }
 
 .icono-candidate-meta {
   display: block;
-  margin-top: 0.45rem;
+  margin-top: 0.35rem;
   color: var(--secondary, var(--darkgray));
   font-family: var(--codeFont, monospace);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
-.icono-viewer-open {
-  overflow: hidden;
+.icono-load-sentinel {
+  height: 1px;
 }
 
-.icono-viewer {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.16s ease;
+.pswp {
+  --pswp-bg: rgba(15, 11, 8, 0.94);
 }
 
-.icono-viewer.is-open {
-  opacity: 1;
-  pointer-events: auto;
+.pswp__bg {
+  background: var(--pswp-bg) !important;
 }
 
-.icono-viewer-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(13, 10, 7, 0.72);
-  backdrop-filter: blur(12px);
-}
-
-.icono-viewer-figure {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  justify-content: center;
-  align-items: center;
-  width: min(92vw, 1100px);
-  height: 100%;
-  margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-.icono-viewer-image {
-  max-width: 100%;
-  max-height: calc(100vh - 7rem);
-  display: block;
-  margin: 0;
+.pswp__img {
   border-radius: 18px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.32);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.28);
 }
 
-.icono-viewer-caption {
+.pswp__counter {
   font-family: var(--codeFont, monospace);
-  font-size: 0.85rem;
-  color: rgba(255,255,255,0.88);
+  font-size: 0.8rem;
 }
 
-.icono-viewer-close {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 2;
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 1px solid rgba(255,255,255,0.24);
+.pswp__button {
+  opacity: 0.9;
+}
+
+.pswp__button--close {
   border-radius: 999px;
-  background: rgba(26, 22, 18, 0.6);
-  color: #fff;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
+  background: rgba(33, 27, 22, 0.68);
 }
 
 html[saved-theme="dark"] .icono-card-badge,
@@ -692,22 +676,36 @@ html[saved-theme="dark"] .icono-gene-symbol-pill {
 }
 
 html[saved-theme="dark"] .icono-vote-box {
-  border-color: rgba(255,255,255,0.14);
-  background: rgba(22, 19, 16, 0.9);
-  box-shadow: 0 10px 28px rgba(0,0,0,0.24);
+  background: transparent;
+  box-shadow: none;
 }
 
 html[saved-theme="dark"] .icono-vote-stats {
   color: rgba(255,255,255,0.94);
+  background: rgba(33, 27, 22, 0.92);
+  border-color: rgba(255,255,255,0.16);
 }
 
 html[saved-theme="dark"] .icono-vote-btn {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.12);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.22);
 }
 
-html[saved-theme="dark"] .icono-vote-btn:hover:not(:disabled) {
-  background: rgba(255,255,255,0.14);
+html[saved-theme="dark"] .icono-vote-btn--approve {
+  background: color-mix(in srgb, var(--accent) 18%, rgba(17, 14, 11, 0.96));
+  border-color: color-mix(in srgb, var(--accent) 42%, rgba(255,255,255,0.12));
+}
+
+html[saved-theme="dark"] .icono-vote-btn--reject {
+  background: color-mix(in srgb, var(--icono-reject) 16%, rgba(17, 14, 11, 0.96));
+  border-color: color-mix(in srgb, var(--icono-reject) 38%, rgba(255,255,255,0.12));
+}
+
+html[saved-theme="dark"] .icono-vote-btn--approve:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 26%, rgba(17, 14, 11, 0.98));
+}
+
+html[saved-theme="dark"] .icono-vote-btn--reject:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--icono-reject) 24%, rgba(17, 14, 11, 0.98));
 }
 
 /* ───────── Gene detail: metadata sections ───────── */
@@ -759,6 +757,10 @@ html[saved-theme="dark"] .icono-vote-btn:hover:not(:disabled) {
     flex-direction: column;
   }
 
+  .icono-search--toolbar {
+    flex-basis: auto;
+  }
+
   .icono-gallery-order {
     justify-content: space-between;
   }
@@ -779,7 +781,7 @@ html[saved-theme="dark"] .icono-vote-btn:hover:not(:disabled) {
 
   .icono-gene-portrait-shell {
     width: min(100%, 320px);
-    align-self: center;
+    align-self: flex-start;
   }
 
   .icono-gene-swatch--portrait {

@@ -207,6 +207,10 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
+                    href={joinSegments(root, "static", `iconoplasm/vendor/photoswipe.css?v=${CACHE_BUST}`)}
+                  />
+                  <link
+                    rel="stylesheet"
                     href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
                   />
                   <script

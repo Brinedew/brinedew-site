@@ -1,3 +1,4 @@
+import PhotoSwipeLightbox from "./vendor/photoswipe-lightbox.esm.js?v=20260306c"
 import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
 ;(function () {
@@ -6,15 +7,13 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   /* ─── Constants ─── */
   var ROOT_ID = "iconoplasm-root"
   var DEBOUNCE_MS = 200
-  var GALLERY_COUNT = 120
+  var GALLERY_PAGE_SIZE = 30
   var GALLERY_DEFAULT_ORDER = "votes"
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
     { value: "popularity", label: "Popularity" },
     { value: "newest", label: "Newest" },
-    { value: "oldest", label: "Oldest" },
-    { value: "name_asc", label: "A-Z" },
-    { value: "name_desc", label: "Z-A" },
+    { value: "random", label: "Random" },
   ]
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
@@ -28,7 +27,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
   var homeMasonry = null
-  var portraitViewer = null
+  var portraitLightbox = null
 
   /* ─── API helpers ─── */
 
@@ -159,62 +158,27 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     return portraitImagePromiseCache[resolvedUrl]
   }
 
-  function ensurePortraitViewer() {
-    if (portraitViewer && document.body.contains(portraitViewer)) return portraitViewer
-    portraitViewer = document.createElement("div")
-    portraitViewer.className = "icono-viewer"
-    portraitViewer.hidden = true
-    portraitViewer.setAttribute("aria-hidden", "true")
-    portraitViewer.innerHTML =
-      '<button type="button" class="icono-viewer-close" data-icono-viewer-close aria-label="Close portrait viewer">&times;</button>' +
-      '<div class="icono-viewer-backdrop" data-icono-viewer-close></div>' +
-      '<figure class="icono-viewer-figure">' +
-        '<img class="icono-viewer-image" alt="">' +
-        '<figcaption class="icono-viewer-caption"></figcaption>' +
-      '</figure>'
-    portraitViewer.addEventListener("click", function (event) {
-      if (event.target.closest("[data-icono-viewer-close]")) {
-        closePortraitViewer()
-      }
-    })
-    document.body.appendChild(portraitViewer)
-    return portraitViewer
-  }
-
-  function openPortraitViewer(url, altText, captionText) {
-    var resolvedUrl = String(url || "").trim()
-    if (!resolvedUrl) return
-    var viewer = ensurePortraitViewer()
-    var image = viewer.querySelector(".icono-viewer-image")
-    var caption = viewer.querySelector(".icono-viewer-caption")
-    if (!image || !caption) return
-    image.setAttribute("src", resolvedUrl)
-    image.setAttribute("alt", String(altText || "").trim())
-    caption.textContent = String(captionText || "").trim()
-    viewer.hidden = false
-    viewer.setAttribute("aria-hidden", "false")
-    document.body.classList.add("icono-viewer-open")
-    window.requestAnimationFrame(function () {
-      viewer.classList.add("is-open")
-    })
-  }
-
-  function closePortraitViewer() {
-    if (!portraitViewer) return
-    portraitViewer.classList.remove("is-open")
-    portraitViewer.setAttribute("aria-hidden", "true")
-    document.body.classList.remove("icono-viewer-open")
-    window.setTimeout(function () {
-      if (!portraitViewer) return
-      portraitViewer.hidden = true
-    }, 160)
-  }
-
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") {
-      closePortraitViewer()
+  function refreshPortraitLightbox() {
+    if (portraitLightbox) {
+      portraitLightbox.destroy()
+      portraitLightbox = null
     }
-  })
+    if (!document.querySelector("[data-icono-lightbox] a[data-icono-pswp]")) return
+    portraitLightbox = new PhotoSwipeLightbox({
+      gallery: "[data-icono-lightbox]",
+      children: "a[data-icono-pswp]",
+      bgOpacity: 0.92,
+      spacing: 0.12,
+      wheelToZoom: true,
+      loop: false,
+      showHideAnimationType: "zoom",
+      pswpModule: () => import("./vendor/photoswipe.esm.js?v=20260306c"),
+      paddingFn: function (_viewportSize) {
+        return { top: 28, bottom: 28, left: 28, right: 28 }
+      },
+    })
+    portraitLightbox.init()
+  }
 
   function fetchGeneDetail(symbol) {
     var key = normalizedSymbol(symbol)
@@ -288,12 +252,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
         hydrateGridPortrait(container, entry.symbol, initialData)
         return preloadImage(initialUrl).then(next)
       }
-      return fetchGeneDetail(entry.symbol)
-        .then(function (data) {
-          hydrateGridPortrait(container, entry.symbol, data)
-          return preloadImage(publishedPortraitUrl(data, "medium"))
-        })
-        .then(next)
+      return Promise.resolve(null).then(next)
     }
 
     for (var j = 0; j < workerCount; j++) {
@@ -555,16 +514,12 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
         '<p class="tagline">Visual mnemonics for molecular cell biology</p>' +
         '<span class="stat" id="icono-gene-count">...</span>' +
       '</div>' +
-      '<div class="icono-search">' +
-        '<div class="icono-search-wrapper">' +
-          '<input type="text" id="icono-q" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
-          '<div class="icono-search-results" id="icono-results"></div>' +
-        '</div>' +
-      '</div>' +
       '<div class="icono-gallery-toolbar">' +
-        '<div class="icono-gallery-intro">' +
-          '<div class="icono-gallery-kicker">Published portrait gallery</div>' +
-          '<div class="icono-gallery-count" id="icono-gallery-count">...</div>' +
+        '<div class="icono-search icono-search--toolbar">' +
+          '<div class="icono-search-wrapper">' +
+            '<input type="text" id="icono-q" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
+            '<div class="icono-search-results" id="icono-results"></div>' +
+          '</div>' +
         '</div>' +
         '<label class="icono-gallery-order" for="icono-order">' +
           '<span>Order by</span>' +
@@ -572,51 +527,136 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
         '</label>' +
       '</div>' +
       '<div class="icono-loading" id="icono-loading">Loading portraits...</div>' +
-      '<div class="icono-grid icono-grid--masonry" id="icono-grid"></div>'
+      '<div class="icono-grid icono-grid--masonry" id="icono-grid"></div>' +
+      '<div class="icono-load-sentinel" id="icono-load-sentinel" aria-hidden="true"></div>'
 
     var grid = document.getElementById("icono-grid")
     var loading = document.getElementById("icono-loading")
     var countEl = document.getElementById("icono-gene-count")
-    var galleryCountEl = document.getElementById("icono-gallery-count")
+    var sentinelEl = document.getElementById("icono-load-sentinel")
     var input = document.getElementById("icono-q")
     var resultsEl = document.getElementById("icono-results")
     var orderEl = document.getElementById("icono-order")
     var activeGalleryRequest = 0
+    var galleryState = {
+      order: GALLERY_DEFAULT_ORDER,
+      offset: 0,
+      total: 0,
+      publishedTotal: 0,
+      loading: false,
+      hasMore: true,
+      seed: "",
+      items: [],
+    }
+    var sentinelObserver = null
 
-    function loadGallery(order) {
+    function newRandomSeed() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+    }
+
+    function setLoadingState(message, show) {
+      loading.textContent = message
+      loading.style.display = show ? "block" : "none"
+    }
+
+    function syncHeroCount() {
+      if (!countEl) return
+      var publishedCount = Number(galleryState.publishedTotal || 0)
+      var totalCount = Number(galleryState.total || 0)
+      countEl.textContent = publishedCount.toLocaleString() + " portraits, " + totalCount.toLocaleString() + " genes"
+    }
+
+    function updateSentinelObserver() {
+      if (sentinelObserver) {
+        sentinelObserver.disconnect()
+        sentinelObserver = null
+      }
+      if (!sentinelEl || !galleryState.hasMore) return
+      sentinelObserver = new IntersectionObserver(function (entries) {
+        var entry = entries && entries[0]
+        if (!entry || !entry.isIntersecting) return
+        loadNextGalleryPage()
+      }, {
+        rootMargin: "900px 0px 1200px 0px",
+      })
+      sentinelObserver.observe(sentinelEl)
+    }
+
+    function resetGallery(order) {
+      galleryState.order = order || GALLERY_DEFAULT_ORDER
+      galleryState.offset = 0
+      galleryState.total = 0
+      galleryState.publishedTotal = 0
+      galleryState.loading = false
+      galleryState.hasMore = true
+      galleryState.seed = galleryState.order === "random" ? newRandomSeed() : ""
+      galleryState.items = []
+      grid.innerHTML = ""
+      destroyHomeMasonry()
+      if (typeof grid._iconoPrefetchCleanup === "function") {
+        grid._iconoPrefetchCleanup()
+      }
+      setLoadingState("Loading gallery...", true)
+      updateSentinelObserver()
+      loadNextGalleryPage()
+    }
+
+    function loadNextGalleryPage() {
+      if (galleryState.loading || !galleryState.hasMore) return
+      galleryState.loading = true
+      setLoadingState(galleryState.offset > 0 ? "Loading more..." : "Loading gallery...", true)
+
       var requestId = ++activeGalleryRequest
-      loading.style.display = "block"
-      loading.textContent = "Loading portraits..."
+      var path =
+        "/api/gallery?order=" + encodeURIComponent(galleryState.order) +
+        "&limit=" + encodeURIComponent(String(GALLERY_PAGE_SIZE)) +
+        "&offset=" + encodeURIComponent(String(galleryState.offset))
+      if (galleryState.seed) {
+        path += "&seed=" + encodeURIComponent(galleryState.seed)
+      }
 
-      fetchJSON("/api/gallery?order=" + encodeURIComponent(order) + "&limit=" + GALLERY_COUNT)
+      fetchJSON(path)
         .then(function (data) {
           if (requestId !== activeGalleryRequest) return
-          loading.style.display = "none"
-          if (countEl) countEl.textContent = (data.total || 0).toLocaleString() + " published portraits"
-          if (galleryCountEl) {
-            galleryCountEl.textContent = "Showing " + (data.items || []).length.toLocaleString() + " of " + (data.total || 0).toLocaleString()
+          var items = Array.isArray(data && data.items) ? data.items : []
+          galleryState.order = String(data && data.order || galleryState.order)
+          galleryState.seed = String(data && data.seed || galleryState.seed || "")
+          galleryState.total = Number(data && data.total || galleryState.total || 0)
+          galleryState.publishedTotal = Number(data && data.published_total || galleryState.publishedTotal || 0)
+          galleryState.hasMore = Boolean(data && data.has_more)
+          if (items.length) {
+            appendGrid(grid, items, galleryState.items.length)
+            galleryState.items = galleryState.items.concat(items)
+            galleryState.offset += items.length
+            applyHomeMasonry(grid)
+            setupOrderedPortraitPrefetch(grid, galleryState.items)
           }
-          if (orderEl && data.order && orderEl.value !== data.order) {
-            orderEl.value = data.order
+          syncHeroCount()
+          updateSentinelObserver()
+          setLoadingState(galleryState.hasMore ? "Scroll for more" : "", false)
+          if (orderEl && orderEl.value !== galleryState.order) {
+            orderEl.value = galleryState.order
           }
-          renderGrid(grid, data.items || [])
-          applyHomeMasonry(grid)
-          setupOrderedPortraitPrefetch(grid, data.items || [])
         })
         .catch(function (err) {
           if (requestId !== activeGalleryRequest) return
-          loading.textContent = "Failed to load portraits."
+          setLoadingState("Failed to load portraits.", true)
           console.error("[Iconoplasm] gallery load error:", err)
+        })
+        .finally(function () {
+          if (requestId === activeGalleryRequest) {
+            galleryState.loading = false
+          }
         })
     }
 
     if (orderEl) {
       orderEl.addEventListener("change", function () {
-        loadGallery(orderEl.value || GALLERY_DEFAULT_ORDER)
+        resetGallery(orderEl.value || GALLERY_DEFAULT_ORDER)
       })
     }
 
-    loadGallery(GALLERY_DEFAULT_ORDER)
+    resetGallery(GALLERY_DEFAULT_ORDER)
 
     // Search with debounce
     var timer = null
@@ -707,14 +747,14 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     container.innerHTML = html
   }
 
-  function renderGrid(container, genes) {
+  function buildGridMarkup(genes, startIndex) {
     if (!genes.length) {
-      container.innerHTML = ""
-      return
+      return ""
     }
     var html = ""
     for (var i = 0; i < genes.length; i++) {
       var g = genes[i]
+      var cardIndex = startIndex + i
       var dims = portraitDimensions(g)
       var tc = textColorFor(g.color)
       var portraitUrl = publishedPortraitUrl(g, "medium")
@@ -722,10 +762,10 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
         ? "icono-card-media"
         : "icono-card-media icono-card-media--fallback"
       html +=
-        '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav data-icono-index="' + i + '" data-icono-symbol="' + esc(g.symbol) + '" style="--width:' + dims.width + ';--height:' + dims.height + ';--icono-card-accent:' + esc(g.color || "#888") + ';">' +
+        '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav data-icono-index="' + cardIndex + '" data-icono-symbol="' + esc(g.symbol) + '" style="--width:' + dims.width + ';--height:' + dims.height + ';--icono-card-accent:' + esc(g.color || "#888") + ';">' +
           '<div class="' + mediaClass + '" style="background:' + esc(g.color) + ';color:' + tc + '">' +
             (portraitUrl
-              ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="' + (i < 12 ? "eager" : "lazy") + '" decoding="async" width="' + dims.width + '" height="' + dims.height + '" fetchpriority="' + (i < 8 ? "high" : "low") + '">'
+              ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="' + (cardIndex < 12 ? "eager" : "lazy") + '" decoding="async" width="' + dims.width + '" height="' + dims.height + '" fetchpriority="' + (cardIndex < 8 ? "high" : "low") + '">'
               : '<span class="icono-card-fallback-symbol">' + esc(g.symbol) + '</span>') +
             '<span class="icono-card-badge">' + esc(g.symbol) + '</span>' +
           '</div>' +
@@ -734,7 +774,17 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
           '</div>' +
         '</a>'
     }
-    container.innerHTML = html
+    return html
+  }
+
+  function renderGrid(container, genes) {
+    container.innerHTML = buildGridMarkup(genes, 0)
+  }
+
+  function appendGrid(container, genes, startIndex) {
+    var html = buildGridMarkup(genes, startIndex)
+    if (!html) return
+    container.insertAdjacentHTML("beforeend", html)
   }
 
   function renderCandidateGallery(genePayload) {
@@ -745,10 +795,9 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     var html =
       '<section class="icono-candidate-gallery">' +
         '<div class="icono-candidate-gallery-heading">' +
-          '<h2>Portrait candidates</h2>' +
-          '<p>Alternate renderings for ' + esc(genePayload.symbol || "this gene") + '.</p>' +
+          '<h2>Candidate portraits</h2>' +
         '</div>' +
-        '<div class="icono-candidate-grid">'
+        '<div class="icono-candidate-strip" data-icono-lightbox>'
     for (var i = 0; i < candidates.length; i++) {
       var candidate = candidates[i]
       var mediumUrl = candidatePortraitUrl(candidate, "medium")
@@ -760,12 +809,12 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
       if (candidate && candidate.is_current) metaBits.push("Current")
       metaBits.push(scoreLabel(candidate && candidate.image_score))
       html +=
-        '<button type="button" class="icono-candidate-card' + (candidate && candidate.is_current ? ' is-current' : '') + '" data-icono-portrait-open data-icono-portrait-src="' + esc(fullUrl) + '" data-icono-portrait-alt="' + esc(genePayload.symbol) + ' portrait candidate" style="--width:' + width + ';--height:' + height + ';">' +
+        '<a class="icono-candidate-card' + (candidate && candidate.is_current ? ' is-current' : '') + '" href="' + esc(fullUrl) + '" data-icono-pswp data-pswp-width="' + width + '" data-pswp-height="' + height + '" data-pswp-type="image" style="--width:' + width + ';--height:' + height + ';">' +
           '<span class="icono-candidate-media">' +
             '<img src="' + esc(mediumUrl) + '" alt="' + esc(genePayload.symbol) + ' portrait candidate" loading="lazy" decoding="async" width="' + width + '" height="' + height + '">' +
           '</span>' +
           '<span class="icono-candidate-meta">' + esc(metaBits.join(" · ")) + '</span>' +
-        '</button>'
+        '</a>'
     }
     html +=
         '</div>' +
@@ -829,13 +878,16 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
         )
       : ""
 
+    var portraitDims = portraitDimensions(g)
     var portraitBlock = hasPortrait
       ? (
           '<div class="icono-gene-portrait-shell">' +
-            '<button type="button" class="' + swatchClass + '" data-icono-portrait-open data-icono-portrait-src="' + esc(portraitFullUrl) + '" data-icono-portrait-alt="' + esc(g.symbol) + ' portrait" aria-label="Open full-size portrait for ' + esc(g.symbol) + '">' +
+            '<div class="icono-gene-media-wrap" data-icono-lightbox>' +
+            '<a href="' + esc(portraitFullUrl) + '" class="' + swatchClass + ' icono-gene-media-link" data-icono-pswp data-pswp-width="' + portraitDims.width + '" data-pswp-height="' + portraitDims.height + '" data-pswp-type="image" aria-label="Open full-size portrait for ' + esc(g.symbol) + '">' +
               '<img src="' + esc(portraitDisplayUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">' +
               '<span class="icono-gene-symbol-pill">' + esc(g.symbol) + '</span>' +
-            '</button>' +
+            '</a>' +
+            '</div>' +
             voteBox +
           '</div>'
         )
@@ -944,22 +996,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
     container.innerHTML = html
     wireGeneVoteBox(container, g)
-    wireGenePortraitViewer(container)
-  }
-
-  function wireGenePortraitViewer(container) {
-    var triggers = container.querySelectorAll("[data-icono-portrait-open]")
-    for (var i = 0; i < triggers.length; i++) {
-      (function (trigger) {
-        trigger.addEventListener("click", function () {
-          openPortraitViewer(
-            trigger.getAttribute("data-icono-portrait-src"),
-            trigger.getAttribute("data-icono-portrait-alt"),
-            trigger.getAttribute("data-icono-portrait-alt")
-          )
-        })
-      })(triggers[i])
-    }
+    refreshPortraitLightbox()
   }
 
   /* ─── Rendering: 404 ─── */
@@ -993,10 +1030,12 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     // Render the appropriate page
     if (route.page === "home") {
       renderHome(root)
+      refreshPortraitLightbox()
     } else if (route.page === "gene") {
       renderGene(root, route.symbol)
     } else {
       render404(root)
+      refreshPortraitLightbox()
     }
   }
 

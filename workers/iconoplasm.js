@@ -844,8 +844,16 @@ function normalizeGalleryOrder(raw) {
     .trim()
     .toLowerCase()
   if (value === "popular") return "popularity"
-  if (["votes", "popularity", "newest", "oldest", "name_asc", "name_desc"].includes(value)) return value
+  if (["votes", "popularity", "newest", "random"].includes(value)) return value
   return "votes"
+}
+
+function normalizeGallerySeed(raw) {
+  const value = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+  return value ? value.slice(0, 48) : null
 }
 
 function wikiPageviewsForSymbol(symbol) {
@@ -862,7 +870,17 @@ function compareNullableTextAsc(a, b) {
   return String(a || "").localeCompare(String(b || ""))
 }
 
-function sortGalleryItems(items, order) {
+function galleryRandomRank(seed, symbol) {
+  const input = `${seed || "iconoplasm"}|${normalizeSymbol(symbol) || ""}`
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function sortGalleryItems(items, order, seed = null) {
   const sorted = Array.isArray(items) ? items.slice() : []
   sorted.sort((left, right) => {
     if (order === "newest") {
@@ -871,14 +889,12 @@ function sortGalleryItems(items, order) {
         compareNullableTextAsc(left.symbol, right.symbol)
       )
     }
-    if (order === "oldest") {
+    if (order === "random") {
       return (
-        compareNullableTextAsc(left.published_at || left.asset_created_at, right.published_at || right.asset_created_at) ||
+        galleryRandomRank(seed, left.symbol) - galleryRandomRank(seed, right.symbol) ||
         compareNullableTextAsc(left.symbol, right.symbol)
       )
     }
-    if (order === "name_asc") return compareNullableTextAsc(left.symbol, right.symbol)
-    if (order === "name_desc") return compareNullableTextDesc(left.symbol, right.symbol)
     if (order === "popularity") {
       return (
         Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
@@ -899,15 +915,23 @@ function sortGalleryItems(items, order) {
   return sorted
 }
 
-async function galleryFeed(env, url, rawOrder, rawLimit) {
+async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
   const order = normalizeGalleryOrder(rawOrder)
-  const limit = Math.max(1, Math.min(240, Number.parseInt(String(rawLimit || "120"), 10) || 120))
+  const limit = Math.max(1, Math.min(60, Number.parseInt(String(rawLimit || "30"), 10) || 30))
+  const offset = Math.max(0, Number.parseInt(String(rawOffset || "0"), 10) || 0)
+  const seed = order === "random" ? normalizeGallerySeed(rawSeed) || crypto.randomUUID().slice(0, 12) : null
   await warmColorsCache(env)
+  const catalogTotal = colorsCache.bySymbol.size
   if (!env.ICONOPLASM_DB) {
     return {
       order,
+      seed,
       total: 0,
-      catalog_total: colorsCache.bySymbol.size,
+      published_total: 0,
+      offset,
+      limit,
+      has_more: false,
+      catalog_total: catalogTotal,
       items: [],
     }
   }
@@ -944,28 +968,17 @@ async function galleryFeed(env, url, rawOrder, rawLimit) {
   )
     .all()
 
-  const totalRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS total
-     FROM icono_publish_state
-     WHERE current_asset_sha256 IS NOT NULL`,
-  ).first()
-
   const base = portraitBase(url, env)
-  const items = (Array.isArray(rows?.results) ? rows.results : []).map((row) => {
+  const publishedRows = Array.isArray(rows?.results) ? rows.results : []
+  const publishedMap = new Map()
+  for (const row of publishedRows) {
     const symbol = normalizeSymbol(row?.symbol || "") || ""
-    const cached = symbol ? colorsCache.bySymbol.get(symbol) : null
+    if (!symbol) continue
     const width = optionalInt(row?.width)
     const height = optionalInt(row?.height)
-    const fullName =
-      String(cached?.n || symbol || "").trim() || symbol
-    const color = String(cached?.c || "#888").trim() || "#888"
-    return {
-      symbol,
-      color,
-      full_name: fullName,
+    publishedMap.set(symbol, {
       width,
       height,
-      popularity_score: wikiPageviewsForSymbol(symbol),
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
       image_score: Number(row?.image_score || 0),
@@ -982,14 +995,45 @@ async function galleryFeed(env, url, rawOrder, rawLimit) {
         ...(width != null ? { width } : {}),
         ...(height != null ? { height } : {}),
       },
-    }
-  })
+    })
+  }
+
+  const items = []
+  for (const [symbol, cached] of colorsCache.bySymbol.entries()) {
+    const published = publishedMap.get(symbol) || null
+    const fullName = String(cached?.n || symbol || "").trim() || symbol
+    const color = String(cached?.c || "#888").trim() || "#888"
+    items.push({
+      symbol,
+      color,
+      full_name: fullName,
+      width: published?.width ?? null,
+      height: published?.height ?? null,
+      popularity_score: wikiPageviewsForSymbol(symbol),
+      image_upvotes: Number(published?.image_upvotes || 0),
+      image_downvotes: Number(published?.image_downvotes || 0),
+      image_score: Number(published?.image_score || 0),
+      published_at: published?.published_at || null,
+      asset_created_at: published?.asset_created_at || null,
+      ph: published?.ph || null,
+      pt: published?.pt || null,
+      portrait: published?.portrait || null,
+    })
+  }
+
+  const sorted = sortGalleryItems(items, order, seed)
+  const pageItems = sorted.slice(offset, offset + limit)
 
   return {
     order,
-    total: Number(totalRow?.total || 0),
-    catalog_total: colorsCache.bySymbol.size,
-    items: sortGalleryItems(items, order).slice(0, limit),
+    ...(seed ? { seed } : {}),
+    total: catalogTotal,
+    published_total: publishedRows.length,
+    offset,
+    limit,
+    has_more: offset + limit < sorted.length,
+    catalog_total: catalogTotal,
+    items: pageItems,
   }
 }
 
@@ -1156,7 +1200,14 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     if (path === "/api/gallery") {
       const retry = rateLimit(request, "gallery", 60)
       if (retry) return done("gallery_rl", json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, { "Retry-After": String(retry) }))
-      const payload = await galleryFeed(env, url, url.searchParams.get("order"), url.searchParams.get("limit"))
+      const payload = await galleryFeed(
+        env,
+        url,
+        url.searchParams.get("order"),
+        url.searchParams.get("limit"),
+        url.searchParams.get("offset"),
+        url.searchParams.get("seed"),
+      )
       return done("gallery", json(payload, 200, { "Cache-Control": "public, max-age=60" }), API_SCHEMA_VERSION)
     }
 
