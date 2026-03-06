@@ -5,6 +5,7 @@ if (document.startViewTransition) {
     const link = e.target.closest('a');
     if (!link || link.origin !== location.origin) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+    if (link.matches('[data-icono-nav]') || link.closest('#iconoplasm-root')) return;
     
     e.preventDefault();
     

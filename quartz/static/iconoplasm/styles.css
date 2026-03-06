@@ -718,48 +718,59 @@ html:has(.pswp--open) body {
 }
 
 html[saved-theme="dark"] .icono-card-badge,
-html[saved-theme="dark"] .icono-gene-symbol-pill {
+html[data-theme="dark"] .icono-card-badge,
+html[saved-theme="dark"] .icono-gene-symbol-pill,
+html[data-theme="dark"] .icono-gene-symbol-pill {
   background: rgba(10, 9, 8, 0.72);
   border-color: rgba(255,255,255,0.18);
   color: rgba(255,255,255,0.98);
 }
 
-html[saved-theme="dark"] .icono-vote-box {
+html[saved-theme="dark"] .icono-vote-box,
+html[data-theme="dark"] .icono-vote-box {
   background: rgba(33, 27, 22, 0.86);
   border-color: rgba(255,255,255,0.12);
   box-shadow: 0 12px 22px rgba(0,0,0,0.24);
 }
 
-html[saved-theme="dark"] .icono-vote-stats {
+html[saved-theme="dark"] .icono-vote-stats,
+html[data-theme="dark"] .icono-vote-stats {
   color: rgba(255,255,255,0.94);
   background: transparent;
 }
 
-html[saved-theme="dark"] .icono-vote-btn {
+html[saved-theme="dark"] .icono-vote-btn,
+html[data-theme="dark"] .icono-vote-btn {
   box-shadow: none;
 }
 
-html[saved-theme="dark"] .icono-vote-btn--approve {
+html[saved-theme="dark"] .icono-vote-btn--approve,
+html[data-theme="dark"] .icono-vote-btn--approve {
   color: color-mix(in srgb, var(--accent) 82%, white 10%);
 }
 
-html[saved-theme="dark"] .icono-vote-btn--reject {
+html[saved-theme="dark"] .icono-vote-btn--reject,
+html[data-theme="dark"] .icono-vote-btn--reject {
   color: color-mix(in srgb, var(--icono-reject) 82%, white 10%);
 }
 
-html[saved-theme="dark"] .icono-vote-btn--approve:hover:not(:disabled) {
+html[saved-theme="dark"] .icono-vote-btn--approve:hover:not(:disabled),
+html[data-theme="dark"] .icono-vote-btn--approve:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-html[saved-theme="dark"] .icono-vote-btn--reject:hover:not(:disabled) {
+html[saved-theme="dark"] .icono-vote-btn--reject:hover:not(:disabled),
+html[data-theme="dark"] .icono-vote-btn--reject:hover:not(:disabled) {
   background: color-mix(in srgb, var(--icono-reject) 18%, transparent);
 }
 
-html[saved-theme="dark"] .icono-vote-btn--approve.active {
+html[saved-theme="dark"] .icono-vote-btn--approve.active,
+html[data-theme="dark"] .icono-vote-btn--approve.active {
   background: color-mix(in srgb, var(--accent) 26%, rgba(17, 14, 11, 0.98));
 }
 
-html[saved-theme="dark"] .icono-vote-btn--reject.active {
+html[saved-theme="dark"] .icono-vote-btn--reject.active,
+html[data-theme="dark"] .icono-vote-btn--reject.active {
   background: color-mix(in srgb, var(--icono-reject) 22%, rgba(17, 14, 11, 0.98));
 }
 

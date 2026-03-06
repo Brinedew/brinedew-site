@@ -104,13 +104,30 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function portraitDimensions(genePayload) {
     var portrait = genePayload && genePayload.portrait
+    var assetSha = String(portrait && portrait.asset_sha256 || "").trim().toLowerCase()
+    var candidates = Array.isArray(genePayload && genePayload.portrait_candidates)
+      ? genePayload.portrait_candidates
+      : []
+    var matchedCandidate = null
+    if (assetSha) {
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = candidates[i]
+        var candidateSha = String(candidate && candidate.asset_sha256 || "").trim().toLowerCase()
+        if (candidateSha && candidateSha === assetSha) {
+          matchedCandidate = candidate
+          break
+        }
+      }
+    }
     var width = Number(
       (portrait && (portrait.width || portrait.image_width)) ||
+      (matchedCandidate && (matchedCandidate.width || matchedCandidate.image_width)) ||
       (genePayload && genePayload.width) ||
       0
     )
     var height = Number(
       (portrait && (portrait.height || portrait.image_height)) ||
+      (matchedCandidate && (matchedCandidate.height || matchedCandidate.image_height)) ||
       (genePayload && genePayload.height) ||
       0
     )
@@ -199,12 +216,33 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
             imageClickAction: "zoom",
             tapAction: "toggle-controls",
             bgClickAction: "close",
-            secondaryZoomLevel: 1,
-            maxZoomLevel: 4,
             showHideAnimationType: "fade",
             paddingFn: function () {
               return { top: 28, bottom: 28, left: 28, right: 28 }
             },
+          })
+          pswp.on("wheel", function (wheelEvent) {
+            var originalEvent = wheelEvent && wheelEvent.originalEvent
+            var slide = pswp.currSlide
+            if (!originalEvent || !slide || !slide.isZoomable()) return
+            wheelEvent.preventDefault()
+
+            var deltaY = Number(originalEvent.deltaY || 0)
+            if (!deltaY) return
+
+            var zoomFactor = -deltaY
+            if (originalEvent.deltaMode === 1) {
+              zoomFactor *= 0.05
+            } else {
+              zoomFactor *= originalEvent.deltaMode ? 1 : 0.002
+            }
+            zoomFactor = Math.pow(2, zoomFactor)
+
+            var centerPoint = typeof pswp.getViewportCenterPoint === "function"
+              ? pswp.getViewportCenterPoint()
+              : { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+
+            slide.zoomTo(slide.currZoomLevel * zoomFactor, centerPoint)
           })
           pswp.init()
         }
