@@ -236,6 +236,7 @@
   width: 100%;
   display: block;
   overflow: hidden;
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--icono-card-accent, var(--ui-border)) 28%, var(--ui-border));
   border-radius: 20px;
   background:
