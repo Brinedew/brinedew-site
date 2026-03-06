@@ -25,6 +25,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   var portraitDetailPromiseCache = Object.create(null)
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
+  var homeMasonry = null
   var portraitLightboxCleanup = null
 
   /* ─── API helpers ─── */
@@ -345,9 +346,74 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     }
   }
 
-  function destroyHomeMasonry() {}
+  function scheduleHomeMasonry() {
+    if (!homeMasonry || !homeMasonry.container) return
+    if (homeMasonry.rafId) {
+      window.cancelAnimationFrame(homeMasonry.rafId)
+    }
+    homeMasonry.rafId = window.requestAnimationFrame(function () {
+      var container = homeMasonry && homeMasonry.container
+      if (!container) return
+      var styles = window.getComputedStyle(container)
+      var rowGap = parseFloat(styles.rowGap || styles.gap || "16") || 16
+      var rowHeight = parseFloat(styles.getPropertyValue("--icono-grid-row")) || 8
+      var cards = container.querySelectorAll(".icono-card")
+      for (var i = 0; i < cards.length; i++) {
+        var card = cards[i]
+        card.style.gridRowEnd = "auto"
+        var height = card.getBoundingClientRect().height
+        var span = Math.max(1, Math.ceil((height + rowGap) / (rowHeight + rowGap)))
+        card.style.gridRowEnd = "span " + span
+      }
+      homeMasonry.rafId = 0
+    })
+  }
 
-  function applyHomeMasonry() {}
+  function destroyHomeMasonry() {
+    if (!homeMasonry) return
+    if (homeMasonry.rafId) {
+      window.cancelAnimationFrame(homeMasonry.rafId)
+    }
+    if (homeMasonry.resizeObserver) {
+      homeMasonry.resizeObserver.disconnect()
+    }
+    if (homeMasonry.container) {
+      var cards = homeMasonry.container.querySelectorAll(".icono-card")
+      for (var i = 0; i < cards.length; i++) {
+        cards[i].style.removeProperty("grid-row-end")
+      }
+    }
+    homeMasonry = null
+  }
+
+  function applyHomeMasonry(container) {
+    if (!container) return
+    if (!homeMasonry || homeMasonry.container !== container) {
+      destroyHomeMasonry()
+      homeMasonry = {
+        container: container,
+        rafId: 0,
+        observedCards: [],
+        resizeObserver: new ResizeObserver(function () {
+          scheduleHomeMasonry()
+        }),
+      }
+      homeMasonry.resizeObserver.observe(container)
+    }
+    var cards = container.querySelectorAll(".icono-card")
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i]
+      if (homeMasonry.observedCards.indexOf(card) !== -1) continue
+      homeMasonry.observedCards.push(card)
+      homeMasonry.resizeObserver.observe(card)
+      var img = card.querySelector("img")
+      if (img && !img.complete) {
+        img.addEventListener("load", scheduleHomeMasonry, { once: true })
+        img.addEventListener("error", scheduleHomeMasonry, { once: true })
+      }
+    }
+    scheduleHomeMasonry()
+  }
 
   function galleryOptionsMarkup() {
     var html = ""
