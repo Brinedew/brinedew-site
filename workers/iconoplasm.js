@@ -934,9 +934,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const count = Math.max(1, Math.min(120, Number.parseInt(url.searchParams.get("count") || "60", 10)))
       const allSymbols = Array.from(colorsCache.bySymbol.keys())
       const shuffled = allSymbols.sort(() => Math.random() - 0.5).slice(0, count)
+      const base = portraitBase(url, env)
       const genes = shuffled.map(s => {
         const g = colorsCache.bySymbol.get(s)
-        return { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
+        const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
+        if (g?.pt) entry.pt = joinUrl(base, g.pt)
+        if (g?.ph) entry.ph = joinUrl(base, g.ph)
+        return entry
       })
       return done("genes_random", json({ genes, total: allSymbols.length }, 200, { "Cache-Control": "public, max-age=60" }))
     }
@@ -953,11 +957,18 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       // Prioritize symbol-prefix matches, then name-substring matches
       const prefixMatches = []
       const nameMatches = []
+      const base = portraitBase(url, env)
       for (const [s, g] of colorsCache.bySymbol) {
         if (s.startsWith(q)) {
-          prefixMatches.push({ symbol: s, color: g?.c || "#888", full_name: g?.n || s })
+          const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
+          if (g?.pt) entry.pt = joinUrl(base, g.pt)
+          if (g?.ph) entry.ph = joinUrl(base, g.ph)
+          prefixMatches.push(entry)
         } else if (g?.n && g.n.toUpperCase().includes(q)) {
-          nameMatches.push({ symbol: s, color: g?.c || "#888", full_name: g?.n || s })
+          const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
+          if (g?.pt) entry.pt = joinUrl(base, g.pt)
+          if (g?.ph) entry.ph = joinUrl(base, g.ph)
+          nameMatches.push(entry)
         }
         if (prefixMatches.length + nameMatches.length >= limit * 2) break
       }

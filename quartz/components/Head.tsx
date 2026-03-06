@@ -131,7 +131,7 @@ export default (() => {
           rel="preload"
           as="font"
           type="font/woff2"
-          href="/static/fonts/IBMPlexMono-Regular.woff2"
+          href="/static/fonts/xenon/MonaspaceXenon-Var.woff2"
           crossOrigin="anonymous"
         />
         <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />

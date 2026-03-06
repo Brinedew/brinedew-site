@@ -5,6 +5,17 @@
   var ROOT_ID = "iconoplasm-root"
   var DEBOUNCE_MS = 200
   var GRID_COUNT = 60
+  var PREFETCH_BATCH_SIZE = 20
+  var PREFETCH_TRIGGER_OFFSET = 10
+  var PREFETCH_DETAIL_CONCURRENCY = 4
+  var ICONO_CHECK_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10.5 8.25 13.75 15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  var ICONO_CROSS_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 6 14 14M14 6 6 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  var portraitDetailCache = Object.create(null)
+  var portraitDetailPromiseCache = Object.create(null)
+  var portraitImageCache = Object.create(null)
+  var portraitImagePromiseCache = Object.create(null)
 
   /* ─── API helpers ─── */
 
@@ -47,6 +58,183 @@
     var d = document.createElement("div")
     d.textContent = s
     return d.innerHTML
+  }
+
+  function normalizedSymbol(symbol) {
+    return String(symbol || "").trim().toUpperCase()
+  }
+
+  function publishedPortraitUrl(genePayload, preferredSize) {
+    var portrait = genePayload && genePayload.portrait
+    var flatHeroUrl = String(genePayload && genePayload.ph || "").trim()
+    var flatMediumUrl = String(genePayload && genePayload.pt || "").trim()
+    var isPublished =
+      (portrait && portrait.status === "published") ||
+      Boolean(flatHeroUrl || flatMediumUrl)
+    if (!isPublished) return ""
+    var heroUrl = String(portrait && portrait.hero_url || flatHeroUrl).trim()
+    var mediumUrl = String(portrait && portrait.medium_url || flatMediumUrl).trim()
+    var thumbUrl = String(portrait && portrait.thumb_url || "").trim()
+    if (preferredSize === "medium") return mediumUrl || thumbUrl || heroUrl
+    if (preferredSize === "thumb") return thumbUrl || mediumUrl || heroUrl
+    return heroUrl || mediumUrl || thumbUrl
+  }
+
+  function deferWork(task) {
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(function () {
+        task()
+      }, { timeout: 1200 })
+      return
+    }
+    window.setTimeout(task, 120)
+  }
+
+  function preloadImage(url) {
+    var resolvedUrl = String(url || "").trim()
+    if (!resolvedUrl) return Promise.resolve("")
+    if (portraitImageCache[resolvedUrl]) return Promise.resolve(resolvedUrl)
+    if (portraitImagePromiseCache[resolvedUrl]) return portraitImagePromiseCache[resolvedUrl]
+
+    portraitImagePromiseCache[resolvedUrl] = new Promise(function (resolve) {
+      var img = new Image()
+      function finish(value) {
+        if (value) portraitImageCache[resolvedUrl] = true
+        delete portraitImagePromiseCache[resolvedUrl]
+        resolve(value)
+      }
+      img.addEventListener("load", function () {
+        finish(resolvedUrl)
+      }, { once: true })
+      img.addEventListener("error", function () {
+        finish("")
+      }, { once: true })
+      img.src = resolvedUrl
+    })
+
+    return portraitImagePromiseCache[resolvedUrl]
+  }
+
+  function fetchGeneDetail(symbol) {
+    var key = normalizedSymbol(symbol)
+    if (!key) return Promise.resolve(null)
+    if (portraitDetailCache[key]) return Promise.resolve(portraitDetailCache[key])
+    if (portraitDetailPromiseCache[key]) return portraitDetailPromiseCache[key]
+
+    portraitDetailPromiseCache[key] = fetchJSON("/api/gene/" + encodeURIComponent(key))
+      .then(function (data) {
+        portraitDetailCache[key] = data
+        return data
+      })
+      .catch(function () {
+        return null
+      })
+      .finally(function () {
+        delete portraitDetailPromiseCache[key]
+      })
+
+    return portraitDetailPromiseCache[key]
+  }
+
+  function hydrateGridPortrait(container, symbol, genePayload) {
+    if (!container) return
+    var key = normalizedSymbol(symbol)
+    if (!key) return
+    var card = container.querySelector('[data-icono-symbol="' + key + '"]')
+    if (!card) return
+    var swatch = card.querySelector(".icono-card-swatch")
+    if (!swatch) return
+    var portraitUrl = publishedPortraitUrl(genePayload, "medium")
+    if (!portraitUrl) return
+    if (swatch.classList.contains("icono-card-swatch--portrait")) return
+
+    swatch.classList.add("icono-card-swatch--portrait")
+    swatch.innerHTML =
+      '<img src="' + esc(portraitUrl) + '" alt="' + esc(key) + ' portrait" loading="lazy">'
+  }
+
+  function prefetchPortraitBatch(entries, container) {
+    var queue = []
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i]
+      var key = normalizedSymbol(entry && entry.symbol ? entry.symbol : entry)
+      if (!key) continue
+      queue.push({
+        symbol: key,
+        data: entry && typeof entry === "object" ? entry : null,
+      })
+    }
+    if (!queue.length) return Promise.resolve(null)
+
+    var workerCount = Math.min(PREFETCH_DETAIL_CONCURRENCY, queue.length)
+    var workers = []
+
+    function next() {
+      var entry = queue.shift()
+      if (!entry) return Promise.resolve(null)
+      var initialData = entry.data
+      var initialUrl = publishedPortraitUrl(initialData, "medium")
+      if (initialUrl) {
+        hydrateGridPortrait(container, entry.symbol, initialData)
+        return preloadImage(initialUrl).then(next)
+      }
+      return fetchGeneDetail(entry.symbol)
+        .then(function (data) {
+          hydrateGridPortrait(container, entry.symbol, data)
+          return preloadImage(publishedPortraitUrl(data, "medium"))
+        })
+        .then(next)
+    }
+
+    for (var j = 0; j < workerCount; j++) {
+      workers.push(next())
+    }
+
+    return Promise.all(workers).then(function () {
+      return null
+    })
+  }
+
+  function setupOrderedPortraitPrefetch(container, genes) {
+    if (!container || !Array.isArray(genes) || !genes.length) return
+
+    var orderedEntries = []
+    for (var i = 0; i < genes.length; i++) {
+      var entry = genes[i]
+      var key = normalizedSymbol(entry && entry.symbol)
+      if (!key) continue
+      orderedEntries.push(entry)
+    }
+    if (!orderedEntries.length) return
+
+    var nextBatchStart = 0
+
+    function scheduleNextBatch() {
+      if (nextBatchStart >= orderedEntries.length) return
+      var batch = orderedEntries.slice(nextBatchStart, nextBatchStart + PREFETCH_BATCH_SIZE)
+      nextBatchStart += PREFETCH_BATCH_SIZE
+      deferWork(function () {
+        void prefetchPortraitBatch(batch, container)
+      })
+    }
+
+    function maybeAdvance(index) {
+      if (!Number.isFinite(index)) return
+      if (index >= nextBatchStart - PREFETCH_TRIGGER_OFFSET) {
+        scheduleNextBatch()
+      }
+    }
+
+    function handleIntent(event) {
+      var card = event.target.closest(".icono-card[data-icono-index]")
+      if (!card || !container.contains(card)) return
+      var index = Number(card.getAttribute("data-icono-index"))
+      maybeAdvance(index)
+    }
+
+    scheduleNextBatch()
+    container.addEventListener("mouseover", handleIntent)
+    container.addEventListener("focusin", handleIntent)
   }
 
   function isLightColor(hex) {
@@ -239,6 +427,7 @@
         loading.style.display = "none"
         if (countEl) countEl.textContent = data.total.toLocaleString() + " genes"
         renderGrid(grid, data.genes)
+        setupOrderedPortraitPrefetch(grid, data.genes || [])
       })
       .catch(function (err) {
         loading.textContent = "Failed to load genes."
@@ -339,9 +528,16 @@
     for (var i = 0; i < genes.length; i++) {
       var g = genes[i]
       var tc = textColorFor(g.color)
+      var portraitUrl = publishedPortraitUrl(g, "medium")
+      var swatchClass = portraitUrl
+        ? "icono-card-swatch icono-card-swatch--portrait"
+        : "icono-card-swatch"
+      var swatchInner = portraitUrl
+        ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">'
+        : esc(g.symbol)
       html +=
-        '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav>' +
-          '<div class="icono-card-swatch" style="background:' + esc(g.color) + ';color:' + tc + '">' + esc(g.symbol) + '</div>' +
+        '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav data-icono-index="' + i + '" data-icono-symbol="' + esc(g.symbol) + '">' +
+          '<div class="' + swatchClass + '" style="background:' + esc(g.color) + ';color:' + tc + '">' + swatchInner + '</div>' +
           '<div class="icono-card-info">' +
             '<div class="icono-card-symbol">' + esc(g.symbol) + '</div>' +
             '<div class="icono-card-name">' + esc(g.full_name) + '</div>' +
@@ -380,7 +576,8 @@
   }
 
   function renderGeneContent(container, g) {
-    var hasPortrait = g.portrait && g.portrait.status === "published" && g.portrait.hero_url
+    var portraitDisplayUrl = publishedPortraitUrl(g, "medium")
+    var hasPortrait = !!portraitDisplayUrl
     var tc = textColorFor(g.color || "#888")
     var swatchClass = hasPortrait
       ? "icono-gene-swatch icono-gene-swatch--portrait"
@@ -390,7 +587,7 @@
       : ' style="background:' + esc(g.color || "#888") + ';color:' + tc + '"'
 
     var swatchInner = hasPortrait
-      ? '<img src="' + esc(g.portrait.hero_url) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">'
+      ? '<img src="' + esc(portraitDisplayUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">'
       : esc(g.symbol)
 
     var portraitNote = hasPortrait
@@ -405,8 +602,8 @@
               '<span class="icono-vote-stats" data-icono-vote-stats>Score +0 (0↑/0↓)</span>' +
             '</div>' +
             '<div class="icono-vote-actions">' +
-              '<button type="button" class="icono-vote-btn" data-icono-vote-up>Upvote</button>' +
-              '<button type="button" class="icono-vote-btn" data-icono-vote-down>Downvote</button>' +
+              '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
+              '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
             '</div>' +
             '<p class="icono-vote-note" data-icono-vote-note>Log in with Discord to vote.</p>' +
           '</div>'

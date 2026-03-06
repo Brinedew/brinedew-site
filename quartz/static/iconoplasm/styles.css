@@ -6,6 +6,7 @@
   max-width: 960px;
   margin: 0 auto;
   padding: 0 1rem 2rem;
+  --icono-reject: oklch(56% 0.16 28);
 }
 
 /* ───────── Hero ───────── */
@@ -162,6 +163,19 @@
   font-weight: 600;
   font-size: 1.1rem;
   letter-spacing: 0.02em;
+}
+
+.icono-card-swatch--portrait {
+  padding: 0;
+  overflow: hidden;
+  background: var(--light);
+}
+
+.icono-card-swatch--portrait img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .icono-card-info {
@@ -346,21 +360,53 @@
   margin-top: 0.5rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .icono-vote-btn {
   border: 1px solid var(--ui-border);
-  background: var(--light);
-  color: var(--dark);
-  border-radius: 6px;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.85rem;
+  background: var(--ui-bg);
+  color: var(--darkgray);
+  border-radius: 8px;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.icono-vote-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icono-vote-btn--approve {
+  color: var(--accent);
+}
+
+.icono-vote-btn--reject {
+  color: var(--icono-reject);
 }
 
 .icono-vote-btn:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+.icono-vote-btn--approve:hover:not(:disabled) {
+  background: var(--light);
+  border-color: var(--accent);
+}
+
+.icono-vote-btn--reject:hover:not(:disabled) {
+  background: var(--light);
+  border-color: var(--icono-reject);
 }
 
 .icono-vote-btn:disabled {
@@ -369,8 +415,19 @@
 }
 
 .icono-vote-btn.active {
+  box-shadow: none;
+}
+
+.icono-vote-btn--approve.active {
   border-color: var(--accent);
+  background: var(--light);
   box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.icono-vote-btn--reject.active {
+  border-color: var(--icono-reject);
+  background: var(--light);
+  box-shadow: inset 0 0 0 1px var(--icono-reject);
 }
 
 .icono-vote-note {

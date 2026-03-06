@@ -31,7 +31,7 @@ const config: QuartzConfig = {
     theme: {
       cdnCaching: false,
       fontOrigin: "local",
-      typography: { header: "system-ui", body: "system-ui", code: "Monaspace Xenon Web" },
+      typography: { header: "Crimson Pro", body: "Crimson Pro", code: "Monaspace Xenon Web" },
       colors: {
         lightMode: {
           light: "#faf8f8",

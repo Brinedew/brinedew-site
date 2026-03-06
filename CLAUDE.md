@@ -10,6 +10,41 @@ Personal longevity research blog built with Quartz 4. This is a modern static si
 
 The basic flow: write markdown in `content/`, push to GitHub, CI builds the site with Quartz, GitHub Pages serves it at brinedew.com. Takes about 60 seconds from push to live.
 
+## Design Context
+
+### Users
+
+Primary readers are like the audiences for LessWrong, Gwern, Slate Star Codex, and HPMOR, but younger: mostly people in their late teens to 20s who are internet-native, intellectually ambitious, and comfortable with dense long-form writing.
+
+They come here to learn something non-obvious about molecular cell biology, aging, cancer, and adjacent ideas through careful reasoning. They are willing to read, click through related notes, and explore rabbit holes, but they should never have to fight the interface.
+
+### Brand Personality
+
+Quiet, non-commercial, nerdy.
+
+The site should feel like an independent researcher's notebook rather than an institution or a company. The emotional target is calm concentration, trust, and intellectual companionship.
+
+### Aesthetic Direction
+
+Use a warm editorial digital-garden feel: warm cream in light mode, deep brown-black in dark mode, teal as the single accent, readable serif-forward typography, and restrained interface chrome. Dark mode is important, but both light and dark should feel intentional and equally usable.
+
+The visual world should support long reading sessions and exploratory browsing. It should feel handcrafted, reflective, and serious without becoming stiff or academic.
+
+Explicit anti-references:
+
+- Not a startup
+- Not a government lab page
+- Not a designer portfolio
+- Not a backend developer's default utilitarian page
+
+### Design Principles
+
+1. Reading comes first. Optimize typography, rhythm, contrast, and navigation for deep reading and note exploration.
+2. Keep the tone independent and human. The site should feel like a personal research notebook with care behind it, not a polished funnel or institutional brochure.
+3. Use teal as a precise accent, not decoration. Accent should guide attention and interaction, not dominate the page.
+4. Stay quiet by default. Let the writing carry the energy; interfaces and apps can be richer, but the baseline should remain calm and low-friction.
+5. Avoid generic tech aesthetics. No SaaS gradients, no corporate blues, no portfolio theatrics, and no cold default developer minimalism.
+
 ## how to actually use it
 
 **Local development (PC only):**

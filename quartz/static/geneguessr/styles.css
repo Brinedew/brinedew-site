@@ -1,5 +1,15 @@
 /* Geneguessr Styles */
 
+:root {
+  --pg-panel-bg: var(--ui-bg);
+  --pg-panel-bg-strong: var(--light);
+  --pg-accent-soft: var(--ui-bg);
+  --pg-accent-quiet: var(--light);
+  --pg-accent-border: var(--accent);
+  --pg-shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.08);
+  --pg-shadow-popover: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
 #geneguessr-root {
   max-width: 700px;
   margin: 2rem auto;
@@ -34,10 +44,10 @@
 /* Sidebar Stats */
 .pg-sidebar-stats {
   margin-top: 1.5rem;
-  padding: 0.9rem;
-  background: var(--light);
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   font-size: 0.875rem;
 }
 
@@ -177,10 +187,10 @@
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  min-height: 28px;
-  padding: 0.28rem 0.6rem;
+  min-height: 32px;
+  padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
@@ -188,20 +198,19 @@
   transition:
     background 0.2s ease,
     border-color 0.2s ease,
-    color 0.2s ease,
-    transform 0.2s ease;
+    color 0.2s ease;
 }
 
 .pg-auth-signin {
-  background: #5865f2;
-  border: 1px solid #5865f2;
-  color: white;
+  background: var(--pg-accent-soft);
+  border: 1px solid var(--pg-accent-border);
+  color: var(--dark);
 }
 
 .pg-auth-signin:hover {
-  background: #4752c4;
-  border-color: #4752c4;
-  color: white;
+  background: var(--pg-accent-quiet);
+  border-color: var(--secondary);
+  color: var(--dark);
 }
 
 .pg-auth-consent-row {
@@ -322,24 +331,23 @@
 }
 
 .pg-auth-discord {
-  background: transparent;
-  border: 1.5px solid #5865f2;
+  background: var(--pg-panel-bg-strong);
+  border: 1px solid var(--pg-accent-border);
   color: var(--dark);
 }
 
 .pg-auth-discord:hover {
-  background: color-mix(in srgb, #5865f2 10%, transparent);
+  background: var(--pg-accent-soft);
   color: var(--dark);
-  transform: translateY(-1px);
 }
 
 .pg-auth-discord svg,
 .pg-auth-discord img {
-  color: #5865f2;
+  color: var(--accent);
 }
 
 .pg-auth-logout {
-  background: var(--ui-bg);
+  background: var(--pg-panel-bg-strong);
   border: 1px solid var(--ui-border);
   color: var(--dark);
 }
@@ -359,14 +367,13 @@
   padding: 0.55rem 0.75rem;
   border-radius: 999px;
   border: 1px solid var(--ui-border);
-  background: var(--ui-bg);
+  background: var(--pg-panel-bg-strong);
   color: var(--dark);
   text-align: left;
   cursor: pointer;
   transition:
     border-color 0.2s ease,
-    background 0.2s ease,
-    transform 0.2s ease;
+    background 0.2s ease;
 }
 
 .pg-sidebar-practice-label {
@@ -385,7 +392,7 @@
   padding: 0.18rem 0.55rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--ui-border) 80%, transparent);
-  background: var(--light);
+  background: var(--pg-panel-bg);
   color: var(--dark);
   font-size: 0.8rem;
   font-weight: 700;
@@ -395,16 +402,12 @@
 
 .pg-sidebar-practice-button:hover {
   border-color: var(--secondary);
-  background: color-mix(in srgb, var(--secondary) 10%, var(--ui-bg));
-}
-
-.pg-sidebar-practice-button:active {
-  transform: translateY(0.5px);
+  background: var(--light);
 }
 
 .pg-sidebar-practice-badge.is-active {
-  border-color: color-mix(in srgb, var(--accent) 65%, var(--ui-border));
-  background: color-mix(in srgb, var(--accent) 10%, var(--ui-bg));
+  border-color: var(--pg-accent-border);
+  background: var(--pg-accent-soft);
 }
 
 .pg-sidebar-practice-badge.is-active .pg-sidebar-practice-value {
@@ -531,12 +534,12 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.2rem 0.5rem;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--pg-panel-bg-strong);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 88%, transparent);
   border-radius: 4px;
   font-size: 0.7rem;
   line-height: 1.2;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 /* 3D-positioned callout styling (B-170): no background, colored text */
@@ -592,8 +595,8 @@
   position: absolute;
   bottom: 0.5rem;
   right: 0.5rem;
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
+  background: var(--dark);
+  color: var(--light);
   padding: 0.15rem 0.4rem;
   border-radius: 3px;
   font-size: 0.65rem;
@@ -601,14 +604,15 @@
 }
 
 :root[data-theme="dark"] .pg-chain-callout {
-  background: rgba(30, 30, 30, 0.85);
-  color: #e0e0e0;
+  background: var(--pg-panel-bg-strong);
+  color: var(--darkgray);
 }
 
 /* Target styling for non-3D callouts only */
 .pg-chain-callout-target:not(.pg-chain-callout-3d) {
-  background: rgba(76, 175, 80, 0.9);
-  color: white;
+  background: var(--pg-accent-soft);
+  border-color: var(--pg-accent-border);
+  color: var(--dark);
   font-weight: 600;
 }
 
@@ -649,7 +653,7 @@
   padding: 1rem;
   color: var(--secondary);
   gap: 0.5rem;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 245, 0.9));
+  background: var(--pg-panel-bg);
 }
 
 /* Footer row: toggle on left, source on right */
@@ -691,9 +695,9 @@
   left: 2px;
   width: 16px;
   height: 16px;
-  background: white;
+  background: var(--light);
   border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--dark) 12%, transparent);
   transition: transform 0.2s ease;
 }
 
@@ -858,8 +862,7 @@
 .pg-tutorial-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--dark) 78%, transparent);
 }
 
 .pg-tutorial-card {
@@ -868,9 +871,10 @@
   max-height: calc(100dvh - 3rem);
   padding: 1.5rem 1.5rem 1.25rem;
   border-radius: 16px;
-  background: var(--light);
+  background: var(--pg-panel-bg);
+  border: 1px solid var(--ui-border);
   color: var(--dark);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.5);
+  box-shadow: var(--pg-shadow-soft);
   z-index: 1;
   overflow-y: auto;
 }
@@ -1455,8 +1459,8 @@
 }
 
 .pg-chip {
-  background: var(--light);
-  border: 1px solid var(--darkgray);
+  background: var(--pg-panel-bg-strong);
+  border: 1px solid var(--ui-border);
   padding: 0.35rem 0.75rem;
   border-radius: 8px;
   font-size: 0.9rem;
@@ -1465,9 +1469,9 @@
 }
 
 .pg-chip.matched {
-  background: oklch(50% 0.08 185);
-  color: white;
-  border-color: oklch(50% 0.08 185);
+  background: var(--pg-accent-soft);
+  color: var(--dark);
+  border-color: var(--pg-accent-border);
 }
 
 /* Dark mode override for matched chips */
@@ -1518,7 +1522,7 @@
   /* STICKY GUTTERS (top/bottom) MUST MATCH: altering them breaks docking in either direction. */
   /* NO helper classes, NO JS observers: pure CSS sticky is intentional and battle-tested. */
   position: relative;
-  background: var(--light);
+  background: var(--pg-panel-bg);
   border-radius: 8px;
   margin-bottom: 1.5rem;
   width: 100%;
@@ -1534,7 +1538,7 @@
   bottom: 1rem; /* mirror sticky gutter at bottom for dual docking without extra classes */
   z-index: 100;
   padding: 0.75rem 1rem;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--pg-shadow-soft);
 }
 
 #pg-input-slot::after {
@@ -1684,10 +1688,10 @@
 }
 
 .pg-how-to-play:hover {
-  background: var(--light);
+  background: var(--pg-accent-soft);
   color: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 :root[data-theme="dark"] .pg-how-to-play {
@@ -1702,11 +1706,11 @@
   right: 0;
   margin-top: 4px;
   margin-bottom: 0;
-  background: var(--light);
+  background: var(--pg-panel-bg);
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--pg-shadow-popover);
   max-height: 300px;
   overflow-y: auto;
 }
@@ -1716,7 +1720,7 @@
   bottom: 100%;
   margin-top: 0;
   margin-bottom: 8px;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--pg-shadow-popover);
 }
 
 .pg-suggestion {
@@ -2077,17 +2081,22 @@ button.pg-collapse-toggle .pg-feedback-score {
 
 .pg-link-btn {
   padding: 0.5rem 1rem;
-  background: white;
-  color: oklch(50% 0.08 185);
+  background: var(--pg-panel-bg-strong);
+  color: var(--accent);
   text-decoration: none;
   border-radius: 8px;
+  border: 1px solid var(--ui-border);
   font-weight: 600;
   font-size: 0.9rem;
-  transition: all 0.2s;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .pg-link-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--pg-accent-soft);
+  border-color: var(--pg-accent-border);
 }
 
 /* Failed card in light mode: cream bg with dark text on medium brown card */
@@ -2101,7 +2110,7 @@ button.pg-collapse-toggle .pg-feedback-score {
   padding: 0.5rem 1.25rem;
   border-radius: 8px;
   border: 1px solid var(--ui-border);
-  background: var(--ui-bg);
+  background: var(--pg-panel-bg-strong);
   color: var(--dark);
   font-weight: 700;
   cursor: pointer;
@@ -2111,7 +2120,7 @@ button.pg-collapse-toggle .pg-feedback-score {
 }
 
 .pg-practice-btn:hover {
-  background: var(--light);
+  background: var(--pg-accent-soft);
   border-color: var(--secondary);
 }
 
@@ -2178,18 +2187,22 @@ button.pg-collapse-toggle .pg-feedback-score {
   gap: 0.5rem;
   padding: 0.5rem 1.25rem;
   border-radius: 999px;
-  background: #5865f2;
-  color: white;
+  background: var(--pg-accent-soft);
+  color: var(--dark);
   text-decoration: none;
   font-weight: 600;
   font-size: 0.95rem;
-  border: none;
+  border: 1px solid var(--pg-accent-border);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .pg-discord-invite:hover {
-  background: #4752c4;
+  background: var(--pg-accent-quiet);
+  border-color: var(--secondary);
 }
 
 .pg-discord-invite svg {
