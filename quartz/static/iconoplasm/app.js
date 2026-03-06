@@ -347,72 +347,70 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   }
 
   function scheduleHomeMasonry() {
-    if (!homeMasonry || !homeMasonry.container) return
-    if (homeMasonry.rafId) {
-      window.cancelAnimationFrame(homeMasonry.rafId)
-    }
-    homeMasonry.rafId = window.requestAnimationFrame(function () {
-      var container = homeMasonry && homeMasonry.container
-      if (!container) return
-      var styles = window.getComputedStyle(container)
-      var rowHeight = parseFloat(styles.getPropertyValue("--icono-grid-row")) || 2
-      var desiredGap = parseFloat(styles.columnGap) || 16
-      var cards = container.querySelectorAll(".icono-card")
-      for (var i = 0; i < cards.length; i++) {
-        var card = cards[i]
-        card.style.gridRowEnd = "auto"
-        var height = card.getBoundingClientRect().height
-        var span = Math.max(1, Math.ceil((height + desiredGap) / rowHeight))
-        card.style.gridRowEnd = "span " + span
-      }
-      homeMasonry.rafId = 0
-    })
+    // no-op; layout is handled by Masonry instance
   }
 
   function destroyHomeMasonry() {
     if (!homeMasonry) return
-    if (homeMasonry.rafId) {
-      window.cancelAnimationFrame(homeMasonry.rafId)
-    }
-    if (homeMasonry.resizeObserver) {
-      homeMasonry.resizeObserver.disconnect()
-    }
-    if (homeMasonry.container) {
-      var cards = homeMasonry.container.querySelectorAll(".icono-card")
-      for (var i = 0; i < cards.length; i++) {
-        cards[i].style.removeProperty("grid-row-end")
-      }
+    if (homeMasonry.instance) {
+      homeMasonry.instance.destroy()
     }
     homeMasonry = null
   }
 
   function applyHomeMasonry(container) {
     if (!container) return
-    if (!homeMasonry || homeMasonry.container !== container) {
-      destroyHomeMasonry()
-      homeMasonry = {
-        container: container,
-        rafId: 0,
-        observedCards: [],
-        resizeObserver: new ResizeObserver(function () {
-          scheduleHomeMasonry()
-        }),
-      }
-      homeMasonry.resizeObserver.observe(container)
+    var Masonry = window.Masonry
+    if (!Masonry) {
+      console.warn("[Iconoplasm] Masonry library not loaded")
+      return
     }
-    var cards = container.querySelectorAll(".icono-card")
-    for (var i = 0; i < cards.length; i++) {
-      var card = cards[i]
-      if (homeMasonry.observedCards.indexOf(card) !== -1) continue
-      homeMasonry.observedCards.push(card)
-      homeMasonry.resizeObserver.observe(card)
-      var img = card.querySelector("img")
-      if (img && !img.complete) {
-        img.addEventListener("load", scheduleHomeMasonry, { once: true })
-        img.addEventListener("error", scheduleHomeMasonry, { once: true })
+    if (homeMasonry && homeMasonry.container === container && homeMasonry.instance) {
+      // Masonry already running on this container — just relay out with new items
+      var instance = homeMasonry.instance
+      instance.reloadItems()
+      if (window.imagesLoaded) {
+        window.imagesLoaded(container, function () {
+          instance.layout()
+        })
+      } else {
+        instance.layout()
       }
+      return
     }
-    scheduleHomeMasonry()
+    destroyHomeMasonry()
+    // Insert sizer elements if not already present
+    if (!container.querySelector(".icono-grid-sizer")) {
+      var sizer = document.createElement("div")
+      sizer.className = "icono-grid-sizer"
+      container.insertBefore(sizer, container.firstChild)
+    }
+    if (!container.querySelector(".icono-gutter-sizer")) {
+      var gutter = document.createElement("div")
+      gutter.className = "icono-gutter-sizer"
+      container.insertBefore(gutter, container.children[1] || null)
+    }
+    var msnry = new Masonry(container, {
+      itemSelector: ".icono-card",
+      columnWidth: ".icono-grid-sizer",
+      gutter: ".icono-gutter-sizer",
+      percentPosition: true,
+      transitionDuration: 0,
+      initLayout: false,
+    })
+    homeMasonry = {
+      container: container,
+      instance: msnry,
+    }
+    if (window.imagesLoaded) {
+      window.imagesLoaded(container, function () {
+        msnry.layout()
+      })
+      // also do an eager layout so things aren't invisible while images load
+      msnry.layout()
+    } else {
+      msnry.layout()
+    }
   }
 
   function galleryOptionsMarkup() {

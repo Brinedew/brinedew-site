@@ -214,6 +214,12 @@ export default (() => {
                     href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
                   />
                   <script
+                    src={joinSegments(root, "static", `iconoplasm/vendor/masonry.pkgd.min.js?v=${CACHE_BUST}`)}
+                  ></script>
+                  <script
+                    src={joinSegments(root, "static", `iconoplasm/vendor/imagesloaded.pkgd.min.js?v=${CACHE_BUST}`)}
+                  ></script>
+                  <script
                     type="module"
                     src={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}
                   ></script>
