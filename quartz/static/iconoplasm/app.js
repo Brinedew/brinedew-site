@@ -355,14 +355,14 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       var container = homeMasonry && homeMasonry.container
       if (!container) return
       var styles = window.getComputedStyle(container)
-      var rowGap = parseFloat(styles.rowGap || styles.gap || "16") || 16
-      var rowHeight = parseFloat(styles.getPropertyValue("--icono-grid-row")) || 8
+      var rowHeight = parseFloat(styles.getPropertyValue("--icono-grid-row")) || 2
+      var desiredGap = parseFloat(styles.columnGap) || 16
       var cards = container.querySelectorAll(".icono-card")
       for (var i = 0; i < cards.length; i++) {
         var card = cards[i]
         card.style.gridRowEnd = "auto"
         var height = card.getBoundingClientRect().height
-        var span = Math.max(1, Math.ceil((height + rowGap) / (rowHeight + rowGap)))
+        var span = Math.max(1, Math.ceil((height + desiredGap) / rowHeight))
         card.style.gridRowEnd = "span " + span
       }
       homeMasonry.rafId = 0
