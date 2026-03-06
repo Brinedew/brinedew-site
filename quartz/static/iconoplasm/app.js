@@ -221,29 +221,6 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
               return { top: 28, bottom: 28, left: 28, right: 28 }
             },
           })
-          pswp.on("wheel", function (wheelEvent) {
-            var originalEvent = wheelEvent && wheelEvent.originalEvent
-            var slide = pswp.currSlide
-            if (!originalEvent || !slide || !slide.isZoomable()) return
-            wheelEvent.preventDefault()
-
-            var deltaY = Number(originalEvent.deltaY || 0)
-            if (!deltaY) return
-
-            var zoomFactor = -deltaY
-            if (originalEvent.deltaMode === 1) {
-              zoomFactor *= 0.05
-            } else {
-              zoomFactor *= originalEvent.deltaMode ? 1 : 0.002
-            }
-            zoomFactor = Math.pow(2, zoomFactor)
-
-            var centerPoint = typeof pswp.getViewportCenterPoint === "function"
-              ? pswp.getViewportCenterPoint()
-              : { x: window.innerWidth / 2, y: window.innerHeight / 2 }
-
-            slide.zoomTo(slide.currZoomLevel * zoomFactor, centerPoint)
-          })
           pswp.init()
         }
         gallery.addEventListener("click", handler)
