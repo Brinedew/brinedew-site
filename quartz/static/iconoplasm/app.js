@@ -1,5 +1,4 @@
 import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
-import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
 ;(function () {
   "use strict"
@@ -26,7 +25,6 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   var portraitDetailPromiseCache = Object.create(null)
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
-  var homeMasonry = null
   var portraitLightboxCleanup = null
 
   /* ─── API helpers ─── */
@@ -347,17 +345,9 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     }
   }
 
-  function destroyHomeMasonry() {
-    if (!homeMasonry || typeof homeMasonry.destroy !== "function") return
-    homeMasonry.destroy()
-    homeMasonry = null
-  }
+  function destroyHomeMasonry() {}
 
-  function applyHomeMasonry(container) {
-    destroyHomeMasonry()
-    if (!container || !container.children.length) return
-    homeMasonry = new BalancedMasonryGrid(container)
-  }
+  function applyHomeMasonry() {}
 
   function galleryOptionsMarkup() {
     var html = ""
@@ -560,7 +550,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
         '</label>' +
       '</div>' +
       '<div class="icono-loading" id="icono-loading">Loading portraits...</div>' +
-      '<div class="icono-grid icono-grid--masonry" id="icono-grid"></div>' +
+      '<div class="icono-grid" id="icono-grid"></div>' +
       '<div class="icono-load-sentinel" id="icono-load-sentinel" aria-hidden="true"></div>'
 
     var grid = document.getElementById("icono-grid")
@@ -830,7 +820,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
         '<div class="icono-candidate-gallery-heading">' +
           '<h2>Candidate portraits</h2>' +
         '</div>' +
-        '<div class="icono-candidate-strip" data-icono-lightbox>'
+        '<div class="icono-candidate-grid" data-icono-lightbox>'
     for (var i = 0; i < candidates.length; i++) {
       var candidate = candidates[i]
       var mediumUrl = candidatePortraitUrl(candidate, "medium")
@@ -904,7 +894,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
           '<div class="icono-gene-portrait-footer">' +
             '<div class="icono-vote-box" data-icono-vote-box>' +
               '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
-              '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)">0</span>' +
+              '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>' +
               '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
             '</div>' +
           '</div>'
