@@ -280,6 +280,18 @@ function buildContentSecurityPolicy(request) {
   return `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; ${scriptSrc}; ${connectSrc}; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
 }
 
+function crossOriginResourcePolicyForRequest(request) {
+  try {
+    const reqUrl = new URL(request.url)
+    if (reqUrl.hostname === ICONOPLASM_HOST && reqUrl.pathname.startsWith("/portraits/")) {
+      return "cross-origin"
+    }
+  } catch {
+    // Ignore malformed request URLs and fall back to the default site-wide policy.
+  }
+  return SECURITY_HEADERS["Cross-Origin-Resource-Policy"]
+}
+
 const STRIP_RESPONSE_HEADERS = [
   "x-powered-by",
   "x-github-request-id",
@@ -346,6 +358,7 @@ function applySecurityHeaders(response, request) {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     headers.set(name, value)
   }
+  headers.set("Cross-Origin-Resource-Policy", crossOriginResourcePolicyForRequest(request))
   try {
     const reqUrl = new URL(request.url)
     if (reqUrl.protocol === "https:") {
