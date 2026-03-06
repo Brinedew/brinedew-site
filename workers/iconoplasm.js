@@ -839,6 +839,122 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
   }
 }
 
+async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}) {
+  if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
+  const symbolNorm = normalizeSymbol(symbol)
+  if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
+
+  const currentRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT current_asset_sha256
+     FROM icono_publish_state
+     WHERE upper(gene_symbol) = ?
+     LIMIT 1`,
+  )
+    .bind(symbolNorm)
+    .first()
+  const currentAssetSha = normalizeSha256(currentRow?.current_asset_sha256 || "")
+
+  const topRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       pa.asset_sha256,
+       COALESCE(v.upvotes, 0) AS image_upvotes,
+       COALESCE(v.downvotes, 0) AS image_downvotes,
+       COALESCE(v.score, 0) AS image_score,
+       pa.created_at,
+       CASE
+         WHEN lower(pa.asset_sha256) = ? THEN 1
+         ELSE 0
+       END AS is_current
+     FROM icono_portrait_assets pa
+     LEFT JOIN (
+       SELECT
+         candidate_ref,
+         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
+         SUM(vote_value) AS score
+       FROM icono_image_votes
+       GROUP BY candidate_ref
+     ) v
+       ON v.candidate_ref = ('a:' || upper(pa.gene_symbol) || '|' || lower(pa.asset_sha256))
+     WHERE upper(pa.gene_symbol) = ?
+       AND COALESCE(pa.status, '') <> 'rejected'
+       AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+     ORDER BY
+       COALESCE(v.score, 0) DESC,
+       COALESCE(v.upvotes, 0) DESC,
+       CASE
+         WHEN lower(pa.asset_sha256) = ? THEN 1
+         ELSE 0
+       END DESC,
+       pa.created_at DESC,
+       lower(pa.asset_sha256) ASC
+     LIMIT 1`,
+  )
+    .bind(currentAssetSha || "", symbolNorm, currentAssetSha || "")
+    .first()
+
+  const topAssetSha = normalizeSha256(topRow?.asset_sha256 || "")
+  if (!topAssetSha) return { ok: true, changed: false, code: "NO_CANDIDATE" }
+  if (currentAssetSha && topAssetSha === currentAssetSha) {
+    return { ok: true, changed: false, code: "UNCHANGED", current_asset_sha256: currentAssetSha }
+  }
+
+  const topScore = Number(topRow?.image_score || 0)
+  const topUpvotes = Number(topRow?.image_upvotes || 0)
+  const topDownvotes = Number(topRow?.image_downvotes || 0)
+  if (!currentAssetSha && topScore <= 0 && topUpvotes <= 0 && topDownvotes <= 0) {
+    return { ok: true, changed: false, code: "NO_SIGNAL", current_asset_sha256: null }
+  }
+
+  const actorNorm = normalizeUserId(actorId || "vote_auto")
+  const eventReason = String(reason || "vote_auto_promote").slice(0, 2000) || "vote_auto_promote"
+
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(gene_symbol) DO UPDATE SET
+       current_asset_sha256 = excluded.current_asset_sha256,
+       updated_by = excluded.updated_by,
+       updated_at = CURRENT_TIMESTAMP`,
+  )
+    .bind(symbolNorm, topAssetSha, actorNorm)
+    .run()
+
+  await env.ICONOPLASM_DB.prepare(
+    `UPDATE icono_portrait_assets
+     SET status = 'approved'
+     WHERE upper(gene_symbol) = ?
+       AND lower(asset_sha256) = ?`,
+  )
+    .bind(symbolNorm, topAssetSha)
+    .run()
+
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_publish_events (
+       gene_symbol,
+       from_asset_sha256,
+       to_asset_sha256,
+       action,
+       actor,
+       reason,
+       created_at
+     ) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)`,
+  )
+    .bind(symbolNorm, currentAssetSha || null, topAssetSha, actorNorm, eventReason)
+    .run()
+
+  return {
+    ok: true,
+    changed: true,
+    code: "PROMOTED",
+    from_asset_sha256: currentAssetSha || null,
+    to_asset_sha256: topAssetSha,
+    image_score: topScore,
+    image_upvotes: topUpvotes,
+    image_downvotes: topDownvotes,
+  }
+}
+
 function normalizeGalleryOrder(raw) {
   const value = String(raw || "")
     .trim()
@@ -1382,6 +1498,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .run()
       }
 
+      const autoPromote = await autoPromoteTopVotedPortrait(env, {
+        symbol,
+        actorId: userId,
+        reason: "vote_auto_promote",
+      })
+
       const snapshot = await iconoVoteSnapshot(env, {
         candidateRef,
         symbol,
@@ -1399,6 +1521,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             asset_sha256: assetSha,
             user_id: userId,
             snapshot,
+            auto_promote: autoPromote,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -1468,6 +1591,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       let upserted = 0
       let deleted = 0
       let invalid = 0
+      const touchedSymbols = new Set()
       for (const raw of items) {
         const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
         const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
@@ -1487,6 +1611,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           invalid += 1
           continue
         }
+        touchedSymbols.add(symbol)
         if (voteValue === 0) {
           await env.ICONOPLASM_DB.prepare(
             `DELETE FROM icono_image_votes
@@ -1514,6 +1639,16 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         upserted += 1
       }
 
+      let autoPromoted = 0
+      for (const symbol of touchedSymbols) {
+        const result = await autoPromoteTopVotedPortrait(env, {
+          symbol,
+          actorId: "admin_import",
+          reason: "vote_import_auto_promote",
+        })
+        if (result?.changed) autoPromoted += 1
+      }
+
       return done(
         "admin_votes_import",
         json(
@@ -1523,6 +1658,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             upserted,
             deleted,
             invalid,
+            auto_promoted: autoPromoted,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -1601,6 +1737,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .run()
       }
 
+      const autoPromote = await autoPromoteTopVotedPortrait(env, {
+        symbol,
+        actorId: userId,
+        reason: "admin_vote_auto_promote",
+      })
+
       const snapshot = await iconoVoteSnapshot(env, {
         candidateRef,
         symbol,
@@ -1618,6 +1760,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             asset_sha256: assetSha,
             user_id: userId,
             snapshot,
+            auto_promote: autoPromote,
           },
           200,
           { "Cache-Control": "no-store" },
