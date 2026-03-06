@@ -1,4 +1,4 @@
-import PhotoSwipeLightbox from "./vendor/photoswipe-lightbox.esm.js?v=20260306c"
+import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
 ;(function () {
@@ -27,7 +27,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
   var homeMasonry = null
-  var portraitLightbox = null
+  var portraitLightboxCleanup = null
 
   /* ─── API helpers ─── */
 
@@ -159,25 +159,58 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   }
 
   function refreshPortraitLightbox() {
-    if (portraitLightbox) {
-      portraitLightbox.destroy()
-      portraitLightbox = null
+    if (typeof portraitLightboxCleanup === "function") {
+      portraitLightboxCleanup()
+      portraitLightboxCleanup = null
     }
-    if (!document.querySelector("[data-icono-lightbox] a[data-icono-pswp]")) return
-    portraitLightbox = new PhotoSwipeLightbox({
-      gallery: "[data-icono-lightbox]",
-      children: "a[data-icono-pswp]",
-      bgOpacity: 0.92,
-      spacing: 0.12,
-      wheelToZoom: true,
-      loop: false,
-      showHideAnimationType: "zoom",
-      pswpModule: () => import("./vendor/photoswipe.esm.js?v=20260306c"),
-      paddingFn: function (_viewportSize) {
-        return { top: 28, bottom: 28, left: 28, right: 28 }
-      },
-    })
-    portraitLightbox.init()
+    if (!document.querySelector("[data-icono-lightbox] [data-icono-pswp]")) return
+    var cleanups = []
+    var galleries = document.querySelectorAll("[data-icono-lightbox]")
+    for (var i = 0; i < galleries.length; i++) {
+      ;(function (gallery) {
+        var handler = function (event) {
+          var trigger = event.target && event.target.closest
+            ? event.target.closest("[data-icono-pswp]")
+            : null
+          if (!trigger || !gallery.contains(trigger)) return
+          var links = gallery.querySelectorAll("[data-icono-pswp]")
+          var items = []
+          var index = 0
+          for (var j = 0; j < links.length; j++) {
+            var link = links[j]
+            var width = Number(link.getAttribute("data-pswp-width") || 0) || 1
+            var height = Number(link.getAttribute("data-pswp-height") || 0) || 1
+            items.push({
+              src: link.getAttribute("data-icono-pswp-src"),
+              width: width,
+              height: height,
+              alt: link.getAttribute("data-icono-pswp-alt") || link.getAttribute("aria-label") || "",
+            })
+            if (link === trigger) index = j
+          }
+          var pswp = new PhotoSwipe({
+            dataSource: items,
+            index: index,
+            bgOpacity: 0.92,
+            spacing: 0.12,
+            wheelToZoom: true,
+            loop: false,
+            showHideAnimationType: "zoom",
+            paddingFn: function () {
+              return { top: 28, bottom: 28, left: 28, right: 28 }
+            },
+          })
+          pswp.init()
+        }
+        gallery.addEventListener("click", handler)
+        cleanups.push(function () {
+          gallery.removeEventListener("click", handler)
+        })
+      })(galleries[i])
+    }
+    portraitLightboxCleanup = function () {
+      for (var i = 0; i < cleanups.length; i++) cleanups[i]()
+    }
   }
 
   function fetchGeneDetail(symbol) {
@@ -809,12 +842,12 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
       if (candidate && candidate.is_current) metaBits.push("Current")
       metaBits.push(scoreLabel(candidate && candidate.image_score))
       html +=
-        '<a class="icono-candidate-card' + (candidate && candidate.is_current ? ' is-current' : '') + '" href="' + esc(fullUrl) + '" data-icono-pswp data-pswp-width="' + width + '" data-pswp-height="' + height + '" data-pswp-type="image" style="--width:' + width + ';--height:' + height + ';">' +
+        '<button type="button" class="icono-candidate-card' + (candidate && candidate.is_current ? ' is-current' : '') + '" data-icono-pswp data-icono-pswp-src="' + esc(fullUrl) + '" data-icono-pswp-alt="' + esc(genePayload.symbol) + ' portrait candidate" data-pswp-width="' + width + '" data-pswp-height="' + height + '" style="--width:' + width + ';--height:' + height + ';">' +
           '<span class="icono-candidate-media">' +
             '<img src="' + esc(mediumUrl) + '" alt="' + esc(genePayload.symbol) + ' portrait candidate" loading="lazy" decoding="async" width="' + width + '" height="' + height + '">' +
           '</span>' +
           '<span class="icono-candidate-meta">' + esc(metaBits.join(" · ")) + '</span>' +
-        '</a>'
+        '</button>'
     }
     html +=
         '</div>' +
@@ -883,10 +916,10 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
       ? (
           '<div class="icono-gene-portrait-shell">' +
             '<div class="icono-gene-media-wrap" data-icono-lightbox>' +
-            '<a href="' + esc(portraitFullUrl) + '" class="' + swatchClass + ' icono-gene-media-link" data-icono-pswp data-pswp-width="' + portraitDims.width + '" data-pswp-height="' + portraitDims.height + '" data-pswp-type="image" aria-label="Open full-size portrait for ' + esc(g.symbol) + '">' +
+            '<button type="button" class="' + swatchClass + ' icono-gene-media-link" data-icono-pswp data-icono-pswp-src="' + esc(portraitFullUrl) + '" data-icono-pswp-alt="' + esc(g.symbol) + ' portrait" data-pswp-width="' + portraitDims.width + '" data-pswp-height="' + portraitDims.height + '" aria-label="Open full-size portrait for ' + esc(g.symbol) + '">' +
               '<img src="' + esc(portraitDisplayUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">' +
               '<span class="icono-gene-symbol-pill">' + esc(g.symbol) + '</span>' +
-            '</a>' +
+            '</button>' +
             '</div>' +
             voteBox +
           '</div>'
