@@ -27,6 +27,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
   var homeMasonry = null
+  var portraitViewer = null
 
   /* ─── API helpers ─── */
 
@@ -147,6 +148,63 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     return portraitImagePromiseCache[resolvedUrl]
   }
 
+  function ensurePortraitViewer() {
+    if (portraitViewer && document.body.contains(portraitViewer)) return portraitViewer
+    portraitViewer = document.createElement("div")
+    portraitViewer.className = "icono-viewer"
+    portraitViewer.hidden = true
+    portraitViewer.setAttribute("aria-hidden", "true")
+    portraitViewer.innerHTML =
+      '<button type="button" class="icono-viewer-close" data-icono-viewer-close aria-label="Close portrait viewer">&times;</button>' +
+      '<div class="icono-viewer-backdrop" data-icono-viewer-close></div>' +
+      '<figure class="icono-viewer-figure">' +
+        '<img class="icono-viewer-image" alt="">' +
+        '<figcaption class="icono-viewer-caption"></figcaption>' +
+      '</figure>'
+    portraitViewer.addEventListener("click", function (event) {
+      if (event.target.closest("[data-icono-viewer-close]")) {
+        closePortraitViewer()
+      }
+    })
+    document.body.appendChild(portraitViewer)
+    return portraitViewer
+  }
+
+  function openPortraitViewer(url, altText, captionText) {
+    var resolvedUrl = String(url || "").trim()
+    if (!resolvedUrl) return
+    var viewer = ensurePortraitViewer()
+    var image = viewer.querySelector(".icono-viewer-image")
+    var caption = viewer.querySelector(".icono-viewer-caption")
+    if (!image || !caption) return
+    image.setAttribute("src", resolvedUrl)
+    image.setAttribute("alt", String(altText || "").trim())
+    caption.textContent = String(captionText || "").trim()
+    viewer.hidden = false
+    viewer.setAttribute("aria-hidden", "false")
+    document.body.classList.add("icono-viewer-open")
+    window.requestAnimationFrame(function () {
+      viewer.classList.add("is-open")
+    })
+  }
+
+  function closePortraitViewer() {
+    if (!portraitViewer) return
+    portraitViewer.classList.remove("is-open")
+    portraitViewer.setAttribute("aria-hidden", "true")
+    document.body.classList.remove("icono-viewer-open")
+    window.setTimeout(function () {
+      if (!portraitViewer) return
+      portraitViewer.hidden = true
+    }, 160)
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      closePortraitViewer()
+    }
+  })
+
   function fetchGeneDetail(symbol) {
     var key = normalizedSymbol(symbol)
     if (!key) return Promise.resolve(null)
@@ -186,12 +244,12 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
       existing.setAttribute("src", portraitUrl)
       existing.setAttribute("width", String(dims.width))
       existing.setAttribute("height", String(dims.height))
+      media.classList.remove("icono-card-media--fallback")
       return
     }
-    media.insertAdjacentHTML(
-      "afterbegin",
+    media.classList.remove("icono-card-media--fallback")
+    media.innerHTML =
       '<img src="' + esc(portraitUrl) + '" alt="' + esc(key) + ' portrait" loading="lazy" decoding="async" width="' + dims.width + '" height="' + dims.height + '">'
-    )
   }
 
   function prefetchPortraitBatch(entries, container) {
@@ -298,15 +356,6 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     homeMasonry = new BalancedMasonryGrid(container)
   }
 
-  function galleryBadgeText(gene) {
-    var score = Number(gene && gene.image_score || 0)
-    var votes = Number(gene && gene.image_upvotes || 0) + Number(gene && gene.image_downvotes || 0)
-    if (votes > 0) {
-      return (score > 0 ? "+" : "") + score + " score"
-    }
-    return "New portrait"
-  }
-
   function galleryOptionsMarkup() {
     var html = ""
     for (var i = 0; i < GALLERY_ORDERS.length; i++) {
@@ -336,25 +385,38 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   }
 
   function voteSummaryText(snapshot) {
+    var score = Number((snapshot || {}).image_score || 0)
+    var sign = score > 0 ? "+" : ""
+    return sign + score
+  }
+
+  function voteSummaryDetails(snapshot) {
     var data = snapshot || {}
     var up = Number(data.image_upvotes || 0)
     var down = Number(data.image_downvotes || 0)
     var score = Number(data.image_score || 0)
     var sign = score > 0 ? "+" : ""
-    return "Score " + sign + score + " (" + up + "↑/" + down + "↓)"
+    return "Score " + sign + score + " (" + up + " approvals / " + down + " rejections)"
   }
 
   function setVoteBoxState(box, opts) {
     if (!box) return
     var statsEl = box.querySelector("[data-icono-vote-stats]")
     var noteEl = box.querySelector("[data-icono-vote-note]")
+    if (!noteEl) {
+      var noteScope = box.closest(".icono-gene-portrait-shell") || box.parentElement
+      noteEl = noteScope ? noteScope.querySelector("[data-icono-vote-note]") : null
+    }
     var upBtn = box.querySelector("[data-icono-vote-up]")
     var downBtn = box.querySelector("[data-icono-vote-down]")
     var snapshot = (opts && opts.snapshot) || {}
     var authenticated = !!(opts && opts.authenticated)
     var pending = !!(opts && opts.pending)
     var userVote = Number(snapshot.user_vote || 0)
-    if (statsEl) statsEl.textContent = voteSummaryText(snapshot)
+    if (statsEl) {
+      statsEl.textContent = voteSummaryText(snapshot)
+      statsEl.setAttribute("title", voteSummaryDetails(snapshot))
+    }
     if (noteEl) {
       noteEl.textContent = authenticated
         ? "Voting with your website account."
@@ -651,18 +713,19 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
       var dims = portraitDimensions(g)
       var tc = textColorFor(g.color)
       var portraitUrl = publishedPortraitUrl(g, "medium")
-      var badgeText = galleryBadgeText(g)
+      var mediaClass = portraitUrl
+        ? "icono-card-media"
+        : "icono-card-media icono-card-media--fallback"
       html +=
         '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav data-icono-index="' + i + '" data-icono-symbol="' + esc(g.symbol) + '" style="--width:' + dims.width + ';--height:' + dims.height + ';--icono-card-accent:' + esc(g.color || "#888") + ';">' +
-          '<div class="icono-card-media" style="background:' + esc(g.color) + ';color:' + tc + '">' +
+          '<div class="' + mediaClass + '" style="background:' + esc(g.color) + ';color:' + tc + '">' +
             (portraitUrl
               ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="' + (i < 12 ? "eager" : "lazy") + '" decoding="async" width="' + dims.width + '" height="' + dims.height + '" fetchpriority="' + (i < 8 ? "high" : "low") + '">'
               : esc(g.symbol)) +
-            '<div class="icono-card-info">' +
-              '<span class="icono-card-badge">' + esc(badgeText) + '</span>' +
-              '<div class="icono-card-symbol">' + esc(g.symbol) + '</div>' +
-              '<div class="icono-card-name">' + esc(g.full_name) + '</div>' +
-            '</div>' +
+          '</div>' +
+          '<div class="icono-card-info">' +
+            '<span class="icono-card-badge">' + esc(g.symbol) + '</span>' +
+            '<div class="icono-card-name">' + esc(g.full_name) + '</div>' +
           '</div>' +
         '</a>'
     }
@@ -699,6 +762,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
   function renderGeneContent(container, g) {
     var portraitDisplayUrl = publishedPortraitUrl(g, "medium")
+    var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitDisplayUrl
     var hasPortrait = !!portraitDisplayUrl
     var tc = textColorFor(g.color || "#888")
     var swatchClass = hasPortrait
@@ -708,10 +772,6 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
       ? ""
       : ' style="background:' + esc(g.color || "#888") + ';color:' + tc + '"'
 
-    var swatchInner = hasPortrait
-      ? '<img src="' + esc(portraitDisplayUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">'
-      : esc(g.symbol)
-
     var portraitNote = hasPortrait
       ? ""
       : '<p class="icono-portrait-status">Portrait not yet published</p>'
@@ -719,18 +779,28 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     var voteBox = (hasPortrait && g.portrait && g.portrait.asset_sha256)
       ? (
           '<div class="icono-vote-box" data-icono-vote-box>' +
-            '<div class="icono-vote-top">' +
-              '<span class="icono-vote-title">Community vote</span>' +
-              '<span class="icono-vote-stats" data-icono-vote-stats>Score +0 (0↑/0↓)</span>' +
-            '</div>' +
-            '<div class="icono-vote-actions">' +
-              '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
-              '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
-            '</div>' +
-            '<p class="icono-vote-note" data-icono-vote-note>Log in with Discord to vote.</p>' +
+            '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
+            '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)">+0</span>' +
+            '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
           '</div>'
         )
       : ""
+
+    var voteNote = hasPortrait && g.portrait && g.portrait.asset_sha256
+      ? '<p class="icono-vote-note" data-icono-vote-note>Log in with Discord to vote.</p>'
+      : ""
+
+    var portraitBlock = hasPortrait
+      ? (
+          '<div class="icono-gene-portrait-shell">' +
+            '<button type="button" class="' + swatchClass + '" data-icono-portrait-open data-icono-portrait-src="' + esc(portraitFullUrl) + '" data-icono-portrait-alt="' + esc(g.symbol) + ' portrait" aria-label="Open full-size portrait for ' + esc(g.symbol) + '">' +
+              '<img src="' + esc(portraitDisplayUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">' +
+            '</button>' +
+            voteBox +
+            voteNote +
+          '</div>'
+        )
+      : '<div class="' + swatchClass + '"' + swatchStyle + '>' + esc(g.symbol) + '</div>'
 
     var links = []
     if (g.source_links) {
@@ -742,9 +812,7 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
     var html =
       '<div class="icono-gene-header">' +
-        '<div class="' + swatchClass + '"' + swatchStyle + '>' +
-          swatchInner +
-        '</div>' +
+        portraitBlock +
         '<div class="icono-gene-meta">' +
           '<h1>' + esc(g.symbol) + '</h1>' +
           '<p class="full-name">' + esc(g.full_name || "") + '</p>' +
@@ -752,7 +820,6 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
             ? '<div class="icono-color-chip"><span class="icono-color-dot" style="background:' + esc(g.color) + '"></span>' + esc(g.color) + '</div>'
             : "") +
           portraitNote +
-          voteBox +
           '<div class="icono-links">' + links.join(" ") + '</div>' +
         '</div>' +
       '</div>'
@@ -836,6 +903,19 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
     container.innerHTML = html
     wireGeneVoteBox(container, g)
+    wireGenePortraitViewer(container)
+  }
+
+  function wireGenePortraitViewer(container) {
+    var trigger = container.querySelector("[data-icono-portrait-open]")
+    if (!trigger) return
+    trigger.addEventListener("click", function () {
+      openPortraitViewer(
+        trigger.getAttribute("data-icono-portrait-src"),
+        trigger.getAttribute("data-icono-portrait-alt"),
+        trigger.getAttribute("data-icono-portrait-alt")
+      )
+    })
   }
 
   /* ─── Rendering: 404 ─── */
