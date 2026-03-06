@@ -1219,6 +1219,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   /* ─── Client-side navigation ─── */
 
+  var lastRenderedPath = null
+
   function navigateTo(path) {
     window.history.pushState(null, "", path)
     render()
@@ -1227,9 +1229,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function render() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
-    // Lock height before wiping content to prevent layout collapse flash
-    var prevH = root.offsetHeight
-    if (prevH > 0) root.style.minHeight = prevH + "px"
+    lastRenderedPath = window.location.pathname + window.location.search
     destroyHomeMasonry()
     destroyCandidateMasonry()
     window.scrollTo(0, 0)
@@ -1250,8 +1250,6 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       render404(root)
       refreshPortraitLightbox()
     }
-    // Release height lock after new content is in place
-    root.style.minHeight = ""
   }
 
   /* ─── Event delegation for internal links ─── */
@@ -1286,6 +1284,9 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   // Also handle Quartz's SPA navigation events
   document.addEventListener("nav", function () {
+    // Skip if navigateTo already rendered for this path
+    var current = window.location.pathname + window.location.search
+    if (lastRenderedPath === current) return
     // Re-init when Quartz navigates to this page
     setTimeout(init, 0)
   })
