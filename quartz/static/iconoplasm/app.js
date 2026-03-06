@@ -1222,7 +1222,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   var lastRenderedPath = null
 
   function navigateTo(path) {
-    window.history.pushState(null, "", path)
+    window.history.pushState({ iconoplasm: true }, "", path)
     render()
   }
 
@@ -1272,6 +1272,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    window.history.replaceState({ iconoplasm: true }, "", window.location.href)
     render()
   }
 
