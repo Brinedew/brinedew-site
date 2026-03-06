@@ -1,10 +1,20 @@
+import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
+
 ;(function () {
   "use strict"
 
   /* ─── Constants ─── */
   var ROOT_ID = "iconoplasm-root"
   var DEBOUNCE_MS = 200
-  var GRID_COUNT = 60
+  var GALLERY_COUNT = 120
+  var GALLERY_DEFAULT_ORDER = "popular"
+  var GALLERY_ORDERS = [
+    { value: "popular", label: "Popularity" },
+    { value: "newest", label: "Newest" },
+    { value: "oldest", label: "Oldest" },
+    { value: "name_asc", label: "A-Z" },
+    { value: "name_desc", label: "Z-A" },
+  ]
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
   var PREFETCH_DETAIL_CONCURRENCY = 4
@@ -16,6 +26,7 @@
   var portraitDetailPromiseCache = Object.create(null)
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
+  var homeMasonry = null
 
   /* ─── API helpers ─── */
 
@@ -80,6 +91,27 @@
     return heroUrl || mediumUrl || thumbUrl
   }
 
+  function portraitDimensions(genePayload) {
+    var portrait = genePayload && genePayload.portrait
+    var width = Number(
+      (portrait && (portrait.width || portrait.image_width)) ||
+      (genePayload && genePayload.width) ||
+      0
+    )
+    var height = Number(
+      (portrait && (portrait.height || portrait.image_height)) ||
+      (genePayload && genePayload.height) ||
+      0
+    )
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+      return { width: 4, height: 5 }
+    }
+    return {
+      width: Math.max(1, Math.round(width)),
+      height: Math.max(1, Math.round(height)),
+    }
+  }
+
   function deferWork(task) {
     if (typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(function () {
@@ -142,15 +174,24 @@
     if (!key) return
     var card = container.querySelector('[data-icono-symbol="' + key + '"]')
     if (!card) return
-    var swatch = card.querySelector(".icono-card-swatch")
-    if (!swatch) return
+    var media = card.querySelector(".icono-card-media")
+    if (!media) return
     var portraitUrl = publishedPortraitUrl(genePayload, "medium")
     if (!portraitUrl) return
-    if (swatch.classList.contains("icono-card-swatch--portrait")) return
-
-    swatch.classList.add("icono-card-swatch--portrait")
-    swatch.innerHTML =
-      '<img src="' + esc(portraitUrl) + '" alt="' + esc(key) + ' portrait" loading="lazy">'
+    var dims = portraitDimensions(genePayload)
+    card.style.setProperty("--width", String(dims.width))
+    card.style.setProperty("--height", String(dims.height))
+    var existing = media.querySelector("img")
+    if (existing) {
+      existing.setAttribute("src", portraitUrl)
+      existing.setAttribute("width", String(dims.width))
+      existing.setAttribute("height", String(dims.height))
+      return
+    }
+    media.insertAdjacentHTML(
+      "afterbegin",
+      '<img src="' + esc(portraitUrl) + '" alt="' + esc(key) + ' portrait" loading="lazy" decoding="async" width="' + dims.width + '" height="' + dims.height + '">'
+    )
   }
 
   function prefetchPortraitBatch(entries, container) {
@@ -197,6 +238,9 @@
 
   function setupOrderedPortraitPrefetch(container, genes) {
     if (!container || !Array.isArray(genes) || !genes.length) return
+    if (typeof container._iconoPrefetchCleanup === "function") {
+      container._iconoPrefetchCleanup()
+    }
 
     var orderedEntries = []
     for (var i = 0; i < genes.length; i++) {
@@ -235,6 +279,44 @@
     scheduleNextBatch()
     container.addEventListener("mouseover", handleIntent)
     container.addEventListener("focusin", handleIntent)
+    container._iconoPrefetchCleanup = function () {
+      container.removeEventListener("mouseover", handleIntent)
+      container.removeEventListener("focusin", handleIntent)
+      container._iconoPrefetchCleanup = null
+    }
+  }
+
+  function destroyHomeMasonry() {
+    if (!homeMasonry || typeof homeMasonry.destroy !== "function") return
+    homeMasonry.destroy()
+    homeMasonry = null
+  }
+
+  function applyHomeMasonry(container) {
+    destroyHomeMasonry()
+    if (!container || !container.children.length) return
+    homeMasonry = new BalancedMasonryGrid(container)
+  }
+
+  function galleryBadgeText(gene) {
+    var score = Number(gene && gene.image_score || 0)
+    var votes = Number(gene && gene.image_upvotes || 0) + Number(gene && gene.image_downvotes || 0)
+    if (votes > 0) {
+      return (score > 0 ? "+" : "") + score + " score"
+    }
+    return "New portrait"
+  }
+
+  function galleryOptionsMarkup() {
+    var html = ""
+    for (var i = 0; i < GALLERY_ORDERS.length; i++) {
+      var option = GALLERY_ORDERS[i]
+      html +=
+        '<option value="' + esc(option.value) + '"' +
+          (option.value === GALLERY_DEFAULT_ORDER ? " selected" : "") +
+        ">" + esc(option.label) + "</option>"
+    }
+    return html
   }
 
   function isLightColor(hex) {
@@ -412,27 +494,62 @@
           '<div class="icono-search-results" id="icono-results"></div>' +
         '</div>' +
       '</div>' +
-      '<div class="icono-loading" id="icono-loading">Loading genes...</div>' +
-      '<div class="icono-grid" id="icono-grid"></div>'
+      '<div class="icono-gallery-toolbar">' +
+        '<div class="icono-gallery-intro">' +
+          '<div class="icono-gallery-kicker">Published portrait gallery</div>' +
+          '<div class="icono-gallery-count" id="icono-gallery-count">...</div>' +
+        '</div>' +
+        '<label class="icono-gallery-order" for="icono-order">' +
+          '<span>Order by</span>' +
+          '<select id="icono-order">' + galleryOptionsMarkup() + '</select>' +
+        '</label>' +
+      '</div>' +
+      '<div class="icono-loading" id="icono-loading">Loading portraits...</div>' +
+      '<div class="icono-grid icono-grid--masonry" id="icono-grid"></div>'
 
     var grid = document.getElementById("icono-grid")
     var loading = document.getElementById("icono-loading")
     var countEl = document.getElementById("icono-gene-count")
+    var galleryCountEl = document.getElementById("icono-gallery-count")
     var input = document.getElementById("icono-q")
     var resultsEl = document.getElementById("icono-results")
+    var orderEl = document.getElementById("icono-order")
+    var activeGalleryRequest = 0
 
-    // Load random genes for the grid
-    fetchJSON("/api/genes/random?count=" + GRID_COUNT)
-      .then(function (data) {
-        loading.style.display = "none"
-        if (countEl) countEl.textContent = data.total.toLocaleString() + " genes"
-        renderGrid(grid, data.genes)
-        setupOrderedPortraitPrefetch(grid, data.genes || [])
+    function loadGallery(order) {
+      var requestId = ++activeGalleryRequest
+      loading.style.display = "block"
+      loading.textContent = "Loading portraits..."
+
+      fetchJSON("/api/gallery?order=" + encodeURIComponent(order) + "&limit=" + GALLERY_COUNT)
+        .then(function (data) {
+          if (requestId !== activeGalleryRequest) return
+          loading.style.display = "none"
+          if (countEl) countEl.textContent = (data.total || 0).toLocaleString() + " published portraits"
+          if (galleryCountEl) {
+            galleryCountEl.textContent = "Showing " + (data.items || []).length.toLocaleString() + " of " + (data.total || 0).toLocaleString()
+          }
+          if (orderEl && data.order && orderEl.value !== data.order) {
+            orderEl.value = data.order
+          }
+          renderGrid(grid, data.items || [])
+          applyHomeMasonry(grid)
+          setupOrderedPortraitPrefetch(grid, data.items || [])
+        })
+        .catch(function (err) {
+          if (requestId !== activeGalleryRequest) return
+          loading.textContent = "Failed to load portraits."
+          console.error("[Iconoplasm] gallery load error:", err)
+        })
+    }
+
+    if (orderEl) {
+      orderEl.addEventListener("change", function () {
+        loadGallery(orderEl.value || GALLERY_DEFAULT_ORDER)
       })
-      .catch(function (err) {
-        loading.textContent = "Failed to load genes."
-        console.error("[Iconoplasm] grid load error:", err)
-      })
+    }
+
+    loadGallery(GALLERY_DEFAULT_ORDER)
 
     // Search with debounce
     var timer = null
@@ -524,23 +641,28 @@
   }
 
   function renderGrid(container, genes) {
+    if (!genes.length) {
+      container.innerHTML = ""
+      return
+    }
     var html = ""
     for (var i = 0; i < genes.length; i++) {
       var g = genes[i]
+      var dims = portraitDimensions(g)
       var tc = textColorFor(g.color)
       var portraitUrl = publishedPortraitUrl(g, "medium")
-      var swatchClass = portraitUrl
-        ? "icono-card-swatch icono-card-swatch--portrait"
-        : "icono-card-swatch"
-      var swatchInner = portraitUrl
-        ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">'
-        : esc(g.symbol)
+      var badgeText = galleryBadgeText(g)
       html +=
-        '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav data-icono-index="' + i + '" data-icono-symbol="' + esc(g.symbol) + '">' +
-          '<div class="' + swatchClass + '" style="background:' + esc(g.color) + ';color:' + tc + '">' + swatchInner + '</div>' +
-          '<div class="icono-card-info">' +
-            '<div class="icono-card-symbol">' + esc(g.symbol) + '</div>' +
-            '<div class="icono-card-name">' + esc(g.full_name) + '</div>' +
+        '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav data-icono-index="' + i + '" data-icono-symbol="' + esc(g.symbol) + '" style="--width:' + dims.width + ';--height:' + dims.height + ';--icono-card-accent:' + esc(g.color || "#888") + ';">' +
+          '<div class="icono-card-media" style="background:' + esc(g.color) + ';color:' + tc + '">' +
+            (portraitUrl
+              ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="' + (i < 12 ? "eager" : "lazy") + '" decoding="async" width="' + dims.width + '" height="' + dims.height + '" fetchpriority="' + (i < 8 ? "high" : "low") + '">'
+              : esc(g.symbol)) +
+            '<div class="icono-card-info">' +
+              '<span class="icono-card-badge">' + esc(badgeText) + '</span>' +
+              '<div class="icono-card-symbol">' + esc(g.symbol) + '</div>' +
+              '<div class="icono-card-name">' + esc(g.full_name) + '</div>' +
+            '</div>' +
           '</div>' +
         '</a>'
     }
@@ -736,6 +858,7 @@
   function render() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    destroyHomeMasonry()
     var route = getRoute()
     // Update page title
     if (route.page === "home") {

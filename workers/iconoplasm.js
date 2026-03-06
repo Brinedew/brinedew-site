@@ -835,6 +835,125 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
   }
 }
 
+function normalizeGalleryOrder(raw) {
+  const value = String(raw || "")
+    .trim()
+    .toLowerCase()
+  if (["newest", "oldest", "name_asc", "name_desc"].includes(value)) return value
+  return "popular"
+}
+
+function galleryOrderClause(order) {
+  switch (order) {
+    case "newest":
+      return `COALESCE(ps.updated_at, pa.created_at) DESC, upper(ps.gene_symbol) ASC`
+    case "oldest":
+      return `COALESCE(ps.updated_at, pa.created_at) ASC, upper(ps.gene_symbol) ASC`
+    case "name_asc":
+      return `upper(ps.gene_symbol) ASC`
+    case "name_desc":
+      return `upper(ps.gene_symbol) DESC`
+    default:
+      return `COALESCE(v.score, 0) DESC, COALESCE(v.upvotes, 0) DESC, COALESCE(ps.updated_at, pa.created_at) DESC, upper(ps.gene_symbol) ASC`
+  }
+}
+
+async function galleryFeed(env, url, rawOrder, rawLimit) {
+  const order = normalizeGalleryOrder(rawOrder)
+  const limit = Math.max(1, Math.min(240, Number.parseInt(String(rawLimit || "120"), 10) || 120))
+  await warmColorsCache(env)
+  if (!env.ICONOPLASM_DB) {
+    return {
+      order,
+      total: 0,
+      catalog_total: colorsCache.bySymbol.size,
+      items: [],
+    }
+  }
+
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       upper(ps.gene_symbol) AS symbol,
+       ps.updated_at AS published_at,
+       pa.created_at AS asset_created_at,
+       pa.asset_sha256,
+       pa.r2_key_full,
+       pa.r2_key_medium,
+       pa.r2_key_thumb,
+       pa.width,
+       pa.height,
+       COALESCE(v.upvotes, 0) AS image_upvotes,
+       COALESCE(v.downvotes, 0) AS image_downvotes,
+       COALESCE(v.score, 0) AS image_score
+     FROM icono_publish_state ps
+     JOIN icono_portrait_assets pa
+       ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+      AND pa.asset_sha256 = ps.current_asset_sha256
+     LEFT JOIN (
+       SELECT
+         candidate_ref,
+         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
+         SUM(vote_value) AS score
+       FROM icono_image_votes
+       GROUP BY candidate_ref
+     ) v
+       ON v.candidate_ref = ('a:' || upper(ps.gene_symbol) || '|' || lower(pa.asset_sha256))
+     WHERE ps.current_asset_sha256 IS NOT NULL
+     ORDER BY ${galleryOrderClause(order)}
+     LIMIT ?`,
+  )
+    .bind(limit)
+    .all()
+
+  const totalRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT COUNT(*) AS total
+     FROM icono_publish_state
+     WHERE current_asset_sha256 IS NOT NULL`,
+  ).first()
+
+  const base = portraitBase(url, env)
+  const items = (Array.isArray(rows?.results) ? rows.results : []).map((row) => {
+    const symbol = normalizeSymbol(row?.symbol || "") || ""
+    const cached = symbol ? colorsCache.bySymbol.get(symbol) : null
+    const width = optionalInt(row?.width)
+    const height = optionalInt(row?.height)
+    const fullName =
+      String(cached?.n || symbol || "").trim() || symbol
+    const color = String(cached?.c || "#888").trim() || "#888"
+    return {
+      symbol,
+      color,
+      full_name: fullName,
+      width,
+      height,
+      image_upvotes: Number(row?.image_upvotes || 0),
+      image_downvotes: Number(row?.image_downvotes || 0),
+      image_score: Number(row?.image_score || 0),
+      published_at: row?.published_at ? String(row.published_at) : null,
+      asset_created_at: row?.asset_created_at ? String(row.asset_created_at) : null,
+      ph: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+      pt: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
+      portrait: {
+        status: "published",
+        hero_url: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+        medium_url: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
+        thumb_url: row?.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
+        asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
+        ...(width != null ? { width } : {}),
+        ...(height != null ? { height } : {}),
+      },
+    }
+  })
+
+  return {
+    order,
+    total: Number(totalRow?.total || 0),
+    catalog_total: colorsCache.bySymbol.size,
+    items,
+  }
+}
+
 async function handleLegacyColorsManifest(request, env) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const url = new URL(request.url)
@@ -924,6 +1043,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         return done("gene_304", new Response(null, { status: 304, headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "public, max-age=120" } }), API_SCHEMA_VERSION)
       }
       return done("gene", json(payload, 200, { ETag: etag, "Cache-Control": "public, max-age=120" }), API_SCHEMA_VERSION)
+    }
+
+    if (path === "/api/gallery") {
+      const retry = rateLimit(request, "gallery", 60)
+      if (retry) return done("gallery_rl", json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, { "Retry-After": String(retry) }))
+      const payload = await galleryFeed(env, url, url.searchParams.get("order"), url.searchParams.get("limit"))
+      return done("gallery", json(payload, 200, { "Cache-Control": "public, max-age=60" }), API_SCHEMA_VERSION)
     }
 
     // Random gene sample for the homepage grid

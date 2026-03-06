@@ -210,7 +210,7 @@ export default (() => {
                     href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
                   />
                   <script
-                    defer
+                    type="module"
                     src={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}
                   ></script>
                 </>

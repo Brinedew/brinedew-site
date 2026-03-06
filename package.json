@@ -40,6 +40,7 @@
   "dependencies": {
     "@clack/prompts": "^1.0.0",
     "@floating-ui/dom": "^1.7.5",
+    "@masonry-grid/vanilla": "^1.1.0",
     "@myriaddreamin/rehype-typst": "^0.6.0",
     "@napi-rs/simple-git": "0.1.22",
     "@tweenjs/tween.js": "^25.0.0",
