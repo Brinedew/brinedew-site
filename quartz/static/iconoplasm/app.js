@@ -114,7 +114,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       0
     )
     if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
-      return { width: 4, height: 5 }
+      return { width: 1, height: 1 }
     }
     return {
       width: Math.max(1, Math.round(width)),
@@ -358,7 +358,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     homeMasonry = null
   }
 
-  function applyHomeMasonry(container) {
+  function applyHomeMasonry(container, newElements) {
     if (!container) return
     var Masonry = window.Masonry
     if (!Masonry) {
@@ -366,9 +366,11 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       return
     }
     if (homeMasonry && homeMasonry.container === container && homeMasonry.instance) {
-      // Masonry already running on this container — just relay out with new items
+      // Masonry already running — append new items if provided, then relayout
       var instance = homeMasonry.instance
-      instance.reloadItems()
+      if (newElements && newElements.length) {
+        instance.appended(newElements)
+      }
       if (window.imagesLoaded) {
         window.imagesLoaded(container, function () {
           instance.layout()
@@ -712,10 +714,10 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
           galleryState.publishedTotal = Number(data && data.published_total || galleryState.publishedTotal || 0)
           galleryState.hasMore = Boolean(data && data.has_more)
           if (items.length) {
-            appendGrid(grid, items, galleryState.items.length)
+            var newCards = appendGrid(grid, items, galleryState.items.length)
             galleryState.items = galleryState.items.concat(items)
             galleryState.offset += items.length
-            applyHomeMasonry(grid)
+            applyHomeMasonry(grid, newCards)
             setupOrderedPortraitPrefetch(grid, galleryState.items)
           }
           syncHeroCount()
@@ -870,8 +872,14 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function appendGrid(container, genes, startIndex) {
     var html = buildGridMarkup(genes, startIndex)
-    if (!html) return
-    container.insertAdjacentHTML("beforeend", html)
+    if (!html) return []
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    var newElements = Array.prototype.slice.call(wrapper.children)
+    for (var i = 0; i < newElements.length; i++) {
+      container.appendChild(newElements[i])
+    }
+    return newElements
   }
 
   function renderCandidateGallery(genePayload) {

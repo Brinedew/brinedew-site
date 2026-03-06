@@ -258,7 +258,7 @@
 }
 
 .icono-card-media--fallback {
-  aspect-ratio: var(--width, 4) / var(--height, 5);
+  aspect-ratio: var(--width, 1) / var(--height, 1);
   display: grid;
   place-items: center;
   padding: 1.2rem;
