@@ -7,9 +7,10 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
   var ROOT_ID = "iconoplasm-root"
   var DEBOUNCE_MS = 200
   var GALLERY_COUNT = 120
-  var GALLERY_DEFAULT_ORDER = "popular"
+  var GALLERY_DEFAULT_ORDER = "votes"
   var GALLERY_ORDERS = [
-    { value: "popular", label: "Popularity" },
+    { value: "votes", label: "Votes" },
+    { value: "popularity", label: "Popularity" },
     { value: "newest", label: "Newest" },
     { value: "oldest", label: "Oldest" },
     { value: "name_asc", label: "A-Z" },
@@ -90,6 +91,16 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     if (preferredSize === "medium") return mediumUrl || thumbUrl || heroUrl
     if (preferredSize === "thumb") return thumbUrl || mediumUrl || heroUrl
     return heroUrl || mediumUrl || thumbUrl
+  }
+
+  function candidatePortraitUrl(candidate, preferredSize) {
+    var item = candidate || {}
+    var fullUrl = String(item.full_url || "").trim()
+    var mediumUrl = String(item.medium_url || "").trim()
+    var thumbUrl = String(item.thumb_url || "").trim()
+    if (preferredSize === "medium") return mediumUrl || thumbUrl || fullUrl
+    if (preferredSize === "thumb") return thumbUrl || mediumUrl || fullUrl
+    return fullUrl || mediumUrl || thumbUrl
   }
 
   function portraitDimensions(genePayload) {
@@ -399,28 +410,22 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
     return "Score " + sign + score + " (" + up + " approvals / " + down + " rejections)"
   }
 
+  function scoreLabel(scoreValue) {
+    var score = Number(scoreValue || 0)
+    return (score > 0 ? "+" : "") + score
+  }
+
   function setVoteBoxState(box, opts) {
     if (!box) return
     var statsEl = box.querySelector("[data-icono-vote-stats]")
-    var noteEl = box.querySelector("[data-icono-vote-note]")
-    if (!noteEl) {
-      var noteScope = box.closest(".icono-gene-portrait-shell") || box.parentElement
-      noteEl = noteScope ? noteScope.querySelector("[data-icono-vote-note]") : null
-    }
     var upBtn = box.querySelector("[data-icono-vote-up]")
     var downBtn = box.querySelector("[data-icono-vote-down]")
     var snapshot = (opts && opts.snapshot) || {}
-    var authenticated = !!(opts && opts.authenticated)
     var pending = !!(opts && opts.pending)
     var userVote = Number(snapshot.user_vote || 0)
     if (statsEl) {
       statsEl.textContent = voteSummaryText(snapshot)
       statsEl.setAttribute("title", voteSummaryDetails(snapshot))
-    }
-    if (noteEl) {
-      noteEl.textContent = authenticated
-        ? "Voting with your website account."
-        : "Log in with Discord to vote."
     }
     if (upBtn) {
       upBtn.disabled = pending
@@ -721,15 +726,51 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
           '<div class="' + mediaClass + '" style="background:' + esc(g.color) + ';color:' + tc + '">' +
             (portraitUrl
               ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="' + (i < 12 ? "eager" : "lazy") + '" decoding="async" width="' + dims.width + '" height="' + dims.height + '" fetchpriority="' + (i < 8 ? "high" : "low") + '">'
-              : esc(g.symbol)) +
+              : '<span class="icono-card-fallback-symbol">' + esc(g.symbol) + '</span>') +
+            '<span class="icono-card-badge">' + esc(g.symbol) + '</span>' +
           '</div>' +
           '<div class="icono-card-info">' +
-            '<span class="icono-card-badge">' + esc(g.symbol) + '</span>' +
             '<div class="icono-card-name">' + esc(g.full_name) + '</div>' +
           '</div>' +
         '</a>'
     }
     container.innerHTML = html
+  }
+
+  function renderCandidateGallery(genePayload) {
+    var candidates = Array.isArray(genePayload && genePayload.portrait_candidates)
+      ? genePayload.portrait_candidates
+      : []
+    if (!candidates.length) return ""
+    var html =
+      '<section class="icono-candidate-gallery">' +
+        '<div class="icono-candidate-gallery-heading">' +
+          '<h2>Portrait candidates</h2>' +
+          '<p>Alternate renderings for ' + esc(genePayload.symbol || "this gene") + '.</p>' +
+        '</div>' +
+        '<div class="icono-candidate-grid">'
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = candidates[i]
+      var mediumUrl = candidatePortraitUrl(candidate, "medium")
+      var fullUrl = candidatePortraitUrl(candidate, "full") || mediumUrl
+      if (!mediumUrl) continue
+      var width = Number(candidate && candidate.width || 4) || 4
+      var height = Number(candidate && candidate.height || 5) || 5
+      var metaBits = []
+      if (candidate && candidate.is_current) metaBits.push("Current")
+      metaBits.push(scoreLabel(candidate && candidate.image_score))
+      html +=
+        '<button type="button" class="icono-candidate-card' + (candidate && candidate.is_current ? ' is-current' : '') + '" data-icono-portrait-open data-icono-portrait-src="' + esc(fullUrl) + '" data-icono-portrait-alt="' + esc(genePayload.symbol) + ' portrait candidate" style="--width:' + width + ';--height:' + height + ';">' +
+          '<span class="icono-candidate-media">' +
+            '<img src="' + esc(mediumUrl) + '" alt="' + esc(genePayload.symbol) + ' portrait candidate" loading="lazy" decoding="async" width="' + width + '" height="' + height + '">' +
+          '</span>' +
+          '<span class="icono-candidate-meta">' + esc(metaBits.join(" · ")) + '</span>' +
+        '</button>'
+    }
+    html +=
+        '</div>' +
+      '</section>'
+    return html
   }
 
   /* ─── Rendering: Gene detail page ─── */
@@ -778,16 +819,14 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
 
     var voteBox = (hasPortrait && g.portrait && g.portrait.asset_sha256)
       ? (
-          '<div class="icono-vote-box" data-icono-vote-box>' +
-            '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
-            '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)">+0</span>' +
-            '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
+          '<div class="icono-gene-portrait-footer">' +
+            '<div class="icono-vote-box" data-icono-vote-box>' +
+              '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
+              '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)">0</span>' +
+              '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
+            '</div>' +
           '</div>'
         )
-      : ""
-
-    var voteNote = hasPortrait && g.portrait && g.portrait.asset_sha256
-      ? '<p class="icono-vote-note" data-icono-vote-note>Log in with Discord to vote.</p>'
       : ""
 
     var portraitBlock = hasPortrait
@@ -795,9 +834,9 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
           '<div class="icono-gene-portrait-shell">' +
             '<button type="button" class="' + swatchClass + '" data-icono-portrait-open data-icono-portrait-src="' + esc(portraitFullUrl) + '" data-icono-portrait-alt="' + esc(g.symbol) + ' portrait" aria-label="Open full-size portrait for ' + esc(g.symbol) + '">' +
               '<img src="' + esc(portraitDisplayUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">' +
+              '<span class="icono-gene-symbol-pill">' + esc(g.symbol) + '</span>' +
             '</button>' +
             voteBox +
-            voteNote +
           '</div>'
         )
       : '<div class="' + swatchClass + '"' + swatchStyle + '>' + esc(g.symbol) + '</div>'
@@ -901,21 +940,26 @@ import { BalancedMasonryGrid } from "./vendor/masonry-grid.js?v=20260306a"
       html += '</div>'
     }
 
+    html += renderCandidateGallery(g)
+
     container.innerHTML = html
     wireGeneVoteBox(container, g)
     wireGenePortraitViewer(container)
   }
 
   function wireGenePortraitViewer(container) {
-    var trigger = container.querySelector("[data-icono-portrait-open]")
-    if (!trigger) return
-    trigger.addEventListener("click", function () {
-      openPortraitViewer(
-        trigger.getAttribute("data-icono-portrait-src"),
-        trigger.getAttribute("data-icono-portrait-alt"),
-        trigger.getAttribute("data-icono-portrait-alt")
-      )
-    })
+    var triggers = container.querySelectorAll("[data-icono-portrait-open]")
+    for (var i = 0; i < triggers.length; i++) {
+      (function (trigger) {
+        trigger.addEventListener("click", function () {
+          openPortraitViewer(
+            trigger.getAttribute("data-icono-portrait-src"),
+            trigger.getAttribute("data-icono-portrait-alt"),
+            trigger.getAttribute("data-icono-portrait-alt")
+          )
+        })
+      })(triggers[i])
+    }
   }
 
   /* ─── Rendering: 404 ─── */

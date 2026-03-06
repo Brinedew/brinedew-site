@@ -2,6 +2,7 @@ import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByGene, fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const API_SCHEMA_VERSION = 2
@@ -682,6 +683,7 @@ async function geneRecord(env, url, rawId) {
   const entry = colorsCache.bySymbol.get(r.symbol)
   const base = portraitBase(url, env)
   const portrait = await portraitState(env, r.symbol, base)
+  const portraitCandidates = await portraitCandidatesForGene(env, url, r.symbol, portrait?.asset_sha256 || null)
   const syncedEssenceState = await essenceState(env, r.symbol)
   const syncedEssence = syncedEssenceState?.essence && typeof syncedEssenceState.essence === "object" ? syncedEssenceState.essence : {}
   const uniprot = normalizeUniprot(r?.protein?.uniprot || entry?.u || null)
@@ -699,8 +701,10 @@ async function geneRecord(env, url, rawId) {
     color: entry?.c || null,
     ...(uniprot ? { uniprot } : {}),
     ...(weightKg != null ? { weight_kg: weightKg } : {}),
+    popularity_score: wikiPageviewsForSymbol(r.symbol),
     essence: syncedEssence,
     portrait,
+    portrait_candidates: portraitCandidates,
     source_links: sourceLinks(r.symbol, uniprot),
     page_url: `${url.origin}/gene/${encodeURIComponent(r.symbol)}`,
     resolved_from: r.mode,
@@ -839,23 +843,60 @@ function normalizeGalleryOrder(raw) {
   const value = String(raw || "")
     .trim()
     .toLowerCase()
-  if (["newest", "oldest", "name_asc", "name_desc"].includes(value)) return value
-  return "popular"
+  if (value === "popular") return "popularity"
+  if (["votes", "popularity", "newest", "oldest", "name_asc", "name_desc"].includes(value)) return value
+  return "votes"
 }
 
-function galleryOrderClause(order) {
-  switch (order) {
-    case "newest":
-      return `COALESCE(ps.updated_at, pa.created_at) DESC, upper(ps.gene_symbol) ASC`
-    case "oldest":
-      return `COALESCE(ps.updated_at, pa.created_at) ASC, upper(ps.gene_symbol) ASC`
-    case "name_asc":
-      return `upper(ps.gene_symbol) ASC`
-    case "name_desc":
-      return `upper(ps.gene_symbol) DESC`
-    default:
-      return `COALESCE(v.score, 0) DESC, COALESCE(v.upvotes, 0) DESC, COALESCE(ps.updated_at, pa.created_at) DESC, upper(ps.gene_symbol) ASC`
-  }
+function wikiPageviewsForSymbol(symbol) {
+  const key = normalizeSymbol(symbol)
+  if (!key) return 0
+  return Number(ICONOPLASM_WIKI_PAGEVIEWS[key] || 0)
+}
+
+function compareNullableTextDesc(a, b) {
+  return String(b || "").localeCompare(String(a || ""))
+}
+
+function compareNullableTextAsc(a, b) {
+  return String(a || "").localeCompare(String(b || ""))
+}
+
+function sortGalleryItems(items, order) {
+  const sorted = Array.isArray(items) ? items.slice() : []
+  sorted.sort((left, right) => {
+    if (order === "newest") {
+      return (
+        compareNullableTextDesc(left.published_at || left.asset_created_at, right.published_at || right.asset_created_at) ||
+        compareNullableTextAsc(left.symbol, right.symbol)
+      )
+    }
+    if (order === "oldest") {
+      return (
+        compareNullableTextAsc(left.published_at || left.asset_created_at, right.published_at || right.asset_created_at) ||
+        compareNullableTextAsc(left.symbol, right.symbol)
+      )
+    }
+    if (order === "name_asc") return compareNullableTextAsc(left.symbol, right.symbol)
+    if (order === "name_desc") return compareNullableTextDesc(left.symbol, right.symbol)
+    if (order === "popularity") {
+      return (
+        Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
+        Number(right.image_score || 0) - Number(left.image_score || 0) ||
+        Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
+        compareNullableTextDesc(left.published_at || left.asset_created_at, right.published_at || right.asset_created_at) ||
+        compareNullableTextAsc(left.symbol, right.symbol)
+      )
+    }
+    return (
+      Number(right.image_score || 0) - Number(left.image_score || 0) ||
+      Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
+      Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
+      compareNullableTextDesc(left.published_at || left.asset_created_at, right.published_at || right.asset_created_at) ||
+      compareNullableTextAsc(left.symbol, right.symbol)
+    )
+  })
+  return sorted
 }
 
 async function galleryFeed(env, url, rawOrder, rawLimit) {
@@ -899,11 +940,8 @@ async function galleryFeed(env, url, rawOrder, rawLimit) {
        GROUP BY candidate_ref
      ) v
        ON v.candidate_ref = ('a:' || upper(ps.gene_symbol) || '|' || lower(pa.asset_sha256))
-     WHERE ps.current_asset_sha256 IS NOT NULL
-     ORDER BY ${galleryOrderClause(order)}
-     LIMIT ?`,
+     WHERE ps.current_asset_sha256 IS NOT NULL`,
   )
-    .bind(limit)
     .all()
 
   const totalRow = await env.ICONOPLASM_DB.prepare(
@@ -927,6 +965,7 @@ async function galleryFeed(env, url, rawOrder, rawLimit) {
       full_name: fullName,
       width,
       height,
+      popularity_score: wikiPageviewsForSymbol(symbol),
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
       image_score: Number(row?.image_score || 0),
@@ -950,8 +989,77 @@ async function galleryFeed(env, url, rawOrder, rawLimit) {
     order,
     total: Number(totalRow?.total || 0),
     catalog_total: colorsCache.bySymbol.size,
-    items,
+    items: sortGalleryItems(items, order).slice(0, limit),
   }
+}
+
+async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = null) {
+  if (!env.ICONOPLASM_DB) return []
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       pa.asset_sha256,
+       pa.r2_key_full,
+       pa.r2_key_medium,
+       pa.r2_key_thumb,
+       pa.width,
+       pa.height,
+       pa.status,
+       pa.created_at,
+       COALESCE(v.upvotes, 0) AS image_upvotes,
+       COALESCE(v.downvotes, 0) AS image_downvotes,
+       COALESCE(v.score, 0) AS image_score
+     FROM icono_portrait_assets pa
+     LEFT JOIN (
+       SELECT
+         candidate_ref,
+         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
+         SUM(vote_value) AS score
+       FROM icono_image_votes
+       GROUP BY candidate_ref
+     ) v
+       ON v.candidate_ref = ('a:' || upper(pa.gene_symbol) || '|' || lower(pa.asset_sha256))
+     WHERE upper(pa.gene_symbol) = ?
+       AND COALESCE(pa.status, '') <> 'rejected'
+       AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+     ORDER BY pa.created_at DESC`,
+  )
+    .bind(symbol)
+    .all()
+
+  const base = portraitBase(url, env)
+  const currentSha = normalizeSha256(currentAssetSha256 || "")
+  const items = (Array.isArray(rows?.results) ? rows.results : []).map((row) => {
+    const assetSha = normalizeSha256(row?.asset_sha256 || "") || null
+    const width = optionalInt(row?.width)
+    const height = optionalInt(row?.height)
+    return {
+      asset_sha256: assetSha,
+      status: String(row?.status || "").trim() || "draft",
+      is_current: !!(assetSha && currentSha && assetSha === currentSha),
+      image_upvotes: Number(row?.image_upvotes || 0),
+      image_downvotes: Number(row?.image_downvotes || 0),
+      image_score: Number(row?.image_score || 0),
+      created_at: row?.created_at ? String(row.created_at) : null,
+      full_url: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+      medium_url: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
+      thumb_url: row?.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
+      ...(width != null ? { width } : {}),
+      ...(height != null ? { height } : {}),
+    }
+  })
+
+  items.sort((left, right) => {
+    return (
+      Number(right.is_current) - Number(left.is_current) ||
+      Number(right.image_score || 0) - Number(left.image_score || 0) ||
+      Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
+      compareNullableTextDesc(left.created_at, right.created_at) ||
+      compareNullableTextAsc(left.asset_sha256, right.asset_sha256)
+    )
+  })
+
+  return items
 }
 
 async function handleLegacyColorsManifest(request, env) {
