@@ -350,7 +350,7 @@
 }
 
 .icono-gene-portrait-shell {
-  width: min(240px, 100%);
+  width: min(320px, 100%);
   flex-shrink: 0;
 }
 
@@ -674,18 +674,9 @@
 .icono-candidate-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.75rem;
   margin-top: 0.45rem;
-}
-
-.icono-candidate-meta {
-  display: block;
-  color: var(--secondary, var(--darkgray));
-  font-family: var(--codeFont, monospace);
-  font-size: 0.7rem;
-  line-height: 1.25;
-  text-align: right;
 }
 
 .icono-load-sentinel {
@@ -868,7 +859,6 @@ html[saved-theme="dark"] .icono-vote-btn--reject.active {
 
   .icono-candidate-footer {
     align-items: flex-start;
-    flex-direction: column;
   }
 
   .icono-hero h1 {

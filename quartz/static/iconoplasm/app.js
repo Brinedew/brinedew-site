@@ -194,8 +194,14 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
             bgOpacity: 0.92,
             spacing: 0.12,
             wheelToZoom: true,
+            mouseMovePan: true,
             loop: false,
-            showHideAnimationType: "zoom",
+            imageClickAction: "zoom",
+            tapAction: "toggle-controls",
+            bgClickAction: "close",
+            secondaryZoomLevel: 1,
+            maxZoomLevel: 4,
+            showHideAnimationType: "fade",
             paddingFn: function () {
               return { top: 28, bottom: 28, left: 28, right: 28 }
             },
@@ -514,9 +520,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   }
 
   function voteSummaryText(snapshot) {
-    var score = Number((snapshot || {}).image_score || 0)
-    var sign = score > 0 ? "+" : ""
-    return sign + score
+    return String(Number((snapshot || {}).image_score || 0))
   }
 
   function voteSummaryDetails(snapshot) {
@@ -529,8 +533,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   }
 
   function scoreLabel(scoreValue) {
-    var score = Number(scoreValue || 0)
-    return (score > 0 ? "+" : "") + score
+    return String(Number(scoreValue || 0))
   }
 
   function setVoteBoxState(box, opts) {
@@ -995,9 +998,6 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       var fullUrl = candidatePortraitUrl(candidate, "full") || mediumUrl
       var width = Number(candidate && candidate.width || 4) || 4
       var height = Number(candidate && candidate.height || 5) || 5
-      var metaBits = []
-      if (candidate && candidate.status) metaBits.push(String(candidate.status))
-      if (candidate && candidate.created_at) metaBits.push(String(candidate.created_at).slice(0, 10))
       var assetSha = String(candidate && candidate.asset_sha256 || "").trim().toLowerCase()
       html +=
         '<article class="icono-candidate-card" style="--width:' + width + ';--height:' + height + ';">' +
@@ -1008,7 +1008,6 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
           '</button>' +
           '<div class="icono-candidate-footer">' +
             voteBoxMarkup('data-icono-candidate-vote-box="' + esc(assetSha) + '"') +
-            '<span class="icono-candidate-meta">' + esc(metaBits.join(" · ")) + '</span>' +
           '</div>' +
         '</article>'
     }
