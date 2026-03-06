@@ -233,7 +233,7 @@
 
 .icono-gene-swatch {
   width: 200px;
-  height: 200px;
+  min-height: 200px;
   border-radius: 8px;
   flex-shrink: 0;
   display: flex;
@@ -246,10 +246,22 @@
   overflow: hidden;
 }
 
+.icono-gene-swatch--portrait {
+  width: min(240px, 100%);
+  min-height: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  background: transparent;
+}
+
 .icono-gene-swatch img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  display: block;
+}
+
+.icono-gene-swatch--portrait img {
+  object-fit: contain;
 }
 
 .icono-gene-meta {
@@ -439,7 +451,13 @@
 
   .icono-gene-swatch {
     width: 100%;
-    height: 180px;
+    min-height: 180px;
+  }
+
+  .icono-gene-swatch--portrait {
+    width: min(100%, 320px);
+    min-height: 0;
+    align-self: center;
   }
 
   .icono-hero h1 {

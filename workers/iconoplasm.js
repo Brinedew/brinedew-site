@@ -20,6 +20,9 @@ const COLORS_CACHE_TTL_MS = 5 * 60 * 1000
 
 const rlBuckets = new Map()
 const RL_WINDOW_MS = 60 * 1000
+const RANDOM_ARTIST_METAVISION_RE = /^artist-random-[a-z0-9-]+$/i
+const LEGACY_ARTIST_VISION_RE = /^artist-(?!random-)[a-z0-9()_-]+$/i
+const CANONICAL_RANDOM_ARTIST_VARIANT_RE = /^[a-z0-9-]+-v\d+-\d+$/i
 
 export function isIconoplasmRequest(host) {
   return host === ICONOPLASM_HOST || host.startsWith("iconoplasm.")
@@ -92,6 +95,33 @@ function normalizeVisionId(raw) {
   return v.slice(0, 255)
 }
 
+export function isRandomArtistMetavisionId(raw) {
+  const visionId = normalizeVisionId(raw)
+  if (!visionId) return false
+  return RANDOM_ARTIST_METAVISION_RE.test(visionId)
+}
+
+export function isLegacyArtistVisionId(raw) {
+  const visionId = normalizeVisionId(raw)
+  if (!visionId) return false
+  return LEGACY_ARTIST_VISION_RE.test(visionId)
+}
+
+export function isCanonicalRandomArtistVariantId(raw) {
+  const visionId = normalizeVisionId(raw)
+  if (!visionId) return false
+  return CANONICAL_RANDOM_ARTIST_VARIANT_RE.test(visionId)
+}
+
+export function sanitizeVoteVisionId(raw) {
+  const visionId = normalizeVisionId(raw)
+  if (!visionId) return ""
+  if (isRandomArtistMetavisionId(visionId)) return ""
+  if (isLegacyArtistVisionId(visionId)) return ""
+  if (/^\d+$/.test(visionId)) return ""
+  return visionId
+}
+
 function normalizeVoteValue(raw) {
   const n = Number.parseInt(String(raw ?? ""), 10)
   if (n === 1) return 1
@@ -130,6 +160,107 @@ function portraitBase(url, env) {
   }
   // R2 keys include the `portraits/` prefix, so the base is just the origin.
   return url.origin
+}
+
+function portraitHashToken(raw) {
+  const token = String(raw || "")
+    .trim()
+    .replace(/[^0-9A-Za-z]+/g, "")
+  return token || null
+}
+
+export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
+  const base = String(baseHash || "").trim()
+  if (!base) return null
+  if (!portraitFingerprint) return base
+  const count = Number(
+    portraitFingerprint.published_count ?? portraitFingerprint.count ?? 0,
+  )
+  const latest = portraitHashToken(
+    portraitFingerprint.latest_updated_at ?? portraitFingerprint.latest ?? "",
+  )
+  if (!count && !latest) return base
+  return latest ? `${base}-${count}-${latest}` : `${base}-${count}`
+}
+
+export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortraits) {
+  if (!artifact || typeof artifact !== "object") return artifact
+  const genes = Array.isArray(artifact.genes) ? artifact.genes : null
+  if (!genes || !Array.isArray(publishedPortraits) || publishedPortraits.length === 0) return artifact
+
+  const publishedBySymbol = new Map()
+  for (const row of publishedPortraits) {
+    const symbol = normalizeSymbol(row?.symbol || row?.gene_symbol)
+    if (!symbol) continue
+    const heroRef = String(row?.ph || row?.r2_key_full || "").trim()
+    const thumbRef = String(row?.pt || row?.r2_key_medium || row?.r2_key_thumb || "").trim()
+    if (!heroRef && !thumbRef) continue
+    publishedBySymbol.set(symbol, { ph: heroRef || null, pt: thumbRef || null })
+  }
+  if (publishedBySymbol.size === 0) return artifact
+
+  let changed = false
+  const nextGenes = genes.map((gene) => {
+    if (!gene || typeof gene !== "object") return gene
+    const symbol = normalizeSymbol(gene.s)
+    const published = symbol ? publishedBySymbol.get(symbol) : null
+    if (!published) return gene
+
+    let nextGene = gene
+    if (!gene.ph && published.ph) {
+      nextGene = nextGene === gene ? { ...gene } : nextGene
+      nextGene.ph = published.ph
+      changed = true
+    }
+    if (!gene.pt && published.pt) {
+      nextGene = nextGene === gene ? { ...gene } : nextGene
+      nextGene.pt = published.pt
+      changed = true
+    }
+    return nextGene
+  })
+
+  if (!changed) return artifact
+  return { ...artifact, genes: nextGenes }
+}
+
+async function publishedPortraitFingerprint(env) {
+  if (!env.ICONOPLASM_DB) return null
+  try {
+    const row = await env.ICONOPLASM_DB.prepare(
+      `SELECT
+         COUNT(*) AS published_count,
+         MAX(updated_at) AS latest_updated_at
+       FROM icono_publish_state
+       WHERE current_asset_sha256 IS NOT NULL`,
+    ).first()
+    return row || null
+  } catch {
+    return null
+  }
+}
+
+async function publishedPortraitRefs(env) {
+  if (!env.ICONOPLASM_DB) return []
+  try {
+    // Keep artifact hydration O(1) SQL-wise. One join here is much cheaper than
+    // per-gene API lookups or N+1 D1 queries when the extension refreshes.
+    const rows = await env.ICONOPLASM_DB.prepare(
+      `SELECT
+         upper(ps.gene_symbol) AS symbol,
+         pa.r2_key_full,
+         pa.r2_key_medium,
+         pa.r2_key_thumb
+       FROM icono_publish_state ps
+       LEFT JOIN icono_portrait_assets pa
+         ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+        AND pa.asset_sha256 = ps.current_asset_sha256
+       WHERE ps.current_asset_sha256 IS NOT NULL`,
+    ).all()
+    return Array.isArray(rows?.results) ? rows.results : []
+  } catch {
+    return []
+  }
 }
 
 // Canonical R2 key for a portrait rendition.
@@ -366,6 +497,19 @@ async function colorsManifestObj(env) {
     return JSON.parse(raw)
   } catch {
     return null
+  }
+}
+
+async function extensionManifestObj(url, env) {
+  const manifest = await colorsManifestObj(env)
+  if (!manifest) return null
+  return {
+    ...manifest,
+    current_hash: buildPortraitAwareManifestHash(
+      manifest.current_hash,
+      await publishedPortraitFingerprint(env),
+    ),
+    portrait_base_url: portraitBase(url, env),
   }
 }
 
@@ -627,7 +771,7 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
   const symbolNorm = normalizeSymbol(symbol)
   const assetShaNorm = normalizeSha256(assetSha256)
   const candidateRefNorm = normalizeCandidateRef(candidateRef, symbolNorm, assetShaNorm)
-  const visionNorm = normalizeVisionId(visionId)
+  const visionNorm = sanitizeVoteVisionId(visionId)
   const userNorm = normalizeUserId(userId)
   if (!candidateRefNorm) {
     return {
@@ -693,16 +837,15 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
 
 async function handleLegacyColorsManifest(request, env) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
-  const manifest = await env.KV.get(KV_COLORS_MANIFEST)
+  const url = new URL(request.url)
+  const manifest = await extensionManifestObj(url, env)
   if (!manifest) return json({ error: "Colors manifest not found — run upload script" }, 404)
-  let etag = null
-  try {
-    etag = `"${JSON.parse(manifest).current_hash}"`
-  } catch {}
+  const body = JSON.stringify(manifest)
+  const etag = manifest.current_hash ? `"${manifest.current_hash}"` : null
   if (etag && etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, { status: 304, headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "public, max-age=300" } })
   }
-  return new Response(manifest, {
+  return new Response(body, {
     headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=300", ...(etag ? { ETag: etag } : {}) },
   })
 }
@@ -713,7 +856,15 @@ async function handleLegacyColorsArtifact(env, path) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const body = await env.KV.get(`${KV_COLORS_PREFIX}${m[1]}`)
   if (!body) return json({ error: "Artifact not found" }, 404)
-  return new Response(body, {
+  let responseBody = body
+  try {
+    const artifact = JSON.parse(body)
+    const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, await publishedPortraitRefs(env))
+    responseBody = JSON.stringify(hydrated)
+  } catch {
+    responseBody = body
+  }
+  return new Response(responseBody, {
     headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable", ETag: `"${m[1]}"` },
   })
 }
@@ -739,7 +890,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     if (path === "/api/manifest") {
       const retry = rateLimit(request, "manifest", 60)
       if (retry) return done("manifest_rl", json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, { "Retry-After": String(retry) }))
-      const m = await colorsManifestObj(env)
+      const m = await extensionManifestObj(url, env)
       if (!m) return done("manifest_404", json({ error: "Colors manifest not found — run upload script" }, 404))
       const payload = {
         schema_version: API_SCHEMA_VERSION,
@@ -749,7 +900,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         generated_at: m.generated_at || null,
         gene_count: m.gene_count || null,
         artifact_schema_version: m.schema_version || 1,
-        portrait_base_url: portraitBase(url, env),
+        portrait_base_url: m.portrait_base_url || portraitBase(url, env),
         min_extension_version: env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION,
       }
       const etag = payload.current_hash ? `"${payload.current_hash}"` : await etagFor(payload)
@@ -895,6 +1046,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (!symbol) return done("votes_set_400", json({ error: "Missing or invalid symbol" }, 400))
       if (!assetSha) return done("votes_set_400", json({ error: "Missing or invalid asset_sha256" }, 400))
       if (requested === null) return done("votes_set_400", json({ error: "vote_value must be -1, 0, or 1" }, 400))
+      if (isRandomArtistMetavisionId(visionId)) {
+        return done("votes_set_400", json({ error: "Metavision IDs are not valid for vote writes" }, 400))
+      }
 
       const userId = normalizeUserId(sessionUser.user_id)
       const existing = await env.ICONOPLASM_DB.prepare(
@@ -971,7 +1125,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         symbol,
         assetSha,
       )
-      const visionId = normalizeVisionId(p?.vision_id || "")
+      const visionId = sanitizeVoteVisionId(p?.vision_id || "")
       if (!candidateRef) return done("votes_snapshot_400", json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400))
       if (!symbol) return done("votes_snapshot_400", json({ error: "Missing or invalid symbol" }, 400))
       if (!assetSha) return done("votes_snapshot_400", json({ error: "Missing or invalid asset_sha256" }, 400))
@@ -1029,6 +1183,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         const visionId = normalizeVisionId(raw?.vision_id || "")
         const userId = normalizeUserId(raw?.user_id || raw?.user || "local")
         const voteValue = normalizeVoteValue(raw?.vote_value)
+        if (isRandomArtistMetavisionId(visionId)) {
+          invalid += 1
+          continue
+        }
         if (!candidateRef || !symbol || !assetSha || !userId || voteValue === null) {
           invalid += 1
           continue
@@ -1100,6 +1258,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (!symbol) return done("admin_votes_set_400", json({ error: "Missing or invalid symbol" }, 400))
       if (!assetSha) return done("admin_votes_set_400", json({ error: "Missing or invalid asset_sha256" }, 400))
       if (requested === null) return done("admin_votes_set_400", json({ error: "vote_value must be -1, 0, or 1" }, 400))
+      if (isRandomArtistMetavisionId(visionId)) {
+        return done("admin_votes_set_400", json({ error: "Metavision IDs are not valid for vote writes" }, 400))
+      }
       if (isGuestUserId(userId)) {
         return done(
           "admin_votes_set_401",
@@ -1184,7 +1345,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         symbol,
         assetSha,
       )
-      const visionId = normalizeVisionId(p?.vision_id || "")
+      const visionId = sanitizeVoteVisionId(p?.vision_id || "")
       const userId = normalizeUserId(p?.user_id || p?.user || "local")
       if (!candidateRef) return done("admin_votes_snapshot_400", json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400))
       if (!symbol) return done("admin_votes_snapshot_400", json({ error: "Missing or invalid symbol" }, 400))
@@ -1238,7 +1399,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           symbol,
           assetSha,
         )
-        const visionId = normalizeVisionId(raw?.vision_id || "")
+        const visionId = sanitizeVoteVisionId(raw?.vision_id || "")
         if (!candidateRef || !symbol || !assetSha) continue
         const key = `${candidateRef}|${visionId}`
         if (seen.has(key)) continue
@@ -1297,7 +1458,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const visionIds = []
       const seenVision = new Set()
       for (const raw of visionIdsRaw) {
-        const visionId = normalizeVisionId(raw)
+        const visionId = sanitizeVoteVisionId(raw)
         if (!visionId || seenVision.has(visionId)) continue
         seenVision.add(visionId)
         visionIds.push(visionId)
@@ -1317,6 +1478,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
              COALESCE(SUM(vote_value), 0) AS score
            FROM icono_image_votes
            WHERE COALESCE(vision_id, '') <> ''
+             AND LOWER(COALESCE(vision_id, '')) NOT LIKE 'artist-random-%'
            GROUP BY vision_id
            ORDER BY score DESC, upvotes DESC, image_count DESC, vision_id ASC`,
         ).all()
@@ -1332,6 +1494,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
              COALESCE(SUM(vote_value), 0) AS score
            FROM icono_image_votes
            WHERE COALESCE(vision_id, '') <> ''
+             AND LOWER(COALESCE(vision_id, '')) NOT LIKE 'artist-random-%'
              AND vision_id IN (${placeholders})
            GROUP BY vision_id
            ORDER BY score DESC, upvotes DESC, image_count DESC, vision_id ASC`,

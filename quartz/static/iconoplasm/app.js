@@ -382,6 +382,12 @@
   function renderGeneContent(container, g) {
     var hasPortrait = g.portrait && g.portrait.status === "published" && g.portrait.hero_url
     var tc = textColorFor(g.color || "#888")
+    var swatchClass = hasPortrait
+      ? "icono-gene-swatch icono-gene-swatch--portrait"
+      : "icono-gene-swatch"
+    var swatchStyle = hasPortrait
+      ? ""
+      : ' style="background:' + esc(g.color || "#888") + ';color:' + tc + '"'
 
     var swatchInner = hasPortrait
       ? '<img src="' + esc(g.portrait.hero_url) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">'
@@ -417,7 +423,7 @@
 
     var html =
       '<div class="icono-gene-header">' +
-        '<div class="icono-gene-swatch" style="background:' + esc(g.color || "#888") + ';color:' + tc + '">' +
+        '<div class="' + swatchClass + '"' + swatchStyle + '>' +
           swatchInner +
         '</div>' +
         '<div class="icono-gene-meta">' +
