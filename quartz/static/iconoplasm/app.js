@@ -1139,11 +1139,14 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + '</p>'
     }
 
-    // Two-column metadata: character trait | molecular origin
+    // Two-column metadata: character-side mnemonic | molecular-side analogue
     var essence = g.essence && typeof g.essence === "object" ? g.essence : {}
     var pairs = []
+    var molecularWeightKda = Number(g.molecular_weight_kda)
+    var proteinLengthAa = Number(g.protein_length_aa)
+    var firstPublicationYear = Number(g.first_publication_year)
+    var primaryTissue = g.primary_tissue ? String(g.primary_tissue) : ""
 
-    // Weight: character weight | molecular weight
     var weightKgRaw = null
     if (essence.weight_kg != null) {
       weightKgRaw = Number(essence.weight_kg)
@@ -1154,71 +1157,43 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       var weightText = (Math.abs(weightKgRaw - Math.round(weightKgRaw)) < 0.05)
         ? String(Math.round(weightKgRaw))
         : weightKgRaw.toFixed(1)
-      pairs.push({ character: weightText + " kg", origin: "Molecular weight", label: "Weight" })
+      var weightKdaText = Number.isFinite(molecularWeightKda) && molecularWeightKda > 0
+        ? ((Math.abs(molecularWeightKda - Math.round(molecularWeightKda)) < 0.05)
+            ? String(Math.round(molecularWeightKda))
+            : molecularWeightKda.toFixed(1)) + " kDa"
+        : ""
+      if (weightKdaText) {
+        pairs.push({ character: weightText + " kg", molecular: weightKdaText, label: "Weight" })
+      }
     }
 
-    // Height
     var heightCmRaw = Number(essence.height_cm)
     if (Number.isFinite(heightCmRaw) && heightCmRaw > 0) {
-      pairs.push({ character: String(Math.round(heightCmRaw)) + " cm", origin: "Protein length", label: "Height" })
+      var heightOriginText = Number.isFinite(proteinLengthAa) && proteinLengthAa > 0
+        ? String(Math.round(proteinLengthAa)) + " aa"
+        : ""
+      if (heightOriginText) {
+        pairs.push({ character: String(Math.round(heightCmRaw)) + " cm", molecular: heightOriginText, label: "Height" })
+      }
     }
 
-    // Sex
-    if (essence.sex) {
-      pairs.push({ character: String(essence.sex), origin: "Chromosome context", label: "Sex" })
-    }
-
-    // Age
     var ageText = ""
     if (essence.age) {
       ageText = String(essence.age)
     } else if (essence.age_years != null && Number.isFinite(Number(essence.age_years))) {
       ageText = String(Math.round(Number(essence.age_years)))
     }
-    if (ageText) {
-      pairs.push({ character: ageText + " years old", origin: "Discovery date", label: "Age" })
+    if (ageText && Number.isFinite(firstPublicationYear) && firstPublicationYear > 0) {
+      pairs.push({ character: ageText + " years old", molecular: String(Math.round(firstPublicationYear)), label: "Age" })
     }
 
-    // Faction
-    if (essence.faction) {
-      pairs.push({ character: String(essence.faction), origin: "Biological pathway", label: "Faction" })
-    }
-
-    // Skin
     if (essence.skin_hex || essence.skin_name) {
       var skinBits = []
       if (essence.skin_name) skinBits.push(String(essence.skin_name))
       if (essence.skin_hex) skinBits.push("(" + String(essence.skin_hex) + ")")
-      pairs.push({ character: skinBits.join(" "), origin: "Expression pattern", label: "Skin" })
-    }
-
-    // Aesthetics
-    if (Array.isArray(essence.aesthetics) && essence.aesthetics.length) {
-      pairs.push({ character: essence.aesthetics.map(String).join(", "), origin: "Protein clan", label: "Aesthetics" })
-    }
-
-    // Family
-    if (essence.family_surname) {
-      var familyText = String(essence.family_surname)
-      if (Number.isFinite(Number(essence.family_members)) && Number(essence.family_members) > 0) {
-        familyText += " (" + String(Math.round(Number(essence.family_members))) + " members)"
+      if (skinBits.length && primaryTissue) {
+        pairs.push({ character: skinBits.join(" "), molecular: primaryTissue, label: "Skin" })
       }
-      pairs.push({ character: familyText, origin: "Gene family", label: "Family" })
-    }
-
-    // Family Feature
-    if (essence.family_feature) {
-      pairs.push({ character: String(essence.family_feature), origin: "Shared domain", label: "Family Feature" })
-    }
-
-    // Aliases
-    if (g.gene_names && g.gene_names.length > 1) {
-      pairs.push({ character: g.gene_names.join(", "), origin: "HGNC aliases", label: "Also known as" })
-    }
-
-    // UniProt ID
-    if (g.uniprot) {
-      pairs.push({ character: g.uniprot, origin: "UniProt accession", label: "Protein ID" })
     }
 
     if (pairs.length) {
@@ -1231,8 +1206,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
               '<div class="icono-section-value">' + esc(pairs[i].character) + '</div>' +
             '</div>' +
             '<div class="icono-section-cell icono-section-cell--origin">' +
-              '<div class="icono-section-label">Derived from</div>' +
-              '<div class="icono-section-value">' + esc(pairs[i].origin) + '</div>' +
+              '<div class="icono-section-label">Molecular</div>' +
+              '<div class="icono-section-value">' + esc(pairs[i].molecular) + '</div>' +
             '</div>' +
           '</div>'
       }

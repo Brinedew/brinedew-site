@@ -368,6 +368,7 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const familySurname = sanitizeText(payload.family_surname || payload.gene_surname, 64)
   const familyMembers = optionalInt(payload.family_members)
   const familyFeature = sanitizeText(payload.family_feature, 255)
+  const manifestation = sanitizeText(payload.manifestation || payload.description, 4000)
 
   return {
     gene_symbol: symbol,
@@ -384,7 +385,73 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     family_surname: familySurname,
     family_members: familyMembers,
     family_feature: familyFeature,
+    manifestation,
   }
+}
+
+async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync") {
+  if (!env.ICONOPLASM_DB || !essence?.gene_symbol) return false
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_gene_essence (
+       gene_symbol,
+       full_name,
+       weight_kg,
+       height_cm,
+       sex,
+       age,
+       age_years,
+       faction,
+       skin_hex,
+       skin_name,
+       aesthetics_json,
+       family_surname,
+       family_members,
+       family_feature,
+       manifestation,
+       source,
+       updated_by,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(gene_symbol) DO UPDATE SET
+       full_name=excluded.full_name,
+       weight_kg=excluded.weight_kg,
+       height_cm=excluded.height_cm,
+       sex=excluded.sex,
+       age=excluded.age,
+       age_years=excluded.age_years,
+       faction=excluded.faction,
+       skin_hex=excluded.skin_hex,
+       skin_name=excluded.skin_name,
+       aesthetics_json=excluded.aesthetics_json,
+       family_surname=excluded.family_surname,
+       family_members=excluded.family_members,
+       family_feature=excluded.family_feature,
+       manifestation=excluded.manifestation,
+       source=excluded.source,
+       updated_by=excluded.updated_by,
+       updated_at=CURRENT_TIMESTAMP`,
+  )
+    .bind(
+      essence.gene_symbol,
+      essence.full_name,
+      essence.weight_kg,
+      essence.height_cm,
+      essence.sex,
+      essence.age,
+      essence.age_years,
+      essence.faction,
+      essence.skin_hex,
+      essence.skin_name,
+      essence.aesthetics_json,
+      essence.family_surname,
+      essence.family_members,
+      essence.family_feature,
+      essence.manifestation || null,
+      String(source || "nicegui_sync").slice(0, 64),
+      normalizeUserId(updatedBy || "nicegui_sync"),
+    )
+    .run()
+  return true
 }
 
 function decodeBase64Bytes(raw) {
@@ -698,6 +765,15 @@ async function geneRecord(env, url, rawId) {
     ((r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol)
   const weightKgValue = Number(syncedEssence?.weight_kg)
   const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
+  const proteinLengthAa = optionalInt(r?.protein?.length)
+  const massDa = Number(r?.protein?.mass)
+  const molecularWeightKda =
+    Number.isFinite(massDa) && massDa > 0 ? Math.round((massDa / 1000) * 10) / 10 : null
+  const firstPublicationYear = optionalInt(r?.protein?.first_pub_year)
+  const primaryTissue =
+    r?.protein?.tissue?.label && String(r.protein.tissue.label).trim()
+      ? String(r.protein.tissue.label).trim()
+      : null
   return {
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
@@ -707,6 +783,10 @@ async function geneRecord(env, url, rawId) {
     color: entry?.c || null,
     ...(uniprot ? { uniprot } : {}),
     ...(weightKg != null ? { weight_kg: weightKg } : {}),
+    ...(proteinLengthAa != null ? { protein_length_aa: proteinLengthAa } : {}),
+    ...(molecularWeightKda != null ? { molecular_weight_kda: molecularWeightKda } : {}),
+    ...(firstPublicationYear != null ? { first_publication_year: firstPublicationYear } : {}),
+    ...(primaryTissue ? { primary_tissue: primaryTissue } : {}),
     popularity_score: wikiPageviewsForSymbol(r.symbol),
     essence: syncedEssence,
     ...(syncedEssenceState?.manifestation ? { manifestation: syncedEssenceState.manifestation } : {}),
@@ -1991,6 +2071,71 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       return done("admin_assets", json({ assets, count: assets.length }, 200, { "Cache-Control": "no-store" }))
     }
 
+    if (path === "/api/iconoplasm/admin/essence/upsert" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_essence_upsert_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_essence_upsert_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_essence_upsert_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const items = Array.isArray(p?.items) ? p.items : []
+      if (!items.length) return done("admin_essence_upsert_400", json({ error: "No items provided" }, 400))
+      if (items.length > 1000) return done("admin_essence_upsert_400", json({ error: "Too many items (max 1000)" }, 400))
+
+      const actorId = await actor(request, env)
+      const source = sanitizeText(p?.source || "nicegui_sync", 64) || "nicegui_sync"
+      let processed = 0
+      let invalid = 0
+      const results = []
+
+      for (const rawItem of items) {
+        const rawEssence =
+          rawItem && typeof rawItem === "object" && rawItem.essence && typeof rawItem.essence === "object"
+            ? rawItem.essence
+            : rawItem
+        const symbolHint =
+          rawItem && typeof rawItem === "object"
+            ? rawItem.symbol || rawItem.gene_symbol || rawEssence?.symbol || rawEssence?.gene_symbol || ""
+            : ""
+        const essence = normalizeEssencePayload(rawEssence, symbolHint)
+        if (!essence) {
+          invalid += 1
+          results.push({
+            ok: false,
+            symbol: normalizeSymbol(symbolHint),
+            error: "Invalid or empty essence payload",
+          })
+          continue
+        }
+
+        await upsertGeneEssence(env, essence, actorId, source)
+        processed += 1
+        results.push({
+          ok: true,
+          symbol: essence.gene_symbol,
+        })
+      }
+
+      return done(
+        "admin_essence_upsert",
+        json(
+          {
+            ok: invalid === 0,
+            processed,
+            invalid,
+            total: items.length,
+            results,
+          },
+          invalid > 0 && processed === 0 ? 400 : 200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (["/api/iconoplasm/admin/ingest", "/api/iconoplasm/admin/publish-local"].includes(path) && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env))) return done("admin_ingest_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB) return done("admin_ingest_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
@@ -2121,65 +2266,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             if (dryRun) {
               essenceResult = "would_update"
             } else {
-              await env.ICONOPLASM_DB.prepare(
-                `INSERT INTO icono_gene_essence (
-                   gene_symbol,
-                   full_name,
-                   weight_kg,
-                   height_cm,
-                   sex,
-                   age,
-                   age_years,
-                   faction,
-                   skin_hex,
-                   skin_name,
-                   aesthetics_json,
-                   family_surname,
-                   family_members,
-                   family_feature,
-                   manifestation,
-                   source,
-                   updated_by,
-                   updated_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nicegui_sync', ?, CURRENT_TIMESTAMP)
-                 ON CONFLICT(gene_symbol) DO UPDATE SET
-                   full_name=excluded.full_name,
-                   weight_kg=excluded.weight_kg,
-                   height_cm=excluded.height_cm,
-                   sex=excluded.sex,
-                   age=excluded.age,
-                   age_years=excluded.age_years,
-                   faction=excluded.faction,
-                   skin_hex=excluded.skin_hex,
-                   skin_name=excluded.skin_name,
-                   aesthetics_json=excluded.aesthetics_json,
-                   family_surname=excluded.family_surname,
-                   family_members=excluded.family_members,
-                   family_feature=excluded.family_feature,
-                   manifestation=excluded.manifestation,
-                   source=excluded.source,
-                   updated_by=excluded.updated_by,
-                   updated_at=CURRENT_TIMESTAMP`,
-              )
-                .bind(
-                  symbol,
-                  essence.full_name,
-                  essence.weight_kg,
-                  essence.height_cm,
-                  essence.sex,
-                  essence.age,
-                  essence.age_years,
-                  essence.faction,
-                  essence.skin_hex,
-                  essence.skin_name,
-                  essence.aesthetics_json,
-                  essence.family_surname,
-                  essence.family_members,
-                  essence.family_feature,
-                  essence.manifestation || null,
-                  createdBy,
-                )
-                .run()
+              await upsertGeneEssence(env, essence, createdBy, "nicegui_sync")
               essenceResult = "updated"
             }
           }
