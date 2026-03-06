@@ -21,6 +21,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10.5 8.25 13.75 15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   var ICONO_CROSS_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 6 14 14M14 6 6 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  var ICONO_ARROW_LEFT =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px;margin-right:3px"><path d="M12.5 4 6.5 10l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   var portraitDetailCache = Object.create(null)
   var portraitDetailPromiseCache = Object.create(null)
   var portraitImageCache = Object.create(null)
@@ -1036,8 +1038,18 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function renderGene(root, symbol) {
     root.innerHTML =
-      '<div class="icono-nav"><a href="/" data-icono-nav>&larr; All genes</a></div>' +
-      '<div class="icono-loading" id="icono-gene-loading">Loading ' + esc(symbol) + '...</div>' +
+      '<div class="icono-nav"><a href="/" data-icono-nav>' + ICONO_ARROW_LEFT + 'All genes</a></div>' +
+      '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
+        '<div class="icono-gene-header">' +
+          '<div class="icono-gene-swatch icono-skel-block" style="width:min(320px,100%);aspect-ratio:3/4"></div>' +
+          '<div class="icono-gene-meta">' +
+            '<div class="icono-skel-line" style="width:60%;height:2rem"></div>' +
+            '<div class="icono-skel-line" style="width:80%;height:1rem;margin-top:0.5rem"></div>' +
+            '<div class="icono-skel-line" style="width:40%;height:1rem;margin-top:0.75rem"></div>' +
+            '<div class="icono-skel-line" style="width:55%;height:0.9rem;margin-top:0.75rem"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
       '<div id="icono-gene-content"></div>'
 
     var contentEl = document.getElementById("icono-gene-content")
@@ -1121,19 +1133,17 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
         '</div>' +
       '</div>'
 
-    // Additional metadata sections if available
-    var sections = []
+    // Manifestation / character description
+    var manifestation = g.manifestation || g.description || ""
+    if (manifestation) {
+      html += '<p class="icono-gene-manifestation">' + esc(manifestation) + '</p>'
+    }
 
-    if (g.uniprot_id) {
-      sections.push({ label: "UniProt ID", value: g.uniprot_id })
-    }
-    if (g.gene_names && g.gene_names.length > 1) {
-      sections.push({ label: "Aliases", value: g.gene_names.join(", ") })
-    }
-    if (g.chromosome) {
-      sections.push({ label: "Chromosome", value: g.chromosome })
-    }
+    // Two-column metadata: character trait | molecular origin
     var essence = g.essence && typeof g.essence === "object" ? g.essence : {}
+    var pairs = []
+
+    // Weight: character weight | molecular weight
     var weightKgRaw = null
     if (essence.weight_kg != null) {
       weightKgRaw = Number(essence.weight_kg)
@@ -1144,16 +1154,21 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       var weightText = (Math.abs(weightKgRaw - Math.round(weightKgRaw)) < 0.05)
         ? String(Math.round(weightKgRaw))
         : weightKgRaw.toFixed(1)
-      sections.push({ label: "Weight (kg)", value: weightText + " kg" })
+      pairs.push({ character: weightText + " kg", origin: "Molecular weight", label: "Weight" })
     }
 
+    // Height
     var heightCmRaw = Number(essence.height_cm)
     if (Number.isFinite(heightCmRaw) && heightCmRaw > 0) {
-      sections.push({ label: "Height", value: String(Math.round(heightCmRaw)) + " cm" })
+      pairs.push({ character: String(Math.round(heightCmRaw)) + " cm", origin: "Protein length", label: "Height" })
     }
+
+    // Sex
     if (essence.sex) {
-      sections.push({ label: "Sex", value: String(essence.sex) })
+      pairs.push({ character: String(essence.sex), origin: "Chromosome context", label: "Sex" })
     }
+
+    // Age
     var ageText = ""
     if (essence.age) {
       ageText = String(essence.age)
@@ -1161,38 +1176,64 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       ageText = String(Math.round(Number(essence.age_years)))
     }
     if (ageText) {
-      sections.push({ label: "Age", value: ageText })
+      pairs.push({ character: ageText + " years old", origin: "Discovery date", label: "Age" })
     }
+
+    // Faction
     if (essence.faction) {
-      sections.push({ label: "Faction", value: String(essence.faction) })
+      pairs.push({ character: String(essence.faction), origin: "Biological pathway", label: "Faction" })
     }
+
+    // Skin
     if (essence.skin_hex || essence.skin_name) {
       var skinBits = []
       if (essence.skin_name) skinBits.push(String(essence.skin_name))
       if (essence.skin_hex) skinBits.push("(" + String(essence.skin_hex) + ")")
-      sections.push({ label: "Skin", value: skinBits.join(" ") })
+      pairs.push({ character: skinBits.join(" "), origin: "Expression pattern", label: "Skin" })
     }
+
+    // Aesthetics
     if (Array.isArray(essence.aesthetics) && essence.aesthetics.length) {
-      sections.push({ label: "Aesthetics", value: essence.aesthetics.map(String).join(", ") })
+      pairs.push({ character: essence.aesthetics.map(String).join(", "), origin: "Protein clan", label: "Aesthetics" })
     }
+
+    // Family
     if (essence.family_surname) {
       var familyText = String(essence.family_surname)
       if (Number.isFinite(Number(essence.family_members)) && Number(essence.family_members) > 0) {
         familyText += " (" + String(Math.round(Number(essence.family_members))) + " members)"
       }
-      sections.push({ label: "Family", value: familyText })
-    }
-    if (essence.family_feature) {
-      sections.push({ label: "Family Feature", value: String(essence.family_feature) })
+      pairs.push({ character: familyText, origin: "Gene family", label: "Family" })
     }
 
-    if (sections.length) {
+    // Family Feature
+    if (essence.family_feature) {
+      pairs.push({ character: String(essence.family_feature), origin: "Shared domain", label: "Family Feature" })
+    }
+
+    // Aliases
+    if (g.gene_names && g.gene_names.length > 1) {
+      pairs.push({ character: g.gene_names.join(", "), origin: "HGNC aliases", label: "Also known as" })
+    }
+
+    // UniProt ID
+    if (g.uniprot) {
+      pairs.push({ character: g.uniprot, origin: "UniProt accession", label: "Protein ID" })
+    }
+
+    if (pairs.length) {
       html += '<div class="icono-gene-sections">'
-      for (var i = 0; i < sections.length; i++) {
+      for (var i = 0; i < pairs.length; i++) {
         html +=
-          '<div class="icono-section">' +
-            '<div class="icono-section-label">' + esc(sections[i].label) + '</div>' +
-            '<div class="icono-section-value">' + esc(sections[i].value) + '</div>' +
+          '<div class="icono-section-row">' +
+            '<div class="icono-section-cell icono-section-cell--character">' +
+              '<div class="icono-section-label">' + esc(pairs[i].label) + '</div>' +
+              '<div class="icono-section-value">' + esc(pairs[i].character) + '</div>' +
+            '</div>' +
+            '<div class="icono-section-cell icono-section-cell--origin">' +
+              '<div class="icono-section-label">Derived from</div>' +
+              '<div class="icono-section-value">' + esc(pairs[i].origin) + '</div>' +
+            '</div>' +
           '</div>'
       }
       html += '</div>'

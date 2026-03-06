@@ -22,8 +22,4 @@ tags:
 
 <div id="iconoplasm-root" data-static="/static/iconoplasm"></div>
 
----
 
-<div class="icono-about-section" style="margin-top: 2rem; font-size: 0.9em; opacity: 0.7;">
-  <p>Gene color data from the <a href="https://iconoplasm.brinedew.bio/api/manifest">Iconoplasm API</a>. Protein metadata from <a href="https://www.uniprot.org/">UniProt</a>, <a href="https://www.genenames.org/">HGNC</a>, and <a href="https://www.ncbi.nlm.nih.gov/gene">NCBI Gene</a>.</p>
-</div>

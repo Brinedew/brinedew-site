@@ -633,6 +633,7 @@ async function essenceState(env, symbol) {
            family_surname,
            family_members,
            family_feature,
+           manifestation,
            updated_at
          FROM icono_gene_essence
          WHERE upper(gene_symbol) = ?
@@ -662,7 +663,12 @@ async function essenceState(env, symbol) {
       ...(row?.updated_at ? { updated_at: String(row.updated_at) } : {}),
       ...(row?.full_name ? { name: String(row.full_name) } : {}),
     }
-    return { exists: true, essence, full_name: row?.full_name ? String(row.full_name) : null }
+    return {
+      exists: true,
+      essence,
+      full_name: row?.full_name ? String(row.full_name) : null,
+      manifestation: row?.manifestation ? String(row.manifestation) : null,
+    }
   } catch {
     return { exists: false, essence: {} }
   }
@@ -703,6 +709,7 @@ async function geneRecord(env, url, rawId) {
     ...(weightKg != null ? { weight_kg: weightKg } : {}),
     popularity_score: wikiPageviewsForSymbol(r.symbol),
     essence: syncedEssence,
+    ...(syncedEssenceState?.manifestation ? { manifestation: syncedEssenceState.manifestation } : {}),
     portrait,
     portrait_candidates: portraitCandidates,
     source_links: sourceLinks(r.symbol, uniprot),
@@ -2130,10 +2137,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                    family_surname,
                    family_members,
                    family_feature,
+                   manifestation,
                    source,
                    updated_by,
                    updated_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nicegui_sync', ?, CURRENT_TIMESTAMP)
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nicegui_sync', ?, CURRENT_TIMESTAMP)
                  ON CONFLICT(gene_symbol) DO UPDATE SET
                    full_name=excluded.full_name,
                    weight_kg=excluded.weight_kg,
@@ -2148,6 +2156,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                    family_surname=excluded.family_surname,
                    family_members=excluded.family_members,
                    family_feature=excluded.family_feature,
+                   manifestation=excluded.manifestation,
                    source=excluded.source,
                    updated_by=excluded.updated_by,
                    updated_at=CURRENT_TIMESTAMP`,
@@ -2167,6 +2176,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                   essence.family_surname,
                   essence.family_members,
                   essence.family_feature,
+                  essence.manifestation || null,
                   createdBy,
                 )
                 .run()
