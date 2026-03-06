@@ -1227,8 +1227,12 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function render() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    // Lock height before wiping content to prevent layout collapse flash
+    var prevH = root.offsetHeight
+    if (prevH > 0) root.style.minHeight = prevH + "px"
     destroyHomeMasonry()
     destroyCandidateMasonry()
+    window.scrollTo(0, 0)
     var route = getRoute()
     // Update page title
     if (route.page === "home") {
@@ -1246,6 +1250,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       render404(root)
       refreshPortraitLightbox()
     }
+    // Release height lock after new content is in place
+    root.style.minHeight = ""
   }
 
   /* ─── Event delegation for internal links ─── */

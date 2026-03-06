@@ -9,6 +9,12 @@
   --icono-reject: oklch(56% 0.16 28);
 }
 
+/* Hide Quartz article siblings (HR, footer, etc.) until SPA content loads
+   to prevent brief flashes of chrome below empty root */
+#iconoplasm-root:empty ~ * {
+  visibility: hidden;
+}
+
 /* ───────── Hero ───────── */
 .icono-hero {
   text-align: center;
