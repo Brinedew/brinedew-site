@@ -26,6 +26,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
   var homeMasonry = null
+  var candidateMasonry = null
   var portraitLightboxCleanup = null
 
   /* ─── API helpers ─── */
@@ -358,6 +359,14 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     homeMasonry = null
   }
 
+  function destroyCandidateMasonry() {
+    if (!candidateMasonry) return
+    if (candidateMasonry.instance) {
+      candidateMasonry.instance.destroy()
+    }
+    candidateMasonry = null
+  }
+
   function applyHomeMasonry(container, newElements) {
     if (!container) return
     var Masonry = window.Masonry
@@ -415,6 +424,56 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     }
   }
 
+  function applyCandidateMasonry(container) {
+    if (!container) return
+    var Masonry = window.Masonry
+    if (!Masonry) {
+      console.warn("[Iconoplasm] Masonry library not loaded")
+      return
+    }
+    if (candidateMasonry && candidateMasonry.container === container && candidateMasonry.instance) {
+      if (window.imagesLoaded) {
+        window.imagesLoaded(container, function () {
+          candidateMasonry.instance.layout()
+        })
+      } else {
+        candidateMasonry.instance.layout()
+      }
+      return
+    }
+    destroyCandidateMasonry()
+    if (!container.querySelector(".icono-candidate-grid-sizer")) {
+      var sizer = document.createElement("div")
+      sizer.className = "icono-candidate-grid-sizer"
+      container.insertBefore(sizer, container.firstChild)
+    }
+    if (!container.querySelector(".icono-candidate-gutter-sizer")) {
+      var gutter = document.createElement("div")
+      gutter.className = "icono-candidate-gutter-sizer"
+      container.insertBefore(gutter, container.children[1] || null)
+    }
+    var msnry = new Masonry(container, {
+      itemSelector: ".icono-candidate-card",
+      columnWidth: ".icono-candidate-grid-sizer",
+      gutter: ".icono-candidate-gutter-sizer",
+      percentPosition: true,
+      transitionDuration: 0,
+      initLayout: false,
+    })
+    candidateMasonry = {
+      container: container,
+      instance: msnry,
+    }
+    if (window.imagesLoaded) {
+      window.imagesLoaded(container, function () {
+        msnry.layout()
+      })
+      msnry.layout()
+    } else {
+      msnry.layout()
+    }
+  }
+
   function galleryOptionsMarkup() {
     var html = ""
     for (var i = 0; i < GALLERY_ORDERS.length; i++) {
@@ -441,6 +500,17 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function showVoteLoginPopup() {
     window.alert("Please log-in first to vote.")
+  }
+
+  function voteBoxMarkup(extraAttrs) {
+    var attrs = extraAttrs ? " " + extraAttrs : ""
+    return (
+      '<div class="icono-vote-box" data-icono-vote-box' + attrs + '>' +
+        '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
+        '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>' +
+        '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
+      '</div>'
+    )
   }
 
   function voteSummaryText(snapshot) {
@@ -485,12 +555,10 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     }
   }
 
-  function wireGeneVoteBox(container, genePayload) {
-    var box = container.querySelector("[data-icono-vote-box]")
+  function wireVoteBox(box, symbolValue, assetShaValue) {
     if (!box) return
-    var symbol = String(genePayload && genePayload.symbol || "").trim().toUpperCase()
-    var portrait = (genePayload && genePayload.portrait) || {}
-    var assetSha = String(portrait.asset_sha256 || "").trim().toLowerCase()
+    var symbol = String(symbolValue || "").trim().toUpperCase()
+    var assetSha = String(assetShaValue || "").trim().toLowerCase()
     if (!symbol || !assetSha) return
     var candidateRef = "a:" + symbol + "|" + assetSha
     var upBtn = box.querySelector("[data-icono-vote-up]")
@@ -582,6 +650,24 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     }
     render()
     refreshSnapshot()
+  }
+
+  function wireGeneVoteBox(container, genePayload) {
+    var box = container.querySelector("[data-icono-vote-box]")
+    if (!box) return
+    var symbol = String(genePayload && genePayload.symbol || "").trim().toUpperCase()
+    var portrait = (genePayload && genePayload.portrait) || {}
+    wireVoteBox(box, symbol, portrait.asset_sha256)
+  }
+
+  function wireCandidateVoteBoxes(container, genePayload) {
+    if (!container || !genePayload) return
+    var symbol = String(genePayload.symbol || "").trim().toUpperCase()
+    var boxes = container.querySelectorAll("[data-icono-candidate-vote-box]")
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i]
+      wireVoteBox(box, symbol, box.getAttribute("data-icono-candidate-vote-box"))
+    }
   }
 
   /* ─── Client-side router ─── */
@@ -886,30 +972,45 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     var candidates = Array.isArray(genePayload && genePayload.portrait_candidates)
       ? genePayload.portrait_candidates
       : []
-    if (!candidates.length) return ""
+    var visibleCandidates = []
+    for (var i = 0; i < candidates.length; i++) {
+      var item = candidates[i]
+      if (!item || item.is_current) continue
+      if (!candidatePortraitUrl(item, "medium")) continue
+      visibleCandidates.push(item)
+    }
+    if (!visibleCandidates.length) return ""
+    var gridClass = visibleCandidates.length === 1
+      ? "icono-candidate-grid icono-candidate-grid--single"
+      : "icono-candidate-grid"
     var html =
       '<section class="icono-candidate-gallery">' +
         '<div class="icono-candidate-gallery-heading">' +
           '<h2>Candidate portraits</h2>' +
         '</div>' +
-        '<div class="icono-candidate-grid" data-icono-lightbox>'
-    for (var i = 0; i < candidates.length; i++) {
-      var candidate = candidates[i]
+        '<div class="' + gridClass + '" data-icono-lightbox>'
+    for (var i = 0; i < visibleCandidates.length; i++) {
+      var candidate = visibleCandidates[i]
       var mediumUrl = candidatePortraitUrl(candidate, "medium")
       var fullUrl = candidatePortraitUrl(candidate, "full") || mediumUrl
-      if (!mediumUrl) continue
       var width = Number(candidate && candidate.width || 4) || 4
       var height = Number(candidate && candidate.height || 5) || 5
       var metaBits = []
-      if (candidate && candidate.is_current) metaBits.push("Current")
-      metaBits.push(scoreLabel(candidate && candidate.image_score))
+      if (candidate && candidate.status) metaBits.push(String(candidate.status))
+      if (candidate && candidate.created_at) metaBits.push(String(candidate.created_at).slice(0, 10))
+      var assetSha = String(candidate && candidate.asset_sha256 || "").trim().toLowerCase()
       html +=
-        '<button type="button" class="icono-candidate-card' + (candidate && candidate.is_current ? ' is-current' : '') + '" data-icono-pswp data-icono-pswp-src="' + esc(fullUrl) + '" data-icono-pswp-alt="' + esc(genePayload.symbol) + ' portrait candidate" data-pswp-width="' + width + '" data-pswp-height="' + height + '" style="--width:' + width + ';--height:' + height + ';">' +
-          '<span class="icono-candidate-media">' +
-            '<img src="' + esc(mediumUrl) + '" alt="' + esc(genePayload.symbol) + ' portrait candidate" loading="lazy" decoding="async" width="' + width + '" height="' + height + '">' +
-          '</span>' +
-          '<span class="icono-candidate-meta">' + esc(metaBits.join(" · ")) + '</span>' +
-        '</button>'
+        '<article class="icono-candidate-card" style="--width:' + width + ';--height:' + height + ';">' +
+          '<button type="button" class="icono-candidate-media-button" data-icono-pswp data-icono-pswp-src="' + esc(fullUrl) + '" data-icono-pswp-alt="' + esc(genePayload.symbol) + ' portrait candidate" data-pswp-width="' + width + '" data-pswp-height="' + height + '" aria-label="Open candidate portrait for ' + esc(genePayload.symbol) + '">' +
+            '<span class="icono-candidate-media">' +
+              '<img src="' + esc(mediumUrl) + '" alt="' + esc(genePayload.symbol) + ' portrait candidate" loading="lazy" decoding="async" width="' + width + '" height="' + height + '">' +
+            '</span>' +
+          '</button>' +
+          '<div class="icono-candidate-footer">' +
+            voteBoxMarkup('data-icono-candidate-vote-box="' + esc(assetSha) + '"') +
+            '<span class="icono-candidate-meta">' + esc(metaBits.join(" · ")) + '</span>' +
+          '</div>' +
+        '</article>'
     }
     html +=
         '</div>' +
@@ -964,11 +1065,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     var voteBox = (hasPortrait && g.portrait && g.portrait.asset_sha256)
       ? (
           '<div class="icono-gene-portrait-footer">' +
-            '<div class="icono-vote-box" data-icono-vote-box>' +
-              '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
-              '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>' +
-              '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
-            '</div>' +
+            voteBoxMarkup() +
           '</div>'
         )
       : ""
@@ -1091,6 +1188,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
     container.innerHTML = html
     wireGeneVoteBox(container, g)
+    wireCandidateVoteBoxes(container, g)
+    applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
     refreshPortraitLightbox()
   }
 
@@ -1115,6 +1214,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     var root = document.getElementById(ROOT_ID)
     if (!root) return
     destroyHomeMasonry()
+    destroyCandidateMasonry()
     var route = getRoute()
     // Update page title
     if (route.page === "home") {
