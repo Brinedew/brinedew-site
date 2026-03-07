@@ -1,2 +1,5 @@
+# Pages must read a Pages-shaped wrangler.toml from its own working directory.
+# Keep this file minimal and separate from the root Worker config, then copy it into
+# the CI temp directory used for `wrangler pages deploy`.
 name = "brinedew-bio"
 pages_build_output_dir = "../public"

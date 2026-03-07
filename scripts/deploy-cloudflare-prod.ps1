@@ -12,6 +12,9 @@ Require-Command "gh"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
+# This script intentionally does not call `wrangler pages deploy` or `wrangler deploy`
+# directly anymore. Production deploys must go through the single GitHub Actions path so
+# local machine auth, local config drift, and partial deploys cannot create split-brain.
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -ne "main") {
   throw "[deploy] Production workflow dispatch is only supported from main. Current branch: $branch"
@@ -25,6 +28,9 @@ if ($status) {
   throw "[deploy] Working tree is dirty. Commit or stash changes before deploying."
 }
 
+# Deploy the exact commit that is already on origin/main. This keeps the release source
+# explicit and avoids the old failure mode where a local-only state or a failed push and
+# a production deploy could drift apart.
 git fetch origin main --quiet
 if ($LASTEXITCODE -ne 0) {
   throw "[deploy] Failed to fetch origin/main."
@@ -45,6 +51,8 @@ if ($LASTEXITCODE -ne 0) {
   throw "[deploy] Failed to dispatch production workflow."
 }
 
+# `gh workflow run` does not return the new run id, so resolve it by looking for the
+# newest workflow_dispatch run for the exact pushed SHA after this dispatch time.
 $deadline = (Get-Date).AddMinutes(2)
 $run = $null
 while ((Get-Date) -lt $deadline -and -not $run) {

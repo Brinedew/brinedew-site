@@ -12,6 +12,9 @@ cd "$repo_root"
 current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 # Only guard production pushes from main.
+# This hook is deliberately build-only: production release itself happens in the
+# Deploy Production GitHub Actions workflow so pushes do not depend on one machine's
+# Cloudflare session or perform half of a deploy locally.
 if [ "$current_branch" != "main" ]; then
   exit 0
 fi

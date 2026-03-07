@@ -94,6 +94,10 @@ jobs:
           mkdir -p public
           touch public/.nojekyll
 
+      # Pages validates the wrangler.toml in its current working directory and rejects
+      # Worker-only keys like `main`, `routes`, and `triggers`. Keep the production
+      # Worker config at repo root, but copy a tiny Pages-only config into an isolated
+      # temp directory so this workflow remains the single canonical deploy path.
       - name: Prepare isolated Pages Wrangler config
         run: |
           mkdir -p .wrangler-pages
