@@ -95,7 +95,7 @@ jobs:
           touch public/.nojekyll
 
       - name: Deploy production static site to Cloudflare Pages
-        run: wrangler pages deploy public --config wrangler.pages.toml --project-name brinedew-bio --branch main
+        run: wrangler pages deploy public --project-name brinedew-bio --branch main
 
       - name: Deploy Cloudflare Worker (production)
         run: wrangler deploy
