@@ -6,7 +6,7 @@ npm ci
 node quartz/bootstrap-cli.mjs build -d content
 
 Write-Host "[deploy] Publishing static site to Cloudflare Pages (brinedew-bio)..."
-wrangler pages deploy public --project-name brinedew-bio --branch main
+wrangler pages deploy public --config wrangler.pages.toml --project-name brinedew-bio --branch main
 
 Write-Host "[deploy] Deploying primary Worker (geneguessr-api)..."
 wrangler deploy
