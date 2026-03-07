@@ -1,5 +1,15 @@
 -- Benchmark infrastructure tables
 -- Used by the geneguessr-benchmark Worker (workers/benchmark/)
+--
+-- Architectural choice:
+--   This bootstrap migration defines the current canonical benchmark schema so a
+--   fresh local database can replay the lane without depending on historical
+--   one-off ALTER TABLE steps.
+--
+-- Mistake to avoid:
+--   Do not strip newer canonical columns back out of this CREATE TABLE just to
+--   "match history". Replayable migrations matter more than preserving every
+--   old incremental step literally.
 
 -- API keys for benchmark access. key_hash is SHA-256 of the Bearer token.
 CREATE TABLE IF NOT EXISTS benchmark_api_keys (
@@ -24,6 +34,7 @@ CREATE TABLE IF NOT EXISTS benchmark_sessions (
   exact_match INTEGER,
   hints_used INTEGER NOT NULL DEFAULT 0,
   checksum TEXT,
+  state TEXT,
   FOREIGN KEY (api_key_hash) REFERENCES benchmark_api_keys(key_hash)
 );
 

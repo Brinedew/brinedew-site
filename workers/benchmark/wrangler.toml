@@ -31,8 +31,13 @@ persist = true
 invocation_logs = true
 
 # Same D1 database as the main Worker — reads proteins, writes benchmark tables.
-# Migrations are managed from the repo root (Website/migrations/) and applied
-# by the main deploy pipeline or via:
+# Benchmark schema changes live beside this worker in workers/benchmark/migrations.
+# That keeps the ownership boundary explicit: gameplay/reference schema stays in
+# the repo-root migrations, benchmark-only tables evolve here.
+# Mistake to avoid:
+#   Do not move benchmark table migrations into the main migration chain "because
+#   they share a database". Shared storage is not shared ownership.
+# Apply via:
 #   wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml
 [[d1_databases]]
 binding = "DB"
