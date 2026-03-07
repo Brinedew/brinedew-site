@@ -321,30 +321,45 @@ function sanitizeText(raw, maxLen) {
   return v.slice(0, maxLen)
 }
 
-function normalizeAestheticsList(raw) {
+function normalizeTextList(raw, { maxItems = 32, maxLen = 128 } = {}) {
   const out = []
   const seen = new Set()
   const pushValue = (value) => {
-    const cleaned = sanitizeText(value, 128)
+    const cleaned = sanitizeText(value, maxLen)
     if (!cleaned) return
-    if (seen.has(cleaned)) return
-    seen.add(cleaned)
+    const key = cleaned.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
     out.push(cleaned)
   }
   if (Array.isArray(raw)) {
     for (const item of raw) {
       pushValue(item)
-      if (out.length >= 32) break
+      if (out.length >= maxItems) break
     }
     return out
   }
   if (typeof raw === "string" && raw.trim()) {
     for (const part of raw.split(",")) {
       pushValue(part)
-      if (out.length >= 32) break
+      if (out.length >= maxItems) break
     }
   }
   return out
+}
+
+function normalizeAestheticsList(raw) {
+  return normalizeTextList(raw)
+}
+
+function validateEssenceTraitOrigins({ symbol, aesthetics, faction, aestheticsOrigin, politicsOrigin }) {
+  if (Array.isArray(aesthetics) && aesthetics.length && (!Array.isArray(aestheticsOrigin) || !aestheticsOrigin.length)) {
+    return `Aesthetics origin metadata is required for ${symbol}`
+  }
+  if (faction && (!Array.isArray(politicsOrigin) || !politicsOrigin.length)) {
+    return `Politics origin metadata is required for ${symbol}`
+  }
+  return ""
 }
 
 function normalizeEssencePayload(rawEssence, fallbackSymbol) {
@@ -365,10 +380,19 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const skinHex = normalizeHexColor(payload.skin_hex)
   const skinName = sanitizeText(payload.skin_name, 64)
   const aesthetics = normalizeAestheticsList(payload.aesthetics)
+  const aestheticsOrigin = normalizeTextList(payload.aesthetics_origin)
+  const politicsOrigin = normalizeTextList(payload.politics_origin)
   const familySurname = sanitizeText(payload.family_surname || payload.gene_surname, 64)
   const familyMembers = optionalInt(payload.family_members)
   const familyFeature = sanitizeText(payload.family_feature, 255)
   const manifestation = sanitizeText(payload.manifestation || payload.description, 4000)
+  const traitOriginValidationError = validateEssenceTraitOrigins({
+    symbol,
+    aesthetics,
+    faction,
+    aestheticsOrigin,
+    politicsOrigin,
+  })
 
   return {
     gene_symbol: symbol,
@@ -382,10 +406,13 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     skin_hex: skinHex,
     skin_name: skinName,
     aesthetics_json: JSON.stringify(aesthetics),
+    aesthetics_origin_json: JSON.stringify(aestheticsOrigin),
+    politics_origin_json: JSON.stringify(politicsOrigin),
     family_surname: familySurname,
     family_members: familyMembers,
     family_feature: familyFeature,
     manifestation,
+    ...(traitOriginValidationError ? { validation_error: traitOriginValidationError } : {}),
   }
 }
 
@@ -404,6 +431,8 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        skin_hex,
        skin_name,
        aesthetics_json,
+       aesthetics_origin_json,
+       politics_origin_json,
        family_surname,
        family_members,
        family_feature,
@@ -411,7 +440,7 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        source,
        updated_by,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol) DO UPDATE SET
        full_name=excluded.full_name,
        weight_kg=excluded.weight_kg,
@@ -423,6 +452,8 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        skin_hex=excluded.skin_hex,
        skin_name=excluded.skin_name,
        aesthetics_json=excluded.aesthetics_json,
+       aesthetics_origin_json=excluded.aesthetics_origin_json,
+       politics_origin_json=excluded.politics_origin_json,
        family_surname=excluded.family_surname,
        family_members=excluded.family_members,
        family_feature=excluded.family_feature,
@@ -443,6 +474,8 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
       essence.skin_hex,
       essence.skin_name,
       essence.aesthetics_json,
+      essence.aesthetics_origin_json,
+      essence.politics_origin_json,
       essence.family_surname,
       essence.family_members,
       essence.family_feature,
@@ -697,6 +730,8 @@ async function essenceState(env, symbol) {
            skin_hex,
            skin_name,
            aesthetics_json,
+           aesthetics_origin_json,
+           politics_origin_json,
            family_surname,
            family_members,
            family_feature,
@@ -710,9 +745,19 @@ async function essenceState(env, symbol) {
       .first()
     if (!row) return { exists: false, essence: {} }
     let aesthetics = []
+    let aestheticsOrigin = []
+    let politicsOrigin = []
     try {
       const parsed = JSON.parse(String(row?.aesthetics_json || "[]"))
       if (Array.isArray(parsed)) aesthetics = parsed.map((v) => String(v || "").trim()).filter(Boolean)
+    } catch {}
+    try {
+      const parsed = JSON.parse(String(row?.aesthetics_origin_json || "[]"))
+      if (Array.isArray(parsed)) aestheticsOrigin = parsed.map((v) => String(v || "").trim()).filter(Boolean)
+    } catch {}
+    try {
+      const parsed = JSON.parse(String(row?.politics_origin_json || "[]"))
+      if (Array.isArray(parsed)) politicsOrigin = parsed.map((v) => String(v || "").trim()).filter(Boolean)
     } catch {}
     const essence = {
       ...(row?.weight_kg != null ? { weight_kg: Number(row.weight_kg) } : {}),
@@ -720,10 +765,12 @@ async function essenceState(env, symbol) {
       ...(row?.sex ? { sex: String(row.sex) } : {}),
       ...(row?.age ? { age: String(row.age) } : {}),
       ...(row?.age_years != null ? { age_years: Number(row.age_years) } : {}),
-      ...(row?.faction ? { faction: String(row.faction) } : {}),
+      ...(row?.faction ? { faction: String(row.faction), politics: String(row.faction) } : {}),
       ...(row?.skin_hex ? { skin_hex: String(row.skin_hex) } : {}),
       ...(row?.skin_name ? { skin_name: String(row.skin_name) } : {}),
       ...(aesthetics.length ? { aesthetics } : {}),
+      ...(aestheticsOrigin.length ? { aesthetics_origin: aestheticsOrigin } : {}),
+      ...(politicsOrigin.length ? { politics_origin: politicsOrigin } : {}),
       ...(row?.family_surname ? { family_surname: String(row.family_surname) } : {}),
       ...(row?.family_members != null ? { family_members: Number(row.family_members) } : {}),
       ...(row?.family_feature ? { family_feature: String(row.family_feature) } : {}),
@@ -759,11 +806,42 @@ async function geneRecord(env, url, rawId) {
   const portraitCandidates = await portraitCandidatesForGene(env, url, r.symbol, portrait?.asset_sha256 || null)
   const syncedEssenceState = await essenceState(env, r.symbol)
   const syncedEssence = syncedEssenceState?.essence && typeof syncedEssenceState.essence === "object" ? syncedEssenceState.essence : {}
+  const proteinDemo =
+    r?.protein?.demographics && typeof r.protein.demographics === "object" ? r.protein.demographics : {}
+  const syncedAesthetics = normalizeTextList(syncedEssence?.aesthetics)
+  const syncedPolitics = sanitizeText(syncedEssence?.politics || syncedEssence?.faction, 64)
+  const syncedAestheticsOrigin = normalizeTextList(syncedEssence?.aesthetics_origin)
+  const syncedPoliticsOrigin = normalizeTextList(syncedEssence?.politics_origin)
+  const liveAesthetics = normalizeTextList(proteinDemo?.aesthetics)
+  const livePolitics = sanitizeText(proteinDemo?.politics || syncedPolitics, 64)
+  const liveAestheticsOrigin = normalizeTextList(r?.protein?.clans)
+  const livePoliticsOrigin = normalizeTextList(r?.protein?.alignment ? [r.protein.alignment] : [])
+  const tooltipEssence = {
+    ...syncedEssence,
+    ...((syncedAesthetics.length ? syncedAesthetics : liveAesthetics).length
+      ? { aesthetics: syncedAesthetics.length ? syncedAesthetics : liveAesthetics }
+      : {}),
+    ...(livePolitics ? { politics: livePolitics, faction: livePolitics } : {}),
+    ...((syncedAestheticsOrigin.length ? syncedAestheticsOrigin : liveAestheticsOrigin).length
+      ? {
+          aesthetics_origin: syncedAestheticsOrigin.length
+            ? syncedAestheticsOrigin
+            : liveAestheticsOrigin,
+        }
+      : {}),
+    ...((syncedPoliticsOrigin.length ? syncedPoliticsOrigin : livePoliticsOrigin).length
+      ? {
+          politics_origin: syncedPoliticsOrigin.length
+            ? syncedPoliticsOrigin
+            : livePoliticsOrigin,
+        }
+      : {}),
+  }
   const uniprot = normalizeUniprot(r?.protein?.uniprot || entry?.u || null)
   const fullName =
     sanitizeText(syncedEssenceState?.full_name, 255) ||
     ((r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol)
-  const weightKgValue = Number(syncedEssence?.weight_kg)
+  const weightKgValue = Number(tooltipEssence?.weight_kg)
   const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
   const proteinLengthAa = optionalInt(r?.protein?.length)
   const massDa = Number(r?.protein?.mass)
@@ -788,7 +866,7 @@ async function geneRecord(env, url, rawId) {
     ...(firstPublicationYear != null ? { first_publication_year: firstPublicationYear } : {}),
     ...(primaryTissue ? { primary_tissue: primaryTissue } : {}),
     popularity_score: wikiPageviewsForSymbol(r.symbol),
-    essence: syncedEssence,
+    essence: tooltipEssence,
     ...(syncedEssenceState?.manifestation ? { manifestation: syncedEssenceState.manifestation } : {}),
     portrait,
     portrait_candidates: portraitCandidates,
@@ -2102,12 +2180,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             ? rawItem.symbol || rawItem.gene_symbol || rawEssence?.symbol || rawEssence?.gene_symbol || ""
             : ""
         const essence = normalizeEssencePayload(rawEssence, symbolHint)
-        if (!essence) {
+        if (!essence || essence.validation_error) {
           invalid += 1
           results.push({
             ok: false,
-            symbol: normalizeSymbol(symbolHint),
-            error: "Invalid or empty essence payload",
+            symbol: normalizeSymbol(symbolHint) || essence?.gene_symbol || "",
+            error: essence?.validation_error || "Invalid or empty essence payload",
           })
           continue
         }
