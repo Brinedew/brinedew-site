@@ -29,7 +29,6 @@ name = "geneguessr-api"
 main = "workers/index.js"
 compatibility_date = "2025-11-12"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "public"
 
 # Keep the worker off workers.dev; only serve the custom domain route.
 workers_dev = false

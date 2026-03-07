@@ -94,8 +94,14 @@ jobs:
           mkdir -p public
           touch public/.nojekyll
 
+      - name: Prepare isolated Pages Wrangler config
+        run: |
+          mkdir -p .wrangler-pages
+          cp wrangler.pages.toml .wrangler-pages/wrangler.toml
+
       - name: Deploy production static site to Cloudflare Pages
-        run: wrangler pages deploy public --project-name brinedew-bio --branch main
+        working-directory: .wrangler-pages
+        run: wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
       - name: Deploy Cloudflare Worker (production)
         run: wrangler deploy
