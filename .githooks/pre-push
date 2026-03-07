@@ -11,12 +11,12 @@ cd "$repo_root"
 
 current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
-# Only auto-deploy production from main pushes.
+# Only guard production pushes from main.
 if [ "$current_branch" != "main" ]; then
   exit 0
 fi
 
-echo "[pre-push] Building site for Cloudflare Pages..."
+echo "[pre-push] Verifying production build for main..."
 
 # Install deps only when missing to keep sync fast.
 if [ ! -d node_modules ]; then
@@ -25,7 +25,5 @@ fi
 
 node quartz/bootstrap-cli.mjs build -d content
 
-echo "[pre-push] Deploying to Cloudflare Pages project: brinedew-bio"
-npx wrangler pages deploy public --project-name brinedew-bio --branch main
-
-echo "[pre-push] Pages deploy finished."
+echo "[pre-push] Build passed."
+echo "[pre-push] Production deploy is handled by GitHub Actions after push."
