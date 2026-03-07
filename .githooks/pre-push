@@ -26,4 +26,4 @@ fi
 node quartz/bootstrap-cli.mjs build -d content
 
 echo "[pre-push] Build passed."
-echo "[pre-push] Production deploy is handled by GitHub Actions after push."
+echo "[pre-push] Canonical production deploy path: Deploy Production (Cloudflare Pages + Worker)."

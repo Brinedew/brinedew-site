@@ -37,9 +37,12 @@ The `?gg_api=<url>` override is for local dev only. It persists in localStorage;
 
 ## deployment
 
-Cloudflare-first deploy (no GitHub Actions required):
+Production deploys through one path only: the `Deploy Production (Cloudflare Pages + Worker)` GitHub Actions workflow.
 
-- `powershell -File scripts/deploy-cloudflare-prod.ps1`
+- Normal release: push `main`
+- Manual re-run of the same path: `powershell -File scripts/deploy-cloudflare-prod.ps1`
+
+Direct local `wrangler pages deploy` / `wrangler deploy` production releases are intentionally not part of the supported flow.
 
 ## license
 

@@ -1,32 +1,81 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "[deploy] Building Quartz site..."
-python scripts/enrich-proteins.py
-npm ci
-node quartz/bootstrap-cli.mjs build -d content
-
-Write-Host "[deploy] Publishing static site to Cloudflare Pages (brinedew-bio)..."
-wrangler pages deploy public --config wrangler.pages.toml --project-name brinedew-bio --branch main
-
-Write-Host "[deploy] Deploying primary Worker (geneguessr-api)..."
-wrangler deploy
-
-Write-Host "[deploy] Applying benchmark migrations (idempotent duplicate-column tolerated)..."
-$migrationOutput = & wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml 2>&1
-$migrationStatus = $LASTEXITCODE
-$migrationText = ($migrationOutput | Out-String)
-Write-Output $migrationText
-if ($migrationStatus -ne 0 -and $migrationText -notmatch "(?i)duplicate column name: state") {
-  throw "Benchmark migration failed with unexpected error."
+function Require-Command([string]$Name) {
+  if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+    throw "[deploy] Missing required command: $Name"
+  }
 }
 
-Write-Host "[deploy] Deploying benchmark Worker..."
-wrangler deploy --config workers/benchmark/wrangler.toml
+Require-Command "git"
+Require-Command "gh"
 
-Write-Host "[deploy] Running health check..."
-$health = Invoke-RestMethod -Uri "https://geneguessr-bench.brinedew.bio/health" -Method GET
-if (-not $health.ok) {
-  throw "Benchmark health check failed."
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
+
+$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($branch -ne "main") {
+  throw "[deploy] Production workflow dispatch is only supported from main. Current branch: $branch"
 }
 
-Write-Host "[deploy] Completed successfully."
+$status = git status --porcelain
+if ($LASTEXITCODE -ne 0) {
+  throw "[deploy] Could not read git status."
+}
+if ($status) {
+  throw "[deploy] Working tree is dirty. Commit or stash changes before deploying."
+}
+
+git fetch origin main --quiet
+if ($LASTEXITCODE -ne 0) {
+  throw "[deploy] Failed to fetch origin/main."
+}
+
+$headSha = (git rev-parse HEAD).Trim()
+$originSha = (git rev-parse origin/main).Trim()
+if ($headSha -ne $originSha) {
+  throw "[deploy] HEAD is not origin/main. Push main first so the deploy source is explicit."
+}
+
+Write-Host "[deploy] Canonical production deploy path: GitHub Actions only."
+Write-Host "[deploy] Dispatching Deploy Production (Cloudflare Pages + Worker) for origin/main..."
+
+$dispatchTime = Get-Date
+gh workflow run ".github/workflows/deploy-quartz.yml" --ref main
+if ($LASTEXITCODE -ne 0) {
+  throw "[deploy] Failed to dispatch production workflow."
+}
+
+$deadline = (Get-Date).AddMinutes(2)
+$run = $null
+while ((Get-Date) -lt $deadline -and -not $run) {
+  $runsJson = gh run list --workflow ".github/workflows/deploy-quartz.yml" --limit 10 --json databaseId,createdAt,url,status,conclusion,headSha,event
+  if ($LASTEXITCODE -ne 0) {
+    throw "[deploy] Failed to list workflow runs."
+  }
+
+  $runs = $runsJson | ConvertFrom-Json
+  $run = $runs |
+    Where-Object {
+      $_.event -eq "workflow_dispatch" -and
+      $_.headSha -eq $originSha -and
+      [DateTime]::Parse($_.createdAt) -ge $dispatchTime.AddSeconds(-10)
+    } |
+    Sort-Object createdAt -Descending |
+    Select-Object -First 1
+
+  if (-not $run) {
+    Start-Sleep -Seconds 3
+  }
+}
+
+if (-not $run) {
+  throw "[deploy] Could not find the dispatched production workflow run."
+}
+
+Write-Host "[deploy] Watching workflow run $($run.databaseId): $($run.url)"
+gh run watch $run.databaseId --exit-status
+if ($LASTEXITCODE -ne 0) {
+  throw "[deploy] Production workflow failed."
+}
+
+Write-Host "[deploy] Production workflow succeeded."
