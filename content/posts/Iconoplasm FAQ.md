@@ -10,16 +10,26 @@ draft: true
 1. **What is this and who is this for?**
 Iconoplasm is a browser extension where each gene on any web page gets its own character portrait. The target audience are life science students and preclinical researchers.
 
-2. **Does anyone actually need it?**
-Gijinkas
-Chernoff faces
-Scott described this idea.
+2. **Does anyone actually care about that?**
+Scott Alexander explicitly requested this kind of tool in [his post](https://slatestarcodex.com/2013/08/14/extreme-mnemonics/) on extreme mnemonics.
 
-3. **Why use AI generation?**
+> *JS-154 is one of five metabolic products of netamine; however, the enzyme that produces it is unknown. It is manufactured in cells in the far rostral region of of the cerebrum, but after binding with a leukocynoid it takes a role in maintaining the blood-brain barrier – in particular guiding the movements of lipid molecules.*
+> 
+> I find I can read paragraphs like this five or six times, write them on flashcards, enter them into Anki, and my brain still refuses to understand or remember them after weeks of trying.
+> 
+> On the other hand, ==my brain easily remembers vastly more complicated structures when they’re loaded with human-accessible meaning==. For example, just by casually reading the Game of Thrones series, I know an extremely intricate web of genealogies, alliances, locations, journeys, battlesites, et cetera. Byte for byte, an average Game of Thrones reader/viewer probably has as much Game of Thrones information as a neuroscience Ph.D has molecular biology information, but getting the neuroscience info is still a thousand times harder.
+> ...
+> This makes me wonder if it would be ==possible to produce a story as enjoyable as Game of Thrones which was actually isomorphic to the most important pathways in molecular biology==.
+
+[Chernoff faces](https://en.wikipedia.org/wiki/Chernoff_face) are a quaint 1973 attempt to visualize multivariate data as algorithmically generated faces. They look a bit too bland to be interesting to memorize. Now, 50 years later and with a massive leap in image generation capability, we can do better.
+
+[Gijinka](https://knowyourmeme.com/memes/gijinka-moe-anthropomorphism) are memeable humanizations of natural world entities, or even abstract concepts, that have existed on the internet since its invention. There are gijinka of companies, planets, and periodic table elements. The casts of [Cells at Work!](https://en.wikipedia.org/wiki/Cells_at_Work!) and [Osmosis Jones](https://en.wikipedia.org/wiki/Osmosis_Jones) are gijinka of human "cell types", and are fondly remembered by the new generation of biomedical researchers.
+
+2. **Why use AI generation?**
 Economics for 20K images.
 
-4. **I want to remove my art style from the pool**
-You can use this utility to check how many times an artist name tag was used across the entire gallery. Press "remove artist style" to blacklist this name tag from the online gallery.
+3. **I want to remove my art style from the pool**
+You can use this utility to check how many times an artist name tag was used across the entire gallery. Press "remove artist style" to remove all images with the tag from the site and blacklist its future use.
  
 If you don't want to register an account on the site, you can send an email to support@brinedew.bio to have an art style removed. Mention your @artist tag as it appears on https://thetacursed.github.io/Anima-Style-Explorer/
 
@@ -40,7 +50,7 @@ Tap "new candidate" to make a new candidate image. Make sure you have inputted A
 6. **All generated images for a gene reuse the same bad character concept**
 Join our Discord to discuss how to modify character prompts for various gene families.
 
-7. **I noticed an image that would better fit another gene**
+7. **I noticed a candidate image that would better fit another gene**
 Open this image fullscreen, then click "copy this image to another gene". Then select the gene from the dropdown menu. This adds it as a new candidate image to that gene, and auto-checkmarks it.
 
 8. **What images are not suitable for Iconoplasm?**
@@ -59,11 +69,11 @@ Who knows! It's 2026 and the status of generative content is murky and varies by
 9. **Why aren't you allowing people to upload custom images from their PC?**
 Several reasons. 
 
-First, image-gen services do their own moderation, which saves us some moderation headache. 
+First, third party image-gen services do their own moderation, which saves us some moderation headache. 
 
 Second, it's saves us from mass-upload attacks to my site infrastructure.
 
-Third, it helps to maintain strict chain of provenance over the gallery and uniform copyright policy over all characters - with uploaded images, I don't know if you uploaded someone else's IP. 
+Third, it helps to maintain strict chain of provenance over the gallery and uniformly permissive IP policy over all characters - with uploaded images, I don't know if you uploaded someone else's IP. 
 
 10. **Is there any kind of narrative or worldbuilding that these characters inhabit?**
 It's up to the users to make up the world that makes sense in the context of their research interest. To a circulatory system researcher, the characters may be living in lotus petals by the river. To a developmental biologist, they may be crew in generational spaceships. To an oncologist, they may be isolated within bubble universes, engaged in multiversal acausal trade. 
@@ -75,9 +85,12 @@ However, as a guidance, I can suggest some constraints.
 - RNAs are better thought of as transient ghost-like spirits that can affect the world only in limited ways. Ribosomes would be the shrine where these spirits incarnate into a material shell. The time before ribosomes existed is covered in mystery - perhaps the rumors of the ancient world of songs upon songs.
 - DNA is best represented as immaterial soul storage for the characters: gravestones, phylacteria, vinyl records, scrolls. The only way to get rid of the character for good is to destroy the soul storage - otherwise there's always a risk they'll come back from the dead.
 - In real world, we can see what's far ahead on the horizon. However, in iconoplasm worlds, each character has very limited information about what's happening elsewhere in the cell. E.g. the characters can't see a cell membrane being ruptured from far away - this information needs to be spread through messengers, rumor networks, or carried as a vague directional smell. Think of it as a dense mist or blur covering the world.
-- Information about what's outside the cell membrane is even more inaccessible. Most characters can't know for sure if they're a part of some grand design like a multicellular body - only the membrane proteins are even aware there's other cells nearby. The "developmental plan" can have more of a ritual or sacred connotation rather than rational design, and there's doubt and suspicion when characters use grand narratives to justify drastic action.
-- You can tell two stories about a protein participating in two different "runs" (translation->some pathway->degradation, translation->some other pathway->degradation). During each run, the memory is stored as post-translational modifications. However, the memories don't get carried over between runs: each time the protein is translated anew, its memories are blank about what happened "last run". 
+- Information about what's outside the cell membrane is even more inaccessible. Most characters can't know for sure if they're a part of some grand design like a multicellular body - only the membrane proteins are even directly aware there's other cells nearby. The "developmental plan" must have more of a ritual or sacred connotation rather than rational design, and there's doubt and suspicion when characters use grand narratives to justify drastic action.
+- You can tell two stories about a protein participating in two different "runs" (translation->some pathway->degradation, translation->some other pathway->degradation). During each run, the memory is stored as post-translational modifications. However, the memories don't get carried over across runs: each time the protein is translated anew, its memories are blank about what happened "last run". 
 - Cell replication (mitosis) is happening when the majority of the cast is "asleep": only the mysterious skeleton crew, who most never meet, is awake and splitting the cell. 
 - What's the motivation to initiate the mitosis? There are factions that are pro-and anti-replication, with their own motivations and narratives. Sometimes, one side wins, sometimes, the other. 
-- When the pro-Growth side wins, cell replicates. Sometimes, it's good. Other times, it's bad.
-- When the pro-Control side wins, cell enters quiescence. Sometimes, it's good. Other times, it's bad.
+- When the pro-Growth side wins, cell replicates. Sometimes, the characters benefit (germline, regeneration). Other times, they die (oncogenesis).
+- When the pro-Control side wins, cell enters quiescence. Sometimes, the characters benefit (morphogenesis). Other times, they die (aging).
+
+11. **How can we support the project?** 
+Please participate! Vote on some images, generate and edit the picks, write lore pages. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on [[Support Me]] page.
