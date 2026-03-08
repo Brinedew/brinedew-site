@@ -3,11 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Match the dark-mode front page palette:
-# - background: body background (`--light`)
-# - mark color: body text (`--dark`)
-LIGHT_BG = "#1a1a1a"
-INK_COLOR = "#ebebec"
+# Match the dark-mode front-page brand mark:
+# - background brown: `--light` => oklch(16% 0.01 45) => #110c0a
+# - logo beige: page-title `--darkgray` => oklch(80% 0.02 60) => #c8bbb1
+LIGHT_BG = "#110c0a"
+INK_COLOR = "#c8bbb1"
 MARK_PADDING = 0.14
 MASK_ALPHA_THRESHOLD = 32
 
