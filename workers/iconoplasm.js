@@ -933,6 +933,7 @@ async function geneRecord(env, url, rawId) {
   const r = await resolveGene(env, rawId)
   if (!r?.symbol) return null
   const entry = colorsCache.bySymbol.get(r.symbol)
+  const identityOverride = symbolIdentityOverride(r.symbol)
   const base = portraitBase(url, env)
   const portrait = await portraitState(env, r.symbol, base)
   const portraitCandidates = await portraitCandidatesForGene(env, url, r.symbol, portrait?.asset_sha256 || null)
@@ -952,8 +953,10 @@ async function geneRecord(env, url, rawId) {
   const liveAestheticsOrigin = normalizeTextList(r?.protein?.clans)
   const livePoliticsOrigin = normalizeTextList(r?.protein?.alignment ? [r.protein.alignment] : [])
   const liveSexOrigin = sexOriginFromProtein(r?.protein)
+  const identityFullName = (r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol
   const tooltipEssence = {
     ...syncedEssence,
+    ...((r?.identityConflict || identityOverride) && identityFullName ? { name: identityFullName } : {}),
     ...((syncedAesthetics.length ? syncedAesthetics : liveAesthetics).length
       ? { aesthetics: syncedAesthetics.length ? syncedAesthetics : liveAesthetics }
       : {}),
@@ -979,9 +982,8 @@ async function geneRecord(env, url, rawId) {
       : {}),
   }
   const uniprot = normalizeUniprot(r?.protein?.uniprot || entry?.u || null)
-  const identityFullName = (r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol
   const fullName =
-    (r?.identityConflict ? null : sanitizeText(syncedEssenceState?.full_name, 255)) ||
+    ((r?.identityConflict || identityOverride) ? null : sanitizeText(syncedEssenceState?.full_name, 255)) ||
     identityFullName
   const weightKgValue = Number(tooltipEssence?.weight_kg)
   const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
