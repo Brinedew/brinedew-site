@@ -1,6 +1,6 @@
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
-import { fetchProteinByGene, fetchProteinByUniprot } from "./lib/protein-store.js"
+import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 
@@ -8,23 +8,16 @@ const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const API_SCHEMA_VERSION = 2
 const MIN_EXTENSION_VERSION = "0.3.0"
 
-const KV_COLORS_MANIFEST = "iconoplasm:colors-manifest"
-const KV_COLORS_PREFIX = "iconoplasm:colors:"
+const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
+const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
 
-const colorsCache = {
+const catalogCache = {
   hash: null,
   bySymbol: new Map(),
   symbolByUniprot: new Map(),
   loadedAt: 0,
 }
-const COLORS_CACHE_TTL_MS = 5 * 60 * 1000
-const SYMBOL_IDENTITY_OVERRIDES = {
-  MST1: {
-    full_name: "Macrophage-stimulating protein 1",
-    uniprot: "P26927",
-    tmh: false,
-  },
-}
+const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000
 
 const rlBuckets = new Map()
 const RL_WINDOW_MS = 60 * 1000
@@ -597,9 +590,9 @@ async function logReq(route, request, status, started, schema = null) {
   )
 }
 
-async function colorsManifestObj(env) {
+async function catalogManifestObj(env) {
   if (!env.KV) return null
-  const raw = await env.KV.get(KV_COLORS_MANIFEST)
+  const raw = await env.KV.get(KV_CATALOG_MANIFEST)
   if (!raw) return null
   try {
     return JSON.parse(raw)
@@ -609,7 +602,7 @@ async function colorsManifestObj(env) {
 }
 
 async function extensionManifestObj(url, env) {
-  const manifest = await colorsManifestObj(env)
+  const manifest = await catalogManifestObj(env)
   if (!manifest) return null
   return {
     ...manifest,
@@ -621,19 +614,19 @@ async function extensionManifestObj(url, env) {
   }
 }
 
-async function warmColorsCache(env) {
-  const manifest = await colorsManifestObj(env)
+async function warmCatalogCache(env) {
+  const manifest = await catalogManifestObj(env)
   if (!manifest?.current_hash || !env.KV) return
   const now = Date.now()
   if (
-    colorsCache.hash === manifest.current_hash &&
-    now - colorsCache.loadedAt < COLORS_CACHE_TTL_MS &&
-    colorsCache.bySymbol.size > 0
+    catalogCache.hash === manifest.current_hash &&
+    now - catalogCache.loadedAt < CATALOG_CACHE_TTL_MS &&
+    catalogCache.bySymbol.size > 0
   ) {
     return
   }
 
-  const raw = await env.KV.get(`${KV_COLORS_PREFIX}${manifest.current_hash}`)
+  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${manifest.current_hash}`)
   if (!raw) return
   let artifact
   try {
@@ -641,6 +634,7 @@ async function warmColorsCache(env) {
   } catch {
     return
   }
+  artifact = mergePublishedPortraitRefsIntoArtifact(artifact, await publishedPortraitRefs(env))
 
   const bySymbol = new Map()
   const symbolByUniprot = new Map()
@@ -651,166 +645,82 @@ async function warmColorsCache(env) {
     const u = normalizeUniprot(g?.u)
     if (u) symbolByUniprot.set(u, s)
   }
-  colorsCache.hash = manifest.current_hash
-  colorsCache.loadedAt = now
-  colorsCache.bySymbol = bySymbol
-  colorsCache.symbolByUniprot = symbolByUniprot
+  catalogCache.hash = manifest.current_hash
+  catalogCache.loadedAt = now
+  catalogCache.bySymbol = bySymbol
+  catalogCache.symbolByUniprot = symbolByUniprot
 }
 
-function proteinMetadataScore(protein) {
-  if (!protein || typeof protein !== "object") return -1
-  let score = 0
-  if (normalizeUniprot(protein.uniprot)) score += 1
-  if (sanitizeText(protein.full_name, 255)) score += 1
-  if (optionalInt(protein.length) != null) score += 1
-  if (optionalFloat(protein.mass, { min: 0 }) != null) score += 2
-  if (typeof protein.tmh === "boolean") score += 2
-  if (optionalInt(protein.first_pub_year) != null) score += 1
-  if (sanitizeText(protein?.tissue?.label, 128)) score += 1
-  if (normalizeTextList(protein.clans).length) score += 1
-  if (sanitizeText(protein.alignment, 128)) score += 1
-  return score
-}
-
-function symbolIdentityOverride(symbol) {
-  const key = normalizeSymbol(symbol)
-  if (!key) return null
-  const override = SYMBOL_IDENTITY_OVERRIDES[key]
-  if (!override) return null
+function normalizeCatalogPayloadItem(rawItem) {
+  const payload = rawItem && typeof rawItem === "object" ? rawItem : null
+  if (!payload) return null
+  const symbol = normalizeSymbol(payload.symbol || payload.gene_symbol || payload.s || "")
+  if (!symbol) return null
+  const fullName = sanitizeText(payload.full_name || payload.name || payload.n, 255)
+  if (!fullName) {
+    return { symbol, validation_error: "Catalog item is missing full_name" }
+  }
+  const colorHex = normalizeHexColor(payload.color_hex || payload.color || payload.c || "")
+  const uniprot = normalizeUniprot(payload.uniprot || payload.u || "")
+  if (payload.uniprot != null && payload.uniprot !== "" && !uniprot) {
+    return { symbol, validation_error: "Catalog item has invalid UniProt accession" }
+  }
+  if (payload.tmh == null) {
+    return { symbol, validation_error: "Catalog item is missing tmh boolean" }
+  }
   return {
-    ...(override.full_name ? { full_name: String(override.full_name) } : {}),
-    ...(normalizeUniprot(override.uniprot) ? { uniprot: normalizeUniprot(override.uniprot) } : {}),
-    ...(typeof override.tmh === "boolean" ? { tmh: override.tmh } : {}),
+    gene_symbol: symbol,
+    full_name: fullName,
+    uniprot,
+    color_hex: colorHex,
+    tmh: coerceBoolean(payload.tmh, false),
   }
 }
 
-function symbolIdentity(symbol, entry) {
-  const override = symbolIdentityOverride(symbol)
-  const uniprot = override?.uniprot || normalizeUniprot(entry?.u || null) || null
-  const fullName = override?.full_name || sanitizeText(entry?.n, 255) || symbol || null
-  return {
-    gene: symbol,
-    ...(fullName ? { full_name: fullName } : {}),
-    ...(uniprot ? { uniprot } : {}),
-    ...(typeof override?.tmh === "boolean" ? { tmh: override.tmh } : {}),
-  }
-}
-
-function applySymbolIdentity(protein, symbol, entry) {
-  const base = protein && typeof protein === "object" ? { ...protein } : {}
-  return {
-    ...base,
-    ...symbolIdentity(symbol, entry),
-  }
-}
-
-function proteinConflictsWithIdentity(protein, identity) {
-  const proteinUniprot = normalizeUniprot(protein?.uniprot || null)
-  const identityUniprot = normalizeUniprot(identity?.uniprot || null)
-  if (!proteinUniprot || !identityUniprot) return false
-  return proteinUniprot !== identityUniprot
-}
-
-function richerProtein(a, b) {
-  if (!a) return b || null
-  if (!b) return a
-  return proteinMetadataScore(b) > proteinMetadataScore(a) ? b : a
-}
-
-async function bestProteinForSymbol(env, symbol, entry, byUni) {
-  if (!symbol) return { protein: null, identityConflict: false }
-  const identity = symbolIdentity(symbol, entry)
-  if (!env.DB) return { protein: identity, identityConflict: false }
-
-  let best = null
+async function fetchCatalogRow(env, symbol) {
+  if (!env.ICONOPLASM_DB || !symbol) return null
   try {
-    best = richerProtein(best, await fetchProteinByGene(env.DB, symbol))
-  } catch {}
-
-  const manifestUniprot = normalizeUniprot(identity.uniprot || best?.uniprot || null)
-  if (best && proteinConflictsWithIdentity(best, identity)) {
-    let corrected = null
-    if (manifestUniprot) {
-      try {
-        corrected = await fetchProteinByUniprot(env.DB, manifestUniprot)
-      } catch {}
-    }
+    const row = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, updated_at
+       FROM icono_gene_catalog
+       WHERE upper(gene_symbol) = ?
+       LIMIT 1`,
+    )
+      .bind(symbol)
+      .first()
+    if (!row?.gene_symbol) return null
     return {
-      protein: applySymbolIdentity(corrected || identity, symbol, entry),
-      identityConflict: true,
+      gene_symbol: normalizeSymbol(row.gene_symbol),
+      full_name: sanitizeText(row.full_name, 255),
+      uniprot: normalizeUniprot(row.uniprot || null),
+      color_hex: normalizeHexColor(row.color_hex || null),
+      tmh: coerceBoolean(row.tmh, false),
+      updated_at: row?.updated_at ? String(row.updated_at) : null,
     }
+  } catch {
+    return null
   }
-  if (!manifestUniprot) return { protein: applySymbolIdentity(best, symbol, entry), identityConflict: false }
-  const siblingSymbol = byUni.get(manifestUniprot)
-  const shouldHydrateAlias =
-    !best ||
-    proteinMetadataScore(best) < 6 ||
-    (siblingSymbol && siblingSymbol !== symbol)
-  if (!shouldHydrateAlias) {
-    return { protein: applySymbolIdentity(best, symbol, entry), identityConflict: false }
-  }
-
-  try {
-    best = richerProtein(best, await fetchProteinByUniprot(env.DB, manifestUniprot))
-  } catch {}
-
-  if (siblingSymbol && siblingSymbol !== symbol) {
-    try {
-      best = richerProtein(best, await fetchProteinByGene(env.DB, siblingSymbol))
-    } catch {}
-  }
-
-  return { protein: applySymbolIdentity(best || identity, symbol, entry), identityConflict: false }
 }
 
 async function resolveGene(env, rawId) {
-  await warmColorsCache(env)
-  const bySymbol = colorsCache.bySymbol
-  const byUni = colorsCache.symbolByUniprot
+  const symbol = normalizeSymbol(rawId)
+  if (!symbol) return null
+  const catalog = await fetchCatalogRow(env, symbol)
+  if (!catalog) return null
 
-  const s = normalizeSymbol(rawId)
-  if (s) {
-    const entry = bySymbol.get(s)
-    const resolved = await bestProteinForSymbol(env, s, entry, byUni)
-    if (resolved?.protein?.gene) {
-      return {
-        protein: resolved.protein,
-        symbol: s,
-        identityConflict: Boolean(resolved.identityConflict),
-        mode: "symbol",
-      }
-    }
-    if (entry) {
-      return {
-        protein: { gene: s, full_name: entry?.n || s, uniprot: entry?.u || null },
-        symbol: s,
-        mode: "symbol",
-      }
-    }
+  let protein = null
+  if (catalog.uniprot && env.DB) {
+    try {
+      protein = await fetchProteinByUniprot(env.DB, catalog.uniprot)
+    } catch {}
   }
 
-  const u = normalizeUniprot(rawId)
-  if (u) {
-    if (env.DB) {
-      try {
-        const p = await fetchProteinByUniprot(env.DB, u)
-        if (p?.gene) {
-          return {
-            protein: p,
-            symbol: normalizeSymbol(p.gene),
-            canonicalSymbol: normalizeSymbol(p.gene),
-            mode: "uniprot",
-          }
-        }
-      } catch {}
-    }
-    const mapped = byUni.get(u)
-    if (mapped) {
-      const g = bySymbol.get(mapped)
-      return { protein: { gene: mapped, full_name: g?.n || mapped, uniprot: u }, symbol: mapped, mode: "uniprot" }
-    }
+  return {
+    symbol,
+    catalog,
+    protein,
+    mode: "catalog",
   }
-  return null
 }
 
 async function portraitState(env, symbol, base) {
@@ -929,16 +839,22 @@ function sexOriginFromProtein(protein) {
   return [protein.tmh ? "Transmembrane" : "Soluble"]
 }
 
+function sexFromProtein(protein) {
+  if (!protein || typeof protein !== "object" || typeof protein.tmh !== "boolean") return null
+  return protein.tmh ? "Male" : "Female"
+}
+
 async function geneRecord(env, url, rawId) {
   const r = await resolveGene(env, rawId)
   if (!r?.symbol) return null
-  const entry = colorsCache.bySymbol.get(r.symbol)
-  const identityOverride = symbolIdentityOverride(r.symbol)
   const base = portraitBase(url, env)
   const portrait = await portraitState(env, r.symbol, base)
   const portraitCandidates = await portraitCandidatesForGene(env, url, r.symbol, portrait?.asset_sha256 || null)
   const syncedEssenceState = await essenceState(env, r.symbol)
-  const syncedEssence = syncedEssenceState?.essence && typeof syncedEssenceState.essence === "object" ? syncedEssenceState.essence : {}
+  const syncedEssence =
+    syncedEssenceState?.essence && typeof syncedEssenceState.essence === "object"
+      ? syncedEssenceState.essence
+      : {}
   const proteinDemo =
     r?.protein?.demographics && typeof r.protein.demographics === "object" ? r.protein.demographics : {}
   const syncedAesthetics = normalizeTextList(syncedEssence?.aesthetics)
@@ -952,11 +868,16 @@ async function geneRecord(env, url, rawId) {
   const livePolitics = sanitizeText(proteinDemo?.politics || syncedPolitics, 64)
   const liveAestheticsOrigin = normalizeTextList(r?.protein?.clans)
   const livePoliticsOrigin = normalizeTextList(r?.protein?.alignment ? [r.protein.alignment] : [])
-  const liveSexOrigin = sexOriginFromProtein(r?.protein)
-  const identityFullName = (r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol
+  const liveSex = typeof r?.catalog?.tmh === "boolean" ? (r.catalog.tmh ? "Male" : "Female") : sexFromProtein(r?.protein)
+  const liveSexOrigin = typeof r?.catalog?.tmh === "boolean" ? [r.catalog.tmh ? "Transmembrane" : "Soluble"] : sexOriginFromProtein(r?.protein)
+  const identityFullName =
+    sanitizeText(r?.catalog?.full_name, 255) ||
+    (r?.protein?.full_name && String(r.protein.full_name).trim()) ||
+    r.symbol
   const tooltipEssence = {
     ...syncedEssence,
-    ...((r?.identityConflict || identityOverride) && identityFullName ? { name: identityFullName } : {}),
+    ...(identityFullName ? { name: identityFullName } : {}),
+    ...(liveSex ? { sex: liveSex } : {}),
     ...((syncedAesthetics.length ? syncedAesthetics : liveAesthetics).length
       ? { aesthetics: syncedAesthetics.length ? syncedAesthetics : liveAesthetics }
       : {}),
@@ -981,10 +902,8 @@ async function geneRecord(env, url, rawId) {
         }
       : {}),
   }
-  const uniprot = normalizeUniprot(r?.protein?.uniprot || entry?.u || null)
-  const fullName =
-    ((r?.identityConflict || identityOverride) ? null : sanitizeText(syncedEssenceState?.full_name, 255)) ||
-    identityFullName
+  const uniprot = normalizeUniprot(r?.catalog?.uniprot || r?.protein?.uniprot || null)
+  const fullName = sanitizeText(r?.catalog?.full_name, 255) || identityFullName
   const weightKgValue = Number(tooltipEssence?.weight_kg)
   const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
   const proteinLengthAa = optionalInt(r?.protein?.length)
@@ -1002,7 +921,7 @@ async function geneRecord(env, url, rawId) {
     canonical_symbol: r.symbol,
     symbol: r.symbol,
     full_name: fullName,
-    color: entry?.c || null,
+    color: r?.catalog?.color_hex || null,
     ...(uniprot ? { uniprot } : {}),
     ...(weightKg != null ? { weight_kg: weightKg } : {}),
     ...(proteinLengthAa != null ? { protein_length_aa: proteinLengthAa } : {}),
@@ -1345,8 +1264,8 @@ async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
   const limit = Math.max(1, Math.min(60, Number.parseInt(String(rawLimit || "30"), 10) || 30))
   const offset = Math.max(0, Number.parseInt(String(rawOffset || "0"), 10) || 0)
   const seed = order === "random" ? normalizeGallerySeed(rawSeed) || crypto.randomUUID().slice(0, 12) : null
-  await warmColorsCache(env)
-  const catalogTotal = colorsCache.bySymbol.size
+  await warmCatalogCache(env)
+  const catalogTotal = catalogCache.bySymbol.size
   if (!env.ICONOPLASM_DB) {
     return {
       order,
@@ -1424,7 +1343,7 @@ async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
   }
 
   const items = []
-  for (const [symbol, cached] of colorsCache.bySymbol.entries()) {
+  for (const [symbol, cached] of catalogCache.bySymbol.entries()) {
     const published = publishedMap.get(symbol) || null
     const fullName = String(cached?.n || symbol || "").trim() || symbol
     const color = String(cached?.c || "#888").trim() || "#888"
@@ -1531,11 +1450,11 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
   return items
 }
 
-async function handleLegacyColorsManifest(request, env) {
+async function handleCatalogManifest(request, env) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const url = new URL(request.url)
   const manifest = await extensionManifestObj(url, env)
-  if (!manifest) return json({ error: "Colors manifest not found — run upload script" }, 404)
+  if (!manifest) return json({ error: "Catalog manifest not found — run iconoplasm catalog publish" }, 404)
   const body = JSON.stringify(manifest)
   const etag = manifest.current_hash ? `"${manifest.current_hash}"` : null
   if (etag && etagMatches(request.headers.get("If-None-Match"), etag)) {
@@ -1546,11 +1465,12 @@ async function handleLegacyColorsManifest(request, env) {
   })
 }
 
-async function handleLegacyColorsArtifact(env, path) {
-  const m = path.match(/\/api\/colors\/colors\.([a-f0-9]+)\.json$/)
+async function handleCatalogArtifact(env, path) {
+  const m = path.match(/\/api\/catalog\/catalog\.([a-z0-9-]+)\.json$/i)
   if (!m) return json({ error: "Invalid artifact path" }, 400)
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
-  const body = await env.KV.get(`${KV_COLORS_PREFIX}${m[1]}`)
+  const hash = String(m[1] || "").split("-")[0]
+  const body = await env.KV.get(`${KV_CATALOG_PREFIX}${hash}`)
   if (!body) return json({ error: "Artifact not found" }, 404)
   let responseBody = body
   try {
@@ -1561,8 +1481,89 @@ async function handleLegacyColorsArtifact(env, path) {
     responseBody = body
   }
   return new Response(responseBody, {
-    headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable", ETag: `"${m[1]}"` },
+    headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable", ETag: `"${hash}"` },
   })
+}
+
+async function loadCatalogRowsForPublish(env) {
+  if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, full_name, uniprot, color_hex, tmh
+     FROM icono_gene_catalog
+     ORDER BY gene_symbol ASC`,
+  ).all()
+  const results = Array.isArray(rows?.results) ? rows.results : []
+  if (!results.length) throw new Error("Catalog table is empty")
+
+  const genes = []
+  const seenSymbols = new Set()
+  const seenUniprot = new Map()
+  for (const row of results) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    const fullName = sanitizeText(row?.full_name, 255)
+    const uniprot = normalizeUniprot(row?.uniprot || null)
+    const colorHex = normalizeHexColor(row?.color_hex || null)
+    const tmh = coerceBoolean(row?.tmh, false)
+    if (!symbol) throw new Error("Catalog contains invalid gene_symbol")
+    if (!fullName) throw new Error(`Catalog row ${symbol} is missing full_name`)
+    if (seenSymbols.has(symbol)) throw new Error(`Duplicate catalog symbol ${symbol}`)
+    seenSymbols.add(symbol)
+    if (uniprot) {
+      const sibling = seenUniprot.get(uniprot)
+      if (sibling && sibling !== symbol) {
+        throw new Error(`Duplicate catalog UniProt ${uniprot} for ${sibling} and ${symbol}`)
+      }
+      seenUniprot.set(uniprot, symbol)
+    }
+    const entry = { s: symbol, n: fullName, tmh }
+    if (uniprot) entry.u = uniprot
+    if (colorHex) entry.c = colorHex
+    genes.push(entry)
+  }
+  return genes
+}
+
+async function publishCatalogArtifact(env) {
+  if (!env.KV) throw new Error("KV binding missing")
+  const genes = await loadCatalogRowsForPublish(env)
+  const artifact = {
+    schema_version: 3,
+    generated_at: new Date().toISOString(),
+    gene_count: genes.length,
+    genes,
+  }
+  const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, await publishedPortraitRefs(env))
+  const artifactJson = JSON.stringify(hydrated)
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(artifactJson))
+  const hash = Array.from(new Uint8Array(digest))
+    .map((n) => n.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 12)
+  const filename = `catalog.${hash}.json`
+  const manifest = {
+    current_hash: hash,
+    filename,
+    generated_at: hydrated.generated_at,
+    schema_version: hydrated.schema_version,
+    canonical_key: "symbol",
+    gene_count: hydrated.gene_count,
+  }
+
+  await env.KV.put(`${KV_CATALOG_PREFIX}${hash}`, artifactJson)
+  await env.KV.put(KV_CATALOG_MANIFEST, JSON.stringify(manifest))
+
+  catalogCache.hash = null
+  catalogCache.bySymbol = new Map()
+  catalogCache.symbolByUniprot = new Map()
+  catalogCache.loadedAt = 0
+
+  return {
+    ok: true,
+    current_hash: hash,
+    filename,
+    gene_count: hydrated.gene_count,
+    schema_version: hydrated.schema_version,
+  }
 }
 
 export async function handleIconoplasmRequest(request, env, ctx) {
@@ -1587,7 +1588,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const retry = rateLimit(request, "manifest", 60)
       if (retry) return done("manifest_rl", json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, { "Retry-After": String(retry) }))
       const m = await extensionManifestObj(url, env)
-      if (!m) return done("manifest_404", json({ error: "Colors manifest not found — run upload script" }, 404))
+      if (!m) return done("manifest_404", json({ error: "Catalog manifest not found — run iconoplasm catalog publish" }, 404))
       const payload = {
         schema_version: API_SCHEMA_VERSION,
         canonical_key: "symbol",
@@ -1640,13 +1641,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     if (path === "/api/genes/random") {
       const retry = rateLimit(request, "genes_random", 30)
       if (retry) return done("genes_random_rl", json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, { "Retry-After": String(retry) }))
-      await warmColorsCache(env)
+      await warmCatalogCache(env)
       const count = Math.max(1, Math.min(120, Number.parseInt(url.searchParams.get("count") || "60", 10)))
-      const allSymbols = Array.from(colorsCache.bySymbol.keys())
+      const allSymbols = Array.from(catalogCache.bySymbol.keys())
       const shuffled = allSymbols.sort(() => Math.random() - 0.5).slice(0, count)
       const base = portraitBase(url, env)
       const genes = shuffled.map(s => {
-        const g = colorsCache.bySymbol.get(s)
+        const g = catalogCache.bySymbol.get(s)
         const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
         if (g?.pt) entry.pt = joinUrl(base, g.pt)
         if (g?.ph) entry.ph = joinUrl(base, g.ph)
@@ -1661,14 +1662,14 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (retry) return done("genes_search_rl", json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, { "Retry-After": String(retry) }))
       const q = (url.searchParams.get("q") || "").trim().toUpperCase()
       if (!q) return done("genes_search_empty", json({ genes: [], query: "" }, 200))
-      await warmColorsCache(env)
+      await warmCatalogCache(env)
       const limit = Math.max(1, Math.min(100, Number.parseInt(url.searchParams.get("limit") || "20", 10)))
       const results = []
       // Prioritize symbol-prefix matches, then name-substring matches
       const prefixMatches = []
       const nameMatches = []
       const base = portraitBase(url, env)
-      for (const [s, g] of colorsCache.bySymbol) {
+      for (const [s, g] of catalogCache.bySymbol) {
         if (s.startsWith(q)) {
           const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
           if (g?.pt) entry.pt = joinUrl(base, g.pt)
@@ -2293,6 +2294,136 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       return done("admin_assets", json({ assets, count: assets.length }, 200, { "Cache-Control": "no-store" }))
     }
 
+    if (path === "/api/iconoplasm/admin/catalog/upsert" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_catalog_upsert_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_catalog_upsert_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_catalog_upsert_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const items = Array.isArray(p?.items) ? p.items : []
+      if (!items.length) return done("admin_catalog_upsert_400", json({ error: "No items provided" }, 400))
+      if (items.length > 1000) return done("admin_catalog_upsert_400", json({ error: "Too many items (max 1000)" }, 400))
+
+      const actorId = await actor(request, env)
+      const source = sanitizeText(p?.source || "nicegui_catalog_sync", 64) || "nicegui_catalog_sync"
+      let processed = 0
+      let invalid = 0
+      const results = []
+
+      for (const rawItem of items) {
+        const item = normalizeCatalogPayloadItem(rawItem)
+        if (!item || item.validation_error) {
+          invalid += 1
+          results.push({
+            ok: false,
+            symbol: normalizeSymbol(rawItem?.symbol || rawItem?.gene_symbol || "") || item?.symbol || "",
+            error: item?.validation_error || "Invalid catalog item",
+          })
+          continue
+        }
+        await env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_gene_catalog (
+             gene_symbol, full_name, uniprot, color_hex, tmh, source, updated_by, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(gene_symbol) DO UPDATE SET
+             full_name=excluded.full_name,
+             uniprot=excluded.uniprot,
+             color_hex=excluded.color_hex,
+             tmh=excluded.tmh,
+             source=excluded.source,
+             updated_by=excluded.updated_by,
+             updated_at=CURRENT_TIMESTAMP`,
+        )
+          .bind(
+            item.gene_symbol,
+            item.full_name,
+            item.uniprot || null,
+            item.color_hex || null,
+            item.tmh ? 1 : 0,
+            source,
+            actorId,
+          )
+          .run()
+        processed += 1
+        results.push({ ok: true, symbol: item.gene_symbol })
+      }
+
+      return done(
+        "admin_catalog_upsert",
+        json(
+          {
+            ok: invalid === 0,
+            processed,
+            invalid,
+            total: items.length,
+            results,
+          },
+          invalid > 0 && processed === 0 ? 400 : 200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/catalog/reconcile" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_catalog_reconcile_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_catalog_reconcile_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_catalog_reconcile_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const keepSymbolsRaw = Array.isArray(p?.keep_symbols) ? p.keep_symbols : []
+      if (!keepSymbolsRaw.length) return done("admin_catalog_reconcile_400", json({ error: "No keep_symbols provided" }, 400))
+      if (keepSymbolsRaw.length > 25000) return done("admin_catalog_reconcile_400", json({ error: "Too many keep_symbols (max 25000)" }, 400))
+      const keepSymbols = new Set(keepSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean))
+      if (!keepSymbols.size) return done("admin_catalog_reconcile_400", json({ error: "No valid keep_symbols provided" }, 400))
+
+      const currentRows = await env.ICONOPLASM_DB.prepare(
+        "SELECT gene_symbol FROM icono_gene_catalog",
+      ).all()
+      const currentSymbols = Array.isArray(currentRows?.results) ? currentRows.results : []
+      const toDelete = currentSymbols
+        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
+        .filter((symbol) => symbol && !keepSymbols.has(symbol))
+
+      for (const symbol of toDelete) {
+        await env.ICONOPLASM_DB.prepare("DELETE FROM icono_gene_catalog WHERE upper(gene_symbol)=?").bind(symbol).run()
+      }
+
+      return done(
+        "admin_catalog_reconcile",
+        json(
+          {
+            ok: true,
+            kept: keepSymbols.size,
+            deleted: toDelete.length,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/catalog/publish" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env))) return done("admin_catalog_publish_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB) return done("admin_catalog_publish_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      if (!env.KV) return done("admin_catalog_publish_500", json({ error: "KV binding missing" }, 500))
+      try {
+        const result = await publishCatalogArtifact(env)
+        return done("admin_catalog_publish", json(result, 200, { "Cache-Control": "no-store" }))
+      } catch (error) {
+        return done("admin_catalog_publish_400", json({ error: String(error?.message || error || "Catalog publish failed") }, 400))
+      }
+    }
+
     if (path === "/api/iconoplasm/admin/essence/upsert" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env))) return done("admin_essence_upsert_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB) return done("admin_essence_upsert_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
@@ -2789,8 +2920,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       return done("rollback", json({ ok: true, action: "rollback", symbol, from_asset_sha256: from, to_asset_sha256: target }))
     }
 
-    if (path === "/api/colors/manifest") return done("legacy_manifest", await handleLegacyColorsManifest(request, env))
-    if (path.startsWith("/api/colors/colors.") && path.endsWith(".json")) return done("legacy_artifact", await handleLegacyColorsArtifact(env, path))
+    if (path === "/api/catalog/manifest") return done("catalog_manifest", await handleCatalogManifest(request, env))
+    if (path.startsWith("/api/catalog/catalog.") && path.endsWith(".json")) return done("catalog_artifact", await handleCatalogArtifact(env, path))
 
     if (path.startsWith("/api/")) return done("api_404", json({ error: "Not found" }, 404))
 
