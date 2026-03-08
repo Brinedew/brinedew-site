@@ -62,7 +62,10 @@ Open this image fullscreen, then click "copy this image to another gene". Then s
 7. **Why aren't you featuring artists names in style descriptions by default?**
 Artists don't want their names under some AI generated content. I'm not so sure I would want my name near some of their content either.
 
-8. **What's the legal status of the generated images?
+8. **Why aren't you matching a rendering style across all images?**
+Rendering cohesion is good to have for rosters of 100-500 characters, but with 20k designs we need all the sources of variations we can get. It's useful to feature mismatched rendering styles (photographic, historical, anime) that help distinguish characters who look similar on paper. 
+
+9. **What's the legal status of the generated images?
 
 Who knows! It's 2026 and the status of generative content is murky and varies by jurisdiction. Regardless, my intent is for the images and the character designs to be freely available to anyone to reuse, spread, or profit from.
 
