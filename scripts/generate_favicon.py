@@ -3,8 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-LIGHT_BG = "#f8f1e7"
-INK_COLOR = "#237c71"
+# Match the dark-mode front page palette:
+# - background: body background (`--light`)
+# - mark color: body text (`--dark`)
+LIGHT_BG = "#1a1a1a"
+INK_COLOR = "#ebebec"
 MARK_PADDING = 0.14
 MASK_ALPHA_THRESHOLD = 32
 
