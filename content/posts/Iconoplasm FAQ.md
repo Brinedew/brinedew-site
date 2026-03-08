@@ -64,3 +64,20 @@ First, image-gen services do their own moderation, which saves us some moderatio
 Second, it's saves us from mass-upload attacks to my site infrastructure.
 
 Third, it helps to maintain strict chain of provenance over the gallery and uniform copyright policy over all characters - with uploaded images, I don't know if you uploaded someone else's IP. 
+
+10. **Is there any kind of narrative or worldbuilding that these characters inhabit?**
+It's up to the users to make up the world that makes sense in the context of their research interest. To a circulatory system researcher, the characters may be living in lotus petals by the river. To a developmental biologist, they may be crew in generational spaceships. To an oncologist, they may be isolated within bubble universes, engaged in multiversal acausal trade. 
+
+However, as a guidance, I can suggest some constraints.
+
+- The protein-to-cell diameter ratio is roughly around 1:10,000 in humans. Intuitively, it would compare to a 1.5m-tall person living in a large 15 km-wide city - somewhere between Paris and Moscow in size.
+- It gets unnecessarily complicated if you try to represent each copy of the protein molecule with its own character, so it makes sense to map gene expression strength to character presence. Highly expressed genes are represented by superpowered characters, barely expressed genes are weak. 
+- RNAs are better thought of as transient ghost-like spirits that can affect the world only in limited ways. Ribosomes would be the shrine where these spirits incarnate into a material shell. The time before ribosomes existed is covered in mystery - perhaps the rumors of the ancient world of songs upon songs.
+- DNA is best represented as immaterial soul storage for the characters: gravestones, phylacteria, vinyl records, scrolls. The only way to get rid of the character for good is to destroy the soul storage - otherwise there's always a risk they'll come back from the dead.
+- In real world, we can see what's far ahead on the horizon. However, in iconoplasm worlds, each character has very limited information about what's happening elsewhere in the cell. E.g. the characters can't see a cell membrane being ruptured from far away - this information needs to be spread through messengers, rumor networks, or carried as a vague directional smell. Think of it as a dense mist or blur covering the world.
+- Information about what's outside the cell membrane is even more inaccessible. Most characters can't know for sure if they're a part of some grand design like a multicellular body - only the membrane proteins are even aware there's other cells nearby. The "developmental plan" can have more of a ritual or sacred connotation rather than rational design, and there's doubt and suspicion when characters use grand narratives to justify drastic action.
+- You can tell two stories about a protein participating in two different "runs" (translation->some pathway->degradation, translation->some other pathway->degradation). During each run, the memory is stored as post-translational modifications. However, the memories don't get carried over between runs: each time the protein is translated anew, its memories are blank about what happened "last run". 
+- Cell replication (mitosis) is happening when the majority of the cast is "asleep": only the mysterious skeleton crew, who most never meet, is awake and splitting the cell. 
+- What's the motivation to initiate the mitosis? There are factions that are pro-and anti-replication, with their own motivations and narratives. Sometimes, one side wins, sometimes, the other. 
+- When the pro-Growth side wins, cell replicates. Sometimes, it's good. Other times, it's bad.
+- When the pro-Control side wins, cell enters quiescence. Sometimes, it's good. Other times, it's bad.
