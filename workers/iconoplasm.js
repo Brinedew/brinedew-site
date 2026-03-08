@@ -797,6 +797,11 @@ function sourceLinks(symbol, uniprot) {
   }
 }
 
+function sexOriginFromProtein(protein) {
+  if (!protein || typeof protein !== "object" || typeof protein.tmh !== "boolean") return []
+  return [protein.tmh ? "transmembrane domains" : "no transmembrane domains"]
+}
+
 async function geneRecord(env, url, rawId) {
   const r = await resolveGene(env, rawId)
   if (!r?.symbol) return null
@@ -812,10 +817,14 @@ async function geneRecord(env, url, rawId) {
   const syncedPolitics = sanitizeText(syncedEssence?.politics || syncedEssence?.faction, 64)
   const syncedAestheticsOrigin = normalizeTextList(syncedEssence?.aesthetics_origin)
   const syncedPoliticsOrigin = normalizeTextList(syncedEssence?.politics_origin)
+  const syncedSexOrigin = normalizeTextList(syncedEssence?.sex_origin || syncedEssence?.gender_origin, {
+    maxItems: 2,
+  })
   const liveAesthetics = normalizeTextList(proteinDemo?.aesthetics)
   const livePolitics = sanitizeText(proteinDemo?.politics || syncedPolitics, 64)
   const liveAestheticsOrigin = normalizeTextList(r?.protein?.clans)
   const livePoliticsOrigin = normalizeTextList(r?.protein?.alignment ? [r.protein.alignment] : [])
+  const liveSexOrigin = sexOriginFromProtein(r?.protein)
   const tooltipEssence = {
     ...syncedEssence,
     ...((syncedAesthetics.length ? syncedAesthetics : liveAesthetics).length
@@ -834,6 +843,11 @@ async function geneRecord(env, url, rawId) {
           politics_origin: syncedPoliticsOrigin.length
             ? syncedPoliticsOrigin
             : livePoliticsOrigin,
+        }
+      : {}),
+    ...((syncedSexOrigin.length ? syncedSexOrigin : liveSexOrigin).length
+      ? {
+          sex_origin: syncedSexOrigin.length ? syncedSexOrigin : liveSexOrigin,
         }
       : {}),
   }

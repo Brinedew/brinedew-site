@@ -521,6 +521,23 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     return isLightColor(hex) ? "rgba(0,0,0,0.7)" : "#fff"
   }
 
+  function uniqueDisplayValues(values, limit) {
+    var maxItems = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 4
+    var out = []
+    var seen = Object.create(null)
+    var source = Array.isArray(values) ? values : [values]
+    for (var i = 0; i < source.length; i++) {
+      var value = String(source[i] || "").trim()
+      if (!value) continue
+      var key = value.toLowerCase()
+      if (seen[key]) continue
+      seen[key] = true
+      out.push(value)
+      if (out.length >= maxItems) break
+    }
+    return out
+  }
+
   function showVoteLoginPopup() {
     window.alert("Please log-in first to vote.")
   }
@@ -1175,6 +1192,19 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       if (heightOriginText) {
         pairs.push({ character: String(Math.round(heightCmRaw)) + " cm", molecular: heightOriginText, label: "Height" })
       }
+    }
+
+    var sexText = essence.sex ? String(essence.sex).trim() : ""
+    var sexOrigin = uniqueDisplayValues(
+      essence.sex_origin || essence.gender_origin || g.sex_origin || g.gender_origin,
+      2
+    )
+    if (sexText) {
+      pairs.push({
+        character: sexText,
+        molecular: sexOrigin.length ? sexOrigin.join(", ") : "—",
+        label: "Sex",
+      })
     }
 
     var ageText = ""
