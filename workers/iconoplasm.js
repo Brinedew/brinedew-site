@@ -650,6 +650,57 @@ async function warmColorsCache(env) {
   colorsCache.symbolByUniprot = symbolByUniprot
 }
 
+function proteinMetadataScore(protein) {
+  if (!protein || typeof protein !== "object") return -1
+  let score = 0
+  if (normalizeUniprot(protein.uniprot)) score += 1
+  if (sanitizeText(protein.full_name, 255)) score += 1
+  if (optionalInt(protein.length) != null) score += 1
+  if (optionalFloat(protein.mass, { min: 0 }) != null) score += 2
+  if (typeof protein.tmh === "boolean") score += 2
+  if (optionalInt(protein.first_pub_year) != null) score += 1
+  if (sanitizeText(protein?.tissue?.label, 128)) score += 1
+  if (normalizeTextList(protein.clans).length) score += 1
+  if (sanitizeText(protein.alignment, 128)) score += 1
+  return score
+}
+
+function richerProtein(a, b) {
+  if (!a) return b || null
+  if (!b) return a
+  return proteinMetadataScore(b) > proteinMetadataScore(a) ? b : a
+}
+
+async function bestProteinForSymbol(env, symbol, entry, byUni) {
+  if (!env.DB || !symbol) return null
+
+  let best = null
+  try {
+    best = richerProtein(best, await fetchProteinByGene(env.DB, symbol))
+  } catch {}
+
+  const manifestUniprot = normalizeUniprot(entry?.u || best?.uniprot || null)
+  if (!manifestUniprot) return best
+  const siblingSymbol = byUni.get(manifestUniprot)
+  const shouldHydrateAlias =
+    !best ||
+    proteinMetadataScore(best) < 6 ||
+    (siblingSymbol && siblingSymbol !== symbol)
+  if (!shouldHydrateAlias) return best
+
+  try {
+    best = richerProtein(best, await fetchProteinByUniprot(env.DB, manifestUniprot))
+  } catch {}
+
+  if (siblingSymbol && siblingSymbol !== symbol) {
+    try {
+      best = richerProtein(best, await fetchProteinByGene(env.DB, siblingSymbol))
+    } catch {}
+  }
+
+  return best
+}
+
 async function resolveGene(env, rawId) {
   await warmColorsCache(env)
   const bySymbol = colorsCache.bySymbol
@@ -657,15 +708,22 @@ async function resolveGene(env, rawId) {
 
   const s = normalizeSymbol(rawId)
   if (s) {
-    if (env.DB) {
-      try {
-        const p = await fetchProteinByGene(env.DB, s)
-        if (p?.gene) return { protein: p, symbol: normalizeSymbol(p.gene), mode: "symbol" }
-      } catch {}
+    const entry = bySymbol.get(s)
+    const best = await bestProteinForSymbol(env, s, entry, byUni)
+    if (best?.gene) {
+      return {
+        protein: best,
+        symbol: s,
+        canonicalSymbol: normalizeSymbol(best.gene),
+        mode: "symbol",
+      }
     }
-    if (bySymbol.has(s)) {
-      const g = bySymbol.get(s)
-      return { protein: { gene: s, full_name: g?.n || s, uniprot: g?.u || null }, symbol: s, mode: "symbol" }
+    if (entry) {
+      return {
+        protein: { gene: s, full_name: entry?.n || s, uniprot: entry?.u || null },
+        symbol: s,
+        mode: "symbol",
+      }
     }
   }
 
@@ -674,7 +732,14 @@ async function resolveGene(env, rawId) {
     if (env.DB) {
       try {
         const p = await fetchProteinByUniprot(env.DB, u)
-        if (p?.gene) return { protein: p, symbol: normalizeSymbol(p.gene), mode: "uniprot" }
+        if (p?.gene) {
+          return {
+            protein: p,
+            symbol: normalizeSymbol(p.gene),
+            canonicalSymbol: normalizeSymbol(p.gene),
+            mode: "uniprot",
+          }
+        }
       } catch {}
     }
     const mapped = byUni.get(u)
@@ -869,7 +934,7 @@ async function geneRecord(env, url, rawId) {
   return {
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
-    canonical_symbol: r.symbol,
+    canonical_symbol: r.canonicalSymbol || r.symbol,
     symbol: r.symbol,
     full_name: fullName,
     color: entry?.c || null,
