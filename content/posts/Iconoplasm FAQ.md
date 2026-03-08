@@ -90,7 +90,7 @@ However, as a guidance, I can suggest some constraints.
 - Cell replication (mitosis) is happening when the majority of the cast is "asleep": only the mysterious skeleton crew, who most never meet, is awake and splitting the cell. 
 - What's the motivation to initiate the mitosis? There are factions that are pro-and anti-replication, with their own motivations and narratives. Sometimes, one side wins, sometimes, the other. 
 - When the pro-Growth side wins, cell replicates. Sometimes, the characters benefit (germline, regeneration). Other times, they die (oncogenesis).
-- When the pro-Control side wins, cell enters quiescence. Sometimes, the characters benefit (morphogenesis). Other times, they die (aging).
+- When the pro-Control side wins, cell enters quiescence. Sometimes, the characters benefit (morphogenesis). Other times, they die (apoptosis, aging).
 
 11. **How can we support the project?** 
 Please participate! Vote on some images, generate and edit the picks, write lore pages. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on [[Support Me]] page.
