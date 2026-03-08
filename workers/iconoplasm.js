@@ -18,6 +18,13 @@ const colorsCache = {
   loadedAt: 0,
 }
 const COLORS_CACHE_TTL_MS = 5 * 60 * 1000
+const SYMBOL_IDENTITY_OVERRIDES = {
+  MST1: {
+    full_name: "Macrophage-stimulating protein 1",
+    uniprot: "P26927",
+    tmh: false,
+  },
+}
 
 const rlBuckets = new Map()
 const RL_WINDOW_MS = 60 * 1000
@@ -665,6 +672,45 @@ function proteinMetadataScore(protein) {
   return score
 }
 
+function symbolIdentityOverride(symbol) {
+  const key = normalizeSymbol(symbol)
+  if (!key) return null
+  const override = SYMBOL_IDENTITY_OVERRIDES[key]
+  if (!override) return null
+  return {
+    ...(override.full_name ? { full_name: String(override.full_name) } : {}),
+    ...(normalizeUniprot(override.uniprot) ? { uniprot: normalizeUniprot(override.uniprot) } : {}),
+    ...(typeof override.tmh === "boolean" ? { tmh: override.tmh } : {}),
+  }
+}
+
+function symbolIdentity(symbol, entry) {
+  const override = symbolIdentityOverride(symbol)
+  const uniprot = override?.uniprot || normalizeUniprot(entry?.u || null) || null
+  const fullName = override?.full_name || sanitizeText(entry?.n, 255) || symbol || null
+  return {
+    gene: symbol,
+    ...(fullName ? { full_name: fullName } : {}),
+    ...(uniprot ? { uniprot } : {}),
+    ...(typeof override?.tmh === "boolean" ? { tmh: override.tmh } : {}),
+  }
+}
+
+function applySymbolIdentity(protein, symbol, entry) {
+  const base = protein && typeof protein === "object" ? { ...protein } : {}
+  return {
+    ...base,
+    ...symbolIdentity(symbol, entry),
+  }
+}
+
+function proteinConflictsWithIdentity(protein, identity) {
+  const proteinUniprot = normalizeUniprot(protein?.uniprot || null)
+  const identityUniprot = normalizeUniprot(identity?.uniprot || null)
+  if (!proteinUniprot || !identityUniprot) return false
+  return proteinUniprot !== identityUniprot
+}
+
 function richerProtein(a, b) {
   if (!a) return b || null
   if (!b) return a
@@ -672,21 +718,37 @@ function richerProtein(a, b) {
 }
 
 async function bestProteinForSymbol(env, symbol, entry, byUni) {
-  if (!env.DB || !symbol) return null
+  if (!symbol) return { protein: null, identityConflict: false }
+  const identity = symbolIdentity(symbol, entry)
+  if (!env.DB) return { protein: identity, identityConflict: false }
 
   let best = null
   try {
     best = richerProtein(best, await fetchProteinByGene(env.DB, symbol))
   } catch {}
 
-  const manifestUniprot = normalizeUniprot(entry?.u || best?.uniprot || null)
-  if (!manifestUniprot) return best
+  const manifestUniprot = normalizeUniprot(identity.uniprot || best?.uniprot || null)
+  if (best && proteinConflictsWithIdentity(best, identity)) {
+    let corrected = null
+    if (manifestUniprot) {
+      try {
+        corrected = await fetchProteinByUniprot(env.DB, manifestUniprot)
+      } catch {}
+    }
+    return {
+      protein: applySymbolIdentity(corrected || identity, symbol, entry),
+      identityConflict: true,
+    }
+  }
+  if (!manifestUniprot) return { protein: applySymbolIdentity(best, symbol, entry), identityConflict: false }
   const siblingSymbol = byUni.get(manifestUniprot)
   const shouldHydrateAlias =
     !best ||
     proteinMetadataScore(best) < 6 ||
     (siblingSymbol && siblingSymbol !== symbol)
-  if (!shouldHydrateAlias) return best
+  if (!shouldHydrateAlias) {
+    return { protein: applySymbolIdentity(best, symbol, entry), identityConflict: false }
+  }
 
   try {
     best = richerProtein(best, await fetchProteinByUniprot(env.DB, manifestUniprot))
@@ -698,7 +760,7 @@ async function bestProteinForSymbol(env, symbol, entry, byUni) {
     } catch {}
   }
 
-  return best
+  return { protein: applySymbolIdentity(best || identity, symbol, entry), identityConflict: false }
 }
 
 async function resolveGene(env, rawId) {
@@ -709,12 +771,12 @@ async function resolveGene(env, rawId) {
   const s = normalizeSymbol(rawId)
   if (s) {
     const entry = bySymbol.get(s)
-    const best = await bestProteinForSymbol(env, s, entry, byUni)
-    if (best?.gene) {
+    const resolved = await bestProteinForSymbol(env, s, entry, byUni)
+    if (resolved?.protein?.gene) {
       return {
-        protein: best,
+        protein: resolved.protein,
         symbol: s,
-        canonicalSymbol: normalizeSymbol(best.gene),
+        identityConflict: Boolean(resolved.identityConflict),
         mode: "symbol",
       }
     }
@@ -917,9 +979,10 @@ async function geneRecord(env, url, rawId) {
       : {}),
   }
   const uniprot = normalizeUniprot(r?.protein?.uniprot || entry?.u || null)
+  const identityFullName = (r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol
   const fullName =
-    sanitizeText(syncedEssenceState?.full_name, 255) ||
-    ((r?.protein?.full_name && String(r.protein.full_name).trim()) || entry?.n || r.symbol)
+    (r?.identityConflict ? null : sanitizeText(syncedEssenceState?.full_name, 255)) ||
+    identityFullName
   const weightKgValue = Number(tooltipEssence?.weight_kg)
   const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
   const proteinLengthAa = optionalInt(r?.protein?.length)
@@ -934,7 +997,7 @@ async function geneRecord(env, url, rawId) {
   return {
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
-    canonical_symbol: r.canonicalSymbol || r.symbol,
+    canonical_symbol: r.symbol,
     symbol: r.symbol,
     full_name: fullName,
     color: entry?.c || null,
