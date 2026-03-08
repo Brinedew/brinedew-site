@@ -1,85 +1,114 @@
-import sys
-import os
-import subprocess
 import shutil
+import subprocess
+import sys
+from pathlib import Path
 
-LIGHT_BG = "#faf8f8"  # from quartz.config.ts lightMode.light
-INK_COLOR = "#2b2b2b"  # from quartz.config.ts lightMode.dark
+LIGHT_BG = "#f8f1e7"
+INK_COLOR = "#237c71"
+MARK_PADDING = 0.14
+MASK_ALPHA_THRESHOLD = 32
 
-SRC_CANDIDATES = [
-    os.path.join("Website", "RotatedB.png"),
-    os.path.join("Website", "RotatedB_small.png"),
-]
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SOURCE_MASK = ROOT_DIR / "quartz" / "static" / "logo-mask.png"
+OUTPUT_DIR = ROOT_DIR / "quartz" / "static"
 
-DEST_DIR = os.path.join("Website", "public", "static")
-DEST_PATH = os.path.join(DEST_DIR, "icon.png")
+PNG_OUTPUTS = {
+    "icon.png": 192,
+    "icon-48.png": 48,
+    "apple-touch-icon.png": 180,
+}
+ICO_OUTPUT = "favicon.ico"
+ICO_SIZES = [(48, 48), (32, 32), (16, 16)]
 
 
 def ensure_pillow():
     try:
         import PIL  # noqa: F401
+
         return
     except Exception:
         pass
-    # Try installing Pillow via uv if available
+
     uv = shutil.which("uv")
     if uv is None:
-        print("ERROR: Pillow not installed and 'uv' not found to install it.", file=sys.stderr)
+        print("ERROR: Pillow is not installed and 'uv' was not found.", file=sys.stderr)
         sys.exit(1)
-    print("Installing Pillow via uv ...", file=sys.stderr)
+
+    print("Installing Pillow via uv...", file=sys.stderr)
     try:
-        subprocess.check_call([uv, "pip", "install", "pillow"])  # may require network
-    except subprocess.CalledProcessError as e:
-        print(f"ERROR: failed to install pillow via uv: {e}", file=sys.stderr)
+        subprocess.check_call([uv, "pip", "install", "pillow"])
+    except subprocess.CalledProcessError as exc:
+        print(f"ERROR: failed to install Pillow via uv: {exc}", file=sys.stderr)
         sys.exit(1)
-
-
-def pick_source():
-    for p in SRC_CANDIDATES:
-        if os.path.exists(p):
-            return p
-    print("ERROR: Source image not found. Expected one of: " + ", ".join(SRC_CANDIDATES), file=sys.stderr)
-    sys.exit(1)
 
 
 def hex_to_rgb(hex_str):
-    hex_str = hex_str.strip().lstrip('#')
+    hex_str = hex_str.strip().lstrip("#")
     if len(hex_str) == 3:
-        hex_str = ''.join([c*2 for c in hex_str])
+        hex_str = "".join(char * 2 for char in hex_str)
     if len(hex_str) != 6:
         raise ValueError(f"Invalid hex color: {hex_str}")
-    r = int(hex_str[0:2], 16)
-    g = int(hex_str[2:4], 16)
-    b = int(hex_str[4:6], 16)
-    return (r, g, b)
+    return tuple(int(hex_str[index : index + 2], 16) for index in range(0, 6, 2))
+
+
+def load_master_mark():
+    if not SOURCE_MASK.exists():
+        print(f"ERROR: Missing brand mask: {SOURCE_MASK}", file=sys.stderr)
+        sys.exit(1)
+
+    from PIL import Image
+
+    source = Image.open(SOURCE_MASK).convert("RGBA")
+    alpha = source.getchannel("A").point(
+        lambda value: 255 if value >= MASK_ALPHA_THRESHOLD else 0,
+        mode="L",
+    )
+    bbox = alpha.getbbox()
+    if bbox is None:
+        print(f"ERROR: No visible mark found in {SOURCE_MASK}", file=sys.stderr)
+        sys.exit(1)
+
+    return source.crop(bbox).getchannel("A")
+
+
+def render_icon(alpha_mark, size, bg_rgb, ink_rgb):
+    from PIL import Image, ImageOps
+
+    canvas = Image.new("RGB", (size, size), bg_rgb)
+    inner_size = max(1, round(size * (1 - 2 * MARK_PADDING)))
+    fitted_alpha = ImageOps.contain(alpha_mark, (inner_size, inner_size), Image.Resampling.LANCZOS)
+
+    # A slight upward nudge keeps the mark optically centered in browser tabs.
+    offset_x = (size - fitted_alpha.width) // 2
+    offset_y = max(0, (size - fitted_alpha.height) // 2 - max(1, round(size * 0.01)))
+
+    icon_layer = Image.new("RGB", fitted_alpha.size, ink_rgb)
+    canvas.paste(icon_layer, (offset_x, offset_y), fitted_alpha)
+    return canvas
+
+
+def write_outputs(alpha_mark):
+    bg_rgb = hex_to_rgb(LIGHT_BG)
+    ink_rgb = hex_to_rgb(INK_COLOR)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    rendered_icons = {}
+    for filename, size in PNG_OUTPUTS.items():
+        rendered = render_icon(alpha_mark, size, bg_rgb, ink_rgb)
+        rendered.save(OUTPUT_DIR / filename, format="PNG")
+        rendered_icons[size] = rendered
+        print(f"Wrote {OUTPUT_DIR / filename}")
+
+    ico_path = OUTPUT_DIR / ICO_OUTPUT
+    largest = rendered_icons[max(rendered_icons)]
+    largest.save(ico_path, format="ICO", sizes=ICO_SIZES)
+    print(f"Wrote {ico_path}")
 
 
 def main():
     ensure_pillow()
-    from PIL import Image
-
-    src_path = pick_source()
-    ink_rgb = hex_to_rgb(INK_COLOR)
-    bg_rgb = hex_to_rgb(LIGHT_BG)
-
-    im = Image.open(src_path).convert("RGBA")
-
-    # Create a binary mask from alpha (ink vs background)
-    alpha = im.split()[3]
-    # First, resize mask smoothly to target size, then threshold to 0/255 to avoid anti-aliasing shades
-    target_size = (32, 32)
-    mask_resized = alpha.resize(target_size, Image.LANCZOS)
-    threshold = 128
-    mask_binary = mask_resized.point(lambda a: 255 if a >= threshold else 0, mode="L")
-
-    # Compose strict two-color image using the binary mask
-    bg_img = Image.new("RGB", target_size, bg_rgb)
-    ink_img = Image.new("RGB", target_size, ink_rgb)
-    icon = Image.composite(ink_img, bg_img, mask_binary)
-
-    os.makedirs(DEST_DIR, exist_ok=True)
-    icon.save(DEST_PATH, format="PNG")
-    print(f"Wrote {DEST_PATH}")
+    alpha_mark = load_master_mark()
+    write_outputs(alpha_mark)
 
 
 if __name__ == "__main__":

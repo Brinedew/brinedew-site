@@ -90,6 +90,7 @@ export default (() => {
           </>
         )}
 
+        <link rel="shortcut icon" href={joinSegments(baseDir, "favicon.ico")} />
         <link
           rel="icon"
           type="image/png"
