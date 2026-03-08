@@ -799,7 +799,7 @@ function sourceLinks(symbol, uniprot) {
 
 function sexOriginFromProtein(protein) {
   if (!protein || typeof protein !== "object" || typeof protein.tmh !== "boolean") return []
-  return [protein.tmh ? "transmembrane domains" : "no transmembrane domains"]
+  return [protein.tmh ? "Transmembrane" : "Soluble"]
 }
 
 async function geneRecord(env, url, rawId) {
