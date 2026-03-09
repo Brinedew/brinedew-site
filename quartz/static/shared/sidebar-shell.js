@@ -100,14 +100,14 @@ export function buildLoginUrl(options) {
 export async function fetchAuthenticatedUser(options) {
   var source = options || {}
   if (!source.authBase && shouldUseSharedAuthBridge()) {
-    var bridgedUser = await requestSharedAuth("fetchAuthenticatedUser").catch(function () {
-      return null
-    })
-    if (bridgedUser) return bridgedUser
-    await wait(300)
-    return requestSharedAuth("fetchAuthenticatedUser").catch(function () {
-      return null
-    })
+    for (var attempt = 0; attempt < 6; attempt++) {
+      var bridgedUser = await requestSharedAuth("fetchAuthenticatedUser").catch(function () {
+        return null
+      })
+      if (bridgedUser) return bridgedUser
+      if (attempt < 5) await wait(400)
+    }
+    return null
   }
   var authBase = resolveAuthBase(source.authBase)
   try {
