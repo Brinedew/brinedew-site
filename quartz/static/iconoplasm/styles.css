@@ -376,10 +376,10 @@
   inset: -1px;
   width: calc(100% + 2px);
   height: calc(100% + 2px);
-  margin: 0;
-  max-width: none;
-  border: 0;
-  vertical-align: top;
+  margin: 0 !important;
+  max-width: none !important;
+  border: 0 !important;
+  vertical-align: top !important;
   object-fit: cover;
   object-position: center top;
   display: none;
