@@ -1,8 +1,8 @@
-import { siteSettingsUrl } from "../site-preferences.js?v=20260309d"
+import { siteSettingsUrl } from "../site-preferences.js?v=20260309e"
 
 var COMMUNITY_URL = "https://discord.com/invite/kx8FVzUrpf"
 var AUTH_BRIDGE_CHANNEL = "brinedew-shared-auth-bridge"
-var AUTH_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309d"
+var AUTH_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
 var AUTH_BRIDGE_TIMEOUT_MS = 4000
 var authBridgePromise = null
 var authBridgeIframe = null
@@ -226,6 +226,12 @@ function ensureAuthBridgeIframe() {
   return iframe
 }
 
+function navigateAuthBridgeIframe(iframe) {
+  if (!iframe) return
+  iframe.setAttribute("data-ready", "false")
+  iframe.setAttribute("src", sharedAuthBridgeUrl())
+}
+
 function attachAuthBridgeIframe(iframe) {
   if (!iframe || iframe.isConnected || !canUseDocument()) return
   var parent = document.body || document.documentElement
@@ -264,6 +270,12 @@ function resolveAuthBridge() {
     }
 
     function onLoad() {
+      if (!authBridgeWindowReady(iframe)) {
+        if (iframe.getAttribute("src") !== sharedAuthBridgeUrl()) {
+          navigateAuthBridgeIframe(iframe)
+        }
+        return
+      }
       cleanup()
       iframe.setAttribute("data-ready", "true")
       authBridgePromise = null
@@ -279,25 +291,15 @@ function resolveAuthBridge() {
 
     iframe.addEventListener("load", onLoad)
     iframe.addEventListener("error", onError)
+    if (iframe.getAttribute("src") !== sharedAuthBridgeUrl()) {
+      navigateAuthBridgeIframe(iframe)
+    }
     attachAuthBridgeIframe(iframe)
 
     if (authBridgeWindowReady(iframe)) {
       cleanup()
       authBridgePromise = null
       resolve(iframe)
-      return
-    }
-
-    iframe.setAttribute("data-ready", "false")
-    if (iframe.getAttribute("src") !== sharedAuthBridgeUrl()) {
-      iframe.setAttribute("src", sharedAuthBridgeUrl())
-      return
-    }
-
-    try {
-      iframe.contentWindow.location.replace(sharedAuthBridgeUrl())
-    } catch (_err) {
-      iframe.setAttribute("src", sharedAuthBridgeUrl())
     }
   })
   return authBridgePromise

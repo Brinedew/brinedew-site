@@ -5,7 +5,7 @@ var THEME_COOKIE_KEY = "brinedew_theme"
 var READER_MODE_COOKIE_KEY = "brinedew_reader_mode"
 var ICONOPLASM_LAYOUT_COOKIE_KEY = "brinedew_icono_layout"
 var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
-var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309d"
+var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
 var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
 var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
@@ -220,6 +220,12 @@ function ensureSharedBridgeIframe() {
   return iframe
 }
 
+function navigateSharedBridgeIframe(iframe) {
+  if (!iframe) return
+  iframe.removeAttribute("data-ready")
+  iframe.setAttribute("src", sharedBridgeUrl())
+}
+
 function attachSharedBridgeIframe(iframe) {
   if (!iframe || iframe.isConnected || !canUseDocument()) return
   var parent = document.body || document.documentElement
@@ -296,8 +302,15 @@ function sharedBridgeReady() {
     }
 
     function handleLoad() {
+      if (!sharedBridgeWindowReady(iframe)) {
+        if (iframe.getAttribute("src") !== url) {
+          navigateSharedBridgeIframe(iframe)
+        }
+        return
+      }
       cleanup()
       markBridgeReady()
+      sharedBridgePromise = null
       resolve(iframe.contentWindow || null)
     }
 
@@ -309,25 +322,15 @@ function sharedBridgeReady() {
 
     iframe.addEventListener("load", handleLoad)
     iframe.addEventListener("error", handleError)
+    if (iframe.getAttribute("src") !== url) {
+      navigateSharedBridgeIframe(iframe)
+    }
     attachSharedBridgeIframe(iframe)
 
     if (sharedBridgeWindowReady(iframe)) {
       cleanup()
       sharedBridgePromise = null
       resolve(iframe.contentWindow)
-      return
-    }
-
-    iframe.removeAttribute("data-ready")
-    if (iframe.getAttribute("src") !== url) {
-      iframe.setAttribute("src", url)
-      return
-    }
-
-    try {
-      iframe.contentWindow.location.replace(url)
-    } catch (_err) {
-      iframe.setAttribute("src", url)
     }
   }).catch(function (error) {
     sharedBridgePromise = null

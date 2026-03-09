@@ -4,13 +4,13 @@ import {
   readIconoplasmSettings,
   resetIconoplasmSettings,
   writeIconoplasmSettings,
-} from "../site-preferences.js?v=20260309d"
+} from "../site-preferences.js?v=20260309e"
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=20260309d"
+} from "../shared/sidebar-shell.js?v=20260309e"
 
 ;(function () {
   "use strict"
