@@ -8,12 +8,31 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   var GALLERY_PAGE_SIZE = 30
   var GALLERY_DEFAULT_ORDER = "votes"
   var HOME_LAYOUT_DEFAULT = "bricks"
+  var SETTINGS_STORAGE_KEY = "iconoplasm.userSettings.v1"
+  var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
     { value: "popularity", label: "Popularity" },
     { value: "newest", label: "Newest" },
     { value: "random", label: "Random" },
   ]
+  var HOME_LAYOUT_OPTIONS = [
+    { value: "bricks", label: "Bricks" },
+    { value: "masonry", label: "Masonry" },
+  ]
+  var GENERATION_PROVIDERS = [
+    { value: "openai-compatible", label: "OpenAI-compatible" },
+    { value: "replicate", label: "Replicate" },
+    { value: "gemini", label: "Gemini" },
+    { value: "custom", label: "Custom endpoint" },
+  ]
+  var DEFAULT_USER_SETTINGS = {
+    homeLayout: HOME_LAYOUT_DEFAULT,
+    generationProvider: GENERATION_PROVIDER_DEFAULT,
+    generationApiKey: "",
+    generationModel: "",
+    generationEndpoint: "",
+  }
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
   var PREFETCH_DETAIL_CONCURRENCY = 4
@@ -538,6 +557,40 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     return html
   }
 
+  function homeLayoutOptionsMarkup(selectedLayout) {
+    var selected = normalizeHomeLayout(selectedLayout)
+    var html = ""
+    for (var i = 0; i < HOME_LAYOUT_OPTIONS.length; i++) {
+      var option = HOME_LAYOUT_OPTIONS[i]
+      html +=
+        '<option value="' +
+        esc(option.value) +
+        '"' +
+        (option.value === selected ? " selected" : "") +
+        ">" +
+        esc(option.label) +
+        "</option>"
+    }
+    return html
+  }
+
+  function generationProviderOptionsMarkup(selectedProvider) {
+    var selected = normalizeGenerationProvider(selectedProvider)
+    var html = ""
+    for (var i = 0; i < GENERATION_PROVIDERS.length; i++) {
+      var option = GENERATION_PROVIDERS[i]
+      html +=
+        '<option value="' +
+        esc(option.value) +
+        '"' +
+        (option.value === selected ? " selected" : "") +
+        ">" +
+        esc(option.label) +
+        "</option>"
+    }
+    return html
+  }
+
   function isLightColor(hex) {
     if (!hex || hex.length < 7) return false
     var r = parseInt(hex.slice(1, 3), 16)
@@ -569,10 +622,74 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   var missingTooltipOriginWarnings = Object.create(null)
 
-  function resolveHomeLayout() {
-    // Keep masonry implementation available for the future settings switch,
-    // but make bricks the default home presentation now.
+  function normalizeHomeLayout(layout) {
+    var value = String(layout || "")
+      .trim()
+      .toLowerCase()
+    if (value === "masonry") return "masonry"
     return HOME_LAYOUT_DEFAULT
+  }
+
+  function normalizeGenerationProvider(provider) {
+    var value = String(provider || "")
+      .trim()
+      .toLowerCase()
+    for (var i = 0; i < GENERATION_PROVIDERS.length; i++) {
+      if (GENERATION_PROVIDERS[i].value === value) return value
+    }
+    return GENERATION_PROVIDER_DEFAULT
+  }
+
+  function trimStoredValue(value, maxLength) {
+    return String(value || "")
+      .trim()
+      .slice(0, maxLength)
+  }
+
+  function buildUserSettings(raw) {
+    var source = raw && typeof raw === "object" ? raw : {}
+    return {
+      homeLayout: normalizeHomeLayout(source.homeLayout),
+      generationProvider: normalizeGenerationProvider(source.generationProvider),
+      generationApiKey: trimStoredValue(source.generationApiKey, 800),
+      generationModel: trimStoredValue(source.generationModel, 200),
+      generationEndpoint: trimStoredValue(source.generationEndpoint, 500),
+    }
+  }
+
+  function readUserSettings() {
+    var parsed = null
+    try {
+      parsed = JSON.parse(window.localStorage.getItem(SETTINGS_STORAGE_KEY) || "null")
+    } catch (_err) {
+      parsed = null
+    }
+    return buildUserSettings(parsed || DEFAULT_USER_SETTINGS)
+  }
+
+  function writeUserSettings(settings) {
+    try {
+      window.localStorage.setItem(
+        SETTINGS_STORAGE_KEY,
+        JSON.stringify(buildUserSettings(settings || DEFAULT_USER_SETTINGS)),
+      )
+      return true
+    } catch (_err) {
+      return false
+    }
+  }
+
+  function resetUserSettings() {
+    try {
+      window.localStorage.removeItem(SETTINGS_STORAGE_KEY)
+      return true
+    } catch (_err) {
+      return false
+    }
+  }
+
+  function resolveHomeLayout() {
+    return readUserSettings().homeLayout
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -1116,6 +1233,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function getRoute() {
     var path = window.location.pathname
     if (path === "/" || path === "") return { page: "home" }
+    if (path === "/settings") return { page: "settings" }
     var m = path.match(/^\/gene\/(.+)$/)
     if (m) return { page: "gene", symbol: decodeURIComponent(m[1]) }
     return { page: "404" }
@@ -1138,12 +1256,15 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       '<div class="icono-search-results" id="icono-results"></div>' +
       "</div>" +
       "</div>" +
+      '<div class="icono-gallery-actions">' +
       '<label class="icono-gallery-order" for="icono-order">' +
       "<span>Order by</span>" +
       '<select id="icono-order">' +
       galleryOptionsMarkup() +
       "</select>" +
       "</label>" +
+      '<a class="icono-toolbar-link" href="/settings" data-icono-nav>Settings</a>' +
+      "</div>" +
       "</div>" +
       '<div class="icono-loading" id="icono-loading">Loading portraits...</div>' +
       '<div class="icono-grid" id="icono-grid"></div>' +
@@ -1564,9 +1685,12 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function renderGene(root, symbol) {
     root.innerHTML =
-      '<div class="icono-nav"><a href="/" data-icono-nav>' +
+      '<div class="icono-nav">' +
+      '<a href="/" data-icono-nav>' +
       ICONO_ARROW_LEFT +
-      "All genes</a></div>" +
+      "All genes</a>" +
+      '<a href="/settings" data-icono-nav>Settings</a>' +
+      "</div>" +
       '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
       '<div class="icono-gene-header">' +
       '<div class="icono-gene-swatch icono-skel-block" style="width:min(320px,100%);aspect-ratio:3/4"></div>' +
@@ -1808,6 +1932,156 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     refreshPortraitLightbox()
   }
 
+  function renderSettings(root) {
+    var settings = readUserSettings()
+    root.innerHTML =
+      '<div class="icono-nav">' +
+      '<a href="/" data-icono-nav>' +
+      ICONO_ARROW_LEFT +
+      "All genes</a>" +
+      '<a href="/settings" data-icono-nav aria-current="page">Settings</a>' +
+      "</div>" +
+      '<section class="icono-settings-hero">' +
+      '<span class="icono-settings-kicker">User settings</span>' +
+      "<h1>Iconoplasm settings</h1>" +
+      "<p>Save your homepage layout and local image-generation credentials here. These values stay in this browser so the site can pick them up later for FAQ features like new candidate and edit image.</p>" +
+      "</section>" +
+      '<div class="icono-settings-grid">' +
+      '<section class="icono-settings-card">' +
+      "<h2>Browsing</h2>" +
+      "<p>Choose how the homepage gallery should render for you.</p>" +
+      '<form class="icono-settings-form" id="icono-settings-form">' +
+      '<label class="icono-settings-field" for="icono-settings-layout">' +
+      "<span>Homepage layout</span>" +
+      '<select class="icono-settings-select" id="icono-settings-layout" name="homeLayout">' +
+      homeLayoutOptionsMarkup(settings.homeLayout) +
+      "</select>" +
+      "</label>" +
+      '<div class="icono-settings-note">Bricks uses the tooltip-style horizontal cards. Masonry keeps the older portrait wall available as your alternate view.</div>' +
+      "</form>" +
+      "</section>" +
+      '<section class="icono-settings-card">' +
+      "<h2>Image generation</h2>" +
+      "<p>Store the provider details that future new-candidate and edit-image tools will use.</p>" +
+      '<form class="icono-settings-form" id="icono-settings-generation-form">' +
+      '<label class="icono-settings-field" for="icono-settings-provider">' +
+      "<span>Provider</span>" +
+      '<select class="icono-settings-select" id="icono-settings-provider" name="generationProvider">' +
+      generationProviderOptionsMarkup(settings.generationProvider) +
+      "</select>" +
+      "</label>" +
+      '<label class="icono-settings-field" for="icono-settings-api-key">' +
+      "<span>API key</span>" +
+      '<div class="icono-settings-secret">' +
+      '<input class="icono-settings-input" id="icono-settings-api-key" name="generationApiKey" type="password" autocomplete="off" spellcheck="false" value="' +
+      esc(settings.generationApiKey) +
+      '" placeholder="Paste your image-generation API key">' +
+      '<button class="icono-settings-toggle" id="icono-settings-api-key-toggle" type="button" aria-pressed="false">Show</button>' +
+      "</div>" +
+      "</label>" +
+      '<label class="icono-settings-field" for="icono-settings-model">' +
+      "<span>Model</span>" +
+      '<input class="icono-settings-input" id="icono-settings-model" name="generationModel" type="text" autocomplete="off" spellcheck="false" value="' +
+      esc(settings.generationModel) +
+      '" placeholder="gpt-image-1, imagen-4, flux, or your own preset">' +
+      "</label>" +
+      '<label class="icono-settings-field" for="icono-settings-endpoint">' +
+      "<span>Endpoint</span>" +
+      '<input class="icono-settings-input" id="icono-settings-endpoint" name="generationEndpoint" type="url" autocomplete="off" spellcheck="false" value="' +
+      esc(settings.generationEndpoint) +
+      '" placeholder="Optional override, for example https://api.openai.com/v1/images">' +
+      "</label>" +
+      "</form>" +
+      "</section>" +
+      '<section class="icono-settings-card icono-settings-card--wide">' +
+      "<h2>Storage</h2>" +
+      "<p>Your settings are stored locally in this browser only. There is no account sync yet, so a different browser or device will start fresh.</p>" +
+      '<div class="icono-settings-actions">' +
+      '<p class="icono-settings-status" id="icono-settings-status" aria-live="polite"></p>' +
+      '<div class="icono-settings-buttons">' +
+      '<button class="icono-settings-btn icono-settings-btn--secondary" id="icono-settings-reset" type="button">Reset defaults</button>' +
+      '<button class="icono-settings-btn icono-settings-btn--primary" id="icono-settings-save" type="button">Save settings</button>' +
+      "</div>" +
+      "</div>" +
+      "</section>" +
+      "</div>"
+
+    var layoutEl = document.getElementById("icono-settings-layout")
+    var providerEl = document.getElementById("icono-settings-provider")
+    var apiKeyEl = document.getElementById("icono-settings-api-key")
+    var modelEl = document.getElementById("icono-settings-model")
+    var endpointEl = document.getElementById("icono-settings-endpoint")
+    var statusEl = document.getElementById("icono-settings-status")
+    var saveBtn = document.getElementById("icono-settings-save")
+    var resetBtn = document.getElementById("icono-settings-reset")
+    var toggleBtn = document.getElementById("icono-settings-api-key-toggle")
+
+    function setStatus(message, tone) {
+      if (!statusEl) return
+      statusEl.textContent = message || ""
+      statusEl.className =
+        "icono-settings-status" +
+        (tone === "success"
+          ? " icono-settings-status--success"
+          : tone === "error"
+            ? " icono-settings-status--error"
+            : "")
+    }
+
+    function collectSettings() {
+      return {
+        homeLayout: normalizeHomeLayout(layoutEl && layoutEl.value),
+        generationProvider: normalizeGenerationProvider(providerEl && providerEl.value),
+        generationApiKey: trimStoredValue(apiKeyEl && apiKeyEl.value, 800),
+        generationModel: trimStoredValue(modelEl && modelEl.value, 200),
+        generationEndpoint: trimStoredValue(endpointEl && endpointEl.value, 500),
+      }
+    }
+
+    if (toggleBtn && apiKeyEl) {
+      toggleBtn.addEventListener("click", function () {
+        var isVisible = apiKeyEl.getAttribute("type") === "text"
+        apiKeyEl.setAttribute("type", isVisible ? "password" : "text")
+        toggleBtn.textContent = isVisible ? "Show" : "Hide"
+        toggleBtn.setAttribute("aria-pressed", isVisible ? "false" : "true")
+      })
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener("click", function () {
+        var nextSettings = collectSettings()
+        if (!writeUserSettings(nextSettings)) {
+          setStatus("This browser blocked local settings storage.", "error")
+          return
+        }
+        setStatus("Settings saved in this browser.", "success")
+      })
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener("click", function () {
+        if (!resetUserSettings()) {
+          setStatus("This browser blocked resetting local settings.", "error")
+          return
+        }
+        var defaults = buildUserSettings(DEFAULT_USER_SETTINGS)
+        if (layoutEl) layoutEl.value = defaults.homeLayout
+        if (providerEl) providerEl.value = defaults.generationProvider
+        if (apiKeyEl) {
+          apiKeyEl.value = defaults.generationApiKey
+          apiKeyEl.setAttribute("type", "password")
+        }
+        if (modelEl) modelEl.value = defaults.generationModel
+        if (endpointEl) endpointEl.value = defaults.generationEndpoint
+        if (toggleBtn) {
+          toggleBtn.textContent = "Show"
+          toggleBtn.setAttribute("aria-pressed", "false")
+        }
+        setStatus("Settings reset to defaults.", "success")
+      })
+    }
+  }
+
   /* ─── Rendering: 404 ─── */
 
   function render404(root) {
@@ -1838,12 +2112,19 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     // Update page title
     if (route.page === "home") {
       document.title = "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+    } else if (route.page === "settings") {
+      document.title = "Settings - Iconoplasm"
     } else if (route.page === "gene") {
       document.title = route.symbol + " - Iconoplasm"
+    } else {
+      document.title = "Not found - Iconoplasm"
     }
     // Render the appropriate page
     if (route.page === "home") {
       renderHome(root)
+      refreshPortraitLightbox()
+    } else if (route.page === "settings") {
+      renderSettings(root)
       refreshPortraitLightbox()
     } else if (route.page === "gene") {
       renderGene(root, route.symbol)
