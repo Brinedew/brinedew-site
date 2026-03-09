@@ -1024,21 +1024,10 @@ html[data-theme="dark"] .icono-gene-symbol-pill {
 
 html[saved-theme="dark"] .icono-card--brick,
 html[data-theme="dark"] .icono-card--brick {
-  --icono-brick-shell: color-mix(in srgb, var(--dark) 86%, var(--light) 14%);
-  --icono-brick-surface: color-mix(in srgb, var(--dark) 92%, var(--light) 8%);
-  --icono-brick-ink: color-mix(in srgb, var(--light) 92%, var(--secondary, var(--light)) 8%);
-  --icono-brick-muted: rgba(244, 238, 230, 0.66);
-  --icono-brick-line-strong: rgba(255, 255, 255, 0.15);
-  --icono-brick-line: rgba(255, 255, 255, 0.09);
   --icono-brick-shadow-1: rgba(0, 0, 0, 0.26);
   --icono-brick-shadow-2: rgba(0, 0, 0, 0.34);
   --icono-brick-shadow-3: rgba(0, 0, 0, 0.42);
   --icono-brick-shadow-4: rgba(0, 0, 0, 0.48);
-  --icono-brick-portrait-base: color-mix(
-    in srgb,
-    var(--icono-card-accent, #6b6b78) 22%,
-    rgba(18, 16, 14, 0.96)
-  );
 }
 
 html[saved-theme="dark"] .icono-vote-box,
