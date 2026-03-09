@@ -1,6 +1,13 @@
 import { siteSettingsUrl } from "../site-preferences.js?v=20260309c"
 
 var COMMUNITY_URL = "https://discord.com/invite/kx8FVzUrpf"
+var AUTH_BRIDGE_CHANNEL = "brinedew-shared-auth-bridge"
+var AUTH_BRIDGE_PATH = "/static/site-preferences/bridge.html"
+var AUTH_BRIDGE_TIMEOUT_MS = 4000
+var authBridgePromise = null
+var authBridgeIframe = null
+var authBridgeRequestId = 0
+var authBridgePending = Object.create(null)
 
 export function escapeHtml(value) {
   var node = document.createElement("div")
@@ -10,6 +17,28 @@ export function escapeHtml(value) {
 
 function currentOrigin() {
   return String((typeof window !== "undefined" && window.location.origin) || "").trim()
+}
+
+function currentHost() {
+  return String((typeof window !== "undefined" && window.location.hostname) || "").toLowerCase()
+}
+
+function isCanonicalAuthHost(host) {
+  var value = String(host || "").toLowerCase()
+  if (!value) return false
+  return value === "brinedew.bio" || value === "www.brinedew.bio" || value === "localhost" || value === "127.0.0.1"
+}
+
+function canonicalAuthOrigin() {
+  var host = currentHost()
+  if (!host || host === "localhost" || host === "127.0.0.1") return currentOrigin()
+  return "https://brinedew.bio"
+}
+
+function shouldUseSharedAuthBridge() {
+  var host = currentHost()
+  if (!host) return false
+  return !isCanonicalAuthHost(host)
 }
 
 function currentReturnTo() {
@@ -25,7 +54,7 @@ function currentReturnTo() {
 function resolveAuthBase(authBase) {
   var value = String(authBase || "").trim()
   if (value) return value.replace(/\/+$/, "")
-  return currentOrigin()
+  return shouldUseSharedAuthBridge() ? canonicalAuthOrigin() : currentOrigin()
 }
 
 export function formatTierLabel(tier) {
@@ -64,6 +93,9 @@ export function buildLoginUrl(options) {
 
 export async function fetchAuthenticatedUser(options) {
   var source = options || {}
+  if (!source.authBase && shouldUseSharedAuthBridge()) {
+    return requestSharedAuth("fetchAuthenticatedUser")
+  }
   var authBase = resolveAuthBase(source.authBase)
   try {
     var response = await fetch(authBase + "/api/auth/me", {
@@ -82,6 +114,9 @@ export async function fetchAuthenticatedUser(options) {
 
 export async function logoutAuthenticatedUser(options) {
   var source = options || {}
+  if (!source.authBase && shouldUseSharedAuthBridge()) {
+    return requestSharedAuth("logoutAuthenticatedUser")
+  }
   var authBase = resolveAuthBase(source.authBase)
   var response = await fetch(authBase + "/api/auth/logout", {
     method: "POST",
@@ -149,6 +184,143 @@ export function buildSharedUserPanelMarkup(options) {
     "</div>" +
     "</div>"
   )
+}
+
+function canUseDocument() {
+  try {
+    return typeof document !== "undefined" && !!document.createElement
+  } catch (_err) {
+    return false
+  }
+}
+
+function sharedAuthBridgeUrl() {
+  return canonicalAuthOrigin() + AUTH_BRIDGE_PATH
+}
+
+function ensureAuthBridgeIframe() {
+  if (!canUseDocument()) return null
+  if (authBridgeIframe && authBridgeIframe.isConnected) return authBridgeIframe
+  authBridgeIframe = document.getElementById("brinedew-auth-bridge")
+  if (authBridgeIframe) return authBridgeIframe
+  var iframe = document.createElement("iframe")
+  iframe.id = "brinedew-auth-bridge"
+  iframe.setAttribute("title", "Brinedew auth bridge")
+  iframe.setAttribute("aria-hidden", "true")
+  iframe.tabIndex = -1
+  iframe.style.display = "none"
+  authBridgeIframe = iframe
+  return iframe
+}
+
+function attachAuthBridgeIframe(iframe) {
+  if (!iframe || iframe.isConnected || !canUseDocument()) return
+  var parent = document.body || document.documentElement
+  if (parent) {
+    parent.appendChild(iframe)
+    return
+  }
+  document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+      var nextParent = document.body || document.documentElement
+      if (nextParent && !iframe.isConnected) nextParent.appendChild(iframe)
+    },
+    { once: true },
+  )
+}
+
+function resolveAuthBridge() {
+  if (!shouldUseSharedAuthBridge()) return Promise.resolve(null)
+  if (authBridgePromise) return authBridgePromise
+  authBridgePromise = new Promise(function (resolve, reject) {
+    var iframe = ensureAuthBridgeIframe()
+    if (!iframe) {
+      authBridgePromise = null
+      reject(new Error("Auth bridge iframe unavailable"))
+      return
+    }
+
+    function cleanup() {
+      iframe.removeEventListener("load", onLoad)
+      iframe.removeEventListener("error", onError)
+    }
+
+    function onLoad() {
+      cleanup()
+      resolve(iframe)
+    }
+
+    function onError() {
+      cleanup()
+      authBridgePromise = null
+      reject(new Error("Failed to load auth bridge iframe"))
+    }
+
+    iframe.addEventListener("load", onLoad)
+    iframe.addEventListener("error", onError)
+    attachAuthBridgeIframe(iframe)
+
+    if (iframe.src !== sharedAuthBridgeUrl()) {
+      iframe.src = sharedAuthBridgeUrl()
+      return
+    }
+
+    if (
+      iframe.contentWindow &&
+      iframe.getAttribute("src") &&
+      iframe.contentDocument &&
+      iframe.contentDocument.readyState === "complete"
+    ) {
+      cleanup()
+      resolve(iframe)
+    }
+  })
+  return authBridgePromise
+}
+
+function requestSharedAuth(type) {
+  return resolveAuthBridge().then(function (iframe) {
+    if (!iframe || !iframe.contentWindow) return null
+    return new Promise(function (resolve, reject) {
+      var id = "auth-" + String(++authBridgeRequestId)
+      var timer = window.setTimeout(function () {
+        delete authBridgePending[id]
+        reject(new Error("Auth bridge request timed out"))
+      }, AUTH_BRIDGE_TIMEOUT_MS)
+
+      authBridgePending[id] = {
+        resolve: resolve,
+        reject: reject,
+        timer: timer,
+      }
+
+      iframe.contentWindow.postMessage(
+        {
+          channel: AUTH_BRIDGE_CHANNEL,
+          id: id,
+          type: type,
+        },
+        canonicalAuthOrigin(),
+      )
+    })
+  })
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("message", function (event) {
+    var data = event && event.data ? event.data : null
+    if (!data || data.channel !== AUTH_BRIDGE_CHANNEL || event.origin !== canonicalAuthOrigin()) return
+    var pending = authBridgePending[data.id]
+    if (!pending) return
+    window.clearTimeout(pending.timer)
+    delete authBridgePending[data.id]
+    if (data.ok) {
+      pending.resolve(data.payload || null)
+      return
+    }
+    pending.reject(new Error((data.payload && data.payload.error) || "Auth bridge request failed"))
+  })
 }
 
 export function mountSidebarStack(options) {
