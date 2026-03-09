@@ -1,5 +1,25 @@
+const readCookie = (name: string) => {
+  const parts = (document.cookie || "").split(/;\s*/)
+  for (const part of parts) {
+    const index = part.indexOf("=")
+    if (index < 0) continue
+    if (part.slice(0, index) !== name) continue
+    return decodeURIComponent(part.slice(index + 1))
+  }
+  return ""
+}
+
+const writeSharedCookie = (name: string, value: string) => {
+  const host = window.location.hostname.toLowerCase()
+  const attrs = ["Path=/", "SameSite=Lax", value ? "Max-Age=31536000" : "Max-Age=0"]
+  if (host === "brinedew.bio" || host.endsWith(".brinedew.bio")) {
+    attrs.push("Domain=.brinedew.bio")
+  }
+  document.cookie = `${name}=${encodeURIComponent(value)}; ${attrs.join("; ")}`
+}
+
 const userPref = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"
-const currentTheme = localStorage.getItem("theme") ?? userPref
+const currentTheme = readCookie("brinedew_theme") || localStorage.getItem("theme") || userPref
 document.documentElement.setAttribute("data-theme", currentTheme)
 document.documentElement.setAttribute("saved-theme", currentTheme)
 
@@ -17,11 +37,12 @@ document.addEventListener("nav", () => {
     document.documentElement.setAttribute("data-theme", newTheme)
     document.documentElement.setAttribute("saved-theme", newTheme)
     localStorage.setItem("theme", newTheme)
+    writeSharedCookie("brinedew_theme", newTheme)
     emitThemeChangeEvent(newTheme)
   }
 
   const themeChange = (e: MediaQueryListEvent) => {
-    if (localStorage.getItem("theme")) return
+    if (localStorage.getItem("theme") || readCookie("brinedew_theme")) return
     const newTheme = e.matches ? "dark" : "light"
     document.documentElement.setAttribute("data-theme", newTheme)
     document.documentElement.setAttribute("saved-theme", newTheme)

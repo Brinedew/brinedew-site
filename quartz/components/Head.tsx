@@ -113,7 +113,7 @@ export default (() => {
         {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('theme');var e=t||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',e);document.documentElement.setAttribute('saved-theme',e);var r=localStorage.getItem('readerMode')==='on'?'on':'off';document.documentElement.setAttribute('reader-mode',r)}catch(e){}`,
+            __html: `try{var c=function(n){var s=document.cookie||'';var p=s.split(/;\\s*/);for(var i=0;i<p.length;i++){var x=p[i];var k=x.indexOf('=');if(k<0)continue;if(x.slice(0,k)===n)return decodeURIComponent(x.slice(k+1))}return''};var t=c('brinedew_theme')||localStorage.getItem('theme');var e=t||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',e);document.documentElement.setAttribute('saved-theme',e);var r=c('brinedew_reader_mode')||(localStorage.getItem('readerMode')==='on'?'on':'off');document.documentElement.setAttribute('reader-mode',r==='on'?'on':'off')}catch(e){}`,
           }}
         />
 
