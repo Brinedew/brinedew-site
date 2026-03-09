@@ -8,9 +8,7 @@
   // -- Placeholder color for genes without color data ----------------
   const PLACEHOLDER_COLOR = '#6B6B78';
   const HIGHLIGHT_MODE_KEY = 'iconoplasm_highlight_mode';
-  const TOOLTIP_PRIMARY_TEXT = 'rgb(33, 28, 24)';
-  const TOOLTIP_MUTED_TEXT = 'rgba(33, 28, 24, 0.72)';
-  const TOOLTIP_SEPARATOR = 'rgba(58, 48, 40, 0.14)';
+  const TOOLTIP_THEME_KEY = 'iconoplasm_tooltip_theme';
 
   // -- Luminance + text color helpers --------------------------------
   function hexLuminance(hex) {
@@ -44,6 +42,10 @@
     return String(raw || '').trim().toLowerCase() === 'pill' ? 'pill' : 'underline';
   }
 
+  function normalizeTooltipTheme(raw) {
+    return String(raw || '').trim().toLowerCase() === 'dark' ? 'dark' : 'light';
+  }
+
   function escapeHtml(value) {
     return String(value ?? '')
       .replaceAll('&', '&amp;')
@@ -60,6 +62,21 @@
     } catch (_) {
       highlightMode = 'underline';
     }
+  }
+
+  async function loadTooltipTheme() {
+    try {
+      const result = await chrome.storage.local.get([TOOLTIP_THEME_KEY]);
+      tooltipTheme = normalizeTooltipTheme(result[TOOLTIP_THEME_KEY]);
+    } catch (_) {
+      tooltipTheme = 'light';
+    }
+  }
+
+  function applyTooltipTheme() {
+    if (!tooltip) return;
+    tooltip.classList.toggle('iconoplasm-tooltip--dark', tooltipTheme === 'dark');
+    tooltip.classList.toggle('iconoplasm-tooltip--light', tooltipTheme !== 'dark');
   }
 
   function applyHighlightStyle(el, symbol, color) {
@@ -240,6 +257,7 @@
   let geneDetailWarmDraining = false;
   let viewportWarmFrame = 0;
   let highlightMode = 'underline';
+  let tooltipTheme = 'light';
   const warnedMissingTraitOrigins = new Set();
   const GENE_DETAIL_WARM_BATCH_SIZE = 20;
   const GENE_DETAIL_VISIBLE_LIMIT = 80;
@@ -568,7 +586,7 @@
     // colors natively, and the extension just adds redundant underlines.
     if (window.location.hostname === 'iconoplasm.brinedew.bio') return;
 
-    await loadHighlightMode();
+    await Promise.all([loadHighlightMode(), loadTooltipTheme()]);
 
     const payload = await new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: 'GET_GENE_DATA' }, resolve);
@@ -707,7 +725,8 @@
         '<div class="iconoplasm-tooltip-meta"></div>' +
       '</div>';
     document.body.appendChild(tooltip);
-    renderTooltipMetaSkeleton(TOOLTIP_PRIMARY_TEXT);
+    applyTooltipTheme();
+    renderTooltipMetaSkeleton();
 
     document.addEventListener('mouseover', onMouseOver);
     document.addEventListener('mouseout', onMouseOut);
@@ -719,12 +738,18 @@
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'local' || !changes[HIGHLIGHT_MODE_KEY]) return;
-    highlightMode = normalizeHighlightMode(changes[HIGHLIGHT_MODE_KEY].newValue);
-    refreshHighlightStyles();
+    if (areaName !== 'local') return;
+    if (changes[HIGHLIGHT_MODE_KEY]) {
+      highlightMode = normalizeHighlightMode(changes[HIGHLIGHT_MODE_KEY].newValue);
+      refreshHighlightStyles();
+    }
+    if (changes[TOOLTIP_THEME_KEY]) {
+      tooltipTheme = normalizeTooltipTheme(changes[TOOLTIP_THEME_KEY].newValue);
+      applyTooltipTheme();
+    }
   });
 
-  function renderTooltipMetaSkeleton(textColor) {
+  function renderTooltipMetaSkeleton() {
     const metaEl = tooltip.querySelector('.iconoplasm-tooltip-meta');
     if (!metaEl) return;
     metaEl.classList.add('iconoplasm-tooltip-meta--loading');
@@ -761,7 +786,6 @@
           '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
         '</div>' +
       '</div>';
-    metaEl.style.color = textColor || '';
   }
 
   function uniqueDisplayValues(values, limit = 4) {
@@ -841,7 +865,7 @@
     };
   }
 
-  function renderTooltipMeta(geneDetail, textColor) {
+  function renderTooltipMeta(geneDetail) {
     const metaEl = tooltip.querySelector('.iconoplasm-tooltip-meta');
     if (!metaEl) return;
     const essence = geneDetail && typeof geneDetail.essence === 'object' ? geneDetail.essence : {};
@@ -941,7 +965,6 @@
     }
     metaEl.classList.remove('iconoplasm-tooltip-meta--loading');
     metaEl.innerHTML = html;
-    metaEl.style.color = textColor;
   }
 
   async function fetchGeneDetailForTooltip(symbol) {
@@ -1007,21 +1030,20 @@
     // Keep the reading surface neutral; gene color is an accent only.
     tooltip.style.backgroundColor = '';
     tooltip.style.setProperty('--iconoplasm-gene-color', color);
-    fade.style.background = TOOLTIP_SEPARATOR;
-    tooltip.style.setProperty('--iconoplasm-separator', TOOLTIP_SEPARATOR);
-    portraitSymbol.style.color = TOOLTIP_PRIMARY_TEXT;
-    symEl.style.color = '';  // Let CSS color-mix with gene color handle this
-    nameEl.style.color = TOOLTIP_MUTED_TEXT;
+    fade.style.background = '';
+    portraitSymbol.style.color = '';
+    symEl.style.color = '';
+    nameEl.style.color = '';
 
     const hoverSymbol = symbol;
     if (geneDetailCache.has(symbol)) {
-      renderTooltipMeta(geneDetailCache.get(symbol), TOOLTIP_PRIMARY_TEXT);
+      renderTooltipMeta(geneDetailCache.get(symbol));
     } else {
       // Reserve the metadata area immediately so the title block never jumps.
-      renderTooltipMetaSkeleton(TOOLTIP_PRIMARY_TEXT);
+      renderTooltipMetaSkeleton();
       fetchGeneDetailForTooltip(symbol).then((geneDetail) => {
         if (activeSymbol === hoverSymbol && geneDetail) {
-          renderTooltipMeta(geneDetail, TOOLTIP_PRIMARY_TEXT);
+          renderTooltipMeta(geneDetail);
         } else if (activeSymbol === hoverSymbol) {
           renderTooltipMeta(null);
         }

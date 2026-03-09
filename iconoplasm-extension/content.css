@@ -55,6 +55,21 @@
 
 /* -- Tooltip container: horizontal card ----------------------------- */
 .iconoplasm-tooltip {
+  --iconoplasm-tooltip-shell: #d9d2c8;
+  --iconoplasm-tooltip-surface: rgba(248, 244, 236, 0.99);
+  --iconoplasm-tooltip-ink: #211c18;
+  --iconoplasm-tooltip-muted: rgba(33, 28, 24, 0.72);
+  --iconoplasm-tooltip-line-strong: rgba(74, 61, 49, 0.18);
+  --iconoplasm-tooltip-line: rgba(74, 61, 49, 0.08);
+  --iconoplasm-tooltip-shadow-1: rgba(40, 32, 24, 0.08);
+  --iconoplasm-tooltip-shadow-2: rgba(40, 32, 24, 0.1);
+  --iconoplasm-tooltip-shadow-3: rgba(40, 32, 24, 0.14);
+  --iconoplasm-tooltip-shadow-4: rgba(40, 32, 24, 0.12);
+  --iconoplasm-tooltip-portrait-base: color-mix(
+    in srgb,
+    var(--iconoplasm-gene-color, #6B6B78) 20%,
+    #dfe2df
+  );
   position: absolute;
   z-index: 2147483647;
   pointer-events: none;
@@ -67,8 +82,8 @@
   display: flex;
   flex-direction: row;
   width: 500px;
-  background: #d9d2c8;
-  color: #211c18;
+  background: var(--iconoplasm-tooltip-shell);
+  color: var(--iconoplasm-tooltip-ink);
 
   /* Card surface */
   border-radius: 2px;
@@ -77,13 +92,31 @@
 
   /* Layered shadow with color-matched warmth */
   box-shadow:
-    0 0 0 0.5px rgba(40, 32, 24, 0.12),
-    0 1px 2px rgba(40, 32, 24, 0.08),
-    0 3px 8px rgba(40, 32, 24, 0.10),
-    0 8px 24px rgba(40, 32, 24, 0.14),
-    0 20px 60px rgba(40, 32, 24, 0.12);
+    0 0 0 0.5px color-mix(in srgb, var(--iconoplasm-tooltip-line-strong) 72%, transparent),
+    0 1px 2px var(--iconoplasm-tooltip-shadow-1),
+    0 3px 8px var(--iconoplasm-tooltip-shadow-2),
+    0 8px 24px var(--iconoplasm-tooltip-shadow-3),
+    0 20px 60px var(--iconoplasm-tooltip-shadow-4);
 
   -webkit-font-smoothing: antialiased;
+}
+
+.iconoplasm-tooltip.iconoplasm-tooltip--dark {
+  --iconoplasm-tooltip-shell: rgba(31, 26, 23, 0.98);
+  --iconoplasm-tooltip-surface: rgba(20, 17, 15, 0.985);
+  --iconoplasm-tooltip-ink: rgba(244, 238, 230, 0.96);
+  --iconoplasm-tooltip-muted: rgba(244, 238, 230, 0.68);
+  --iconoplasm-tooltip-line-strong: rgba(255, 255, 255, 0.14);
+  --iconoplasm-tooltip-line: rgba(255, 255, 255, 0.08);
+  --iconoplasm-tooltip-shadow-1: rgba(0, 0, 0, 0.3);
+  --iconoplasm-tooltip-shadow-2: rgba(0, 0, 0, 0.38);
+  --iconoplasm-tooltip-shadow-3: rgba(0, 0, 0, 0.46);
+  --iconoplasm-tooltip-shadow-4: rgba(0, 0, 0, 0.5);
+  --iconoplasm-tooltip-portrait-base: color-mix(
+    in srgb,
+    var(--iconoplasm-gene-color, #6B6B78) 24%,
+    rgba(22, 18, 16, 0.98)
+  );
 }
 
 .iconoplasm-tooltip-visible {
@@ -98,7 +131,7 @@
   flex-shrink: 0;
   width: 192px;
   min-height: 240px; /* 4:5 ratio */
-  background-color: color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 20%, #dfe2df);
+  background-color: var(--iconoplasm-tooltip-portrait-base);
   background-size: cover;
   background-position: center top;
   background-repeat: no-repeat;
@@ -107,9 +140,9 @@
 
 .iconoplasm-tooltip-portrait-img {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
   object-fit: cover;
   object-position: center top;
   display: none;
@@ -124,15 +157,19 @@
   gap: 6px;
   padding: 16px;
   background:
-    linear-gradient(160deg, color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 18%, #f2ede5), rgba(255, 255, 255, 0.08)),
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.26), transparent 60%);
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 18%, var(--iconoplasm-tooltip-surface)),
+      color-mix(in srgb, var(--iconoplasm-tooltip-surface) 92%, transparent)
+    ),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--iconoplasm-tooltip-ink) 12%, transparent), transparent 60%);
 }
 
 .iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fallback {
   display: flex;
 }
 
-/* Gradient fade on right edge -- background set dynamically by JS */
+/* Gradient fade on right edge */
 .iconoplasm-tooltip-portrait-fade {
   position: absolute;
   top: 0;
@@ -140,6 +177,7 @@
   bottom: 0;
   width: 1px;
   opacity: 0.9;
+  background: var(--iconoplasm-tooltip-line-strong);
 }
 
 .iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fade {
@@ -159,6 +197,7 @@
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.1;
+  color: var(--iconoplasm-tooltip-ink);
 }
 
 /* -- Infobox: right side -------------------------------------------- */
@@ -172,8 +211,8 @@
   min-height: 240px;
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
-    rgba(248, 244, 236, 0.99);
-  color: #211c18;
+    var(--iconoplasm-tooltip-surface);
+  color: var(--iconoplasm-tooltip-ink);
 }
 
 .iconoplasm-tooltip-header {
@@ -182,7 +221,7 @@
   gap: 2px;
   min-height: 62px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(74, 61, 49, 0.18);
+  border-bottom: 1px solid var(--iconoplasm-tooltip-line-strong);
   margin-bottom: 2px;
 }
 
@@ -194,7 +233,7 @@
   line-height: 1.05;
   font-family: 'Monaspace Xenon Web', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   text-align: left;
-  color: #1a1612;
+  color: color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 42%, var(--iconoplasm-tooltip-ink));
 }
 
 /* Full gene name -- serif body font, like GeneGuessr cards. Color set dynamically by JS. */
@@ -206,7 +245,7 @@
   font-family: 'Crimson Pro', 'Georgia', serif;
   overflow: visible;
   text-align: left;
-  color: rgba(33, 28, 24, 0.58);
+  color: var(--iconoplasm-tooltip-muted);
 }
 
 /* -- Tooltip metadata: 2-column character | origin ------------------- */
@@ -216,7 +255,7 @@
   flex-direction: column;
   gap: 0;
   min-height: 128px;
-  color: #211c18;
+  color: var(--iconoplasm-tooltip-ink);
   padding-top: 4px;
 }
 
@@ -233,7 +272,7 @@
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
   gap: 0;
   background: transparent;
-  border-bottom: 1px solid rgba(74, 61, 49, 0.08);
+  border-bottom: 1px solid var(--iconoplasm-tooltip-line);
 }
 
 .iconoplasm-tooltip-meta-cell {
@@ -285,7 +324,7 @@
   flex-direction: column;
   gap: 0;
   background: transparent;
-  border-bottom: 1px solid rgba(74, 61, 49, 0.08);
+  border-bottom: 1px solid var(--iconoplasm-tooltip-line);
 }
 
 .iconoplasm-tooltip-meta-pair-row {
@@ -347,9 +386,9 @@
   background:
     linear-gradient(
       90deg,
-      color-mix(in srgb, currentColor 8%, transparent) 0%,
-      color-mix(in srgb, currentColor 18%, transparent) 50%,
-      color-mix(in srgb, currentColor 8%, transparent) 100%
+      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 0%,
+      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 18%, transparent) 50%,
+      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 100%
     );
   opacity: 0.9;
 }
@@ -368,5 +407,5 @@
   vertical-align: middle;
   position: relative;
   top: -1px;
-  border: 0.5px solid var(--iconoplasm-separator, rgba(255, 255, 255, 0.2));
+  border: 0.5px solid var(--iconoplasm-tooltip-line-strong);
 }

@@ -8,7 +8,9 @@ const textEl = document.getElementById('status-text');
 const refreshBtn = document.getElementById('refresh-btn');
 const versionEl = document.getElementById('version-text');
 const highlightModeEl = document.getElementById('highlight-mode');
+const tooltipThemeEl = document.getElementById('tooltip-theme');
 const HIGHLIGHT_MODE_KEY = 'iconoplasm_highlight_mode';
+const TOOLTIP_THEME_KEY = 'iconoplasm_tooltip_theme';
 
 if (versionEl) {
   versionEl.textContent = 'v' + chrome.runtime.getManifest().version;
@@ -31,15 +33,22 @@ function formatDate(iso) {
   return d.toLocaleDateString();
 }
 
+function normalizeTooltipTheme(value) {
+  return value === 'dark' ? 'dark' : 'light';
+}
+
 async function loadStatus() {
   try {
-    const localSettings = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY]);
+    const localSettings = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY, TOOLTIP_THEME_KEY]);
     const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
     countEl.textContent = formatCount(status.geneCount);
     hashEl.textContent = status.hash ? status.hash.slice(0, 12) : '--';
     fetchEl.textContent = formatDate(status.lastFetch);
     if (highlightModeEl) {
       highlightModeEl.value = localSettings[HIGHLIGHT_MODE_KEY] === 'pill' ? 'pill' : 'underline';
+    }
+    if (tooltipThemeEl) {
+      tooltipThemeEl.value = normalizeTooltipTheme(localSettings[TOOLTIP_THEME_KEY]);
     }
 
     if (status.geneCount > 0) {
@@ -84,6 +93,12 @@ if (highlightModeEl) {
   highlightModeEl.addEventListener('change', async () => {
     const mode = highlightModeEl.value === 'pill' ? 'pill' : 'underline';
     await chrome.storage.local.set({ [HIGHLIGHT_MODE_KEY]: mode });
+  });
+}
+
+if (tooltipThemeEl) {
+  tooltipThemeEl.addEventListener('change', async () => {
+    await chrome.storage.local.set({ [TOOLTIP_THEME_KEY]: normalizeTooltipTheme(tooltipThemeEl.value) });
   });
 }
 
