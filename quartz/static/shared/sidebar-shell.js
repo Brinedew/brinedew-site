@@ -170,7 +170,7 @@ export function buildSharedUserPanelMarkup(options) {
     '" aria-label="Settings" title="Settings">' +
     SETTINGS_GEAR_ICON +
     "</a>"
-  var communityAction = communityHref
+  var communityAction = user && communityHref
     ? '<a class="brd-sidebar-btn brd-sidebar-btn--community" href="' +
       escapeHtml(communityHref) +
       '" target="_blank" rel="noopener noreferrer">Discord</a>'
@@ -187,6 +187,7 @@ export function buildSharedUserPanelMarkup(options) {
     '<div class="brd-sidebar-panel-title">' +
     escapeHtml(panelTitle) +
     "</div>" +
+    '<div class="brd-user-header">' +
     '<div class="brd-user-summary">' +
     avatarMarkup +
     '<div class="brd-user-identity">' +
@@ -196,8 +197,9 @@ export function buildSharedUserPanelMarkup(options) {
     (tierLabel ? '<div class="brd-user-tier">' + escapeHtml(tierLabel) + "</div>" : "") +
     "</div>" +
     "</div>" +
-    '<div class="brd-user-actions">' +
     settingsAction +
+    "</div>" +
+    '<div class="brd-user-actions">' +
     communityAction +
     primaryAction +
     "</div>" +

@@ -267,6 +267,13 @@ article p {
   color: var(--secondary);
 }
 
+.brd-user-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .brd-user-summary {
   display: flex;
   align-items: center;
