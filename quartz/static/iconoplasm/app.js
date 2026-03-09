@@ -1,8 +1,10 @@
+import { readIconoplasmSettings, syncSharedIconoplasmSettings } from "../site-preferences.js?v=20260309c"
 import {
-  readIconoplasmSettings,
-  siteSettingsUrl,
-  syncSharedIconoplasmSettings,
-} from "../site-preferences.js?v=20260309c"
+  buildSharedUserPanelMarkup,
+  fetchAuthenticatedUser,
+  mountSidebarStack,
+  wireSharedUserPanel,
+} from "../shared/sidebar-shell.js?v=20260309a"
 import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
 void syncSharedIconoplasmSettings().catch(function () {
@@ -39,6 +41,14 @@ void syncSharedIconoplasmSettings().catch(function () {
   var homeMasonry = null
   var candidateMasonry = null
   var portraitLightboxCleanup = null
+  var currentUser = null
+  var iconoSidebarState = {
+    page: "home",
+    homeLayout: HOME_LAYOUT_DEFAULT,
+    total: 0,
+    publishedTotal: 0,
+    gene: null,
+  }
 
   /* ─── API helpers ─── */
 
@@ -581,6 +591,97 @@ void syncSharedIconoplasmSettings().catch(function () {
   function resolveHomeLayout() {
     var settings = readIconoplasmSettings()
     return String((settings && settings.homeLayout) || HOME_LAYOUT_DEFAULT).trim() || HOME_LAYOUT_DEFAULT
+  }
+
+  function iconoRowMarkup(label, value) {
+    return (
+      '<div class="brd-sidebar-row">' +
+      '<span class="brd-sidebar-row-label">' +
+      esc(label) +
+      "</span>" +
+      '<span class="brd-sidebar-row-value">' +
+      esc(value) +
+      "</span>" +
+      "</div>"
+    )
+  }
+
+  function iconoSidebarPanelMarkup() {
+    var page = String((iconoSidebarState && iconoSidebarState.page) || "home")
+    var html =
+      '<div class="brd-sidebar-section">' +
+      '<div class="brd-sidebar-panel-title">Iconoplasm</div>' +
+      '<div class="brd-sidebar-rowlist">'
+    if (page === "gene") {
+      var gene = (iconoSidebarState && iconoSidebarState.gene) || null
+      if (!gene) {
+        html += iconoRowMarkup("Gene", "Loading")
+      } else if (gene.error) {
+        html += iconoRowMarkup("Gene", gene.symbol || "Unknown")
+        html += iconoRowMarkup("Status", "Not found")
+      } else {
+        html += iconoRowMarkup("Gene", gene.symbol || "Unknown")
+        html += iconoRowMarkup("Portrait", gene.hasPortrait ? "Published" : "Pending")
+        html += iconoRowMarkup("Candidates", String(gene.candidateCount || 0))
+        html += iconoRowMarkup("Aliases", String(gene.aliasCount || 0))
+      }
+      html +=
+        "</div>" +
+        '<div class="brd-user-links"><a href="/" data-icono-nav>All genes</a></div>' +
+        "</div>"
+      return html
+    }
+    if (page === "404") {
+      html += iconoRowMarkup("Page", "Not found")
+      html += "</div></div>"
+      return html
+    }
+    html += iconoRowMarkup("Layout", iconoSidebarState.homeLayout || HOME_LAYOUT_DEFAULT)
+    html += iconoRowMarkup("Portraits", String(iconoSidebarState.publishedTotal || 0))
+    html += iconoRowMarkup("Genes", String(iconoSidebarState.total || 0))
+    html += "</div></div>"
+    return html
+  }
+
+  function renderIconoplasmSidebar() {
+    var stack = mountSidebarStack({
+      stackId: "brd-sidebar-stack",
+      panels: [
+        {
+          id: "brd-shared-user-panel",
+          className: "brd-sidebar-panel--user",
+          markup: buildSharedUserPanelMarkup({
+            user: currentUser,
+            loginLabel: "Discord Login",
+          }),
+        },
+        {
+          id: "icono-sidebar-panel",
+          className: "brd-sidebar-panel--iconoplasm",
+          markup: iconoSidebarPanelMarkup(),
+        },
+      ],
+    })
+    wireSharedUserPanel(stack, {
+      onAuthChanged: function (user) {
+        currentUser = user
+        renderIconoplasmSidebar()
+      },
+    })
+  }
+
+  function refreshSharedUserState() {
+    return fetchAuthenticatedUser()
+      .then(function (user) {
+        currentUser = user
+        renderIconoplasmSidebar()
+        return user
+      })
+      .catch(function () {
+        currentUser = null
+        renderIconoplasmSidebar()
+        return null
+      })
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -1133,7 +1234,12 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function renderHome(root) {
     var homeLayout = resolveHomeLayout()
-    var settingsHref = siteSettingsUrl()
+    iconoSidebarState.page = "home"
+    iconoSidebarState.homeLayout = homeLayout
+    iconoSidebarState.total = 0
+    iconoSidebarState.publishedTotal = 0
+    iconoSidebarState.gene = null
+    renderIconoplasmSidebar()
     root.innerHTML =
       '<div class="icono-hero">' +
       "<h1>Iconoplasm</h1>" +
@@ -1154,9 +1260,6 @@ void syncSharedIconoplasmSettings().catch(function () {
       galleryOptionsMarkup() +
       "</select>" +
       "</label>" +
-      '<a class="icono-toolbar-link" href="' +
-      esc(settingsHref) +
-      '">Settings</a>' +
       "</div>" +
       "</div>" +
       '<div class="icono-loading" id="icono-loading">Loading portraits...</div>' +
@@ -1196,6 +1299,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       if (!countEl) return
       var publishedCount = Number(galleryState.publishedTotal || 0)
       var totalCount = Number(galleryState.total || 0)
+      iconoSidebarState.total = totalCount
+      iconoSidebarState.publishedTotal = publishedCount
+      renderIconoplasmSidebar()
       countEl.textContent =
         publishedCount.toLocaleString() + " portraits, " + totalCount.toLocaleString() + " genes"
     }
@@ -1577,15 +1683,21 @@ void syncSharedIconoplasmSettings().catch(function () {
   /* ─── Rendering: Gene detail page ─── */
 
   function renderGene(root, symbol) {
-    var settingsHref = siteSettingsUrl()
+    iconoSidebarState.page = "gene"
+    iconoSidebarState.homeLayout = resolveHomeLayout()
+    iconoSidebarState.gene = {
+      symbol: normalizedSymbol(symbol),
+      error: false,
+      hasPortrait: false,
+      candidateCount: 0,
+      aliasCount: 0,
+    }
+    renderIconoplasmSidebar()
     root.innerHTML =
       '<div class="icono-nav">' +
       '<a href="/" data-icono-nav>' +
       ICONO_ARROW_LEFT +
       "All genes</a>" +
-      '<a href="' +
-      esc(settingsHref) +
-      '">Settings</a>' +
       "</div>" +
       '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
       '<div class="icono-gene-header">' +
@@ -1606,10 +1718,26 @@ void syncSharedIconoplasmSettings().catch(function () {
     fetchJSON("/api/gene/" + encodeURIComponent(symbol))
       .then(function (g) {
         loadingEl.style.display = "none"
+        iconoSidebarState.gene = {
+          symbol: normalizedSymbol(g && g.symbol ? g.symbol : symbol),
+          error: false,
+          hasPortrait: !!publishedPortraitUrl(g, "medium"),
+          candidateCount: Array.isArray(g && g.candidates) ? g.candidates.length : 0,
+          aliasCount: Array.isArray(g && g.aliases) ? g.aliases.length : 0,
+        }
+        renderIconoplasmSidebar()
         renderGeneContent(contentEl, g)
       })
       .catch(function (err) {
         loadingEl.style.display = "none"
+        iconoSidebarState.gene = {
+          symbol: normalizedSymbol(symbol),
+          error: true,
+          hasPortrait: false,
+          candidateCount: 0,
+          aliasCount: 0,
+        }
+        renderIconoplasmSidebar()
         contentEl.innerHTML =
           '<div class="icono-empty">' +
           "<h2>Gene not found</h2>" +
@@ -1831,6 +1959,9 @@ void syncSharedIconoplasmSettings().catch(function () {
   /* ─── Rendering: 404 ─── */
 
   function render404(root) {
+    iconoSidebarState.page = "404"
+    iconoSidebarState.gene = null
+    renderIconoplasmSidebar()
     root.innerHTML =
       '<div class="icono-empty">' +
       "<h2>Page not found</h2>" +
@@ -1897,6 +2028,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (!root) return
     window.history.replaceState({ iconoplasm: true }, "", window.location.href)
     render()
+    void refreshSharedUserState()
   }
 
   // Quartz uses SPA navigation, so the root might already be in the DOM

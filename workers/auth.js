@@ -77,6 +77,33 @@ function parseLeaderboardOptInFromUrl(url) {
   return raw === "1" || raw === "true" || raw === "on" || raw === "yes"
 }
 
+function normalizeReturnToUrl(rawValue, requestUrl) {
+  const raw = String(rawValue || "").trim()
+  if (!raw) return ""
+  try {
+    const candidate = new URL(raw, requestUrl.origin)
+    const host = String(candidate.hostname || "").toLowerCase()
+    const requestHost = String(requestUrl.hostname || "").toLowerCase()
+    const isLocal =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      requestHost === "localhost" ||
+      requestHost === "127.0.0.1"
+    if (isLocal && candidate.origin === requestUrl.origin) {
+      return candidate.toString()
+    }
+    if (host === requestHost) {
+      return candidate.toString()
+    }
+    if (host === "brinedew.bio" || host === "www.brinedew.bio" || host.endsWith(".brinedew.bio")) {
+      return candidate.toString()
+    }
+  } catch (_err) {
+    return ""
+  }
+  return ""
+}
+
 function getSharedCookieDomain(hostname) {
   const host = String(hostname || "").toLowerCase()
   if (
@@ -157,6 +184,7 @@ export async function handleLogin(request, env) {
   }
 
   const leaderboardOptIn = parseLeaderboardOptInFromUrl(url)
+  const returnTo = normalizeReturnToUrl(url.searchParams.get("return_to"), url)
   const redirectUri = resolveDiscordRedirectUri(url, env)
   const cookieDomain = getSharedCookieDomain(url.hostname)
   const cookieDomainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
@@ -180,6 +208,7 @@ export async function handleLogin(request, env) {
         code_verifier: codeVerifier,
         state: state,
         leaderboard_opt_in: leaderboardOptIn ? 1 : 0,
+        return_to: returnTo,
         redirect_uri: redirectUri,
         cookie_domain: cookieDomain,
         expires_at: Date.now() + 600000, // 10 minutes
@@ -392,9 +421,10 @@ export async function handleCallback(request, env) {
     "Set-Cookie",
     `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}${cookieDomainAttr}`,
   ) // 30 days
+  const returnTo = normalizeReturnToUrl(oauthData?.return_to, url)
   // Normalize to trailing-slash and preserve cookie visibility across environments.
   // Staging/dev must stay same-origin to retain host-only session cookies.
-  headers.set("Location", resolvePostAuthAppUrl(url, cookieDomain))
+  headers.set("Location", returnTo || resolvePostAuthAppUrl(url, cookieDomain))
 
   return new Response(null, {
     status: 302,

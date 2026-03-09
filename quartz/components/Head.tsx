@@ -201,7 +201,7 @@ export default (() => {
                     )}
                   ></script>
                   <script
-                    defer
+                    type="module"
                     src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}
                   ></script>
                 </>
