@@ -56,11 +56,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const API_OVERRIDE_QUERY_KEY = "gg_api"
   const API_OVERRIDE_STORAGE_KEY = "gg_api_base"
   const PRACTICE_LIST_STORAGE_KEY = "geneguessr_practice_list_v1"
-  const PROD_AUTH_HOSTS = new Set([
-    "geneguessr.brinedew.bio",
-    "brinedew.bio",
-    "www.brinedew.bio",
-  ])
+  const PROD_AUTH_HOSTS = new Set(["geneguessr.brinedew.bio", "brinedew.bio", "www.brinedew.bio"])
 
   function shouldPersistApiOverride(host, apiOrigin) {
     if (!apiOrigin) return false
@@ -6145,9 +6141,7 @@ https://brinedew.bio/apps/geneguessr/`
         }
       })
       setLeaderboardConsentEnabled(false)
-      showLeaderboardConsentFeedback(
-        "Log in with Discord first to enable leaderboard visibility.",
-      )
+      showLeaderboardConsentFeedback("Log in with Discord first to enable leaderboard visibility.")
       return
     }
 
@@ -6309,7 +6303,6 @@ https://brinedew.bio/apps/geneguessr/`
     if (visibilityInput && visibilityInput instanceof HTMLInputElement && currentUser) {
       visibilityInput.checked = Boolean(currentUser.leaderboard_opt_in)
     }
-
   }
 
   /**

@@ -30,7 +30,7 @@ const getOpts = ({ target }: Event): { url: URL; scroll?: boolean } | undefined 
   const a = target.closest("a")
   if (!a) return
   if ("routerIgnore" in a.dataset) return
-  if ("iconoNav" in a.dataset || a.closest('#iconoplasm-root')) return
+  if ("iconoNav" in a.dataset || a.closest("#iconoplasm-root")) return
   const { href } = a
   if (!isLocalUrl(href)) return
   return { url: new URL(href), scroll: "routerNoscroll" in a.dataset ? false : undefined }

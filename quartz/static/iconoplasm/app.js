@@ -1,5 +1,4 @@
 import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
-
 ;(function () {
   "use strict"
 
@@ -37,7 +36,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     var host = String(window.location.hostname || "").toLowerCase()
     if (host === "iconoplasm.brinedew.bio") return window.location.origin
     if (host === "staging.brinedew.bio") return window.location.origin
-    if (host === "brinedew.bio" || host === "www.brinedew.bio") return "https://iconoplasm.brinedew.bio"
+    if (host === "brinedew.bio" || host === "www.brinedew.bio")
+      return "https://iconoplasm.brinedew.bio"
     return "https://iconoplasm.brinedew.bio"
   }
 
@@ -56,7 +56,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
           }
         }
         if (!r.ok) {
-          var err = new Error((payload && payload.error) || ("HTTP " + r.status))
+          var err = new Error((payload && payload.error) || "HTTP " + r.status)
           err.status = r.status
           err.payload = payload
           throw err
@@ -75,20 +75,21 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   }
 
   function normalizedSymbol(symbol) {
-    return String(symbol || "").trim().toUpperCase()
+    return String(symbol || "")
+      .trim()
+      .toUpperCase()
   }
 
   function publishedPortraitUrl(genePayload, preferredSize) {
     var portrait = genePayload && genePayload.portrait
-    var flatHeroUrl = String(genePayload && genePayload.ph || "").trim()
-    var flatMediumUrl = String(genePayload && genePayload.pt || "").trim()
+    var flatHeroUrl = String((genePayload && genePayload.ph) || "").trim()
+    var flatMediumUrl = String((genePayload && genePayload.pt) || "").trim()
     var isPublished =
-      (portrait && portrait.status === "published") ||
-      Boolean(flatHeroUrl || flatMediumUrl)
+      (portrait && portrait.status === "published") || Boolean(flatHeroUrl || flatMediumUrl)
     if (!isPublished) return ""
-    var heroUrl = String(portrait && portrait.hero_url || flatHeroUrl).trim()
-    var mediumUrl = String(portrait && portrait.medium_url || flatMediumUrl).trim()
-    var thumbUrl = String(portrait && portrait.thumb_url || "").trim()
+    var heroUrl = String((portrait && portrait.hero_url) || flatHeroUrl).trim()
+    var mediumUrl = String((portrait && portrait.medium_url) || flatMediumUrl).trim()
+    var thumbUrl = String((portrait && portrait.thumb_url) || "").trim()
     if (preferredSize === "medium") return mediumUrl || thumbUrl || heroUrl
     if (preferredSize === "thumb") return thumbUrl || mediumUrl || heroUrl
     return heroUrl || mediumUrl || thumbUrl
@@ -106,7 +107,9 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function portraitDimensions(genePayload) {
     var portrait = genePayload && genePayload.portrait
-    var assetSha = String(portrait && portrait.asset_sha256 || "").trim().toLowerCase()
+    var assetSha = String((portrait && portrait.asset_sha256) || "")
+      .trim()
+      .toLowerCase()
     var candidates = Array.isArray(genePayload && genePayload.portrait_candidates)
       ? genePayload.portrait_candidates
       : []
@@ -114,7 +117,9 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     if (assetSha) {
       for (var i = 0; i < candidates.length; i++) {
         var candidate = candidates[i]
-        var candidateSha = String(candidate && candidate.asset_sha256 || "").trim().toLowerCase()
+        var candidateSha = String((candidate && candidate.asset_sha256) || "")
+          .trim()
+          .toLowerCase()
         if (candidateSha && candidateSha === assetSha) {
           matchedCandidate = candidate
           break
@@ -123,15 +128,15 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     }
     var width = Number(
       (portrait && (portrait.width || portrait.image_width)) ||
-      (matchedCandidate && (matchedCandidate.width || matchedCandidate.image_width)) ||
-      (genePayload && genePayload.width) ||
-      0
+        (matchedCandidate && (matchedCandidate.width || matchedCandidate.image_width)) ||
+        (genePayload && genePayload.width) ||
+        0,
     )
     var height = Number(
       (portrait && (portrait.height || portrait.image_height)) ||
-      (matchedCandidate && (matchedCandidate.height || matchedCandidate.image_height)) ||
-      (genePayload && genePayload.height) ||
-      0
+        (matchedCandidate && (matchedCandidate.height || matchedCandidate.image_height)) ||
+        (genePayload && genePayload.height) ||
+        0,
     )
     if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
       return { width: 1, height: 1 }
@@ -144,9 +149,12 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function deferWork(task) {
     if (typeof window.requestIdleCallback === "function") {
-      window.requestIdleCallback(function () {
-        task()
-      }, { timeout: 1200 })
+      window.requestIdleCallback(
+        function () {
+          task()
+        },
+        { timeout: 1200 },
+      )
       return
     }
     window.setTimeout(task, 120)
@@ -165,12 +173,20 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
         delete portraitImagePromiseCache[resolvedUrl]
         resolve(value)
       }
-      img.addEventListener("load", function () {
-        finish(resolvedUrl)
-      }, { once: true })
-      img.addEventListener("error", function () {
-        finish("")
-      }, { once: true })
+      img.addEventListener(
+        "load",
+        function () {
+          finish(resolvedUrl)
+        },
+        { once: true },
+      )
+      img.addEventListener(
+        "error",
+        function () {
+          finish("")
+        },
+        { once: true },
+      )
       img.src = resolvedUrl
     })
 
@@ -188,9 +204,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     for (var i = 0; i < galleries.length; i++) {
       ;(function (gallery) {
         var handler = function (event) {
-          var trigger = event.target && event.target.closest
-            ? event.target.closest("[data-icono-pswp]")
-            : null
+          var trigger =
+            event.target && event.target.closest ? event.target.closest("[data-icono-pswp]") : null
           if (!trigger || !gallery.contains(trigger)) return
           var links = gallery.querySelectorAll("[data-icono-pswp]")
           var items = []
@@ -203,7 +218,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
               src: link.getAttribute("data-icono-pswp-src"),
               width: width,
               height: height,
-              alt: link.getAttribute("data-icono-pswp-alt") || link.getAttribute("aria-label") || "",
+              alt:
+                link.getAttribute("data-icono-pswp-alt") || link.getAttribute("aria-label") || "",
             })
             if (link === trigger) index = j
           }
@@ -280,7 +296,15 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     }
     media.classList.remove("icono-card-media--fallback")
     media.innerHTML =
-      '<img src="' + esc(portraitUrl) + '" alt="' + esc(key) + ' portrait" loading="lazy" decoding="async" width="' + dims.width + '" height="' + dims.height + '">'
+      '<img src="' +
+      esc(portraitUrl) +
+      '" alt="' +
+      esc(key) +
+      ' portrait" loading="lazy" decoding="async" width="' +
+      dims.width +
+      '" height="' +
+      dims.height +
+      '">'
   }
 
   function prefetchPortraitBatch(entries, container) {
@@ -502,9 +526,13 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     for (var i = 0; i < GALLERY_ORDERS.length; i++) {
       var option = GALLERY_ORDERS[i]
       html +=
-        '<option value="' + esc(option.value) + '"' +
-          (option.value === GALLERY_DEFAULT_ORDER ? " selected" : "") +
-        ">" + esc(option.label) + "</option>"
+        '<option value="' +
+        esc(option.value) +
+        '"' +
+        (option.value === GALLERY_DEFAULT_ORDER ? " selected" : "") +
+        ">" +
+        esc(option.label) +
+        "</option>"
     }
     return html
   }
@@ -514,7 +542,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     var r = parseInt(hex.slice(1, 3), 16)
     var g = parseInt(hex.slice(3, 5), 16)
     var b = parseInt(hex.slice(5, 7), 16)
-    return (r * 0.299 + g * 0.587 + b * 0.114) > 160
+    return r * 0.299 + g * 0.587 + b * 0.114 > 160
   }
 
   function textColorFor(hex) {
@@ -545,11 +573,17 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function voteBoxMarkup(extraAttrs) {
     var attrs = extraAttrs ? " " + extraAttrs : ""
     return (
-      '<div class="icono-vote-box" data-icono-vote-box' + attrs + '>' +
-        '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + ICONO_CHECK_ICON + '</button>' +
-        '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>' +
-        '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + ICONO_CROSS_ICON + '</button>' +
-      '</div>'
+      '<div class="icono-vote-box" data-icono-vote-box' +
+      attrs +
+      ">" +
+      '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
+      ICONO_CHECK_ICON +
+      "</button>" +
+      '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>' +
+      '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
+      ICONO_CROSS_ICON +
+      "</button>" +
+      "</div>"
     )
   }
 
@@ -594,8 +628,12 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function wireVoteBox(box, symbolValue, assetShaValue) {
     if (!box) return
-    var symbol = String(symbolValue || "").trim().toUpperCase()
-    var assetSha = String(assetShaValue || "").trim().toLowerCase()
+    var symbol = String(symbolValue || "")
+      .trim()
+      .toUpperCase()
+    var assetSha = String(assetShaValue || "")
+      .trim()
+      .toLowerCase()
     if (!symbol || !assetSha) return
     var candidateRef = "a:" + symbol + "|" + assetSha
     var upBtn = box.querySelector("[data-icono-vote-up]")
@@ -662,7 +700,10 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
           state.snapshot = (data && data.snapshot) || state.snapshot
         })
         .catch(function (err) {
-          if (Number(err && err.status || 0) === 401 || (err && err.payload && err.payload.code === "AUTH_REQUIRED")) {
+          if (
+            Number((err && err.status) || 0) === 401 ||
+            (err && err.payload && err.payload.code === "AUTH_REQUIRED")
+          ) {
             state.authenticated = false
             showVoteLoginPopup()
             return
@@ -692,14 +733,18 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function wireGeneVoteBox(container, genePayload) {
     var box = container.querySelector("[data-icono-vote-box]")
     if (!box) return
-    var symbol = String(genePayload && genePayload.symbol || "").trim().toUpperCase()
+    var symbol = String((genePayload && genePayload.symbol) || "")
+      .trim()
+      .toUpperCase()
     var portrait = (genePayload && genePayload.portrait) || {}
     wireVoteBox(box, symbol, portrait.asset_sha256)
   }
 
   function wireCandidateVoteBoxes(container, genePayload) {
     if (!container || !genePayload) return
-    var symbol = String(genePayload.symbol || "").trim().toUpperCase()
+    var symbol = String(genePayload.symbol || "")
+      .trim()
+      .toUpperCase()
     var boxes = container.querySelectorAll("[data-icono-candidate-vote-box]")
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i]
@@ -722,22 +767,24 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function renderHome(root) {
     root.innerHTML =
       '<div class="icono-hero">' +
-        '<h1>Iconoplasm</h1>' +
-        '<p class="tagline">Visual mnemonics for molecular cell biology</p>' +
-        '<span class="stat" id="icono-gene-count">...</span>' +
-      '</div>' +
+      "<h1>Iconoplasm</h1>" +
+      '<p class="tagline">Visual mnemonics for molecular cell biology</p>' +
+      '<span class="stat" id="icono-gene-count">...</span>' +
+      "</div>" +
       '<div class="icono-gallery-toolbar">' +
-        '<div class="icono-search icono-search--toolbar">' +
-          '<div class="icono-search-wrapper">' +
-            '<input type="text" id="icono-q" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
-            '<div class="icono-search-results" id="icono-results"></div>' +
-          '</div>' +
-        '</div>' +
-        '<label class="icono-gallery-order" for="icono-order">' +
-          '<span>Order by</span>' +
-          '<select id="icono-order">' + galleryOptionsMarkup() + '</select>' +
-        '</label>' +
-      '</div>' +
+      '<div class="icono-search icono-search--toolbar">' +
+      '<div class="icono-search-wrapper">' +
+      '<input type="text" id="icono-q" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
+      '<div class="icono-search-results" id="icono-results"></div>' +
+      "</div>" +
+      "</div>" +
+      '<label class="icono-gallery-order" for="icono-order">' +
+      "<span>Order by</span>" +
+      '<select id="icono-order">' +
+      galleryOptionsMarkup() +
+      "</select>" +
+      "</label>" +
+      "</div>" +
       '<div class="icono-loading" id="icono-loading">Loading portraits...</div>' +
       '<div class="icono-grid" id="icono-grid"></div>' +
       '<div class="icono-load-sentinel" id="icono-load-sentinel" aria-hidden="true"></div>'
@@ -775,7 +822,8 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       if (!countEl) return
       var publishedCount = Number(galleryState.publishedTotal || 0)
       var totalCount = Number(galleryState.total || 0)
-      countEl.textContent = publishedCount.toLocaleString() + " portraits, " + totalCount.toLocaleString() + " genes"
+      countEl.textContent =
+        publishedCount.toLocaleString() + " portraits, " + totalCount.toLocaleString() + " genes"
     }
 
     function updateSentinelObserver() {
@@ -784,13 +832,16 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
         sentinelObserver = null
       }
       if (!sentinelEl || !galleryState.hasMore) return
-      sentinelObserver = new IntersectionObserver(function (entries) {
-        var entry = entries && entries[0]
-        if (!entry || !entry.isIntersecting) return
-        loadNextGalleryPage()
-      }, {
-        rootMargin: "900px 0px 1200px 0px",
-      })
+      sentinelObserver = new IntersectionObserver(
+        function (entries) {
+          var entry = entries && entries[0]
+          if (!entry || !entry.isIntersecting) return
+          loadNextGalleryPage()
+        },
+        {
+          rootMargin: "900px 0px 1200px 0px",
+        },
+      )
       sentinelObserver.observe(sentinelEl)
     }
 
@@ -820,9 +871,12 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
       var requestId = ++activeGalleryRequest
       var path =
-        "/api/gallery?order=" + encodeURIComponent(galleryState.order) +
-        "&limit=" + encodeURIComponent(String(GALLERY_PAGE_SIZE)) +
-        "&offset=" + encodeURIComponent(String(galleryState.offset))
+        "/api/gallery?order=" +
+        encodeURIComponent(galleryState.order) +
+        "&limit=" +
+        encodeURIComponent(String(GALLERY_PAGE_SIZE)) +
+        "&offset=" +
+        encodeURIComponent(String(galleryState.offset))
       if (galleryState.seed) {
         path += "&seed=" + encodeURIComponent(galleryState.seed)
       }
@@ -831,10 +885,12 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
         .then(function (data) {
           if (requestId !== activeGalleryRequest) return
           var items = Array.isArray(data && data.items) ? data.items : []
-          galleryState.order = String(data && data.order || galleryState.order)
-          galleryState.seed = String(data && data.seed || galleryState.seed || "")
-          galleryState.total = Number(data && data.total || galleryState.total || 0)
-          galleryState.publishedTotal = Number(data && data.published_total || galleryState.publishedTotal || 0)
+          galleryState.order = String((data && data.order) || galleryState.order)
+          galleryState.seed = String((data && data.seed) || galleryState.seed || "")
+          galleryState.total = Number((data && data.total) || galleryState.total || 0)
+          galleryState.publishedTotal = Number(
+            (data && data.published_total) || galleryState.publishedTotal || 0,
+          )
           galleryState.hasMore = Boolean(data && data.has_more)
           if (items.length) {
             var newCards = appendGrid(grid, items, galleryState.items.length)
@@ -943,18 +999,27 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function renderSearchResults(container, genes) {
     if (!genes.length) {
-      container.innerHTML = '<div class="icono-search-result" style="pointer-events:none;opacity:0.5;">No results</div>'
+      container.innerHTML =
+        '<div class="icono-search-result" style="pointer-events:none;opacity:0.5;">No results</div>'
       return
     }
     var html = ""
     for (var i = 0; i < genes.length; i++) {
       var g = genes[i]
       html +=
-        '<a class="icono-search-result" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav>' +
-          '<span class="icono-search-result-swatch" style="background:' + esc(g.color) + '"></span>' +
-          '<span class="icono-search-result-symbol">' + esc(g.symbol) + '</span>' +
-          '<span class="icono-search-result-name">' + esc(g.full_name) + '</span>' +
-        '</a>'
+        '<a class="icono-search-result" href="/gene/' +
+        esc(encodeURIComponent(g.symbol)) +
+        '" data-icono-nav>' +
+        '<span class="icono-search-result-swatch" style="background:' +
+        esc(g.color) +
+        '"></span>' +
+        '<span class="icono-search-result-symbol">' +
+        esc(g.symbol) +
+        "</span>" +
+        '<span class="icono-search-result-name">' +
+        esc(g.full_name) +
+        "</span>" +
+        "</a>"
     }
     container.innerHTML = html
   }
@@ -974,17 +1039,51 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
         ? "icono-card-media"
         : "icono-card-media icono-card-media--fallback"
       html +=
-        '<a class="icono-card" href="/gene/' + esc(encodeURIComponent(g.symbol)) + '" data-icono-nav data-icono-index="' + cardIndex + '" data-icono-symbol="' + esc(g.symbol) + '" style="--width:' + dims.width + ';--height:' + dims.height + ';--icono-card-accent:' + esc(g.color || "#888") + ';">' +
-          '<div class="' + mediaClass + '" style="background:' + esc(g.color) + ';color:' + tc + '">' +
-            (portraitUrl
-              ? '<img src="' + esc(portraitUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="' + (cardIndex < 12 ? "eager" : "lazy") + '" decoding="async" width="' + dims.width + '" height="' + dims.height + '" fetchpriority="' + (cardIndex < 8 ? "high" : "low") + '">'
-              : '<span class="icono-card-fallback-symbol">' + esc(g.symbol) + '</span>') +
-            '<span class="icono-card-badge">' + esc(g.symbol) + '</span>' +
-          '</div>' +
-          '<div class="icono-card-info">' +
-            '<div class="icono-card-name">' + esc(g.full_name) + '</div>' +
-          '</div>' +
-        '</a>'
+        '<a class="icono-card" href="/gene/' +
+        esc(encodeURIComponent(g.symbol)) +
+        '" data-icono-nav data-icono-index="' +
+        cardIndex +
+        '" data-icono-symbol="' +
+        esc(g.symbol) +
+        '" style="--width:' +
+        dims.width +
+        ";--height:" +
+        dims.height +
+        ";--icono-card-accent:" +
+        esc(g.color || "#888") +
+        ';">' +
+        '<div class="' +
+        mediaClass +
+        '" style="background:' +
+        esc(g.color) +
+        ";color:" +
+        tc +
+        '">' +
+        (portraitUrl
+          ? '<img src="' +
+            esc(portraitUrl) +
+            '" alt="' +
+            esc(g.symbol) +
+            ' portrait" loading="' +
+            (cardIndex < 12 ? "eager" : "lazy") +
+            '" decoding="async" width="' +
+            dims.width +
+            '" height="' +
+            dims.height +
+            '" fetchpriority="' +
+            (cardIndex < 8 ? "high" : "low") +
+            '">'
+          : '<span class="icono-card-fallback-symbol">' + esc(g.symbol) + "</span>") +
+        '<span class="icono-card-badge">' +
+        esc(g.symbol) +
+        "</span>" +
+        "</div>" +
+        '<div class="icono-card-info">' +
+        '<div class="icono-card-name">' +
+        esc(g.full_name) +
+        "</div>" +
+        "</div>" +
+        "</a>"
     }
     return html
   }
@@ -1017,37 +1116,62 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       visibleCandidates.push(item)
     }
     if (!visibleCandidates.length) return ""
-    var gridClass = visibleCandidates.length === 1
-      ? "icono-candidate-grid icono-candidate-grid--single"
-      : "icono-candidate-grid"
+    var gridClass =
+      visibleCandidates.length === 1
+        ? "icono-candidate-grid icono-candidate-grid--single"
+        : "icono-candidate-grid"
     var html =
       '<section class="icono-candidate-gallery">' +
-        '<div class="icono-candidate-gallery-heading">' +
-          '<h2>Candidate portraits</h2>' +
-        '</div>' +
-        '<div class="' + gridClass + '" data-icono-lightbox>'
+      '<div class="icono-candidate-gallery-heading">' +
+      "<h2>Candidate portraits</h2>" +
+      "</div>" +
+      '<div class="' +
+      gridClass +
+      '" data-icono-lightbox>'
     for (var i = 0; i < visibleCandidates.length; i++) {
       var candidate = visibleCandidates[i]
       var mediumUrl = candidatePortraitUrl(candidate, "medium")
       var fullUrl = candidatePortraitUrl(candidate, "full") || mediumUrl
-      var width = Number(candidate && candidate.width || 4) || 4
-      var height = Number(candidate && candidate.height || 5) || 5
-      var assetSha = String(candidate && candidate.asset_sha256 || "").trim().toLowerCase()
+      var width = Number((candidate && candidate.width) || 4) || 4
+      var height = Number((candidate && candidate.height) || 5) || 5
+      var assetSha = String((candidate && candidate.asset_sha256) || "")
+        .trim()
+        .toLowerCase()
       html +=
-        '<article class="icono-candidate-card" style="--width:' + width + ';--height:' + height + ';">' +
-          '<button type="button" class="icono-candidate-media-button" data-icono-pswp data-icono-pswp-src="' + esc(fullUrl) + '" data-icono-pswp-alt="' + esc(genePayload.symbol) + ' portrait candidate" data-pswp-width="' + width + '" data-pswp-height="' + height + '" aria-label="Open candidate portrait for ' + esc(genePayload.symbol) + '">' +
-            '<span class="icono-candidate-media">' +
-              '<img src="' + esc(mediumUrl) + '" alt="' + esc(genePayload.symbol) + ' portrait candidate" loading="lazy" decoding="async" width="' + width + '" height="' + height + '">' +
-            '</span>' +
-          '</button>' +
-          '<div class="icono-candidate-footer">' +
-            voteBoxMarkup('data-icono-candidate-vote-box="' + esc(assetSha) + '"') +
-          '</div>' +
-        '</article>'
+        '<article class="icono-candidate-card" style="--width:' +
+        width +
+        ";--height:" +
+        height +
+        ';">' +
+        '<button type="button" class="icono-candidate-media-button" data-icono-pswp data-icono-pswp-src="' +
+        esc(fullUrl) +
+        '" data-icono-pswp-alt="' +
+        esc(genePayload.symbol) +
+        ' portrait candidate" data-pswp-width="' +
+        width +
+        '" data-pswp-height="' +
+        height +
+        '" aria-label="Open candidate portrait for ' +
+        esc(genePayload.symbol) +
+        '">' +
+        '<span class="icono-candidate-media">' +
+        '<img src="' +
+        esc(mediumUrl) +
+        '" alt="' +
+        esc(genePayload.symbol) +
+        ' portrait candidate" loading="lazy" decoding="async" width="' +
+        width +
+        '" height="' +
+        height +
+        '">' +
+        "</span>" +
+        "</button>" +
+        '<div class="icono-candidate-footer">' +
+        voteBoxMarkup('data-icono-candidate-vote-box="' + esc(assetSha) + '"') +
+        "</div>" +
+        "</article>"
     }
-    html +=
-        '</div>' +
-      '</section>'
+    html += "</div>" + "</section>"
     return html
   }
 
@@ -1055,18 +1179,20 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
   function renderGene(root, symbol) {
     root.innerHTML =
-      '<div class="icono-nav"><a href="/" data-icono-nav>' + ICONO_ARROW_LEFT + 'All genes</a></div>' +
+      '<div class="icono-nav"><a href="/" data-icono-nav>' +
+      ICONO_ARROW_LEFT +
+      "All genes</a></div>" +
       '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
-        '<div class="icono-gene-header">' +
-          '<div class="icono-gene-swatch icono-skel-block" style="width:min(320px,100%);aspect-ratio:3/4"></div>' +
-          '<div class="icono-gene-meta">' +
-            '<div class="icono-skel-line" style="width:60%;height:2rem"></div>' +
-            '<div class="icono-skel-line" style="width:80%;height:1rem;margin-top:0.5rem"></div>' +
-            '<div class="icono-skel-line" style="width:40%;height:1rem;margin-top:0.75rem"></div>' +
-            '<div class="icono-skel-line" style="width:55%;height:0.9rem;margin-top:0.75rem"></div>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
+      '<div class="icono-gene-header">' +
+      '<div class="icono-gene-swatch icono-skel-block" style="width:min(320px,100%);aspect-ratio:3/4"></div>' +
+      '<div class="icono-gene-meta">' +
+      '<div class="icono-skel-line" style="width:60%;height:2rem"></div>' +
+      '<div class="icono-skel-line" style="width:80%;height:1rem;margin-top:0.5rem"></div>' +
+      '<div class="icono-skel-line" style="width:40%;height:1rem;margin-top:0.75rem"></div>' +
+      '<div class="icono-skel-line" style="width:55%;height:0.9rem;margin-top:0.75rem"></div>' +
+      "</div>" +
+      "</div>" +
+      "</div>" +
       '<div id="icono-gene-content"></div>'
 
     var contentEl = document.getElementById("icono-gene-content")
@@ -1081,10 +1207,12 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
         loadingEl.style.display = "none"
         contentEl.innerHTML =
           '<div class="icono-empty">' +
-            '<h2>Gene not found</h2>' +
-            '<p>"' + esc(symbol) + '" doesn\'t match any gene in our catalog.</p>' +
-            '<p><a href="/" data-icono-nav>Browse all genes</a></p>' +
-          '</div>'
+          "<h2>Gene not found</h2>" +
+          '<p>"' +
+          esc(symbol) +
+          "\" doesn't match any gene in our catalog.</p>" +
+          '<p><a href="/" data-icono-nav>Browse all genes</a></p>' +
+          "</div>"
         console.error("[Iconoplasm] gene load error:", err)
       })
   }
@@ -1099,61 +1227,86 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       : "icono-gene-swatch"
     var swatchStyle = hasPortrait
       ? ""
-      : ' style="background:' + esc(g.color || "#888") + ';color:' + tc + '"'
+      : ' style="background:' + esc(g.color || "#888") + ";color:" + tc + '"'
 
     var portraitNote = hasPortrait
       ? ""
       : '<p class="icono-portrait-status">Portrait not yet published</p>'
 
-    var voteBox = (hasPortrait && g.portrait && g.portrait.asset_sha256)
-      ? (
-          '<div class="icono-gene-portrait-footer">' +
-            voteBoxMarkup() +
-          '</div>'
-        )
-      : ""
+    var voteBox =
+      hasPortrait && g.portrait && g.portrait.asset_sha256
+        ? '<div class="icono-gene-portrait-footer">' + voteBoxMarkup() + "</div>"
+        : ""
 
     var portraitDims = portraitDimensions(g)
     var portraitBlock = hasPortrait
-      ? (
-          '<div class="icono-gene-portrait-shell">' +
-            '<div class="icono-gene-media-wrap" data-icono-lightbox>' +
-            '<button type="button" class="' + swatchClass + ' icono-gene-media-link" data-icono-pswp data-icono-pswp-src="' + esc(portraitFullUrl) + '" data-icono-pswp-alt="' + esc(g.symbol) + ' portrait" data-pswp-width="' + portraitDims.width + '" data-pswp-height="' + portraitDims.height + '" aria-label="Open full-size portrait for ' + esc(g.symbol) + '">' +
-              '<img src="' + esc(portraitDisplayUrl) + '" alt="' + esc(g.symbol) + ' portrait" loading="lazy">' +
-              '<span class="icono-gene-symbol-pill">' + esc(g.symbol) + '</span>' +
-            '</button>' +
-            '</div>' +
-            voteBox +
-          '</div>'
-        )
-      : '<div class="' + swatchClass + '"' + swatchStyle + '>' + esc(g.symbol) + '</div>'
+      ? '<div class="icono-gene-portrait-shell">' +
+        '<div class="icono-gene-media-wrap" data-icono-lightbox>' +
+        '<button type="button" class="' +
+        swatchClass +
+        ' icono-gene-media-link" data-icono-pswp data-icono-pswp-src="' +
+        esc(portraitFullUrl) +
+        '" data-icono-pswp-alt="' +
+        esc(g.symbol) +
+        ' portrait" data-pswp-width="' +
+        portraitDims.width +
+        '" data-pswp-height="' +
+        portraitDims.height +
+        '" aria-label="Open full-size portrait for ' +
+        esc(g.symbol) +
+        '">' +
+        '<img src="' +
+        esc(portraitDisplayUrl) +
+        '" alt="' +
+        esc(g.symbol) +
+        ' portrait" loading="lazy">' +
+        '<span class="icono-gene-symbol-pill">' +
+        esc(g.symbol) +
+        "</span>" +
+        "</button>" +
+        "</div>" +
+        voteBox +
+        "</div>"
+      : '<div class="' + swatchClass + '"' + swatchStyle + ">" + esc(g.symbol) + "</div>"
 
     var links = []
     if (g.source_links) {
-      if (g.source_links.uniprot) links.push('<a href="' + esc(g.source_links.uniprot) + '">UniProt</a>')
+      if (g.source_links.uniprot)
+        links.push('<a href="' + esc(g.source_links.uniprot) + '">UniProt</a>')
       if (g.source_links.ncbi) links.push('<a href="' + esc(g.source_links.ncbi) + '">NCBI</a>')
-      if (g.source_links.ensembl) links.push('<a href="' + esc(g.source_links.ensembl) + '">Ensembl</a>')
+      if (g.source_links.ensembl)
+        links.push('<a href="' + esc(g.source_links.ensembl) + '">Ensembl</a>')
     }
     links.push('<a href="/api/gene/' + esc(encodeURIComponent(g.symbol)) + '">API</a>')
 
     var html =
       '<div class="icono-gene-header">' +
-        portraitBlock +
-        '<div class="icono-gene-meta">' +
-          '<h1>' + esc(g.symbol) + '</h1>' +
-          '<p class="full-name">' + esc(g.full_name || "") + '</p>' +
-          (g.color
-            ? '<div class="icono-color-chip"><span class="icono-color-dot" style="background:' + esc(g.color) + '"></span>' + esc(g.color) + '</div>'
-            : "") +
-          portraitNote +
-          '<div class="icono-links">' + links.join(" ") + '</div>' +
-        '</div>' +
-      '</div>'
+      portraitBlock +
+      '<div class="icono-gene-meta">' +
+      "<h1>" +
+      esc(g.symbol) +
+      "</h1>" +
+      '<p class="full-name">' +
+      esc(g.full_name || "") +
+      "</p>" +
+      (g.color
+        ? '<div class="icono-color-chip"><span class="icono-color-dot" style="background:' +
+          esc(g.color) +
+          '"></span>' +
+          esc(g.color) +
+          "</div>"
+        : "") +
+      portraitNote +
+      '<div class="icono-links">' +
+      links.join(" ") +
+      "</div>" +
+      "</div>" +
+      "</div>"
 
     // Manifestation / character description
     var manifestation = g.manifestation || g.description || ""
     if (manifestation) {
-      html += '<p class="icono-gene-manifestation">' + esc(manifestation) + '</p>'
+      html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
 
     // Two-column metadata: character-side mnemonic | molecular-side analogue
@@ -1171,14 +1324,16 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       weightKgRaw = Number(g.weight_kg)
     }
     if (Number.isFinite(weightKgRaw) && weightKgRaw > 0) {
-      var weightText = (Math.abs(weightKgRaw - Math.round(weightKgRaw)) < 0.05)
-        ? String(Math.round(weightKgRaw))
-        : weightKgRaw.toFixed(1)
-      var weightKdaText = Number.isFinite(molecularWeightKda) && molecularWeightKda > 0
-        ? ((Math.abs(molecularWeightKda - Math.round(molecularWeightKda)) < 0.05)
-            ? String(Math.round(molecularWeightKda))
-            : molecularWeightKda.toFixed(1)) + " kDa"
-        : ""
+      var weightText =
+        Math.abs(weightKgRaw - Math.round(weightKgRaw)) < 0.05
+          ? String(Math.round(weightKgRaw))
+          : weightKgRaw.toFixed(1)
+      var weightKdaText =
+        Number.isFinite(molecularWeightKda) && molecularWeightKda > 0
+          ? (Math.abs(molecularWeightKda - Math.round(molecularWeightKda)) < 0.05
+              ? String(Math.round(molecularWeightKda))
+              : molecularWeightKda.toFixed(1)) + " kDa"
+          : ""
       if (weightKdaText) {
         pairs.push({ character: weightText + " kg", molecular: weightKdaText, label: "Weight" })
       }
@@ -1186,18 +1341,23 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
     var heightCmRaw = Number(essence.height_cm)
     if (Number.isFinite(heightCmRaw) && heightCmRaw > 0) {
-      var heightOriginText = Number.isFinite(proteinLengthAa) && proteinLengthAa > 0
-        ? String(Math.round(proteinLengthAa)) + " aa"
-        : ""
+      var heightOriginText =
+        Number.isFinite(proteinLengthAa) && proteinLengthAa > 0
+          ? String(Math.round(proteinLengthAa)) + " aa"
+          : ""
       if (heightOriginText) {
-        pairs.push({ character: String(Math.round(heightCmRaw)) + " cm", molecular: heightOriginText, label: "Height" })
+        pairs.push({
+          character: String(Math.round(heightCmRaw)) + " cm",
+          molecular: heightOriginText,
+          label: "Height",
+        })
       }
     }
 
     var sexText = essence.sex ? String(essence.sex).trim() : ""
     var sexOrigin = uniqueDisplayValues(
       essence.sex_origin || essence.gender_origin || g.sex_origin || g.gender_origin,
-      2
+      2,
     )
     if (sexText) {
       pairs.push({
@@ -1214,7 +1374,11 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       ageText = String(Math.round(Number(essence.age_years)))
     }
     if (ageText && Number.isFinite(firstPublicationYear) && firstPublicationYear > 0) {
-      pairs.push({ character: ageText + " years old", molecular: String(Math.round(firstPublicationYear)), label: "Age" })
+      pairs.push({
+        character: ageText + " years old",
+        molecular: String(Math.round(firstPublicationYear)),
+        label: "Age",
+      })
     }
 
     if (essence.skin_hex || essence.skin_name) {
@@ -1231,17 +1395,23 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       for (var i = 0; i < pairs.length; i++) {
         html +=
           '<div class="icono-section-row">' +
-            '<div class="icono-section-cell icono-section-cell--character">' +
-              '<div class="icono-section-label">' + esc(pairs[i].label) + '</div>' +
-              '<div class="icono-section-value">' + esc(pairs[i].character) + '</div>' +
-            '</div>' +
-            '<div class="icono-section-cell icono-section-cell--origin">' +
-              '<div class="icono-section-label">Molecular</div>' +
-              '<div class="icono-section-value">' + esc(pairs[i].molecular) + '</div>' +
-            '</div>' +
-          '</div>'
+          '<div class="icono-section-cell icono-section-cell--character">' +
+          '<div class="icono-section-label">' +
+          esc(pairs[i].label) +
+          "</div>" +
+          '<div class="icono-section-value">' +
+          esc(pairs[i].character) +
+          "</div>" +
+          "</div>" +
+          '<div class="icono-section-cell icono-section-cell--origin">' +
+          '<div class="icono-section-label">Molecular</div>' +
+          '<div class="icono-section-value">' +
+          esc(pairs[i].molecular) +
+          "</div>" +
+          "</div>" +
+          "</div>"
       }
-      html += '</div>'
+      html += "</div>"
     }
 
     html += renderCandidateGallery(g)
@@ -1258,9 +1428,9 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   function render404(root) {
     root.innerHTML =
       '<div class="icono-empty">' +
-        '<h2>Page not found</h2>' +
-        '<p><a href="/" data-icono-nav>Back to Iconoplasm</a></p>' +
-      '</div>'
+      "<h2>Page not found</h2>" +
+      '<p><a href="/" data-icono-nav>Back to Iconoplasm</a></p>' +
+      "</div>"
   }
 
   /* ─── Client-side navigation ─── */

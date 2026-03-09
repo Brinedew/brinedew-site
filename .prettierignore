@@ -4,3 +4,5 @@ node_modules
 content/
 scripts/tag_cleanup_backups/
 .claude/
+quartz/static/iconoplasm/vendor/
+quartz/static/vendor/katex/
