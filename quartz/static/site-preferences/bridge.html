@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Brinedew Settings Bridge</title>
+  </head>
+  <body>
+    <script>
+      ;(function () {
+        "use strict"
+
+        var CHANNEL = "brinedew-site-preferences-bridge"
+        var STORAGE_KEY = "brinedew.iconoplasm.settings.v1"
+        var DEFAULTS = {
+          homeLayout: "bricks",
+          generationProvider: "openai-compatible",
+          generationApiKey: "",
+          generationModel: "",
+          generationEndpoint: "",
+        }
+
+        function normalizeHomeLayout(layout) {
+          return String(layout || "").trim().toLowerCase() === "masonry" ? "masonry" : "bricks"
+        }
+
+        function normalizeGenerationProvider(provider) {
+          var value = String(provider || "").trim().toLowerCase()
+          if (["openai-compatible", "replicate", "gemini", "custom"].indexOf(value) >= 0) {
+            return value
+          }
+          return DEFAULTS.generationProvider
+        }
+
+        function trimStoredValue(value, maxLength) {
+          return String(value || "")
+            .trim()
+            .slice(0, maxLength)
+        }
+
+        function buildIconoplasmSettings(raw) {
+          var source = raw && typeof raw === "object" ? raw : {}
+          return {
+            homeLayout: normalizeHomeLayout(source.homeLayout),
+            generationProvider: normalizeGenerationProvider(source.generationProvider),
+            generationApiKey: trimStoredValue(source.generationApiKey, 800),
+            generationModel: trimStoredValue(source.generationModel, 200),
+            generationEndpoint: trimStoredValue(source.generationEndpoint, 500),
+          }
+        }
+
+        function allowedOrigin(origin) {
+          try {
+            var url = new URL(String(origin || ""))
+            var host = String(url.hostname || "").toLowerCase()
+            return (
+              host === "brinedew.bio" ||
+              host.endsWith(".brinedew.bio") ||
+              host === "localhost" ||
+              host === "127.0.0.1"
+            )
+          } catch (_err) {
+            return false
+          }
+        }
+
+        function readStoredSettings() {
+          try {
+            return buildIconoplasmSettings(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"))
+          } catch (_err) {
+            return buildIconoplasmSettings(DEFAULTS)
+          }
+        }
+
+        function writeStoredSettings(value) {
+          var nextSettings = buildIconoplasmSettings(value || DEFAULTS)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings))
+          return nextSettings
+        }
+
+        function resetStoredSettings() {
+          localStorage.removeItem(STORAGE_KEY)
+          return buildIconoplasmSettings(DEFAULTS)
+        }
+
+        function respond(target, origin, id, ok, payload) {
+          if (!target || typeof target.postMessage !== "function" || !id) return
+          target.postMessage(
+            {
+              channel: CHANNEL,
+              id: id,
+              ok: ok,
+              payload: payload || null,
+            },
+            origin,
+          )
+        }
+
+        window.addEventListener("message", function (event) {
+          var data = event && event.data ? event.data : null
+          if (!data || data.channel !== CHANNEL || !allowedOrigin(event.origin)) return
+
+          try {
+            if (data.type === "readIconoplasmSettings") {
+              respond(event.source, event.origin, data.id, true, readStoredSettings())
+              return
+            }
+            if (data.type === "writeIconoplasmSettings") {
+              respond(event.source, event.origin, data.id, true, writeStoredSettings(data.payload))
+              return
+            }
+            if (data.type === "resetIconoplasmSettings") {
+              respond(event.source, event.origin, data.id, true, resetStoredSettings())
+              return
+            }
+            respond(event.source, event.origin, data.id, false, {
+              error: "Unsupported bridge request",
+            })
+          } catch (error) {
+            respond(event.source, event.origin, data.id, false, {
+              error: error && error.message ? error.message : "Unknown bridge error",
+            })
+          }
+        })
+      })()
+    </script>
+  </body>
+</html>

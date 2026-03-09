@@ -4,6 +4,9 @@ var READER_MODE_STORAGE_KEY = "readerMode"
 var THEME_COOKIE_KEY = "brinedew_theme"
 var READER_MODE_COOKIE_KEY = "brinedew_reader_mode"
 var ICONOPLASM_LAYOUT_COOKIE_KEY = "brinedew_icono_layout"
+var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
+var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html"
+var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
 var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
   homeLayout: "bricks",
@@ -12,6 +15,11 @@ var ICONOPLASM_DEFAULT_SETTINGS = {
   generationModel: "",
   generationEndpoint: "",
 }
+var sharedIconoplasmSettingsCache = null
+var sharedBridgePromise = null
+var sharedBridgeIframe = null
+var sharedBridgeRequestId = 0
+var sharedBridgePending = Object.create(null)
 
 function normalizeHomeLayout(layout) {
   var value = String(layout || "")
@@ -38,6 +46,14 @@ function trimStoredValue(value, maxLength) {
 function canUseLocalStorage() {
   try {
     return typeof window !== "undefined" && !!window.localStorage
+  } catch (_err) {
+    return false
+  }
+}
+
+function canUseDocument() {
+  try {
+    return typeof document !== "undefined" && !!document.createElement
   } catch (_err) {
     return false
   }
@@ -81,8 +97,39 @@ function readStringStorage(key) {
   }
 }
 
+function currentHost() {
+  return String((typeof window !== "undefined" && window.location.hostname) || "").toLowerCase()
+}
+
+function currentOrigin() {
+  return String((typeof window !== "undefined" && window.location.origin) || "")
+}
+
+function isCanonicalSettingsHost(host) {
+  var value = String(host || "").toLowerCase()
+  if (!value) return false
+  return (
+    value === "brinedew.bio" ||
+    value === "www.brinedew.bio" ||
+    value === "localhost" ||
+    value === "127.0.0.1"
+  )
+}
+
+function canonicalSettingsOrigin() {
+  var host = currentHost()
+  if (!host || host === "localhost" || host === "127.0.0.1") return currentOrigin()
+  return "https://brinedew.bio"
+}
+
+function shouldUseSharedSettingsBridge() {
+  var host = currentHost()
+  if (!host) return false
+  return !isCanonicalSettingsHost(host)
+}
+
 function sharedCookieDomain() {
-  var host = String((typeof window !== "undefined" && window.location.hostname) || "").toLowerCase()
+  var host = currentHost()
   if (!host) return ""
   if (host === "brinedew.bio" || host.endsWith(".brinedew.bio")) return ".brinedew.bio"
   return ""
@@ -136,6 +183,169 @@ function writeStringStorage(key, value) {
   } catch (_err) {
     return false
   }
+}
+
+function sharedBridgeUrl() {
+  return canonicalSettingsOrigin() + ICONOPLASM_SHARED_BRIDGE_PATH
+}
+
+function markBridgeReady() {
+  if (sharedBridgeIframe) sharedBridgeIframe.setAttribute("data-ready", "true")
+}
+
+function ensureSharedBridgeIframe() {
+  if (!canUseDocument()) return null
+  if (sharedBridgeIframe && sharedBridgeIframe.isConnected) return sharedBridgeIframe
+  sharedBridgeIframe = document.getElementById("brinedew-site-preferences-bridge")
+  if (sharedBridgeIframe) return sharedBridgeIframe
+  var iframe = document.createElement("iframe")
+  iframe.id = "brinedew-site-preferences-bridge"
+  iframe.setAttribute("title", "Brinedew settings bridge")
+  iframe.setAttribute("aria-hidden", "true")
+  iframe.tabIndex = -1
+  iframe.style.display = "none"
+  sharedBridgeIframe = iframe
+  return iframe
+}
+
+function attachSharedBridgeIframe(iframe) {
+  if (!iframe || iframe.isConnected || !canUseDocument()) return
+  var parent = document.body || document.documentElement
+  if (parent) {
+    parent.appendChild(iframe)
+    return
+  }
+  document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+      var nextParent = document.body || document.documentElement
+      if (nextParent && !iframe.isConnected) nextParent.appendChild(iframe)
+    },
+    { once: true },
+  )
+}
+
+function clearSharedBridgePending(id, error, payload) {
+  var pending = sharedBridgePending[id]
+  if (!pending) return
+  delete sharedBridgePending[id]
+  if (pending.timeoutId) window.clearTimeout(pending.timeoutId)
+  if (error) {
+    pending.reject(error)
+    return
+  }
+  pending.resolve(payload)
+}
+
+function ensureSharedBridgeMessageListener() {
+  if (
+    typeof window === "undefined" ||
+    !window.addEventListener ||
+    window.__brinedewSitePreferencesBridgeListener
+  ) {
+    return
+  }
+  window.__brinedewSitePreferencesBridgeListener = true
+  window.addEventListener("message", function (event) {
+    var data = event && event.data ? event.data : null
+    if (!data || data.channel !== ICONOPLASM_SHARED_BRIDGE_CHANNEL) return
+    if (event.origin !== canonicalSettingsOrigin()) return
+    if (typeof data.id !== "string" || !sharedBridgePending[data.id]) return
+    if (data.ok === false) {
+      clearSharedBridgePending(data.id, new Error((data.payload && data.payload.error) || "Settings bridge failed"))
+      return
+    }
+    clearSharedBridgePending(data.id, null, data.payload || null)
+  })
+}
+
+function sharedBridgeReady() {
+  if (!shouldUseSharedSettingsBridge()) return Promise.resolve(null)
+  if (!canUseDocument() || typeof window === "undefined") {
+    return Promise.reject(new Error("Settings bridge unavailable"))
+  }
+  ensureSharedBridgeMessageListener()
+  if (sharedBridgeIframe && sharedBridgeIframe.getAttribute("data-ready") === "true") {
+    return Promise.resolve(sharedBridgeIframe.contentWindow || null)
+  }
+  if (sharedBridgePromise) return sharedBridgePromise
+
+  sharedBridgePromise = new Promise(function (resolve, reject) {
+    var iframe = ensureSharedBridgeIframe()
+    if (!iframe) {
+      reject(new Error("Settings bridge unavailable"))
+      return
+    }
+
+    function cleanup() {
+      iframe.removeEventListener("load", handleLoad)
+      iframe.removeEventListener("error", handleError)
+    }
+
+    function handleLoad() {
+      cleanup()
+      markBridgeReady()
+      resolve(iframe.contentWindow || null)
+    }
+
+    function handleError() {
+      cleanup()
+      sharedBridgePromise = null
+      reject(new Error("Failed to load shared settings bridge"))
+    }
+
+    iframe.addEventListener("load", handleLoad)
+    iframe.addEventListener("error", handleError)
+    attachSharedBridgeIframe(iframe)
+
+    var url = sharedBridgeUrl()
+    if (iframe.getAttribute("src") !== url) {
+      iframe.removeAttribute("data-ready")
+      iframe.setAttribute("src", url)
+      return
+    }
+    if (iframe.contentWindow) {
+      cleanup()
+      markBridgeReady()
+      resolve(iframe.contentWindow)
+    }
+  }).catch(function (error) {
+    sharedBridgePromise = null
+    throw error
+  })
+
+  return sharedBridgePromise
+}
+
+function requestSharedIconoplasmSettings(type, payload) {
+  if (!shouldUseSharedSettingsBridge()) {
+    return Promise.resolve(null)
+  }
+  return sharedBridgeReady().then(function (bridgeWindow) {
+    if (!bridgeWindow || !bridgeWindow.postMessage) {
+      throw new Error("Settings bridge unavailable")
+    }
+    return new Promise(function (resolve, reject) {
+      sharedBridgeRequestId += 1
+      var requestId = "settings-" + sharedBridgeRequestId
+      sharedBridgePending[requestId] = {
+        resolve: resolve,
+        reject: reject,
+        timeoutId: window.setTimeout(function () {
+          clearSharedBridgePending(requestId, new Error("Shared settings bridge timed out"))
+        }, ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS),
+      }
+      bridgeWindow.postMessage(
+        {
+          channel: ICONOPLASM_SHARED_BRIDGE_CHANNEL,
+          id: requestId,
+          type: type,
+          payload: payload || null,
+        },
+        canonicalSettingsOrigin(),
+      )
+    })
+  })
 }
 
 function effectiveSystemTheme() {
@@ -216,8 +426,17 @@ export function buildIconoplasmSettings(raw) {
   }
 }
 
+function rememberIconoplasmSettings(settings) {
+  sharedIconoplasmSettingsCache = buildIconoplasmSettings(settings || ICONOPLASM_DEFAULT_SETTINGS)
+  return sharedIconoplasmSettingsCache
+}
+
 export function readIconoplasmSettings() {
-  var settings = buildIconoplasmSettings(readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {})
+  var cached =
+    sharedIconoplasmSettingsCache && typeof sharedIconoplasmSettingsCache === "object"
+      ? sharedIconoplasmSettingsCache
+      : readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}
+  var settings = buildIconoplasmSettings(cached)
   var sharedLayout = normalizeHomeLayout(readCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY))
   if (sharedLayout) settings.homeLayout = sharedLayout
   return settings
@@ -225,28 +444,58 @@ export function readIconoplasmSettings() {
 
 export function writeIconoplasmSettings(settings) {
   var nextSettings = buildIconoplasmSettings(settings || ICONOPLASM_DEFAULT_SETTINGS)
-  if (
-    !writeJsonStorage(
-    ICONOPLASM_SETTINGS_STORAGE_KEY,
-      nextSettings,
-    )
-  ) {
-    return false
+  rememberIconoplasmSettings(nextSettings)
+  if (!writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, nextSettings)) return false
+  if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, nextSettings.homeLayout)) return false
+  if (shouldUseSharedSettingsBridge()) {
+    void requestSharedIconoplasmSettings("writeIconoplasmSettings", nextSettings)
+      .then(function (sharedSettings) {
+        if (sharedSettings) rememberIconoplasmSettings(sharedSettings)
+      })
+      .catch(function () {
+        return null
+      })
   }
-  return writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, nextSettings.homeLayout)
+  return true
 }
 
 export function resetIconoplasmSettings() {
+  sharedIconoplasmSettingsCache = null
   if (!removeStorageKey(ICONOPLASM_SETTINGS_STORAGE_KEY)) return false
-  return writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, "")
+  if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, "")) return false
+  if (shouldUseSharedSettingsBridge()) {
+    void requestSharedIconoplasmSettings("resetIconoplasmSettings")
+      .then(function (sharedSettings) {
+        if (sharedSettings) rememberIconoplasmSettings(sharedSettings)
+      })
+      .catch(function () {
+        return null
+      })
+  }
+  return true
 }
 
 export function iconoplasmSettingsDefaults() {
   return buildIconoplasmSettings(ICONOPLASM_DEFAULT_SETTINGS)
 }
 
+export function syncSharedIconoplasmSettings() {
+  if (!shouldUseSharedSettingsBridge()) {
+    return Promise.resolve(rememberIconoplasmSettings(readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}))
+  }
+  return requestSharedIconoplasmSettings("readIconoplasmSettings")
+    .then(function (sharedSettings) {
+      var nextSettings = rememberIconoplasmSettings(sharedSettings || ICONOPLASM_DEFAULT_SETTINGS)
+      writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, nextSettings)
+      return readIconoplasmSettings()
+    })
+    .catch(function () {
+      return readIconoplasmSettings()
+    })
+}
+
 export function siteSettingsUrl() {
-  var host = String((typeof window !== "undefined" && window.location.hostname) || "").toLowerCase()
+  var host = currentHost()
   if (!host || host === "localhost" || host === "127.0.0.1") return "/settings"
   if (host === "brinedew.bio" || host === "www.brinedew.bio") return "/settings"
   return "https://brinedew.bio/settings"
