@@ -1,6 +1,10 @@
 // CORS headers for frontend access - supports both main domain and subdomain
 function getCorsHeaders(origin, requestHost = "") {
-  const allowedOrigins = ["https://brinedew.bio", "https://geneguessr.brinedew.bio"]
+  const allowedOrigins = [
+    "https://brinedew.bio",
+    "https://geneguessr.brinedew.bio",
+    "https://iconoplasm.brinedew.bio",
+  ]
   const stagingOrigins = [
     "https://staging.brinedew.bio",
     "https://brinedew-bio-staging.pages.dev",
@@ -283,8 +287,8 @@ function buildContentSecurityPolicy(request) {
     ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com"
     : "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com"
   const connectSrc = allowUnsafeEval
-    ? "connect-src 'self' data: blob: https://brinedew.bio https://geneguessr.brinedew.bio"
-    : "connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio"
+    ? "connect-src 'self' data: blob: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio"
+    : "connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio"
   const frameAncestors = isSiteSettingsBridgeRequest(request)
     ? "frame-ancestors https://brinedew.bio https://*.brinedew.bio"
     : "frame-ancestors 'none'"
@@ -432,6 +436,16 @@ export default {
     const origin = request.headers.get("Origin") || ""
     const corsHeaders = getCorsHeaders(origin, url.hostname)
     const routeRequest = async () => {
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        (url.pathname === "/apps/iconoplasm" ||
+          url.pathname === "/apps/iconoplasm/" ||
+          url.pathname === "/apps/iconoplasm/index" ||
+          url.pathname === "/apps/iconoplasm/index/")
+      ) {
+        return Response.redirect(`https://${ICONOPLASM_HOST}/`, 301)
+      }
+
       // Serve the shared Mol* initializer from the Worker so staging (workers.dev) can load it.
       // Production can still proxy /static/* from the Quartz site, but this keeps staging self-contained.
       if (
@@ -554,17 +568,6 @@ export default {
 
         if (isApiOrWorker) {
           return handleIconoplasmRequest(request, env, ctx)
-        }
-
-        // Normalize stale paths that might leak from the content structure
-        if (
-          (request.method === "GET" || request.method === "HEAD") &&
-          (url.pathname === "/apps/iconoplasm" ||
-            url.pathname === "/apps/iconoplasm/" ||
-            url.pathname === "/apps/iconoplasm/index" ||
-            url.pathname === "/apps/iconoplasm/index/")
-        ) {
-          return Response.redirect(`https://${ICONOPLASM_HOST}/`, 301)
         }
 
         // Versioned iconoplasm static assets: extend cache aggressively
@@ -1461,7 +1464,11 @@ export default {
       }
 
       // 5. Pre-warm bootstrap KV cache for tomorrow (for both origins)
-      const origins = ["https://brinedew.bio", "https://geneguessr.brinedew.bio"]
+      const origins = [
+        "https://brinedew.bio",
+        "https://geneguessr.brinedew.bio",
+        "https://iconoplasm.brinedew.bio",
+      ]
       const cronAudit = {
         date: tomorrowStr,
         source: source === "admin_override" ? "override" : "computed",
