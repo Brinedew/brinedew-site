@@ -157,7 +157,8 @@ export default (() => {
             normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr"
           const isIconoplasm =
             normalizedSlug === "apps/iconoplasm" ||
-            fileData.frontmatter?.title === "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+            fileData.frontmatter?.title ===
+              "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
 
           if (!isScriptotic && !isGeneguessr && !isIconoplasm) {
             return null
@@ -208,17 +209,29 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(root, "static", `iconoplasm/vendor/photoswipe.css?v=${CACHE_BUST}`)}
+                    href={joinSegments(
+                      root,
+                      "static",
+                      `iconoplasm/vendor/photoswipe.css?v=${CACHE_BUST}`,
+                    )}
                   />
                   <link
                     rel="stylesheet"
                     href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
                   />
                   <script
-                    src={joinSegments(root, "static", `iconoplasm/vendor/masonry.pkgd.min.js?v=${CACHE_BUST}`)}
+                    src={joinSegments(
+                      root,
+                      "static",
+                      `iconoplasm/vendor/masonry.pkgd.min.js?v=${CACHE_BUST}`,
+                    )}
                   ></script>
                   <script
-                    src={joinSegments(root, "static", `iconoplasm/vendor/imagesloaded.pkgd.min.js?v=${CACHE_BUST}`)}
+                    src={joinSegments(
+                      root,
+                      "static",
+                      `iconoplasm/vendor/imagesloaded.pkgd.min.js?v=${CACHE_BUST}`,
+                    )}
                   ></script>
                   <script
                     type="module"

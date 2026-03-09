@@ -542,9 +542,9 @@ export default {
         if (
           (request.method === "GET" || request.method === "HEAD") &&
           (url.pathname === "/apps/iconoplasm" ||
-           url.pathname === "/apps/iconoplasm/" ||
-           url.pathname === "/apps/iconoplasm/index" ||
-           url.pathname === "/apps/iconoplasm/index/")
+            url.pathname === "/apps/iconoplasm/" ||
+            url.pathname === "/apps/iconoplasm/index" ||
+            url.pathname === "/apps/iconoplasm/index/")
         ) {
           return Response.redirect(`https://${ICONOPLASM_HOST}/`, 301)
         }
@@ -2356,10 +2356,11 @@ function buildDailyBootstrapCacheKey(date, origin) {
   try {
     hostKey = new URL(String(origin || "")).host.toLowerCase() || hostKey
   } catch {
-    hostKey = String(origin || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9.-]/g, "") || hostKey
+    hostKey =
+      String(origin || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9.-]/g, "") || hostKey
   }
   return `${DAILY_BOOTSTRAP_CACHE_PREFIX}${safeDate}:${hostKey}`
 }
@@ -2369,7 +2370,11 @@ async function getProdDailyBootstrapCache(env, date) {
     return null
   }
 
-  const candidateOrigins = [`https://${GENEGUESSR_HOST}`, "https://brinedew.bio", "https://www.brinedew.bio"]
+  const candidateOrigins = [
+    `https://${GENEGUESSR_HOST}`,
+    "https://brinedew.bio",
+    "https://www.brinedew.bio",
+  ]
   for (const origin of candidateOrigins) {
     const keyed = await env.PROD_KV.get(buildDailyBootstrapCacheKey(date, origin), {
       type: "json",

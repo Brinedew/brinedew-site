@@ -95,7 +95,7 @@
   border-radius: 0 0 8px 8px;
   max-height: 320px;
   overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .icono-search-results:empty {
@@ -123,7 +123,7 @@
   height: 20px;
   border-radius: 4px;
   flex-shrink: 0;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .icono-search-result-symbol {
@@ -225,8 +225,7 @@
   text-decoration: none;
   color: var(--dark);
   margin-bottom: 16px;
-  transition:
-    box-shadow 0.18s ease;
+  transition: box-shadow 0.18s ease;
 }
 
 .icono-card:hover {
@@ -243,10 +242,11 @@
   display: block;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--icono-card-accent, var(--ui-border)) 28%, var(--ui-border));
+  border: 1px solid
+    color-mix(in srgb, var(--icono-card-accent, var(--ui-border)) 28%, var(--ui-border));
   border-radius: 20px;
   background:
-    radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 48%),
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.18), transparent 48%),
     color-mix(in srgb, var(--icono-card-accent, var(--ui-bg)) 12%, white);
   box-shadow: 0 12px 28px rgba(45, 33, 20, 0.08);
 }
@@ -288,7 +288,7 @@
   left: 0.85rem;
   bottom: 0.85rem;
   padding: 0.18rem 0.58rem;
-  border: 1px solid rgba(255,255,255,0.22);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: rgba(14, 12, 10, 0.54);
   backdrop-filter: blur(10px);
@@ -296,8 +296,8 @@
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.03em;
-  color: rgba(255,255,255,0.96);
-  box-shadow: 0 8px 22px rgba(0,0,0,0.18);
+  color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
   pointer-events: none;
 }
 
@@ -412,12 +412,12 @@
   display: inline-flex;
   align-items: center;
   padding: 0.26rem 0.66rem;
-  border: 1px solid rgba(255,255,255,0.22);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: rgba(14, 12, 10, 0.58);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-  color: rgba(255,255,255,0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.96);
   font-family: var(--codeFont, monospace);
   font-size: 0.75rem;
   font-weight: 700;
@@ -464,7 +464,7 @@
   height: 14px;
   border-radius: 50%;
   display: inline-block;
-  border: 1px solid rgba(0,0,0,0.08);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .icono-portrait-status {
@@ -489,7 +489,7 @@
   padding: 0.14rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--accent) 8%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--light) 90%, rgba(255,255,255,0.66));
+  background: color-mix(in srgb, var(--light) 90%, rgba(255, 255, 255, 0.66));
   box-shadow: 0 8px 18px rgba(45, 33, 20, 0.08);
 }
 
@@ -557,7 +557,7 @@
 }
 
 .icono-vote-btn.active {
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .icono-vote-btn--approve.active {
@@ -699,7 +699,7 @@
 
 .pswp__img {
   border-radius: 18px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
 }
 
 .pswp__counter {
@@ -725,20 +725,20 @@ html[data-theme="dark"] .icono-card-badge,
 html[saved-theme="dark"] .icono-gene-symbol-pill,
 html[data-theme="dark"] .icono-gene-symbol-pill {
   background: rgba(10, 9, 8, 0.72);
-  border-color: rgba(255,255,255,0.18);
-  color: rgba(255,255,255,0.98);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.98);
 }
 
 html[saved-theme="dark"] .icono-vote-box,
 html[data-theme="dark"] .icono-vote-box {
   background: rgba(33, 27, 22, 0.86);
-  border-color: rgba(255,255,255,0.12);
-  box-shadow: 0 12px 22px rgba(0,0,0,0.24);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.24);
 }
 
 html[saved-theme="dark"] .icono-vote-stats,
 html[data-theme="dark"] .icono-vote-stats {
-  color: rgba(255,255,255,0.94);
+  color: rgba(255, 255, 255, 0.94);
   background: transparent;
 }
 
