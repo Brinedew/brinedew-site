@@ -4,8 +4,7 @@ import {
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=20260309a"
-
+} from "../shared/sidebar-shell.js?v=20260309b"
 // ⚡ PERFORMANCE: Mark navigation start for pre-zero timing measurement
 var NAVIGATION_START = performance.now()
 console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
