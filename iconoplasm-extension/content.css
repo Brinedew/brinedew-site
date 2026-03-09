@@ -1,0 +1,372 @@
+/* Iconoplasm content styles -- gene highlighting + horizontal tooltip infobox.
+ * Canonical extension root: D:\Coding\Website\iconoplasm-extension
+ * Fonts: Crimson Pro (body), Monaspace Xenon (symbol) -- matching GeneGuessr.
+ * Animation: fade only, no movement.
+ * Tooltip: portrait left, infobox right, full gene color as background. */
+
+/* Font faces are injected dynamically by content.js using chrome.runtime.getURL */
+
+/* -- Gene highlight ------------------------------------------------- */
+.iconoplasm-gene {
+  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  text-decoration-skip-ink: auto;
+  cursor: text;
+}
+
+.iconoplasm-gene--underline {
+  border-bottom: 3px solid var(--iconoplasm-gene-color, #6B6B78);
+}
+
+.iconoplasm-gene--pill {
+  display: inline;
+  position: relative;
+  z-index: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: 0.22em;
+  background: transparent;
+  color: var(--iconoplasm-gene-fg, #ffffff);
+  box-shadow: none;
+  text-shadow: 0 0.02em 0.12em rgba(0, 0, 0, 0.16);
+  line-height: inherit;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.iconoplasm-gene--pill::before {
+  content: "";
+  position: absolute;
+  left: -0.08em;
+  right: -0.08em;
+  top: -0.06em;
+  bottom: -0.05em;
+  border-radius: 0.18em;
+  background: color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 72%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(22, 18, 16, 0.58),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.iconoplasm-gene:hover {
+  opacity: 0.85;
+}
+
+/* -- Tooltip container: horizontal card ----------------------------- */
+.iconoplasm-tooltip {
+  position: absolute;
+  z-index: 2147483647;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Horizontal layout */
+  display: flex;
+  flex-direction: row;
+  width: 500px;
+  background: #d9d2c8;
+  color: #211c18;
+
+  /* Card surface */
+  border-radius: 2px;
+  overflow: hidden;
+  border: none;
+
+  /* Layered shadow with color-matched warmth */
+  box-shadow:
+    0 0 0 0.5px rgba(40, 32, 24, 0.12),
+    0 1px 2px rgba(40, 32, 24, 0.08),
+    0 3px 8px rgba(40, 32, 24, 0.10),
+    0 8px 24px rgba(40, 32, 24, 0.14),
+    0 20px 60px rgba(40, 32, 24, 0.12);
+
+  -webkit-font-smoothing: antialiased;
+}
+
+.iconoplasm-tooltip-visible {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  transform: translateY(0) scale(1);
+}
+
+/* -- Portrait: left side -------------------------------------------- */
+.iconoplasm-tooltip-portrait {
+  flex-shrink: 0;
+  width: 192px;
+  min-height: 240px; /* 4:5 ratio */
+  background-color: color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 20%, #dfe2df);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  position: relative;
+}
+
+.iconoplasm-tooltip-portrait-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: none;
+}
+
+.iconoplasm-tooltip-portrait-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 16px;
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 18%, #f2ede5), rgba(255, 255, 255, 0.08)),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.26), transparent 60%);
+}
+
+.iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fallback {
+  display: flex;
+}
+
+/* Gradient fade on right edge -- background set dynamically by JS */
+.iconoplasm-tooltip-portrait-fade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  opacity: 0.9;
+}
+
+.iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fade {
+  display: none;
+}
+
+.iconoplasm-tooltip-portrait-status {
+  font-family: 'Crimson Pro', 'Georgia', serif;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.iconoplasm-tooltip-portrait-symbol {
+  font-family: 'Monaspace Xenon Web', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* -- Infobox: right side -------------------------------------------- */
+.iconoplasm-tooltip-body {
+  flex: 1;
+  padding: 20px 20px 14px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 240px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
+    rgba(248, 244, 236, 0.99);
+  color: #211c18;
+}
+
+.iconoplasm-tooltip-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 62px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(74, 61, 49, 0.18);
+  margin-bottom: 2px;
+}
+
+/* Gene symbol -- monospace, prominent. Color set dynamically by JS. */
+.iconoplasm-tooltip-symbol {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  font-family: 'Monaspace Xenon Web', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  text-align: left;
+  color: #1a1612;
+}
+
+/* Full gene name -- serif body font, like GeneGuessr cards. Color set dynamically by JS. */
+.iconoplasm-tooltip-name {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+  margin-top: 2px;
+  font-family: 'Crimson Pro', 'Georgia', serif;
+  overflow: visible;
+  text-align: left;
+  color: rgba(33, 28, 24, 0.58);
+}
+
+/* -- Tooltip metadata: 2-column character | origin ------------------- */
+.iconoplasm-tooltip-meta {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 128px;
+  color: #211c18;
+  padding-top: 4px;
+}
+
+.iconoplasm-tooltip-meta:empty {
+  display: none;
+}
+
+.iconoplasm-tooltip-meta--loading {
+  display: flex;
+}
+
+.iconoplasm-tooltip-meta-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 0;
+  background: transparent;
+  border-bottom: 1px solid rgba(74, 61, 49, 0.08);
+}
+
+.iconoplasm-tooltip-meta-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 7px 6px;
+  min-width: 0;
+}
+
+.iconoplasm-tooltip-meta-cell--origin {
+  padding-left: 10px;
+}
+
+.iconoplasm-tooltip-meta-label {
+  font-family: 'Crimson Pro', 'Georgia', serif;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  line-height: 1.2;
+}
+
+.iconoplasm-tooltip-meta-value {
+  font-family: 'Crimson Pro', 'Georgia', serif;
+  font-size: 15px;
+  font-weight: 580;
+  font-style: normal;
+  line-height: 1.42;
+  opacity: 0.88;
+  overflow-wrap: anywhere;
+  text-shadow: none;
+}
+
+.iconoplasm-tooltip-meta-cell--origin .iconoplasm-tooltip-meta-value {
+  font-style: italic;
+  font-weight: 420;
+  opacity: 0.72;
+  letter-spacing: 0;
+}
+
+.iconoplasm-tooltip-meta-value--compact {
+  font-size: 14px;
+  line-height: 1.14;
+  overflow-wrap: break-word;
+}
+
+.iconoplasm-tooltip-meta-pairs {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: transparent;
+  border-bottom: 1px solid rgba(74, 61, 49, 0.08);
+}
+
+.iconoplasm-tooltip-meta-pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 0;
+}
+
+.iconoplasm-tooltip-meta-pair-row + .iconoplasm-tooltip-meta-pair-row {
+  border-top: none;
+}
+
+.iconoplasm-tooltip-meta-pair-cell {
+  min-width: 0;
+  padding: 5px 8px;
+}
+
+.iconoplasm-tooltip-meta-pair-cell--origin {
+  padding-left: 10px;
+}
+
+.iconoplasm-tooltip-meta-pair-cell .iconoplasm-tooltip-meta-value--compact {
+  font-style: normal;
+  font-weight: 580;
+  opacity: 0.88;
+}
+
+.iconoplasm-tooltip-meta-pair-cell--origin .iconoplasm-tooltip-meta-value--compact {
+  font-style: italic;
+  font-weight: 420;
+  opacity: 0.72;
+}
+
+.iconoplasm-tooltip-meta-value--error {
+  color: #ffd7d1;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.iconoplasm-tooltip-meta-skeleton-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.iconoplasm-tooltip-meta-skeleton-cell {
+  padding: 7px 4px;
+}
+
+.iconoplasm-tooltip-meta-skeleton-cell--origin {
+  padding-left: 10px;
+}
+
+.iconoplasm-tooltip-skeleton-line {
+  display: block;
+  width: 100%;
+  height: 13px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, currentColor 8%, transparent) 0%,
+      color-mix(in srgb, currentColor 18%, transparent) 50%,
+      color-mix(in srgb, currentColor 8%, transparent) 100%
+    );
+  opacity: 0.9;
+}
+
+.iconoplasm-tooltip-skeleton-line--short {
+  width: 66%;
+}
+
+/* Skin color dot */
+.iconoplasm-tooltip-skin-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  border: 0.5px solid var(--iconoplasm-separator, rgba(255, 255, 255, 0.2));
+}

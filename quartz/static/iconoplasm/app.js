@@ -7,6 +7,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   var DEBOUNCE_MS = 200
   var GALLERY_PAGE_SIZE = 30
   var GALLERY_DEFAULT_ORDER = "votes"
+  var HOME_LAYOUT_DEFAULT = "bricks"
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
     { value: "popularity", label: "Popularity" },
@@ -566,6 +567,364 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     return out
   }
 
+  var missingTooltipOriginWarnings = Object.create(null)
+
+  function resolveHomeLayout() {
+    // Keep masonry implementation available for the future settings switch,
+    // but make bricks the default home presentation now.
+    return HOME_LAYOUT_DEFAULT
+  }
+
+  function renderTooltipMetaSkeletonHtml() {
+    return (
+      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function renderTooltipMetaPairsHtml(pairs) {
+    var safePairs = []
+    var source = Array.isArray(pairs) ? pairs : []
+    for (var i = 0; i < source.length; i++) {
+      var pair = source[i] || {}
+      var character = String(pair.character || "").trim()
+      var molecular = String(pair.molecular || "").trim()
+      if (!character || !molecular) continue
+      safePairs.push({ character: character, molecular: molecular })
+    }
+    if (!safePairs.length) return ""
+    var html = '<div class="iconoplasm-tooltip-meta-pairs">'
+    for (var j = 0; j < safePairs.length; j++) {
+      html +=
+        '<div class="iconoplasm-tooltip-meta-pair-row">' +
+        '<div class="iconoplasm-tooltip-meta-pair-cell">' +
+        '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
+        esc(safePairs[j].character) +
+        "</span>" +
+        "</div>" +
+        '<div class="iconoplasm-tooltip-meta-pair-cell iconoplasm-tooltip-meta-pair-cell--origin">' +
+        '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
+        esc(safePairs[j].molecular) +
+        "</span>" +
+        "</div>" +
+        "</div>"
+    }
+    html += "</div>"
+    return html
+  }
+
+  function buildTooltipTraitOriginRows(essence) {
+    var rows = []
+    var aesthetics = uniqueDisplayValues(essence && essence.aesthetics, 4)
+    var aestheticsOrigin = uniqueDisplayValues(essence && essence.aesthetics_origin, 4)
+    var politics = String(
+      (essence && (essence.politics || essence.faction)) || "",
+    ).trim()
+    var politicsOrigin = uniqueDisplayValues(essence && essence.politics_origin, 2)
+
+    var pairedAestheticCount = Math.min(aesthetics.length, aestheticsOrigin.length)
+    if (pairedAestheticCount > 0) {
+      var pairs = []
+      for (var i = 0; i < pairedAestheticCount; i++) {
+        pairs.push({
+          character: aesthetics[i],
+          molecular: aestheticsOrigin[i],
+        })
+      }
+      rows.push({
+        pairGridHtml: renderTooltipMetaPairsHtml(pairs),
+      })
+    }
+
+    var missingAestheticOrigins = aesthetics.length > pairedAestheticCount
+    var politicsIsNeutral = politics.toLowerCase() === "neutral"
+    var missingPoliticsOrigins = Boolean(politics) && !politicsIsNeutral && !politicsOrigin.length
+    if (politics && !politicsIsNeutral && politicsOrigin.length) {
+      rows.push({
+        character: politics,
+        molecular: politicsOrigin.join(", "),
+      })
+    }
+
+    return {
+      rows: rows,
+      missingOrigins: missingAestheticOrigins || missingPoliticsOrigins,
+    }
+  }
+
+  function renderTooltipMetaHtml(geneDetail) {
+    var essence = geneDetail && typeof geneDetail.essence === "object" ? geneDetail.essence : null
+    if (!geneDetail || !essence) return ""
+
+    var rows = []
+    var sexText = String(essence.sex || "").trim()
+    var sexOrigin = uniqueDisplayValues(
+      essence.sex_origin || essence.gender_origin || geneDetail.sex_origin || geneDetail.gender_origin,
+      2,
+    )
+    if (sexText) {
+      rows.push({
+        character: sexText,
+        molecular: sexOrigin.length ? sexOrigin.join(", ") : "—",
+      })
+    }
+
+    var ageText = ""
+    if (essence.age) {
+      ageText = String(essence.age)
+    } else if (essence.age_years != null && Number.isFinite(Number(essence.age_years))) {
+      ageText = String(Math.round(Number(essence.age_years)))
+    }
+    var firstPublicationYear = Number(geneDetail.first_publication_year)
+    if (ageText && Number.isFinite(firstPublicationYear) && firstPublicationYear > 0) {
+      rows.push({
+        character: ageText + " years old",
+        molecular: "discovered in " + String(Math.round(firstPublicationYear)),
+      })
+    }
+
+    var weightKg = Number(essence.weight_kg)
+    var molecularWeightKda = Number(geneDetail.molecular_weight_kda)
+    if (
+      Number.isFinite(weightKg) &&
+      weightKg > 0 &&
+      Number.isFinite(molecularWeightKda) &&
+      molecularWeightKda > 0
+    ) {
+      rows.push({
+        character: String(Math.round(weightKg)) + " kg",
+        molecular: String(Math.round(molecularWeightKda)) + " kDa",
+      })
+    }
+
+    var tissue = geneDetail.primary_tissue ? String(geneDetail.primary_tissue).trim() : ""
+    if ((essence.skin_hex || essence.skin_name) && tissue) {
+      var skinDisplay = ""
+      if (essence.skin_hex) {
+        skinDisplay +=
+          '<span class="iconoplasm-tooltip-skin-dot" style="background:' +
+          String(essence.skin_hex) +
+          '"></span>'
+      }
+      skinDisplay += String(essence.skin_name || essence.skin_hex || "")
+      rows.push({
+        character: skinDisplay,
+        molecular: tissue,
+        characterIsHtml: true,
+      })
+    }
+
+    var traitOriginRows = buildTooltipTraitOriginRows(essence)
+    if (traitOriginRows.missingOrigins) {
+      var warnKey =
+        String(geneDetail.symbol || geneDetail.canonical_symbol || "").trim() || "(unknown)"
+      if (!missingTooltipOriginWarnings[warnKey]) {
+        missingTooltipOriginWarnings[warnKey] = true
+        console.error(
+          "[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:",
+          warnKey,
+          geneDetail,
+        )
+      }
+    }
+    for (var i = 0; i < traitOriginRows.rows.length; i++) {
+      rows.push(traitOriginRows.rows[i])
+    }
+
+    if (!rows.length) return ""
+
+    var html = ""
+    for (var j = 0; j < rows.length; j++) {
+      var row = rows[j]
+      if (row.pairGridHtml) {
+        html += row.pairGridHtml
+        continue
+      }
+      html +=
+        '<div class="iconoplasm-tooltip-meta-row">' +
+        '<div class="iconoplasm-tooltip-meta-cell">' +
+        '<span class="iconoplasm-tooltip-meta-value">' +
+        (row.characterIsHtml ? row.character : esc(row.character)) +
+        "</span>" +
+        "</div>" +
+        '<div class="iconoplasm-tooltip-meta-cell iconoplasm-tooltip-meta-cell--origin">' +
+        '<span class="iconoplasm-tooltip-meta-value">' +
+        (row.molecularIsHtml ? row.molecular : esc(row.molecular)) +
+        "</span>" +
+        "</div>" +
+        "</div>"
+    }
+    return html
+  }
+
+  function buildBrickCardMarkup(g, cardIndex) {
+    var dims = portraitDimensions(g)
+    var key = normalizedSymbol(g.symbol)
+    var portraitUrl = publishedPortraitUrl(g, "medium")
+    var detail = portraitDetailCache[key] || null
+    var metaHtml = detail ? renderTooltipMetaHtml(detail) : renderTooltipMetaSkeletonHtml()
+    var portraitStateClass = portraitUrl
+      ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
+      : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
+    return (
+      '<a class="icono-card icono-card--brick" href="/gene/' +
+      esc(encodeURIComponent(g.symbol)) +
+      '" data-icono-nav data-icono-index="' +
+      cardIndex +
+      '" data-icono-symbol="' +
+      esc(g.symbol) +
+      '" style="--width:' +
+      dims.width +
+      ";--height:" +
+      dims.height +
+      ";--icono-card-accent:" +
+      esc(g.color || "#888") +
+      ';">' +
+      '<div class="' +
+      portraitStateClass +
+      '">' +
+      (portraitUrl
+        ? '<img class="iconoplasm-tooltip-portrait-img" src="' +
+          esc(portraitUrl) +
+          '" alt="' +
+          esc(g.symbol) +
+          ' portrait" loading="' +
+          (cardIndex < 8 ? "eager" : "lazy") +
+          '" decoding="async" width="' +
+          dims.width +
+          '" height="' +
+          dims.height +
+          '">'
+        : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
+      '<div class="iconoplasm-tooltip-portrait-fallback">' +
+      '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+      '<div class="iconoplasm-tooltip-portrait-symbol">' +
+      esc(g.symbol) +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-body">' +
+      '<div class="iconoplasm-tooltip-header">' +
+      '<div class="iconoplasm-tooltip-symbol">' +
+      esc(g.symbol) +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-name">' +
+      esc(g.full_name || g.symbol) +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta' +
+      (detail ? "" : " iconoplasm-tooltip-meta--loading") +
+      '" data-icono-card-meta>' +
+      metaHtml +
+      "</div>" +
+      "</div>" +
+      "</a>"
+    )
+  }
+
+  function hydrateBrickPortrait(card, genePayload) {
+    if (!card) return
+    var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
+    var portraitImg = card.querySelector(".iconoplasm-tooltip-portrait-img")
+    if (!portrait || !portraitImg) return
+    var portraitUrl = publishedPortraitUrl(genePayload, "medium")
+    if (!portraitUrl) {
+      portrait.classList.remove("iconoplasm-tooltip-portrait--ready")
+      portrait.classList.add("iconoplasm-tooltip-portrait-missing")
+      portraitImg.removeAttribute("src")
+      return
+    }
+    var dims = portraitDimensions(genePayload)
+    portrait.classList.remove("iconoplasm-tooltip-portrait-missing")
+    portrait.classList.add("iconoplasm-tooltip-portrait--ready")
+    portraitImg.setAttribute("src", portraitUrl)
+    portraitImg.setAttribute("width", String(dims.width))
+    portraitImg.setAttribute("height", String(dims.height))
+    portraitImg.setAttribute("alt", normalizedSymbol(genePayload.symbol) + " portrait")
+    card.style.setProperty("--width", String(dims.width))
+    card.style.setProperty("--height", String(dims.height))
+  }
+
+  function hydrateBrickCard(card, genePayload) {
+    if (!card) return
+    if (genePayload) hydrateBrickPortrait(card, genePayload)
+    var meta = card.querySelector("[data-icono-card-meta]")
+    if (!meta) return
+    var html = renderTooltipMetaHtml(genePayload)
+    meta.classList.remove("iconoplasm-tooltip-meta--loading")
+    meta.innerHTML = html
+  }
+
+  function hydrateBrickCards(cards) {
+    var queue = []
+    var items = Array.isArray(cards) ? cards : []
+    for (var i = 0; i < items.length; i++) {
+      var card = items[i]
+      if (!card || !card.classList || !card.classList.contains("icono-card--brick")) continue
+      var symbol = normalizedSymbol(card.getAttribute("data-icono-symbol"))
+      if (!symbol) continue
+      if (portraitDetailCache[symbol]) {
+        hydrateBrickCard(card, portraitDetailCache[symbol])
+        continue
+      }
+      queue.push({ card: card, symbol: symbol })
+    }
+    if (!queue.length) return Promise.resolve(null)
+
+    var workerCount = Math.min(PREFETCH_DETAIL_CONCURRENCY, queue.length)
+    var workers = []
+
+    function next() {
+      var entry = queue.shift()
+      if (!entry) return Promise.resolve(null)
+      return fetchGeneDetail(entry.symbol)
+        .then(function (genePayload) {
+          if (!entry.card.isConnected) return null
+          hydrateBrickCard(entry.card, genePayload)
+          return null
+        })
+        .then(next)
+    }
+
+    for (var j = 0; j < workerCount; j++) {
+      workers.push(next())
+    }
+    return Promise.all(workers).then(function () {
+      return null
+    })
+  }
+
   function showVoteLoginPopup() {
     window.alert("Please log-in first to vote.")
   }
@@ -765,6 +1124,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
   /* ─── Rendering: Home page ─── */
 
   function renderHome(root) {
+    var homeLayout = resolveHomeLayout()
     root.innerHTML =
       '<div class="icono-hero">' +
       "<h1>Iconoplasm</h1>" +
@@ -855,6 +1215,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
       galleryState.seed = galleryState.order === "random" ? newRandomSeed() : ""
       galleryState.items = []
       grid.innerHTML = ""
+      grid.setAttribute("data-layout", homeLayout)
       destroyHomeMasonry()
       if (typeof grid._iconoPrefetchCleanup === "function") {
         grid._iconoPrefetchCleanup()
@@ -893,11 +1254,16 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
           )
           galleryState.hasMore = Boolean(data && data.has_more)
           if (items.length) {
-            var newCards = appendGrid(grid, items, galleryState.items.length)
+            var newCards = appendGrid(grid, items, galleryState.items.length, homeLayout)
             galleryState.items = galleryState.items.concat(items)
             galleryState.offset += items.length
-            applyHomeMasonry(grid, newCards)
-            setupOrderedPortraitPrefetch(grid, galleryState.items)
+            if (homeLayout === "masonry") {
+              applyHomeMasonry(grid, newCards)
+              setupOrderedPortraitPrefetch(grid, galleryState.items)
+            } else {
+              destroyHomeMasonry()
+              void hydrateBrickCards(newCards)
+            }
           }
           syncHeroCount()
           updateSentinelObserver()
@@ -1024,7 +1390,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     container.innerHTML = html
   }
 
-  function buildGridMarkup(genes, startIndex) {
+  function buildMasonryGridMarkup(genes, startIndex) {
     if (!genes.length) {
       return ""
     }
@@ -1039,7 +1405,7 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
         ? "icono-card-media"
         : "icono-card-media icono-card-media--fallback"
       html +=
-        '<a class="icono-card" href="/gene/' +
+        '<a class="icono-card icono-card--masonry" href="/gene/' +
         esc(encodeURIComponent(g.symbol)) +
         '" data-icono-nav data-icono-index="' +
         cardIndex +
@@ -1088,12 +1454,31 @@ import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
     return html
   }
 
-  function renderGrid(container, genes) {
-    container.innerHTML = buildGridMarkup(genes, 0)
+  function buildBrickGridMarkup(genes, startIndex) {
+    if (!genes.length) {
+      return ""
+    }
+    var html = ""
+    for (var i = 0; i < genes.length; i++) {
+      html += buildBrickCardMarkup(genes[i], startIndex + i)
+    }
+    return html
   }
 
-  function appendGrid(container, genes, startIndex) {
-    var html = buildGridMarkup(genes, startIndex)
+  function renderGrid(container, genes, layout) {
+    var resolvedLayout = layout || resolveHomeLayout()
+    container.innerHTML =
+      resolvedLayout === "masonry"
+        ? buildMasonryGridMarkup(genes, 0)
+        : buildBrickGridMarkup(genes, 0)
+  }
+
+  function appendGrid(container, genes, startIndex, layout) {
+    var resolvedLayout = layout || resolveHomeLayout()
+    var html =
+      resolvedLayout === "masonry"
+        ? buildMasonryGridMarkup(genes, startIndex)
+        : buildBrickGridMarkup(genes, startIndex)
     if (!html) return []
     var wrapper = document.createElement("div")
     wrapper.innerHTML = html

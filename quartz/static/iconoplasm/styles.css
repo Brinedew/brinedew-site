@@ -211,7 +211,7 @@
 }
 
 .icono-grid-sizer,
-.icono-card {
+.icono-card--masonry {
   width: calc(50% - 8px);
 }
 
@@ -224,15 +224,18 @@
   position: relative;
   text-decoration: none;
   color: var(--dark);
-  margin-bottom: 16px;
   transition: box-shadow 0.18s ease;
 }
 
-.icono-card:hover {
+.icono-card--masonry {
+  margin-bottom: 16px;
+}
+
+.icono-card--masonry:hover {
   box-shadow: none;
 }
 
-.icono-card:hover .icono-card-media {
+.icono-card--masonry:hover .icono-card-media {
   box-shadow: 0 16px 32px rgba(45, 33, 20, 0.12);
 }
 
@@ -306,6 +309,285 @@
   color: var(--secondary, var(--darkgray));
   line-height: 1.3;
   text-wrap: balance;
+}
+
+.icono-grid[data-layout="bricks"] {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.icono-grid[data-layout="bricks"] .icono-grid-sizer,
+.icono-grid[data-layout="bricks"] .icono-gutter-sizer {
+  display: none;
+}
+
+.icono-card--brick {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #d9d2c8;
+  box-shadow:
+    0 0 0 0.5px rgba(40, 32, 24, 0.12),
+    0 1px 2px rgba(40, 32, 24, 0.08),
+    0 3px 8px rgba(40, 32, 24, 0.1),
+    0 8px 24px rgba(40, 32, 24, 0.14),
+    0 20px 60px rgba(40, 32, 24, 0.12);
+  color: rgb(33, 28, 24);
+}
+
+.icono-card--brick:hover {
+  box-shadow:
+    0 0 0 0.5px rgba(40, 32, 24, 0.12),
+    0 2px 6px rgba(40, 32, 24, 0.1),
+    0 10px 30px rgba(40, 32, 24, 0.16),
+    0 24px 72px rgba(40, 32, 24, 0.14);
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait {
+  min-height: 240px;
+  background-color: color-mix(
+    in srgb,
+    var(--icono-card-accent, #6b6b78) 20%,
+    #dfe2df
+  );
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  position: relative;
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: none;
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait--ready .iconoplasm-tooltip-portrait-img {
+  display: block;
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 16px;
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--icono-card-accent, #6b6b78) 18%, #f2ede5),
+      rgba(255, 255, 255, 0.08)
+    ),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.26), transparent 60%);
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fallback {
+  display: flex;
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-fade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  opacity: 0.9;
+  background: rgba(58, 48, 40, 0.14);
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fade {
+  display: none;
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-status {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-symbol,
+.icono-card--brick .iconoplasm-tooltip-symbol {
+  font-family: var(--codeFont, monospace);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.icono-card--brick .iconoplasm-tooltip-portrait-symbol {
+  font-size: 1.7rem;
+}
+
+.icono-card--brick .iconoplasm-tooltip-body {
+  padding: 1.25rem 1.25rem 0.9rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 240px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
+    rgba(248, 244, 236, 0.99);
+  color: rgb(33, 28, 24);
+}
+
+.icono-card--brick .iconoplasm-tooltip-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-height: 62px;
+  padding-bottom: 0.85rem;
+  margin-bottom: 0.1rem;
+  border-bottom: 1px solid rgba(74, 61, 49, 0.18);
+}
+
+.icono-card--brick .iconoplasm-tooltip-symbol {
+  font-size: clamp(1.75rem, 3vw, 2.1rem);
+  color: color-mix(in srgb, var(--icono-card-accent, #6b6b78) 42%, #1a1612);
+}
+
+.icono-card--brick .iconoplasm-tooltip-name {
+  font-size: 0.96rem;
+  line-height: 1.4;
+  color: rgba(33, 28, 24, 0.58);
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 128px;
+  padding-top: 0.25rem;
+  color: rgb(33, 28, 24);
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta:empty {
+  display: none;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  border-bottom: 1px solid rgba(74, 61, 49, 0.08);
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 0.45rem 0.4rem;
+  min-width: 0;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-cell--origin {
+  padding-left: 0.65rem;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-value {
+  font-size: 0.95rem;
+  font-weight: 580;
+  line-height: 1.42;
+  opacity: 0.88;
+  overflow-wrap: anywhere;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-cell--origin .iconoplasm-tooltip-meta-value {
+  font-style: italic;
+  font-weight: 420;
+  opacity: 0.72;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-value--compact {
+  font-size: 0.9rem;
+  line-height: 1.14;
+  overflow-wrap: break-word;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-pairs {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(74, 61, 49, 0.08);
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-pair-cell {
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-pair-cell--origin {
+  padding-left: 0.65rem;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-pair-cell .iconoplasm-tooltip-meta-value--compact {
+  font-style: normal;
+  font-weight: 580;
+  opacity: 0.88;
+}
+
+.icono-card--brick
+  .iconoplasm-tooltip-meta-pair-cell--origin
+  .iconoplasm-tooltip-meta-value--compact {
+  font-style: italic;
+  font-weight: 420;
+  opacity: 0.72;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-skeleton-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-skeleton-cell {
+  padding: 0.45rem 0.25rem;
+}
+
+.icono-card--brick .iconoplasm-tooltip-meta-skeleton-cell--origin {
+  padding-left: 0.65rem;
+}
+
+.icono-card--brick .iconoplasm-tooltip-skeleton-line {
+  display: block;
+  width: 100%;
+  height: 13px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(33, 28, 24, 0.08) 0%,
+      rgba(33, 28, 24, 0.16) 50%,
+      rgba(33, 28, 24, 0.08) 100%
+    );
+  opacity: 0.9;
+}
+
+.icono-card--brick .iconoplasm-tooltip-skeleton-line--short {
+  width: 66%;
+}
+
+.icono-card--brick .iconoplasm-tooltip-skin-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  border: 0.5px solid rgba(58, 48, 40, 0.14);
 }
 
 /* ───────── Loading / empty states ───────── */
@@ -850,7 +1132,7 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
 /* ───────── Responsive ───────── */
 @media (max-width: 600px) {
   .icono-grid-sizer,
-  .icono-card {
+  .icono-card--masonry {
     width: calc(50% - 6px);
   }
 
@@ -873,6 +1155,29 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
 
   .icono-gallery-order select {
     min-width: 9rem;
+  }
+
+  .icono-card--brick {
+    grid-template-columns: 1fr;
+  }
+
+  .icono-card--brick .iconoplasm-tooltip-portrait {
+    min-height: 220px;
+  }
+
+  .icono-card--brick .iconoplasm-tooltip-body {
+    min-height: 0;
+  }
+
+  .icono-card--brick .iconoplasm-tooltip-meta-row,
+  .icono-card--brick .iconoplasm-tooltip-meta-pair-row {
+    grid-template-columns: 1fr;
+  }
+
+  .icono-card--brick .iconoplasm-tooltip-meta-cell--origin,
+  .icono-card--brick .iconoplasm-tooltip-meta-pair-cell--origin {
+    padding-top: 0.15rem;
+    padding-left: 0.5rem;
   }
 
   .icono-gene-header {
