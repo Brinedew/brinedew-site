@@ -59,7 +59,9 @@ async function deleteAdminScheduleDayCacheEntry(env, date) {
 }
 
 function normalizeUniprotId(value) {
-  const raw = String(value || "").trim().toUpperCase()
+  const raw = String(value || "")
+    .trim()
+    .toUpperCase()
   return raw || null
 }
 
@@ -94,7 +96,9 @@ function toScheduleUpcomingRow(entry) {
     override_uniprot_id: normalizeUniprotId(entry?.override_uniprot_id),
     override_protein: entry?.override_protein || null,
     computed: entry?.computed || null,
-    skipped_alpha_fold: Number.isFinite(entry?.skipped_alpha_fold) ? entry.skipped_alpha_fold : null,
+    skipped_alpha_fold: Number.isFinite(entry?.skipped_alpha_fold)
+      ? entry.skipped_alpha_fold
+      : null,
   }
 }
 
@@ -102,7 +106,9 @@ async function buildScheduleDayCacheEntry(env, { date, overrideByDate, eligibleI
   const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
   const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date)
   const computedProtein = selection?.protein ? sanitizeProteinSummary(selection.protein) : null
-  const computedUniprot = normalizeUniprotId(computedProtein?.uniprot || selection?.protein?.uniprot)
+  const computedUniprot = normalizeUniprotId(
+    computedProtein?.uniprot || selection?.protein?.uniprot,
+  )
 
   let overrideProtein = null
   if (plannedOverride) {
@@ -122,7 +128,9 @@ async function buildScheduleDayCacheEntry(env, { date, overrideByDate, eligibleI
     computed: computedProtein,
     override_uniprot_id: plannedOverride,
     override_protein: overrideProtein,
-    skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold) ? selection.skippedAlphaFold : null,
+    skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold)
+      ? selection.skippedAlphaFold
+      : null,
     generated_at: Date.now(),
   }
 }
@@ -977,7 +985,10 @@ export async function handleAdminSchedule(request, env) {
         // If source is missing/unknown but an override key exists for this date,
         // it was an override — fix the source retroactively
         let source = row.source
-        if ((!source || source === "unknown" || source === "actual") && overrideByDate.has(row.date)) {
+        if (
+          (!source || source === "unknown" || source === "actual") &&
+          overrideByDate.has(row.date)
+        ) {
           const ovr = overrideByDate.get(row.date)
           // Verify the override uniprot matches the actual pick
           if (!row.uniprot_id || ovr.uniprot_id === row.uniprot_id) {
@@ -1024,7 +1035,13 @@ export async function handleAdminSchedule(request, env) {
     for (const date of dates) {
       const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
       const cachedEntry = cachedRowsByDate.get(date)
-      if (isScheduleDayCacheEntryValid(cachedEntry, { date, overrideUniprotId: plannedOverride, salt })) {
+      if (
+        isScheduleDayCacheEntryValid(cachedEntry, {
+          date,
+          overrideUniprotId: plannedOverride,
+          salt,
+        })
+      ) {
         upcomingByDate.set(date, cachedEntry)
         continue
       }
@@ -1386,7 +1403,10 @@ export async function handleAdminDiscordRecapImageUpload(request, env) {
 
   const bytes = decodeBase64Png(payload?.image_base64)
   if (!bytes) {
-    return Response.json({ error: "image_base64 must contain a valid PNG payload" }, { status: 400 })
+    return Response.json(
+      { error: "image_base64 must contain a valid PNG payload" },
+      { status: 400 },
+    )
   }
   if (bytes.byteLength > DISCORD_RECAP_IMAGE_MAX_BYTES) {
     return Response.json(

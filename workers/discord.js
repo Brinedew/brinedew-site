@@ -291,7 +291,10 @@ async function postRecapToDiscord(env, { day, content, screenshotBytes }) {
   )
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort("discord_post_timeout"), DISCORD_POST_TIMEOUT_MS)
+  const timeout = setTimeout(
+    () => controller.abort("discord_post_timeout"),
+    DISCORD_POST_TIMEOUT_MS,
+  )
   let response
   try {
     response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
@@ -798,8 +801,7 @@ export async function handleRenderPage(request, env) {
     try {
       chainLabelsData =
         typeof chainLabelsRaw === "string" ? JSON.parse(chainLabelsRaw) : chainLabelsRaw
-      totalChainCount =
-        chainLabelsData?.reduce((sum, l) => sum + (l.chains?.length || 0), 0) || 0
+      totalChainCount = chainLabelsData?.reduce((sum, l) => sum + (l.chains?.length || 0), 0) || 0
     } catch (e) {
       console.warn("Failed to parse chain_labels for render:", e)
     }
@@ -828,7 +830,16 @@ export async function handleRenderPage(request, env) {
 /**
  * Build minimal HTML for structure rendering
  */
-function buildRenderHTML({ day, gene, fullName, structureUrl, structureFormat, moleculeId, chainLabels, totalChainCount }) {
+function buildRenderHTML({
+  day,
+  gene,
+  fullName,
+  structureUrl,
+  structureFormat,
+  moleculeId,
+  chainLabels,
+  totalChainCount,
+}) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

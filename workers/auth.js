@@ -79,7 +79,11 @@ function parseLeaderboardOptInFromUrl(url) {
 
 function getSharedCookieDomain(hostname) {
   const host = String(hostname || "").toLowerCase()
-  if (host === "brinedew.bio" || host === "www.brinedew.bio" || host === "geneguessr.brinedew.bio") {
+  if (
+    host === "brinedew.bio" ||
+    host === "www.brinedew.bio" ||
+    host === "geneguessr.brinedew.bio"
+  ) {
     return ".brinedew.bio"
   }
   return ""
@@ -98,7 +102,11 @@ function resolveDiscordRedirectUri(url, env) {
 
   // Keep production OAuth callback stable even when app is served from the apex domain.
   const host = String(url.hostname || "").toLowerCase()
-  if (host === "brinedew.bio" || host === "www.brinedew.bio" || host === "geneguessr.brinedew.bio") {
+  if (
+    host === "brinedew.bio" ||
+    host === "www.brinedew.bio" ||
+    host === "geneguessr.brinedew.bio"
+  ) {
     return "https://geneguessr.brinedew.bio/api/auth/callback"
   }
 
@@ -135,7 +143,10 @@ export async function handleLogin(request, env) {
   const url = new URL(request.url)
   const configStatus = getDiscordAuthConfigStatus(env)
   if (!configStatus.loginReady) {
-    console.error("Discord OAuth config missing required values for login:", configStatus.missingRequired)
+    console.error(
+      "Discord OAuth config missing required values for login:",
+      configStatus.missingRequired,
+    )
     return Response.json(
       {
         error: "Discord OAuth is not configured",
