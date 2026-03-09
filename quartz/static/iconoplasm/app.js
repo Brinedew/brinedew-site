@@ -4,7 +4,7 @@ import {
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=20260310b"
+} from "../shared/sidebar-shell.js?v=20260310c"
 import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
 void syncSharedIconoplasmSettings().catch(function () {
