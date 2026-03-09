@@ -209,6 +209,7 @@ function ensureAuthBridgeIframe() {
   iframe.setAttribute("aria-hidden", "true")
   iframe.tabIndex = -1
   iframe.style.display = "none"
+  iframe.setAttribute("data-ready", "false")
   authBridgeIframe = iframe
   return iframe
 }
@@ -232,9 +233,18 @@ function attachAuthBridgeIframe(iframe) {
 
 function resolveAuthBridge() {
   if (!shouldUseSharedAuthBridge()) return Promise.resolve(null)
+  var existing = ensureAuthBridgeIframe()
+  if (
+    existing &&
+    existing.isConnected &&
+    existing.getAttribute("src") === sharedAuthBridgeUrl() &&
+    existing.getAttribute("data-ready") === "true"
+  ) {
+    return Promise.resolve(existing)
+  }
   if (authBridgePromise) return authBridgePromise
   authBridgePromise = new Promise(function (resolve, reject) {
-    var iframe = ensureAuthBridgeIframe()
+    var iframe = existing || ensureAuthBridgeIframe()
     if (!iframe) {
       authBridgePromise = null
       reject(new Error("Auth bridge iframe unavailable"))
@@ -248,11 +258,14 @@ function resolveAuthBridge() {
 
     function onLoad() {
       cleanup()
+      iframe.setAttribute("data-ready", "true")
+      authBridgePromise = null
       resolve(iframe)
     }
 
     function onError() {
       cleanup()
+      iframe.setAttribute("data-ready", "false")
       authBridgePromise = null
       reject(new Error("Failed to load auth bridge iframe"))
     }
@@ -262,18 +275,9 @@ function resolveAuthBridge() {
     attachAuthBridgeIframe(iframe)
 
     if (iframe.src !== sharedAuthBridgeUrl()) {
+      iframe.setAttribute("data-ready", "false")
       iframe.src = sharedAuthBridgeUrl()
       return
-    }
-
-    if (
-      iframe.contentWindow &&
-      iframe.getAttribute("src") &&
-      iframe.contentDocument &&
-      iframe.contentDocument.readyState === "complete"
-    ) {
-      cleanup()
-      resolve(iframe)
     }
   })
   return authBridgePromise
