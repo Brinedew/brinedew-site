@@ -672,6 +672,13 @@ export default {
         (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
         !url.pathname.startsWith("/api/")
       ) {
+        if (
+          (request.method === "GET" || request.method === "HEAD") &&
+          (url.pathname === "/settings" || url.pathname === "/settings/")
+        ) {
+          return Response.redirect(`${url.origin}/settings/index`, 301)
+        }
+
         const upstreamUrl = buildStaticSiteUrl(url)
         const upstreamResp = await fetch(upstreamUrl.toString(), {
           method: request.method,
