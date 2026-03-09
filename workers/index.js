@@ -549,6 +549,38 @@ export default {
         return handleRenderPage(request, env)
       }
 
+      // Shared platform route: avatar proxy belongs to the common shell, not any single app router.
+      // Handle it before host-based dispatch so every Brinedew app resolves avatars through one path
+      // instead of re-implementing the same proxy inside each app-specific API surface.
+      if (
+        url.pathname === "/api/avatar" &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        const upstreamUrl = extractAvatarUpstreamFromRequest(url)
+        if (!upstreamUrl) {
+          return Response.json(
+            { error: "Invalid avatar URL" },
+            { status: 400, headers: corsHeaders },
+          )
+        }
+        const upstreamResp = await fetch(upstreamUrl, {
+          cf: {
+            cacheEverything: true,
+            cacheTtl: 86400,
+          },
+        })
+        if (!upstreamResp.ok) {
+          return Response.json({ error: "Avatar not found" }, { status: 404, headers: corsHeaders })
+        }
+        const headers = new Headers(corsHeaders)
+        headers.set("Content-Type", upstreamResp.headers.get("Content-Type") || "image/png")
+        headers.set("Cache-Control", "public, max-age=86400")
+        return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
+          status: upstreamResp.status,
+          headers,
+        })
+      }
+
       // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
       // delegate API/portrait/admin to the iconoplasm handler.
       if (isIconoplasmRequest(url.hostname)) {
@@ -941,36 +973,6 @@ export default {
         return new Response(response.body, {
           status: response.status,
           headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-        })
-      }
-
-      // Proxy Discord avatars through same-origin to avoid leaking visitor IPs to third-party CDNs.
-      if (
-        url.pathname === "/api/avatar" &&
-        (request.method === "GET" || request.method === "HEAD")
-      ) {
-        const upstreamUrl = extractAvatarUpstreamFromRequest(url)
-        if (!upstreamUrl) {
-          return Response.json(
-            { error: "Invalid avatar URL" },
-            { status: 400, headers: corsHeaders },
-          )
-        }
-        const upstreamResp = await fetch(upstreamUrl, {
-          cf: {
-            cacheEverything: true,
-            cacheTtl: 86400,
-          },
-        })
-        if (!upstreamResp.ok) {
-          return Response.json({ error: "Avatar not found" }, { status: 404, headers: corsHeaders })
-        }
-        const headers = new Headers(corsHeaders)
-        headers.set("Content-Type", upstreamResp.headers.get("Content-Type") || "image/png")
-        headers.set("Cache-Control", "public, max-age=86400")
-        return new Response(request.method === "HEAD" ? null : upstreamResp.body, {
-          status: upstreamResp.status,
-          headers,
         })
       }
 
