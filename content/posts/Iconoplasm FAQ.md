@@ -3,12 +3,12 @@ title: Iconoplasm FAQ
 tags:
   - content/post
 date: 2026-03-07
-draft: true
+draft: false
 ---
 # Iconoplasm FAQ
 
 1. **What is this and who is this for?**
-Iconoplasm is a browser extension where each gene on any web page gets its own character portrait. The target audience are life science students and preclinical researchers.
+[Iconoplasm ](https://iconoplasm.brinedew.bio/)is a browser extension where each gene on any web page gets its own character portrait. The target audience are life science students and preclinical researchers.
 
 2. **Does anyone actually care about that?**
 Scott Alexander explicitly requested this kind of tool in [his post](https://slatestarcodex.com/2013/08/14/extreme-mnemonics/) on extreme mnemonics.
