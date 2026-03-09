@@ -1105,6 +1105,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
      ) v
        ON v.candidate_ref = ('a:' || upper(pa.gene_symbol) || '|' || lower(pa.asset_sha256))
      WHERE upper(pa.gene_symbol) = ?
+       AND COALESCE(pa.autopick_eligible, 1) = 1
        AND COALESCE(pa.status, '') <> 'rejected'
        AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
      ORDER BY
@@ -1392,6 +1393,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.width,
        pa.height,
        pa.status,
+       pa.autopick_eligible,
        pa.created_at,
        COALESCE(v.upvotes, 0) AS image_upvotes,
        COALESCE(v.downvotes, 0) AS image_downvotes,
@@ -1424,6 +1426,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
     return {
       asset_sha256: assetSha,
       status: String(row?.status || "").trim() || "draft",
+      autopick_eligible: coerceBoolean(row?.autopick_eligible, true),
       is_current: !!(assetSha && currentSha && assetSha === currentSha),
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
@@ -2286,8 +2289,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const where = status === "all" ? "" : "WHERE lower(status)=?"
       const stmt =
         status === "all"
-          ? env.ICONOPLASM_DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(limit)
-          : env.ICONOPLASM_DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(status, limit)
+          ? env.ICONOPLASM_DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, autopick_eligible, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(limit)
+          : env.ICONOPLASM_DB.prepare(`SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, autopick_eligible, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`).bind(status, limit)
       const { results } = await stmt.all()
       const base = portraitBase(url, env)
       const assets = (results || []).map((r) => ({ ...r, hero_url: r.r2_key_full ? joinUrl(base, r.r2_key_full) : null, medium_url: r.r2_key_medium ? joinUrl(base, r.r2_key_medium) : null, thumb_url: r.r2_key_thumb ? joinUrl(base, r.r2_key_thumb) : null }))
@@ -2577,16 +2580,20 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             }
           }
 
-          const width = optionalInt(item?.width ?? fullPayload?.width)
-          const height = optionalInt(item?.height ?? fullPayload?.height)
-          const bytes = optionalInt(item?.bytes ?? fullPayload?.bytes ?? fullBytes?.byteLength)
-          const essence = normalizeEssencePayload(item?.essence, symbol)
-
           const existingAsset = await env.ICONOPLASM_DB.prepare(
-            "SELECT status FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND asset_sha256=? LIMIT 1",
+            "SELECT status, autopick_eligible FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND asset_sha256=? LIMIT 1",
           )
             .bind(symbol, assetSha)
             .first()
+          const width = optionalInt(item?.width ?? fullPayload?.width)
+          const height = optionalInt(item?.height ?? fullPayload?.height)
+          const bytes = optionalInt(item?.bytes ?? fullPayload?.bytes ?? fullBytes?.byteLength)
+          const autopickEligibleRequested = item?.autopick_eligible ?? item?.autopickEligible
+          const autopickEligible =
+            autopickEligibleRequested === undefined || autopickEligibleRequested === null
+              ? coerceBoolean(existingAsset?.autopick_eligible, true)
+              : coerceBoolean(autopickEligibleRequested, true)
+          const essence = normalizeEssencePayload(item?.essence, symbol)
           const existingStatus = normalizeAssetStatus(existingAsset?.status || "", "draft")
           let finalStatus = statusRequested
           if (!publishNow && finalStatus === "draft" && (existingStatus === "approved" || existingStatus === "rejected")) {
@@ -2597,8 +2604,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             await env.ICONOPLASM_DB.prepare(
               `INSERT INTO icono_portrait_assets (
                  gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
-                 mime, width, height, bytes, status, created_by, created_at
-               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 mime, width, height, bytes, status, autopick_eligible, created_by, created_at
+               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
                  r2_key_full=excluded.r2_key_full,
                  r2_key_medium=excluded.r2_key_medium,
@@ -2608,9 +2615,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  height=COALESCE(excluded.height, icono_portrait_assets.height),
                  bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
                  status=excluded.status,
+                 autopick_eligible=excluded.autopick_eligible,
                  created_by=COALESCE(excluded.created_by, icono_portrait_assets.created_by)`,
             )
-              .bind(symbol, assetSha, keys.full, keys.medium, keys.thumb, width, height, bytes, finalStatus, createdBy)
+              .bind(
+                symbol,
+                assetSha,
+                keys.full,
+                keys.medium,
+                keys.thumb,
+                width,
+                height,
+                bytes,
+                finalStatus,
+                autopickEligible ? 1 : 0,
+                createdBy,
+              )
               .run()
           }
 
@@ -2672,6 +2692,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             asset_sha256: assetSha,
             dry_run: dryRun,
             status: finalStatus,
+            autopick_eligible: autopickEligible,
             uploads,
             publish: publishResult,
             from_asset_sha256: fromAssetSha256,
