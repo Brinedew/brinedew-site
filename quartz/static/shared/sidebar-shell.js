@@ -105,16 +105,6 @@ export function buildLoginUrl(options) {
 
 export async function fetchAuthenticatedUser(options) {
   var source = options || {}
-  if (!source.authBase && shouldUseSharedAuthBridge()) {
-    for (var attempt = 0; attempt < 6; attempt++) {
-      var bridgedUser = await requestSharedAuth("fetchAuthenticatedUser").catch(function () {
-        return null
-      })
-      if (bridgedUser) return bridgedUser
-      if (attempt < 5) await wait(400)
-    }
-    return null
-  }
   var authBase = resolveAuthBase(source.authBase)
   try {
     var response = await fetch(authBase + "/api/auth/me", {
@@ -127,24 +117,37 @@ export async function fetchAuthenticatedUser(options) {
     if (!payload || !payload.authenticated || !payload.user) return null
     return payload.user
   } catch (_err) {
+    if (!source.authBase && shouldUseSharedAuthBridge()) {
+      for (var attempt = 0; attempt < 6; attempt++) {
+        var bridgedUser = await requestSharedAuth("fetchAuthenticatedUser").catch(function () {
+          return null
+        })
+        if (bridgedUser) return bridgedUser
+        if (attempt < 5) await wait(400)
+      }
+    }
     return null
   }
 }
 
 export async function logoutAuthenticatedUser(options) {
   var source = options || {}
-  if (!source.authBase && shouldUseSharedAuthBridge()) {
-    return requestSharedAuth("logoutAuthenticatedUser")
-  }
   var authBase = resolveAuthBase(source.authBase)
-  var response = await fetch(authBase + "/api/auth/logout", {
-    method: "POST",
-    credentials: "include",
-  })
-  if (!response.ok && response.status !== 204) {
-    throw new Error("Logout failed (" + response.status + ")")
+  try {
+    var response = await fetch(authBase + "/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    })
+    if (!response.ok && response.status !== 204) {
+      throw new Error("Logout failed (" + response.status + ")")
+    }
+    return true
+  } catch (error) {
+    if (!source.authBase && shouldUseSharedAuthBridge()) {
+      return requestSharedAuth("logoutAuthenticatedUser")
+    }
+    throw error
   }
-  return true
 }
 
 export function buildSharedUserPanelMarkup(options) {

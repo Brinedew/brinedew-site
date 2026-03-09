@@ -10,7 +10,7 @@ import {
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=20260310c"
+} from "../shared/sidebar-shell.js?v=20260310d"
 
 ;(function () {
   "use strict"
