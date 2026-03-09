@@ -17,6 +17,7 @@ import {
   "use strict"
 
   var ROOT_ID = "site-settings-root"
+  var SIDEBAR_ID = "site-settings-sidebar"
   var SECTION_LINKS = [
     { id: "appearance", label: "Appearance" },
     { id: "reading", label: "Reading" },
@@ -47,13 +48,6 @@ import {
     var node = document.createElement("div")
     node.textContent = String(value || "")
     return node.innerHTML
-  }
-
-  function formatThemeName(value) {
-    var theme = String(value || "").trim().toLowerCase()
-    if (theme === "light") return "light"
-    if (theme === "dark") return "dark"
-    return "system"
   }
 
   function segmentedControlMarkup(name, selectedValue, options) {
@@ -97,22 +91,6 @@ import {
     return html
   }
 
-  function sectionNavMarkup() {
-    var html = '<nav class="site-settings-nav" aria-label="Settings sections">'
-    for (var i = 0; i < SECTION_LINKS.length; i++) {
-      html +=
-        '<a href="#' +
-        esc(SECTION_LINKS[i].id) +
-        '" data-section-link="' +
-        esc(SECTION_LINKS[i].id) +
-        '">' +
-        esc(SECTION_LINKS[i].label) +
-        "</a>"
-    }
-    html += "</nav>"
-    return html
-  }
-
   function snapshotSignature(snapshot) {
     return JSON.stringify(snapshot || {})
   }
@@ -135,18 +113,67 @@ import {
     }
   }
 
-  function predictedEffectiveTheme(themePreference) {
-    var normalized = normalizeThemePreference(themePreference)
-    if (normalized === "light" || normalized === "dark") return normalized
-    return formatThemeName(readEffectiveTheme())
+  function removeSidebar() {
+    var existing = document.getElementById(SIDEBAR_ID)
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing)
   }
 
-  function setActiveNav(root, sectionId) {
-    if (!root) return
-    var links = root.querySelectorAll("[data-section-link]")
+  function sidebarMarkup() {
+    var html =
+      '<div class="site-settings-sidebar-rail">' +
+      '<div class="site-settings-sidebar-section">' +
+      '<div class="site-settings-sidebar-label">Settings</div>' +
+      '<nav class="site-settings-sidebar-nav" aria-label="Settings sections">'
+    for (var i = 0; i < SECTION_LINKS.length; i++) {
+      html +=
+        '<a href="#' +
+        esc(SECTION_LINKS[i].id) +
+        '" data-settings-nav="' +
+        esc(SECTION_LINKS[i].id) +
+        '">' +
+        esc(SECTION_LINKS[i].label) +
+        "</a>"
+    }
+    html +=
+      "</nav>" +
+      "</div>" +
+      '<div class="site-settings-sidebar-section">' +
+      '<div class="site-settings-sidebar-label">Actions</div>' +
+      '<div class="site-settings-sidebar-actions">' +
+      '<button class="site-settings-sidebar-btn" id="site-settings-save" type="button">Save changes</button>' +
+      '<button class="site-settings-sidebar-btn site-settings-sidebar-btn--quiet" id="site-settings-reset" type="button">Reset defaults</button>' +
+      '<p class="site-settings-sidebar-status" id="site-settings-status" aria-live="polite"></p>' +
+      "</div>" +
+      "</div>" +
+      '<div class="site-settings-sidebar-section">' +
+      '<div class="site-settings-sidebar-label">Notes</div>' +
+      '<p class="site-settings-sidebar-note">Theme, reader mode, and Iconoplasm settings are shared across Brinedew-controlled pages in this browser. Nothing is account-backed yet.</p>' +
+      "</div>" +
+      "</div>"
+    return html
+  }
+
+  function mountSidebar() {
+    removeSidebar()
+    var sidebar = document.querySelector(".right.sidebar")
+    if (!sidebar) return null
+    var mount = document.createElement("div")
+    mount.id = SIDEBAR_ID
+    mount.innerHTML = sidebarMarkup()
+    var tagsSection = sidebar.querySelector(".page-tags-section")
+    if (tagsSection) {
+      sidebar.insertBefore(mount, tagsSection)
+    } else {
+      sidebar.appendChild(mount)
+    }
+    return mount
+  }
+
+  function setActiveNav(sectionId) {
+    var links = document.querySelectorAll("[data-settings-nav]")
     for (var i = 0; i < links.length; i++) {
       var link = links[i]
-      var isActive = link.getAttribute("data-section-link") === sectionId
+      var isActive = link.getAttribute("data-settings-nav") === sectionId
       link.setAttribute("data-active", isActive ? "true" : "false")
       if (isActive) {
         link.setAttribute("aria-current", "location")
@@ -160,7 +187,7 @@ import {
     if (!root) return
     var sections = root.querySelectorAll(".site-settings-section[id]")
     if (!sections.length) return
-    setActiveNav(root, sections[0].id)
+    setActiveNav(sections[0].id)
     if (typeof window.IntersectionObserver !== "function") return
 
     var observer = new window.IntersectionObserver(
@@ -174,11 +201,11 @@ import {
           }
         }
         if (topEntry && topEntry.target && topEntry.target.id) {
-          setActiveNav(root, topEntry.target.id)
+          setActiveNav(topEntry.target.id)
         }
       },
       {
-        rootMargin: "-15% 0px -65% 0px",
+        rootMargin: "-12% 0px -72% 0px",
         threshold: [0.2, 0.55, 0.85],
       },
     )
@@ -194,35 +221,19 @@ import {
     root.innerHTML =
       '<div class="site-settings-shell">' +
       '<header class="site-settings-header">' +
-      '<p class="site-settings-kicker">User settings</p>' +
+      '<p class="site-settings-kicker">Brinedew.bio</p>' +
       '<h1 class="site-settings-title">Settings</h1>' +
-      '<p class="site-settings-lede">These are your browser-level settings for Brinedew.bio. They shape the site chrome, travel across Brinedew subdomains, and give Iconoplasm one shared place to read its user preferences.</p>' +
-      '<div class="site-settings-meta">' +
-      '<span class="site-settings-meta-item">Shared across Brinedew.bio and Iconoplasm</span>' +
-      '<span class="site-settings-meta-item">Saved to this browser, not to an account</span>' +
-      "</div>" +
+      '<p class="site-settings-lede">Site-wide preferences for this browser. Shared shell behavior belongs here, and app-specific settings can extend it without inventing their own separate settings pages.</p>' +
       "</header>" +
-      '<div class="site-settings-layout">' +
-      '<aside class="site-settings-sidebar">' +
-      '<div class="site-settings-sidebar-block">' +
-      '<p class="site-settings-sidebar-label">Sections</p>' +
-      sectionNavMarkup() +
-      "</div>" +
-      '<div class="site-settings-sidebar-note">' +
-      "<strong>What syncs today:</strong> theme, reader mode, and Iconoplasm preferences are shared across Brinedew-controlled pages in this browser. Nothing is attached to a login yet." +
-      "</div>" +
-      "</aside>" +
-      '<main class="site-settings-main">' +
       '<section class="site-settings-section" id="appearance">' +
       '<div class="site-settings-section-head">' +
       "<h2>Appearance</h2>" +
-      "<p>Core presentation settings for the entire site shell.</p>" +
+      "<p>Theme settings for the whole Brinedew shell.</p>" +
       "</div>" +
-      '<div class="site-settings-card">' +
       '<div class="site-settings-row">' +
       '<div class="site-settings-copy">' +
       "<h3>Theme</h3>" +
-      "<p>Choose whether Brinedew follows your system preference or stays pinned to a single theme.</p>" +
+      "<p>Let the site follow your system preference, or force a fixed theme.</p>" +
       "</div>" +
       '<div class="site-settings-control">' +
       segmentedControlMarkup("themePreference", snapshot.themePreference, THEME_OPTIONS) +
@@ -231,48 +242,44 @@ import {
       "</span></p>" +
       "</div>" +
       "</div>" +
-      "</div>" +
       "</section>" +
       '<section class="site-settings-section" id="reading">' +
       '<div class="site-settings-section-head">' +
       "<h2>Reading</h2>" +
-      "<p>Settings that affect article and page layout behavior.</p>" +
+      "<p>Controls for content pages and article viewing.</p>" +
       "</div>" +
-      '<div class="site-settings-card">' +
       '<div class="site-settings-row">' +
       '<div class="site-settings-copy">' +
       "<h3>Reader mode</h3>" +
-      "<p>Persist the simplified reading layout instead of toggling it only for the page you are on.</p>" +
+      "<p>Persist the simplified reading layout instead of toggling it one page at a time.</p>" +
       "</div>" +
       '<div class="site-settings-control">' +
       segmentedControlMarkup("readerModePreference", snapshot.readerModePreference, READER_OPTIONS) +
-      '<p class="site-settings-help">This matches the reader-mode button in the site header.</p>' +
-      "</div>" +
+      '<p class="site-settings-help">This mirrors the reader-mode toggle in the header.</p>' +
       "</div>" +
       "</div>" +
       "</section>" +
       '<section class="site-settings-section" id="iconoplasm">' +
       '<div class="site-settings-section-head">' +
       "<h2>Iconoplasm</h2>" +
-      "<p>App-specific preferences that still live inside your shared site settings.</p>" +
+      "<p>Preferences that belong to Iconoplasm but live inside your shared site settings.</p>" +
       "</div>" +
-      '<div class="site-settings-card">' +
       '<div class="site-settings-row">' +
       '<div class="site-settings-copy">' +
       "<h3>Front page layout</h3>" +
-      "<p>Choose the catalog presentation you want on the Iconoplasm homepage.</p>" +
+      "<p>Choose how the main Iconoplasm catalog is presented.</p>" +
       "</div>" +
       '<div class="site-settings-control">' +
       '<select class="site-settings-select" id="site-settings-iconoplasm-layout">' +
       selectOptionsMarkup(snapshot.iconoplasm.homeLayout, HOME_LAYOUT_OPTIONS) +
       "</select>" +
-      '<p class="site-settings-help">Bricks is the current default. Masonry remains available as the alternate browse view.</p>' +
+      '<p class="site-settings-help">Bricks is the default. Masonry stays available as the alternate browse view.</p>' +
       "</div>" +
       "</div>" +
       '<div class="site-settings-row">' +
       '<div class="site-settings-copy">' +
       "<h3>Image generation</h3>" +
-      "<p>These values power future actions like new candidate, edit image, and related generation tools.</p>" +
+      "<p>Provider and defaults for future actions like new candidate and edit image.</p>" +
       "</div>" +
       '<div class="site-settings-control site-settings-control--stack">' +
       '<label class="site-settings-field" for="site-settings-provider">' +
@@ -289,7 +296,7 @@ import {
       '" placeholder="Paste your API key">' +
       '<button class="site-settings-inline-btn" id="site-settings-api-key-toggle" type="button" aria-pressed="false">Show</button>' +
       "</div>" +
-      '<p class="site-settings-help">Stored locally in this browser and used by Brinedew-controlled apps. It is not attached to an account.</p>' +
+      '<p class="site-settings-help">Stored locally in this browser and shared across Brinedew-controlled pages.</p>' +
       "</label>" +
       '<label class="site-settings-field" for="site-settings-model">' +
       "<span>Model</span>" +
@@ -305,37 +312,26 @@ import {
       "</label>" +
       "</div>" +
       "</div>" +
-      "</div>" +
       "</section>" +
       '<section class="site-settings-section" id="storage">' +
       '<div class="site-settings-section-head">' +
       "<h2>Storage</h2>" +
-      "<p>How this page behaves today, before account sync exists.</p>" +
+      "<p>How these settings behave before account sync exists.</p>" +
       "</div>" +
-      '<div class="site-settings-card">' +
       '<div class="site-settings-row">' +
       '<div class="site-settings-copy">' +
-      "<h3>Browser-local state</h3>" +
-      "<p>These settings belong to this browser profile. A different browser or device starts from defaults until account-backed sync exists.</p>" +
+      "<h3>Browser-local</h3>" +
+      "<p>These settings stay with this browser profile. Another browser or device starts from defaults.</p>" +
       "</div>" +
-      '<div class="site-settings-control site-settings-control--stack">' +
-      '<p class="site-settings-help site-settings-help--strong">That makes testing safe: you can change layout, theme, or generation defaults without affecting anyone else.</p>' +
-      '<p class="site-settings-help">The page itself lives on Brinedew.bio so apps can read the same preferences instead of maintaining their own mini settings screens.</p>' +
-      "</div>" +
+      '<div class="site-settings-control">' +
+      '<p class="site-settings-help site-settings-help--strong">That makes testing safe without affecting other users.</p>' +
+      '<p class="site-settings-help">The canonical settings page lives on Brinedew.bio so apps can read the same preferences instead of shipping their own separate settings surfaces.</p>' +
       "</div>" +
       "</div>" +
       "</section>" +
-      "</main>" +
-      "</div>" +
-      '<div class="site-settings-savebar">' +
-      '<p class="site-settings-status" id="site-settings-status" aria-live="polite"></p>' +
-      '<div class="site-settings-actions">' +
-      '<button class="site-settings-btn site-settings-btn--secondary" id="site-settings-reset" type="button">Reset defaults</button>' +
-      '<button class="site-settings-btn site-settings-btn--primary" id="site-settings-save" type="button">Save changes</button>' +
-      "</div>" +
-      "</div>" +
       "</div>"
 
+    mountSidebar()
     wireSectionTracking(root)
 
     var themeInputs = root.querySelectorAll('input[name="themePreference"]')
@@ -361,13 +357,13 @@ import {
       if (!statusEl) return
       statusEl.textContent = message || ""
       statusEl.className =
-        "site-settings-status" +
+        "site-settings-sidebar-status" +
         (tone === "success"
-          ? " site-settings-status--success"
+          ? " site-settings-sidebar-status--success"
           : tone === "error"
-            ? " site-settings-status--error"
+            ? " site-settings-sidebar-status--error"
             : tone === "dirty"
-              ? " site-settings-status--dirty"
+              ? " site-settings-sidebar-status--dirty"
               : "")
       statusEl.setAttribute("data-sticky", sticky ? "true" : "false")
     }
@@ -382,7 +378,6 @@ import {
     function currentDraft() {
       return {
         themePreference: normalizeThemePreference(selectedRadioValue(themeInputs, "system")),
-        effectiveTheme: predictedEffectiveTheme(selectedRadioValue(themeInputs, "system")),
         readerModePreference: normalizeReaderModePreference(selectedRadioValue(readerInputs, "off")),
         iconoplasm: buildIconoplasmSettings({
           homeLayout: layoutEl && layoutEl.value,
@@ -394,17 +389,15 @@ import {
       }
     }
 
-    function currentComparableDraft() {
-      return comparableSnapshot(currentDraft())
-    }
-
     function updateEffectiveThemeLabel() {
       if (!effectiveThemeEl) return
-      effectiveThemeEl.textContent = currentDraft().effectiveTheme
+      var preference = normalizeThemePreference(selectedRadioValue(themeInputs, "system"))
+      effectiveThemeEl.textContent =
+        preference === "system" ? String(readEffectiveTheme() || "system") : preference
     }
 
     function refreshDirtyState() {
-      var draftComparable = currentComparableDraft()
+      var draftComparable = comparableSnapshot(currentDraft())
       var dirty = snapshotSignature(draftComparable) !== snapshotSignature(savedComparableSnapshot)
       var canReset =
         snapshotSignature(draftComparable) !== snapshotSignature(defaultComparableSnapshot)
@@ -412,11 +405,7 @@ import {
       if (resetBtn) resetBtn.disabled = !canReset
       updateEffectiveThemeLabel()
       if (statusEl && statusEl.getAttribute("data-sticky") === "true") return
-      if (dirty) {
-        setStatus("Unsaved changes.", "dirty", false)
-      } else {
-        setStatus("", "", false)
-      }
+      setStatus(dirty ? "Unsaved changes." : "", dirty ? "dirty" : "", false)
     }
 
     function bindDirtyTracking(node) {
@@ -453,12 +442,12 @@ import {
           return
         }
         savedComparableSnapshot = comparableSnapshot(currentSettingsSnapshot())
-        setStatus("Settings saved for this browser.", "success", true)
+        setStatus("Saved.", "success", true)
         window.setTimeout(function () {
-          if (!statusEl || statusEl.textContent !== "Settings saved for this browser.") return
+          if (!statusEl || statusEl.textContent !== "Saved.") return
           statusEl.setAttribute("data-sticky", "false")
           refreshDirtyState()
-        }, 1800)
+        }, 1600)
         refreshDirtyState()
       })
     }
@@ -478,7 +467,8 @@ import {
         var rerenderedStatus = document.getElementById("site-settings-status")
         if (rerenderedStatus) {
           rerenderedStatus.textContent = "Settings reset to defaults."
-          rerenderedStatus.className = "site-settings-status site-settings-status--success"
+          rerenderedStatus.className =
+            "site-settings-sidebar-status site-settings-sidebar-status--success"
           rerenderedStatus.setAttribute("data-sticky", "true")
           window.setTimeout(function () {
             if (
@@ -486,10 +476,10 @@ import {
               rerenderedStatus.getAttribute("data-sticky") === "true"
             ) {
               rerenderedStatus.textContent = ""
-              rerenderedStatus.className = "site-settings-status"
+              rerenderedStatus.className = "site-settings-sidebar-status"
               rerenderedStatus.setAttribute("data-sticky", "false")
             }
-          }, 1800)
+          }, 1600)
         }
       })
     }
@@ -498,7 +488,11 @@ import {
   }
 
   function init() {
-    if (!document.getElementById(ROOT_ID)) return
+    var root = document.getElementById(ROOT_ID)
+    if (!root) {
+      removeSidebar()
+      return
+    }
     render()
   }
 
