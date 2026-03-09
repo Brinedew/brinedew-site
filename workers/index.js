@@ -262,6 +262,15 @@ function shouldAllowUnsafeEval(url) {
   )
 }
 
+function isSiteSettingsBridgeRequest(request) {
+  try {
+    const reqUrl = new URL(request.url)
+    return reqUrl.pathname === "/static/site-preferences/bridge.html"
+  } catch {
+    return false
+  }
+}
+
 function buildContentSecurityPolicy(request) {
   let allowUnsafeEval = false
   try {
@@ -276,8 +285,14 @@ function buildContentSecurityPolicy(request) {
   const connectSrc = allowUnsafeEval
     ? "connect-src 'self' data: blob: https://brinedew.bio https://geneguessr.brinedew.bio"
     : "connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio"
+  const frameAncestors = isSiteSettingsBridgeRequest(request)
+    ? "frame-ancestors https://brinedew.bio https://*.brinedew.bio"
+    : "frame-ancestors 'none'"
+  const frameSrc = isSiteSettingsBridgeRequest(request)
+    ? "frame-src 'self' https://brinedew.bio https://*.brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com"
+    : "frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com"
 
-  return `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; ${scriptSrc}; ${connectSrc}; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
+  return `default-src 'self'; base-uri 'self'; object-src 'none'; ${frameAncestors}; img-src 'self' data: blob: https://cdn.discordapp.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; ${scriptSrc}; ${connectSrc}; ${frameSrc}; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
 }
 
 function crossOriginResourcePolicyForRequest(request) {
@@ -357,6 +372,9 @@ function applySecurityHeaders(response, request) {
   headers.set("Content-Security-Policy", buildContentSecurityPolicy(request))
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     headers.set(name, value)
+  }
+  if (isSiteSettingsBridgeRequest(request)) {
+    headers.delete("X-Frame-Options")
   }
   headers.set("Cross-Origin-Resource-Policy", crossOriginResourcePolicyForRequest(request))
   try {
