@@ -314,26 +314,40 @@ article p {
   line-height: 1.2;
 }
 
-.brd-user-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  font-size: 0.82rem;
-}
-
-.brd-user-links a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.brd-user-links a:hover {
-  text-decoration: underline;
-}
-
 .brd-user-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+  align-items: center;
+}
+
+.brd-icon-btn {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+  color: var(--accent);
+  text-decoration: none;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.brd-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.brd-icon-btn:hover {
+  background: var(--light);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .brd-sidebar-btn {
@@ -367,6 +381,10 @@ article p {
 
 .brd-sidebar-btn--quiet {
   border-color: var(--ui-border);
+}
+
+.brd-sidebar-btn--community {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--ui-border));
 }
 
 .brd-sidebar-rowlist {

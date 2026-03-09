@@ -8,6 +8,11 @@ var authBridgePromise = null
 var authBridgeIframe = null
 var authBridgeRequestId = 0
 var authBridgePending = Object.create(null)
+var SETTINGS_GEAR_ICON =
+  '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+  '<path d="M10 2.75 11.2 3.2 12.48 2.85 13.83 3.63 14.05 4.94 15.06 5.95 16.37 6.17 17.15 7.52 16.8 8.8 17.25 10 16.8 11.2 17.15 12.48 16.37 13.83 15.06 14.05 14.05 15.06 13.83 16.37 12.48 17.15 11.2 16.8 10 17.25 8.8 16.8 7.52 17.15 6.17 16.37 5.95 15.06 4.94 14.05 3.63 13.83 2.85 12.48 3.2 11.2 2.75 10 3.2 8.8 2.85 7.52 3.63 6.17 4.94 5.95 5.95 4.94 6.17 3.63 7.52 2.85 8.8 3.2 10 2.75Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>' +
+  '<circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.25"/>' +
+  "</svg>"
 
 function wait(ms) {
   return new Promise(function (resolve) {
@@ -159,24 +164,24 @@ export function buildSharedUserPanelMarkup(options) {
   var loginLabel = String(source.loginLabel || "Discord Login").trim() || "Discord Login"
   var panelTitle = String(source.panelTitle || "Account").trim() || "Account"
   var communityHref = String(source.communityHref || COMMUNITY_URL).trim()
-  var actions = user
+  var settingsAction =
+    '<a class="brd-icon-btn brd-icon-btn--settings" href="' +
+    escapeHtml(settingsHref) +
+    '" aria-label="Settings" title="Settings">' +
+    SETTINGS_GEAR_ICON +
+    "</a>"
+  var communityAction = communityHref
+    ? '<a class="brd-sidebar-btn brd-sidebar-btn--community" href="' +
+      escapeHtml(communityHref) +
+      '" target="_blank" rel="noopener noreferrer">Discord</a>'
+    : ""
+  var primaryAction = user
     ? '<button type="button" class="brd-sidebar-btn brd-sidebar-btn--quiet" data-brd-user-logout>Sign Out</button>'
     : '<a class="brd-sidebar-btn" href="' +
       escapeHtml(loginHref) +
       '">' +
       escapeHtml(loginLabel) +
       "</a>"
-  var links =
-    '<div class="brd-user-links">' +
-    '<a href="' +
-    escapeHtml(settingsHref) +
-    '">Settings</a>' +
-    (communityHref
-      ? '<a href="' +
-        escapeHtml(communityHref) +
-        '" target="_blank" rel="noopener noreferrer">Discord</a>'
-      : "") +
-    "</div>"
   return (
     '<div class="brd-sidebar-section">' +
     '<div class="brd-sidebar-panel-title">' +
@@ -191,9 +196,10 @@ export function buildSharedUserPanelMarkup(options) {
     (tierLabel ? '<div class="brd-user-tier">' + escapeHtml(tierLabel) + "</div>" : "") +
     "</div>" +
     "</div>" +
-    links +
     '<div class="brd-user-actions">' +
-    actions +
+    settingsAction +
+    communityAction +
+    primaryAction +
     "</div>" +
     "</div>"
   )
