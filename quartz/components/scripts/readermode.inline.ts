@@ -8,10 +8,17 @@ const emitReaderModeChangeEvent = (mode: "on" | "off") => {
 }
 
 document.addEventListener("nav", () => {
+  isReaderMode = localStorage.getItem("readerMode") === "on"
+
   const switchReaderMode = () => {
     isReaderMode = !isReaderMode
     const newMode = isReaderMode ? "on" : "off"
     document.documentElement.setAttribute("reader-mode", newMode)
+    if (newMode === "on") {
+      localStorage.setItem("readerMode", "on")
+    } else {
+      localStorage.removeItem("readerMode")
+    }
     emitReaderModeChangeEvent(newMode)
   }
 

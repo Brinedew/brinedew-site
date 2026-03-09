@@ -113,7 +113,7 @@ export default (() => {
         {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('theme');if(t){document.documentElement.setAttribute('data-theme',t)}}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('theme');var e=t||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',e);document.documentElement.setAttribute('saved-theme',e);var r=localStorage.getItem('readerMode')==='on'?'on':'off';document.documentElement.setAttribute('reader-mode',r)}catch(e){}`,
           }}
         />
 
@@ -159,8 +159,9 @@ export default (() => {
             normalizedSlug === "apps/iconoplasm" ||
             fileData.frontmatter?.title ===
               "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+          const isSettings = normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
 
-          if (!isScriptotic && !isGeneguessr && !isIconoplasm) {
+          if (!isScriptotic && !isGeneguessr && !isIconoplasm && !isSettings) {
             return null
           }
 
@@ -236,6 +237,22 @@ export default (() => {
                   <script
                     type="module"
                     src={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}
+                  ></script>
+                </>
+              )}
+              {isSettings && (
+                <>
+                  <link
+                    rel="stylesheet"
+                    href={joinSegments(
+                      root,
+                      "static",
+                      `site-settings/styles.css?v=${CACHE_BUST}`,
+                    )}
+                  />
+                  <script
+                    type="module"
+                    src={joinSegments(root, "static", `site-settings/app.js?v=${CACHE_BUST}`)}
                   ></script>
                 </>
               )}

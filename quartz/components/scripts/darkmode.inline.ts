@@ -1,6 +1,7 @@
 const userPref = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"
 const currentTheme = localStorage.getItem("theme") ?? userPref
 document.documentElement.setAttribute("data-theme", currentTheme)
+document.documentElement.setAttribute("saved-theme", currentTheme)
 
 const emitThemeChangeEvent = (theme: "light" | "dark") => {
   const event: CustomEventMap["themechange"] = new CustomEvent("themechange", {
@@ -14,14 +15,16 @@ document.addEventListener("nav", () => {
     const newTheme =
       document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"
     document.documentElement.setAttribute("data-theme", newTheme)
+    document.documentElement.setAttribute("saved-theme", newTheme)
     localStorage.setItem("theme", newTheme)
     emitThemeChangeEvent(newTheme)
   }
 
   const themeChange = (e: MediaQueryListEvent) => {
+    if (localStorage.getItem("theme")) return
     const newTheme = e.matches ? "dark" : "light"
     document.documentElement.setAttribute("data-theme", newTheme)
-    localStorage.setItem("theme", newTheme)
+    document.documentElement.setAttribute("saved-theme", newTheme)
     emitThemeChangeEvent(newTheme)
   }
 
