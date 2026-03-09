@@ -9,6 +9,12 @@ var authBridgeIframe = null
 var authBridgeRequestId = 0
 var authBridgePending = Object.create(null)
 
+function wait(ms) {
+  return new Promise(function (resolve) {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 export function escapeHtml(value) {
   var node = document.createElement("div")
   node.textContent = String(value || "")
@@ -94,7 +100,14 @@ export function buildLoginUrl(options) {
 export async function fetchAuthenticatedUser(options) {
   var source = options || {}
   if (!source.authBase && shouldUseSharedAuthBridge()) {
-    return requestSharedAuth("fetchAuthenticatedUser")
+    var bridgedUser = await requestSharedAuth("fetchAuthenticatedUser").catch(function () {
+      return null
+    })
+    if (bridgedUser) return bridgedUser
+    await wait(300)
+    return requestSharedAuth("fetchAuthenticatedUser").catch(function () {
+      return null
+    })
   }
   var authBase = resolveAuthBase(source.authBase)
   try {
