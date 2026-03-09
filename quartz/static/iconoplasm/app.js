@@ -1,10 +1,10 @@
-import { readIconoplasmSettings, syncSharedIconoplasmSettings } from "../site-preferences.js?v=20260309c"
+import { readIconoplasmSettings, syncSharedIconoplasmSettings } from "../site-preferences.js?v=20260309d"
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=20260309c"
+} from "../shared/sidebar-shell.js?v=20260309d"
 import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
 void syncSharedIconoplasmSettings().catch(function () {

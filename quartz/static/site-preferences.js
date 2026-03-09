@@ -5,7 +5,7 @@ var THEME_COOKIE_KEY = "brinedew_theme"
 var READER_MODE_COOKIE_KEY = "brinedew_reader_mode"
 var ICONOPLASM_LAYOUT_COOKIE_KEY = "brinedew_icono_layout"
 var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
-var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309b"
+var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309d"
 var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
 var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
@@ -189,6 +189,18 @@ function sharedBridgeUrl() {
   return canonicalSettingsOrigin() + ICONOPLASM_SHARED_BRIDGE_PATH
 }
 
+function sharedBridgeWindowReady(iframe) {
+  if (!iframe || iframe.getAttribute("src") !== sharedBridgeUrl()) return false
+  if (iframe.getAttribute("data-ready") !== "true" || !iframe.contentWindow) return false
+  try {
+    var loadedOrigin = String((iframe.contentWindow.location && iframe.contentWindow.location.origin) || "")
+    if (!loadedOrigin || loadedOrigin !== canonicalSettingsOrigin()) return false
+  } catch (_err) {
+    return true
+  }
+  return true
+}
+
 function markBridgeReady() {
   if (sharedBridgeIframe) sharedBridgeIframe.setAttribute("data-ready", "true")
 }
@@ -265,7 +277,7 @@ function sharedBridgeReady() {
     return Promise.reject(new Error("Settings bridge unavailable"))
   }
   ensureSharedBridgeMessageListener()
-  if (sharedBridgeIframe && sharedBridgeIframe.getAttribute("data-ready") === "true") {
+  if (sharedBridgeIframe && sharedBridgeWindowReady(sharedBridgeIframe)) {
     return Promise.resolve(sharedBridgeIframe.contentWindow || null)
   }
   if (sharedBridgePromise) return sharedBridgePromise
@@ -297,15 +309,25 @@ function sharedBridgeReady() {
 
     iframe.addEventListener("load", handleLoad)
     iframe.addEventListener("error", handleError)
-    if (iframe.getAttribute("src") !== url) {
-      iframe.removeAttribute("data-ready")
-      iframe.setAttribute("src", url)
-    }
     attachSharedBridgeIframe(iframe)
 
-    if (iframe.getAttribute("data-ready") === "true" && iframe.contentWindow) {
+    if (sharedBridgeWindowReady(iframe)) {
       cleanup()
+      sharedBridgePromise = null
       resolve(iframe.contentWindow)
+      return
+    }
+
+    iframe.removeAttribute("data-ready")
+    if (iframe.getAttribute("src") !== url) {
+      iframe.setAttribute("src", url)
+      return
+    }
+
+    try {
+      iframe.contentWindow.location.replace(url)
+    } catch (_err) {
+      iframe.setAttribute("src", url)
     }
   }).catch(function (error) {
     sharedBridgePromise = null

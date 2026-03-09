@@ -4,13 +4,13 @@ import {
   readIconoplasmSettings,
   resetIconoplasmSettings,
   writeIconoplasmSettings,
-} from "../site-preferences.js?v=20260309c"
+} from "../site-preferences.js?v=20260309d"
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=20260309c"
+} from "../shared/sidebar-shell.js?v=20260309d"
 
 ;(function () {
   "use strict"
@@ -18,7 +18,7 @@ import {
   var ROOT_ID = "site-settings-root"
   var SECTION_LINKS = [
     { id: "iconoplasm", label: "Iconoplasm" },
-    { id: "storage", label: "Storage" },
+    { id: "browser", label: "Browser" },
   ]
   var HOME_LAYOUT_OPTIONS = [
     { value: "bricks", label: "Bricks" },
@@ -116,7 +116,7 @@ import {
     var html =
       '<div class="site-settings-sidebar-rail">' +
       '<div class="site-settings-sidebar-section">' +
-      '<div class="site-settings-sidebar-label">Settings</div>' +
+      '<div class="site-settings-sidebar-label">Sections</div>' +
       '<nav class="site-settings-sidebar-nav" aria-label="Settings sections">'
     for (var i = 0; i < SECTION_LINKS.length; i++) {
       html +=
@@ -179,16 +179,14 @@ import {
     root.innerHTML =
       '<div class="site-settings-shell">' +
       '<header class="site-settings-header">' +
-      '<p class="site-settings-kicker">Brinedew.bio</p>' +
       '<h1 class="site-settings-title">Settings</h1>' +
-      '<p class="site-settings-lede">Browser-local app preferences.</p>' +
       "</header>" +
       '<section class="site-settings-section" id="iconoplasm">' +
       '<div class="site-settings-section-head">' +
       "<h2>Iconoplasm</h2>" +
       "</div>" +
       '<div class="site-settings-row">' +
-      '<div class="site-settings-copy"><h3>Front page layout</h3></div>' +
+      '<div class="site-settings-copy"><h3>Home layout</h3></div>' +
       '<div class="site-settings-control">' +
       '<select class="site-settings-select" id="site-settings-iconoplasm-layout">' +
       selectOptionsMarkup(snapshot.iconoplasm.homeLayout, HOME_LAYOUT_OPTIONS) +
@@ -228,15 +226,14 @@ import {
       "</div>" +
       "</div>" +
       "</section>" +
-      '<section class="site-settings-section" id="storage">' +
+      '<section class="site-settings-section" id="browser">' +
       '<div class="site-settings-section-head">' +
-      "<h2>Storage</h2>" +
+      "<h2>Browser</h2>" +
       "</div>" +
       '<div class="site-settings-row">' +
-      '<div class="site-settings-copy"><h3>Scope</h3></div>' +
+      '<div class="site-settings-copy"><h3>Storage</h3></div>' +
       '<div class="site-settings-control">' +
-      '<p class="site-settings-help site-settings-help--strong">Saved in this browser.</p>' +
-      '<p class="site-settings-help">Other browsers and devices keep their own defaults.</p>' +
+      '<div class="site-settings-plain-value">Local to this browser.</div>' +
       "</div>" +
       "</div>" +
       "</section>" +
@@ -294,7 +291,7 @@ import {
       if (saveBtn) saveBtn.disabled = !dirty
       if (resetBtn) resetBtn.disabled = !canReset
       if (statusEl && statusEl.getAttribute("data-sticky") === "true") return
-      setStatus(dirty ? "Unsaved changes." : "", dirty ? "dirty" : "", false)
+      setStatus(dirty ? "Unsaved." : "", dirty ? "dirty" : "", false)
     }
 
     function bindDirtyTracking(node) {
@@ -323,7 +320,7 @@ import {
         var draft = currentDraft()
         var iconoplasmOk = writeIconoplasmSettings(draft.iconoplasm)
         if (!iconoplasmOk) {
-          setStatus("This browser blocked saving settings.", "error", true)
+          setStatus("Could not save in this browser.", "error", true)
           return
         }
         savedComparableSnapshot = comparableSnapshot(currentSettingsSnapshot())
@@ -343,7 +340,7 @@ import {
         var iconoplasmOk = resetIconoplasmSettings()
         if (!iconoplasmOk) iconoplasmOk = writeIconoplasmSettings(iconoplasmDefaults)
         if (!iconoplasmOk) {
-          setStatus("This browser blocked resetting settings.", "error", true)
+          setStatus("Could not reset in this browser.", "error", true)
           return
         }
         render()
@@ -363,15 +360,14 @@ import {
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    render()
     void fetchAuthenticatedUser()
       .then(function (user) {
         currentUser = user
+        render()
       })
       .catch(function () {
         currentUser = null
-      })
-      .finally(function () {
-        render()
       })
   }
 
