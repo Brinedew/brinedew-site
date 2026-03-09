@@ -49,6 +49,6 @@ jobs:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
-          projectName: quartz
+          projectName: brinedew-bio
           deploymentName: Branch Preview
           directory: ${{ steps.preview-build-artifact.outputs.download-path }}
