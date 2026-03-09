@@ -11,7 +11,7 @@ import {
   readThemePreference,
   resetIconoplasmSettings,
   writeIconoplasmSettings,
-} from "../site-preferences.js?v=20260309b"
+} from "../site-preferences.js?v=20260309c"
 
 ;(function () {
   "use strict"

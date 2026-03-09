@@ -276,6 +276,7 @@ function sharedBridgeReady() {
       reject(new Error("Settings bridge unavailable"))
       return
     }
+    var url = sharedBridgeUrl()
 
     function cleanup() {
       iframe.removeEventListener("load", handleLoad)
@@ -296,17 +297,14 @@ function sharedBridgeReady() {
 
     iframe.addEventListener("load", handleLoad)
     iframe.addEventListener("error", handleError)
-    attachSharedBridgeIframe(iframe)
-
-    var url = sharedBridgeUrl()
     if (iframe.getAttribute("src") !== url) {
       iframe.removeAttribute("data-ready")
       iframe.setAttribute("src", url)
-      return
     }
-    if (iframe.contentWindow) {
+    attachSharedBridgeIframe(iframe)
+
+    if (iframe.getAttribute("data-ready") === "true" && iframe.contentWindow) {
       cleanup()
-      markBridgeReady()
       resolve(iframe.contentWindow)
     }
   }).catch(function (error) {

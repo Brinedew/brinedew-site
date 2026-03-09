@@ -2,7 +2,7 @@ import {
   readIconoplasmSettings,
   siteSettingsUrl,
   syncSharedIconoplasmSettings,
-} from "../site-preferences.js?v=20260309b"
+} from "../site-preferences.js?v=20260309c"
 import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
 void syncSharedIconoplasmSettings().catch(function () {
