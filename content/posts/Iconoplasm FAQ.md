@@ -29,7 +29,7 @@ Scott Alexander explicitly requested this kind of tool in [his post](https://sla
 Economics for 20K images.
 
 3. **I want to remove my art style from the pool**
-You can use this utility to check how many times an artist name tag was used across the entire gallery. Press "remove artist style" to remove all images with the tag from the site and blacklist its future use.
+You can use the [artist style lookup utility](https://iconoplasm.brinedew.bio/artist-styles) to check how many times an artist name tag was used across the entire gallery. Press "remove artist style" to remove all images with the tag from the site and blacklist its future use.
  
 If you don't want to register an account on the site, you can send an email to support@brinedew.bio to have an art style removed. Mention your @artist tag as it appears on https://thetacursed.github.io/Anima-Style-Explorer/
 

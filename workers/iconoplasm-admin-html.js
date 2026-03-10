@@ -292,6 +292,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               <th>Gene</th>
               <th>Asset SHA256</th>
               <th>Status</th>
+              <th>Artist</th>
               <th>Preview</th>
               <th>Uploaded</th>
               <th>Emergency</th>
@@ -402,11 +403,16 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function renderTable() {
         var assets = filteredAssets();
         els.body.innerHTML = assets.map(function (a) {
+          var artistBits = [];
+          if (a.artist_tag) artistBits.push('<div><strong>' + esc(a.artist_tag) + '</strong></div>');
+          if (a.artist_name) artistBits.push('<div class="small">' + esc(a.artist_name) + '</div>');
+          if (a.vision_id) artistBits.push('<div class="small mono">' + esc(a.vision_id) + '</div>');
           return [
             '<tr>',
             '<td><strong>' + esc(a.gene_symbol || '') + '</strong></td>',
             '<td class="mono sha" title="' + esc(a.asset_sha256 || '') + '">' + esc(shortSha(a.asset_sha256 || '')) + '</td>',
             '<td>' + statusPill(a.status) + '</td>',
+            '<td>' + (artistBits.join('') || '<span class="small">-</span>') + '</td>',
             '<td>' + previewCell(a) + '</td>',
             '<td><div>' + esc(a.created_at || '-') + '</div><div class="small">' + esc(a.created_by || '-') + '</div></td>',
             '<td>',
