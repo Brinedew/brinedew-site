@@ -19,6 +19,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   var GALLERY_PAGE_SIZE = 30
   var GALLERY_DEFAULT_ORDER = "votes"
   var HOME_LAYOUT_DEFAULT = "bricks"
+  var HOME_SKELETON_CARD_COUNT = 8
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
     { value: "popularity", label: "Popularity" },
@@ -555,6 +556,76 @@ void syncSharedIconoplasmSettings().catch(function () {
         "</option>"
     }
     return html
+  }
+
+  function buildHomeSkeletonGridMarkup(layout) {
+    var resolvedLayout = layout === "masonry" ? "masonry" : "bricks"
+    var html = ""
+    if (resolvedLayout === "masonry") {
+      html += '<div class="icono-grid-sizer"></div><div class="icono-gutter-sizer"></div>'
+    }
+    for (var i = 0; i < HOME_SKELETON_CARD_COUNT; i++) {
+      if (resolvedLayout === "masonry") {
+        var aspectRatio = i % 3 === 0 ? "4 / 5" : i % 3 === 1 ? "1 / 1" : "3 / 4"
+        html +=
+          '<article class="icono-card icono-card--masonry icono-card--skeleton" aria-hidden="true" style="--icono-skeleton-aspect:' +
+          aspectRatio +
+          ';">' +
+          '<div class="icono-card-media icono-card-skeleton-media"></div>' +
+          '<div class="icono-card-info icono-card-skeleton-body">' +
+          '<span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>' +
+          '<span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>' +
+          "</div>" +
+          "</article>"
+      } else {
+        html +=
+          '<article class="icono-card icono-card--brick icono-card--skeleton" aria-hidden="true">' +
+          '<div class="icono-card-skeleton-media"></div>' +
+          '<div class="icono-card-skeleton-body">' +
+          '<span class="icono-card-skeleton-kicker"></span>' +
+          '<span class="icono-card-skeleton-line icono-card-skeleton-line--title"></span>' +
+          '<span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>' +
+          '<span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>' +
+          '<span class="icono-card-skeleton-line"></span>' +
+          "</div>" +
+          "</article>"
+      }
+    }
+    return html
+  }
+
+  function buildHomeShellMarkup(layout) {
+    var resolvedLayout = layout === "masonry" ? "masonry" : HOME_LAYOUT_DEFAULT
+    return (
+      '<div class="icono-hero">' +
+      "<h1>Iconoplasm</h1>" +
+      '<p class="tagline">Visual mnemonics for molecular cell biology</p>' +
+      '<span class="stat" id="icono-gene-count">...</span>' +
+      "</div>" +
+      '<div class="icono-gallery-toolbar">' +
+      '<div class="icono-search icono-search--toolbar">' +
+      '<div class="icono-search-wrapper">' +
+      '<input type="text" id="icono-q" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
+      '<div class="icono-search-results" id="icono-results"></div>' +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-gallery-actions">' +
+      '<label class="icono-gallery-order" for="icono-order">' +
+      "<span>Order by</span>" +
+      '<select id="icono-order">' +
+      galleryOptionsMarkup() +
+      "</select>" +
+      "</label>" +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-loading" id="icono-loading">Loading gallery...</div>' +
+      '<div class="icono-grid" id="icono-grid" data-layout="' +
+      esc(resolvedLayout) +
+      '" aria-busy="true">' +
+      buildHomeSkeletonGridMarkup(resolvedLayout) +
+      "</div>" +
+      '<div class="icono-load-sentinel" id="icono-load-sentinel" aria-hidden="true"></div>'
+    )
   }
 
   function isLightColor(hex) {
@@ -1240,31 +1311,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     iconoSidebarState.publishedTotal = 0
     iconoSidebarState.gene = null
     renderIconoplasmSidebar()
-    root.innerHTML =
-      '<div class="icono-hero">' +
-      "<h1>Iconoplasm</h1>" +
-      '<p class="tagline">Visual mnemonics for molecular cell biology</p>' +
-      '<span class="stat" id="icono-gene-count">...</span>' +
-      "</div>" +
-      '<div class="icono-gallery-toolbar">' +
-      '<div class="icono-search icono-search--toolbar">' +
-      '<div class="icono-search-wrapper">' +
-      '<input type="text" id="icono-q" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
-      '<div class="icono-search-results" id="icono-results"></div>' +
-      "</div>" +
-      "</div>" +
-      '<div class="icono-gallery-actions">' +
-      '<label class="icono-gallery-order" for="icono-order">' +
-      "<span>Order by</span>" +
-      '<select id="icono-order">' +
-      galleryOptionsMarkup() +
-      "</select>" +
-      "</label>" +
-      "</div>" +
-      "</div>" +
-      '<div class="icono-loading" id="icono-loading">Loading portraits...</div>' +
-      '<div class="icono-grid" id="icono-grid"></div>' +
-      '<div class="icono-load-sentinel" id="icono-load-sentinel" aria-hidden="true"></div>'
+    root.innerHTML = buildHomeShellMarkup(homeLayout)
 
     var grid = document.getElementById("icono-grid")
     var loading = document.getElementById("icono-loading")
@@ -1334,8 +1381,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       galleryState.hasMore = true
       galleryState.seed = galleryState.order === "random" ? newRandomSeed() : ""
       galleryState.items = []
-      grid.innerHTML = ""
       grid.setAttribute("data-layout", homeLayout)
+      grid.setAttribute("aria-busy", "true")
+      grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout)
       destroyHomeMasonry()
       if (typeof grid._iconoPrefetchCleanup === "function") {
         grid._iconoPrefetchCleanup()
@@ -1366,6 +1414,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         .then(function (data) {
           if (requestId !== activeGalleryRequest) return
           var items = Array.isArray(data && data.items) ? data.items : []
+          var isFirstPage = galleryState.offset === 0
           galleryState.order = String((data && data.order) || galleryState.order)
           galleryState.seed = String((data && data.seed) || galleryState.seed || "")
           galleryState.total = Number((data && data.total) || galleryState.total || 0)
@@ -1373,6 +1422,11 @@ void syncSharedIconoplasmSettings().catch(function () {
             (data && data.published_total) || galleryState.publishedTotal || 0,
           )
           galleryState.hasMore = Boolean(data && data.has_more)
+          if (isFirstPage) {
+            grid.innerHTML = ""
+            grid.setAttribute("data-layout", homeLayout)
+            grid.setAttribute("aria-busy", "false")
+          }
           if (items.length) {
             var newCards = appendGrid(grid, items, galleryState.items.length, homeLayout)
             galleryState.items = galleryState.items.concat(items)
@@ -1394,6 +1448,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         })
         .catch(function (err) {
           if (requestId !== activeGalleryRequest) return
+          grid.setAttribute("aria-busy", "false")
           setLoadingState("Failed to load portraits.", true)
           console.error("[Iconoplasm] gallery load error:", err)
         })
