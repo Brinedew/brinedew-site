@@ -3146,18 +3146,20 @@ async function getDailyTargetProtein(env, options = {}) {
     if (overrideId) {
       const overrideProtein = await fetchProteinByUniprot(env.DB, overrideId)
       if (overrideProtein) {
+        protein = overrideProtein
+        startIdx = eligibleIds.indexOf(protein.uniprot)
+        if (startIdx < 0) startIdx = 0
         if (audit) {
           audit.source = "override"
           audit.override_id = overrideId
           audit.skipped_alpha_fold = 0
         }
-        return audit ? { protein: overrideProtein, audit } : overrideProtein
       }
     }
 
     // If prod has already served today's puzzle (no override needed), mirror that pick in staging.
     // This keeps `?gg_api=...staging...` usable for comparing visuals without changing live behavior.
-    if (env.PROD_KV?.get) {
+    if (!protein && env.PROD_KV?.get) {
       try {
         const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
         if (prodActualRaw) {
@@ -3166,32 +3168,38 @@ async function getDailyTargetProtein(env, options = {}) {
           if (prodUniprot) {
             const prodProtein = await fetchProteinByUniprot(env.DB, prodUniprot)
             if (prodProtein) {
+              protein = prodProtein
+              startIdx = eligibleIds.indexOf(protein.uniprot)
+              if (startIdx < 0) startIdx = 0
               if (audit) {
                 audit.source = "prod_actual"
                 audit.override_id = null
                 audit.skipped_alpha_fold = 0
               }
-              return audit ? { protein: prodProtein, audit } : prodProtein
             }
           }
         }
 
         // Fallback: mirror prod's daily bootstrap cache if it exists (often available even when
         // puzzle_actual hasn't been recorded yet).
-        const prodDailyCache = await getProdDailyBootstrapCache(env, today)
-        const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
-          .toString()
-          .trim()
-          .toUpperCase()
-        if (prodDailyUniprot) {
-          const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
-          if (prodProtein) {
-            if (audit) {
-              audit.source = "prod_daily_cache"
-              audit.override_id = null
-              audit.skipped_alpha_fold = 0
+        if (!protein) {
+          const prodDailyCache = await getProdDailyBootstrapCache(env, today)
+          const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
+            .toString()
+            .trim()
+            .toUpperCase()
+          if (prodDailyUniprot) {
+            const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
+            if (prodProtein) {
+              protein = prodProtein
+              startIdx = eligibleIds.indexOf(protein.uniprot)
+              if (startIdx < 0) startIdx = 0
+              if (audit) {
+                audit.source = "prod_daily_cache"
+                audit.override_id = null
+                audit.skipped_alpha_fold = 0
+              }
             }
-            return audit ? { protein: prodProtein, audit } : prodProtein
           }
         }
       } catch (err) {
@@ -3199,17 +3207,19 @@ async function getDailyTargetProtein(env, options = {}) {
       }
     }
 
-    const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
-    const selection = await pickDailyTarget(env.DB, eligibleIds, salt)
-    protein = selection?.protein || null
-    if (audit) {
-      audit.source = "computed"
-      audit.skipped_alpha_fold = Number.isFinite(selection?.skippedAlphaFold)
-        ? selection.skippedAlphaFold
-        : null
+    if (!protein) {
+      const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
+      const selection = await pickDailyTarget(env.DB, eligibleIds, salt)
+      protein = selection?.protein || null
+      if (audit) {
+        audit.source = "computed"
+        audit.skipped_alpha_fold = Number.isFinite(selection?.skippedAlphaFold)
+          ? selection.skippedAlphaFold
+          : null
+      }
+      startIdx = eligibleIds.indexOf(protein?.uniprot)
+      if (startIdx < 0) startIdx = 0
     }
-    startIdx = eligibleIds.indexOf(protein?.uniprot)
-    if (startIdx < 0) startIdx = 0
   }
 
   // Validate structure availability before committing to this pick.
@@ -3221,63 +3231,17 @@ async function getDailyTargetProtein(env, options = {}) {
     let currentIdx = startIdx
 
     while (attempts < MAX_ATTEMPTS) {
-      const structureMeta = buildMetaFromStoredStructure(protein)
-
-      // If no upstream URL needed (e.g., structure pre-baked), accept it
-      if (structureMeta && !structureMeta.upstreamUrl) {
-        console.log(`[TARGET-PICK] ${protein.uniprot} has no upstream dependency, using it`)
+      const structureMeta = await getCanonicalStructureMeta(protein, env)
+      if (structureMeta?.r2Key) {
+        console.log(
+          `[TARGET-PICK] ${protein.uniprot} validated with ${structureMeta.source} (${structureMeta.r2Key})`,
+        )
         break
       }
 
-      if (structureMeta?.upstreamUrl) {
-        // Check if structure is cached in R2 (instant, no upstream needed)
-        try {
-          const head = await env.STRUCTURES_BUCKET.head(structureMeta.r2Key)
-          if (head) {
-            console.log(`[TARGET-PICK] ${protein.uniprot} cached in R2, using it`)
-            break
-          }
-        } catch {
-          /* not cached */
-        }
-
-        // Not cached - validate upstream with Range GET (SWISS-MODEL blocks HEAD)
-        try {
-          const controller = new AbortController()
-          const timeout = setTimeout(() => controller.abort(), 5000)
-          const upstreamResp = await fetch(structureMeta.upstreamUrl, {
-            method: "GET",
-            headers: {
-              "User-Agent": "GeneGuessr-Worker/1.0",
-              Range: "bytes=0-0",
-            },
-            signal: controller.signal,
-          })
-          clearTimeout(timeout)
-          if (upstreamResp.ok || upstreamResp.status === 206) {
-            console.log(`[TARGET-PICK] ${protein.uniprot} upstream OK (${upstreamResp.status})`)
-            break
-          }
-          console.warn(
-            `[TARGET-PICK] ${protein.uniprot} upstream failed (${upstreamResp.status}), trying next`,
-          )
-          if (audit) {
-            audit.rejected.push({
-              uniprot_id: protein.uniprot,
-              reason: `upstream_failed_${upstreamResp.status}`,
-            })
-          }
-        } catch (err) {
-          console.warn(`[TARGET-PICK] ${protein.uniprot} upstream error:`, err.message)
-          if (audit) {
-            audit.rejected.push({ uniprot_id: protein.uniprot, reason: "upstream_error" })
-          }
-        }
-      } else if (!structureMeta) {
-        console.warn(`[TARGET-PICK] ${protein.uniprot} has no structure meta, trying next`)
-        if (audit) {
-          audit.rejected.push({ uniprot_id: protein.uniprot, reason: "no_structure_meta" })
-        }
+      console.warn(`[TARGET-PICK] ${protein.uniprot} has no working structure, trying next`)
+      if (audit) {
+        audit.rejected.push({ uniprot_id: protein.uniprot, reason: "no_working_structure" })
       }
 
       // This protein's structure is unavailable - try next candidate
@@ -4282,6 +4246,53 @@ function buildMetaFromStoredStructure(protein) {
 const STRUCTURE_SOURCE_CACHE_PREFIX = "structure_source:"
 const STRUCTURE_SOURCE_CACHE_TTL = 60 * 60 * 24 // 24 hours
 
+function hasStoredStructureSource(protein, source) {
+  if (!protein || !source) {
+    return false
+  }
+  if (source === "pdb") {
+    return Boolean(protein.pdb_id)
+  }
+  if (source === "swissmodel") {
+    return Boolean(protein.swissmodel_url)
+  }
+  if (source === "alphafold") {
+    return Boolean(protein.alphafold_url)
+  }
+  return false
+}
+
+function buildStoredStructureCandidates(protein) {
+  if (!protein) {
+    return []
+  }
+
+  const candidates = []
+  const seenKeys = new Set()
+  const explicitSource = String(protein.structure_source || "")
+    .trim()
+    .toLowerCase()
+
+  const pushCandidate = (source) => {
+    if (!hasStoredStructureSource(protein, source)) {
+      return
+    }
+    const meta = buildStructureMetaFromStoredSource({ ...protein, structure_source: source })
+    if (!meta?.r2Key || seenKeys.has(meta.r2Key)) {
+      return
+    }
+    seenKeys.add(meta.r2Key)
+    candidates.push(meta)
+  }
+
+  pushCandidate(explicitSource)
+  pushCandidate("pdb")
+  pushCandidate("swissmodel")
+  pushCandidate("alphafold")
+
+  return candidates
+}
+
 // Cache index metadata (KV).
 //
 // We keep an index of R2 objects in KV (size + lastAccess) so we can evict old
@@ -4290,31 +4301,102 @@ const STRUCTURE_SOURCE_CACHE_TTL = 60 * 60 * 24 // 24 hours
 // These entries have NO TTL - they persist until explicitly deleted by evictStructureCache().
 // This prevents orphaning: if KV expired but R2 didn't, eviction couldn't find/delete the R2 object.
 
+async function isStructureMetaAvailable(env, meta) {
+  if (!meta?.r2Key) {
+    return false
+  }
+  if (!env) {
+    return true
+  }
+  if (await structureObjectExists(env, meta.r2Key)) {
+    return true
+  }
+  if (!meta.upstreamUrl) {
+    return false
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
+  try {
+    const upstreamResp = await fetch(meta.upstreamUrl, {
+      method: "GET",
+      headers: {
+        "User-Agent": "GeneGuessr-Worker/1.0",
+        Range: "bytes=0-0",
+      },
+      signal: controller.signal,
+    })
+    return upstreamResp.ok || upstreamResp.status === 206
+  } catch (err) {
+    console.warn(`GeneGuessr: structure probe failed for ${meta.r2Key}`, err?.message || err)
+    return false
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function resolveStoredStructureMeta(protein, env) {
+  const candidates = buildStoredStructureCandidates(protein)
+  if (!candidates.length) {
+    return null
+  }
+  if (!env) {
+    return candidates[0]
+  }
+
+  for (const candidate of candidates) {
+    if (await isStructureMetaAvailable(env, candidate)) {
+      if (candidate.source !== protein.structure_source) {
+        console.warn(
+          `GeneGuessr: falling back from stored ${protein.structure_source || "unknown"} to ${candidate.source} for ${protein.uniprot}`,
+        )
+      }
+      return candidate
+    }
+  }
+
+  return null
+}
+
 async function getCanonicalStructureMeta(protein, env) {
   if (!protein) {
     return null
   }
 
-  // FAST PATH: Use pre-seeded structure metadata from database
-  // This avoids 3 slow external API calls (PDB, AlphaFold, SWISS-MODEL)
-  const storedMeta = buildMetaFromStoredStructure(protein)
-  if (storedMeta) {
-    console.log(`GeneGuessr: using stored structure metadata for ${protein.uniprot}`)
-    return storedMeta
-  }
-
-  // SLOW PATH: Discover structure from external APIs (for proteins not in our database)
-  // Check KV cache first to avoid re-discovering
+  // Check KV cache first so a validated fallback source can override stale DB preferences.
   const cacheKey = `${STRUCTURE_SOURCE_CACHE_PREFIX}${protein.uniprot}`
   try {
     const cached = await env.KV?.get(cacheKey, { type: "json" })
     if (cached) {
-      console.log(`GeneGuessr: structure source cache hit for ${protein.uniprot}`)
-      return cached
+      if (await isStructureMetaAvailable(env, cached)) {
+        console.log(`GeneGuessr: structure source cache hit for ${protein.uniprot}`)
+        return cached
+      }
+      console.warn(`GeneGuessr: cached structure source stale for ${protein.uniprot}, refreshing`)
+      await env.KV?.delete(cacheKey)
     }
   } catch (err) {
     console.warn("GeneGuessr: failed to read structure source cache", err)
   }
+
+  // FAST PATH: Use pre-seeded structure metadata from database, but probe/fallback if the
+  // preferred stored source has gone stale.
+  const storedMeta = await resolveStoredStructureMeta(protein, env)
+  if (storedMeta) {
+    console.log(
+      `GeneGuessr: using stored structure metadata for ${protein.uniprot} (${storedMeta.source})`,
+    )
+    try {
+      await env.KV?.put(cacheKey, JSON.stringify(storedMeta), {
+        expirationTtl: STRUCTURE_SOURCE_CACHE_TTL,
+      })
+    } catch (err) {
+      console.warn("GeneGuessr: failed to cache stored structure source", err)
+    }
+    return storedMeta
+  }
+
+  // SLOW PATH: Discover structure from external APIs (for proteins not in our database)
   console.log(
     `GeneGuessr: structure source cache miss for ${protein.uniprot}, discovering from APIs...`,
   )
