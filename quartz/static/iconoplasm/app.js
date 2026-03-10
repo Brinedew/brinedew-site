@@ -19,7 +19,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   var GALLERY_PAGE_SIZE = 30
   var GALLERY_DEFAULT_ORDER = "votes"
   var HOME_LAYOUT_DEFAULT = "bricks"
-  var HOME_SKELETON_CARD_COUNT = 8
+  var HOME_SKELETON_CARD_COUNT = 4
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
     { value: "popularity", label: "Popularity" },
@@ -558,6 +558,41 @@ void syncSharedIconoplasmSettings().catch(function () {
     return html
   }
 
+  function buildBrickSkeletonCardMarkup() {
+    return (
+      '<article class="icono-card icono-card--brick icono-card--skeleton" aria-hidden="true">' +
+      '<div class="iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--skeleton">' +
+      '<div class="icono-card-skeleton-portrait-wash"></div>' +
+      '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-body iconoplasm-tooltip-body--skeleton">' +
+      '<div class="iconoplasm-tooltip-header iconoplasm-tooltip-header--skeleton">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--symbol"></span>' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--name"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta iconoplasm-tooltip-meta--skeleton">' +
+      renderTooltipMetaSkeletonHtml() +
+      "</div>" +
+      "</div>" +
+      "</article>"
+    )
+  }
+
+  function buildMasonrySkeletonCardMarkup(index) {
+    var aspectRatio = index % 3 === 0 ? "4 / 5" : index % 3 === 1 ? "1 / 1" : "3 / 4"
+    return (
+      '<article class="icono-card icono-card--masonry icono-card--skeleton" aria-hidden="true" style="--icono-skeleton-aspect:' +
+      aspectRatio +
+      ';">' +
+      '<div class="icono-card-media icono-card-skeleton-media"></div>' +
+      '<div class="icono-card-info icono-card-skeleton-body">' +
+      '<span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>' +
+      '<span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>' +
+      "</div>" +
+      "</article>"
+    )
+  }
+
   function buildHomeSkeletonGridMarkup(layout) {
     var resolvedLayout = layout === "masonry" ? "masonry" : "bricks"
     var html = ""
@@ -565,31 +600,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       html += '<div class="icono-grid-sizer"></div><div class="icono-gutter-sizer"></div>'
     }
     for (var i = 0; i < HOME_SKELETON_CARD_COUNT; i++) {
-      if (resolvedLayout === "masonry") {
-        var aspectRatio = i % 3 === 0 ? "4 / 5" : i % 3 === 1 ? "1 / 1" : "3 / 4"
-        html +=
-          '<article class="icono-card icono-card--masonry icono-card--skeleton" aria-hidden="true" style="--icono-skeleton-aspect:' +
-          aspectRatio +
-          ';">' +
-          '<div class="icono-card-media icono-card-skeleton-media"></div>' +
-          '<div class="icono-card-info icono-card-skeleton-body">' +
-          '<span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>' +
-          '<span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>' +
-          "</div>" +
-          "</article>"
-      } else {
-        html +=
-          '<article class="icono-card icono-card--brick icono-card--skeleton" aria-hidden="true">' +
-          '<div class="icono-card-skeleton-media"></div>' +
-          '<div class="icono-card-skeleton-body">' +
-          '<span class="icono-card-skeleton-kicker"></span>' +
-          '<span class="icono-card-skeleton-line icono-card-skeleton-line--title"></span>' +
-          '<span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>' +
-          '<span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>' +
-          '<span class="icono-card-skeleton-line"></span>' +
-          "</div>" +
-          "</article>"
-      }
+      html += resolvedLayout === "masonry" ? buildMasonrySkeletonCardMarkup(i) : buildBrickSkeletonCardMarkup()
     }
     return html
   }
@@ -618,7 +629,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       "</label>" +
       "</div>" +
       "</div>" +
-      '<div class="icono-loading" id="icono-loading">Loading gallery...</div>' +
+      '<div class="icono-loading" id="icono-loading" hidden aria-live="polite"></div>' +
       '<div class="icono-grid" id="icono-grid" data-layout="' +
       esc(resolvedLayout) +
       '" aria-busy="true">' +
@@ -1311,7 +1322,13 @@ void syncSharedIconoplasmSettings().catch(function () {
     iconoSidebarState.publishedTotal = 0
     iconoSidebarState.gene = null
     renderIconoplasmSidebar()
-    root.innerHTML = buildHomeShellMarkup(homeLayout)
+    var hasExistingShell =
+      root.querySelector("#icono-grid") &&
+      root.querySelector("#icono-q") &&
+      root.querySelector("#icono-order")
+    if (!hasExistingShell) {
+      root.innerHTML = buildHomeShellMarkup(homeLayout)
+    }
 
     var grid = document.getElementById("icono-grid")
     var loading = document.getElementById("icono-loading")
@@ -1338,8 +1355,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
 
     function setLoadingState(message, show) {
-      loading.textContent = message
-      loading.style.display = show ? "block" : "none"
+      var text = String(message || "").trim()
+      loading.textContent = text
+      loading.hidden = !(show && text)
     }
 
     function syncHeroCount() {
@@ -1388,7 +1406,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       if (typeof grid._iconoPrefetchCleanup === "function") {
         grid._iconoPrefetchCleanup()
       }
-      setLoadingState("Loading gallery...", true)
+      setLoadingState("", false)
       updateSentinelObserver()
       loadNextGalleryPage()
     }
@@ -1396,7 +1414,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     function loadNextGalleryPage() {
       if (galleryState.loading || !galleryState.hasMore) return
       galleryState.loading = true
-      setLoadingState(galleryState.offset > 0 ? "Loading more..." : "Loading gallery...", true)
+      setLoadingState("", false)
 
       var requestId = ++activeGalleryRequest
       var path =
@@ -1441,7 +1459,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           }
           syncHeroCount()
           updateSentinelObserver()
-          setLoadingState(galleryState.hasMore ? "Scroll for more" : "", false)
+          setLoadingState("", false)
           if (orderEl && orderEl.value !== galleryState.order) {
             orderEl.value = galleryState.order
           }

@@ -45,46 +45,190 @@ tags:
       </label>
     </div>
   </div>
-  <div class="icono-loading" id="icono-loading">Loading gallery...</div>
+  <div class="icono-loading" id="icono-loading" hidden aria-live="polite"></div>
   <div class="icono-grid" id="icono-grid" data-layout="bricks" aria-busy="true">
     <article class="icono-card icono-card--brick icono-card--skeleton" aria-hidden="true">
-      <div class="icono-card-skeleton-media"></div>
-      <div class="icono-card-skeleton-body">
-        <span class="icono-card-skeleton-kicker"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--title"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>
-        <span class="icono-card-skeleton-line"></span>
+      <div class="iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--skeleton">
+        <div class="icono-card-skeleton-portrait-wash"></div>
+        <div class="iconoplasm-tooltip-portrait-fade"></div>
+      </div>
+      <div class="iconoplasm-tooltip-body iconoplasm-tooltip-body--skeleton">
+        <div class="iconoplasm-tooltip-header iconoplasm-tooltip-header--skeleton">
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--symbol"></span>
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--name"></span>
+        </div>
+        <div class="iconoplasm-tooltip-meta iconoplasm-tooltip-meta--skeleton">
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+        </div>
       </div>
     </article>
     <article class="icono-card icono-card--brick icono-card--skeleton" aria-hidden="true">
-      <div class="icono-card-skeleton-media"></div>
-      <div class="icono-card-skeleton-body">
-        <span class="icono-card-skeleton-kicker"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--title"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>
-        <span class="icono-card-skeleton-line"></span>
+      <div class="iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--skeleton">
+        <div class="icono-card-skeleton-portrait-wash"></div>
+        <div class="iconoplasm-tooltip-portrait-fade"></div>
+      </div>
+      <div class="iconoplasm-tooltip-body iconoplasm-tooltip-body--skeleton">
+        <div class="iconoplasm-tooltip-header iconoplasm-tooltip-header--skeleton">
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--symbol"></span>
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--name"></span>
+        </div>
+        <div class="iconoplasm-tooltip-meta iconoplasm-tooltip-meta--skeleton">
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+        </div>
       </div>
     </article>
     <article class="icono-card icono-card--brick icono-card--skeleton" aria-hidden="true">
-      <div class="icono-card-skeleton-media"></div>
-      <div class="icono-card-skeleton-body">
-        <span class="icono-card-skeleton-kicker"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--title"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>
-        <span class="icono-card-skeleton-line"></span>
+      <div class="iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--skeleton">
+        <div class="icono-card-skeleton-portrait-wash"></div>
+        <div class="iconoplasm-tooltip-portrait-fade"></div>
+      </div>
+      <div class="iconoplasm-tooltip-body iconoplasm-tooltip-body--skeleton">
+        <div class="iconoplasm-tooltip-header iconoplasm-tooltip-header--skeleton">
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--symbol"></span>
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--name"></span>
+        </div>
+        <div class="iconoplasm-tooltip-meta iconoplasm-tooltip-meta--skeleton">
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+        </div>
       </div>
     </article>
     <article class="icono-card icono-card--brick icono-card--skeleton" aria-hidden="true">
-      <div class="icono-card-skeleton-media"></div>
-      <div class="icono-card-skeleton-body">
-        <span class="icono-card-skeleton-kicker"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--title"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>
-        <span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>
-        <span class="icono-card-skeleton-line"></span>
+      <div class="iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--skeleton">
+        <div class="icono-card-skeleton-portrait-wash"></div>
+        <div class="iconoplasm-tooltip-portrait-fade"></div>
+      </div>
+      <div class="iconoplasm-tooltip-body iconoplasm-tooltip-body--skeleton">
+        <div class="iconoplasm-tooltip-header iconoplasm-tooltip-header--skeleton">
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--symbol"></span>
+          <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--name"></span>
+        </div>
+        <div class="iconoplasm-tooltip-meta iconoplasm-tooltip-meta--skeleton">
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+          </div>
+          <div class="iconoplasm-tooltip-meta-skeleton-row">
+            <div class="iconoplasm-tooltip-meta-skeleton-cell">
+              <span class="iconoplasm-tooltip-skeleton-line"></span>
+            </div>
+            <div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">
+              <span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>
+            </div>
+          </div>
+        </div>
       </div>
     </article>
   </div>

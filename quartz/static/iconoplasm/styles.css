@@ -338,40 +338,25 @@
   text-wrap: balance;
 }
 
+.icono-hero .stat {
+  min-width: 24ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .icono-card--skeleton {
   pointer-events: none;
 }
 
 .icono-card-skeleton-media,
-.icono-card-skeleton-line,
-.icono-card-skeleton-kicker {
+.icono-card-skeleton-line {
+  display: block;
   position: relative;
   overflow: hidden;
-  background:
-    linear-gradient(
-      110deg,
-      color-mix(in srgb, var(--ui-bg) 88%, white) 8%,
-      color-mix(in srgb, var(--ui-bg) 72%, white) 24%,
-      color-mix(in srgb, var(--ui-bg) 88%, white) 42%
-    );
-  background-size: 220% 100%;
-  animation: icono-skeleton-shimmer 1.3s ease-in-out infinite;
-}
-
-.icono-card-skeleton-line,
-.icono-card-skeleton-kicker {
-  display: block;
   border-radius: 999px;
-}
-
-.icono-card-skeleton-line {
   width: 100%;
   height: 0.82rem;
-}
-
-.icono-card-skeleton-line--title {
-  width: min(78%, 24rem);
-  height: 1.15rem;
+  background: color-mix(in srgb, var(--ui-border) 82%, white 18%);
 }
 
 .icono-card-skeleton-line--medium {
@@ -382,44 +367,95 @@
   width: 42%;
 }
 
-.icono-card-skeleton-kicker {
-  width: 7rem;
-  height: 0.72rem;
+.icono-card-skeleton-media {
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--ui-border) 22%, var(--light)) 0%,
+      color-mix(in srgb, var(--ui-bg) 84%, white 16%) 100%
+    );
 }
 
 .icono-card--brick.icono-card--skeleton {
   background: var(--icono-brick-shell);
 }
 
-.icono-card--brick.icono-card--skeleton .icono-card-skeleton-media {
-  min-height: 240px;
-  border-right: 1px solid color-mix(in srgb, var(--dark) 8%, transparent);
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-portrait,
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-body {
+  min-height: 300px;
 }
 
-.icono-card--brick.icono-card--skeleton .icono-card-skeleton-body {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.85rem;
-  padding: 1.45rem 1.55rem;
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-portrait {
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--icono-card-accent, #6b6b78) 14%, var(--icono-brick-surface)) 0%,
+      color-mix(in srgb, var(--icono-brick-surface) 94%, white 6%) 100%
+    );
+}
+
+.icono-card--brick.icono-card--skeleton .icono-card-skeleton-portrait-wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--icono-brick-ink) 8%, transparent), transparent 58%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--icono-brick-surface) 16%, transparent),
+      transparent 36%
+    );
+}
+
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-body--skeleton {
+  padding: 1.25rem 1.25rem 0.9rem 1.1rem;
+}
+
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-header--skeleton {
+  min-height: 62px;
+  padding-bottom: 0.85rem;
+  margin-bottom: 0.1rem;
+  border-bottom: 1px solid var(--icono-brick-line-strong);
+}
+
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-meta--skeleton {
+  min-height: 128px;
+}
+
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-meta-skeleton-row {
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  border-bottom: 1px solid var(--icono-brick-line);
+}
+
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-meta-skeleton-cell {
+  padding: 0.45rem 0.4rem;
+}
+
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-meta-skeleton-cell--origin {
+  padding-left: 0.65rem;
+}
+
+.icono-card--brick.icono-card--skeleton .iconoplasm-tooltip-skeleton-line {
+  opacity: 0.74;
+}
+
+.iconoplasm-tooltip-skeleton-line--symbol {
+  width: min(8rem, 42%);
+  height: 1.9rem;
+}
+
+.iconoplasm-tooltip-skeleton-line--name {
+  width: min(12rem, 58%);
+  height: 0.95rem;
 }
 
 .icono-card--masonry.icono-card--skeleton .icono-card-skeleton-media {
   aspect-ratio: var(--icono-skeleton-aspect, 4 / 5);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 85%, transparent);
+  border-radius: 20px;
 }
 
 .icono-card--masonry.icono-card--skeleton .icono-card-skeleton-body {
   gap: 0.55rem;
-}
-
-@keyframes icono-skeleton-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: -100% 0;
-  }
 }
 
 .icono-grid[data-layout="bricks"] {
@@ -717,6 +753,10 @@
 }
 
 /* ───────── Loading / empty states ───────── */
+.icono-loading[hidden] {
+  display: none !important;
+}
+
 .icono-loading {
   text-align: center;
   padding: 3rem 0;
