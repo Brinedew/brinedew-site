@@ -11,6 +11,7 @@ const MIN_EXTENSION_VERSION = "0.3.0"
 
 const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
 const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
+const KV_GALLERY_VERSION = "iconoplasm:gallery-version"
 
 const catalogCache = {
   hash: null,
@@ -28,6 +29,11 @@ const gallerySnapshotCache = {
   sorted: new Map(),
 }
 const GALLERY_SNAPSHOT_TTL_MS = 60 * 1000
+const galleryVersionCache = {
+  value: "0",
+  loadedAt: 0,
+}
+const GALLERY_VERSION_CACHE_TTL_MS = 5 * 1000
 
 const rlBuckets = new Map()
 const RL_WINDOW_MS = 60 * 1000
@@ -1508,6 +1514,14 @@ function normalizeGalleryOrder(raw) {
   return "votes"
 }
 
+function normalizeGalleryLimit(raw) {
+  return Math.max(1, Math.min(60, Number.parseInt(String(raw || "30"), 10) || 30))
+}
+
+function normalizeGalleryOffset(raw) {
+  return Math.max(0, Number.parseInt(String(raw || "0"), 10) || 0)
+}
+
 function normalizeGallerySeed(raw) {
   const value = String(raw || "")
     .trim()
@@ -1537,6 +1551,63 @@ function clearGallerySnapshotCache() {
   gallerySnapshotCache.items = []
   gallerySnapshotCache.publishedTotal = 0
   gallerySnapshotCache.sorted = new Map()
+}
+
+async function currentGalleryVersion(env) {
+  const now = Date.now()
+  if (
+    galleryVersionCache.loadedAt > 0 &&
+    now - galleryVersionCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS
+  ) {
+    return galleryVersionCache.value || "0"
+  }
+  if (!env.KV) {
+    galleryVersionCache.loadedAt = now
+    return galleryVersionCache.value || "0"
+  }
+  try {
+    const raw = await env.KV.get(KV_GALLERY_VERSION)
+    galleryVersionCache.value = String(raw || "0").trim() || "0"
+  } catch {
+    galleryVersionCache.value = galleryVersionCache.value || "0"
+  }
+  galleryVersionCache.loadedAt = now
+  return galleryVersionCache.value || "0"
+}
+
+async function bumpGalleryVersion(env) {
+  const next = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
+  galleryVersionCache.value = next
+  galleryVersionCache.loadedAt = Date.now()
+  if (env.KV) {
+    await env.KV.put(KV_GALLERY_VERSION, next)
+  }
+  return next
+}
+
+async function invalidateGalleryCache(env) {
+  clearGallerySnapshotCache()
+  await bumpGalleryVersion(env)
+}
+
+function galleryCanUseEdgeCache(url) {
+  const order = normalizeGalleryOrder(url.searchParams.get("order"))
+  if (order !== "random") return true
+  return Boolean(normalizeGallerySeed(url.searchParams.get("seed")))
+}
+
+async function galleryEdgeCacheKey(url, env) {
+  const keyUrl = new URL("/__edge/iconoplasm/gallery", url.origin)
+  const order = normalizeGalleryOrder(url.searchParams.get("order"))
+  const limit = normalizeGalleryLimit(url.searchParams.get("limit"))
+  const offset = normalizeGalleryOffset(url.searchParams.get("offset"))
+  const seed = order === "random" ? normalizeGallerySeed(url.searchParams.get("seed")) : null
+  keyUrl.searchParams.set("v", await currentGalleryVersion(env))
+  keyUrl.searchParams.set("order", order)
+  keyUrl.searchParams.set("limit", String(limit))
+  keyUrl.searchParams.set("offset", String(offset))
+  if (seed) keyUrl.searchParams.set("seed", seed)
+  return new Request(keyUrl.toString(), { method: "GET" })
 }
 
 function galleryRandomRank(seed, symbol) {
@@ -1621,7 +1692,7 @@ async function gallerySnapshot(env, url) {
 
   const rows = await env.ICONOPLASM_DB.prepare(
     `SELECT
-       upper(ps.gene_symbol) AS symbol,
+       ps.gene_symbol AS symbol,
        ps.updated_at AS published_at,
        pa.created_at AS asset_created_at,
        pa.asset_sha256,
@@ -1635,13 +1706,14 @@ async function gallerySnapshot(env, url) {
        COALESCE(SUM(iv.vote_value), 0) AS image_score
      FROM icono_publish_state ps
      JOIN icono_portrait_assets pa
-       ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
-      AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
+       ON pa.gene_symbol = ps.gene_symbol
+      AND pa.asset_sha256 = ps.current_asset_sha256
      LEFT JOIN icono_image_votes iv
-       ON iv.candidate_ref = ('a:' || upper(ps.gene_symbol) || '|' || lower(pa.asset_sha256))
+       ON iv.gene_symbol = ps.gene_symbol
+      AND iv.asset_sha256 = pa.asset_sha256
      WHERE ps.current_asset_sha256 IS NOT NULL
      GROUP BY
-       upper(ps.gene_symbol),
+       ps.gene_symbol,
        ps.updated_at,
        pa.created_at,
        pa.asset_sha256,
@@ -1720,8 +1792,8 @@ async function gallerySnapshot(env, url) {
 
 async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
   const order = normalizeGalleryOrder(rawOrder)
-  const limit = Math.max(1, Math.min(60, Number.parseInt(String(rawLimit || "30"), 10) || 30))
-  const offset = Math.max(0, Number.parseInt(String(rawOffset || "0"), 10) || 0)
+  const limit = normalizeGalleryLimit(rawLimit)
+  const offset = normalizeGalleryOffset(rawOffset)
   const seed =
     order === "random" ? normalizeGallerySeed(rawSeed) || crypto.randomUUID().slice(0, 12) : null
   const snapshot = await gallerySnapshot(env, url)
@@ -1957,7 +2029,7 @@ async function publishCatalogArtifact(env) {
   catalogCache.bySymbol = new Map()
   catalogCache.symbolByUniprot = new Map()
   catalogCache.loadedAt = 0
-  clearGallerySnapshotCache()
+  await invalidateGalleryCache(env)
 
   return {
     ok: true,
@@ -2078,6 +2150,15 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             "Retry-After": String(retry),
           }),
         )
+      const edgeCacheable = request.method === "GET" && galleryCanUseEdgeCache(url)
+      const cache = edgeCacheable ? caches.default : null
+      const cacheKey = edgeCacheable ? await galleryEdgeCacheKey(url, env) : null
+      if (cache && cacheKey) {
+        const cached = await cache.match(cacheKey)
+        if (cached) {
+          return done("gallery_cached", cached, API_SCHEMA_VERSION)
+        }
+      }
       const payload = await galleryFeed(
         env,
         url,
@@ -2086,11 +2167,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         url.searchParams.get("offset"),
         url.searchParams.get("seed"),
       )
-      return done(
-        "gallery",
-        json(payload, 200, { "Cache-Control": "public, max-age=60" }),
-        API_SCHEMA_VERSION,
-      )
+      const response = json(payload, 200, { "Cache-Control": "public, max-age=60, s-maxage=60" })
+      if (cache && cacheKey) {
+        ctx.waitUntil(cache.put(cacheKey, response.clone()))
+      }
+      return done("gallery", response, API_SCHEMA_VERSION)
     }
 
     // Random gene sample for the homepage grid
@@ -2312,7 +2393,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         visionId,
         userId,
       })
-      clearGallerySnapshotCache()
+      await invalidateGalleryCache(env)
       return done(
         "votes_set",
         json(
@@ -2463,7 +2544,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         if (result?.changed) autoPromoted += 1
       }
 
-      clearGallerySnapshotCache()
+      await invalidateGalleryCache(env)
       return done(
         "admin_votes_import",
         json(
@@ -2577,7 +2658,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         visionId,
         userId,
       })
-      clearGallerySnapshotCache()
+      await invalidateGalleryCache(env)
       return done(
         "admin_votes_set",
         json(
@@ -2893,7 +2974,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           reason,
           dryRun,
         })
-        if (!dryRun) clearGallerySnapshotCache()
+        if (!dryRun) await invalidateGalleryCache(env)
         return done(
           "artist_styles_remove",
           json(result, 200, { "Cache-Control": "no-store" }),
@@ -3661,7 +3742,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .run()
       }
 
-      if (!dryRun) clearGallerySnapshotCache()
+      if (!dryRun) await invalidateGalleryCache(env)
       return done(
         "admin_reconcile",
         json(
@@ -3732,7 +3813,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             String(p?.reason || "").slice(0, 2000) || null,
           )
           .run()
-        clearGallerySnapshotCache()
+        await invalidateGalleryCache(env)
         return done(
           "publish",
           json({ ok: true, action: "publish", symbol, to_asset_sha256: asset }),
@@ -3752,7 +3833,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
           .bind(symbol, asset, asset, actorId, String(p?.reason || "").slice(0, 2000) || null)
           .run()
-        clearGallerySnapshotCache()
+        await invalidateGalleryCache(env)
         return done("reject", json({ ok: true, action: "reject", symbol, asset_sha256: asset }))
       }
 
@@ -3774,7 +3855,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
           .bind(symbol, from, null, actorId, String(p?.reason || "").slice(0, 2000) || null)
           .run()
-        clearGallerySnapshotCache()
+        await invalidateGalleryCache(env)
         return done(
           "unpublish",
           json({ ok: true, action: "unpublish", symbol, from_asset_sha256: from }),
@@ -3813,7 +3894,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
         .bind(symbol, from, target, actorId, String(p?.reason || "").slice(0, 2000) || null)
         .run()
-      clearGallerySnapshotCache()
+      await invalidateGalleryCache(env)
       return done(
         "rollback",
         json({
