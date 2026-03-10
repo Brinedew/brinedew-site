@@ -1008,6 +1008,7 @@ export async function handleAdminSchedule(request, env) {
         return patched
       }),
     )
+    const recordedDates = new Set(history.map((row) => row.date).filter(Boolean))
 
     // Upcoming (planned)
     const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT_FALLBACK
@@ -1015,10 +1016,11 @@ export async function handleAdminSchedule(request, env) {
     for (let offset = 0; offset <= futureDays; offset += 1) {
       dates.push(addDaysISO(today, offset))
     }
+    const plannedDates = dates.filter((date) => !recordedDates.has(date))
 
     const cachedRowsByDate = new Map()
     await Promise.all(
-      dates.map(async (date) => {
+      plannedDates.map(async (date) => {
         try {
           const cached = await env.KV.get(buildAdminScheduleDayCacheKey(date), { type: "json" })
           if (cached && typeof cached === "object") {
@@ -1032,7 +1034,7 @@ export async function handleAdminSchedule(request, env) {
 
     const upcomingByDate = new Map()
     const missingDates = []
-    for (const date of dates) {
+    for (const date of plannedDates) {
       const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
       const cachedEntry = cachedRowsByDate.get(date)
       if (
@@ -1074,7 +1076,7 @@ export async function handleAdminSchedule(request, env) {
       }
     }
 
-    const upcoming = dates.map((date) => {
+    const upcoming = plannedDates.map((date) => {
       const entry = upcomingByDate.get(date)
       if (!entry) {
         return {
