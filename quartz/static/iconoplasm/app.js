@@ -1,11 +1,13 @@
-import { readIconoplasmSettings, syncSharedIconoplasmSettings } from "../site-preferences.js?v=20260309e"
+import {
+  readIconoplasmSettings,
+  syncSharedIconoplasmSettings,
+} from "../site-preferences.js?v=20260309e"
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260310d"
-import PhotoSwipe from "./vendor/photoswipe.esm.js?v=20260306d"
 
 void syncSharedIconoplasmSettings().catch(function () {
   return null
@@ -44,6 +46,8 @@ void syncSharedIconoplasmSettings().catch(function () {
   var candidateMasonry = null
   var portraitLightboxCleanup = null
   var currentUser = null
+  var masonryLibsPromise = null
+  var photoSwipeModulePromise = null
   var iconoSidebarState = {
     page: "home",
     homeLayout: HOME_LAYOUT_DEFAULT,
@@ -182,6 +186,90 @@ void syncSharedIconoplasmSettings().catch(function () {
     window.setTimeout(task, 120)
   }
 
+  function ensureStylesheetOnce(href, marker) {
+    if (!href) return
+    var existingSelector = marker
+      ? 'link[data-icono-style="' + marker + '"]'
+      : 'link[href="' + href.replace(/"/g, '\\"') + '"]'
+    if (document.querySelector(existingSelector)) return
+    var link = document.createElement("link")
+    link.rel = "stylesheet"
+    link.href = href
+    if (marker) link.setAttribute("data-icono-style", marker)
+    document.head.appendChild(link)
+  }
+
+  function loadScriptOnce(src, test) {
+    if (typeof test === "function" && test()) return Promise.resolve()
+    var existing = document.querySelector('script[data-icono-script="' + src + '"]')
+    if (existing) {
+      return new Promise(function (resolve, reject) {
+        existing.addEventListener("load", resolve, { once: true })
+        existing.addEventListener("error", reject, { once: true })
+      })
+    }
+    return new Promise(function (resolve, reject) {
+      var script = document.createElement("script")
+      script.src = src
+      script.defer = true
+      script.async = false
+      script.setAttribute("data-icono-script", src)
+      script.addEventListener(
+        "load",
+        function () {
+          resolve()
+        },
+        { once: true },
+      )
+      script.addEventListener(
+        "error",
+        function () {
+          reject(new Error("Failed to load " + src))
+        },
+        { once: true },
+      )
+      document.head.appendChild(script)
+    })
+  }
+
+  function ensureMasonryLibs() {
+    if (window.Masonry && window.imagesLoaded) return Promise.resolve()
+    if (masonryLibsPromise) return masonryLibsPromise
+    var masonryUrl = new URL("./vendor/masonry.pkgd.min.js?v=20260311a", import.meta.url).href
+    var imagesLoadedUrl = new URL("./vendor/imagesloaded.pkgd.min.js?v=20260311a", import.meta.url)
+      .href
+    masonryLibsPromise = loadScriptOnce(masonryUrl, function () {
+      return !!window.Masonry
+    })
+      .then(function () {
+        return loadScriptOnce(imagesLoadedUrl, function () {
+          return !!window.imagesLoaded
+        })
+      })
+      .catch(function (error) {
+        masonryLibsPromise = null
+        throw error
+      })
+    return masonryLibsPromise
+  }
+
+  function ensurePhotoSwipe() {
+    ensureStylesheetOnce(
+      new URL("./vendor/photoswipe.css?v=20260311a", import.meta.url).href,
+      "photoswipe",
+    )
+    if (photoSwipeModulePromise) return photoSwipeModulePromise
+    photoSwipeModulePromise = import("./vendor/photoswipe.esm.js?v=20260306d")
+      .then(function (module) {
+        return module && module.default ? module.default : module
+      })
+      .catch(function (error) {
+        photoSwipeModulePromise = null
+        throw error
+      })
+    return photoSwipeModulePromise
+  }
+
   function preloadImage(url) {
     var resolvedUrl = String(url || "").trim()
     if (!resolvedUrl) return Promise.resolve("")
@@ -229,6 +317,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           var trigger =
             event.target && event.target.closest ? event.target.closest("[data-icono-pswp]") : null
           if (!trigger || !gallery.contains(trigger)) return
+          event.preventDefault()
           var links = gallery.querySelectorAll("[data-icono-pswp]")
           var items = []
           var index = 0
@@ -245,23 +334,29 @@ void syncSharedIconoplasmSettings().catch(function () {
             })
             if (link === trigger) index = j
           }
-          var pswp = new PhotoSwipe({
-            dataSource: items,
-            index: index,
-            bgOpacity: 0.92,
-            spacing: 0.12,
-            wheelToZoom: true,
-            mouseMovePan: true,
-            loop: false,
-            imageClickAction: "zoom",
-            tapAction: "toggle-controls",
-            bgClickAction: "close",
-            showHideAnimationType: "fade",
-            paddingFn: function () {
-              return { top: 28, bottom: 28, left: 28, right: 28 }
-            },
-          })
-          pswp.init()
+          void ensurePhotoSwipe()
+            .then(function (PhotoSwipe) {
+              var pswp = new PhotoSwipe({
+                dataSource: items,
+                index: index,
+                bgOpacity: 0.92,
+                spacing: 0.12,
+                wheelToZoom: true,
+                mouseMovePan: true,
+                loop: false,
+                imageClickAction: "zoom",
+                tapAction: "toggle-controls",
+                bgClickAction: "close",
+                showHideAnimationType: "fade",
+                paddingFn: function () {
+                  return { top: 28, bottom: 28, left: 28, right: 28 }
+                },
+              })
+              pswp.init()
+            })
+            .catch(function (error) {
+              console.error("[Iconoplasm] failed to load PhotoSwipe:", error)
+            })
         }
         gallery.addEventListener("click", handler)
         cleanups.push(function () {
@@ -436,7 +531,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     candidateMasonry = null
   }
 
-  function applyHomeMasonry(container, newElements) {
+  function applyHomeMasonryNow(container, newElements) {
     if (!container) return
     var Masonry = window.Masonry
     if (!Masonry) {
@@ -493,7 +588,19 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
   }
 
-  function applyCandidateMasonry(container) {
+  function applyHomeMasonry(container, newElements) {
+    if (!container) return
+    void ensureMasonryLibs()
+      .then(function () {
+        if (!container.isConnected) return
+        applyHomeMasonryNow(container, newElements)
+      })
+      .catch(function (error) {
+        console.error("[Iconoplasm] failed to load Masonry:", error)
+      })
+  }
+
+  function applyCandidateMasonryNow(container) {
     if (!container) return
     var Masonry = window.Masonry
     if (!Masonry) {
@@ -541,6 +648,30 @@ void syncSharedIconoplasmSettings().catch(function () {
     } else {
       msnry.layout()
     }
+  }
+
+  function applyCandidateMasonry(container) {
+    if (!container) return
+    void ensureMasonryLibs()
+      .then(function () {
+        if (!container.isConnected) return
+        applyCandidateMasonryNow(container)
+      })
+      .catch(function (error) {
+        console.error("[Iconoplasm] failed to load Masonry:", error)
+      })
+  }
+
+  function consumeBootstrapGallery(order, limit, offset) {
+    var bootstrap = window.__iconoplasmBootstrap
+    if (!bootstrap || bootstrap.homeGalleryUsed) return null
+    if (offset !== 0 || order !== GALLERY_DEFAULT_ORDER || limit !== GALLERY_INITIAL_PAGE_SIZE) {
+      return null
+    }
+    bootstrap.homeGalleryUsed = true
+    if (bootstrap.homeGalleryData) return Promise.resolve(bootstrap.homeGalleryData)
+    if (bootstrap.homeGalleryPromise) return bootstrap.homeGalleryPromise
+    return null
   }
 
   function galleryOptionsMarkup() {
@@ -601,7 +732,10 @@ void syncSharedIconoplasmSettings().catch(function () {
       html += '<div class="icono-grid-sizer"></div><div class="icono-gutter-sizer"></div>'
     }
     for (var i = 0; i < HOME_SKELETON_CARD_COUNT; i++) {
-      html += resolvedLayout === "masonry" ? buildMasonrySkeletonCardMarkup(i) : buildBrickSkeletonCardMarkup()
+      html +=
+        resolvedLayout === "masonry"
+          ? buildMasonrySkeletonCardMarkup(i)
+          : buildBrickSkeletonCardMarkup()
     }
     return html
   }
@@ -673,7 +807,9 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function resolveHomeLayout() {
     var settings = readIconoplasmSettings()
-    return String((settings && settings.homeLayout) || HOME_LAYOUT_DEFAULT).trim() || HOME_LAYOUT_DEFAULT
+    return (
+      String((settings && settings.homeLayout) || HOME_LAYOUT_DEFAULT).trim() || HOME_LAYOUT_DEFAULT
+    )
   }
 
   function iconoRowMarkup(label, value) {
@@ -839,9 +975,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var rows = []
     var aesthetics = uniqueDisplayValues(essence && essence.aesthetics, 4)
     var aestheticsOrigin = uniqueDisplayValues(essence && essence.aesthetics_origin, 4)
-    var politics = String(
-      (essence && (essence.politics || essence.faction)) || "",
-    ).trim()
+    var politics = String((essence && (essence.politics || essence.faction)) || "").trim()
     var politicsOrigin = uniqueDisplayValues(essence && essence.politics_origin, 2)
 
     var pairedAestheticCount = Math.min(aesthetics.length, aestheticsOrigin.length)
@@ -881,7 +1015,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     var rows = []
     var sexText = String(essence.sex || "").trim()
     var sexOrigin = uniqueDisplayValues(
-      essence.sex_origin || essence.gender_origin || geneDetail.sex_origin || geneDetail.gender_origin,
+      essence.sex_origin ||
+        essence.gender_origin ||
+        geneDetail.sex_origin ||
+        geneDetail.gender_origin,
       2,
     )
     if (sexText) {
@@ -1449,7 +1586,16 @@ void syncSharedIconoplasmSettings().catch(function () {
         path += "&seed=" + encodeURIComponent(galleryState.seed)
       }
 
-      fetchJSON(path)
+      var requestPromise = consumeBootstrapGallery(
+        galleryState.order,
+        pageLimit,
+        galleryState.offset,
+      )
+      if (!requestPromise) {
+        requestPromise = fetchJSON(path)
+      }
+
+      requestPromise
         .then(function (data) {
           if (requestId !== activeGalleryRequest) return
           var items = Array.isArray(data && data.items) ? data.items : []

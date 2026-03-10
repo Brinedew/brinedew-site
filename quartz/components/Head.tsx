@@ -28,6 +28,78 @@ export default (() => {
       unescapeHTML(fileData.description?.trim() ?? i18n(cfg.locale).propertyDefaults.description)
 
     const { css, js, additionalHead } = externalResources
+    const slugValue = typeof fileData.slug === "string" ? fileData.slug : undefined
+    const normalizedSlug = slugValue?.replace(/\/index(?:\.html)?$/, "")
+    const isIconoplasm =
+      normalizedSlug === "apps/iconoplasm" ||
+      fileData.frontmatter?.title === "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+    const iconoplasmBootstrapScript = isIconoplasm
+      ? `(() => {
+  if (typeof window === "undefined" || window.__iconoplasmBootstrap) return
+  var host = String(window.location.hostname || "").toLowerCase()
+  var origin = window.location.origin
+  if (host !== "iconoplasm.brinedew.bio" && host !== "staging.brinedew.bio") {
+    origin = "https://iconoplasm.brinedew.bio"
+  }
+  var endpoint = origin + "/api/gallery?order=votes&limit=4&offset=0"
+  var bootstrap = {
+    homeGalleryData: null,
+    homeGalleryUsed: false,
+    homeGalleryPromise: null,
+  }
+  window.__iconoplasmBootstrap = bootstrap
+  function pickPortraitUrl(item) {
+    if (!item || typeof item !== "object") return ""
+    var portrait = item.portrait && typeof item.portrait === "object" ? item.portrait : null
+    return String(
+      item.pt ||
+        item.medium_url ||
+        item.thumb_url ||
+        (portrait && (portrait.medium_url || portrait.thumb_url || portrait.hero_url)) ||
+        "",
+    ).trim()
+  }
+  function preloadImage(url, priority) {
+    if (!url || document.querySelector('link[data-icono-preload="' + url + '"]')) return
+    var link = document.createElement("link")
+    link.rel = "preload"
+    link.as = "image"
+    link.href = url
+    link.setAttribute("data-icono-preload", url)
+    if (priority) link.setAttribute("fetchpriority", priority)
+    document.head.appendChild(link)
+  }
+  bootstrap.homeGalleryPromise = fetch(endpoint, { credentials: "same-origin" })
+    .then(function (response) {
+      if (!response.ok) throw new Error("HTTP " + response.status)
+      return response.json()
+    })
+    .then(function (data) {
+      bootstrap.homeGalleryData = data
+      var items = Array.isArray(data && data.items) ? data.items : []
+      for (var i = 0; i < items.length && i < 2; i++) {
+        var imageUrl = pickPortraitUrl(items[i])
+        if (imageUrl) preloadImage(imageUrl, i === 0 ? "high" : "auto")
+      }
+      return data
+    })
+    .catch(function () {
+      bootstrap.homeGalleryData = null
+      return null
+    })
+})()`
+      : null
+    const pageCss = isIconoplasm
+      ? css.filter((resource) => !resource.content.includes("/static/vendor/katex/"))
+      : css
+    const pageJs = isIconoplasm
+      ? js.filter(
+          (resource) =>
+            !(
+              resource.contentType === "external" && resource.src.includes("/static/vendor/katex/")
+            ),
+        )
+      : js
 
     const url = new URL(`https://${cfg.baseUrl ?? "example.com"}`)
     const path = url.pathname as FullSlug
@@ -118,7 +190,7 @@ export default (() => {
         />
 
         {/* Load Quartz CSS first */}
-        {css.map((resource) => CSSResourceToStyleElement(resource, true))}
+        {pageCss.map((resource) => CSSResourceToStyleElement(resource, true))}
 
         {/* Preload critical assets to reduce flash (fonts, logo mask) */}
         <link
@@ -128,27 +200,31 @@ export default (() => {
           href="/static/fonts/CrimsonPro-VariableFont_wght.woff2"
           crossOrigin="anonymous"
         />
-        <link
-          rel="preload"
-          as="font"
-          type="font/woff2"
-          href="/static/fonts/xenon/MonaspaceXenon-Var.woff2"
-          crossOrigin="anonymous"
-        />
-        <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
+        {!isIconoplasm && (
+          <link
+            rel="preload"
+            as="font"
+            type="font/woff2"
+            href="/static/fonts/xenon/MonaspaceXenon-Var.woff2"
+            crossOrigin="anonymous"
+          />
+        )}
+        {!isIconoplasm && (
+          <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
+        )}
 
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
         <link href="/static/custom.css?v=bio4" rel="stylesheet" type="text/css" />
+        {iconoplasmBootstrapScript && (
+          <script dangerouslySetInnerHTML={{ __html: iconoplasmBootstrapScript }} />
+        )}
 
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {
-          const slugValue = typeof fileData.slug === "string" ? fileData.slug : undefined
-
           if (!slugValue) {
             return null
           }
 
-          const normalizedSlug = slugValue.replace(/\/index(?:\.html)?$/, "")
           const root = pathToRoot(slugValue as FullSlug)
           const isScriptotic =
             normalizedSlug === "apps/scriptotic" ||
@@ -159,7 +235,8 @@ export default (() => {
             normalizedSlug === "apps/iconoplasm" ||
             fileData.frontmatter?.title ===
               "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
-          const isSettings = normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
+          const isSettings =
+            normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
 
           if (!isScriptotic && !isGeneguessr && !isIconoplasm && !isSettings) {
             return null
@@ -210,30 +287,8 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(
-                      root,
-                      "static",
-                      `iconoplasm/vendor/photoswipe.css?v=${CACHE_BUST}`,
-                    )}
-                  />
-                  <link
-                    rel="stylesheet"
                     href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
                   />
-                  <script
-                    src={joinSegments(
-                      root,
-                      "static",
-                      `iconoplasm/vendor/masonry.pkgd.min.js?v=${CACHE_BUST}`,
-                    )}
-                  ></script>
-                  <script
-                    src={joinSegments(
-                      root,
-                      "static",
-                      `iconoplasm/vendor/imagesloaded.pkgd.min.js?v=${CACHE_BUST}`,
-                    )}
-                  ></script>
                   <script
                     type="module"
                     src={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}
@@ -244,11 +299,7 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
-                    href={joinSegments(
-                      root,
-                      "static",
-                      `site-settings/styles.css?v=${CACHE_BUST}`,
-                    )}
+                    href={joinSegments(root, "static", `site-settings/styles.css?v=${CACHE_BUST}`)}
                   />
                   <script
                     type="module"
@@ -262,7 +313,7 @@ export default (() => {
 
         {/* Performance optimizations */}
         <link rel="prefetch" href="/posts" as="document" />
-        {js
+        {pageJs
           .filter((resource) => resource.loadTime === "beforeDOMReady")
           .map((res) => JSResourceToScriptElement(res, true))}
         {additionalHead.map((resource) => {
