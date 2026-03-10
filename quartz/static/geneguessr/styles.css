@@ -851,6 +851,13 @@
   --secondary: oklch(40% 0.04 55);
   --tertiary: var(--accent);
   --highlight: oklch(from var(--accent) l c h / 0.25);
+  --pg-panel-bg: var(--light);
+  --pg-panel-bg-strong: var(--ui-bg);
+  --pg-accent-soft: color-mix(in srgb, var(--accent) 12%, var(--light));
+  --pg-accent-quiet: color-mix(in srgb, var(--accent) 18%, var(--light));
+  --pg-accent-border: color-mix(in srgb, var(--accent) 40%, var(--ui-border));
+  --pg-shadow-soft: 0 24px 60px rgba(15, 23, 42, 0.24);
+  --pg-shadow-popover: 0 10px 24px rgba(15, 23, 42, 0.16);
 }
 
 .pg-tutorial-overlay.is-visible {
