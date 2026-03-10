@@ -17,6 +17,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   var ROOT_ID = "iconoplasm-root"
   var DEBOUNCE_MS = 200
   var GALLERY_PAGE_SIZE = 30
+  var GALLERY_INITIAL_PAGE_SIZE = 4
   var GALLERY_DEFAULT_ORDER = "votes"
   var HOME_LAYOUT_DEFAULT = "bricks"
   var HOME_SKELETON_CARD_COUNT = 4
@@ -1347,11 +1348,28 @@ void syncSharedIconoplasmSettings().catch(function () {
       hasMore: true,
       seed: "",
       items: [],
+      prefillTarget: GALLERY_PAGE_SIZE,
     }
     var sentinelObserver = null
+    var backgroundPrefillTimer = null
 
     function newRandomSeed() {
       return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+    }
+
+    function clearBackgroundPrefill() {
+      if (backgroundPrefillTimer) {
+        window.clearTimeout(backgroundPrefillTimer)
+        backgroundPrefillTimer = null
+      }
+    }
+
+    function currentGalleryLimit() {
+      if (galleryState.offset === 0) return GALLERY_INITIAL_PAGE_SIZE
+      if (galleryState.offset < galleryState.prefillTarget) {
+        return Math.max(1, galleryState.prefillTarget - galleryState.offset)
+      }
+      return GALLERY_PAGE_SIZE
     }
 
     function setLoadingState(message, show) {
@@ -1399,6 +1417,8 @@ void syncSharedIconoplasmSettings().catch(function () {
       galleryState.hasMore = true
       galleryState.seed = galleryState.order === "random" ? newRandomSeed() : ""
       galleryState.items = []
+      galleryState.prefillTarget = GALLERY_PAGE_SIZE
+      clearBackgroundPrefill()
       grid.setAttribute("data-layout", homeLayout)
       grid.setAttribute("aria-busy", "true")
       grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout)
@@ -1415,13 +1435,14 @@ void syncSharedIconoplasmSettings().catch(function () {
       if (galleryState.loading || !galleryState.hasMore) return
       galleryState.loading = true
       setLoadingState("", false)
+      var pageLimit = currentGalleryLimit()
 
       var requestId = ++activeGalleryRequest
       var path =
         "/api/gallery?order=" +
         encodeURIComponent(galleryState.order) +
         "&limit=" +
-        encodeURIComponent(String(GALLERY_PAGE_SIZE)) +
+        encodeURIComponent(String(pageLimit)) +
         "&offset=" +
         encodeURIComponent(String(galleryState.offset))
       if (galleryState.seed) {
@@ -1455,6 +1476,17 @@ void syncSharedIconoplasmSettings().catch(function () {
             } else {
               destroyHomeMasonry()
               void hydrateBrickCards(newCards)
+            }
+            if (
+              isFirstPage &&
+              galleryState.offset < galleryState.prefillTarget &&
+              galleryState.hasMore
+            ) {
+              clearBackgroundPrefill()
+              backgroundPrefillTimer = window.setTimeout(function () {
+                backgroundPrefillTimer = null
+                loadNextGalleryPage()
+              }, 140)
             }
           }
           syncHeroCount()
