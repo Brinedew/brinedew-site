@@ -2242,7 +2242,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var route = getRoute()
     // Update page title
     if (route.page === "home") {
-      document.title = "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+      document.title = "Iconoplasm - Mnemonics for genes"
     } else if (route.page === "gene") {
       document.title = route.symbol + " - Iconoplasm"
     } else {
