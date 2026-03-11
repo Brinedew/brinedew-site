@@ -744,7 +744,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var resolvedLayout = layout === "masonry" ? "masonry" : HOME_LAYOUT_DEFAULT
     return (
       '<div class="icono-hero">' +
-      "<h1>Iconoplasm</h1>" +
+      '<div class="icono-hero-title">Iconoplasm</div>' +
       '<p class="tagline">Mnemonics for genes - <a class="internal" href="/posts/iconoplasm-faq">read FAQ</a></p>' +
       '<span class="stat" id="icono-gene-count">...</span>' +
       "</div>" +
