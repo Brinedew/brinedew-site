@@ -1,5 +1,5 @@
 ---
-title: "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+title: "Iconoplasm - Mnemonics for genes"
 description: "Browse gene personas — unique color identities assigned to every human protein-coding gene. Search 19,000+ genes by symbol or name."
 canonicalUrl: "https://iconoplasm.brinedew.bio/"
 date: 2025-12-01
