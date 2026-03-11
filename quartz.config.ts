@@ -77,7 +77,7 @@ const config: QuartzConfig = {
         },
       }),
       Plugin.ObsidianFlavoredMarkdown({ enableInHtmlEmbed: true }),
-      Plugin.GitHubFlavoredMarkdown(),
+      Plugin.GitHubFlavoredMarkdown({ linkHeadings: false }),
       // Render single newlines as <br> to match Obsidian preview
       Plugin.HardLineBreaks(),
       // Convert images with alt text into <figure><img/><figcaption>alt</figcaption></figure>

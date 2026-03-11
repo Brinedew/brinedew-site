@@ -9,6 +9,16 @@
   --icono-reject: oklch(56% 0.16 28);
 }
 
+body[data-slug="apps/iconoplasm"] .page-header,
+body[data-slug="apps/iconoplasm"] .page-footer,
+body[data-slug="apps/iconoplasm"] hr {
+  display: none;
+}
+
+body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
+  margin-top: 0;
+}
+
 /* Hide Quartz article siblings (HR, footer, etc.) until SPA content loads
    to prevent brief flashes of chrome below empty root */
 #iconoplasm-root:empty ~ * {
@@ -18,7 +28,7 @@
 /* ───────── Hero ───────── */
 .icono-hero {
   text-align: center;
-  padding: 2rem 0 1.5rem;
+  padding: 0.35rem 0 1.5rem;
 }
 
 .icono-hero-title {
