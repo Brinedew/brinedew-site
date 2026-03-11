@@ -745,11 +745,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     return (
       '<div class="icono-hero">' +
       "<h1>Iconoplasm</h1>" +
-      '<p class="tagline">Visual mnemonics for molecular cell biology</p>' +
+      '<p class="tagline">Mnemonics for genes - <a class="internal" href="/posts/iconoplasm-faq">read FAQ</a></p>' +
       '<span class="stat" id="icono-gene-count">...</span>' +
-      '<div class="icono-hero-links">' +
-      '<a class="icono-hero-link" href="/posts/iconoplasm-faq">FAQ</a>' +
-      "</div>" +
       "</div>" +
       '<div class="icono-gallery-toolbar">' +
       '<div class="icono-search icono-search--toolbar">' +
