@@ -25,7 +25,7 @@ tags:
 <div id="iconoplasm-root" data-static="/static/iconoplasm">
   <div class="icono-hero">
     <div class="icono-hero-title">Iconoplasm</div>
-    <p class="tagline">Mnemonics for genes - <a class="internal" href="/posts/iconoplasm-faq">read FAQ</a></p>
+    <p class="tagline">Mnemonics for genes - <a class="internal" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">read FAQ</a></p>
     <span class="stat" id="icono-gene-count">...</span>
   </div>
   <div class="icono-gallery-toolbar">
