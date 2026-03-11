@@ -1460,6 +1460,8 @@ async function blacklistArtistStyle(
     await env.ICONOPLASM_DB.prepare(
       `UPDATE icono_portrait_assets
        SET status = 'rejected',
+           is_stale = 0,
+           is_legacy = 0,
            autopick_eligible = 0
        WHERE lower(COALESCE(artist_tag, '')) = ?`,
     )
@@ -2990,24 +2992,39 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     if (path === "/api/iconoplasm/admin/assets" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_assets_403", json({ error: "Unauthorized" }, 403))
-      const status = (url.searchParams.get("status") || "draft").toLowerCase()
+      const status = (url.searchParams.get("status") || "all").toLowerCase()
+      const stale = (url.searchParams.get("stale") || "all").toLowerCase()
+      const legacy = (url.searchParams.get("legacy") || "all").toLowerCase()
       const limit = Math.max(
         1,
         Math.min(250, Number.parseInt(url.searchParams.get("limit") || "50", 10)),
       )
-      const where = status === "all" ? "" : "WHERE lower(status)=?"
-      const stmt =
-        status === "all"
-          ? env.ICONOPLASM_DB.prepare(
-              `SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, autopick_eligible, vision_id, artist_tag, artist_name, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`,
-            ).bind(limit)
-          : env.ICONOPLASM_DB.prepare(
-              `SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, autopick_eligible, vision_id, artist_tag, artist_name, created_by, created_at FROM icono_portrait_assets ${where} ORDER BY created_at DESC LIMIT ?`,
-            ).bind(status, limit)
+      const whereParts = []
+      const params = []
+      if (status !== "all") {
+        whereParts.push("lower(status)=?")
+        params.push(status)
+      }
+      if (stale === "yes") whereParts.push("COALESCE(is_stale, 0) = 1")
+      else if (stale === "no") whereParts.push("COALESCE(is_stale, 0) = 0")
+      if (legacy === "yes") whereParts.push("COALESCE(is_legacy, 0) = 1")
+      else if (legacy === "no") whereParts.push("COALESCE(is_legacy, 0) = 0")
+      const where = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : ""
+      const stmt = env.ICONOPLASM_DB.prepare(
+        `SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status,
+                autopick_eligible, COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy,
+                vision_id, artist_tag, artist_name, created_by, created_at
+           FROM icono_portrait_assets
+           ${where}
+          ORDER BY created_at DESC
+          LIMIT ?`,
+      ).bind(...params, limit)
       const { results } = await stmt.all()
       const base = portraitBase(url, env)
       const assets = (results || []).map((r) => ({
         ...r,
+        is_stale: Number(r?.is_stale || 0) > 0,
+        is_legacy: Number(r?.is_legacy || 0) > 0,
         hero_url: r.r2_key_full ? joinUrl(base, r.r2_key_full) : null,
         medium_url: r.r2_key_medium ? joinUrl(base, r.r2_key_medium) : null,
         thumb_url: r.r2_key_thumb ? joinUrl(base, r.r2_key_thumb) : null,
@@ -3424,9 +3441,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             await env.ICONOPLASM_DB.prepare(
               `INSERT INTO icono_portrait_assets (
                  gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
-                 mime, width, height, bytes, status, autopick_eligible,
+                 mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
                  vision_id, artist_tag, artist_name, created_by, created_at
-               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
                  r2_key_full=excluded.r2_key_full,
                  r2_key_medium=excluded.r2_key_medium,
@@ -3437,6 +3454,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
                  status=excluded.status,
                  autopick_eligible=excluded.autopick_eligible,
+                 is_stale=0,
+                 is_legacy=0,
                  vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
                  artist_tag=COALESCE(excluded.artist_tag, icono_portrait_assets.artist_tag),
                  artist_name=COALESCE(excluded.artist_name, icono_portrait_assets.artist_name),
@@ -3613,6 +3632,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
 
       const keepRaw = Array.isArray(p?.keep) ? p.keep : []
       const publishRaw = Array.isArray(p?.publish) ? p.publish : []
+      const legacyRaw = Array.isArray(p?.legacy) ? p.legacy : []
       if (keepRaw.length > 50000)
         return done(
           "admin_reconcile_400",
@@ -3622,6 +3642,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         return done(
           "admin_reconcile_400",
           json({ error: "Too many publish entries (max 20000)" }, 400),
+        )
+      if (legacyRaw.length > 50000)
+        return done(
+          "admin_reconcile_400",
+          json({ error: "Too many legacy entries (max 50000)" }, 400),
         )
 
       const keep = []
@@ -3647,12 +3672,25 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         publishBySymbol.set(symbol, assetSha)
       }
 
+      const legacy = []
+      const legacySet = new Set()
+      for (const raw of legacyRaw) {
+        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
+        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
+        if (!symbol || !assetSha) continue
+        const key = `${symbol}|${assetSha}`
+        if (legacySet.has(key)) continue
+        legacySet.add(key)
+        legacy.push({ symbol, asset_sha256: assetSha, key })
+      }
+
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
+      const unpublishMissing = coerceBoolean(p?.unpublish_missing ?? p?.unpublishMissing, false)
       const actorId = await actor(request, env)
       const reason = String(p?.reason || "").slice(0, 2000) || "local_sync_reconcile"
 
       const { results: existingAssets = [] } = await env.ICONOPLASM_DB.prepare(
-        "SELECT gene_symbol, asset_sha256, status FROM icono_portrait_assets",
+        "SELECT gene_symbol, asset_sha256, status, COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy FROM icono_portrait_assets",
       ).all()
 
       const { results: existingStateRows = [] } = await env.ICONOPLASM_DB.prepare(
@@ -3667,6 +3705,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       let rejected = 0
+      let legacyMarked = 0
+      let legacyAlreadyMarked = 0
       let published = 0
       let unpublished = 0
       let alreadyCurrent = 0
@@ -3681,10 +3721,30 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         }
         const key = `${symbol}|${assetSha}`
         if (keepSet.has(key)) continue
+        if (legacySet.has(key)) {
+          const alreadyLegacy = Number(row?.is_stale || 0) > 0 && Number(row?.is_legacy || 0) > 0
+          if (alreadyLegacy) {
+            legacyAlreadyMarked += 1
+            continue
+          }
+          legacyMarked += 1
+          if (dryRun) continue
+          await env.ICONOPLASM_DB.prepare(
+            "UPDATE icono_portrait_assets SET is_stale=1, is_legacy=1 WHERE upper(gene_symbol)=? AND asset_sha256=?",
+          )
+            .bind(symbol, assetSha)
+            .run()
+          await env.ICONOPLASM_DB.prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'legacy_mark', ?, ?, CURRENT_TIMESTAMP)",
+          )
+            .bind(symbol, assetSha, assetSha, actorId, reason)
+            .run()
+          continue
+        }
         rejected += 1
         if (dryRun) continue
         await env.ICONOPLASM_DB.prepare(
-          "UPDATE icono_portrait_assets SET status='rejected' WHERE upper(gene_symbol)=? AND asset_sha256=?",
+          "UPDATE icono_portrait_assets SET status='rejected', is_stale=0, is_legacy=0 WHERE upper(gene_symbol)=? AND asset_sha256=?",
         )
           .bind(symbol, assetSha)
           .run()
@@ -3725,21 +3785,23 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .run()
       }
 
-      for (const [symbol, currentAssetSha] of existingState.entries()) {
-        if (!currentAssetSha) continue
-        if (publishBySymbol.has(symbol)) continue
-        unpublished += 1
-        if (dryRun) continue
-        await env.ICONOPLASM_DB.prepare(
-          "UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
-        )
-          .bind(actorId, symbol)
-          .run()
-        await env.ICONOPLASM_DB.prepare(
-          "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unpublish', ?, ?, CURRENT_TIMESTAMP)",
-        )
-          .bind(symbol, currentAssetSha, null, actorId, reason)
-          .run()
+      if (unpublishMissing) {
+        for (const [symbol, currentAssetSha] of existingState.entries()) {
+          if (!currentAssetSha) continue
+          if (publishBySymbol.has(symbol)) continue
+          unpublished += 1
+          if (dryRun) continue
+          await env.ICONOPLASM_DB.prepare(
+            "UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+          )
+            .bind(actorId, symbol)
+            .run()
+          await env.ICONOPLASM_DB.prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unpublish', ?, ?, CURRENT_TIMESTAMP)",
+          )
+            .bind(symbol, currentAssetSha, null, actorId, reason)
+            .run()
+        }
       }
 
       if (!dryRun) await invalidateGalleryCache(env)
@@ -3751,6 +3813,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             dry_run: dryRun,
             keep_count: keep.length,
             publish_count: publishBySymbol.size,
+            legacy_count: legacy.length,
+            legacy_marked: legacyMarked,
+            legacy_already_marked: legacyAlreadyMarked,
             rejected,
             published,
             unpublished,
@@ -3769,6 +3834,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         "/api/iconoplasm/admin/reject",
         "/api/iconoplasm/admin/rollback",
         "/api/iconoplasm/admin/unpublish",
+        "/api/iconoplasm/admin/unstale",
+        "/api/iconoplasm/admin/purge-legacy",
       ].includes(path) &&
       request.method === "POST"
     ) {
@@ -3824,7 +3891,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         const asset = String(p?.asset_sha256 || "").trim()
         if (!asset) return done("reject_400", json({ error: "Missing asset_sha256" }, 400))
         await env.ICONOPLASM_DB.prepare(
-          "UPDATE icono_portrait_assets SET status='rejected' WHERE upper(gene_symbol)=? AND asset_sha256=?",
+          "UPDATE icono_portrait_assets SET status='rejected', is_stale=0, is_legacy=0 WHERE upper(gene_symbol)=? AND asset_sha256=?",
         )
           .bind(symbol, asset)
           .run()
@@ -3859,6 +3926,113 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         return done(
           "unpublish",
           json({ ok: true, action: "unpublish", symbol, from_asset_sha256: from }),
+        )
+      }
+
+      if (path.endsWith("/unstale")) {
+        const asset = String(p?.asset_sha256 || "").trim()
+        if (!asset) return done("unstale_400", json({ error: "Missing asset_sha256" }, 400))
+        const existing = await env.ICONOPLASM_DB.prepare(
+          "SELECT COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND asset_sha256=? LIMIT 1",
+        )
+          .bind(symbol, asset)
+          .first()
+        if (!existing)
+          return done("unstale_404", json({ error: "Asset not found" }, 404))
+        await env.ICONOPLASM_DB.prepare(
+          "UPDATE icono_portrait_assets SET is_stale=0, is_legacy=0 WHERE upper(gene_symbol)=? AND asset_sha256=?",
+        )
+          .bind(symbol, asset)
+          .run()
+        await env.ICONOPLASM_DB.prepare(
+          "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unstale', ?, ?, CURRENT_TIMESTAMP)",
+        )
+          .bind(symbol, asset, asset, actorId, String(p?.reason || "").slice(0, 2000) || null)
+          .run()
+        await invalidateGalleryCache(env)
+        return done(
+          "unstale",
+          json({ ok: true, action: "unstale", symbol, asset_sha256: asset }),
+        )
+      }
+
+      if (path.endsWith("/purge-legacy")) {
+        const asset = String(p?.asset_sha256 || "").trim()
+        if (!asset) return done("purge_legacy_400", json({ error: "Missing asset_sha256" }, 400))
+        const existing = await env.ICONOPLASM_DB.prepare(
+          `SELECT
+             r2_key_full,
+             r2_key_medium,
+             r2_key_thumb,
+             COALESCE(is_legacy, 0) AS is_legacy
+           FROM icono_portrait_assets
+           WHERE upper(gene_symbol)=? AND asset_sha256=?
+           LIMIT 1`,
+        )
+          .bind(symbol, asset)
+          .first()
+        if (!existing)
+          return done("purge_legacy_404", json({ error: "Asset not found" }, 404))
+        if (Number(existing?.is_legacy || 0) <= 0)
+          return done("purge_legacy_400", json({ error: "Asset is not marked legacy" }, 400))
+
+        const current = await env.ICONOPLASM_DB.prepare(
+          "SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1",
+        )
+          .bind(symbol)
+          .first()
+        const from = normalizeSha256(current?.current_asset_sha256 || "")
+        const isCurrent = !!(from && from === normalizeSha256(asset))
+        if (isCurrent) {
+          await env.ICONOPLASM_DB.prepare(
+            "UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+          )
+            .bind(actorId, symbol)
+            .run()
+          await env.ICONOPLASM_DB.prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unpublish', ?, ?, CURRENT_TIMESTAMP)",
+          )
+            .bind(symbol, asset, null, actorId, String(p?.reason || "").slice(0, 2000) || null)
+            .run()
+        }
+
+        const candidateRef = normalizeCandidateRef("", symbol, asset)
+        if (candidateRef) {
+          await env.ICONOPLASM_DB.prepare("DELETE FROM icono_image_votes WHERE candidate_ref = ?")
+            .bind(candidateRef)
+            .run()
+        }
+        await env.ICONOPLASM_DB.prepare(
+          "DELETE FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND asset_sha256=?",
+        )
+          .bind(symbol, asset)
+          .run()
+        await env.ICONOPLASM_DB.prepare(
+          "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'purge_legacy', ?, ?, CURRENT_TIMESTAMP)",
+        )
+          .bind(symbol, asset, null, actorId, String(p?.reason || "").slice(0, 2000) || null)
+          .run()
+
+        const keys = [existing?.r2_key_full, existing?.r2_key_medium, existing?.r2_key_thumb]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+        if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.delete === "function") {
+          for (const key of keys) {
+            await env.ICONOPLASM_PORTRAITS.delete(key)
+          }
+        }
+
+        await invalidateGalleryCache(env)
+        return done(
+          "purge_legacy",
+          json({
+            ok: true,
+            action: "purge_legacy",
+            symbol,
+            asset_sha256: asset,
+            unpublished_current: isCurrent,
+            deleted_r2_keys: keys.length,
+          }),
         )
       }
 

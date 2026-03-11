@@ -747,6 +747,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       "<h1>Iconoplasm</h1>" +
       '<p class="tagline">Visual mnemonics for molecular cell biology</p>' +
       '<span class="stat" id="icono-gene-count">...</span>' +
+      '<div class="icono-hero-links">' +
+      '<a class="icono-hero-link" href="/posts/iconoplasm-faq">FAQ</a>' +
+      "</div>" +
       "</div>" +
       '<div class="icono-gallery-toolbar">' +
       '<div class="icono-search icono-search--toolbar">' +
@@ -1523,7 +1526,10 @@ void syncSharedIconoplasmSettings().catch(function () {
       iconoSidebarState.publishedTotal = publishedCount
       renderIconoplasmSidebar()
       countEl.textContent =
-        publishedCount.toLocaleString() + " portraits, " + totalCount.toLocaleString() + " genes"
+        totalCount.toLocaleString() +
+        " human genes, " +
+        publishedCount.toLocaleString() +
+        " AI images"
     }
 
     function updateSentinelObserver() {

@@ -182,6 +182,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .status-approved { color: #8ee5af; }
     .status-rejected { color: #f6a7a7; }
 
+    .flag {
+      display: inline-block;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 2px 8px;
+      letter-spacing: 0.05em;
+      font-size: 11px;
+      margin-right: 6px;
+      margin-bottom: 4px;
+    }
+    .flag-stale { color: #ffd280; }
+    .flag-legacy { color: #9ed0ff; }
+
     .thumbs {
       display: flex;
       gap: 6px;
@@ -249,7 +262,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         </article>
         <article class="step">
           <div class="badge"><span class="dot"></span>2. Click Sync to Website</div>
-          <p class="small">NiceGUI uploads all non-deleted local images and reconciles removals automatically.</p>
+          <p class="small">NiceGUI uploads all non-deleted local images. Locally cleared stale images stay here as stale legacy candidates until an admin unstales or purges them.</p>
         </article>
         <article class="step">
           <div class="badge"><span class="dot"></span>3. Verify here</div>
@@ -265,10 +278,24 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <div class="controls">
         <label>Show
           <select id="assets-status">
-            <option value="approved" selected>currently live</option>
+            <option value="all" selected>all candidates</option>
+            <option value="approved">currently live</option>
             <option value="draft">draft (awaiting publish)</option>
             <option value="rejected">rejected</option>
-            <option value="all">all</option>
+          </select>
+        </label>
+        <label>Stale
+          <select id="assets-stale">
+            <option value="all" selected>all</option>
+            <option value="yes">stale only</option>
+            <option value="no">not stale</option>
+          </select>
+        </label>
+        <label>Legacy
+          <select id="assets-legacy">
+            <option value="all" selected>all</option>
+            <option value="yes">legacy only</option>
+            <option value="no">not legacy</option>
           </select>
         </label>
         <label>Limit
@@ -292,6 +319,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               <th>Gene</th>
               <th>Asset SHA256</th>
               <th>Status</th>
+              <th>Flags</th>
               <th>Artist</th>
               <th>Preview</th>
               <th>Uploaded</th>
@@ -322,6 +350,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       var els = {
         status: document.getElementById('assets-status'),
+        stale: document.getElementById('assets-stale'),
+        legacy: document.getElementById('assets-legacy'),
         limit: document.getElementById('assets-limit'),
         search: document.getElementById('assets-search'),
         token: document.getElementById('admin-token'),
@@ -364,6 +394,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           thumb(asset.thumb_url, 'thumb')
         ].filter(Boolean).join('');
         return html ? '<div class="thumbs">' + html + '</div>' : '<span class="small">No image</span>';
+      }
+
+      function flagsCell(asset) {
+        var out = [];
+        if (asset.is_stale) out.push('<span class="flag flag-stale">stale</span>');
+        if (asset.is_legacy) out.push('<span class="flag flag-legacy">legacy</span>');
+        return out.length ? out.join('') : '<span class="small">normal</span>';
       }
 
       function authHeaders() {
@@ -412,12 +449,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             '<td><strong>' + esc(a.gene_symbol || '') + '</strong></td>',
             '<td class="mono sha" title="' + esc(a.asset_sha256 || '') + '">' + esc(shortSha(a.asset_sha256 || '')) + '</td>',
             '<td>' + statusPill(a.status) + '</td>',
+            '<td>' + flagsCell(a) + '</td>',
             '<td>' + (artistBits.join('') || '<span class="small">-</span>') + '</td>',
             '<td>' + previewCell(a) + '</td>',
             '<td><div>' + esc(a.created_at || '-') + '</div><div class="small">' + esc(a.created_by || '-') + '</div></td>',
             '<td>',
             '<div class="actions">',
             '<button class="btn-flat" data-action="copy" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Copy SHA</button>',
+            ((a.is_stale || a.is_legacy)
+              ? '<button class="btn-primary" data-action="unstale" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Unstale</button>'
+              : ''),
+            (a.is_legacy
+              ? '<button class="btn-danger" data-action="purge-legacy" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Purge legacy</button>'
+              : ''),
             '<button class="btn-warn" data-action="rollback" data-symbol="' + esc(a.gene_symbol || '') + '">Rollback gene</button>',
             '<button class="btn-flat" data-action="unpublish" data-symbol="' + esc(a.gene_symbol || '') + '">Unpublish gene</button>',
             '<button class="btn-danger" data-action="reject" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Reject image</button>',
@@ -432,21 +476,29 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         try {
           els.refresh.disabled = true;
           els.meta.textContent = 'Loading...';
-          var status = encodeURIComponent(String(els.status.value || 'approved').toLowerCase());
+          var status = encodeURIComponent(String(els.status.value || 'all').toLowerCase());
+          var stale = encodeURIComponent(String(els.stale.value || 'all').toLowerCase());
+          var legacy = encodeURIComponent(String(els.legacy.value || 'all').toLowerCase());
           var limit = Math.max(1, Math.min(250, Number.parseInt(els.limit.value || '120', 10) || 120));
-          var data = await apiJson('/assets?status=' + status + '&limit=' + limit, { method: 'GET' });
+          var data = await apiJson('/assets?status=' + status + '&stale=' + stale + '&legacy=' + legacy + '&limit=' + limit, { method: 'GET' });
           state.assets = Array.isArray(data.assets) ? data.assets : [];
 
           var counts = { draft: 0, approved: 0, rejected: 0 };
+          var staleCount = 0;
+          var legacyCount = 0;
           state.assets.forEach(function (row) {
             var s = String(row.status || '').toLowerCase();
             if (Object.prototype.hasOwnProperty.call(counts, s)) counts[s] += 1;
+            if (row.is_stale) staleCount += 1;
+            if (row.is_legacy) legacyCount += 1;
           });
           els.meta.innerHTML = [
             '<span>' + state.assets.length + ' shown</span>',
             '<span>live ' + counts.approved + '</span>',
             '<span>draft ' + counts.draft + '</span>',
-            '<span>rejected ' + counts.rejected + '</span>'
+            '<span>rejected ' + counts.rejected + '</span>',
+            '<span>stale ' + staleCount + '</span>',
+            '<span>legacy ' + legacyCount + '</span>'
           ].join(' · ');
           renderTable();
         } catch (err) {
@@ -497,6 +549,26 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           return;
         }
 
+        if (action === 'unstale') {
+          if (!sha) throw new Error('Missing SHA for unstale');
+          if (!window.confirm('Return this image to the normal candidate pool for ' + symbol + '?')) return;
+          var unstaleBody = { symbol: symbol, asset_sha256: sha };
+          if (reason) unstaleBody.reason = reason;
+          setLog(await runMutation('/unstale', unstaleBody));
+          await refreshAssets();
+          return;
+        }
+
+        if (action === 'purge-legacy') {
+          if (!sha) throw new Error('Missing SHA for purge legacy');
+          if (!window.confirm('Permanently purge this legacy image for ' + symbol + '? This deletes it from the site DB and storage.')) return;
+          var purgeBody = { symbol: symbol, asset_sha256: sha };
+          if (reason) purgeBody.reason = reason;
+          setLog(await runMutation('/purge-legacy', purgeBody));
+          await refreshAssets();
+          return;
+        }
+
         if (action === 'rollback') {
           if (!window.confirm('Rollback live image for ' + symbol + ' to previous publish?')) return;
           var rollbackBody = { symbol: symbol };
@@ -528,6 +600,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function init() {
         els.refresh.addEventListener('click', refreshAssets);
         els.status.addEventListener('change', refreshAssets);
+        els.stale.addEventListener('change', refreshAssets);
+        els.legacy.addEventListener('change', refreshAssets);
         els.limit.addEventListener('change', refreshAssets);
         els.search.addEventListener('input', renderTable);
         bindActions();
