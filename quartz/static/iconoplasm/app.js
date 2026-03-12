@@ -1601,8 +1601,10 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   /* ─── Rendering: Home page ─── */
 
-  function renderHome(root) {
+  function renderHome(root, restoreState) {
     var homeLayout = resolveHomeLayout()
+    var pendingRestoreState = restoreState || null
+    var activeRestoreState = pendingRestoreState
     iconoSidebarState.page = "home"
     iconoSidebarState.homeLayout = homeLayout
     iconoSidebarState.total = 0
@@ -1638,6 +1640,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
     var sentinelObserver = null
     var backgroundPrefillTimer = null
+    var scrollRestored = !activeRestoreState
 
     function newRandomSeed() {
       return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -1697,16 +1700,69 @@ void syncSharedIconoplasmSettings().catch(function () {
       sentinelObserver.observe(sentinelEl)
     }
 
+    function maybeRestoreHomeScroll() {
+      if (!activeRestoreState || scrollRestored) return
+      if (galleryState.offset < activeRestoreState.loadedCount && galleryState.hasMore) return
+      scrollRestored = true
+      var targetY = Math.max(0, Number(activeRestoreState.scrollY || 0) || 0)
+      window.requestAnimationFrame(function () {
+        window.scrollTo(0, targetY)
+        if (activeRestoreState.focusSymbol) {
+          window.requestAnimationFrame(function () {
+            var cards = grid.querySelectorAll(".icono-card[data-icono-symbol]")
+            for (var i = 0; i < cards.length; i++) {
+              var card = cards[i]
+              if (
+                String(card.getAttribute("data-icono-symbol") || "")
+                  .trim()
+                  .toUpperCase() !== activeRestoreState.focusSymbol
+              ) {
+                continue
+              }
+              var rect = card.getBoundingClientRect()
+              window.scrollBy(0, Math.round(rect.top - Number(activeRestoreState.focusTop || 0)))
+              break
+            }
+          })
+        }
+      })
+    }
+
+    function snapshotHomeState() {
+      return {
+        order: galleryState.order,
+        seed: galleryState.seed,
+        loadedCount: galleryState.offset,
+        scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
+        focusSymbol: pendingHomeAnchor ? pendingHomeAnchor.focusSymbol : "",
+        focusTop: pendingHomeAnchor ? pendingHomeAnchor.focusTop : 0,
+      }
+    }
+
     function resetGallery(order) {
-      galleryState.order = order || GALLERY_DEFAULT_ORDER
+      var resolvedOrder = order || GALLERY_DEFAULT_ORDER
+      var restoreConfig =
+        pendingRestoreState && pendingRestoreState.order === resolvedOrder ? pendingRestoreState : null
+      pendingRestoreState = null
+      activeRestoreState = restoreConfig
+      scrollRestored = !restoreConfig
+      galleryState.order = resolvedOrder
       galleryState.offset = 0
       galleryState.total = 0
       galleryState.publishedTotal = 0
       galleryState.loading = false
       galleryState.hasMore = true
-      galleryState.seed = galleryState.order === "random" ? newRandomSeed() : ""
+      galleryState.seed =
+        restoreConfig && restoreConfig.seed
+          ? restoreConfig.seed
+          : galleryState.order === "random"
+            ? newRandomSeed()
+            : ""
       galleryState.items = []
-      galleryState.prefillTarget = GALLERY_PAGE_SIZE
+      galleryState.prefillTarget = Math.max(
+        GALLERY_PAGE_SIZE,
+        Number((restoreConfig && restoreConfig.loadedCount) || 0) || 0,
+      )
       clearBackgroundPrefill()
       grid.setAttribute("data-layout", homeLayout)
       grid.setAttribute("aria-busy", "true")
@@ -1717,6 +1773,10 @@ void syncSharedIconoplasmSettings().catch(function () {
       }
       setLoadingState("", false)
       updateSentinelObserver()
+      if (!restoreConfig) {
+        window.scrollTo(0, 0)
+      }
+      syncHomeHistoryState(false)
       loadNextGalleryPage()
     }
 
@@ -1790,6 +1850,8 @@ void syncSharedIconoplasmSettings().catch(function () {
           syncHeroCount()
           updateSentinelObserver()
           setLoadingState("", false)
+          syncHomeHistoryState(false)
+          maybeRestoreHomeScroll()
           if (orderEl && orderEl.value !== galleryState.order) {
             orderEl.value = galleryState.order
           }
@@ -1813,7 +1875,21 @@ void syncSharedIconoplasmSettings().catch(function () {
       })
     }
 
-    resetGallery(GALLERY_DEFAULT_ORDER)
+    activeHomeHistorySnapshot = snapshotHomeState
+    var handleHomeScroll = function () {
+      syncHomeHistoryState(false)
+    }
+    window.addEventListener("scroll", handleHomeScroll, { passive: true })
+    activeHomeRenderCleanup = function () {
+      if (sentinelObserver) {
+        sentinelObserver.disconnect()
+        sentinelObserver = null
+      }
+      clearBackgroundPrefill()
+      window.removeEventListener("scroll", handleHomeScroll)
+    }
+
+    resetGallery(pendingRestoreState ? pendingRestoreState.order : GALLERY_DEFAULT_ORDER)
 
     // Search with debounce
     var timer = null
@@ -2222,20 +2298,122 @@ void syncSharedIconoplasmSettings().catch(function () {
   /* ─── Client-side navigation ─── */
 
   var lastRenderedPath = null
+  var activeHomeHistorySnapshot = null
+  var activeHomeRenderCleanup = null
+  var queuedHomeHistorySync = null
+  var pendingHomeAnchor = null
 
-  function navigateTo(path) {
+  function readHistoryState() {
+    var state = window.history.state
+    return state && typeof state === "object" ? state : {}
+  }
+
+  function replaceHistoryStatePatch(patch) {
+    var prev = readHistoryState()
+    var next = {}
+    var key = ""
+    for (key in prev) {
+      if (Object.prototype.hasOwnProperty.call(prev, key)) {
+        next[key] = prev[key]
+      }
+    }
+    for (key in patch) {
+      if (Object.prototype.hasOwnProperty.call(patch, key)) {
+        next[key] = patch[key]
+      }
+    }
+    next.iconoplasm = true
+    window.history.replaceState(next, "", window.location.href)
+  }
+
+  function syncHomeHistoryState(immediate) {
+    if (!activeHomeHistorySnapshot) return
+    var commit = function () {
+      queuedHomeHistorySync = null
+      if (!activeHomeHistorySnapshot) return
+      replaceHistoryStatePatch({
+        iconoplasmPage: "home",
+        iconoplasmHome: activeHomeHistorySnapshot(),
+      })
+    }
+    if (immediate) {
+      if (queuedHomeHistorySync) {
+        window.clearTimeout(queuedHomeHistorySync)
+        queuedHomeHistorySync = null
+      }
+      commit()
+      return
+    }
+    if (queuedHomeHistorySync) return
+    queuedHomeHistorySync = window.setTimeout(commit, 120)
+  }
+
+  function clearActiveHomeRenderState() {
+    activeHomeHistorySnapshot = null
+    if (queuedHomeHistorySync) {
+      window.clearTimeout(queuedHomeHistorySync)
+      queuedHomeHistorySync = null
+    }
+    if (typeof activeHomeRenderCleanup === "function") {
+      var cleanup = activeHomeRenderCleanup
+      activeHomeRenderCleanup = null
+      cleanup()
+    }
+  }
+
+  function readHomeRestoreState() {
+    var state = readHistoryState()
+    if (!state || state.iconoplasmPage !== "home") return null
+    var home = state.iconoplasmHome
+    if (!home || typeof home !== "object") return null
+    var order = String(home.order || GALLERY_DEFAULT_ORDER).trim() || GALLERY_DEFAULT_ORDER
+    var loadedCount = Number(home.loadedCount || 0)
+    var scrollY = Number(home.scrollY || 0)
+    if (!(loadedCount > 0 || scrollY > 0)) return null
+    return {
+      order: order,
+      seed: String(home.seed || ""),
+      loadedCount: Number.isFinite(loadedCount) ? Math.max(0, Math.round(loadedCount)) : 0,
+      scrollY: Number.isFinite(scrollY) ? Math.max(0, Math.round(scrollY)) : 0,
+      focusSymbol: String(home.focusSymbol || ""),
+      focusTop: Number.isFinite(Number(home.focusTop || 0))
+        ? Math.round(Number(home.focusTop || 0))
+        : 0,
+    }
+  }
+
+  function captureHomeAnchor(link) {
+    pendingHomeAnchor = null
+    if (!link) return
+    if (getRoute().page !== "home") return
+    var card = link.closest(".icono-card[data-icono-symbol]")
+    if (!card) return
+    var symbol = String(card.getAttribute("data-icono-symbol") || "").trim().toUpperCase()
+    if (!symbol) return
+    var rect = card.getBoundingClientRect()
+    pendingHomeAnchor = {
+      focusSymbol: symbol,
+      focusTop: Math.round(rect.top),
+    }
+  }
+
+  function navigateTo(path, link) {
+    captureHomeAnchor(link)
+    syncHomeHistoryState(true)
     window.history.pushState({ iconoplasm: true }, "", path)
+    pendingHomeAnchor = null
     render()
   }
 
   function render() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    clearActiveHomeRenderState()
     lastRenderedPath = window.location.pathname + window.location.search
     destroyHomeMasonry()
     destroyCandidateMasonry()
-    window.scrollTo(0, 0)
     var route = getRoute()
+    var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
     // Update page title
     if (route.page === "home") {
       document.title = "Iconoplasm - Mnemonics for genes"
@@ -2246,11 +2424,13 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
     // Render the appropriate page
     if (route.page === "home") {
-      renderHome(root)
+      renderHome(root, homeRestoreState)
       refreshPortraitLightbox()
     } else if (route.page === "gene") {
+      window.scrollTo(0, 0)
       renderGene(root, route.symbol)
     } else {
+      window.scrollTo(0, 0)
       render404(root)
       refreshPortraitLightbox()
     }
@@ -2264,7 +2444,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var href = link.getAttribute("href")
     if (!href || href.startsWith("http")) return
     e.preventDefault()
-    navigateTo(href)
+    navigateTo(href, link)
   })
 
   window.addEventListener("popstate", function () {
@@ -2276,7 +2456,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
-    window.history.replaceState({ iconoplasm: true }, "", window.location.href)
+    replaceHistoryStatePatch({})
     render()
     void refreshSharedUserState()
   }
