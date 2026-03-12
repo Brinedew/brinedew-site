@@ -1466,6 +1466,12 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
     min-width: 0;
   }
 
+  .icono-gene-mobile-visual .iconoplasm-tooltip-portrait {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
   .icono-gene-lead-card .iconoplasm-tooltip-body {
     min-height: auto;
     padding: 0.95rem 0.95rem 0.8rem 0.9rem;
