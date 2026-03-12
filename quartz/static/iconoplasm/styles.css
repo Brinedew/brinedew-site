@@ -804,6 +804,62 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 /* ───────── Gene detail page ───────── */
+.icono-gene-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.icono-card--brick-static {
+  text-decoration: none;
+}
+
+.icono-card--brick-static:hover {
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--icono-brick-line-strong) 72%, transparent),
+    0 1px 2px var(--icono-brick-shadow-1),
+    0 3px 8px var(--icono-brick-shadow-2),
+    0 8px 24px var(--icono-brick-shadow-3),
+    0 20px 60px var(--icono-brick-shadow-4);
+}
+
+.icono-gene-lead-card .iconoplasm-tooltip-portrait,
+.icono-gene-lead-card .iconoplasm-tooltip-body {
+  min-height: 280px;
+}
+
+.iconoplasm-tooltip-portrait-media {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  color: inherit;
+}
+
+.icono-gene-detail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem 1rem;
+  flex-wrap: wrap;
+}
+
+.icono-gene-detail-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.icono-gene-detail-group--actions {
+  justify-content: flex-end;
+}
+
 .icono-nav {
   display: flex;
   align-items: center;
@@ -1265,8 +1321,9 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
   font-size: 0.95rem;
   line-height: 1.6;
   color: var(--secondary, var(--darkgray));
-  margin: 1rem 0 0;
+  margin: 0;
   font-style: italic;
+  max-width: 68ch;
 }
 
 .icono-gene-sections {
@@ -1431,6 +1488,10 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
     border-left: none;
     border-top: 1px dashed var(--ui-border);
     padding-top: 0.35rem;
+  }
+
+  .icono-gene-detail-group--actions {
+    justify-content: flex-start;
   }
 
   .icono-hero-title {

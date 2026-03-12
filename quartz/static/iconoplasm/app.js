@@ -1182,6 +1182,82 @@ void syncSharedIconoplasmSettings().catch(function () {
     )
   }
 
+  function buildGeneLeadCardMarkup(g) {
+    var dims = portraitDimensions(g)
+    var portraitUrl = publishedPortraitUrl(g, "medium")
+    var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
+    var detail = g || null
+    var metaHtml = detail ? renderTooltipMetaHtml(detail) : renderTooltipMetaSkeletonHtml()
+    var portraitStateClass = portraitUrl
+      ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
+      : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
+    var portraitMarkup =
+      '<div class="' +
+      portraitStateClass +
+      '"' +
+      (portraitUrl ? ' data-icono-lightbox' : "") +
+      ">" +
+      (portraitUrl
+        ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
+          esc(portraitFullUrl) +
+          '" data-icono-pswp-alt="' +
+          esc(g.symbol) +
+          ' portrait" data-pswp-width="' +
+          dims.width +
+          '" data-pswp-height="' +
+          dims.height +
+          '" aria-label="Open full-size portrait for ' +
+          esc(g.symbol) +
+          ' portrait">' +
+          '<img class="iconoplasm-tooltip-portrait-img" src="' +
+          esc(portraitUrl) +
+          '" alt="' +
+          esc(g.symbol) +
+          ' portrait" loading="eager" decoding="async" width="' +
+          dims.width +
+          '" height="' +
+          dims.height +
+          '">' +
+          '<span class="icono-card-badge">' +
+          esc(g.symbol) +
+          "</span>" +
+          "</button>"
+        : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
+          '<div class="iconoplasm-tooltip-portrait-fallback">' +
+          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+          '<div class="iconoplasm-tooltip-portrait-symbol">' +
+          esc(g.symbol) +
+          "</div>" +
+          "</div>") +
+      '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+      "</div>"
+
+    return (
+      '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card" style="--width:' +
+      dims.width +
+      ";--height:" +
+      dims.height +
+      ";--icono-card-accent:" +
+      esc(g.color || "#888") +
+      ';">' +
+      portraitMarkup +
+      '<div class="iconoplasm-tooltip-body">' +
+      '<div class="iconoplasm-tooltip-header">' +
+      '<div class="iconoplasm-tooltip-symbol">' +
+      esc(g.symbol) +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-name">' +
+      esc(g.full_name || g.symbol) +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-meta" data-icono-card-meta>' +
+      metaHtml +
+      "</div>" +
+      "</div>" +
+      "</article>"
+    )
+  }
+
   function hydrateBrickPortrait(card, genePayload) {
     if (!card) return
     var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
@@ -1954,15 +2030,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       "All genes</a>" +
       "</div>" +
       '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
-      '<div class="icono-gene-header">' +
-      '<div class="icono-gene-swatch icono-skel-block" style="width:min(320px,100%);aspect-ratio:3/4"></div>' +
-      '<div class="icono-gene-meta">' +
-      '<div class="icono-skel-line" style="width:60%;height:2rem"></div>' +
-      '<div class="icono-skel-line" style="width:80%;height:1rem;margin-top:0.5rem"></div>' +
-      '<div class="icono-skel-line" style="width:40%;height:1rem;margin-top:0.75rem"></div>' +
-      '<div class="icono-skel-line" style="width:55%;height:0.9rem;margin-top:0.75rem"></div>' +
-      "</div>" +
-      "</div>" +
+      buildBrickSkeletonCardMarkup() +
       "</div>" +
       '<div id="icono-gene-content"></div>'
 
@@ -2005,17 +2073,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function renderGeneContent(container, g) {
-    var portraitDisplayUrl = publishedPortraitUrl(g, "medium")
-    var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitDisplayUrl
-    var hasPortrait = !!portraitDisplayUrl
-    var tc = textColorFor(g.color || "#888")
-    var swatchClass = hasPortrait
-      ? "icono-gene-swatch icono-gene-swatch--portrait"
-      : "icono-gene-swatch"
-    var swatchStyle = hasPortrait
-      ? ""
-      : ' style="background:' + esc(g.color || "#888") + ";color:" + tc + '"'
-
+    var hasPortrait = !!publishedPortraitUrl(g, "medium")
     var portraitNote = hasPortrait
       ? ""
       : '<p class="icono-portrait-status">Portrait not yet published</p>'
@@ -2024,37 +2082,6 @@ void syncSharedIconoplasmSettings().catch(function () {
       hasPortrait && g.portrait && g.portrait.asset_sha256
         ? '<div class="icono-gene-portrait-footer">' + voteBoxMarkup() + "</div>"
         : ""
-
-    var portraitDims = portraitDimensions(g)
-    var portraitBlock = hasPortrait
-      ? '<div class="icono-gene-portrait-shell">' +
-        '<div class="icono-gene-media-wrap" data-icono-lightbox>' +
-        '<button type="button" class="' +
-        swatchClass +
-        ' icono-gene-media-link" data-icono-pswp data-icono-pswp-src="' +
-        esc(portraitFullUrl) +
-        '" data-icono-pswp-alt="' +
-        esc(g.symbol) +
-        ' portrait" data-pswp-width="' +
-        portraitDims.width +
-        '" data-pswp-height="' +
-        portraitDims.height +
-        '" aria-label="Open full-size portrait for ' +
-        esc(g.symbol) +
-        '">' +
-        '<img src="' +
-        esc(portraitDisplayUrl) +
-        '" alt="' +
-        esc(g.symbol) +
-        ' portrait" loading="lazy">' +
-        '<span class="icono-gene-symbol-pill">' +
-        esc(g.symbol) +
-        "</span>" +
-        "</button>" +
-        "</div>" +
-        voteBox +
-        "</div>"
-      : '<div class="' + swatchClass + '"' + swatchStyle + ">" + esc(g.symbol) + "</div>"
 
     var links = []
     if (g.source_links) {
@@ -2067,15 +2094,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     links.push('<a href="/api/gene/' + esc(encodeURIComponent(g.symbol)) + '">API</a>')
 
     var html =
-      '<div class="icono-gene-header">' +
-      portraitBlock +
-      '<div class="icono-gene-meta">' +
-      "<h1>" +
-      esc(g.symbol) +
-      "</h1>" +
-      '<p class="full-name">' +
-      esc(g.full_name || "") +
-      "</p>" +
+      '<section class="icono-gene-lead">' +
+      buildGeneLeadCardMarkup(g) +
+      '<div class="icono-gene-detail-bar">' +
+      '<div class="icono-gene-detail-group">' +
       (g.color
         ? '<div class="icono-color-chip"><span class="icono-color-dot" style="background:' +
           esc(g.color) +
@@ -2084,7 +2106,10 @@ void syncSharedIconoplasmSettings().catch(function () {
           "</div>"
         : "") +
       portraitNote +
-      '<div class="icono-links">' +
+      "</div>" +
+      '<div class="icono-gene-detail-group icono-gene-detail-group--actions">' +
+      voteBox +
+      '<div class="icono-links icono-links--gene">' +
       links.join(" ") +
       "</div>" +
       "</div>" +
@@ -2095,111 +2120,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (manifestation) {
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
-
-    // Two-column metadata: character-side mnemonic | molecular-side analogue
-    var essence = g.essence && typeof g.essence === "object" ? g.essence : {}
-    var pairs = []
-    var molecularWeightKda = Number(g.molecular_weight_kda)
-    var proteinLengthAa = Number(g.protein_length_aa)
-    var firstPublicationYear = Number(g.first_publication_year)
-    var primaryTissue = g.primary_tissue ? String(g.primary_tissue) : ""
-
-    var weightKgRaw = null
-    if (essence.weight_kg != null) {
-      weightKgRaw = Number(essence.weight_kg)
-    } else if (g.weight_kg != null) {
-      weightKgRaw = Number(g.weight_kg)
-    }
-    if (Number.isFinite(weightKgRaw) && weightKgRaw > 0) {
-      var weightText =
-        Math.abs(weightKgRaw - Math.round(weightKgRaw)) < 0.05
-          ? String(Math.round(weightKgRaw))
-          : weightKgRaw.toFixed(1)
-      var weightKdaText =
-        Number.isFinite(molecularWeightKda) && molecularWeightKda > 0
-          ? (Math.abs(molecularWeightKda - Math.round(molecularWeightKda)) < 0.05
-              ? String(Math.round(molecularWeightKda))
-              : molecularWeightKda.toFixed(1)) + " kDa"
-          : ""
-      if (weightKdaText) {
-        pairs.push({ character: weightText + " kg", molecular: weightKdaText, label: "Weight" })
-      }
-    }
-
-    var heightCmRaw = Number(essence.height_cm)
-    if (Number.isFinite(heightCmRaw) && heightCmRaw > 0) {
-      var heightOriginText =
-        Number.isFinite(proteinLengthAa) && proteinLengthAa > 0
-          ? String(Math.round(proteinLengthAa)) + " aa"
-          : ""
-      if (heightOriginText) {
-        pairs.push({
-          character: String(Math.round(heightCmRaw)) + " cm",
-          molecular: heightOriginText,
-          label: "Height",
-        })
-      }
-    }
-
-    var sexText = essence.sex ? String(essence.sex).trim() : ""
-    var sexOrigin = uniqueDisplayValues(
-      essence.sex_origin || essence.gender_origin || g.sex_origin || g.gender_origin,
-      2,
-    )
-    if (sexText) {
-      pairs.push({
-        character: sexText,
-        molecular: sexOrigin.length ? sexOrigin.join(", ") : "—",
-        label: "Sex",
-      })
-    }
-
-    var ageText = ""
-    if (essence.age) {
-      ageText = String(essence.age)
-    } else if (essence.age_years != null && Number.isFinite(Number(essence.age_years))) {
-      ageText = String(Math.round(Number(essence.age_years)))
-    }
-    if (ageText && Number.isFinite(firstPublicationYear) && firstPublicationYear > 0) {
-      pairs.push({
-        character: ageText + " years old",
-        molecular: String(Math.round(firstPublicationYear)),
-        label: "Age",
-      })
-    }
-
-    if (essence.skin_hex || essence.skin_name) {
-      var skinBits = []
-      if (essence.skin_name) skinBits.push(String(essence.skin_name))
-      if (essence.skin_hex) skinBits.push("(" + String(essence.skin_hex) + ")")
-      if (skinBits.length && primaryTissue) {
-        pairs.push({ character: skinBits.join(" "), molecular: primaryTissue, label: "Skin" })
-      }
-    }
-
-    if (pairs.length) {
-      html += '<div class="icono-gene-sections">'
-      for (var i = 0; i < pairs.length; i++) {
-        html +=
-          '<div class="icono-section-row">' +
-          '<div class="icono-section-cell icono-section-cell--character">' +
-          '<div class="icono-section-label">' +
-          esc(pairs[i].label) +
-          "</div>" +
-          '<div class="icono-section-value">' +
-          esc(pairs[i].character) +
-          "</div>" +
-          "</div>" +
-          '<div class="icono-section-cell icono-section-cell--origin">' +
-          '<div class="icono-section-label">Molecular</div>' +
-          '<div class="icono-section-value">' +
-          esc(pairs[i].molecular) +
-          "</div>" +
-          "</div>" +
-          "</div>"
-      }
-      html += "</div>"
-    }
+    html += "</section>"
 
     html += renderCandidateGallery(g)
 
