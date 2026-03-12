@@ -1442,6 +1442,104 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
     padding-left: 0.5rem;
   }
 
+  .icono-gene-lead-card {
+    grid-template-columns: minmax(132px, 0.4fr) minmax(0, 0.6fr);
+    align-items: stretch;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-portrait {
+    min-height: 100%;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-body {
+    min-height: auto;
+    padding: 0.95rem 0.95rem 0.8rem 0.9rem;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-header {
+    min-height: 0;
+    padding-bottom: 0.7rem;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-symbol {
+    font-size: clamp(1.55rem, 7vw, 1.95rem);
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-name {
+    font-size: 0.92rem;
+    line-height: 1.34;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-meta {
+    min-height: 0;
+    padding-top: 0.12rem;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-meta-row,
+  .icono-gene-lead-card .iconoplasm-tooltip-meta-pair-row {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-meta-cell,
+  .icono-gene-lead-card .iconoplasm-tooltip-meta-pair-cell {
+    padding: 0.38rem 0.35rem;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-meta-cell--origin,
+  .icono-gene-lead-card .iconoplasm-tooltip-meta-pair-cell--origin {
+    padding-top: 0.38rem;
+    padding-left: 0.5rem;
+  }
+
+  .icono-gene-lead-card .iconoplasm-tooltip-meta-value {
+    font-size: 0.9rem;
+    line-height: 1.32;
+  }
+
+  .icono-gene-detail-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .icono-gene-detail-group {
+    width: 100%;
+  }
+
+  .icono-gene-detail-group--actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .icono-gene-portrait-footer {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .icono-vote-box {
+    width: 100%;
+  }
+
+  .icono-links--gene {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0;
+  }
+
+  .icono-links--gene a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--ui-border);
+    border-radius: 12px;
+    background: var(--ui-bg);
+    border-bottom-color: var(--ui-border);
+  }
+
   .icono-gene-header {
     flex-direction: column;
     align-items: stretch;
