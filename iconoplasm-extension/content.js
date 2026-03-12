@@ -36,6 +36,10 @@
               reject(new Error(chrome.runtime.lastError.message || 'Extension API fetch failed'));
               return;
             }
+            if (!result || typeof result !== 'object') {
+              reject(new Error('Extension API fetch returned no response'));
+              return;
+            }
             const payload = result && typeof result === 'object' ? result : {};
             const rawText = String(payload.text || '');
             resolve({
@@ -861,12 +865,13 @@
     if (geneDetailPromiseCache.has(symbol)) return geneDetailPromiseCache.get(symbol);
     const request = (async () => {
       try {
-        const resp = await extensionApiFetch(ICONOPLASM_API_BASE + '/api/gene/' + encodeURIComponent(symbol));
+        const resp = await fetch(ICONOPLASM_API_BASE + '/api/gene/' + encodeURIComponent(symbol));
         if (!resp.ok) { geneDetailCache.set(symbol, null); return null; }
         const data = await resp.json();
         geneDetailCache.set(symbol, data || null);
         return data || null;
-      } catch {
+      } catch (err) {
+        console.error('[Iconoplasm] extension gene detail fetch error:', err);
         geneDetailCache.set(symbol, null);
         return null;
       } finally {
