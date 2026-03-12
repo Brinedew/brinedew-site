@@ -116,6 +116,11 @@
     var politicsOrigin = uniqueDisplayValues(safeEssence.politics_origin, 2)
 
     var pairedAestheticCount = Math.min(aesthetics.length, aestheticsOrigin.length)
+    // Renderer guardrail: public cards intentionally render clan/origin rows
+    // only when the website payload already contains paired aesthetics +
+    // aesthetics_origin values. If NiceGUI Mapping/Demographics says a gene has
+    // clans but the card shows nothing here, debug the payload projection first
+    // (iconoplasm.py), not just this shared renderer.
     if (pairedAestheticCount > 0) {
       var pairs = []
       for (var i = 0; i < pairedAestheticCount; i++) {

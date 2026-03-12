@@ -460,6 +460,66 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   }
 }
 
+async function sha256Hex(input) {
+  const bytes = new TextEncoder().encode(String(input || ""))
+  const digest = await crypto.subtle.digest("SHA-256", bytes)
+  return Array.from(new Uint8Array(digest))
+    .map((n) => n.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+function catalogStateHashPayload(rawItem) {
+  const item = normalizeCatalogPayloadItem(rawItem)
+  if (!item || item.validation_error) return null
+  return [
+    item.gene_symbol,
+    item.full_name || "",
+    item.uniprot || "",
+    item.color_hex || "",
+    item.tmh ? 1 : 0,
+  ]
+}
+
+async function hashCatalogItems(rawItems) {
+  const rows = []
+  for (const rawItem of Array.isArray(rawItems) ? rawItems : []) {
+    const payload = catalogStateHashPayload(rawItem)
+    if (payload) rows.push(payload)
+  }
+  rows.sort((left, right) => String(left[0] || "").localeCompare(String(right[0] || "")))
+  return sha256Hex(JSON.stringify(rows))
+}
+
+function essenceStateHashPayload(rawEssence, fallbackSymbol = "") {
+  const essence = normalizeEssencePayload(rawEssence, fallbackSymbol)
+  if (!essence || essence.validation_error) return null
+  return [
+    essence.gene_symbol,
+    essence.full_name || "",
+    essence.weight_kg ?? null,
+    essence.height_cm ?? null,
+    essence.sex || "",
+    essence.age || "",
+    essence.age_years ?? null,
+    essence.faction || "",
+    essence.skin_hex || "",
+    essence.skin_name || "",
+    essence.aesthetics_json || "[]",
+    essence.aesthetics_origin_json || "[]",
+    essence.politics_origin_json || "[]",
+    essence.family_surname || "",
+    essence.family_members ?? null,
+    essence.family_feature || "",
+    essence.manifestation || "",
+  ]
+}
+
+async function hashEssencePayload(rawEssence, fallbackSymbol = "") {
+  const payload = essenceStateHashPayload(rawEssence, fallbackSymbol)
+  if (!payload) return ""
+  return sha256Hex(JSON.stringify(payload))
+}
+
 async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync") {
   if (!env.ICONOPLASM_DB || !essence?.gene_symbol) return false
   await env.ICONOPLASM_DB.prepare(
@@ -721,6 +781,105 @@ function normalizeCatalogPayloadItem(rawItem) {
     color_hex: colorHex,
     tmh: coerceBoolean(payload.tmh, false),
   }
+}
+
+async function fetchCatalogState(env) {
+  if (!env.ICONOPLASM_DB) return { gene_count: 0, content_hash: "" }
+  const { results } = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, full_name, uniprot, color_hex, tmh
+       FROM icono_gene_catalog
+      ORDER BY gene_symbol ASC`,
+  ).all()
+  const rows = Array.isArray(results) ? results : []
+  return {
+    gene_count: rows.length,
+    content_hash: await hashCatalogItems(rows),
+  }
+}
+
+async function fetchEssenceStateRows(env, requestedSymbols = null) {
+  if (!env.ICONOPLASM_DB) return []
+  const wantedSymbols = Array.isArray(requestedSymbols)
+    ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
+    : []
+  let results = []
+  if (wantedSymbols.length && wantedSymbols.length <= 1000) {
+    const placeholders = wantedSymbols.map(() => "?").join(", ")
+    const stmt = env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, full_name, weight_kg, height_cm, sex, age, age_years, faction,
+              skin_hex, skin_name, aesthetics_json, aesthetics_origin_json, politics_origin_json,
+              family_surname, family_members, family_feature, manifestation, updated_at
+         FROM icono_gene_essence
+        WHERE upper(gene_symbol) IN (${placeholders})
+        ORDER BY gene_symbol ASC`,
+    ).bind(...wantedSymbols)
+    const response = await stmt.all()
+    results = Array.isArray(response?.results) ? response.results : []
+  } else {
+    const response = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, full_name, weight_kg, height_cm, sex, age, age_years, faction,
+              skin_hex, skin_name, aesthetics_json, aesthetics_origin_json, politics_origin_json,
+              family_surname, family_members, family_feature, manifestation, updated_at
+         FROM icono_gene_essence
+        ORDER BY gene_symbol ASC`,
+    ).all()
+    results = Array.isArray(response?.results) ? response.results : []
+  }
+
+  const out = []
+  for (const row of results) {
+    const rawEssence = {
+      gene_symbol: row?.gene_symbol || "",
+      full_name: row?.full_name || "",
+      weight_kg: row?.weight_kg,
+      height_cm: row?.height_cm,
+      sex: row?.sex || "",
+      age: row?.age || "",
+      age_years: row?.age_years,
+      faction: row?.faction || "",
+      skin_hex: row?.skin_hex || "",
+      skin_name: row?.skin_name || "",
+      aesthetics:
+        (() => {
+          try {
+            const parsed = JSON.parse(String(row?.aesthetics_json || "[]"))
+            return Array.isArray(parsed) ? parsed : []
+          } catch {
+            return []
+          }
+        })(),
+      aesthetics_origin:
+        (() => {
+          try {
+            const parsed = JSON.parse(String(row?.aesthetics_origin_json || "[]"))
+            return Array.isArray(parsed) ? parsed : []
+          } catch {
+            return []
+          }
+        })(),
+      politics_origin:
+        (() => {
+          try {
+            const parsed = JSON.parse(String(row?.politics_origin_json || "[]"))
+            return Array.isArray(parsed) ? parsed : []
+          } catch {
+            return []
+          }
+        })(),
+      family_surname: row?.family_surname || "",
+      family_members: row?.family_members,
+      family_feature: row?.family_feature || "",
+      manifestation: row?.manifestation || "",
+    }
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    out.push({
+      symbol,
+      hash: await hashEssencePayload(rawEssence, symbol),
+      updated_at: row?.updated_at ? String(row.updated_at) : null,
+    })
+  }
+  return out
 }
 
 async function fetchCatalogRow(env, symbol) {
@@ -1155,6 +1314,209 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
     candidate_ref: candidateRefNorm,
     vision_id: visionNorm,
   }
+}
+
+async function iconoVoteSnapshotsBatch(env, { items, userId }) {
+  const normalizedItems = Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : []
+  const userNorm = normalizeUserId(userId)
+  if (!env.ICONOPLASM_DB || !normalizedItems.length) return []
+
+  const snapshots = []
+  const chunkSize = 5000
+  for (let start = 0; start < normalizedItems.length; start += chunkSize) {
+    const chunk = normalizedItems.slice(start, start + chunkSize)
+    try {
+      const chunkJson = JSON.stringify(
+        chunk.map((item) => ({
+          candidate_ref: String(item?.candidate_ref || "").trim(),
+          symbol: normalizeSymbol(item?.symbol || ""),
+          asset_sha256: normalizeSha256(item?.asset_sha256 || ""),
+          vision_id: sanitizeVoteVisionId(item?.vision_id || ""),
+        })),
+      )
+      const resp = await env.ICONOPLASM_DB.prepare(
+        `WITH input AS (
+           SELECT
+             CAST(json_each.key AS INTEGER) AS idx,
+             json_extract(json_each.value, '$.candidate_ref') AS candidate_ref,
+             json_extract(json_each.value, '$.symbol') AS symbol,
+             json_extract(json_each.value, '$.asset_sha256') AS asset_sha256,
+             json_extract(json_each.value, '$.vision_id') AS vision_id
+           FROM json_each(?)
+         ),
+         image_agg AS (
+           SELECT
+             iv.candidate_ref,
+             COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+             COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+             COALESCE(SUM(iv.vote_value), 0) AS score
+           FROM icono_image_votes iv
+           WHERE iv.candidate_ref IN (SELECT candidate_ref FROM input)
+           GROUP BY iv.candidate_ref
+         ),
+         user_votes AS (
+           SELECT iv.candidate_ref, iv.vote_value
+           FROM icono_image_votes iv
+           WHERE iv.user_id = ?
+             AND iv.candidate_ref IN (SELECT candidate_ref FROM input)
+         ),
+         vision_agg AS (
+           SELECT
+             iv.vision_id,
+             COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+             COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+             COALESCE(SUM(iv.vote_value), 0) AS score
+           FROM icono_image_votes iv
+           WHERE COALESCE(iv.vision_id, '') <> ''
+             AND iv.vision_id IN (SELECT DISTINCT vision_id FROM input WHERE COALESCE(vision_id, '') <> '')
+           GROUP BY iv.vision_id
+         )
+         SELECT
+           input.idx,
+           input.candidate_ref,
+           input.symbol,
+           input.asset_sha256,
+           input.vision_id,
+           COALESCE(image_agg.upvotes, 0) AS image_upvotes,
+           COALESCE(image_agg.downvotes, 0) AS image_downvotes,
+           COALESCE(image_agg.score, 0) AS image_score,
+           COALESCE(user_votes.vote_value, 0) AS user_vote,
+           COALESCE(vision_agg.upvotes, 0) AS vision_upvotes,
+           COALESCE(vision_agg.downvotes, 0) AS vision_downvotes,
+           COALESCE(vision_agg.score, 0) AS vision_score
+         FROM input
+         LEFT JOIN image_agg
+           ON image_agg.candidate_ref = input.candidate_ref
+         LEFT JOIN user_votes
+           ON user_votes.candidate_ref = input.candidate_ref
+         LEFT JOIN vision_agg
+           ON vision_agg.vision_id = input.vision_id
+         ORDER BY input.idx ASC`,
+      )
+        .bind(chunkJson, userNorm)
+        .all()
+      for (const row of Array.isArray(resp?.results) ? resp.results : []) {
+        const candidateRef = String(row?.candidate_ref || "").trim()
+        const visionId = sanitizeVoteVisionId(row?.vision_id || "")
+        snapshots.push({
+          candidate_ref: candidateRef,
+          symbol: normalizeSymbol(row?.symbol || ""),
+          asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
+          vision_id: visionId,
+          snapshot: {
+            image_upvotes: Number(row?.image_upvotes || 0),
+            image_downvotes: Number(row?.image_downvotes || 0),
+            image_score: Number(row?.image_score || 0),
+            user_vote: Number(row?.user_vote || 0),
+            vision_upvotes: Number(row?.vision_upvotes || 0),
+            vision_downvotes: Number(row?.vision_downvotes || 0),
+            vision_score: Number(row?.vision_score || 0),
+            candidate_ref: candidateRef,
+            vision_id: visionId,
+          },
+        })
+      }
+    } catch (error) {
+      const candidateRefs = chunk.map((item) => String(item.candidate_ref || "").trim()).filter(Boolean)
+      const visionIds = [
+        ...new Set(chunk.map((item) => sanitizeVoteVisionId(item.vision_id || "")).filter(Boolean)),
+      ]
+      const imageAggByRef = new Map()
+      const userVoteByRef = new Map()
+      const visionAggById = new Map()
+      const imageAggPromise = candidateRefs.length
+        ? env.ICONOPLASM_DB.prepare(
+            `SELECT
+               candidate_ref,
+               COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+               COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+               COALESCE(SUM(vote_value), 0) AS score
+             FROM icono_image_votes
+             WHERE candidate_ref IN (${candidateRefs.map(() => "?").join(",")})
+             GROUP BY candidate_ref`,
+          )
+            .bind(...candidateRefs)
+            .all()
+        : Promise.resolve({ results: [] })
+      const userVotePromise = candidateRefs.length
+        ? env.ICONOPLASM_DB.prepare(
+            `SELECT candidate_ref, vote_value
+             FROM icono_image_votes
+             WHERE user_id = ?
+               AND candidate_ref IN (${candidateRefs.map(() => "?").join(",")})`,
+          )
+            .bind(userNorm, ...candidateRefs)
+            .all()
+        : Promise.resolve({ results: [] })
+      const visionAggPromise = visionIds.length
+        ? env.ICONOPLASM_DB.prepare(
+            `SELECT
+               vision_id,
+               COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+               COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+               COALESCE(SUM(vote_value), 0) AS score
+             FROM icono_image_votes
+             WHERE vision_id IN (${visionIds.map(() => "?").join(",")})
+             GROUP BY vision_id`,
+          )
+            .bind(...visionIds)
+            .all()
+        : Promise.resolve({ results: [] })
+      const [imageAggRows, userVoteRows, visionAggRows] = await Promise.all([
+        imageAggPromise,
+        userVotePromise,
+        visionAggPromise,
+      ])
+      for (const row of Array.isArray(imageAggRows?.results) ? imageAggRows.results : []) {
+        const candidateRef = String(row?.candidate_ref || "").trim()
+        if (!candidateRef) continue
+        imageAggByRef.set(candidateRef, {
+          upvotes: Number(row?.upvotes || 0),
+          downvotes: Number(row?.downvotes || 0),
+          score: Number(row?.score || 0),
+        })
+      }
+      for (const row of Array.isArray(userVoteRows?.results) ? userVoteRows.results : []) {
+        const candidateRef = String(row?.candidate_ref || "").trim()
+        if (!candidateRef || userVoteByRef.has(candidateRef)) continue
+        userVoteByRef.set(candidateRef, Number(row?.vote_value || 0))
+      }
+      for (const row of Array.isArray(visionAggRows?.results) ? visionAggRows.results : []) {
+        const visionId = sanitizeVoteVisionId(row?.vision_id || "")
+        if (!visionId) continue
+        visionAggById.set(visionId, {
+          upvotes: Number(row?.upvotes || 0),
+          downvotes: Number(row?.downvotes || 0),
+          score: Number(row?.score || 0),
+        })
+      }
+      for (const item of chunk) {
+        const candidateRef = String(item?.candidate_ref || "").trim()
+        const visionId = sanitizeVoteVisionId(item?.vision_id || "")
+        const imageAgg = imageAggByRef.get(candidateRef) || { upvotes: 0, downvotes: 0, score: 0 }
+        const visionAgg = visionAggById.get(visionId) || { upvotes: 0, downvotes: 0, score: 0 }
+        snapshots.push({
+          candidate_ref: candidateRef,
+          symbol: normalizeSymbol(item?.symbol || ""),
+          asset_sha256: normalizeSha256(item?.asset_sha256 || ""),
+          vision_id: visionId,
+          snapshot: {
+            image_upvotes: Number(imageAgg.upvotes || 0),
+            image_downvotes: Number(imageAgg.downvotes || 0),
+            image_score: Number(imageAgg.score || 0),
+            user_vote: Number(userVoteByRef.get(candidateRef) || 0),
+            vision_upvotes: Number(visionAgg.upvotes || 0),
+            vision_downvotes: Number(visionAgg.downvotes || 0),
+            vision_score: Number(visionAgg.score || 0),
+            candidate_ref: candidateRef,
+            vision_id: visionId,
+          },
+        })
+      }
+    }
+  }
+
+  return snapshots
 }
 
 async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}) {
@@ -2784,23 +3146,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         })
       }
 
-      const snapshots = []
-      for (const item of deduped) {
-        const snapshot = await iconoVoteSnapshot(env, {
-          candidateRef: item.candidate_ref,
-          symbol: item.symbol,
-          assetSha256: item.asset_sha256,
-          visionId: item.vision_id,
-          userId,
-        })
-        snapshots.push({
-          candidate_ref: item.candidate_ref,
-          symbol: item.symbol,
-          asset_sha256: item.asset_sha256,
-          vision_id: item.vision_id,
-          snapshot,
-        })
-      }
+      // optimize/harden: the Website Ops sync asks for thousands of snapshots at
+      // once. Keep this set-based so scan_local does not stall behind per-item D1
+      // round-trips.
+      const snapshots = await iconoVoteSnapshotsBatch(env, { items: deduped, userId })
 
       return done(
         "admin_votes_snapshots",
@@ -3032,6 +3381,99 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       return done(
         "admin_assets",
         json({ assets, count: assets.length }, 200, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/assets/summary" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_assets_summary_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_assets_summary_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const summaryRow = await env.ICONOPLASM_DB.prepare(
+        `SELECT
+            COUNT(*) AS candidate_assets,
+            SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
+            SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets
+           FROM icono_portrait_assets`,
+      ).first()
+      return done(
+        "admin_assets_summary",
+        json(
+          {
+            ok: true,
+            candidate_assets: Number(summaryRow?.candidate_assets || 0),
+            stale_assets: Number(summaryRow?.stale_assets || 0),
+            legacy_assets: Number(summaryRow?.legacy_assets || 0),
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/assets/state" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_assets_state_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_assets_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const resp = await env.ICONOPLASM_DB.prepare(
+        `SELECT
+           pa.gene_symbol,
+           pa.asset_sha256,
+           COALESCE(v.upvotes, 0) AS image_upvotes,
+           COALESCE(v.downvotes, 0) AS image_downvotes,
+           COALESCE(v.score, 0) AS image_score
+         FROM icono_portrait_assets pa
+         LEFT JOIN (
+           SELECT
+             candidate_ref,
+             COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+             COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+             COALESCE(SUM(vote_value), 0) AS score
+           FROM icono_image_votes
+           GROUP BY candidate_ref
+         ) v
+           ON v.candidate_ref = ('a:' || upper(pa.gene_symbol) || '|' || lower(pa.asset_sha256))
+         ORDER BY pa.gene_symbol ASC, pa.asset_sha256 ASC`,
+      ).all()
+      const assets = (Array.isArray(resp?.results) ? resp.results : [])
+        .map((row) => ({
+          symbol: normalizeSymbol(row?.gene_symbol || ""),
+          asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
+          image_upvotes: Number(row?.image_upvotes || 0),
+          image_downvotes: Number(row?.image_downvotes || 0),
+          image_score: Number(row?.image_score || 0),
+        }))
+        .filter((row) => row.symbol && row.asset_sha256)
+      return done(
+        "admin_assets_state",
+        json({ ok: true, count: assets.length, assets }, 200, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/catalog/state" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_catalog_state_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_catalog_state_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const state = await fetchCatalogState(env)
+      return done(
+        "admin_catalog_state",
+        json(
+          {
+            ok: true,
+            gene_count: Number(state.gene_count || 0),
+            content_hash: String(state.content_hash || ""),
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
       )
     }
 
@@ -3279,6 +3721,44 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
+    if (path === "/api/iconoplasm/admin/essence/state" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_essence_state_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_essence_state_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_essence_state_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
+      if (rawSymbols.length > 25000)
+        return done(
+          "admin_essence_state_400",
+          json({ error: "Too many symbols (max 25000)" }, 400),
+        )
+
+      const rows = await fetchEssenceStateRows(env, rawSymbols.length ? rawSymbols : null)
+      return done(
+        "admin_essence_state",
+        json(
+          {
+            ok: true,
+            count: rows.length,
+            rows,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (
       ["/api/iconoplasm/admin/ingest", "/api/iconoplasm/admin/publish-local"].includes(path) &&
       request.method === "POST"
@@ -3341,29 +3821,64 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             item?.created_by || item?.createdBy || createdByDefault || "unknown",
           ).slice(0, 255)
 
+          const existingAsset = await env.ICONOPLASM_DB.prepare(
+            `SELECT
+               status,
+               autopick_eligible,
+               r2_key_full,
+               r2_key_medium,
+               r2_key_thumb,
+               vision_id,
+               artist_tag,
+               artist_name
+             FROM icono_portrait_assets
+             WHERE upper(gene_symbol)=? AND asset_sha256=?
+             LIMIT 1`,
+          )
+            .bind(symbol, assetSha)
+            .first()
           const keys = {
             full: r2PortraitKey(assetSha, "full"),
             medium: r2PortraitKey(assetSha, "medium"),
             thumb: r2PortraitKey(assetSha, "thumb"),
           }
-
-          const [headFull, headMedium, headThumb] = await Promise.all([
-            env.ICONOPLASM_PORTRAITS.head(keys.full),
-            env.ICONOPLASM_PORTRAITS.head(keys.medium),
-            env.ICONOPLASM_PORTRAITS.head(keys.thumb),
-          ])
-          const exists = {
-            full: Boolean(headFull),
-            medium: Boolean(headMedium),
-            thumb: Boolean(headThumb),
+          // optimize/harden: repeated syncs should not re-probe and re-require
+          // binary renditions for assets the website already knows about.
+          const storedRenditionsPresent =
+            Boolean(existingAsset?.r2_key_full) &&
+            Boolean(existingAsset?.r2_key_medium) &&
+            Boolean(existingAsset?.r2_key_thumb)
+          let exists = {
+            full: storedRenditionsPresent,
+            medium: storedRenditionsPresent,
+            thumb: storedRenditionsPresent,
           }
-
-          const fullPayload = extractRenditionPayload(item, "full")
-          const mediumPayload = extractRenditionPayload(item, "medium")
-          const thumbPayload = extractRenditionPayload(item, "thumb")
-          const fullBytes = extractRenditionBytes(fullPayload)
-          const mediumBytes = extractRenditionBytes(mediumPayload)
-          const thumbBytes = extractRenditionBytes(thumbPayload)
+          let fullPayload = null
+          let mediumPayload = null
+          let thumbPayload = null
+          let fullBytes = null
+          let mediumBytes = null
+          let thumbBytes = null
+          if (!storedRenditionsPresent) {
+            const [headFull, headMedium, headThumb] = await Promise.all([
+              env.ICONOPLASM_PORTRAITS.head(keys.full),
+              env.ICONOPLASM_PORTRAITS.head(keys.medium),
+              env.ICONOPLASM_PORTRAITS.head(keys.thumb),
+            ])
+            exists = {
+              full: Boolean(headFull),
+              medium: Boolean(headMedium),
+              thumb: Boolean(headThumb),
+            }
+          }
+          if (!exists.full || !exists.medium || !exists.thumb) {
+            fullPayload = extractRenditionPayload(item, "full")
+            mediumPayload = extractRenditionPayload(item, "medium")
+            thumbPayload = extractRenditionPayload(item, "thumb")
+            fullBytes = extractRenditionBytes(fullPayload)
+            mediumBytes = extractRenditionBytes(mediumPayload)
+            thumbBytes = extractRenditionBytes(thumbPayload)
+          }
 
           if (!dryRun) {
             if (!exists.full) {
@@ -3392,20 +3907,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               })
             }
           }
-
-          const existingAsset = await env.ICONOPLASM_DB.prepare(
-            `SELECT
-               status,
-               autopick_eligible,
-               vision_id,
-               artist_tag,
-               artist_name
-             FROM icono_portrait_assets
-             WHERE upper(gene_symbol)=? AND asset_sha256=?
-             LIMIT 1`,
-          )
-            .bind(symbol, assetSha)
-            .first()
           const visionId =
             sanitizeText(item?.vision_id || item?.vision || existingAsset?.vision_id || "", 255) || null
           const artistTag =
