@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Iconoplasm",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Every human gene has a unique color. Iconoplasm highlights gene names on any webpage and reveals their color identity.",
   "permissions": [
     "storage"
