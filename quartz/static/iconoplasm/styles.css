@@ -832,7 +832,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   display: contents;
 }
 
-.icono-gene-mobile-meta {
+.icono-gene-mobile-rowgrid {
   display: none;
 }
 
@@ -1495,29 +1495,27 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
     display: none;
   }
 
-  .icono-gene-mobile-meta {
+  .icono-gene-mobile-rowgrid {
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--icono-brick-line-strong);
     background: var(--icono-brick-surface);
   }
 
-  .icono-gene-mobile-meta--character {
-    border-top: 1px solid var(--icono-brick-line-strong);
+  .icono-gene-mobile-row {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
   }
 
-  .icono-gene-mobile-meta-item {
+  .icono-gene-mobile-cell {
     min-width: 0;
     padding: 0.34rem 0.45rem;
     border-bottom: 1px solid var(--icono-brick-line);
   }
 
-  .icono-gene-mobile-meta-item:last-child {
-    border-bottom: none;
-  }
-
-  .icono-gene-mobile-meta--character .iconoplasm-tooltip-meta-value,
-  .icono-gene-mobile-meta--character .iconoplasm-tooltip-meta-value--compact {
+  .icono-gene-mobile-cell--character .iconoplasm-tooltip-meta-value,
+  .icono-gene-mobile-cell--character .iconoplasm-tooltip-meta-value--compact {
     font-size: 0.88rem;
     line-height: 1.28;
     font-style: normal;
@@ -1525,8 +1523,8 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
     opacity: 0.88;
   }
 
-  .icono-gene-mobile-meta--molecular .iconoplasm-tooltip-meta-value,
-  .icono-gene-mobile-meta--molecular .iconoplasm-tooltip-meta-value--compact {
+  .icono-gene-mobile-cell--molecular .iconoplasm-tooltip-meta-value,
+  .icono-gene-mobile-cell--molecular .iconoplasm-tooltip-meta-value--compact {
     font-size: 0.88rem;
     line-height: 1.28;
     font-style: italic;
