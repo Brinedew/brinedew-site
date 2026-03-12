@@ -7,6 +7,22 @@
   margin: 0 auto;
   padding: 0 1rem 2rem;
   --icono-reject: oklch(56% 0.16 28);
+  /* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md
+     (Layout & Space, Visual Details, Motion) +
+     C:\Users\Admin\.codex\skills\polish\SKILL.md
+     (Visual Alignment & Spacing, Icons & Images, Micro-interactions & Transitions) +
+     C:\Users\Admin\.codex\skills\optimize\SKILL.md (Smooth 60fps).
+     These shared tokens keep Iconoplasm's nested surfaces concentric, portraits legible,
+     and transitions interruptible. Reverting them tends to reintroduce pale edges, mismatched
+     radii, and sticky-feeling motion. */
+  --icono-radius-xl: 20px;
+  --icono-radius-lg: 16px;
+  --icono-radius-md: 12px;
+  --icono-radius-sm: 8px;
+  --icono-radius-pill: 999px;
+  --icono-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --icono-ring-soft: color-mix(in srgb, var(--dark) 10%, transparent);
+  --icono-ring-image: color-mix(in srgb, var(--light) 72%, var(--dark) 12%);
 }
 
 body[data-slug="apps/iconoplasm"] .page-header,
@@ -46,6 +62,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   font-size: 1.1rem;
   color: var(--secondary, var(--darkgray));
   margin: 0.4rem 0 0;
+  text-wrap: pretty;
 }
 
 .icono-hero .stat {
@@ -56,7 +73,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   font-size: 0.85rem;
   color: var(--darkgray);
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--icono-radius-sm);
   background: var(--ui-bg);
 }
 
@@ -82,9 +99,12 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   color: var(--dark);
   background: var(--light);
   border: 1px solid var(--ui-border);
-  border-radius: 8px;
+  border-radius: var(--icono-radius-sm);
   outline: none;
-  transition: border-color 0.15s ease;
+  transition:
+    border-color 0.16s var(--icono-ease-out),
+    box-shadow 0.18s var(--icono-ease-out),
+    background-color 0.16s var(--icono-ease-out);
   box-sizing: border-box;
 }
 
@@ -94,6 +114,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-search input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* Live search dropdown */
@@ -106,7 +127,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background: var(--light);
   border: 1px solid var(--ui-border);
   border-top: none;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 var(--icono-radius-sm) var(--icono-radius-sm);
   max-height: 320px;
   overflow-y: auto;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -264,8 +285,17 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   display: block;
   position: relative;
   text-decoration: none;
+  /* Lock card ink through link/visited/active states. Browser link colors made cards turn
+     noticeably paler after click-through/back on the live gallery. */
   color: var(--icono-card-ink, var(--dark));
-  transition: box-shadow 0.18s ease;
+  /* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Motion) +
+     C:\Users\Admin\.codex\skills\optimize\SKILL.md (Smooth 60fps).
+     Keep gallery interactions interruptible and low-drama; swapping this back to generic easing
+     or one-off keyframes is what makes the cards feel sticky after repeated navigation. */
+  transition:
+    transform 0.18s var(--icono-ease-out),
+    box-shadow 0.18s var(--icono-ease-out),
+    color 0.16s var(--icono-ease-out);
 }
 
 .icono-card:link,
@@ -294,11 +324,18 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   box-sizing: border-box;
   border: 1px solid
     color-mix(in srgb, var(--icono-card-accent, var(--ui-border)) 28%, var(--ui-border));
-  border-radius: 20px;
+  /* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Layout & Space) +
+     C:\Users\Admin\.codex\skills\polish\SKILL.md (Concentric radii).
+     This radius is intentionally tied to the shared token set so masonry cards, gene cards,
+     candidate cards, and lightbox images read like the same system. */
+  border-radius: var(--icono-radius-xl);
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.18), transparent 48%),
     color-mix(in srgb, var(--icono-card-accent, var(--ui-bg)) 12%, white);
   box-shadow: 0 12px 28px rgba(45, 33, 20, 0.08);
+  transition:
+    box-shadow 0.18s var(--icono-ease-out),
+    transform 0.18s var(--icono-ease-out);
 }
 
 .icono-card-media img {
@@ -307,6 +344,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   display: block;
   margin: 0;
   background: transparent;
+  box-shadow: inset 0 0 0 1px var(--icono-ring-image);
 }
 
 .icono-card-fallback-symbol {
@@ -339,7 +377,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   bottom: 0.85rem;
   padding: 0.18rem 0.58rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
+  border-radius: var(--icono-radius-pill);
   background: rgba(14, 12, 10, 0.54);
   backdrop-filter: blur(10px);
   font-family: var(--codeFont, monospace);
@@ -362,6 +400,18 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 .icono-hero .stat {
   min-width: 24ch;
   text-align: center;
+  /* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Typography) +
+     C:\Users\Admin\.codex\skills\harden\SKILL.md (Dynamic Numeric Data).
+     Keep numerals tabular across stats, votes, and sidebar counters to prevent jitter when
+     values change or align side-by-side. */
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
+.icono-vote-stats,
+.pswp__counter,
+.iconoplasm-tooltip-meta-value,
+.iconoplasm-tooltip-meta-value--compact {
   font-variant-numeric: tabular-nums;
 }
 
@@ -514,7 +564,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   width: 100%;
   margin: 0;
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: var(--icono-radius-lg);
   background: var(--icono-brick-shell);
   box-shadow:
     0 0 0 0.5px color-mix(in srgb, var(--icono-brick-line-strong) 72%, transparent),
@@ -532,11 +582,16 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 .icono-card--brick:hover {
+  transform: translateY(-1px);
   box-shadow:
     0 0 0 0.5px color-mix(in srgb, var(--icono-brick-line-strong) 72%, transparent),
     0 2px 6px var(--icono-brick-shadow-2),
     0 10px 30px var(--icono-brick-shadow-3),
     0 24px 72px var(--icono-brick-shadow-4);
+}
+
+.icono-card--brick:active {
+  transform: translateY(0);
 }
 
 .icono-card--brick .iconoplasm-tooltip-portrait {
@@ -546,6 +601,29 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background-position: center top;
   background-repeat: no-repeat;
   position: relative;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icono-ring-image) 82%, transparent);
+}
+
+.icono-card--brick .icono-brick-media-link,
+.icono-card--brick .icono-brick-header-link,
+.icono-card--brick .icono-brick-meta-link,
+.icono-card--brick .icono-brick-mobile-link {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+  min-width: 0;
+}
+
+.icono-card--brick .icono-brick-mobile-link {
+  grid-column: 1 / -1;
+}
+
+.icono-card--brick .icono-brick-media-link:focus-visible,
+.icono-card--brick .icono-brick-header-link:focus-visible,
+.icono-card--brick .icono-brick-meta-link:focus-visible,
+.icono-card--brick .icono-brick-mobile-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, white 8%);
+  outline-offset: -2px;
 }
 
 .icono-card--brick .iconoplasm-tooltip-portrait-img {
@@ -646,6 +724,17 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   border-bottom: 1px solid var(--icono-brick-line-strong);
 }
 
+.icono-card--brick .icono-brick-header-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.icono-card--brick .icono-brick-header-link {
+  flex: 1 1 auto;
+}
+
 .icono-card--brick .iconoplasm-tooltip-symbol {
   font-size: clamp(1.75rem, 3vw, 2.1rem);
   color: var(--icono-brick-ink);
@@ -656,6 +745,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   line-height: 1.4;
   color: color-mix(in srgb, var(--icono-brick-ink) 92%, white 8%);
   font-weight: 500;
+  text-wrap: pretty;
 }
 
 .icono-card--brick .iconoplasm-tooltip-meta {
@@ -845,6 +935,8 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   display: none;
 }
 
+/* Keep the mobile skeleton using the same row-grid structure as the hydrated card. That way the
+   portrait rail and the metadata rail reserve stable space before gene detail text arrives. */
 .iconoplasm-tooltip-mobile-rowgrid--skeleton .iconoplasm-tooltip-mobile-cell {
   display: flex;
   align-items: center;
@@ -867,6 +959,9 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background: transparent;
   cursor: zoom-in;
   color: inherit;
+  transition:
+    transform 0.18s var(--icono-ease-out),
+    opacity 0.16s var(--icono-ease-out);
 }
 
 .icono-gene-detail-bar {
@@ -901,6 +996,9 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   color: var(--accent);
   text-decoration: none;
   font-size: 0.9rem;
+  transition:
+    color 0.16s var(--icono-ease-out),
+    opacity 0.16s var(--icono-ease-out);
 }
 
 .icono-nav a:hover {
@@ -925,7 +1023,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 .icono-gene-swatch {
   width: 200px;
   min-height: 200px;
-  border-radius: 20px;
+  border-radius: var(--icono-radius-xl);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -936,7 +1034,9 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   border: 1px solid var(--ui-border);
   overflow: hidden;
   background: var(--ui-bg);
-  box-shadow: 0 16px 34px rgba(45, 33, 20, 0.1);
+  box-shadow:
+    0 16px 34px rgba(45, 33, 20, 0.1),
+    inset 0 0 0 1px color-mix(in srgb, var(--icono-ring-image) 82%, transparent);
 }
 
 .icono-gene-swatch--portrait {
@@ -971,7 +1071,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   align-items: center;
   padding: 0.26rem 0.66rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
+  border-radius: var(--icono-radius-pill);
   background: rgba(14, 12, 10, 0.58);
   backdrop-filter: blur(10px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
@@ -995,6 +1095,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   margin: 0 0 0.25rem;
   color: var(--dark);
   letter-spacing: 0;
+  text-wrap: balance;
 }
 
 .icono-gene-meta .full-name {
@@ -1002,6 +1103,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   color: color-mix(in srgb, var(--dark) 90%, var(--secondary, var(--darkgray)) 10%);
   font-weight: 500;
   margin: 0 0 0.75rem;
+  text-wrap: pretty;
 }
 
 .icono-color-chip {
@@ -1010,7 +1112,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   gap: 0.4rem;
   padding: 0.25rem 0.65rem;
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--icono-radius-sm);
   background: var(--ui-bg);
   font-family: var(--codeFont, monospace);
   font-size: 0.85rem;
@@ -1039,39 +1141,56 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   justify-content: flex-start;
 }
 
+/* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Motion) +
+   C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction States, Micro-interactions).
+   The vote control deliberately reads like a segmented control rather than a generic counter pill:
+   one shared shell, clear segments, and stronger active states. Please do not flatten it back into
+   a plain bordered capsule unless the whole interaction model changes. */
 .icono-vote-box {
   display: inline-grid;
-  grid-template-columns: 2.3rem auto 2.3rem;
-  align-items: center;
-  gap: 0;
-  min-height: 2.45rem;
-  padding: 0.14rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--accent) 8%);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--light) 90%, rgba(255, 255, 255, 0.66));
-  box-shadow: 0 8px 18px rgba(45, 33, 20, 0.08);
+  grid-template-columns: minmax(2.45rem, auto) minmax(2.4rem, auto) minmax(2.45rem, auto);
+  align-items: stretch;
+  gap: 0.14rem;
+  min-height: 2.7rem;
+  padding: 0.16rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 80%, var(--accent) 10%);
+  border-radius: var(--icono-radius-pill);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--light) 96%, white 4%),
+      color-mix(in srgb, var(--light) 88%, var(--ui-bg) 12%)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 8px 18px rgba(45, 33, 20, 0.08);
 }
 
 .icono-vote-stats {
   font-family: var(--codeFont, monospace);
-  font-size: 0.86rem;
-  font-weight: 700;
-  min-width: 1.9rem;
+  font-size: 0.84rem;
+  font-weight: 760;
+  min-width: 2.2rem;
   text-align: center;
   color: var(--dark);
-  padding: 0 0.32rem;
+  padding: 0 0.48rem;
   border: 0;
-  background: transparent;
-  box-shadow: none;
+  border-radius: calc(var(--icono-radius-pill) - 6px);
+  background: color-mix(in srgb, var(--ui-bg) 86%, white 14%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-border) 76%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icono-vote-btn {
   border: 0;
   background: transparent;
   color: var(--darkgray);
-  border-radius: 999px;
-  width: 2.3rem;
-  height: 2.3rem;
+  border-radius: calc(var(--icono-radius-pill) - 6px);
+  width: 2.45rem;
+  min-width: 2.45rem;
+  height: 2.36rem;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -1080,9 +1199,11 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   cursor: pointer;
   box-shadow: none;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    transform 0.15s ease;
+    background-color 0.16s var(--icono-ease-out),
+    color 0.16s var(--icono-ease-out),
+    box-shadow 0.18s var(--icono-ease-out),
+    transform 0.18s var(--icono-ease-out),
+    opacity 0.16s var(--icono-ease-out);
 }
 
 .icono-vote-btn svg {
@@ -1100,6 +1221,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-vote-btn:hover:not(:disabled) {
   transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-border) 60%, transparent);
 }
 
 .icono-vote-btn--approve:hover:not(:disabled) {
@@ -1116,7 +1238,9 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 .icono-vote-btn.active {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 6px 14px rgba(45, 33, 20, 0.08);
 }
 
 .icono-vote-btn--approve.active {
@@ -1125,6 +1249,43 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-vote-btn--reject.active {
   background: color-mix(in srgb, var(--icono-reject) 18%, var(--light));
+}
+
+.icono-vote-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, white 8%);
+  outline-offset: 1px;
+}
+
+.icono-vote-box--brick {
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(2, minmax(2rem, auto));
+  gap: 0.12rem;
+  width: 2.45rem;
+  min-width: 2.45rem;
+  min-height: 4.22rem;
+  align-self: flex-start;
+  padding: 0.14rem;
+  border-radius: var(--icono-radius-md);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--icono-brick-surface) 95%, white 5%),
+      color-mix(in srgb, var(--icono-brick-shell) 96%, var(--ui-bg) 4%)
+    );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--icono-brick-line-strong) 68%, transparent),
+    0 10px 18px rgba(45, 33, 20, 0.1);
+}
+
+.icono-vote-box--brick .icono-vote-stats {
+  display: none;
+}
+
+.icono-vote-box--brick .icono-vote-btn {
+  width: 100%;
+  min-width: 0;
+  height: 2rem;
+  border-radius: calc(var(--icono-radius-md) - 3px);
 }
 
 .icono-links {
@@ -1141,7 +1302,10 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   font-weight: 500;
   padding: 0.25rem 0;
   border-bottom: 1px solid transparent;
-  transition: border-color 0.15s ease;
+  transition:
+    border-color 0.16s var(--icono-ease-out),
+    color 0.16s var(--icono-ease-out),
+    transform 0.18s var(--icono-ease-out);
 }
 
 .icono-links a:hover {
@@ -1160,6 +1324,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   margin: 0;
   font-size: 1.1rem;
   color: var(--dark);
+  text-wrap: balance;
 }
 
 .icono-candidate-grid {
@@ -1223,10 +1388,13 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   width: 100%;
   overflow: hidden;
   box-sizing: border-box;
-  border-radius: 14px;
+  border-radius: var(--icono-radius-lg);
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--accent) 10%);
   box-shadow: 0 10px 24px rgba(45, 33, 20, 0.08);
   background: var(--ui-bg);
+  transition:
+    box-shadow 0.18s var(--icono-ease-out),
+    transform 0.18s var(--icono-ease-out);
 }
 
 .icono-candidate-media img {
@@ -1234,6 +1402,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   height: auto;
   display: block;
   margin: 0;
+  box-shadow: inset 0 0 0 1px var(--icono-ring-image);
 }
 
 .icono-candidate-footer {
@@ -1257,8 +1426,43 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 .pswp__img {
-  border-radius: 18px;
+  border-radius: var(--icono-radius-lg);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px color-mix(in srgb, var(--icono-ring-image) 72%, transparent);
+}
+
+/* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Visual Details) +
+   C:\Users\Admin\.codex\skills\polish\SKILL.md (Icons & Images).
+   Portrait-bearing surfaces intentionally keep a faint edge definition so artwork does not melt
+   into similarly toned shells or backgrounds during dark/light theme changes. */
+.icono-card-media img,
+.icono-card--brick .iconoplasm-tooltip-portrait,
+.icono-gene-swatch,
+.icono-candidate-media,
+.pswp__img {
+  outline: 1px solid color-mix(in srgb, var(--icono-ring-image) 68%, transparent);
+  outline-offset: -1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-card,
+  .icono-card-media,
+  .icono-card--brick,
+  .iconoplasm-tooltip-portrait-media,
+  .icono-vote-btn,
+  .icono-links a,
+  .icono-candidate-media,
+  .icono-search input {
+    transition-duration: 0.01ms !important;
+  }
+
+  .icono-card--brick:hover,
+  .icono-card--brick:active,
+  .icono-vote-btn:hover:not(:disabled) {
+    transform: none;
+  }
 }
 
 .pswp__counter {
@@ -1298,15 +1502,22 @@ html[data-theme="dark"] .icono-card--brick {
 
 html[saved-theme="dark"] .icono-vote-box,
 html[data-theme="dark"] .icono-vote-box {
-  background: rgba(33, 27, 22, 0.86);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(39, 31, 26, 0.96),
+      rgba(26, 21, 18, 0.94)
+    );
   border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 22px rgba(0, 0, 0, 0.24);
 }
 
 html[saved-theme="dark"] .icono-vote-stats,
 html[data-theme="dark"] .icono-vote-stats {
   color: rgba(255, 255, 255, 0.94);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 html[saved-theme="dark"] .icono-vote-btn,
@@ -1502,6 +1713,8 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
     border-bottom: 1px solid var(--icono-brick-line);
   }
 
+  /* The shared mobile card intentionally splits "character" and "molecular" columns visually.
+     Keep these colors explicit so revisits do not inherit stray anchor/link styling. */
   .iconoplasm-tooltip-mobile-cell--character {
     color: var(--icono-brick-ink);
   }
@@ -1556,6 +1769,10 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
 
   .icono-vote-box {
     width: 100%;
+  }
+
+  .icono-vote-box--brick {
+    width: 2.45rem;
   }
 
   .icono-links--gene {

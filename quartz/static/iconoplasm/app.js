@@ -406,6 +406,12 @@ void syncSharedIconoplasmSettings().catch(function () {
     var existing = media.querySelector("img")
     if (existing) {
       existing.setAttribute("src", portraitUrl)
+      // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Loading Performance, Smooth 60fps)
+      // + C:\Users\Admin\.codex\skills\polish\SKILL.md (Performance / No layout shift).
+      // When Masonry cards hydrate after initial shell render, keep the portrait fetch eager but
+      // low priority so fast mobile scrolling does not flash blank media while preserving order.
+      existing.setAttribute("loading", "eager")
+      existing.setAttribute("fetchpriority", "low")
       existing.setAttribute("width", String(dims.width))
       existing.setAttribute("height", String(dims.height))
       media.classList.remove("icono-card-media--fallback")
@@ -417,7 +423,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       esc(portraitUrl) +
       '" alt="' +
       esc(key) +
-      ' portrait" loading="lazy" decoding="async" width="' +
+      ' portrait" loading="eager" decoding="async" fetchpriority="low" width="' +
       dims.width +
       '" height="' +
       dims.height +
@@ -1132,6 +1138,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     var safeRows = Array.isArray(rows) ? rows : []
     var attrs = extraAttrs ? " " + extraAttrs : ""
     if (!safeRows.length) return '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + "></div>"
+    // Mobile cards use paired left/right rows so both columns share the same row height.
+    // Keep this renderer shared between home bricks and gene-page lead cards; a page-local
+    // variant previously caused the mobile layouts to drift apart and regress independently.
     var html = '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + ">"
     for (var i = 0; i < safeRows.length; i++) {
       var row = safeRows[i] || {}
@@ -1174,6 +1183,9 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function renderTooltipMobileSkeletonHtml(extraAttrs) {
     var attrs = extraAttrs ? " " + extraAttrs : ""
+    // This mirrors the paired mobile row grid on purpose. On small screens the skeleton has to
+    // reserve roughly the same vertical rhythm as the hydrated content or the card "pops" taller
+    // when gene details arrive.
     return (
       '<div class="iconoplasm-tooltip-mobile-rowgrid iconoplasm-tooltip-mobile-rowgrid--skeleton"' +
       attrs +
@@ -1224,6 +1236,9 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function warmBrickCardImages(entries) {
     var source = Array.isArray(entries) ? entries : []
+    // Mobile users scroll through the brick gallery faster than the detail hydrator can react.
+    // Prewarm published portraits as soon as a page of cards lands so top/bottom viewport cards
+    // do not briefly flash placeholder art during fast flicks.
     for (var i = 0; i < source.length; i++) {
       var portraitUrl = publishedPortraitUrl(source[i], "medium")
       if (!portraitUrl) continue
@@ -1231,23 +1246,42 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
   }
 
+  function brickVoteAssetSha(genePayload) {
+    return String((((genePayload || {}).portrait || {}).asset_sha256) || "")
+      .trim()
+      .toLowerCase()
+  }
+
+  function brickVoteBoxMarkup(genePayload) {
+    var assetSha = brickVoteAssetSha(genePayload)
+    if (!assetSha) return ""
+    return voteBoxMarkup('data-icono-brick-vote-box="' + esc(assetSha) + '"', {
+      variant: "brick",
+      showScore: false,
+    })
+  }
+
   function buildBrickCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var detail = portraitDetailCache[key] || null
+    var href = "/gene/" + esc(encodeURIComponent(g.symbol))
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
     var mobileRowsHtml = detail
       ? renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
       : renderTooltipMobileSkeletonHtml('data-icono-card-mobile-meta')
+    var voteHtml = brickVoteBoxMarkup(detail || g)
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
     return (
-      '<a class="icono-card icono-card--brick" href="/gene/' +
-      esc(encodeURIComponent(g.symbol)) +
-      '" data-icono-nav data-icono-index="' +
+      // Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Layout &
+      // Space) + C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction States). Brick cards
+      // are no longer one giant anchor because the compact vote control needs to be a real,
+      // keyboard-focusable control instead of an invalid nested button inside a link.
+      '<article class="icono-card icono-card--brick" data-icono-index="' +
       cardIndex +
       '" data-icono-symbol="' +
       esc(g.symbol) +
@@ -1258,14 +1292,20 @@ void syncSharedIconoplasmSettings().catch(function () {
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
       ';">' +
-      '<div class="' +
+      '<a class="' +
       portraitStateClass +
-      '">' +
+      ' icono-brick-media-link" href="' +
+      href +
+      '" data-icono-nav aria-label="Open ' +
+      esc(g.symbol) +
+      ' gene page">' +
       (portraitUrl
         ? '<img class="iconoplasm-tooltip-portrait-img" src="' +
           esc(portraitUrl) +
           '" alt="' +
           esc(g.symbol) +
+          // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
+          // scroll show empty portrait boxes for a beat before the browser picked them up.
           ' portrait" loading="eager" decoding="async" fetchpriority="' +
           (cardIndex < 6 ? "high" : "low") +
           '" width="' +
@@ -1281,24 +1321,39 @@ void syncSharedIconoplasmSettings().catch(function () {
       "</div>" +
       "</div>" +
       '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
-      "</div>" +
+      "</a>" +
       '<div class="iconoplasm-tooltip-body">' +
       '<div class="iconoplasm-tooltip-header">' +
+      '<div class="icono-brick-header-row">' +
+      '<a class="icono-brick-header-link" href="' +
+      href +
+      '" data-icono-nav>' +
       '<div class="iconoplasm-tooltip-symbol">' +
       esc(g.symbol) +
       "</div>" +
       '<div class="iconoplasm-tooltip-name">' +
       esc(g.full_name || g.symbol) +
       "</div>" +
+      "</a>" +
+      voteHtml +
       "</div>" +
+      "</div>" +
+      '<a class="icono-brick-meta-link" href="' +
+      href +
+      '" data-icono-nav>' +
       '<div class="iconoplasm-tooltip-meta' +
       (detail ? "" : " iconoplasm-tooltip-meta--loading") +
       '" data-icono-card-meta>' +
       metaHtml +
       "</div>" +
+      "</a>" +
       "</div>" +
+      '<a class="icono-brick-mobile-link" href="' +
+      href +
+      '" data-icono-nav>' +
       mobileRowsHtml +
-      "</a>"
+      "</a>" +
+      "</article>"
     )
   }
 
@@ -1309,6 +1364,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = g || null
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
+    // The lead card intentionally consumes the same mobile row-grid renderer as home bricks.
+    // Keep mobile structure changes centralized so the gene page and gallery do not diverge again.
     var mobileRowsHtml = renderTooltipMobileRowGridHtml(
       detail ? metaRows : [],
       'data-icono-card-mobile-meta',
@@ -1400,6 +1457,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     portrait.classList.remove("iconoplasm-tooltip-portrait-missing")
     portrait.classList.add("iconoplasm-tooltip-portrait--ready")
     portraitImg.setAttribute("src", portraitUrl)
+    // Hydration should keep the same loading strategy as initial brick markup so a returned card
+    // does not downgrade to a slower image fetch after click-through/back navigation.
     portraitImg.setAttribute("loading", "eager")
     portraitImg.setAttribute("fetchpriority", "low")
     portraitImg.setAttribute("width", String(dims.width))
@@ -1407,6 +1466,29 @@ void syncSharedIconoplasmSettings().catch(function () {
     portraitImg.setAttribute("alt", normalizedSymbol(genePayload.symbol) + " portrait")
     card.style.setProperty("--width", String(dims.width))
     card.style.setProperty("--height", String(dims.height))
+  }
+
+  function ensureBrickVoteBox(card, genePayload) {
+    if (!card) return
+    var headerRow = card.querySelector(".icono-brick-header-row")
+    if (!headerRow) return
+    var assetSha = brickVoteAssetSha(genePayload)
+    var existing = headerRow.querySelector("[data-icono-brick-vote-box]")
+    if (!assetSha) {
+      if (existing) existing.remove()
+      return
+    }
+    if (!existing) {
+      headerRow.insertAdjacentHTML("beforeend", brickVoteBoxMarkup(genePayload))
+      existing = headerRow.querySelector("[data-icono-brick-vote-box]")
+    } else if (existing.getAttribute("data-icono-brick-vote-box") !== assetSha) {
+      existing.outerHTML = brickVoteBoxMarkup(genePayload)
+      existing = headerRow.querySelector("[data-icono-brick-vote-box]")
+    }
+    if (!existing) return
+    wireVoteBox(existing, card.getAttribute("data-icono-symbol"), assetSha, {
+      deferSnapshot: true,
+    })
   }
 
   function hydrateBrickCard(card, genePayload) {
@@ -1422,6 +1504,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (mobileMeta) {
       mobileMeta.outerHTML = renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
     }
+    ensureBrickVoteBox(card, genePayload)
   }
 
   function hydrateBrickCards(cards) {
@@ -1467,16 +1550,23 @@ void syncSharedIconoplasmSettings().catch(function () {
     window.alert("Please log-in first to vote.")
   }
 
-  function voteBoxMarkup(extraAttrs) {
+  function voteBoxMarkup(extraAttrs, options) {
     var attrs = extraAttrs ? " " + extraAttrs : ""
+    var opts = options || {}
+    var variant = String(opts.variant || "").trim()
+    var showScore = opts.showScore !== false
     return (
-      '<div class="icono-vote-box" data-icono-vote-box' +
+      '<div class="icono-vote-box' +
+      (variant === "brick" ? " icono-vote-box--brick" : "") +
+      '" data-icono-vote-box' +
       attrs +
       ">" +
       '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
       ICONO_CHECK_ICON +
       "</button>" +
-      '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>' +
+      (showScore
+        ? '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>'
+        : "") +
       '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
       ICONO_CROSS_ICON +
       "</button>" +
@@ -1513,6 +1603,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       statsEl.textContent = voteSummaryText(snapshot)
       statsEl.setAttribute("title", voteSummaryDetails(snapshot))
     }
+    if (!statsEl) {
+      box.setAttribute("title", voteSummaryDetails(snapshot))
+    }
     if (upBtn) {
       upBtn.disabled = pending
       upBtn.classList.toggle("active", userVote === 1)
@@ -1523,8 +1616,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
   }
 
-  function wireVoteBox(box, symbolValue, assetShaValue) {
+  function wireVoteBox(box, symbolValue, assetShaValue, options) {
     if (!box) return
+    if (box.getAttribute("data-icono-vote-wired") === "true") return
     var symbol = String(symbolValue || "")
       .trim()
       .toUpperCase()
@@ -1532,6 +1626,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       .trim()
       .toLowerCase()
     if (!symbol || !assetSha) return
+    box.setAttribute("data-icono-vote-wired", "true")
+    var opts = options || {}
+    var deferSnapshot = !!opts.deferSnapshot
     var candidateRef = "a:" + symbol + "|" + assetSha
     var upBtn = box.querySelector("[data-icono-vote-up]")
     var downBtn = box.querySelector("[data-icono-vote-down]")
@@ -1545,6 +1642,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         user_vote: 0,
       },
     }
+    var snapshotPrimed = false
 
     function render() {
       setVoteBoxState(box, state)
@@ -1613,6 +1711,12 @@ void syncSharedIconoplasmSettings().catch(function () {
         })
     }
 
+    function ensureSnapshot() {
+      if (snapshotPrimed) return
+      snapshotPrimed = true
+      void refreshSnapshot()
+    }
+
     if (upBtn) {
       upBtn.addEventListener("click", function () {
         submitVote(1)
@@ -1624,7 +1728,29 @@ void syncSharedIconoplasmSettings().catch(function () {
       })
     }
     render()
-    refreshSnapshot()
+    if (deferSnapshot) {
+      box.addEventListener("pointerenter", ensureSnapshot, { once: true })
+      box.addEventListener("focusin", ensureSnapshot, { once: true })
+      box.addEventListener("touchstart", ensureSnapshot, { once: true, passive: true })
+      return
+    }
+    ensureSnapshot()
+  }
+
+  function wireBrickVoteBoxes(cards) {
+    var items = Array.isArray(cards) ? cards : []
+    for (var i = 0; i < items.length; i++) {
+      var card = items[i]
+      if (!card || !card.classList || !card.classList.contains("icono-card--brick")) continue
+      var box = card.querySelector("[data-icono-brick-vote-box]")
+      if (!box) continue
+      wireVoteBox(
+        box,
+        card.getAttribute("data-icono-symbol"),
+        box.getAttribute("data-icono-brick-vote-box"),
+        { deferSnapshot: true },
+      )
+    }
   }
 
   function wireGeneVoteBox(container, genePayload) {
@@ -1894,6 +2020,7 @@ void syncSharedIconoplasmSettings().catch(function () {
             } else {
               destroyHomeMasonry()
               warmBrickCardImages(items)
+              wireBrickVoteBoxes(newCards)
               void hydrateBrickCards(newCards)
             }
             if (
@@ -2086,6 +2213,10 @@ void syncSharedIconoplasmSettings().catch(function () {
         tc +
         '">' +
         (portraitUrl
+          // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Loading Performance) +
+          // C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Motion / keep exits and
+          // reveals lightweight). The first visible home cards stay eager so the public gallery
+          // feels present immediately, then later cards fall back to lazy loading.
           ? '<img src="' +
             esc(portraitUrl) +
             '" alt="' +
@@ -2200,11 +2331,19 @@ void syncSharedIconoplasmSettings().catch(function () {
         esc(genePayload.symbol) +
         '">' +
         '<span class="icono-candidate-media">' +
+        // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Loading Performance) +
+        // C:\Users\Admin\.codex\skills\polish\SKILL.md (Loading states / no layout shift).
+        // The first visible candidate portraits stay eager so the gene page does not show large
+        // empty media wells before the gallery settles; later candidates can stay lazy.
         '<img src="' +
         esc(mediumUrl) +
         '" alt="' +
         esc(genePayload.symbol) +
-        ' portrait candidate" loading="lazy" decoding="async" width="' +
+        ' portrait candidate" loading="' +
+        (i < 2 ? "eager" : "lazy") +
+        '" decoding="async" fetchpriority="' +
+        (i < 2 ? "high" : "low") +
+        '" width="' +
         width +
         '" height="' +
         height +
@@ -2397,6 +2536,9 @@ void syncSharedIconoplasmSettings().catch(function () {
         iconoplasmHome: activeHomeHistorySnapshot(),
       })
     }
+    // The home gallery is infinite and masonry-like, so we persist loaded count + scroll instead
+    // of resetting to gene 1 on every render. This state must be kept current for both browser
+    // Back and the in-page "All genes" backlink to feel native.
     if (immediate) {
       if (queuedHomeHistorySync) {
         window.clearTimeout(queuedHomeHistorySync)
@@ -2472,6 +2614,8 @@ void syncSharedIconoplasmSettings().catch(function () {
       }
       return nextState
     }
+    // Carry the current home snapshot into gene routes so returning through "All genes" restores
+    // the deep gallery position instead of constructing a fresh blank home history entry.
     if (carriedHomeState) {
       nextState.iconoplasmHome = carriedHomeState
     }
