@@ -229,6 +229,17 @@
   margin-bottom: 2px;
 }
 
+.iconoplasm-tooltip-header .icono-shared-card-header-row {
+  width: 100%;
+}
+
+.iconoplasm-tooltip-vote-slot {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
 /* Gene symbol -- monospace, prominent. Color set dynamically by JS. */
 .iconoplasm-tooltip-symbol {
   font-size: 32px;

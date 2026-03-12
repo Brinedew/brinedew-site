@@ -289,6 +289,21 @@ export default (() => {
                 <>
                   <link
                     rel="stylesheet"
+                    href={joinSegments(
+                      root,
+                      "static",
+                      `iconoplasm/generated/shared-card-vote.css?v=${CACHE_BUST}`,
+                    )}
+                  />
+                  <script
+                    src={joinSegments(
+                      root,
+                      "static",
+                      `iconoplasm/generated/shared-card-runtime.js?v=${CACHE_BUST}`,
+                    )}
+                  ></script>
+                  <link
+                    rel="stylesheet"
                     href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
                   />
                   <script

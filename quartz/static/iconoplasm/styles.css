@@ -719,14 +719,14 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   flex-direction: column;
   gap: 0.18rem;
   min-height: 62px;
-  padding-bottom: 0.85rem;
-  margin-bottom: 0.1rem;
-  border-bottom: 1px solid var(--icono-brick-line-strong);
+  padding-bottom: 0.55rem;
+  margin-bottom: 0;
+  border-bottom: 0;
 }
 
 .icono-card--brick .icono-brick-header-row {
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   gap: 0.65rem;
   min-width: 0;
 }
@@ -754,7 +754,7 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   flex-direction: column;
   gap: 0;
   min-height: 128px;
-  padding-top: 0.25rem;
+  padding-top: 0.4rem;
   color: var(--icono-brick-ink);
 }
 
@@ -1268,8 +1268,10 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   grid-template-rows: repeat(2, minmax(0, 1fr));
   width: 2.55rem;
   min-width: 2.55rem;
+  height: 4rem;
   min-height: 4rem;
-  align-self: stretch;
+  align-self: flex-start;
+  flex: 0 0 auto;
   border-radius: calc(var(--icono-radius-md) - 1px);
   background:
     linear-gradient(
@@ -1290,7 +1292,7 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   width: 100%;
   min-width: 0;
   height: auto;
-  min-height: 1.95rem;
+  min-height: 0;
 }
 
 .icono-vote-box--brick .icono-vote-btn + .icono-vote-btn {

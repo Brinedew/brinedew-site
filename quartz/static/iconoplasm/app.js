@@ -15,6 +15,11 @@ void syncSharedIconoplasmSettings().catch(function () {
 ;(function () {
   "use strict"
 
+  var IconoCardShared = globalThis.IconoplasmCardShared
+  if (!IconoCardShared) {
+    throw new Error("[Iconoplasm] shared card runtime missing: load shared-card-runtime.js first")
+  }
+
   /* ─── Constants ─── */
   var ROOT_ID = "iconoplasm-root"
   var DEBOUNCE_MS = 200
@@ -32,10 +37,6 @@ void syncSharedIconoplasmSettings().catch(function () {
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
   var PREFETCH_DETAIL_CONCURRENCY = 4
-  var ICONO_CHECK_ICON =
-    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10.5 8.25 13.75 15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-  var ICONO_CROSS_ICON =
-    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 6 14 14M14 6 6 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
   var ICONO_ARROW_LEFT =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px;margin-right:3px"><path d="M12.5 4 6.5 10l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   var portraitDetailCache = Object.create(null)
@@ -793,20 +794,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function uniqueDisplayValues(values, limit) {
-    var maxItems = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 4
-    var out = []
-    var seen = Object.create(null)
-    var source = Array.isArray(values) ? values : [values]
-    for (var i = 0; i < source.length; i++) {
-      var value = String(source[i] || "").trim()
-      if (!value) continue
-      var key = value.toLowerCase()
-      if (seen[key]) continue
-      seen[key] = true
-      out.push(value)
-      if (out.length >= maxItems) break
-    }
-    return out
+    return IconoCardShared.uniqueDisplayValues(values, limit)
   }
 
   var missingTooltipOriginWarnings = Object.create(null)
@@ -910,224 +898,31 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function renderTooltipMetaSkeletonHtml() {
-    return (
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      "</div>"
-    )
-  }
-
-  function renderTooltipMetaPairsHtml(pairs) {
-    var safePairs = normalizeTooltipMetaPairs(pairs)
-    if (!safePairs.length) return ""
-    var html = '<div class="iconoplasm-tooltip-meta-pairs">'
-    for (var j = 0; j < safePairs.length; j++) {
-      html +=
-        '<div class="iconoplasm-tooltip-meta-pair-row">' +
-        '<div class="iconoplasm-tooltip-meta-pair-cell">' +
-        '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
-        esc(safePairs[j].character) +
-        "</span>" +
-        "</div>" +
-        '<div class="iconoplasm-tooltip-meta-pair-cell iconoplasm-tooltip-meta-pair-cell--origin">' +
-        '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
-        esc(safePairs[j].molecular) +
-        "</span>" +
-        "</div>" +
-        "</div>"
-    }
-    html += "</div>"
-    return html
-  }
-
-  function normalizeTooltipMetaPairs(pairs) {
-    var safePairs = []
-    var source = Array.isArray(pairs) ? pairs : []
-    for (var i = 0; i < source.length; i++) {
-      var pair = source[i] || {}
-      var character = String(pair.character || "").trim()
-      var molecular = String(pair.molecular || "").trim()
-      if (!character || !molecular) continue
-      safePairs.push({ character: character, molecular: molecular })
-    }
-    return safePairs
+    // Shared source of truth: shared/iconoplasm-card/shared-card-runtime.js
+    // This keeps tooltip/card skeleton behavior identical across the site and extension.
+    return IconoCardShared.renderTooltipMetaSkeletonHtml()
   }
 
   function buildTooltipTraitOriginRows(essence) {
-    var rows = []
-    var aesthetics = uniqueDisplayValues(essence && essence.aesthetics, 4)
-    var aestheticsOrigin = uniqueDisplayValues(essence && essence.aesthetics_origin, 4)
-    var politics = String((essence && (essence.politics || essence.faction)) || "").trim()
-    var politicsOrigin = uniqueDisplayValues(essence && essence.politics_origin, 2)
-
-    var pairedAestheticCount = Math.min(aesthetics.length, aestheticsOrigin.length)
-    if (pairedAestheticCount > 0) {
-      var pairs = []
-      for (var i = 0; i < pairedAestheticCount; i++) {
-        pairs.push({
-          character: aesthetics[i],
-          molecular: aestheticsOrigin[i],
-        })
-      }
-      rows.push({
-        pairs: normalizeTooltipMetaPairs(pairs),
-      })
-    }
-
-    var missingAestheticOrigins = aesthetics.length > pairedAestheticCount
-    var politicsIsNeutral = politics.toLowerCase() === "neutral"
-    var missingPoliticsOrigins = Boolean(politics) && !politicsIsNeutral && !politicsOrigin.length
-    if (politics && !politicsIsNeutral && politicsOrigin.length) {
-      rows.push({
-        character: politics,
-        molecular: politicsOrigin.join(", "),
-      })
-    }
-
-    return {
-      rows: rows,
-      missingOrigins: missingAestheticOrigins || missingPoliticsOrigins,
-    }
+    return IconoCardShared.buildTooltipTraitOriginRows(essence)
   }
 
   function collectTooltipMetaRows(geneDetail) {
-    var essence = geneDetail && typeof geneDetail.essence === "object" ? geneDetail.essence : null
-    if (!geneDetail || !essence) return []
-
-    var rows = []
-    var sexText = String(essence.sex || "").trim()
-    var sexOrigin = uniqueDisplayValues(
-      essence.sex_origin ||
-        essence.gender_origin ||
-        geneDetail.sex_origin ||
-        geneDetail.gender_origin,
-      2,
-    )
-    if (sexText) {
-      rows.push({
-        character: sexText,
-        molecular: sexOrigin.length ? sexOrigin.join(", ") : "—",
-      })
-    }
-
-    var ageText = ""
-    if (essence.age) {
-      ageText = String(essence.age)
-    } else if (essence.age_years != null && Number.isFinite(Number(essence.age_years))) {
-      ageText = String(Math.round(Number(essence.age_years)))
-    }
-    var firstPublicationYear = Number(geneDetail.first_publication_year)
-    if (ageText && Number.isFinite(firstPublicationYear) && firstPublicationYear > 0) {
-      rows.push({
-        character: ageText + " years old",
-        molecular: "discovered in " + String(Math.round(firstPublicationYear)),
-      })
-    }
-
-    var weightKg = Number(essence.weight_kg)
-    var molecularWeightKda = Number(geneDetail.molecular_weight_kda)
-    if (
-      Number.isFinite(weightKg) &&
-      weightKg > 0 &&
-      Number.isFinite(molecularWeightKda) &&
-      molecularWeightKda > 0
-    ) {
-      rows.push({
-        character: String(Math.round(weightKg)) + " kg",
-        molecular: String(Math.round(molecularWeightKda)) + " kDa",
-      })
-    }
-
-    var tissue = geneDetail.primary_tissue ? String(geneDetail.primary_tissue).trim() : ""
-    if ((essence.skin_hex || essence.skin_name) && tissue) {
-      var skinDisplay = ""
-      if (essence.skin_hex) {
-        skinDisplay +=
-          '<span class="iconoplasm-tooltip-skin-dot" style="background:' +
-          String(essence.skin_hex) +
-          '"></span>'
-      }
-      skinDisplay += String(essence.skin_name || essence.skin_hex || "")
-      rows.push({
-        character: skinDisplay,
-        molecular: tissue,
-        characterIsHtml: true,
-      })
-    }
-
-    var traitOriginRows = buildTooltipTraitOriginRows(essence)
-    if (traitOriginRows.missingOrigins) {
-      var warnKey =
-        String(geneDetail.symbol || geneDetail.canonical_symbol || "").trim() || "(unknown)"
-      if (!missingTooltipOriginWarnings[warnKey]) {
+    return IconoCardShared.collectTooltipMetaRows(geneDetail, {
+      onMissingOrigins: function (warnKey, detail) {
+        if (missingTooltipOriginWarnings[warnKey]) return
         missingTooltipOriginWarnings[warnKey] = true
         console.error(
           "[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:",
           warnKey,
-          geneDetail,
+          detail,
         )
-      }
-    }
-    for (var i = 0; i < traitOriginRows.rows.length; i++) {
-      rows.push(traitOriginRows.rows[i])
-    }
-
-    return rows
+      },
+    })
   }
 
   function renderTooltipMetaRowsHtml(rows) {
-    if (!Array.isArray(rows) || !rows.length) return ""
-    var html = ""
-    for (var j = 0; j < rows.length; j++) {
-      var row = rows[j]
-      if (Array.isArray(row.pairs) && row.pairs.length) {
-        html += renderTooltipMetaPairsHtml(row.pairs)
-        continue
-      }
-      html +=
-        '<div class="iconoplasm-tooltip-meta-row">' +
-        '<div class="iconoplasm-tooltip-meta-cell">' +
-        '<span class="iconoplasm-tooltip-meta-value">' +
-        (row.characterIsHtml ? row.character : esc(row.character)) +
-        "</span>" +
-        "</div>" +
-        '<div class="iconoplasm-tooltip-meta-cell iconoplasm-tooltip-meta-cell--origin">' +
-        '<span class="iconoplasm-tooltip-meta-value">' +
-        (row.molecularIsHtml ? row.molecular : esc(row.molecular)) +
-        "</span>" +
-        "</div>" +
-        "</div>"
-    }
-    return html
+    return IconoCardShared.renderTooltipMetaRowsHtml(rows)
   }
 
   function renderTooltipMetaHtml(geneDetail) {
@@ -1135,103 +930,11 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function renderTooltipMobileRowGridHtml(rows, extraAttrs) {
-    var safeRows = Array.isArray(rows) ? rows : []
-    var attrs = extraAttrs ? " " + extraAttrs : ""
-    if (!safeRows.length) return '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + "></div>"
-    // Mobile cards use paired left/right rows so both columns share the same row height.
-    // Keep this renderer shared between home bricks and gene-page lead cards; a page-local
-    // variant previously caused the mobile layouts to drift apart and regress independently.
-    var html = '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + ">"
-    for (var i = 0; i < safeRows.length; i++) {
-      var row = safeRows[i] || {}
-      if (Array.isArray(row.pairs) && row.pairs.length) {
-        for (var j = 0; j < row.pairs.length; j++) {
-          html +=
-            '<div class="iconoplasm-tooltip-mobile-row">' +
-            '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
-            '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
-            esc(row.pairs[j].character) +
-            "</span>" +
-            "</div>" +
-            '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
-            '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
-            esc(row.pairs[j].molecular) +
-            "</span>" +
-            "</div>" +
-            "</div>"
-        }
-        continue
-      }
-      if (!row.character && !row.molecular) continue
-      html +=
-        '<div class="iconoplasm-tooltip-mobile-row">' +
-        '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
-        '<span class="iconoplasm-tooltip-meta-value">' +
-        (row.characterIsHtml ? row.character : esc(row.character || "")) +
-        "</span>" +
-        "</div>" +
-        '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
-        '<span class="iconoplasm-tooltip-meta-value">' +
-        (row.molecularIsHtml ? row.molecular : esc(row.molecular || "")) +
-        "</span>" +
-        "</div>" +
-        "</div>"
-    }
-    html += "</div>"
-    return html
+    return IconoCardShared.renderTooltipMobileRowGridHtml(rows, extraAttrs)
   }
 
   function renderTooltipMobileSkeletonHtml(extraAttrs) {
-    var attrs = extraAttrs ? " " + extraAttrs : ""
-    // This mirrors the paired mobile row grid on purpose. On small screens the skeleton has to
-    // reserve roughly the same vertical rhythm as the hydrated content or the card "pops" taller
-    // when gene details arrive.
-    return (
-      '<div class="iconoplasm-tooltip-mobile-rowgrid iconoplasm-tooltip-mobile-rowgrid--skeleton"' +
-      attrs +
-      ">" +
-      '<div class="iconoplasm-tooltip-mobile-row">' +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-row">' +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-row">' +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-row">' +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
-      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-row">' +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
-      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-      "</div>" +
-      "</div>" +
-      "</div>"
-    )
+    return IconoCardShared.renderTooltipMobileSkeletonHtml(extraAttrs)
   }
 
   function warmBrickCardImages(entries) {
@@ -1324,7 +1027,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       "</a>" +
       '<div class="iconoplasm-tooltip-body">' +
       '<div class="iconoplasm-tooltip-header">' +
-      '<div class="icono-brick-header-row">' +
+      '<div class="icono-brick-header-row icono-shared-card-header-row">' +
       '<a class="icono-brick-header-link" href="' +
       href +
       '" data-icono-nav>' +
@@ -1551,190 +1254,21 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function voteBoxMarkup(extraAttrs, options) {
-    var attrs = extraAttrs ? " " + extraAttrs : ""
-    var opts = options || {}
-    var variant = String(opts.variant || "").trim()
-    var showScore = opts.showScore !== false
-    return (
-      '<div class="icono-vote-box' +
-      (variant === "brick" ? " icono-vote-box--brick" : "") +
-      '" data-icono-vote-box' +
-      attrs +
-      ">" +
-      '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
-      ICONO_CHECK_ICON +
-      "</button>" +
-      (showScore
-        ? '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>'
-        : "") +
-      '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
-      ICONO_CROSS_ICON +
-      "</button>" +
-      "</div>"
-    )
-  }
-
-  function voteSummaryText(snapshot) {
-    return String(Number((snapshot || {}).image_score || 0))
-  }
-
-  function voteSummaryDetails(snapshot) {
-    var data = snapshot || {}
-    var up = Number(data.image_upvotes || 0)
-    var down = Number(data.image_downvotes || 0)
-    var score = Number(data.image_score || 0)
-    var sign = score > 0 ? "+" : ""
-    return "Score " + sign + score + " (" + up + " approvals / " + down + " rejections)"
-  }
-
-  function scoreLabel(scoreValue) {
-    return String(Number(scoreValue || 0))
-  }
-
-  function setVoteBoxState(box, opts) {
-    if (!box) return
-    var statsEl = box.querySelector("[data-icono-vote-stats]")
-    var upBtn = box.querySelector("[data-icono-vote-up]")
-    var downBtn = box.querySelector("[data-icono-vote-down]")
-    var snapshot = (opts && opts.snapshot) || {}
-    var pending = !!(opts && opts.pending)
-    var userVote = Number(snapshot.user_vote || 0)
-    if (statsEl) {
-      statsEl.textContent = voteSummaryText(snapshot)
-      statsEl.setAttribute("title", voteSummaryDetails(snapshot))
-    }
-    if (!statsEl) {
-      box.setAttribute("title", voteSummaryDetails(snapshot))
-    }
-    if (upBtn) {
-      upBtn.disabled = pending
-      upBtn.classList.toggle("active", userVote === 1)
-    }
-    if (downBtn) {
-      downBtn.disabled = pending
-      downBtn.classList.toggle("active", userVote === -1)
-    }
+    return IconoCardShared.voteBoxMarkup(extraAttrs, options)
   }
 
   function wireVoteBox(box, symbolValue, assetShaValue, options) {
-    if (!box) return
-    if (box.getAttribute("data-icono-vote-wired") === "true") return
-    var symbol = String(symbolValue || "")
-      .trim()
-      .toUpperCase()
-    var assetSha = String(assetShaValue || "")
-      .trim()
-      .toLowerCase()
-    if (!symbol || !assetSha) return
-    box.setAttribute("data-icono-vote-wired", "true")
     var opts = options || {}
-    var deferSnapshot = !!opts.deferSnapshot
-    var candidateRef = "a:" + symbol + "|" + assetSha
-    var upBtn = box.querySelector("[data-icono-vote-up]")
-    var downBtn = box.querySelector("[data-icono-vote-down]")
-    var state = {
-      authenticated: false,
-      pending: false,
-      snapshot: {
-        image_upvotes: 0,
-        image_downvotes: 0,
-        image_score: 0,
-        user_vote: 0,
+    return IconoCardShared.wireVoteBox(box, {
+      symbol: symbolValue,
+      assetSha: assetShaValue,
+      deferSnapshot: !!opts.deferSnapshot,
+      apiBaseUrl: API,
+      onAuthRequired: showVoteLoginPopup,
+      onError: function (phase, err) {
+        console.error("[Iconoplasm] vote " + phase + " error:", err)
       },
-    }
-    var snapshotPrimed = false
-
-    function render() {
-      setVoteBoxState(box, state)
-    }
-
-    function refreshSnapshot() {
-      state.pending = true
-      render()
-      return fetchJSON("/api/iconoplasm/votes/snapshot", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          candidate_ref: candidateRef,
-          symbol: symbol,
-          asset_sha256: assetSha,
-          vision_id: "",
-        }),
-      })
-        .then(function (data) {
-          state.authenticated = !!(data && data.authenticated)
-          state.snapshot = (data && data.snapshot) || state.snapshot
-        })
-        .catch(function (err) {
-          console.error("[Iconoplasm] vote snapshot error:", err)
-        })
-        .finally(function () {
-          state.pending = false
-          render()
-        })
-    }
-
-    function submitVote(voteValue) {
-      state.pending = true
-      render()
-      fetchJSON("/api/iconoplasm/votes/set", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          candidate_ref: candidateRef,
-          symbol: symbol,
-          asset_sha256: assetSha,
-          vision_id: "",
-          vote_value: voteValue,
-        }),
-      })
-        .then(function (data) {
-          state.authenticated = true
-          state.snapshot = (data && data.snapshot) || state.snapshot
-        })
-        .catch(function (err) {
-          if (
-            Number((err && err.status) || 0) === 401 ||
-            (err && err.payload && err.payload.code === "AUTH_REQUIRED")
-          ) {
-            state.authenticated = false
-            showVoteLoginPopup()
-            return
-          }
-          console.error("[Iconoplasm] vote set error:", err)
-        })
-        .finally(function () {
-          state.pending = false
-          render()
-        })
-    }
-
-    function ensureSnapshot() {
-      if (snapshotPrimed) return
-      snapshotPrimed = true
-      void refreshSnapshot()
-    }
-
-    if (upBtn) {
-      upBtn.addEventListener("click", function () {
-        submitVote(1)
-      })
-    }
-    if (downBtn) {
-      downBtn.addEventListener("click", function () {
-        submitVote(-1)
-      })
-    }
-    render()
-    if (deferSnapshot) {
-      box.addEventListener("pointerenter", ensureSnapshot, { once: true })
-      box.addEventListener("focusin", ensureSnapshot, { once: true })
-      box.addEventListener("touchstart", ensureSnapshot, { once: true, passive: true })
-      return
-    }
-    ensureSnapshot()
+    })
   }
 
   function wireBrickVoteBoxes(cards) {

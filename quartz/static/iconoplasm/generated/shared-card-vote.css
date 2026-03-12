@@ -1,0 +1,182 @@
+/* GENERATED FILE. Edit shared/iconoplasm-card/shared-card-vote.css and rerun node scripts/sync-iconoplasm-shared.mjs. */
+
+/* Shared Iconoplasm vote/header styles.
+   Edit this source, then run scripts/sync-iconoplasm-shared.mjs. */
+
+.icono-shared-card-header-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.icono-shared-card-header-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.icono-vote-box {
+  --icono-vote-shell: color-mix(in srgb, var(--ui-bg, #f4ede5) 82%, var(--light, #fff) 18%);
+  --icono-vote-line: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 82%, var(--dark, #221d19) 6%);
+  --icono-vote-seam: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 68%, transparent);
+  --icono-vote-ink: var(--ui-text, #271f1a);
+  --icono-vote-muted: color-mix(in srgb, var(--icono-vote-ink) 68%, transparent);
+  --icono-approve: color-mix(in srgb, var(--accent, #7e5539) 72%, #2b241f 28%);
+  --icono-reject: color-mix(in srgb, #9d544f 74%, #2b241f 26%);
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  border: 1px solid var(--icono-vote-line);
+  border-radius: calc(var(--icono-radius-md, 14px) - 1px);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--icono-vote-shell) 90%, white 10%),
+      color-mix(in srgb, var(--icono-vote-shell) 96%, var(--ui-bg, #f4ede5) 4%)
+    );
+  color: var(--icono-vote-ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(34, 29, 25, 0.08);
+  overflow: hidden;
+}
+
+.icono-vote-stats {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.55rem;
+  padding: 0 0.9rem;
+  border-inline: 1px solid var(--icono-vote-seam);
+  background: color-mix(in srgb, var(--light, #fff) 62%, var(--icono-vote-shell) 38%);
+  color: var(--icono-vote-muted);
+  font-size: 0.83rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.icono-vote-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.68rem 0.88rem;
+  min-width: 2.7rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.icono-vote-btn svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.icono-vote-btn--approve {
+  color: color-mix(in srgb, var(--icono-approve) 66%, var(--icono-vote-ink) 34%);
+}
+
+.icono-vote-btn--reject {
+  color: color-mix(in srgb, var(--icono-reject) 72%, var(--icono-vote-ink) 28%);
+}
+
+.icono-vote-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--icono-vote-line) 10%, transparent);
+}
+
+.icono-vote-btn--approve:hover:not(:disabled) {
+  color: var(--icono-approve);
+}
+
+.icono-vote-btn--reject:hover:not(:disabled) {
+  color: var(--icono-reject);
+}
+
+.icono-vote-btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.icono-vote-btn.active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 0 0 1px color-mix(in srgb, var(--icono-vote-line) 74%, transparent);
+}
+
+.icono-vote-btn--approve.active {
+  background: color-mix(in srgb, var(--accent, #7e5539) 16%, var(--icono-vote-shell));
+}
+
+.icono-vote-btn--reject.active {
+  background: color-mix(in srgb, var(--icono-reject) 15%, var(--icono-vote-shell));
+}
+
+.icono-vote-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #7e5539) 72%, white 28%);
+  outline-offset: -2px;
+}
+
+.icono-vote-box--brick {
+  --icono-vote-shell: color-mix(in srgb, var(--icono-brick-shell, rgba(255, 248, 238, 0.96)) 86%, var(--icono-brick-surface, rgba(248, 241, 233, 0.98)) 14%);
+  --icono-vote-line: color-mix(in srgb, var(--icono-brick-line-strong, rgba(74, 61, 49, 0.18)) 88%, transparent);
+  --icono-vote-seam: color-mix(in srgb, var(--icono-brick-line, rgba(74, 61, 49, 0.08)) 96%, transparent);
+  display: inline-grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  width: 2.55rem;
+  min-width: 2.55rem;
+  height: 4rem;
+  min-height: 4rem;
+  align-self: flex-start;
+  flex: 0 0 auto;
+  border-radius: calc(var(--icono-radius-md, 14px) - 1px);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--icono-vote-shell) 92%, white 8%),
+      color-mix(in srgb, var(--icono-vote-shell) 97%, var(--icono-brick-shell, rgba(255, 248, 238, 0.96)) 3%)
+    );
+}
+
+.icono-vote-box--brick .icono-vote-stats {
+  display: none;
+}
+
+.icono-vote-box--brick .icono-vote-btn {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+}
+
+.icono-vote-box--brick .icono-vote-btn + .icono-vote-btn {
+  border-top: 1px solid var(--icono-vote-seam);
+}
+
+.iconoplasm-tooltip--dark .icono-vote-box,
+html[saved-theme="dark"] .icono-vote-box,
+html[data-theme="dark"] .icono-vote-box {
+  --icono-vote-shell: rgba(34, 28, 24, 0.96);
+  --icono-vote-line: rgba(255, 255, 255, 0.12);
+  --icono-vote-seam: rgba(255, 255, 255, 0.08);
+  --icono-vote-ink: rgba(244, 238, 230, 0.94);
+  --icono-vote-muted: rgba(244, 238, 230, 0.72);
+}
+
+.iconoplasm-tooltip--dark .icono-vote-stats,
+html[saved-theme="dark"] .icono-vote-stats,
+html[data-theme="dark"] .icono-vote-stats {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.iconoplasm-tooltip--dark .icono-vote-btn,
+html[saved-theme="dark"] .icono-vote-btn,
+html[data-theme="dark"] .icono-vote-btn {
+  color: rgba(244, 238, 230, 0.8);
+}

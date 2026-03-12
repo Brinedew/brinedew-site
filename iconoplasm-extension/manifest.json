@@ -15,8 +15,8 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "js": ["generated/shared-card-runtime.js", "content.js"],
+      "css": ["generated/shared-card-vote.css", "content.css"],
       "run_at": "document_idle"
     }
   ],

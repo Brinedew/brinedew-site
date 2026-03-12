@@ -5,10 +5,18 @@
 (function () {
   'use strict';
 
+  const IconoCardShared = globalThis.IconoplasmCardShared;
+  if (!IconoCardShared) {
+    console.error('[Iconoplasm] shared card runtime missing: load generated/shared-card-runtime.js first');
+    return;
+  }
+
   // -- Placeholder color for genes without color data ----------------
   const PLACEHOLDER_COLOR = '#6B6B78';
   const HIGHLIGHT_MODE_KEY = 'iconoplasm_highlight_mode';
   const TOOLTIP_THEME_KEY = 'iconoplasm_tooltip_theme';
+  const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase('https://iconoplasm.brinedew.bio');
+  const escapeHtml = IconoCardShared.escapeHtml;
 
   // -- Luminance + text color helpers --------------------------------
   function hexLuminance(hex) {
@@ -44,15 +52,6 @@
 
   function normalizeTooltipTheme(raw) {
     return String(raw || '').trim().toLowerCase() === 'dark' ? 'dark' : 'light';
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? '')
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;');
   }
 
   async function loadHighlightMode() {
@@ -271,6 +270,10 @@
   function openGenePage(symbol) {
     if (!symbol || !geneMap || !geneMap[symbol]) return;
     window.open(buildGenePageUrl(symbol), '_blank', 'noopener');
+  }
+
+  function showVoteLoginPopup() {
+    window.alert('Please log in on Iconoplasm first to vote.');
   }
 
   function cancelHideTimer() {
@@ -719,8 +722,13 @@
       '</div>' +
       '<div class="iconoplasm-tooltip-body">' +
         '<div class="iconoplasm-tooltip-header">' +
-          '<div class="iconoplasm-tooltip-symbol"></div>' +
-        '<div class="iconoplasm-tooltip-name"></div>' +
+          '<div class="icono-shared-card-header-row">' +
+            '<div class="icono-shared-card-header-copy">' +
+              '<div class="iconoplasm-tooltip-symbol"></div>' +
+              '<div class="iconoplasm-tooltip-name"></div>' +
+            '</div>' +
+            '<div class="iconoplasm-tooltip-vote-slot" data-icono-tooltip-vote-slot></div>' +
+          '</div>' +
         '</div>' +
         '<div class="iconoplasm-tooltip-meta"></div>' +
       '</div>';
@@ -753,218 +761,64 @@
     const metaEl = tooltip.querySelector('.iconoplasm-tooltip-meta');
     if (!metaEl) return;
     metaEl.classList.add('iconoplasm-tooltip-meta--loading');
-    metaEl.innerHTML =
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-          '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-        '</div>' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-          '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-          '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-        '</div>' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-          '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-          '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-        '</div>' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-          '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="iconoplasm-tooltip-meta-skeleton-row">' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell">' +
-          '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
-        '</div>' +
-        '<div class="iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin">' +
-          '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function uniqueDisplayValues(values, limit = 4) {
-    const out = [];
-    const seen = new Set();
-    for (const rawValue of Array.isArray(values) ? values : [values]) {
-      const value = String(rawValue || '').trim();
-      if (!value) continue;
-      const key = value.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(value);
-      if (out.length >= limit) break;
-    }
-    return out;
-  }
-
-  function renderMetaPairsHtml(pairs) {
-    const safePairs = Array.isArray(pairs)
-      ? pairs
-          .map((pair) => ({
-            character: String(pair && pair.character ? pair.character : '').trim(),
-            molecular: String(pair && pair.molecular ? pair.molecular : '').trim(),
-          }))
-          .filter((pair) => pair.character && pair.molecular)
-      : [];
-    if (!safePairs.length) return '';
-    return (
-      '<div class="iconoplasm-tooltip-meta-pairs">' +
-        safePairs.map((pair) =>
-          '<div class="iconoplasm-tooltip-meta-pair-row">' +
-            '<div class="iconoplasm-tooltip-meta-pair-cell">' +
-              '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' + escapeHtml(pair.character) + '</span>' +
-            '</div>' +
-            '<div class="iconoplasm-tooltip-meta-pair-cell iconoplasm-tooltip-meta-pair-cell--origin">' +
-              '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' + escapeHtml(pair.molecular) + '</span>' +
-            '</div>' +
-          '</div>'
-        ).join('') +
-      '</div>'
-    );
-  }
-
-  function buildTraitOriginRows(essence) {
-    const rows = [];
-    const aesthetics = uniqueDisplayValues(essence.aesthetics, 4);
-    const aestheticsOrigin = uniqueDisplayValues(essence.aesthetics_origin, 4);
-    const politicsRaw = essence.politics || essence.faction || '';
-    const politics = String(politicsRaw).trim();
-    const politicsOrigin = uniqueDisplayValues(essence.politics_origin, 2);
-
-    const pairedAestheticCount = Math.min(aesthetics.length, aestheticsOrigin.length);
-    if (pairedAestheticCount > 0) {
-      rows.push({
-        pairGridHtml: renderMetaPairsHtml(
-          aesthetics.slice(0, pairedAestheticCount).map((aesthetic, index) => ({
-            character: aesthetic,
-            molecular: aestheticsOrigin[index],
-          }))
-        ),
-      });
-    }
-
-    const missingAestheticOrigins = aesthetics.length > pairedAestheticCount;
-    const politicsIsNeutral = politics.toLowerCase() === 'neutral';
-    const missingPoliticsOrigins = Boolean(politics) && !politicsIsNeutral && !politicsOrigin.length;
-    if (politics && !politicsIsNeutral && politicsOrigin.length) {
-      rows.push({
-        character: politics,
-        molecular: politicsOrigin.join(', '),
-      });
-    }
-
-    return {
-      rows,
-      missingOrigins: missingAestheticOrigins || missingPoliticsOrigins,
-    };
+    metaEl.innerHTML = IconoCardShared.renderTooltipMetaSkeletonHtml();
   }
 
   function renderTooltipMeta(geneDetail) {
     const metaEl = tooltip.querySelector('.iconoplasm-tooltip-meta');
     if (!metaEl) return;
-    const essence = geneDetail && typeof geneDetail.essence === 'object' ? geneDetail.essence : {};
-    if (!geneDetail || !essence || typeof essence !== 'object') {
+    if (!geneDetail || typeof geneDetail !== 'object') {
       metaEl.classList.remove('iconoplasm-tooltip-meta--loading');
       metaEl.innerHTML = '';
       return;
     }
 
-    const rows = [];
-
-    const sexText = String(essence.sex || '').trim();
-    const sexOrigin = uniqueDisplayValues(
-      essence.sex_origin || essence.gender_origin || geneDetail.sex_origin || geneDetail.gender_origin,
-      2
-    );
-    if (sexText) {
-      rows.push({
-        character: sexText,
-        molecular: sexOrigin.length ? sexOrigin.join(', ') : '—',
-      });
-    }
-
-    // 34 years old | discovered in 1972
-    let ageText = '';
-    if (essence.age) {
-      ageText = String(essence.age);
-    } else if (essence.age_years != null && Number.isFinite(Number(essence.age_years))) {
-      ageText = String(Math.round(Number(essence.age_years)));
-    }
-    const firstPublicationYear = Number(geneDetail.first_publication_year);
-    if (ageText && Number.isFinite(firstPublicationYear) && firstPublicationYear > 0) {
-      rows.push({ character: ageText + ' years old', molecular: 'discovered in ' + String(Math.round(firstPublicationYear)) });
-    }
-
-    // 62 kg | 124 kDa
-    const weightKg = Number(essence.weight_kg);
-    const molecularWeightKda = Number(geneDetail.molecular_weight_kda);
-    if (Number.isFinite(weightKg) && weightKg > 0 && Number.isFinite(molecularWeightKda) && molecularWeightKda > 0) {
-      rows.push({
-        character: String(Math.round(weightKg)) + ' kg',
-        molecular: String(Math.round(molecularWeightKda)) + ' kDa',
-      });
-    }
-
-    // [dot] ivory | breast epithelium
-    const tissue = geneDetail.primary_tissue ? String(geneDetail.primary_tissue).trim() : '';
-    if ((essence.skin_hex || essence.skin_name) && tissue) {
-      let skinDisplay = '';
-      if (essence.skin_hex) {
-        skinDisplay += '<span class="iconoplasm-tooltip-skin-dot" style="background:' + String(essence.skin_hex) + '"></span>';
-      }
-      skinDisplay += String(essence.skin_name || essence.skin_hex || '');
-      rows.push({ character: skinDisplay, molecular: tissue, characterIsHtml: true });
-    }
-
-    // gothic, noir | Suppressors
-    const traitOriginRows = buildTraitOriginRows(essence);
-    if (traitOriginRows.missingOrigins) {
-      const warnKey = String(geneDetail.symbol || geneDetail.canonical_symbol || '').trim() || '(unknown)';
-      if (!warnedMissingTraitOrigins.has(warnKey)) {
+    const rows = IconoCardShared.collectTooltipMetaRows(geneDetail, {
+      onMissingOrigins: (warnKey, detail) => {
+        if (warnedMissingTraitOrigins.has(warnKey)) return;
         warnedMissingTraitOrigins.add(warnKey);
-        console.error('[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:', warnKey, geneDetail);
-      }
-    }
-    if (traitOriginRows.rows.length) {
-      for (const row of traitOriginRows.rows) {
-        rows.push(row);
-      }
-    }
+        console.error('[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:', warnKey, detail);
+      },
+    });
 
     if (!rows.length) {
       metaEl.classList.remove('iconoplasm-tooltip-meta--loading');
       metaEl.innerHTML = '';
       return;
     }
-
-    let html = '';
-    for (const row of rows) {
-      if (row.pairGridHtml) {
-        html += row.pairGridHtml;
-        continue;
-      }
-      html +=
-        '<div class="iconoplasm-tooltip-meta-row' + (row.rowClassName ? ' ' + row.rowClassName : '') + '">' +
-          '<div class="iconoplasm-tooltip-meta-cell">' +
-            '<span class="iconoplasm-tooltip-meta-value">' +
-              (row.characterIsHtml ? row.character : escapeHtml(row.character)) +
-            '</span>' +
-          '</div>' +
-          '<div class="iconoplasm-tooltip-meta-cell iconoplasm-tooltip-meta-cell--origin">' +
-            '<span class="iconoplasm-tooltip-meta-value' +
-              (row.molecularClassName ? ' ' + row.molecularClassName : '') +
-              '">' + (row.molecularIsHtml ? row.molecular : escapeHtml(row.molecular)) + '</span>' +
-          '</div>' +
-        '</div>';
-    }
     metaEl.classList.remove('iconoplasm-tooltip-meta--loading');
-    metaEl.innerHTML = html;
+    metaEl.innerHTML = IconoCardShared.renderTooltipMetaRowsHtml(rows);
+  }
+
+  function resetTooltipVoteSlot() {
+    if (!tooltip) return;
+    const slot = tooltip.querySelector('[data-icono-tooltip-vote-slot]');
+    if (!slot) return;
+    slot.innerHTML = '';
+  }
+
+  function renderTooltipVoteBox(geneDetail) {
+    if (!tooltip) return;
+    const slot = tooltip.querySelector('[data-icono-tooltip-vote-slot]');
+    if (!slot) return;
+    const symbol = String((geneDetail && geneDetail.symbol) || activeSymbol || '').trim().toUpperCase();
+    const assetSha = String((((geneDetail || {}).portrait || {}).asset_sha256) || '').trim().toLowerCase();
+    if (!symbol || !assetSha) {
+      slot.innerHTML = '';
+      return;
+    }
+    slot.innerHTML = IconoCardShared.voteBoxMarkup('', { variant: 'brick', showScore: false });
+    const box = slot.querySelector('[data-icono-vote-box]');
+    if (!box) return;
+    IconoCardShared.wireVoteBox(box, {
+      symbol,
+      assetSha,
+      apiBaseUrl: ICONOPLASM_API_BASE,
+      onAuthRequired: showVoteLoginPopup,
+      onError: (phase, err) => {
+        console.error('[Iconoplasm] extension vote ' + phase + ' error:', err);
+      },
+    });
   }
 
   async function fetchGeneDetailForTooltip(symbol) {
@@ -972,7 +826,7 @@
     if (geneDetailPromiseCache.has(symbol)) return geneDetailPromiseCache.get(symbol);
     const request = (async () => {
       try {
-        const resp = await fetch('https://iconoplasm.brinedew.bio/api/gene/' + encodeURIComponent(symbol));
+        const resp = await fetch(ICONOPLASM_API_BASE + '/api/gene/' + encodeURIComponent(symbol));
         if (!resp.ok) { geneDetailCache.set(symbol, null); return null; }
         const data = await resp.json();
         geneDetailCache.set(symbol, data || null);
@@ -988,11 +842,13 @@
     return request;
   }
 
-  function onTooltipClick() {
+  function onTooltipClick(e) {
+    if (e && e.target && e.target.closest('[data-icono-vote-box]')) return;
     openGenePage(activeSymbol);
   }
 
   function onTooltipKeyDown(e) {
+    if (e.target && e.target.closest('[data-icono-vote-box]')) return;
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
     openGenePage(activeSymbol);
@@ -1026,6 +882,7 @@
     portraitSymbol.textContent = symbol;
     symEl.textContent = symbol;
     nameEl.textContent = gene.n || symbol;
+    resetTooltipVoteSlot();
 
     // Keep the reading surface neutral; gene color is an accent only.
     tooltip.style.backgroundColor = '';
@@ -1037,15 +894,19 @@
 
     const hoverSymbol = symbol;
     if (geneDetailCache.has(symbol)) {
-      renderTooltipMeta(geneDetailCache.get(symbol));
+      const geneDetail = geneDetailCache.get(symbol);
+      renderTooltipMeta(geneDetail);
+      renderTooltipVoteBox(geneDetail);
     } else {
       // Reserve the metadata area immediately so the title block never jumps.
       renderTooltipMetaSkeleton();
       fetchGeneDetailForTooltip(symbol).then((geneDetail) => {
         if (activeSymbol === hoverSymbol && geneDetail) {
           renderTooltipMeta(geneDetail);
+          renderTooltipVoteBox(geneDetail);
         } else if (activeSymbol === hoverSymbol) {
           renderTooltipMeta(null);
+          resetTooltipVoteSlot();
         }
       });
     }
@@ -1088,6 +949,7 @@
     cancelHideTimer();
     activeSymbol = null;
     portraitLoadToken += 1;
+    resetTooltipVoteSlot();
     tooltip.classList.remove('iconoplasm-tooltip-visible');
   }
 
