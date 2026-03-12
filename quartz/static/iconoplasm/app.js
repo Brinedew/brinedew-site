@@ -2044,7 +2044,9 @@ void syncSharedIconoplasmSettings().catch(function () {
           symbol: normalizedSymbol(g && g.symbol ? g.symbol : symbol),
           error: false,
           hasPortrait: !!publishedPortraitUrl(g, "medium"),
-          candidateCount: Array.isArray(g && g.candidates) ? g.candidates.length : 0,
+          candidateCount: Array.isArray(g && g.portrait_candidates)
+            ? g.portrait_candidates.length
+            : 0,
           aliasCount: Array.isArray(g && g.aliases) ? g.aliases.length : 0,
         }
         renderIconoplasmSidebar()
