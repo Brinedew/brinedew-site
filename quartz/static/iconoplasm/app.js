@@ -1128,22 +1128,22 @@ void syncSharedIconoplasmSettings().catch(function () {
     return renderTooltipMetaRowsHtml(collectTooltipMetaRows(geneDetail))
   }
 
-  function renderGeneLeadMobileRowsHtml(rows) {
+  function renderTooltipMobileRowGridHtml(rows) {
     var safeRows = Array.isArray(rows) ? rows : []
     if (!safeRows.length) return ""
-    var html = '<div class="icono-gene-mobile-rowgrid">'
+    var html = '<div class="iconoplasm-tooltip-mobile-rowgrid">'
     for (var i = 0; i < safeRows.length; i++) {
       var row = safeRows[i] || {}
       if (Array.isArray(row.pairs) && row.pairs.length) {
         for (var j = 0; j < row.pairs.length; j++) {
           html +=
-            '<div class="icono-gene-mobile-row">' +
-            '<div class="icono-gene-mobile-cell icono-gene-mobile-cell--character">' +
+            '<div class="iconoplasm-tooltip-mobile-row">' +
+            '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
             '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
             esc(row.pairs[j].character) +
             "</span>" +
             "</div>" +
-            '<div class="icono-gene-mobile-cell icono-gene-mobile-cell--molecular">' +
+            '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
             '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
             esc(row.pairs[j].molecular) +
             "</span>" +
@@ -1154,13 +1154,13 @@ void syncSharedIconoplasmSettings().catch(function () {
       }
       if (!row.character && !row.molecular) continue
       html +=
-        '<div class="icono-gene-mobile-row">' +
-        '<div class="icono-gene-mobile-cell icono-gene-mobile-cell--character">' +
+        '<div class="iconoplasm-tooltip-mobile-row">' +
+        '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
         '<span class="iconoplasm-tooltip-meta-value">' +
         (row.characterIsHtml ? row.character : esc(row.character || "")) +
         "</span>" +
         "</div>" +
-        '<div class="icono-gene-mobile-cell icono-gene-mobile-cell--molecular">' +
+        '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
         '<span class="iconoplasm-tooltip-meta-value">' +
         (row.molecularIsHtml ? row.molecular : esc(row.molecular || "")) +
         "</span>" +
@@ -1176,7 +1176,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     var key = normalizedSymbol(g.symbol)
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var detail = portraitDetailCache[key] || null
-    var metaHtml = detail ? renderTooltipMetaHtml(detail) : renderTooltipMetaSkeletonHtml()
+    var metaRows = detail ? collectTooltipMetaRows(detail) : []
+    var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
+    var mobileRowsHtml = detail ? renderTooltipMobileRowGridHtml(metaRows) : ""
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
@@ -1233,6 +1235,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       metaHtml +
       "</div>" +
       "</div>" +
+      mobileRowsHtml +
       "</a>"
     )
   }
@@ -1244,7 +1247,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = g || null
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
-    var mobileRowsHtml = detail ? renderGeneLeadMobileRowsHtml(metaRows) : ""
+    var mobileRowsHtml = detail ? renderTooltipMobileRowGridHtml(metaRows) : ""
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
@@ -1297,9 +1300,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
       ';">' +
-      '<div class="icono-gene-mobile-visual">' +
       portraitMarkup +
-      "</div>" +
       '<div class="iconoplasm-tooltip-body">' +
       '<div class="iconoplasm-tooltip-header">' +
       '<div class="iconoplasm-tooltip-symbol">' +
