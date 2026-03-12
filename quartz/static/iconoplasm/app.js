@@ -1128,10 +1128,11 @@ void syncSharedIconoplasmSettings().catch(function () {
     return renderTooltipMetaRowsHtml(collectTooltipMetaRows(geneDetail))
   }
 
-  function renderTooltipMobileRowGridHtml(rows) {
+  function renderTooltipMobileRowGridHtml(rows, extraAttrs) {
     var safeRows = Array.isArray(rows) ? rows : []
-    if (!safeRows.length) return ""
-    var html = '<div class="iconoplasm-tooltip-mobile-rowgrid">'
+    var attrs = extraAttrs ? " " + extraAttrs : ""
+    if (!safeRows.length) return '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + "></div>"
+    var html = '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + ">"
     for (var i = 0; i < safeRows.length; i++) {
       var row = safeRows[i] || {}
       if (Array.isArray(row.pairs) && row.pairs.length) {
@@ -1178,7 +1179,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = portraitDetailCache[key] || null
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
-    var mobileRowsHtml = detail ? renderTooltipMobileRowGridHtml(metaRows) : ""
+    var mobileRowsHtml = renderTooltipMobileRowGridHtml(
+      detail ? metaRows : [],
+      'data-icono-card-mobile-meta',
+    )
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
@@ -1247,7 +1251,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = g || null
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
-    var mobileRowsHtml = detail ? renderTooltipMobileRowGridHtml(metaRows) : ""
+    var mobileRowsHtml = renderTooltipMobileRowGridHtml(
+      detail ? metaRows : [],
+      'data-icono-card-mobile-meta',
+    )
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
@@ -1346,10 +1353,15 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (!card) return
     if (genePayload) hydrateBrickPortrait(card, genePayload)
     var meta = card.querySelector("[data-icono-card-meta]")
-    if (!meta) return
-    var html = renderTooltipMetaHtml(genePayload)
-    meta.classList.remove("iconoplasm-tooltip-meta--loading")
-    meta.innerHTML = html
+    var mobileMeta = card.querySelector("[data-icono-card-mobile-meta]")
+    var metaRows = collectTooltipMetaRows(genePayload)
+    if (meta) {
+      meta.classList.remove("iconoplasm-tooltip-meta--loading")
+      meta.innerHTML = renderTooltipMetaRowsHtml(metaRows)
+    }
+    if (mobileMeta) {
+      mobileMeta.outerHTML = renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
+    }
   }
 
   function hydrateBrickCards(cards) {

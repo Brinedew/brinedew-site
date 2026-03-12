@@ -6,11 +6,13 @@ import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } fro
 import { unescapeHTML } from "../util/escape"
 import { CustomOgImagesEmitterName } from "../plugins/emitters/ogImage"
 
-// Build-time cache buster - prefer explicit env override, fall back to commit or timestamp
-const CACHE_BUST =
+// Build-time cache buster - always include a fresh timestamp so production HTML
+// points at the latest static assets even when environment-level cache vars linger.
+const CACHE_BUST = `${Date.now()}-${
   (typeof process !== "undefined" && process.env?.CACHE_BUST) ||
   (typeof process !== "undefined" && process.env?.VERCEL_GIT_COMMIT_SHA) ||
-  `${Date.now()}`
+  "build"
+}`
 
 export default (() => {
   const Head: QuartzComponent = ({
