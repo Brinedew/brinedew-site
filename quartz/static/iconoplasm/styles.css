@@ -1452,11 +1452,11 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
 
   .icono-gene-lead-card .iconoplasm-tooltip-portrait {
     min-height: 0;
-    aspect-ratio: 0.82;
+    aspect-ratio: 0.88;
   }
 
   .icono-gene-lead-card {
-    grid-template-columns: minmax(146px, 0.92fr) minmax(0, 1.08fr);
+    grid-template-columns: 132px minmax(0, 1fr);
     align-items: start;
   }
 
@@ -1502,7 +1502,7 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
 
   .icono-gene-mobile-meta-item {
     min-width: 0;
-    padding: 0.4rem 0.55rem;
+    padding: 0.34rem 0.45rem;
     border-bottom: 1px solid var(--icono-brick-line);
   }
 
