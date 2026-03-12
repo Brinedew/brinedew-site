@@ -941,15 +941,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function renderTooltipMetaPairsHtml(pairs) {
-    var safePairs = []
-    var source = Array.isArray(pairs) ? pairs : []
-    for (var i = 0; i < source.length; i++) {
-      var pair = source[i] || {}
-      var character = String(pair.character || "").trim()
-      var molecular = String(pair.molecular || "").trim()
-      if (!character || !molecular) continue
-      safePairs.push({ character: character, molecular: molecular })
-    }
+    var safePairs = normalizeTooltipMetaPairs(pairs)
     if (!safePairs.length) return ""
     var html = '<div class="iconoplasm-tooltip-meta-pairs">'
     for (var j = 0; j < safePairs.length; j++) {
@@ -971,6 +963,19 @@ void syncSharedIconoplasmSettings().catch(function () {
     return html
   }
 
+  function normalizeTooltipMetaPairs(pairs) {
+    var safePairs = []
+    var source = Array.isArray(pairs) ? pairs : []
+    for (var i = 0; i < source.length; i++) {
+      var pair = source[i] || {}
+      var character = String(pair.character || "").trim()
+      var molecular = String(pair.molecular || "").trim()
+      if (!character || !molecular) continue
+      safePairs.push({ character: character, molecular: molecular })
+    }
+    return safePairs
+  }
+
   function buildTooltipTraitOriginRows(essence) {
     var rows = []
     var aesthetics = uniqueDisplayValues(essence && essence.aesthetics, 4)
@@ -988,7 +993,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         })
       }
       rows.push({
-        pairGridHtml: renderTooltipMetaPairsHtml(pairs),
+        pairs: normalizeTooltipMetaPairs(pairs),
       })
     }
 
@@ -1008,9 +1013,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
   }
 
-  function renderTooltipMetaHtml(geneDetail) {
+  function collectTooltipMetaRows(geneDetail) {
     var essence = geneDetail && typeof geneDetail.essence === "object" ? geneDetail.essence : null
-    if (!geneDetail || !essence) return ""
+    if (!geneDetail || !essence) return []
 
     var rows = []
     var sexText = String(essence.sex || "").trim()
@@ -1090,13 +1095,16 @@ void syncSharedIconoplasmSettings().catch(function () {
       rows.push(traitOriginRows.rows[i])
     }
 
-    if (!rows.length) return ""
+    return rows
+  }
 
+  function renderTooltipMetaRowsHtml(rows) {
+    if (!Array.isArray(rows) || !rows.length) return ""
     var html = ""
     for (var j = 0; j < rows.length; j++) {
       var row = rows[j]
-      if (row.pairGridHtml) {
-        html += row.pairGridHtml
+      if (Array.isArray(row.pairs) && row.pairs.length) {
+        html += renderTooltipMetaPairsHtml(row.pairs)
         continue
       }
       html +=
@@ -1113,6 +1121,41 @@ void syncSharedIconoplasmSettings().catch(function () {
         "</div>" +
         "</div>"
     }
+    return html
+  }
+
+  function renderTooltipMetaHtml(geneDetail) {
+    return renderTooltipMetaRowsHtml(collectTooltipMetaRows(geneDetail))
+  }
+
+  function renderGeneLeadMobileMetaColumnHtml(rows, side) {
+    var safeRows = Array.isArray(rows) ? rows : []
+    if (!safeRows.length) return ""
+    var valueKey = side === "molecular" ? "molecular" : "character"
+    var html =
+      '<div class="icono-gene-mobile-meta icono-gene-mobile-meta--' + valueKey + '">'
+    for (var i = 0; i < safeRows.length; i++) {
+      var row = safeRows[i] || {}
+      if (Array.isArray(row.pairs) && row.pairs.length) {
+        for (var j = 0; j < row.pairs.length; j++) {
+          html +=
+            '<div class="icono-gene-mobile-meta-item">' +
+            '<span class="iconoplasm-tooltip-meta-value iconoplasm-tooltip-meta-value--compact">' +
+            esc(row.pairs[j][valueKey]) +
+            "</span>" +
+            "</div>"
+        }
+        continue
+      }
+      if (!row[valueKey]) continue
+      html +=
+        '<div class="icono-gene-mobile-meta-item">' +
+        '<span class="iconoplasm-tooltip-meta-value">' +
+        (row[valueKey + "IsHtml"] ? row[valueKey] : esc(row[valueKey])) +
+        "</span>" +
+        "</div>"
+    }
+    html += "</div>"
     return html
   }
 
@@ -1187,7 +1230,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
     var detail = g || null
-    var metaHtml = detail ? renderTooltipMetaHtml(detail) : renderTooltipMetaSkeletonHtml()
+    var metaRows = detail ? collectTooltipMetaRows(detail) : []
+    var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
+    var mobileCharacterHtml = detail ? renderGeneLeadMobileMetaColumnHtml(metaRows, "character") : ""
+    var mobileMolecularHtml = detail ? renderGeneLeadMobileMetaColumnHtml(metaRows, "molecular") : ""
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
@@ -1240,7 +1286,10 @@ void syncSharedIconoplasmSettings().catch(function () {
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
       ';">' +
+      '<div class="icono-gene-mobile-visual">' +
       portraitMarkup +
+      mobileCharacterHtml +
+      "</div>" +
       '<div class="iconoplasm-tooltip-body">' +
       '<div class="iconoplasm-tooltip-header">' +
       '<div class="iconoplasm-tooltip-symbol">' +
@@ -1250,6 +1299,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       esc(g.full_name || g.symbol) +
       "</div>" +
       "</div>" +
+      mobileMolecularHtml +
       '<div class="iconoplasm-tooltip-meta" data-icono-card-meta>' +
       metaHtml +
       "</div>" +

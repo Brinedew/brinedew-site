@@ -828,6 +828,14 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   min-height: 280px;
 }
 
+.icono-gene-mobile-visual {
+  display: contents;
+}
+
+.icono-gene-mobile-meta {
+  display: none;
+}
+
 .iconoplasm-tooltip-portrait-media {
   position: absolute;
   inset: 0;
@@ -1444,7 +1452,18 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
 
   .icono-gene-lead-card .iconoplasm-tooltip-portrait {
     min-height: 0;
-    aspect-ratio: 1.24;
+    aspect-ratio: 0.82;
+  }
+
+  .icono-gene-lead-card {
+    grid-template-columns: minmax(146px, 0.92fr) minmax(0, 1.08fr);
+    align-items: start;
+  }
+
+  .icono-gene-mobile-visual {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
 
   .icono-gene-lead-card .iconoplasm-tooltip-body {
@@ -1467,29 +1486,46 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
   }
 
   .icono-gene-lead-card .iconoplasm-tooltip-meta {
-    min-height: 0;
-    padding-top: 0.12rem;
+    display: none;
   }
 
-  .icono-gene-lead-card .iconoplasm-tooltip-meta-row,
-  .icono-gene-lead-card .iconoplasm-tooltip-meta-pair-row {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  .icono-gene-mobile-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--icono-brick-surface);
   }
 
-  .icono-gene-lead-card .iconoplasm-tooltip-meta-cell,
-  .icono-gene-lead-card .iconoplasm-tooltip-meta-pair-cell {
-    padding: 0.38rem 0.35rem;
+  .icono-gene-mobile-meta--character {
+    border-top: 1px solid var(--icono-brick-line-strong);
   }
 
-  .icono-gene-lead-card .iconoplasm-tooltip-meta-cell--origin,
-  .icono-gene-lead-card .iconoplasm-tooltip-meta-pair-cell--origin {
-    padding-top: 0.38rem;
-    padding-left: 0.5rem;
+  .icono-gene-mobile-meta-item {
+    min-width: 0;
+    padding: 0.4rem 0.55rem;
+    border-bottom: 1px solid var(--icono-brick-line);
   }
 
-  .icono-gene-lead-card .iconoplasm-tooltip-meta-value {
-    font-size: 0.9rem;
-    line-height: 1.32;
+  .icono-gene-mobile-meta-item:last-child {
+    border-bottom: none;
+  }
+
+  .icono-gene-mobile-meta--character .iconoplasm-tooltip-meta-value,
+  .icono-gene-mobile-meta--character .iconoplasm-tooltip-meta-value--compact {
+    font-size: 0.88rem;
+    line-height: 1.28;
+    font-style: normal;
+    font-weight: 580;
+    opacity: 0.88;
+  }
+
+  .icono-gene-mobile-meta--molecular .iconoplasm-tooltip-meta-value,
+  .icono-gene-mobile-meta--molecular .iconoplasm-tooltip-meta-value--compact {
+    font-size: 0.88rem;
+    line-height: 1.28;
+    font-style: italic;
+    font-weight: 420;
+    opacity: 0.74;
   }
 
   .icono-gene-detail-bar {
