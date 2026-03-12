@@ -18,6 +18,40 @@
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase('https://iconoplasm.brinedew.bio');
   const escapeHtml = IconoCardShared.escapeHtml;
 
+  function extensionApiFetch(input, init = {}) {
+    const url = typeof input === 'string' ? input : String((input && input.url) || '');
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(
+          {
+            type: 'ICONOPLASM_API_FETCH',
+            url,
+            method: String(init.method || 'GET').toUpperCase(),
+            headers: init.headers && typeof init.headers === 'object' ? init.headers : {},
+            body: typeof init.body === 'string' ? init.body : undefined,
+            credentials: init.credentials === 'include' ? 'include' : 'same-origin',
+          },
+          (result) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message || 'Extension API fetch failed'));
+              return;
+            }
+            const payload = result && typeof result === 'object' ? result : {};
+            const rawText = String(payload.text || '');
+            resolve({
+              ok: Boolean(payload.ok),
+              status: Number(payload.status || 0),
+              text: () => Promise.resolve(rawText),
+              json: () => Promise.resolve(rawText ? JSON.parse(rawText) : null),
+            });
+          },
+        );
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
   // -- Luminance + text color helpers --------------------------------
   function hexLuminance(hex) {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -814,6 +848,7 @@
       symbol,
       assetSha,
       apiBaseUrl: ICONOPLASM_API_BASE,
+      fetchImpl: extensionApiFetch,
       onAuthRequired: showVoteLoginPopup,
       onError: (phase, err) => {
         console.error('[Iconoplasm] extension vote ' + phase + ' error:', err);
@@ -826,7 +861,7 @@
     if (geneDetailPromiseCache.has(symbol)) return geneDetailPromiseCache.get(symbol);
     const request = (async () => {
       try {
-        const resp = await fetch(ICONOPLASM_API_BASE + '/api/gene/' + encodeURIComponent(symbol));
+        const resp = await extensionApiFetch(ICONOPLASM_API_BASE + '/api/gene/' + encodeURIComponent(symbol));
         if (!resp.ok) { geneDetailCache.set(symbol, null); return null; }
         const data = await resp.json();
         geneDetailCache.set(symbol, data || null);

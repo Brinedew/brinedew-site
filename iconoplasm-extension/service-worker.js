@@ -21,6 +21,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     ensureFreshGeneData().then((data) => sendResponse(data))
     return true
   }
+  if (msg.type === "ICONOPLASM_API_FETCH") {
+    fetchIconoplasmApi(msg).then((result) => sendResponse(result))
+    return true
+  }
   if (msg.type === "WARM_PORTRAIT_DATA_URLS") {
     warmPortraitDataUrls(msg.urls).then((count) =>
       sendResponse({
@@ -67,6 +71,54 @@ async function getStatus() {
     geneCount: result.iconoplasm_gene_count || 0,
     lastFetch: result.iconoplasm_last_fetch || null,
     schemaVersion: result.iconoplasm_schema_version || null,
+  }
+}
+
+function normalizeIconoplasmApiPath(rawUrl) {
+  const value = String(rawUrl || "").trim()
+  if (!value) return ""
+  try {
+    const url = value.startsWith("http://") || value.startsWith("https://")
+      ? new URL(value)
+      : new URL(value, HOST)
+    if (url.origin !== HOST) return ""
+    if (!url.pathname.startsWith("/api/")) return ""
+    return `${url.pathname}${url.search}`
+  } catch (_err) {
+    return ""
+  }
+}
+
+async function fetchIconoplasmApi(msg) {
+  const path = normalizeIconoplasmApiPath(msg.url || msg.path)
+  if (!path) {
+    return {
+      ok: false,
+      status: 400,
+      text: JSON.stringify({ error: "Invalid Iconoplasm API path" }),
+    }
+  }
+  try {
+    const resp = await fetch(`${HOST}${path}`, {
+      method: String(msg.method || "GET").toUpperCase(),
+      headers: {
+        ...(msg.headers && typeof msg.headers === "object" ? msg.headers : {}),
+        "X-Iconoplasm-Extension-Version": chrome.runtime.getManifest().version,
+      },
+      body: typeof msg.body === "string" ? msg.body : undefined,
+      credentials: msg.credentials === "include" ? "include" : "same-origin",
+    })
+    return {
+      ok: resp.ok,
+      status: resp.status,
+      text: await resp.text(),
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      text: JSON.stringify({ error: String(err && err.message ? err.message : err) }),
+    }
   }
 }
 
