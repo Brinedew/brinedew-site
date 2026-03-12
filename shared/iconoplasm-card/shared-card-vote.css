@@ -1,6 +1,14 @@
 /* Shared Iconoplasm vote/header styles.
    Edit this source, then run scripts/sync-iconoplasm-shared.mjs. */
 
+/* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Components, Color & Theme) +
+   C:\Users\Admin\.codex\skills\polish\SKILL.md (Concentric radii, Surface separation,
+   Interaction states) + C:\Users\Admin\.codex\skills\optimize\SKILL.md
+   (Optimistic UI, interruptible transitions).
+   Keep vote visuals here as the single source of truth for both the website and the extension.
+   Re-implementing these rules in site-local CSS is what caused the shading, radius, and
+   active-state drift the user flagged. */
+
 .icono-shared-card-header-row {
   display: flex;
   align-items: flex-start;
@@ -14,28 +22,21 @@
 }
 
 .icono-vote-box {
-  --icono-vote-shell: color-mix(in srgb, var(--ui-bg, #f4ede5) 82%, var(--light, #fff) 18%);
-  --icono-vote-line: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 82%, var(--dark, #221d19) 6%);
-  --icono-vote-seam: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 68%, transparent);
+  --icono-vote-shell: color-mix(in srgb, var(--ui-bg, #f4ede5) 90%, var(--light, #fff) 10%);
+  --icono-vote-line: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 88%, var(--dark, #221d19) 4%);
+  --icono-vote-seam: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 78%, transparent);
   --icono-vote-ink: var(--ui-text, #271f1a);
   --icono-vote-muted: color-mix(in srgb, var(--icono-vote-ink) 68%, transparent);
-  --icono-approve: color-mix(in srgb, var(--accent, #7e5539) 72%, #2b241f 28%);
+  --icono-approve: color-mix(in srgb, #4bb8ad 84%, var(--icono-vote-ink) 16%);
   --icono-reject: color-mix(in srgb, #9d544f 74%, #2b241f 26%);
   display: inline-grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: stretch;
   border: 1px solid var(--icono-vote-line);
-  border-radius: calc(var(--icono-radius-md, 14px) - 1px);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--icono-vote-shell) 90%, white 10%),
-      color-mix(in srgb, var(--icono-vote-shell) 96%, var(--ui-bg, #f4ede5) 4%)
-    );
+  border-radius: calc(var(--icono-radius-md, 4px) - 1px);
+  background: var(--icono-vote-shell);
   color: var(--icono-vote-ink);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    inset 0 -1px 0 rgba(34, 29, 25, 0.08);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 14%, transparent);
   overflow: hidden;
 }
 
@@ -46,7 +47,7 @@
   min-width: 2.55rem;
   padding: 0 0.9rem;
   border-inline: 1px solid var(--icono-vote-seam);
-  background: color-mix(in srgb, var(--light, #fff) 62%, var(--icono-vote-shell) 38%);
+  background: color-mix(in srgb, var(--icono-vote-shell) 94%, var(--light, #fff) 6%);
   color: var(--icono-vote-muted);
   font-size: 0.83rem;
   line-height: 1;
@@ -67,7 +68,6 @@
   transition:
     background-color 160ms ease,
     color 160ms ease,
-    box-shadow 160ms ease,
     opacity 160ms ease;
 }
 
@@ -85,7 +85,7 @@
 }
 
 .icono-vote-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--icono-vote-line) 10%, transparent);
+  background: color-mix(in srgb, var(--icono-vote-line) 12%, transparent);
 }
 
 .icono-vote-btn--approve:hover:not(:disabled) {
@@ -102,21 +102,21 @@
 }
 
 .icono-vote-btn.active {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 0 0 0 1px color-mix(in srgb, var(--icono-vote-line) 74%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icono-vote-line) 86%, transparent);
 }
 
 .icono-vote-btn--approve.active {
-  background: color-mix(in srgb, var(--accent, #7e5539) 16%, var(--icono-vote-shell));
+  background: color-mix(in srgb, var(--icono-approve) 18%, var(--icono-vote-shell));
+  color: var(--icono-approve);
 }
 
 .icono-vote-btn--reject.active {
-  background: color-mix(in srgb, var(--icono-reject) 15%, var(--icono-vote-shell));
+  background: color-mix(in srgb, var(--icono-reject) 16%, var(--icono-vote-shell));
+  color: var(--icono-reject);
 }
 
 .icono-vote-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent, #7e5539) 72%, white 28%);
+  outline: 2px solid color-mix(in srgb, var(--icono-approve) 70%, white 30%);
   outline-offset: -2px;
 }
 
@@ -133,13 +133,8 @@
   min-height: 4rem;
   align-self: flex-start;
   flex: 0 0 auto;
-  border-radius: calc(var(--icono-radius-md, 14px) - 1px);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--icono-vote-shell) 92%, white 8%),
-      color-mix(in srgb, var(--icono-vote-shell) 97%, var(--icono-brick-shell, rgba(255, 248, 238, 0.96)) 3%)
-    );
+  border-radius: calc(var(--icono-radius-md, 4px) - 1px);
+  background: var(--icono-vote-shell);
 }
 
 .icono-vote-box--brick .icono-vote-stats {
@@ -160,17 +155,20 @@
 .iconoplasm-tooltip--dark .icono-vote-box,
 html[saved-theme="dark"] .icono-vote-box,
 html[data-theme="dark"] .icono-vote-box {
-  --icono-vote-shell: rgba(34, 28, 24, 0.96);
-  --icono-vote-line: rgba(255, 255, 255, 0.12);
-  --icono-vote-seam: rgba(255, 255, 255, 0.08);
+  --icono-vote-shell: rgba(28, 24, 21, 0.98);
+  --icono-vote-line: rgba(255, 255, 255, 0.1);
+  --icono-vote-seam: rgba(255, 255, 255, 0.07);
   --icono-vote-ink: rgba(244, 238, 230, 0.94);
-  --icono-vote-muted: rgba(244, 238, 230, 0.72);
+  --icono-vote-muted: rgba(244, 238, 230, 0.68);
+  --icono-approve: color-mix(in srgb, #58d4c9 88%, white 12%);
+  --icono-reject: color-mix(in srgb, #d47b73 84%, white 16%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .iconoplasm-tooltip--dark .icono-vote-stats,
 html[saved-theme="dark"] .icono-vote-stats,
 html[data-theme="dark"] .icono-vote-stats {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .iconoplasm-tooltip--dark .icono-vote-btn,

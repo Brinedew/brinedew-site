@@ -15,10 +15,10 @@
      These shared tokens keep Iconoplasm's nested surfaces concentric, portraits legible,
      and transitions interruptible. Reverting them tends to reintroduce pale edges, mismatched
      radii, and sticky-feeling motion. */
-  --icono-radius-xl: 20px;
-  --icono-radius-lg: 16px;
-  --icono-radius-md: 12px;
-  --icono-radius-sm: 8px;
+  --icono-radius-xl: 10px;
+  --icono-radius-lg: 6px;
+  --icono-radius-md: 4px;
+  --icono-radius-sm: 3px;
   --icono-radius-pill: 999px;
   --icono-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --icono-ring-soft: color-mix(in srgb, var(--dark) 10%, transparent);
@@ -332,7 +332,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.18), transparent 48%),
     color-mix(in srgb, var(--icono-card-accent, var(--ui-bg)) 12%, white);
-  box-shadow: 0 12px 28px rgba(45, 33, 20, 0.08);
+  box-shadow: 0 8px 18px rgba(45, 33, 20, 0.06);
   transition:
     box-shadow 0.18s var(--icono-ease-out),
     transform 0.18s var(--icono-ease-out);
@@ -567,11 +567,9 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   border-radius: var(--icono-radius-lg);
   background: var(--icono-brick-shell);
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--icono-brick-line-strong) 72%, transparent),
-    0 1px 2px var(--icono-brick-shadow-1),
-    0 3px 8px var(--icono-brick-shadow-2),
-    0 8px 24px var(--icono-brick-shadow-3),
-    0 20px 60px var(--icono-brick-shadow-4);
+    0 0 0 1px color-mix(in srgb, var(--icono-brick-line-strong) 74%, transparent),
+    0 8px 20px var(--icono-brick-shadow-2),
+    0 16px 36px var(--icono-brick-shadow-3);
   color: var(--icono-brick-ink);
 }
 
@@ -584,10 +582,9 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 .icono-card--brick:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--icono-brick-line-strong) 72%, transparent),
-    0 2px 6px var(--icono-brick-shadow-2),
-    0 10px 30px var(--icono-brick-shadow-3),
-    0 24px 72px var(--icono-brick-shadow-4);
+    0 0 0 1px color-mix(in srgb, var(--icono-brick-line-strong) 76%, transparent),
+    0 10px 24px var(--icono-brick-shadow-2),
+    0 18px 42px var(--icono-brick-shadow-3);
 }
 
 .icono-card--brick:active {
@@ -1035,7 +1032,7 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   overflow: hidden;
   background: var(--ui-bg);
   box-shadow:
-    0 16px 34px rgba(45, 33, 20, 0.1),
+    0 10px 24px rgba(45, 33, 20, 0.08),
     inset 0 0 0 1px color-mix(in srgb, var(--icono-ring-image) 82%, transparent);
 }
 
@@ -1141,163 +1138,10 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   justify-content: flex-start;
 }
 
-/* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Visual Details) +
-   C:\Users\Admin\.codex\skills\normalize\SKILL.md (Color & Theme, Components) +
-   C:\Users\Admin\.codex\skills\polish\SKILL.md (Surface Separation, Interaction States).
-   Vote controls borrow the card's own shell/line language on purpose. When this picks up glossy
-   gradients or outer lift shadows, it starts reading like a foreign widget floating above the
-   card instead of an inset action strip that belongs to Iconoplasm. */
-.icono-vote-box {
-  --icono-vote-shell: color-mix(in srgb, var(--ui-bg) 82%, var(--light) 18%);
-  --icono-vote-line: color-mix(in srgb, var(--ui-border) 82%, var(--dark) 6%);
-  --icono-vote-seam: color-mix(in srgb, var(--ui-border) 68%, transparent);
-  display: inline-grid;
-  grid-template-columns: minmax(2.5rem, auto) minmax(2.85rem, auto) minmax(2.5rem, auto);
-  align-items: stretch;
-  gap: 0;
-  min-height: 2.62rem;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--icono-vote-line);
-  border-radius: calc(var(--icono-radius-pill) - 1px);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--icono-vote-shell) 90%, white 10%),
-      color-mix(in srgb, var(--icono-vote-shell) 96%, var(--ui-bg) 4%)
-    );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.38),
-    inset 0 -1px 0 rgba(45, 33, 20, 0.04);
-}
-
-.icono-vote-stats {
-  font-family: var(--codeFont, monospace);
-  font-size: 0.84rem;
-  font-weight: 760;
-  min-width: 2.6rem;
-  text-align: center;
-  color: var(--dark);
-  padding: 0 0.62rem;
-  border-inline: 1px solid var(--icono-vote-seam);
-  background: color-mix(in srgb, var(--light) 62%, var(--icono-vote-shell) 38%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(45, 33, 20, 0.03);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.icono-vote-btn {
-  border: 0;
-  background: transparent;
-  color: var(--darkgray);
-  border-radius: 0;
-  width: 2.5rem;
-  min-width: 2.5rem;
-  height: 2.62rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  cursor: pointer;
-  box-shadow: none;
-  transition:
-    background-color 0.16s var(--icono-ease-out),
-    color 0.16s var(--icono-ease-out),
-    box-shadow 0.18s var(--icono-ease-out),
-    opacity 0.16s var(--icono-ease-out);
-}
-
-.icono-vote-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.icono-vote-btn--approve {
-  color: color-mix(in srgb, var(--accent) 88%, black 20%);
-}
-
-.icono-vote-btn--reject {
-  color: color-mix(in srgb, var(--icono-reject) 88%, black 12%);
-}
-
-.icono-vote-btn:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 999px rgba(255, 255, 255, 0.06);
-}
-
-.icono-vote-btn--approve:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.icono-vote-btn--reject:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--icono-reject) 10%, transparent);
-}
-
-.icono-vote-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.icono-vote-btn.active {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 0 0 1px color-mix(in srgb, var(--icono-vote-line) 74%, transparent);
-}
-
-.icono-vote-btn--approve.active {
-  background: color-mix(in srgb, var(--accent) 16%, var(--icono-vote-shell));
-}
-
-.icono-vote-btn--reject.active {
-  background: color-mix(in srgb, var(--icono-reject) 15%, var(--icono-vote-shell));
-}
-
-.icono-vote-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 40%, white 8%);
-  outline-offset: -2px;
-}
-
-.icono-vote-box--brick {
-  --icono-vote-shell: color-mix(in srgb, var(--icono-brick-shell) 86%, var(--icono-brick-surface) 14%);
-  --icono-vote-line: color-mix(in srgb, var(--icono-brick-line-strong) 88%, transparent);
-  --icono-vote-seam: color-mix(in srgb, var(--icono-brick-line) 96%, transparent);
-  grid-template-columns: 1fr;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  width: 2.55rem;
-  min-width: 2.55rem;
-  height: 4rem;
-  min-height: 4rem;
-  align-self: flex-start;
-  flex: 0 0 auto;
-  border-radius: calc(var(--icono-radius-md) - 1px);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--icono-vote-shell) 92%, white 8%),
-      color-mix(in srgb, var(--icono-vote-shell) 97%, var(--icono-brick-shell) 3%)
-    );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -1px 0 rgba(45, 33, 20, 0.06);
-}
-
-.icono-vote-box--brick .icono-vote-stats {
-  display: none;
-}
-
-.icono-vote-box--brick .icono-vote-btn {
-  width: 100%;
-  min-width: 0;
-  height: auto;
-  min-height: 0;
-}
-
-.icono-vote-box--brick .icono-vote-btn + .icono-vote-btn {
-  border-top: 1px solid var(--icono-vote-seam);
-}
+/* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Components) +
+   C:\Users\Admin\.codex\skills\extract\SKILL.md (single source of truth).
+   Vote visuals intentionally live in iconoplasm/generated/shared-card-vote.css. Keep any
+   site-local rules limited to placement and sizing so the extension and website stay matched. */
 
 .icono-links {
   display: flex;
@@ -1505,67 +1349,10 @@ html[data-theme="dark"] .icono-gene-symbol-pill {
 
 html[saved-theme="dark"] .icono-card--brick,
 html[data-theme="dark"] .icono-card--brick {
-  --icono-brick-shadow-1: rgba(0, 0, 0, 0.26);
-  --icono-brick-shadow-2: rgba(0, 0, 0, 0.34);
-  --icono-brick-shadow-3: rgba(0, 0, 0, 0.42);
-  --icono-brick-shadow-4: rgba(0, 0, 0, 0.48);
-}
-
-html[saved-theme="dark"] .icono-vote-box,
-html[data-theme="dark"] .icono-vote-box {
-  --icono-vote-shell: rgba(34, 28, 24, 0.96);
-  --icono-vote-line: rgba(255, 255, 255, 0.12);
-  --icono-vote-seam: rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(43, 35, 30, 0.96),
-      rgba(27, 22, 19, 0.94)
-    );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
-}
-
-html[saved-theme="dark"] .icono-vote-stats,
-html[data-theme="dark"] .icono-vote-stats {
-  color: rgba(255, 255, 255, 0.94);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-html[saved-theme="dark"] .icono-vote-btn,
-html[data-theme="dark"] .icono-vote-btn {
-  box-shadow: none;
-}
-
-html[saved-theme="dark"] .icono-vote-btn--approve,
-html[data-theme="dark"] .icono-vote-btn--approve {
-  color: color-mix(in srgb, var(--accent) 82%, white 10%);
-}
-
-html[saved-theme="dark"] .icono-vote-btn--reject,
-html[data-theme="dark"] .icono-vote-btn--reject {
-  color: color-mix(in srgb, var(--icono-reject) 82%, white 10%);
-}
-
-html[saved-theme="dark"] .icono-vote-btn--approve:hover:not(:disabled),
-html[data-theme="dark"] .icono-vote-btn--approve:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
-html[saved-theme="dark"] .icono-vote-btn--reject:hover:not(:disabled),
-html[data-theme="dark"] .icono-vote-btn--reject:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--icono-reject) 18%, transparent);
-}
-
-html[saved-theme="dark"] .icono-vote-btn--approve.active,
-html[data-theme="dark"] .icono-vote-btn--approve.active {
-  background: color-mix(in srgb, var(--accent) 26%, rgba(17, 14, 11, 0.98));
-}
-
-html[saved-theme="dark"] .icono-vote-btn--reject.active,
-html[data-theme="dark"] .icono-vote-btn--reject.active {
-  background: color-mix(in srgb, var(--icono-reject) 22%, rgba(17, 14, 11, 0.98));
+  --icono-brick-shadow-1: rgba(0, 0, 0, 0.18);
+  --icono-brick-shadow-2: rgba(0, 0, 0, 0.22);
+  --icono-brick-shadow-3: rgba(0, 0, 0, 0.28);
+  --icono-brick-shadow-4: rgba(0, 0, 0, 0.34);
 }
 
 /* ───────── Gene detail: metadata sections (2-column paired layout) ───────── */

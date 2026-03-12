@@ -54,6 +54,10 @@
 }
 
 /* -- Tooltip container: horizontal card ----------------------------- */
+/* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout, Components) +
+   C:\Users\Admin\.codex\skills\polish\SKILL.md (Concentric radii, Surface separation).
+   Keep extension tooltip geometry close to the site brick cards. When this regains huge lift
+   shadows or overly sharp one-off corners, the shared card system starts feeling disjointed. */
 .iconoplasm-tooltip {
   --iconoplasm-tooltip-shell: #d9d2c8;
   --iconoplasm-tooltip-surface: rgba(248, 244, 236, 0.99);
@@ -61,10 +65,10 @@
   --iconoplasm-tooltip-muted: rgba(33, 28, 24, 0.72);
   --iconoplasm-tooltip-line-strong: rgba(74, 61, 49, 0.18);
   --iconoplasm-tooltip-line: rgba(74, 61, 49, 0.08);
-  --iconoplasm-tooltip-shadow-1: rgba(40, 32, 24, 0.08);
+  --iconoplasm-tooltip-shadow-1: rgba(40, 32, 24, 0.06);
   --iconoplasm-tooltip-shadow-2: rgba(40, 32, 24, 0.1);
   --iconoplasm-tooltip-shadow-3: rgba(40, 32, 24, 0.14);
-  --iconoplasm-tooltip-shadow-4: rgba(40, 32, 24, 0.12);
+  --iconoplasm-tooltip-shadow-4: rgba(40, 32, 24, 0.18);
   --iconoplasm-tooltip-portrait-base: color-mix(
     in srgb,
     var(--iconoplasm-gene-color, #6B6B78) 20%,
@@ -86,17 +90,15 @@
   color: var(--iconoplasm-tooltip-ink);
 
   /* Card surface */
-  border-radius: 2px;
+  border-radius: 4px;
   overflow: hidden;
   border: none;
 
-  /* Layered shadow with color-matched warmth */
+  /* Keep the tooltip grounded like the site cards, not floating like a modal. */
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--iconoplasm-tooltip-line-strong) 72%, transparent),
-    0 1px 2px var(--iconoplasm-tooltip-shadow-1),
-    0 3px 8px var(--iconoplasm-tooltip-shadow-2),
-    0 8px 24px var(--iconoplasm-tooltip-shadow-3),
-    0 20px 60px var(--iconoplasm-tooltip-shadow-4);
+    0 0 0 1px color-mix(in srgb, var(--iconoplasm-tooltip-line-strong) 74%, transparent),
+    0 8px 18px var(--iconoplasm-tooltip-shadow-2),
+    0 16px 34px var(--iconoplasm-tooltip-shadow-4);
 
   -webkit-font-smoothing: antialiased;
 }
@@ -108,10 +110,10 @@
   --iconoplasm-tooltip-muted: rgba(244, 238, 230, 0.68);
   --iconoplasm-tooltip-line-strong: rgba(255, 255, 255, 0.14);
   --iconoplasm-tooltip-line: rgba(255, 255, 255, 0.08);
-  --iconoplasm-tooltip-shadow-1: rgba(0, 0, 0, 0.3);
-  --iconoplasm-tooltip-shadow-2: rgba(0, 0, 0, 0.38);
-  --iconoplasm-tooltip-shadow-3: rgba(0, 0, 0, 0.46);
-  --iconoplasm-tooltip-shadow-4: rgba(0, 0, 0, 0.5);
+  --iconoplasm-tooltip-shadow-1: rgba(0, 0, 0, 0.22);
+  --iconoplasm-tooltip-shadow-2: rgba(0, 0, 0, 0.28);
+  --iconoplasm-tooltip-shadow-3: rgba(0, 0, 0, 0.34);
+  --iconoplasm-tooltip-shadow-4: rgba(0, 0, 0, 0.4);
   --iconoplasm-tooltip-portrait-base: color-mix(
     in srgb,
     var(--iconoplasm-gene-color, #6B6B78) 24%,

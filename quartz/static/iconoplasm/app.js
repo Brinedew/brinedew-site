@@ -1189,8 +1189,12 @@ void syncSharedIconoplasmSettings().catch(function () {
       existing = headerRow.querySelector("[data-icono-brick-vote-box]")
     }
     if (!existing) return
+    // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Optimistic UI) +
+    // C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction states).
+    // Brick votes must show the user's prior choice before hover. Deferring these snapshots
+    // until pointer intent is what made the gallery look unresponsive and inconsistent.
     wireVoteBox(existing, card.getAttribute("data-icono-symbol"), assetSha, {
-      deferSnapshot: true,
+      deferSnapshot: false,
     })
   }
 
@@ -1282,7 +1286,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         box,
         card.getAttribute("data-icono-symbol"),
         box.getAttribute("data-icono-brick-vote-box"),
-        { deferSnapshot: true },
+        { deferSnapshot: false },
       )
     }
   }

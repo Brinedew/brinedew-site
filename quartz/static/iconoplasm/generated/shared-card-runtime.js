@@ -476,6 +476,30 @@
       }
     }
 
+    function cloneSnapshot(snapshot) {
+      var safe = snapshot || {}
+      return {
+        image_upvotes: Number(safe.image_upvotes || 0),
+        image_downvotes: Number(safe.image_downvotes || 0),
+        image_score: Number(safe.image_score || 0),
+        user_vote: Number(safe.user_vote || 0),
+      }
+    }
+
+    function optimisticSnapshot(nextVote) {
+      var base = cloneSnapshot(state.snapshot)
+      var currentVote = Number(base.user_vote || 0)
+      var resolvedVote = Number(nextVote || 0)
+      if (currentVote === 1) base.image_upvotes = Math.max(0, Number(base.image_upvotes || 0) - 1)
+      if (currentVote === -1)
+        base.image_downvotes = Math.max(0, Number(base.image_downvotes || 0) - 1)
+      if (resolvedVote === 1) base.image_upvotes += 1
+      if (resolvedVote === -1) base.image_downvotes += 1
+      base.user_vote = resolvedVote
+      base.image_score = Number(base.image_upvotes || 0) - Number(base.image_downvotes || 0)
+      return base
+    }
+
     function refreshSnapshot() {
       state.pending = true
       render()
@@ -512,7 +536,17 @@
     }
 
     function submitVote(voteValue) {
+      // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Optimistic UI) +
+      // C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction states).
+      // Keep the selected vote lit on click, not after the network round-trip. This is shared
+      // by both the website and extension, so sluggish feedback here propagates everywhere.
+      var previousSnapshot = cloneSnapshot(state.snapshot)
+      var currentVote = Number(previousSnapshot.user_vote || 0)
+      var requestedVote = Number(voteValue || 0)
+      var nextVote = currentVote === requestedVote ? 0 : requestedVote
+      state.snapshot = optimisticSnapshot(nextVote)
       state.pending = true
+      notifySnapshot()
       render()
       fetchJSON(
         "/api/iconoplasm/votes/set",
@@ -525,7 +559,7 @@
             symbol: symbol,
             asset_sha256: assetSha,
             vision_id: "",
-            vote_value: voteValue,
+            vote_value: nextVote,
           }),
         },
         {
@@ -539,14 +573,17 @@
           notifySnapshot()
         })
         .catch(function (err) {
+          state.snapshot = previousSnapshot
           if (
             Number((err && err.status) || 0) === 401 ||
             (err && err.payload && err.payload.code === "AUTH_REQUIRED")
           ) {
             state.authenticated = false
+            notifySnapshot()
             if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err)
             return
           }
+          notifySnapshot()
           if (typeof cfg.onError === "function") cfg.onError("set", err)
         })
         .finally(function () {
