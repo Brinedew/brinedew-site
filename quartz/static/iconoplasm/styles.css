@@ -1442,13 +1442,9 @@ html[data-theme="dark"] .icono-vote-btn--reject.active {
     padding-left: 0.5rem;
   }
 
-  .icono-gene-lead-card {
-    grid-template-columns: minmax(132px, 0.4fr) minmax(0, 0.6fr);
-    align-items: stretch;
-  }
-
   .icono-gene-lead-card .iconoplasm-tooltip-portrait {
-    min-height: 100%;
+    min-height: 0;
+    aspect-ratio: 1.24;
   }
 
   .icono-gene-lead-card .iconoplasm-tooltip-body {
