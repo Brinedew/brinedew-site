@@ -1172,6 +1172,65 @@ void syncSharedIconoplasmSettings().catch(function () {
     return html
   }
 
+  function renderTooltipMobileSkeletonHtml(extraAttrs) {
+    var attrs = extraAttrs ? " " + extraAttrs : ""
+    return (
+      '<div class="iconoplasm-tooltip-mobile-rowgrid iconoplasm-tooltip-mobile-rowgrid--skeleton"' +
+      attrs +
+      ">" +
+      '<div class="iconoplasm-tooltip-mobile-row">' +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-row">' +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-row">' +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-row">' +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
+      '<span class="iconoplasm-tooltip-skeleton-line"></span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-row">' +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      '<div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular">' +
+      '<span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span>' +
+      "</div>" +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function warmBrickCardImages(entries) {
+    var source = Array.isArray(entries) ? entries : []
+    for (var i = 0; i < source.length; i++) {
+      var portraitUrl = publishedPortraitUrl(source[i], "medium")
+      if (!portraitUrl) continue
+      void preloadImage(portraitUrl)
+    }
+  }
+
   function buildBrickCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
@@ -1179,10 +1238,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = portraitDetailCache[key] || null
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
-    var mobileRowsHtml = renderTooltipMobileRowGridHtml(
-      detail ? metaRows : [],
-      'data-icono-card-mobile-meta',
-    )
+    var mobileRowsHtml = detail
+      ? renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
+      : renderTooltipMobileSkeletonHtml('data-icono-card-mobile-meta')
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
@@ -1208,9 +1266,9 @@ void syncSharedIconoplasmSettings().catch(function () {
           esc(portraitUrl) +
           '" alt="' +
           esc(g.symbol) +
-          ' portrait" loading="' +
-          (cardIndex < 8 ? "eager" : "lazy") +
-          '" decoding="async" width="' +
+          ' portrait" loading="eager" decoding="async" fetchpriority="' +
+          (cardIndex < 6 ? "high" : "low") +
+          '" width="' +
           dims.width +
           '" height="' +
           dims.height +
@@ -1342,6 +1400,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     portrait.classList.remove("iconoplasm-tooltip-portrait-missing")
     portrait.classList.add("iconoplasm-tooltip-portrait--ready")
     portraitImg.setAttribute("src", portraitUrl)
+    portraitImg.setAttribute("loading", "eager")
+    portraitImg.setAttribute("fetchpriority", "low")
     portraitImg.setAttribute("width", String(dims.width))
     portraitImg.setAttribute("height", String(dims.height))
     portraitImg.setAttribute("alt", normalizedSymbol(genePayload.symbol) + " portrait")
@@ -1833,6 +1893,7 @@ void syncSharedIconoplasmSettings().catch(function () {
               setupOrderedPortraitPrefetch(grid, galleryState.items)
             } else {
               destroyHomeMasonry()
+              warmBrickCardImages(items)
               void hydrateBrickCards(newCards)
             }
             if (
