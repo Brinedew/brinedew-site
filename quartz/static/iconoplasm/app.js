@@ -2397,10 +2397,30 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
   }
 
+  function buildNavigationState(path) {
+    var nextState = { iconoplasm: true }
+    var currentState = readHistoryState()
+    var carriedHomeState =
+      currentState && currentState.iconoplasmHome && typeof currentState.iconoplasmHome === "object"
+        ? currentState.iconoplasmHome
+        : null
+    if (path === "/" || path === "") {
+      if (carriedHomeState) {
+        nextState.iconoplasmPage = "home"
+        nextState.iconoplasmHome = carriedHomeState
+      }
+      return nextState
+    }
+    if (carriedHomeState) {
+      nextState.iconoplasmHome = carriedHomeState
+    }
+    return nextState
+  }
+
   function navigateTo(path, link) {
     captureHomeAnchor(link)
     syncHomeHistoryState(true)
-    window.history.pushState({ iconoplasm: true }, "", path)
+    window.history.pushState(buildNavigationState(path), "", path)
     pendingHomeAnchor = null
     render()
   }
