@@ -1655,6 +1655,111 @@ async function getArtistStyleBlacklistRow(env, artistTag) {
   }
 }
 
+async function iconoExistingAssetsBatch(env, rawItems) {
+  const out = new Map()
+  if (!env.ICONOPLASM_DB || !Array.isArray(rawItems) || rawItems.length <= 0) return out
+  const lookupRows = rawItems
+    .map((item) => ({
+      symbol: normalizeSymbol(item?.symbol || item?.gene_symbol || ""),
+      asset_sha256: normalizeSha256(item?.asset_sha256 || item?.sha256 || ""),
+    }))
+    .filter((row) => row.symbol && row.asset_sha256)
+  if (lookupRows.length <= 0) return out
+  try {
+    const { results } = await env.ICONOPLASM_DB.prepare(
+      `WITH incoming AS (
+         SELECT
+           upper(json_extract(value, '$.symbol')) AS symbol,
+           lower(json_extract(value, '$.asset_sha256')) AS asset_sha256
+         FROM json_each(?)
+       )
+       SELECT
+         upper(pa.gene_symbol) AS symbol,
+         lower(pa.asset_sha256) AS asset_sha256,
+         pa.status,
+         pa.autopick_eligible,
+         pa.r2_key_full,
+         pa.r2_key_medium,
+         pa.r2_key_thumb,
+         pa.vision_id,
+         pa.artist_tag,
+         pa.artist_name
+       FROM icono_portrait_assets pa
+       JOIN incoming i
+         ON upper(pa.gene_symbol) = i.symbol
+        AND lower(pa.asset_sha256) = i.asset_sha256`,
+    )
+      .bind(JSON.stringify(lookupRows))
+      .all()
+    for (const row of results || []) {
+      const symbol = normalizeSymbol(row?.symbol || "")
+      const assetSha = normalizeSha256(row?.asset_sha256 || "")
+      if (!symbol || !assetSha) continue
+      out.set(`${symbol}|${assetSha}`, row)
+    }
+  } catch {}
+  return out
+}
+
+async function iconoPublishStateBatch(env, rawSymbols) {
+  const out = new Map()
+  if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return out
+  const symbols = Array.from(
+    new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
+  )
+  if (symbols.length <= 0) return out
+  try {
+    const { results } = await env.ICONOPLASM_DB.prepare(
+      `WITH incoming AS (
+         SELECT upper(value) AS symbol
+         FROM json_each(?)
+       )
+       SELECT
+         upper(ps.gene_symbol) AS symbol,
+         lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256
+       FROM icono_publish_state ps
+       JOIN incoming i
+         ON upper(ps.gene_symbol) = i.symbol`,
+    )
+      .bind(JSON.stringify(symbols))
+      .all()
+    for (const row of results || []) {
+      const symbol = normalizeSymbol(row?.symbol || "")
+      if (!symbol) continue
+      out.set(symbol, row?.current_asset_sha256 || "")
+    }
+  } catch {}
+  return out
+}
+
+async function iconoBlacklistRowsBatch(env, rawArtistTags) {
+  const out = new Map()
+  if (!env.ICONOPLASM_DB || !Array.isArray(rawArtistTags) || rawArtistTags.length <= 0) return out
+  const artistTags = Array.from(
+    new Set(rawArtistTags.map((value) => normalizeArtistTag(value)).filter(Boolean)),
+  )
+  if (artistTags.length <= 0) return out
+  try {
+    const { results } = await env.ICONOPLASM_DB.prepare(
+      `WITH incoming AS (
+         SELECT lower(value) AS artist_tag
+         FROM json_each(?)
+       )
+       SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
+       FROM icono_artist_style_blacklist
+       WHERE lower(artist_tag) IN (SELECT artist_tag FROM incoming)`,
+    )
+      .bind(JSON.stringify(artistTags))
+      .all()
+    for (const row of results || []) {
+      const artistTag = normalizeArtistTag(row?.artist_tag || "")
+      if (!artistTag) continue
+      out.set(artistTag, row)
+    }
+  } catch {}
+  return out
+}
+
 async function searchArtistStyles(env, { query = "", limit = 50 } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedLimit = Math.max(1, Math.min(100, Number.parseInt(String(limit || "50"), 10) || 50))
@@ -3783,10 +3888,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const itemsRaw = Array.isArray(p?.items) ? p.items : [p]
       if (!itemsRaw.length)
         return done("admin_ingest_400", json({ error: "No items provided" }, 400))
-      if (itemsRaw.length > 100)
+      if (itemsRaw.length > 500)
         return done(
           "admin_ingest_400",
-          json({ error: "Too many items (max 100 per request)" }, 400),
+          json({ error: "Too many items (max 500 per request)" }, 400),
         )
 
       const actorId = await actor(request, env)
@@ -3798,12 +3903,24 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         255,
       )
       const base = portraitBase(url, env)
+      const prefetchedExistingAssets = await iconoExistingAssetsBatch(env, itemsRaw)
+      const prefetchedPublishState = await iconoPublishStateBatch(
+        env,
+        itemsRaw
+          .filter((item) => coerceBoolean(item?.publish, defaultPublish))
+          .map((item) => item?.symbol || item?.gene_symbol || ""),
+      )
+      const prefetchedBlacklistRows = await iconoBlacklistRowsBatch(
+        env,
+        itemsRaw.map((item) => item?.artist_tag || item?.artistTag || ""),
+      )
 
       const results = []
       let processed = 0
       let failed = 0
+      const ingestConcurrency = dryRun ? 16 : 12
 
-      for (const rawItem of itemsRaw) {
+      const ingestOne = async (rawItem) => {
         try {
           const item = rawItem && typeof rawItem === "object" ? rawItem : {}
           const symbol = normalizeSymbol(item?.symbol || item?.gene_symbol || "")
@@ -3821,22 +3938,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             item?.created_by || item?.createdBy || createdByDefault || "unknown",
           ).slice(0, 255)
 
-          const existingAsset = await env.ICONOPLASM_DB.prepare(
-            `SELECT
-               status,
-               autopick_eligible,
-               r2_key_full,
-               r2_key_medium,
-               r2_key_thumb,
-               vision_id,
-               artist_tag,
-               artist_name
-             FROM icono_portrait_assets
-             WHERE upper(gene_symbol)=? AND asset_sha256=?
-             LIMIT 1`,
-          )
-            .bind(symbol, assetSha)
-            .first()
+          const existingAsset = prefetchedExistingAssets.get(`${symbol}|${assetSha}`) || null
           const keys = {
             full: r2PortraitKey(assetSha, "full"),
             medium: r2PortraitKey(assetSha, "medium"),
@@ -3881,30 +3983,40 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           }
 
           if (!dryRun) {
+            const uploadTasks = []
             if (!exists.full) {
               if (!fullBytes) throw new Error("Missing full rendition payload for new upload")
-              await env.ICONOPLASM_PORTRAITS.put(keys.full, fullBytes, {
-                httpMetadata: { contentType: "image/webp" },
-                customMetadata: { gene_symbol: symbol, asset_sha256: assetSha, rendition: "full" },
-              })
+              uploadTasks.push(
+                env.ICONOPLASM_PORTRAITS.put(keys.full, fullBytes, {
+                  httpMetadata: { contentType: "image/webp" },
+                  customMetadata: { gene_symbol: symbol, asset_sha256: assetSha, rendition: "full" },
+                }),
+              )
             }
             if (!exists.medium) {
               if (!mediumBytes) throw new Error("Missing medium rendition payload for new upload")
-              await env.ICONOPLASM_PORTRAITS.put(keys.medium, mediumBytes, {
-                httpMetadata: { contentType: "image/webp" },
-                customMetadata: {
-                  gene_symbol: symbol,
-                  asset_sha256: assetSha,
-                  rendition: "medium",
-                },
-              })
+              uploadTasks.push(
+                env.ICONOPLASM_PORTRAITS.put(keys.medium, mediumBytes, {
+                  httpMetadata: { contentType: "image/webp" },
+                  customMetadata: {
+                    gene_symbol: symbol,
+                    asset_sha256: assetSha,
+                    rendition: "medium",
+                  },
+                }),
+              )
             }
             if (!exists.thumb) {
               if (!thumbBytes) throw new Error("Missing thumb rendition payload for new upload")
-              await env.ICONOPLASM_PORTRAITS.put(keys.thumb, thumbBytes, {
-                httpMetadata: { contentType: "image/webp" },
-                customMetadata: { gene_symbol: symbol, asset_sha256: assetSha, rendition: "thumb" },
-              })
+              uploadTasks.push(
+                env.ICONOPLASM_PORTRAITS.put(keys.thumb, thumbBytes, {
+                  httpMetadata: { contentType: "image/webp" },
+                  customMetadata: { gene_symbol: symbol, asset_sha256: assetSha, rendition: "thumb" },
+                }),
+              )
+            }
+            if (uploadTasks.length > 0) {
+              await Promise.all(uploadTasks)
             }
           }
           const visionId =
@@ -3914,7 +4026,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           const artistName =
             sanitizeText(item?.artist_name || item?.artistName || existingAsset?.artist_name || "", 255) ||
             null
-          const blacklistRow = artistTag ? await getArtistStyleBlacklistRow(env, artistTag) : null
+          const blacklistRow =
+            (artistTag && prefetchedBlacklistRows.get(artistTag)) ||
+            (artistTag ? await getArtistStyleBlacklistRow(env, artistTag) : null)
           const blacklisted = Boolean(blacklistRow)
           const width = optionalInt(item?.width ?? fullPayload?.width)
           const height = optionalInt(item?.height ?? fullPayload?.height)
@@ -3926,7 +4040,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               : coerceBoolean(autopickEligibleRequested, true)
           const autopickEligible = blacklisted ? false : autopickEligibleBase
           const publishNow = blacklisted ? false : requestedPublish
-          const essence = normalizeEssencePayload(item?.essence, symbol)
           const existingStatus = normalizeAssetStatus(existingAsset?.status || "", "draft")
           let finalStatus = statusRequested
           if (
@@ -3981,25 +4094,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               .run()
           }
 
-          let essenceResult = "not_provided"
-          if (essence) {
-            if (dryRun) {
-              essenceResult = "would_update"
-            } else {
-              await upsertGeneEssence(env, essence, createdBy, "nicegui_sync")
-              essenceResult = "updated"
-            }
-          }
+          const essenceResult = "not_provided"
 
           let publishResult = "not_requested"
           let fromAssetSha256 = null
           if (publishNow) {
-            const current = await env.ICONOPLASM_DB.prepare(
-              "SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1",
-            )
-              .bind(symbol)
-              .first()
-            fromAssetSha256 = current?.current_asset_sha256 || null
+            fromAssetSha256 = prefetchedPublishState.get(symbol) || null
             if (dryRun) {
               publishResult = fromAssetSha256 === assetSha ? "already_current" : "would_publish"
             } else if (fromAssetSha256 === assetSha) {
@@ -4058,31 +4158,32 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                 : "missing_payload",
           }
 
-          processed += 1
-          results.push({
+          return {
             ok: true,
-            symbol,
-            asset_sha256: assetSha,
-            dry_run: dryRun,
-            vision_id: visionId,
-            artist_tag: artistTag,
-            artist_name: artistName,
-            status: finalStatus,
-            autopick_eligible: autopickEligible,
-            uploads,
-            publish: publishResult,
-            requested_publish: requestedPublish,
-            blacklisted,
-            blacklist_reason: sanitizeText(blacklistRow?.reason || "", 2000) || null,
-            from_asset_sha256: fromAssetSha256,
-            essence: essenceResult,
-            hero_url: joinUrl(base, keys.full),
-            medium_url: joinUrl(base, keys.medium),
-            thumb_url: joinUrl(base, keys.thumb),
-            r2_keys: keys,
-          })
+            result: {
+              ok: true,
+              symbol,
+              asset_sha256: assetSha,
+              dry_run: dryRun,
+              vision_id: visionId,
+              artist_tag: artistTag,
+              artist_name: artistName,
+              status: finalStatus,
+              autopick_eligible: autopickEligible,
+              uploads,
+              publish: publishResult,
+              requested_publish: requestedPublish,
+              blacklisted,
+              blacklist_reason: sanitizeText(blacklistRow?.reason || "", 2000) || null,
+              from_asset_sha256: fromAssetSha256,
+              essence: essenceResult,
+              hero_url: joinUrl(base, keys.full),
+              medium_url: joinUrl(base, keys.medium),
+              thumb_url: joinUrl(base, keys.thumb),
+              r2_keys: keys,
+            },
+          }
         } catch (err) {
-          failed += 1
           const rawSymbol =
             rawItem && typeof rawItem === "object"
               ? rawItem.symbol || rawItem.gene_symbol || null
@@ -4091,12 +4192,32 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             rawItem && typeof rawItem === "object"
               ? rawItem.asset_sha256 || rawItem.sha256 || null
               : null
-          results.push({
+          return {
             ok: false,
-            symbol: rawSymbol,
-            asset_sha256: rawSha,
-            error: String(err?.message || err || "Unknown ingest error"),
-          })
+            result: {
+              ok: false,
+              symbol: rawSymbol,
+              asset_sha256: rawSha,
+              error: String(err?.message || err || "Unknown ingest error"),
+            },
+          }
+        }
+      }
+
+      for (let start = 0; start < itemsRaw.length; start += ingestConcurrency) {
+        const chunk = itemsRaw.slice(start, start + ingestConcurrency)
+        const chunkResults = await Promise.all(chunk.map((rawItem) => ingestOne(rawItem)))
+        for (const outcome of chunkResults) {
+          if (outcome?.ok) processed += 1
+          else failed += 1
+          results.push(
+            outcome?.result || {
+              ok: false,
+              symbol: null,
+              asset_sha256: null,
+              error: "Unknown ingest outcome",
+            },
+          )
         }
       }
 
