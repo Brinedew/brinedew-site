@@ -768,12 +768,7 @@
     tooltip.setAttribute('role', 'tooltip');
     tooltip.innerHTML =
       '<div class="iconoplasm-tooltip-portrait">' +
-        '<img class="iconoplasm-tooltip-portrait-img" alt="" />' +
-        '<div class="iconoplasm-tooltip-portrait-fallback">' +
-          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-          '<div class="iconoplasm-tooltip-portrait-symbol"></div>' +
-        '</div>' +
-        '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+        buildTooltipPortraitInnerHtml(null, null) +
       '</div>' +
       '<div class="iconoplasm-tooltip-body"></div>';
     document.body.appendChild(tooltip);
@@ -861,6 +856,33 @@
     });
   }
 
+  function buildTooltipPortraitInnerHtml(summaryGene, geneDetail) {
+    const summary = summaryGene && typeof summaryGene === 'object' ? summaryGene : {};
+    const detail = geneDetail && typeof geneDetail === 'object' ? geneDetail : null;
+    const model = detail || {
+      symbol: summary.symbol || activeSymbol || '',
+      color: summary.c || PLACEHOLDER_COLOR,
+    };
+    if (cardVariant === 'lab-label') {
+      return IconoCardShared.renderLabLabelSpecimenRailHtml(
+        '<img class="iconoplasm-tooltip-portrait-img" alt="" />' +
+          '<div class="iconoplasm-tooltip-portrait-fallback">' +
+            '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+            '<div class="iconoplasm-tooltip-portrait-symbol"></div>' +
+          '</div>',
+        model,
+      );
+    }
+    return (
+      '<img class="iconoplasm-tooltip-portrait-img" alt="" />' +
+      '<div class="iconoplasm-tooltip-portrait-fallback">' +
+        '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+        '<div class="iconoplasm-tooltip-portrait-symbol"></div>' +
+      '</div>' +
+      '<div class="iconoplasm-tooltip-portrait-fade"></div>'
+    );
+  }
+
   function renderTooltipBody(summaryGene, geneDetail, loading) {
     if (!tooltip) return;
     const body = tooltip.querySelector('.iconoplasm-tooltip-body');
@@ -869,26 +891,6 @@
       cardVariant === 'lab-label'
         ? buildLabLabelTooltipBodyHtml(summaryGene, geneDetail)
         : buildClassicTooltipBodyHtml(summaryGene, geneDetail, loading);
-    if (cardVariant === 'lab-label') {
-      const portrait = tooltip.querySelector('.iconoplasm-tooltip-portrait');
-      if (portrait) {
-        portrait.querySelectorAll('.icono-label-specimen-footer').forEach((node) => node.remove());
-        const fade = portrait.querySelector('.iconoplasm-tooltip-portrait-fade');
-        if (fade) {
-          fade.insertAdjacentHTML(
-            'beforebegin',
-            IconoCardShared.renderLabLabelSpecimenFooterHtml(
-              geneDetail || {
-                symbol: (summaryGene && summaryGene.symbol) || activeSymbol || '',
-                color: (summaryGene && summaryGene.c) || PLACEHOLDER_COLOR,
-              },
-            ),
-          );
-        }
-      }
-    } else {
-      tooltip.querySelectorAll('.icono-label-specimen-footer').forEach((node) => node.remove());
-    }
   }
 
   function wireRenderedTooltipVoteBox(geneDetail) {
@@ -960,6 +962,9 @@
 
     // Fill tooltip content
     const portrait = tooltip.querySelector('.iconoplasm-tooltip-portrait');
+    if (portrait) {
+      portrait.innerHTML = buildTooltipPortraitInnerHtml(activeGeneSummary, null);
+    }
     const portraitImg = tooltip.querySelector('.iconoplasm-tooltip-portrait-img');
     const fade = tooltip.querySelector('.iconoplasm-tooltip-portrait-fade');
     const portraitFallback = tooltip.querySelector('.iconoplasm-tooltip-portrait-fallback');

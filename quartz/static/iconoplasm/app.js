@@ -1001,9 +1001,33 @@ void syncSharedIconoplasmSettings().catch(function () {
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
-    var specimenFooterHtml = isLabelVariant
-      ? IconoCardShared.renderLabLabelSpecimenFooterHtml(detail || g)
-      : ""
+    var labelPortraitHtml =
+      (portraitUrl
+        ? '<a class="iconoplasm-tooltip-portrait-media icono-brick-media-link" href="' +
+          href +
+          '" data-icono-nav aria-label="Open ' +
+          esc(g.symbol) +
+          ' gene page">' +
+          '<img class="iconoplasm-tooltip-portrait-img" src="' +
+          esc(portraitUrl) +
+          '" alt="' +
+          esc(g.symbol) +
+          // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
+          // scroll show empty portrait boxes for a beat before the browser picked them up.
+          ' portrait" loading="eager" decoding="async" fetchpriority="' +
+          (cardIndex < 6 ? "high" : "low") +
+          '" width="' +
+          dims.width +
+          '" height="' +
+          dims.height +
+          '">' +
+          "</a>"
+        : '<div class="iconoplasm-tooltip-portrait-fallback">' +
+          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+          '<div class="iconoplasm-tooltip-portrait-symbol">' +
+          esc(g.symbol) +
+          "</div>" +
+          "</div>")
     var bodyHtml = isLabelVariant
       ? IconoCardShared.renderLabLabelCardHtml(detail || g, {
           voteHtml: labelVoteHtml,
@@ -1054,37 +1078,42 @@ void syncSharedIconoplasmSettings().catch(function () {
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
       ';">' +
-      '<a class="' +
-      portraitStateClass +
-      ' icono-brick-media-link" href="' +
-      href +
-      '" data-icono-nav aria-label="Open ' +
-      esc(g.symbol) +
-      ' gene page">' +
-      (portraitUrl
-        ? '<img class="iconoplasm-tooltip-portrait-img" src="' +
-          esc(portraitUrl) +
-          '" alt="' +
+      (isLabelVariant
+        ? '<div class="' +
+          portraitStateClass +
+          '">' +
+          IconoCardShared.renderLabLabelSpecimenRailHtml(labelPortraitHtml, detail || g) +
+          "</div>"
+        : '<a class="' +
+          portraitStateClass +
+          ' icono-brick-media-link" href="' +
+          href +
+          '" data-icono-nav aria-label="Open ' +
           esc(g.symbol) +
-          // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
-          // scroll show empty portrait boxes for a beat before the browser picked them up.
-          ' portrait" loading="eager" decoding="async" fetchpriority="' +
-          (cardIndex < 6 ? "high" : "low") +
-          '" width="' +
-          dims.width +
-          '" height="' +
-          dims.height +
-          '">'
-        : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
-      '<div class="iconoplasm-tooltip-portrait-fallback">' +
-      '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-      '<div class="iconoplasm-tooltip-portrait-symbol">' +
-      esc(g.symbol) +
-      "</div>" +
-      "</div>" +
-      specimenFooterHtml +
-      '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
-      "</a>" +
+          ' gene page">' +
+          (portraitUrl
+            ? '<img class="iconoplasm-tooltip-portrait-img" src="' +
+              esc(portraitUrl) +
+              '" alt="' +
+              esc(g.symbol) +
+              // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
+              // scroll show empty portrait boxes for a beat before the browser picked them up.
+              ' portrait" loading="eager" decoding="async" fetchpriority="' +
+              (cardIndex < 6 ? "high" : "low") +
+              '" width="' +
+              dims.width +
+              '" height="' +
+              dims.height +
+              '">'
+            : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
+          '<div class="iconoplasm-tooltip-portrait-fallback">' +
+          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+          '<div class="iconoplasm-tooltip-portrait-symbol">' +
+          esc(g.symbol) +
+          "</div>" +
+          "</div>" +
+          '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+          "</a>") +
       '<div class="iconoplasm-tooltip-body">' +
       bodyHtml +
       "</div>" +
@@ -1124,40 +1153,72 @@ void syncSharedIconoplasmSettings().catch(function () {
       '"' +
       (portraitUrl ? ' data-icono-lightbox' : "") +
       ">" +
-      (portraitUrl
-        ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
-          esc(portraitFullUrl) +
-          '" data-icono-pswp-alt="' +
-          esc(g.symbol) +
-          ' portrait" data-pswp-width="' +
-          dims.width +
-          '" data-pswp-height="' +
-          dims.height +
-          '" aria-label="Open full-size portrait for ' +
-          esc(g.symbol) +
-          ' portrait">' +
-          '<img class="iconoplasm-tooltip-portrait-img" src="' +
-          esc(portraitUrl) +
-          '" alt="' +
-          esc(g.symbol) +
-          ' portrait" loading="eager" decoding="async" width="' +
-          dims.width +
-          '" height="' +
-          dims.height +
-          '">' +
-          '<span class="icono-card-badge">' +
-          esc(g.symbol) +
-          "</span>" +
-          "</button>"
-        : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
-          '<div class="iconoplasm-tooltip-portrait-fallback">' +
-          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-          '<div class="iconoplasm-tooltip-portrait-symbol">' +
-          esc(g.symbol) +
-          "</div>" +
-          "</div>") +
-      (isLabelVariant ? IconoCardShared.renderLabLabelSpecimenFooterHtml(g) : "") +
-      '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+      (isLabelVariant
+        ? IconoCardShared.renderLabLabelSpecimenRailHtml(
+            portraitUrl
+              ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
+                esc(portraitFullUrl) +
+                '" data-icono-pswp-alt="' +
+                esc(g.symbol) +
+                ' portrait" data-pswp-width="' +
+                dims.width +
+                '" data-pswp-height="' +
+                dims.height +
+                '" aria-label="Open full-size portrait for ' +
+                esc(g.symbol) +
+                ' portrait">' +
+                '<img class="iconoplasm-tooltip-portrait-img" src="' +
+                esc(portraitUrl) +
+                '" alt="' +
+                esc(g.symbol) +
+                ' portrait" loading="eager" decoding="async" width="' +
+                dims.width +
+                '" height="' +
+                dims.height +
+                '">' +
+                "</button>"
+              : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
+                '<div class="iconoplasm-tooltip-portrait-fallback">' +
+                '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+                '<div class="iconoplasm-tooltip-portrait-symbol">' +
+                esc(g.symbol) +
+                "</div>" +
+                "</div>",
+            g,
+          )
+        : portraitUrl
+          ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
+            esc(portraitFullUrl) +
+            '" data-icono-pswp-alt="' +
+            esc(g.symbol) +
+            ' portrait" data-pswp-width="' +
+            dims.width +
+            '" data-pswp-height="' +
+            dims.height +
+            '" aria-label="Open full-size portrait for ' +
+            esc(g.symbol) +
+            ' portrait">' +
+            '<img class="iconoplasm-tooltip-portrait-img" src="' +
+            esc(portraitUrl) +
+            '" alt="' +
+            esc(g.symbol) +
+            ' portrait" loading="eager" decoding="async" width="' +
+            dims.width +
+            '" height="' +
+            dims.height +
+            '">' +
+            '<span class="icono-card-badge">' +
+            esc(g.symbol) +
+            "</span>" +
+            "</button>"
+          : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
+            '<div class="iconoplasm-tooltip-portrait-fallback">' +
+            '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+            '<div class="iconoplasm-tooltip-portrait-symbol">' +
+            esc(g.symbol) +
+            "</div>" +
+            "</div>" +
+            '<div class="iconoplasm-tooltip-portrait-fade"></div>') +
       "</div>"
     // Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Components) +
     // C:\Users\Admin\.codex\skills\extract\SKILL.md (single source of truth).

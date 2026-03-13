@@ -360,13 +360,9 @@
   function renderLabLabelSpecimenFooterHtml(geneDetail) {
     var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
     var color = String(safeGeneDetail.color || "").trim().toUpperCase()
-    var symbol = normalizedSymbol(safeGeneDetail.symbol)
-    if (!symbol && !color) return ""
+    if (!color) color = ""
     return (
       '<div class="icono-label-specimen-footer">' +
-      '<div class="icono-label-specimen-chip">' +
-      escapeHtml(symbol || "UNFILED") +
-      "</div>" +
       '<div class="icono-label-specimen-notes">' +
       '<div class="icono-label-specimen-note">specimen portrait</div>' +
       '<div class="icono-label-specimen-note">iconoplasm archive</div>' +
@@ -376,6 +372,21 @@
       '<div class="icono-label-specimen-note">emulsion note / glass plate copy</div>' +
       "</div>" +
       "</div>"
+    )
+  }
+
+  function renderLabLabelSpecimenRailHtml(mediaHtml, geneDetail) {
+    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
+    var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
+    return (
+      '<div class="icono-label-specimen-viewport">' +
+      String(mediaHtml || "") +
+      (symbol
+        ? '<div class="icono-label-specimen-chip">' + escapeHtml(symbol) + "</div>"
+        : "") +
+      "</div>" +
+      renderLabLabelSpecimenFooterHtml(safeGeneDetail) +
+      '<div class="iconoplasm-tooltip-portrait-fade"></div>'
     )
   }
 
@@ -1039,6 +1050,7 @@
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,
     collectTooltipMetaRows: collectTooltipMetaRows,
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
+    renderLabLabelSpecimenRailHtml: renderLabLabelSpecimenRailHtml,
     renderLabLabelCardHtml: renderLabLabelCardHtml,
     renderTooltipMetaRowsHtml: renderTooltipMetaRowsHtml,
     renderTooltipMetaSkeletonHtml: renderTooltipMetaSkeletonHtml,
