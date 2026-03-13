@@ -830,6 +830,14 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-card--brick .iconoplasm-tooltip-meta-pair-cell .iconoplasm-tooltip-meta-value--compact {
+  /* Source-of-truth note:
+     C:\Users\Admin\.codex\skills\polish\SKILL.md (Typography Refinement / hierarchy)
+     C:\Users\Admin\.codex\skills\normalize\SKILL.md (shared pattern consistency)
+     Pair rows are subordinate sub-rows, not peer rows. Keep the same type size and ink
+     strength as full rows, but tighten only the leading so multi-aesthetic blocks read
+     as nested structure without adding indent or dimming the text. */
+  font-size: 0.95rem;
+  line-height: 1.2;
   font-style: normal;
   font-weight: 580;
   opacity: 0.88;
