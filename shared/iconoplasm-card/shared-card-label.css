@@ -151,13 +151,11 @@
 }
 
 .icono-label-specimen-footer {
-  display: flex;
-  flex-direction: column;
+  display: block;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  gap: calc(4 / 1220 * 100cqw);
   padding-top: calc(12 / 1220 * 100cqw);
   border-top: 1px solid var(--icono-label-rule);
 }
@@ -180,8 +178,8 @@
 }
 
 .icono-label-specimen-notes {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-auto-rows: min-content;
   width: 100%;
   gap: calc(4 / 1220 * 100cqw);
 }
