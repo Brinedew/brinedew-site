@@ -71,7 +71,7 @@ jobs:
         run: npm ci
 
       - name: Build Quartz site
-        run: node quartz/bootstrap-cli.mjs build -d content
+        run: npm run build
 
       - name: Verify Geneguessr assets bundled
         run: |
