@@ -208,6 +208,16 @@
 
 /* -- Infobox: right side -------------------------------------------- */
 .iconoplasm-tooltip-body {
+  /* Source: C:\Users\Admin\.codex\skills\polish\SKILL.md (Visual Alignment & Spacing)
+     + C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout).
+     Match the site card's single text spine and tighter sub-row rhythm so the
+     extension tooltip does not drift into its own off-spec variant again. */
+  --icono-card-cell-pad-x: 8px;
+  --icono-card-origin-pad-x: 10px;
+  --icono-card-subrow-pad-y: 2px;
+  --icono-card-subrow-group-pad-top: 3px;
+  --icono-card-subrow-group-pad-bottom: 5px;
+  --icono-card-subrow-gap: 1px;
   flex: 1;
   padding: 20px 20px 14px 18px;
   display: flex;
@@ -226,7 +236,7 @@
   flex-direction: column;
   gap: 2px;
   min-height: 62px;
-  padding-bottom: 14px;
+  padding: 0 var(--icono-card-cell-pad-x) 14px;
   border-bottom: 1px solid var(--iconoplasm-tooltip-line-strong);
   margin-bottom: 2px;
 }
@@ -295,12 +305,12 @@
 .iconoplasm-tooltip-meta-cell {
   display: flex;
   flex-direction: column;
-  padding: 7px 6px;
+  padding: 7px var(--icono-card-cell-pad-x);
   min-width: 0;
 }
 
 .iconoplasm-tooltip-meta-cell--origin {
-  padding-left: 10px;
+  padding-left: var(--icono-card-origin-pad-x);
 }
 
 .iconoplasm-tooltip-meta-label {
@@ -339,9 +349,10 @@
 .iconoplasm-tooltip-meta-pairs {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--icono-card-subrow-gap);
   background: transparent;
   border-bottom: 1px solid var(--iconoplasm-tooltip-line);
+  padding: var(--icono-card-subrow-group-pad-top) 0 var(--icono-card-subrow-group-pad-bottom);
 }
 
 .iconoplasm-tooltip-meta-pair-row {
@@ -356,11 +367,11 @@
 
 .iconoplasm-tooltip-meta-pair-cell {
   min-width: 0;
-  padding: 5px 8px;
+  padding: var(--icono-card-subrow-pad-y) var(--icono-card-cell-pad-x);
 }
 
 .iconoplasm-tooltip-meta-pair-cell--origin {
-  padding-left: 10px;
+  padding-left: var(--icono-card-origin-pad-x);
 }
 
 .iconoplasm-tooltip-meta-pair-cell .iconoplasm-tooltip-meta-value--compact {

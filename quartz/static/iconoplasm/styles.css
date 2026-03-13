@@ -699,6 +699,17 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-card--brick .iconoplasm-tooltip-body {
+  /* Source: C:\Users\Admin\.codex\skills\polish\SKILL.md (Visual Alignment & Spacing)
+     + C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout).
+     Keep one shared text spine for title, rows, and sub-rows. When header and row
+     cells drift onto different left insets, the whole shared card starts reading
+     like stitched-together fragments instead of one composed panel. */
+  --icono-card-cell-pad-x: 0.4rem;
+  --icono-card-origin-pad-x: 0.65rem;
+  --icono-card-subrow-pad-y: 0.12rem;
+  --icono-card-subrow-group-pad-top: 0.14rem;
+  --icono-card-subrow-group-pad-bottom: 0.18rem;
+  --icono-card-subrow-gap: 0.04rem;
   padding: 1.25rem 1.25rem 0.9rem 1.1rem;
   display: flex;
   flex-direction: column;
@@ -716,7 +727,7 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   flex-direction: column;
   gap: 0.18rem;
   min-height: 62px;
-  padding-bottom: 0.55rem;
+  padding: 0 var(--icono-card-cell-pad-x) 0.55rem;
   margin-bottom: 0;
   border-bottom: 0;
 }
@@ -768,12 +779,12 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 .icono-card--brick .iconoplasm-tooltip-meta-cell {
   display: flex;
   flex-direction: column;
-  padding: 0.45rem 0.4rem;
+  padding: 0.45rem var(--icono-card-cell-pad-x);
   min-width: 0;
 }
 
 .icono-card--brick .iconoplasm-tooltip-meta-cell--origin {
-  padding-left: 0.65rem;
+  padding-left: var(--icono-card-origin-pad-x);
 }
 
 .icono-card--brick .iconoplasm-tooltip-meta-value {
@@ -799,7 +810,9 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 .icono-card--brick .iconoplasm-tooltip-meta-pairs {
   display: flex;
   flex-direction: column;
+  gap: var(--icono-card-subrow-gap);
   border-bottom: 1px solid var(--icono-brick-line);
+  padding: var(--icono-card-subrow-group-pad-top) 0 var(--icono-card-subrow-group-pad-bottom);
 }
 
 .icono-card--brick .iconoplasm-tooltip-meta-pair-row {
@@ -809,11 +822,11 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-card--brick .iconoplasm-tooltip-meta-pair-cell {
   min-width: 0;
-  padding: 0.35rem 0.5rem;
+  padding: var(--icono-card-subrow-pad-y) var(--icono-card-cell-pad-x);
 }
 
 .icono-card--brick .iconoplasm-tooltip-meta-pair-cell--origin {
-  padding-left: 0.65rem;
+  padding-left: var(--icono-card-origin-pad-x);
 }
 
 .icono-card--brick .iconoplasm-tooltip-meta-pair-cell .iconoplasm-tooltip-meta-value--compact {
