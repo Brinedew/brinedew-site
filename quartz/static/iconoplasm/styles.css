@@ -592,6 +592,12 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-card--brick .iconoplasm-tooltip-portrait {
+  /* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout)
+     The portrait rail must fully occupy its grid track. If it shrink-wraps inside the
+     reserved column, a dead strip opens beside the divider and the card reads like two
+     disconnected panels. */
+  width: 100%;
+  min-width: 0;
   min-height: 240px;
   background-color: var(--icono-brick-portrait-base);
   background-size: cover;
@@ -703,14 +709,16 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
      + C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout).
      Keep one shared text spine for title, rows, and sub-rows. When header and row
      cells drift onto different left insets, the whole shared card starts reading
-     like stitched-together fragments instead of one composed panel. */
+     like stitched-together fragments instead of one composed panel. Also keep the
+     portrait/text seam tight enough that the divider feels like a hinge, not an empty
+     moat. */
   --icono-card-cell-pad-x: 0.4rem;
   --icono-card-origin-pad-x: 0.65rem;
   --icono-card-subrow-pad-y: 0.12rem;
   --icono-card-subrow-group-pad-top: 0.14rem;
   --icono-card-subrow-group-pad-bottom: 0.18rem;
   --icono-card-subrow-gap: 0.04rem;
-  padding: 1.25rem 1.25rem 0.9rem 1.1rem;
+  padding: 1.25rem 1.25rem 0.9rem 0.85rem;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;

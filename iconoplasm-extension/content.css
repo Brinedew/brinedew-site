@@ -130,6 +130,9 @@
 
 /* -- Portrait: left side -------------------------------------------- */
 .iconoplasm-tooltip-portrait {
+  /* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout)
+     Mirror the site card: the portrait rail should feel fully docked to the text rail,
+     not like a narrower panel floating beside it. */
   flex-shrink: 0;
   width: 192px;
   min-height: 240px; /* 4:5 ratio */
@@ -219,7 +222,7 @@
   --icono-card-subrow-group-pad-bottom: 5px;
   --icono-card-subrow-gap: 1px;
   flex: 1;
-  padding: 20px 20px 14px 18px;
+  padding: 20px 20px 14px 14px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;

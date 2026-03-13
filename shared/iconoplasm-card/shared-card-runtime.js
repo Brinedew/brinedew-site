@@ -79,6 +79,66 @@
     return out
   }
 
+  function normalizePoliticsDisplay(rawPolitics, rawPoliticsOrigin) {
+    var politics = String(rawPolitics || "").trim()
+    var politicsOriginValues = uniqueDisplayValues(rawPoliticsOrigin, 2)
+    var politicsOrigin = politicsOriginValues.length ? String(politicsOriginValues[0] || "").trim() : ""
+    var politicsKey = politics.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+    var originKey = politicsOrigin.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+    var character = ""
+    var molecular = ""
+
+    if (politicsKey === "development" || politicsKey === "pro growth" || politicsKey === "progrowth") {
+      character = "pro-growth"
+    } else if (
+      politicsKey === "protection" ||
+      politicsKey === "pro control" ||
+      politicsKey === "procontrol"
+    ) {
+      character = "pro-control"
+    } else if (
+      politicsKey === "opportunist" ||
+      politicsKey === "turncoat" ||
+      politicsKey === "contextual"
+    ) {
+      character = "turncoat"
+    } else if (politicsKey === "neutral" || politicsKey === "housekeeper") {
+      return { character: "", molecular: "", isNeutral: true }
+    }
+
+    if (originKey === "oncogene") {
+      molecular = "oncogene"
+    } else if (
+      originKey === "tumor suppressor" ||
+      originKey === "tumor suppressor gene" ||
+      originKey === "tumour suppressor"
+    ) {
+      molecular = "tumor suppressor"
+    } else if (
+      originKey === "both" ||
+      originKey === "contextual" ||
+      originKey === "contextual oncogene tumor suppressor" ||
+      originKey === "contextual oncogene/tumor suppressor" ||
+      originKey === "contextual oncogene / tumor suppressor" ||
+      originKey === "oncogene/tumor suppressor" ||
+      originKey === "tumor suppressor/oncogene"
+    ) {
+      molecular = "contextual oncogene/tumor suppressor"
+    } else if (originKey === "neutral" || originKey === "housekeeper") {
+      return { character: "", molecular: "", isNeutral: true }
+    }
+
+    if (!character || !molecular) {
+      return { character: "", molecular: "", isNeutral: false }
+    }
+
+    return {
+      character: character,
+      molecular: molecular,
+      isNeutral: false,
+    }
+  }
+
   function renderTooltipMetaPairsHtml(pairs) {
     var safePairs = Array.isArray(pairs) ? pairs : []
     if (!safePairs.length) return ""
@@ -112,8 +172,9 @@
     var aesthetics = uniqueDisplayValues(safeEssence.aesthetics, 4)
     var aestheticsOrigin = uniqueDisplayValues(safeEssence.aesthetics_origin, 4)
     var politicsRaw = safeEssence.politics || safeEssence.faction || ""
-    var politics = String(politicsRaw || "").trim()
-    var politicsOrigin = uniqueDisplayValues(safeEssence.politics_origin, 2)
+    var politicsDisplay = normalizePoliticsDisplay(politicsRaw, safeEssence.politics_origin)
+    var politics = politicsDisplay.character
+    var politicsOrigin = politicsDisplay.molecular ? [politicsDisplay.molecular] : []
 
     var pairedAestheticCount = Math.min(aesthetics.length, aestheticsOrigin.length)
     // Renderer guardrail: public cards intentionally render clan/origin rows
@@ -133,9 +194,8 @@
     }
 
     var missingAestheticOrigins = aesthetics.length > pairedAestheticCount
-    var politicsIsNeutral = politics.toLowerCase() === "neutral"
-    var missingPoliticsOrigins = Boolean(politics) && !politicsIsNeutral && !politicsOrigin.length
-    if (politics && !politicsIsNeutral && politicsOrigin.length) {
+    var missingPoliticsOrigins = Boolean(politicsRaw) && !politicsDisplay.isNeutral && !politicsOrigin.length
+    if (politics && politicsOrigin.length) {
       rows.push({
         character: politics,
         molecular: politicsOrigin.join(", "),
