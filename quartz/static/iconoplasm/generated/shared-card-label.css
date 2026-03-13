@@ -26,24 +26,26 @@
   --icono-label-pen: #4b7fa9;
   --icono-label-type: "IBM Plex Mono", var(--codeFont, monospace);
   --icono-label-hand: "Caveat", "Segoe Print", "Bradley Hand", cursive;
-  --icono-label-card-width: 676px;
-  --icono-label-portrait-width: 168px;
-  --icono-label-body-width: 508px;
-  --icono-label-row-label-width: 88px;
-  --icono-label-header-title-width: 258px;
-  --icono-label-header-meta-width: 140px;
-  --icono-label-header-qc-width: 110px;
-  --icono-label-band-category-width: 178px;
-  --icono-label-band-noted-width: 112px;
-  --icono-label-band-mass-width: 130px;
-  --icono-label-footer-main-width: 238px;
-  --icono-label-footer-side-width: 182px;
+  --icono-label-portrait-fr: 23.114754%;
+  --icono-label-form-fr: 76.885246%;
+  --icono-label-header-title-fr: 55.4371%;
+  --icono-label-header-meta-fr: 25.1599%;
+  --icono-label-header-qc-fr: 19.403%;
+  --icono-label-row-label-fr: 15.991474%;
+  --icono-label-row-body-fr: 84.008526%;
+  --icono-label-band-category-fr: 40.35533%;
+  --icono-label-band-noted-fr: 25.634518%;
+  --icono-label-band-mass-fr: 34.010152%;
+  --icono-label-footer-main-fr: 54.568528%;
+  --icono-label-footer-side-fr: 45.431472%;
 }
 
 .icono-card--variant-lab-label.icono-card--brick {
-  inline-size: var(--icono-label-card-width);
+  container-type: inline-size;
+  inline-size: min(100%, 1220px);
   max-inline-size: 100%;
-  grid-template-columns: var(--icono-label-portrait-width) var(--icono-label-body-width);
+  aspect-ratio: 1220 / 800;
+  grid-template-columns: var(--icono-label-portrait-fr) var(--icono-label-form-fr);
   border-radius: 1px;
   background: var(--icono-label-paper);
   box-shadow:
@@ -61,7 +63,8 @@
 
 .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait,
 .iconoplasm-tooltip--variant-lab-label .iconoplasm-tooltip-portrait {
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   background:
     linear-gradient(180deg, var(--icono-label-paper-2) 0%, color-mix(in srgb, var(--icono-label-paper-2) 94%, #c8bcaa 6%) 100%);
   box-shadow: none;
@@ -70,14 +73,17 @@
 .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body,
 .iconoplasm-tooltip--variant-lab-label .iconoplasm-tooltip-body {
   padding: 0;
+  height: 100%;
   min-height: 0;
   background: var(--icono-label-paper);
   color: var(--icono-label-ink);
 }
 
 .iconoplasm-tooltip--variant-lab-label {
-  inline-size: var(--icono-label-card-width);
+  container-type: inline-size;
+  inline-size: min(100%, 1220px);
   max-inline-size: calc(100vw - 16px);
+  aspect-ratio: 1220 / 800;
   border-radius: 2px;
   background: var(--icono-label-paper);
 }
@@ -98,8 +104,8 @@
   bottom: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem 1.1rem 0.95rem;
+  gap: clamp(8px, 0.98cqw, 12px);
+  padding: clamp(12px, 1.48cqw, 18px);
   background:
     linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.04) 100%),
     linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--icono-label-paper-2) 96%, #a9977e 4%) 100%);
@@ -125,16 +131,16 @@
 .icono-label-specimen-note {
   color: color-mix(in srgb, var(--icono-label-ink) 58%, transparent);
   font-family: var(--icono-label-type);
-  font-size: 0.625rem;
+  font-size: clamp(8px, 0.82cqw, 10px);
   letter-spacing: 0.12em;
-  line-height: 0.75rem;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
 .icono-label-sheet-body {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
+  display: grid;
+  grid-template-rows: 23.75% 16% 34.75% 13% 12.5%;
+  height: 100%;
   background:
     radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 22%),
     linear-gradient(180deg, var(--icono-label-paper) 0%, color-mix(in srgb, var(--icono-label-paper) 97%, #c7b99c 3%) 100%);
@@ -146,42 +152,25 @@
 .icono-label-alignment-row,
 .icono-label-footer-row {
   display: grid;
-  grid-template-columns: var(--icono-label-row-label-width) minmax(0, 1fr);
+  grid-template-columns: var(--icono-label-row-label-fr) var(--icono-label-row-body-fr);
   border-bottom: 1px solid var(--icono-label-rule);
 }
 
 .icono-label-header-row {
   grid-template-columns:
-    var(--icono-label-header-title-width)
-    var(--icono-label-header-meta-width)
-    var(--icono-label-header-qc-width);
-  min-height: 10.875rem;
-}
-
-.icono-label-band-row {
-  min-height: 6.55rem;
-}
-
-.icono-label-style-row {
-  min-height: 14.5rem;
-}
-
-.icono-label-alignment-row {
-  min-height: 5.25rem;
-}
-
-.icono-label-footer-row {
-  min-height: 5.2rem;
+    var(--icono-label-header-title-fr)
+    var(--icono-label-header-meta-fr)
+    var(--icono-label-header-qc-fr);
 }
 
 .icono-label-row-label {
-  padding: 0.875rem 1rem;
+  padding: clamp(8px, 1.15cqw, 14px) clamp(8px, 1.31cqw, 16px);
   border-right: 1px solid var(--icono-label-rule);
   color: var(--icono-label-muted);
   font-family: var(--icono-label-type);
-  font-size: 0.625rem;
+  font-size: clamp(8px, 0.82cqw, 10px);
   letter-spacing: 0.18em;
-  line-height: 0.75rem;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
@@ -189,9 +178,9 @@
 .icono-label-title-link {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: clamp(4px, 0.66cqw, 8px);
   min-width: 0;
-  padding: 0.875rem 0.95rem 0.75rem;
+  padding: clamp(12px, 1.48cqw, 18px);
   color: inherit;
   text-decoration: none;
 }
@@ -204,16 +193,16 @@
 .icono-label-caption {
   color: var(--icono-label-muted);
   font-family: var(--icono-label-type);
-  font-size: 0.625rem;
+  font-size: clamp(8px, 0.82cqw, 10px);
   letter-spacing: 0.18em;
-  line-height: 0.75rem;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
 .icono-label-symbol {
   color: var(--icono-label-ink);
   font-family: "League Spartan", var(--codeFont, monospace);
-  font-size: 3.55rem;
+  font-size: clamp(34px, 4.92cqw, 60px);
   font-weight: 800;
   letter-spacing: 0.04em;
   line-height: 0.9;
@@ -222,17 +211,17 @@
 .icono-label-name {
   color: color-mix(in srgb, var(--icono-label-ink) 92%, transparent);
   font-family: "Special Elite", var(--icono-label-type);
-  font-size: 1.18rem;
+  font-size: clamp(13px, 1.8cqw, 22px);
   letter-spacing: 0.03em;
   line-height: 1.05;
   text-wrap: pretty;
 }
 
 .icono-label-registry-line {
-  margin-top: 0.375rem;
+  margin-top: clamp(4px, 0.49cqw, 6px);
   color: #544539;
   font-family: var(--icono-label-type);
-  font-size: 0.6rem;
+  font-size: clamp(8px, 0.9cqw, 11px);
   letter-spacing: 0.1em;
   line-height: 1.35;
   text-transform: uppercase;
@@ -248,13 +237,13 @@
 
 .icono-label-header-stack {
   display: grid;
-  grid-template-rows: 3.75rem minmax(0, 1fr);
+  grid-template-rows: 36.842105% 63.157895%;
   border-left: 1px solid var(--icono-label-rule);
 }
 
 .icono-label-header-meta {
   display: grid;
-  grid-template-columns: 1fr 4.7rem;
+  grid-template-columns: 61.016949% 38.983051%;
   border-bottom: 1px solid var(--icono-label-rule);
 }
 
@@ -262,7 +251,7 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 0.65rem 0.65rem 0.48rem 0.8rem;
+  padding: clamp(10px, 1.15cqw, 14px) clamp(10px, 1.15cqw, 14px) clamp(7px, 0.82cqw, 10px) clamp(12px, 1.31cqw, 16px);
 }
 
 .icono-label-header-meta-cell + .icono-label-header-meta-cell {
@@ -273,7 +262,7 @@
   margin-top: 0.25rem;
   color: var(--icono-label-stamp);
   font-family: "Special Elite", var(--icono-label-type);
-  font-size: 1.95rem;
+  font-size: clamp(22px, 2.95cqw, 36px);
   line-height: 0.95;
 }
 
@@ -281,7 +270,7 @@
   margin-top: 0.18rem;
   color: var(--icono-label-ink);
   font-family: "Special Elite", var(--icono-label-type);
-  font-size: 0.98rem;
+  font-size: clamp(12px, 1.56cqw, 19px);
   line-height: 1;
   text-transform: uppercase;
 }
@@ -289,15 +278,15 @@
 .icono-label-filed-block {
   display: flex;
   flex-direction: column;
-  gap: 0.22rem;
-  padding: 0.65rem 0.8rem 0.75rem;
+  gap: clamp(2px, 0.33cqw, 4px);
+  padding: clamp(10px, 0.98cqw, 12px) clamp(12px, 1.31cqw, 16px);
 }
 
 .icono-label-filed-copy,
 .icono-label-footer-line {
   color: color-mix(in srgb, var(--icono-label-ink) 82%, transparent);
   font-family: var(--icono-label-type);
-  font-size: 0.61rem;
+  font-size: clamp(8px, 0.9cqw, 11px);
   letter-spacing: 0.08em;
   line-height: 1.35;
   text-transform: uppercase;
@@ -306,13 +295,13 @@
 .icono-label-qc-block {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.7rem 0.7rem 0.72rem;
+  gap: clamp(6px, 0.98cqw, 12px);
+  padding: clamp(12px, 1.31cqw, 16px) clamp(11px, 1.15cqw, 14px) clamp(11px, 1.15cqw, 14px);
   border-left: 1px solid var(--icono-label-rule);
 }
 
 .icono-label-qc-empty {
-  height: 2.1rem;
+  height: clamp(22px, 3.03cqw, 37px);
 }
 
 .icono-label-qc-meta {
@@ -324,18 +313,18 @@
 .icono-label-qc-meta-item {
   color: #645446;
   font-family: var(--icono-label-type);
-  font-size: 0.625rem;
+  font-size: clamp(8px, 0.82cqw, 10px);
   letter-spacing: 0.12em;
-  line-height: 0.75rem;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
 .icono-label-qc-note {
-  min-height: 1.2rem;
+  min-height: clamp(16px, 1.97cqw, 24px);
   margin-top: auto;
   color: #3f739f;
   font-family: var(--icono-label-hand);
-  font-size: 1.26rem;
+  font-size: clamp(16px, 1.97cqw, 24px);
   line-height: 0.9;
   transform: rotate(-4deg);
   transform-origin: left center;
@@ -348,18 +337,18 @@
 .icono-label-band-grid {
   display: grid;
   grid-template-columns:
-    var(--icono-label-band-category-width)
-    var(--icono-label-band-noted-width)
-    var(--icono-label-band-mass-width);
+    var(--icono-label-band-category-fr)
+    var(--icono-label-band-noted-fr)
+    var(--icono-label-band-mass-fr);
   min-width: 0;
 }
 
 .icono-label-band-cell {
   display: flex;
   flex-direction: column;
-  gap: 0.42rem;
+  gap: clamp(6px, 0.82cqw, 10px);
   min-height: 100%;
-  padding: 0.72rem 0.78rem 0.72rem;
+  padding: clamp(12px, 1.15cqw, 14px) clamp(12px, 1.48cqw, 18px);
 }
 
 .icono-label-band-cell + .icono-label-band-cell {
@@ -369,8 +358,8 @@
 .icono-label-selector-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.1rem;
-  min-height: 2rem;
+  gap: clamp(14px, 2.13cqw, 26px);
+  min-height: clamp(26px, 2.79cqw, 34px);
   align-items: flex-start;
 }
 
@@ -388,7 +377,7 @@
   z-index: 1;
   color: var(--icono-label-ink);
   font-family: "Special Elite", var(--icono-label-type);
-  font-size: 1rem;
+  font-size: clamp(12px, 1.56cqw, 19px);
   letter-spacing: 0.03em;
   line-height: 1;
   text-transform: uppercase;
@@ -407,7 +396,7 @@
 .icono-label-origin-text {
   color: var(--icono-label-ink);
   font-family: "Special Elite", var(--icono-label-type);
-  font-size: 1rem;
+  font-size: clamp(12px, 1.64cqw, 20px);
   letter-spacing: 0.03em;
   line-height: 1;
   text-transform: uppercase;
@@ -434,7 +423,7 @@
 .icono-label-hand-note {
   color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
-  font-size: 1.55rem;
+  font-size: clamp(18px, 2.54cqw, 31px);
   line-height: 0.9;
   letter-spacing: 0.01em;
 }
@@ -448,7 +437,7 @@
 }
 
 .icono-label-hand-note--mass-number {
-  font-size: 2rem;
+  font-size: clamp(22px, 3.11cqw, 38px);
   transform: rotate(-4deg);
   transform-origin: left center;
 }
@@ -456,28 +445,28 @@
 .icono-label-mass-line {
   display: flex;
   align-items: flex-end;
-  gap: 0.5rem;
-  min-height: 2rem;
+  gap: clamp(4px, 0.66cqw, 8px);
+  min-height: clamp(22px, 2.79cqw, 34px);
 }
 
 .icono-label-style-stack {
   display: flex;
   flex-direction: column;
-  gap: 1.15rem;
+  gap: clamp(18px, 3.03cqw, 37px);
   min-width: 0;
-  padding: 0.8rem 0.95rem 0.78rem;
+  padding: clamp(14px, 1.48cqw, 18px) clamp(16px, 1.64cqw, 20px);
 }
 
 .icono-label-style-pair {
   display: flex;
   flex-direction: column;
-  gap: 0.22rem;
+  gap: clamp(2px, 0.33cqw, 4px);
   min-width: 0;
 }
 
 .icono-label-hand-note--style {
   color: color-mix(in srgb, var(--icono-label-ink) 92%, transparent);
-  font-size: 1.48rem;
+  font-size: clamp(18px, 2.54cqw, 31px);
   transform: rotate(-3deg);
   transform-origin: left center;
 }
@@ -486,17 +475,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.85rem;
-  padding: 0.78rem 0.9rem 0.74rem;
+  gap: clamp(12px, 2.79cqw, 34px);
+  padding: clamp(14px, 1.31cqw, 16px) clamp(16px, 1.48cqw, 18px);
 }
 
 .icono-label-selector-row--alignment {
-  gap: 1.4rem;
+  gap: clamp(18px, 2.79cqw, 34px);
 }
 
 .icono-label-footer-copy {
   display: grid;
-  grid-template-columns: var(--icono-label-footer-main-width) var(--icono-label-footer-side-width);
+  grid-template-columns: var(--icono-label-footer-main-fr) var(--icono-label-footer-side-fr);
   min-width: 0;
 }
 
@@ -505,7 +494,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.72rem 0.9rem 0.76rem;
+  padding: clamp(14px, 1.48cqw, 18px);
 }
 
 .icono-label-footer-copy-main {
@@ -520,15 +509,15 @@
 
 .icono-label-footer-line--caption {
   font-family: var(--icono-label-type);
-  font-size: 0.625rem;
-  line-height: 0.75rem;
+  font-size: clamp(8px, 0.82cqw, 10px);
+  line-height: 1.2;
   letter-spacing: 0.12em;
 }
 
 .icono-label-footer-line--typed {
   color: #34241b;
   font-family: "Special Elite", var(--icono-label-type);
-  font-size: 0.83rem;
+  font-size: clamp(10px, 1.23cqw, 15px);
   line-height: 1.12;
   letter-spacing: 0.03em;
 }
