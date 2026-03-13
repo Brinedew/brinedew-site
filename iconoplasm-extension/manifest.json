@@ -25,6 +25,11 @@
       "resources": [
         "fonts/CrimsonPro-Variable.woff2",
         "fonts/MonaspaceXenon-Var.woff2",
+        "fonts/IBMPlexMono-Regular.woff2",
+        "fonts/IBMPlexMono-Medium.woff2",
+        "fonts/LeagueSpartan-800.woff2",
+        "fonts/SpecialElite-Regular.woff2",
+        "fonts/Caveat-400.woff2",
         "portrait-placeholder.png",
         "portrait-placeholder@2x.png"
       ],

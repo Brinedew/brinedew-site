@@ -14,6 +14,46 @@
    This is a fixed printed sheet on desktop, not a fluid border system. Use hard track
    sizes and only switch layouts at a real breakpoint instead of scaling the plate. */
 
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "League Spartan";
+  src: url("../fonts/LeagueSpartan-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Special Elite";
+  src: url("../fonts/SpecialElite-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Caveat";
+  src: url("../fonts/Caveat-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
 .icono-card--variant-lab-label,
 .iconoplasm-tooltip--variant-lab-label {
   --icono-label-paper: color-mix(in srgb, var(--light, #f4ede5) 92%, #d4cab8 8%);
@@ -24,8 +64,8 @@
   --icono-label-rule-strong: color-mix(in srgb, var(--icono-label-ink) 26%, transparent);
   --icono-label-stamp: #a24834;
   --icono-label-pen: #4b7fa9;
-  --icono-label-type: "IBM Plex Mono", var(--codeFont, monospace);
-  --icono-label-hand: "Caveat", "Segoe Print", "Bradley Hand", cursive;
+  --icono-label-type: "IBM Plex Mono";
+  --icono-label-hand: "Caveat";
   --icono-label-portrait-fr: 23.114754%;
   --icono-label-form-fr: 76.885246%;
   --icono-label-header-title-fr: 55.4371%;
@@ -248,7 +288,7 @@
 
 .icono-label-symbol {
   color: var(--icono-label-ink);
-  font-family: "League Spartan", var(--codeFont, monospace);
+  font-family: "League Spartan";
   font-size: calc(60 / 1220 * 100cqw);
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -257,7 +297,7 @@
 
 .icono-label-name {
   color: color-mix(in srgb, var(--icono-label-ink) 92%, transparent);
-  font-family: "Special Elite", var(--icono-label-type);
+  font-family: "Special Elite";
   font-size: calc(22 / 1220 * 100cqw);
   letter-spacing: 0.03em;
   line-height: 1.05;
@@ -329,7 +369,7 @@
 .icono-label-serial {
   margin-top: calc(4 / 1220 * 100cqw);
   color: var(--icono-label-stamp);
-  font-family: "Special Elite", var(--icono-label-type);
+  font-family: "Special Elite";
   font-size: calc(36 / 1220 * 100cqw);
   line-height: 0.95;
 }
@@ -337,7 +377,7 @@
 .icono-label-family {
   margin-top: calc(3 / 1220 * 100cqw);
   color: var(--icono-label-ink);
-  font-family: "Special Elite", var(--icono-label-type);
+  font-family: "Special Elite";
   font-size: calc(19 / 1220 * 100cqw);
   line-height: 1;
   text-transform: uppercase;
@@ -451,7 +491,7 @@
   position: relative;
   z-index: 1;
   color: var(--icono-label-ink);
-  font-family: "Special Elite", var(--icono-label-type);
+  font-family: "Special Elite";
   font-size: calc(19 / 1220 * 100cqw);
   letter-spacing: 0.03em;
   line-height: 1;
@@ -470,7 +510,7 @@
 .icono-label-typed-value,
 .icono-label-origin-text {
   color: var(--icono-label-ink);
-  font-family: "Special Elite", var(--icono-label-type);
+  font-family: "Special Elite";
   font-size: calc(20 / 1220 * 100cqw);
   letter-spacing: 0.03em;
   line-height: 1;
@@ -668,7 +708,7 @@
 
 .icono-label-footer-line--typed {
   color: #34241b;
-  font-family: "Special Elite", var(--icono-label-type);
+  font-family: "Special Elite";
   font-size: calc(12 / 1220 * 100cqw);
   line-height: 0.98;
   letter-spacing: 0.02em;

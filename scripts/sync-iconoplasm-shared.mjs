@@ -29,6 +29,20 @@ const targets = [
   },
 ]
 
+const fontTargets = [
+  "IBMPlexMono-Regular.woff2",
+  "IBMPlexMono-Medium.woff2",
+  "LeagueSpartan-800.woff2",
+  "SpecialElite-Regular.woff2",
+  "Caveat-400.woff2",
+].map((name) => ({
+  source: path.join(repoRoot, "shared", "iconoplasm-card", "fonts", name),
+  outputs: [
+    path.join(repoRoot, "quartz", "static", "iconoplasm", "fonts", name),
+    path.join(repoRoot, "iconoplasm-extension", "fonts", name),
+  ],
+}))
+
 async function syncTarget({ source, outputs }) {
   const content = await readFile(source, "utf8")
   const banner =
@@ -43,3 +57,14 @@ async function syncTarget({ source, outputs }) {
 }
 
 await Promise.all(targets.map(syncTarget))
+
+async function syncBinaryTarget({ source, outputs }) {
+  const content = await readFile(source)
+
+  for (const output of outputs) {
+    await mkdir(path.dirname(output), { recursive: true })
+    await writeFile(output, content)
+  }
+}
+
+await Promise.all(fontTargets.map(syncBinaryTarget))

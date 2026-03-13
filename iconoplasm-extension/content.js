@@ -615,6 +615,10 @@
   // -- Font injection ------------------------------------------------
   // Content scripts can't use relative URLs in CSS @font-face, so we
   // inject a <style> element with chrome.runtime.getURL paths.
+  // The Paper-derived Iconoplasm label fonts are now self-hosted directly by
+  // generated/shared-card-label.css using shared relative paths; keep this
+  // injector limited to the extension's non-label baseline fonts so we don't
+  // reintroduce per-surface font drift.
   function injectFonts() {
     const crimsonUrl = chrome.runtime.getURL('fonts/CrimsonPro-Variable.woff2');
     const xenonUrl = chrome.runtime.getURL('fonts/MonaspaceXenon-Var.woff2');

@@ -35,6 +35,8 @@ export default (() => {
     const isIconoplasm =
       normalizedSlug === "apps/iconoplasm" ||
       fileData.frontmatter?.title === "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+    const usesIconoplasmLabelFonts =
+      isIconoplasm || normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
     const iconoplasmBootstrapScript = isIconoplasm
       ? `(() => {
   if (typeof window === "undefined" || window.__iconoplasmBootstrap) return
@@ -210,6 +212,45 @@ export default (() => {
             href="/static/fonts/xenon/MonaspaceXenon-Var.woff2"
             crossOrigin="anonymous"
           />
+        )}
+        {usesIconoplasmLabelFonts && (
+          <>
+            <link
+              rel="preload"
+              as="font"
+              type="font/woff2"
+              href="/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2"
+              crossOrigin="anonymous"
+            />
+            <link
+              rel="preload"
+              as="font"
+              type="font/woff2"
+              href="/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2"
+              crossOrigin="anonymous"
+            />
+            <link
+              rel="preload"
+              as="font"
+              type="font/woff2"
+              href="/static/iconoplasm/fonts/LeagueSpartan-800.woff2"
+              crossOrigin="anonymous"
+            />
+            <link
+              rel="preload"
+              as="font"
+              type="font/woff2"
+              href="/static/iconoplasm/fonts/SpecialElite-Regular.woff2"
+              crossOrigin="anonymous"
+            />
+            <link
+              rel="preload"
+              as="font"
+              type="font/woff2"
+              href="/static/iconoplasm/fonts/Caveat-400.woff2"
+              crossOrigin="anonymous"
+            />
+          </>
         )}
         {!isIconoplasm && (
           <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
