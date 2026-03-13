@@ -331,6 +331,9 @@
 
   function renderLabLabelTitleHtml(symbol, fullName, options) {
     var opts = options || {}
+    var registryLine = String(
+      opts.registryLine || "ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03",
+    ).trim()
     var titleInner =
       '<div class="icono-label-caption">gene name</div>' +
       '<div class="icono-label-symbol">' +
@@ -338,6 +341,9 @@
       "</div>" +
       '<div class="icono-label-name">' +
       escapeHtml(fullName || symbol) +
+      "</div>" +
+      '<div class="icono-label-registry-line">' +
+      escapeHtml(registryLine) +
       "</div>"
     if (opts.titleHref) {
       return (
@@ -369,6 +375,45 @@
       (color
         ? '<div class="icono-label-specimen-note">catalog stock ' + escapeHtml(color) + "</div>"
         : "") +
+      '<div class="icono-label-specimen-note">emulsion note / glass plate copy</div>' +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function renderLabLabelFiledLines(familyFeature) {
+    var lead = String(familyFeature || "").trim()
+    var lines = []
+    if (lead) lines.push(lead)
+    else lines.push("receptor plate / archive")
+    lines.push("box 5 / filed by h.g.")
+    lines.push("section")
+    var html = ""
+    for (var i = 0; i < lines.length; i++) {
+      html += '<div class="icono-label-filed-copy">' + escapeHtml(lines[i]) + "</div>"
+    }
+    return html
+  }
+
+  function renderLabLabelFooterHtml(color, serial) {
+    var stockTone = String(color || "").trim().toUpperCase() || "UNFILED"
+    var sheetNo = String(serial || "").trim() || "00000"
+    return (
+      '<div class="icono-label-footer-copy">' +
+      '<div class="icono-label-footer-copy-main">' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">labelled / inspected / filed</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--typed">archive room b / bench 3 / human gene cabinet</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--typed">stock tone ' +
+      escapeHtml(stockTone) +
+      " / sheet " +
+      escapeHtml(sheetNo) +
+      ' / print run 07</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--typed">seal after review / do not expose to open air</div>' +
+      "</div>" +
+      '<div class="icono-label-footer-copy-side">' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--typed">keep away from heat / moisture</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">registry copy retained in cabinet 5A</div>' +
       "</div>" +
       "</div>"
     )
@@ -383,11 +428,9 @@
     var opts = options || {}
     var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     var fullName = labLabelDisplayName(safeGeneDetail)
+    var serial = labLabelCatalogNumber(symbol)
     var family = String(safeEssence.family_surname || "").trim()
     var familyFeature = String(safeEssence.family_feature || "").trim()
-    var filedCopy = familyFeature
-      ? familyFeature
-      : "iconoplasm archive / human gene / field copy"
     var sexOriginValues = uniqueDisplayValues(
       safeEssence.sex_origin ||
         safeEssence.gender_origin ||
@@ -438,13 +481,12 @@
       '<div class="icono-label-sheet-body">' +
       '<div class="icono-label-header-row">' +
       titleHtml +
-      '<div class="icono-label-header-side">' +
-      '<div class="icono-label-header-meta">' +
       '<div class="icono-label-header-stack">' +
+      '<div class="icono-label-header-meta">' +
       '<div class="icono-label-header-meta-cell">' +
       '<div class="icono-label-caption">emulsion no.</div>' +
       '<div class="icono-label-serial">' +
-      escapeHtml(labLabelCatalogNumber(symbol)) +
+      escapeHtml(serial) +
       "</div>" +
       "</div>" +
       '<div class="icono-label-header-meta-cell">' +
@@ -456,14 +498,16 @@
       "</div>" +
       '<div class="icono-label-filed-block">' +
       '<div class="icono-label-caption">filed</div>' +
-      '<div class="icono-label-filed-copy">' +
-      escapeHtml(filedCopy) +
-      "</div>" +
-      "</div>" +
+      renderLabLabelFiledLines(familyFeature) +
       "</div>" +
       '<div class="icono-label-qc-block">' +
       '<div class="icono-label-caption">qc</div>' +
       voteHtml +
+      '<div class="icono-label-qc-meta">' +
+      '<div class="icono-label-qc-meta-item">inspect. A3</div>' +
+      '<div class="icono-label-qc-meta-item">plate 7</div>' +
+      "</div>" +
+      '<div class="icono-label-qc-note icono-label-qc-note--empty" data-icono-qc-note></div>' +
       "</div>" +
       "</div>" +
       "</div>" +
@@ -532,11 +576,7 @@
           "</div>") +
       '<div class="icono-label-footer-row">' +
       '<div class="icono-label-row-label">remarks</div>' +
-      '<div class="icono-label-footer-copy">' +
-      '<div class="icono-label-footer-line">labelled / inspected / filed</div>' +
-      '<div class="icono-label-footer-line">archive room b / human gene cabinet</div>' +
-      '<div class="icono-label-footer-line">keep away from heat / moisture</div>' +
-      "</div>" +
+      renderLabLabelFooterHtml(safeGeneDetail.color, serial) +
       "</div>" +
       "</div>"
     )
@@ -763,6 +803,17 @@
     if (downBtn) {
       downBtn.disabled = pending
       downBtn.classList.toggle("active", userVote === -1)
+    }
+    var qcBlock = box.closest ? box.closest(".icono-label-qc-block") : null
+    if (qcBlock) {
+      var qcNote = qcBlock.querySelector("[data-icono-qc-note]")
+      if (qcNote) {
+        var qcCopy = ""
+        if (userVote === 1) qcCopy = "looks viable"
+        else if (userVote === -1) qcCopy = "flagged misfit"
+        qcNote.textContent = qcCopy
+        qcNote.classList.toggle("icono-label-qc-note--empty", !qcCopy)
+      }
     }
   }
 
