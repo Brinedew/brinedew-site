@@ -61,16 +61,16 @@
   --icono-label-rule: color-mix(in srgb, var(--icono-label-ink) 16%, transparent);
   --icono-label-rule-strong: color-mix(in srgb, var(--icono-label-ink) 26%, transparent);
   --icono-label-stamp: #a24834;
-  --icono-label-pen: #4b7fa9;
+  --icono-label-pen: var(--accent, #1b7269);
   --icono-label-type: "IBM Plex Mono";
   --icono-label-hand: "Caveat";
-  --icono-label-portrait-fr: 23.114754%;
-  --icono-label-form-fr: 76.885246%;
+  --icono-label-portrait-fr: 27.3%;
+  --icono-label-form-fr: 72.7%;
   --icono-label-header-title-fr: 55.4371%;
   --icono-label-header-meta-fr: 25.1599%;
   --icono-label-header-qc-fr: 19.403%;
-  --icono-label-row-label-fr: 15.991474%;
-  --icono-label-row-body-fr: 84.008526%;
+  --icono-label-row-label-fr: 11.8%;
+  --icono-label-row-body-fr: 88.2%;
   --icono-label-band-category-fr: 40.35533%;
   --icono-label-band-noted-fr: 25.634518%;
   --icono-label-band-mass-fr: 34.010152%;
@@ -193,7 +193,9 @@
 }
 
 .icono-label-specimen-footer {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: calc(10 / 1220 * 100cqw);
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
@@ -209,12 +211,44 @@
   gap: calc(4 / 1220 * 100cqw);
 }
 
+.icono-label-specimen-micro {
+  display: grid;
+  gap: calc(6 / 1220 * 100cqw);
+}
+
+.icono-label-specimen-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: calc(7 / 1220 * 100cqw);
+}
+
+.icono-label-specimen-swatch {
+  inline-size: calc(12 / 1220 * 100cqw);
+  block-size: calc(12 / 1220 * 100cqw);
+  border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 88%, transparent);
+  flex: 0 0 auto;
+}
+
+.icono-label-specimen-metric-grid {
+  display: grid;
+  gap: calc(3 / 1220 * 100cqw);
+}
+
 .icono-label-specimen-note {
   color: color-mix(in srgb, var(--icono-label-ink) 58%, transparent);
   font-family: var(--icono-label-type);
   font-size: calc(9 / 1220 * 100cqw);
   letter-spacing: 0.12em;
   line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.icono-label-specimen-metric {
+  color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
+  font-family: var(--icono-label-type);
+  font-size: calc(8.8 / 1220 * 100cqw);
+  letter-spacing: 0.1em;
+  line-height: 1.08;
   text-transform: uppercase;
 }
 
@@ -376,8 +410,8 @@
   margin-top: calc(3 / 1220 * 100cqw);
   color: var(--icono-label-ink);
   font-family: "Special Elite";
-  font-size: calc(19 / 1220 * 100cqw);
-  line-height: 1;
+  font-size: calc(24 / 1220 * 100cqw);
+  line-height: 0.96;
   text-transform: uppercase;
 }
 
@@ -399,9 +433,9 @@
 }
 
 .icono-label-qc-block {
-  display: flex;
-  flex-direction: column;
-  gap: calc(12 / 1220 * 100cqw);
+  display: grid;
+  grid-template-rows: min-content min-content min-content 1fr;
+  gap: calc(7 / 1220 * 100cqw);
   justify-content: flex-start;
   align-self: stretch;
   height: 100%;
@@ -414,7 +448,7 @@
 }
 
 .icono-label-qc-empty {
-  height: calc(37 / 1220 * 100cqw);
+  height: calc(24 / 1220 * 100cqw);
 }
 
 .icono-label-qc-meta {
@@ -435,16 +469,12 @@
 .icono-label-qc-note {
   min-height: calc(24 / 1220 * 100cqw);
   margin-top: auto;
-  color: #3f739f;
+  color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
   font-size: calc(24 / 1220 * 100cqw);
   line-height: 0.9;
   transform: rotate(-4deg);
   transform-origin: left center;
-}
-
-.icono-label-qc-note--empty {
-  visibility: hidden;
 }
 
 .icono-label-band-grid {
@@ -454,12 +484,14 @@
     var(--icono-label-band-noted-fr)
     var(--icono-label-band-mass-fr);
   min-width: 0;
+  align-items: start;
 }
 
 .icono-label-band-cell {
-  display: flex;
-  flex-direction: column;
-  gap: calc(8 / 1220 * 100cqw);
+  display: grid;
+  grid-template-rows: min-content calc(39 / 1220 * 100cqw) calc(33 / 1220 * 100cqw);
+  align-content: start;
+  gap: calc(5 / 1220 * 100cqw);
   min-height: 100%;
   padding: calc(14 / 1220 * 100cqw) calc(18 / 1220 * 100cqw);
 }
@@ -468,12 +500,29 @@
   border-left: 1px solid var(--icono-label-rule);
 }
 
+.icono-label-band-primary,
+.icono-label-band-secondary {
+  min-height: 0;
+}
+
+.icono-label-band-primary {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(39 / 1220 * 100cqw);
+}
+
+.icono-label-band-secondary {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(33 / 1220 * 100cqw);
+}
+
 .icono-label-selector-row {
   display: flex;
   flex-wrap: wrap;
   gap: calc(26 / 1220 * 100cqw);
-  min-height: calc(34 / 1220 * 100cqw);
-  align-items: flex-start;
+  min-height: calc(28 / 1220 * 100cqw);
+  align-items: center;
 }
 
 .icono-label-option {
@@ -490,9 +539,9 @@
   z-index: 1;
   color: var(--icono-label-ink);
   font-family: "Special Elite";
-  font-size: calc(19 / 1220 * 100cqw);
+  font-size: calc(24 / 1220 * 100cqw);
   letter-spacing: 0.03em;
-  line-height: 1;
+  line-height: 0.98;
   text-transform: uppercase;
 }
 
@@ -509,9 +558,9 @@
 .icono-label-origin-text {
   color: var(--icono-label-ink);
   font-family: "Special Elite";
-  font-size: calc(20 / 1220 * 100cqw);
+  font-size: calc(24 / 1220 * 100cqw);
   letter-spacing: 0.03em;
-  line-height: 1;
+  line-height: 0.98;
   text-transform: uppercase;
 }
 
@@ -533,6 +582,11 @@
   transform: rotate(-7deg);
 }
 
+.icono-label-typed-value--unit-kda {
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
 .icono-label-hand-note {
   color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
@@ -550,24 +604,28 @@
 }
 
 .icono-label-hand-note--mass-number {
-  font-size: calc(38 / 1220 * 100cqw);
+  display: inline-block;
+  font-size: calc(34 / 1220 * 100cqw);
+  line-height: 0.82;
+  margin-bottom: calc(-1 / 1220 * 100cqw);
   transform: rotate(-4deg);
   transform-origin: left center;
 }
 
 .icono-label-mass-line {
   display: flex;
-  align-items: flex-end;
+  align-items: baseline;
   gap: calc(8 / 1220 * 100cqw);
-  min-height: calc(34 / 1220 * 100cqw);
+  min-height: calc(28 / 1220 * 100cqw);
 }
 
 .icono-label-mass-fill {
   position: relative;
   display: inline-flex;
-  align-items: flex-end;
-  min-width: calc(92 / 1220 * 100cqw);
-  padding: 0 calc(4 / 1220 * 100cqw) calc(2 / 1220 * 100cqw) 0;
+  align-items: baseline;
+  gap: calc(8 / 1220 * 100cqw);
+  min-width: calc(112 / 1220 * 100cqw);
+  padding: 0 calc(4 / 1220 * 100cqw) calc(1 / 1220 * 100cqw) 0;
 }
 
 .icono-label-mass-fill::after {
@@ -599,7 +657,7 @@
 }
 
 .icono-label-hand-note--style {
-  color: color-mix(in srgb, var(--icono-label-ink) 92%, transparent);
+  color: var(--icono-label-pen);
   font-size: calc(31 / 1220 * 100cqw);
   transform: rotate(-3deg);
   transform-origin: left center;
@@ -629,11 +687,11 @@
 
 .icono-label-alignment-strike {
   position: absolute;
-  left: calc(-4 / 1220 * 100cqw);
-  right: calc(-4 / 1220 * 100cqw);
+  left: calc(-8 / 1220 * 100cqw);
+  right: calc(-10 / 1220 * 100cqw);
   top: 50%;
   border-top: 1.3px solid color-mix(in srgb, var(--icono-label-pen) 88%, transparent);
-  transform: rotate(-3deg);
+  transform: rotate(-0.15deg);
   pointer-events: none;
 }
 

@@ -339,9 +339,11 @@
       '<div class="icono-label-category-option icono-label-category-option--soluble">' +
       renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble") +
       "</div>" +
-      '<div class="icono-label-hand-note icono-label-hand-note--sex">' +
-      escapeHtml(sexNote || "") +
-      "</div>" +
+      (sexNote
+        ? '<div class="icono-label-hand-note icono-label-hand-note--sex">' +
+          escapeHtml(sexNote || "") +
+          "</div>"
+        : "") +
       "</div>"
     )
   }
@@ -398,6 +400,78 @@
     return '<div class="icono-label-title-block">' + titleInner + "</div>"
   }
 
+  function hexToHsv(hex) {
+    var value = String(hex || "").trim()
+    if (!/^#?[a-f0-9]{6}$/i.test(value)) return null
+    if (value.charAt(0) !== "#") value = "#" + value
+    var r = parseInt(value.slice(1, 3), 16) / 255
+    var g = parseInt(value.slice(3, 5), 16) / 255
+    var b = parseInt(value.slice(5, 7), 16) / 255
+    var max = Math.max(r, g, b)
+    var min = Math.min(r, g, b)
+    var delta = max - min
+    var hue = 0
+    if (delta > 0) {
+      if (max === r) hue = ((g - b) / delta) % 6
+      else if (max === g) hue = (b - r) / delta + 2
+      else hue = (r - g) / delta + 4
+      hue *= 60
+      if (hue < 0) hue += 360
+    }
+    var saturation = max === 0 ? 0 : delta / max
+    return {
+      h: Math.round(hue),
+      s: Math.round(saturation * 100),
+      v: Math.round(max * 100),
+    }
+  }
+
+  function formatMetricNumber(raw, digits) {
+    var n = Number(raw)
+    if (!Number.isFinite(n)) return ""
+    return n.toFixed(Math.max(0, Number(digits || 0))).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
+  }
+
+  function renderLabLabelSpecimenMicrographicsHtml(geneDetail) {
+    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
+    var color = String(safeGeneDetail.color || "").trim().toUpperCase()
+    var hsv = hexToHsv(color)
+    var tau = formatMetricNumber(safeGeneDetail.tissue_tau, 2)
+    var loeuf = formatMetricNumber(safeGeneDetail.loeuf, 3)
+    var constraintPct = formatMetricNumber(safeGeneDetail.constraint_percentile, 2)
+    var aaLength = formatMetricNumber(safeGeneDetail.protein_length_aa, 0)
+    return (
+      '<div class="icono-label-specimen-micro">' +
+      '<div class="icono-label-specimen-note">spectral analysis</div>' +
+      '<div class="icono-label-specimen-swatch-row">' +
+      '<span class="icono-label-specimen-swatch" style="background:' +
+      escapeHtml(color || "#000000") +
+      '"></span>' +
+      '<span class="icono-label-specimen-metric">sample ' +
+      escapeHtml(color || "UNFILED") +
+      "</span>" +
+      "</div>" +
+      '<div class="icono-label-specimen-metric-grid">' +
+      '<span class="icono-label-specimen-metric">HSV ' +
+      escapeHtml(hsv ? hsv.h + " / " + hsv.s + " / " + hsv.v : "n/a") +
+      "</span>" +
+      '<span class="icono-label-specimen-metric">UniProt len ' +
+      escapeHtml(aaLength ? aaLength + " aa" : "n/a") +
+      "</span>" +
+      '<span class="icono-label-specimen-metric">HPA tau ' +
+      escapeHtml(tau || "n/a") +
+      "</span>" +
+      '<span class="icono-label-specimen-metric">gnomAD LOEUF ' +
+      escapeHtml(loeuf || "n/a") +
+      "</span>" +
+      '<span class="icono-label-specimen-metric">constraint pct ' +
+      escapeHtml(constraintPct || "n/a") +
+      "</span>" +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function renderLabLabelSpecimenFooterHtml(geneDetail) {
     var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
     var color = String(safeGeneDetail.color || "").trim().toUpperCase()
@@ -407,11 +481,9 @@
       '<div class="icono-label-specimen-notes">' +
       '<div class="icono-label-specimen-note">specimen portrait</div>' +
       '<div class="icono-label-specimen-note">iconoplasm archive</div>' +
-      (color
-        ? '<div class="icono-label-specimen-note">catalog stock ' + escapeHtml(color) + "</div>"
-        : "") +
       '<div class="icono-label-specimen-note">emulsion note / glass plate copy</div>' +
       "</div>" +
+      renderLabLabelSpecimenMicrographicsHtml(safeGeneDetail) +
       "</div>"
     )
   }
@@ -553,7 +625,7 @@
       '<div class="icono-label-qc-meta-item">inspect. A3</div>' +
       '<div class="icono-label-qc-meta-item">plate 7</div>' +
       "</div>" +
-      '<div class="icono-label-qc-note icono-label-qc-note--empty" data-icono-qc-note></div>' +
+      '<div class="icono-label-qc-note" data-icono-qc-note>pending review</div>' +
       "</div>" +
       "</div>" +
       '<div class="icono-label-band-row">' +
@@ -561,28 +633,38 @@
       '<div class="icono-label-band-grid">' +
       '<div class="icono-label-band-cell icono-label-band-cell--category">' +
       '<div class="icono-label-caption">category</div>' +
+      '<div class="icono-label-band-primary">' +
       renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) +
+      "</div>" +
+      '<div class="icono-label-band-secondary"></div>' +
       "</div>" +
       '<div class="icono-label-band-cell icono-label-band-cell--noted">' +
       '<div class="icono-label-caption">first noted</div>' +
+      '<div class="icono-label-band-primary">' +
       '<div class="icono-label-typed-value">' +
       escapeHtml(firstNoted || " ") +
       "</div>" +
+      "</div>" +
+      '<div class="icono-label-band-secondary">' +
       '<div class="icono-label-hand-note icono-label-hand-note--age">' +
       escapeHtml(ageNote) +
       "</div>" +
       "</div>" +
+      "</div>" +
       '<div class="icono-label-band-cell icono-label-band-cell--mass">' +
       '<div class="icono-label-caption">mass</div>' +
+      '<div class="icono-label-band-primary">' +
       '<div class="icono-label-mass-line">' +
       '<span class="icono-label-mass-fill">' +
+      '<span class="icono-label-typed-value icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>' +
       '<span class="icono-label-hand-note icono-label-hand-note--mass-number">' +
       escapeHtml(handwrittenWeight) +
       "</span>" +
       "</span>" +
       '<span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>' +
-      '<span class="icono-label-typed-value icono-label-typed-value--crossed">kDa</span>' +
       "</div>" +
+      "</div>" +
+      '<div class="icono-label-band-secondary"></div>' +
       "</div>" +
       "</div>" +
       "</div>" +
@@ -776,7 +858,9 @@
     var approveInner = isLabel
       ? '<span class="icono-vote-btn-copy">FIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop")
       : ICONO_CHECK_ICON
-    var rejectInner = isLabel ? '<span class="icono-vote-btn-copy">MISFIT</span>' : ICONO_CROSS_ICON
+    var rejectInner = isLabel
+      ? '<span class="icono-vote-btn-copy">MISFIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop")
+      : ICONO_CROSS_ICON
     return (
       '<div class="icono-vote-box' +
       (isBrick ? " icono-vote-box--brick" : "") +
@@ -834,11 +918,10 @@
     if (qcBlock) {
       var qcNote = qcBlock.querySelector("[data-icono-qc-note]")
       if (qcNote) {
-        var qcCopy = ""
+        var qcCopy = "pending review"
         if (userVote === 1) qcCopy = "looks viable"
         else if (userVote === -1) qcCopy = "flagged misfit"
         qcNote.textContent = qcCopy
-        qcNote.classList.toggle("icono-label-qc-note--empty", !qcCopy)
       }
     }
   }

@@ -1179,6 +1179,9 @@ async function geneRecord(env, url, rawId) {
   const molecularWeightKda =
     Number.isFinite(massDa) && massDa > 0 ? Math.round((massDa / 1000) * 10) / 10 : null
   const firstPublicationYear = optionalInt(r?.protein?.first_pub_year)
+  const tissueTau = optionalFloat(r?.protein?.tissue?.score, { min: 0 })
+  const loeuf = optionalFloat(r?.protein?.loeuf, { min: 0 })
+  const constraintPercentile = optionalFloat(r?.protein?.constraint_percentile, { min: 0 })
   const primaryTissue =
     r?.protein?.tissue?.label && String(r.protein.tissue.label).trim()
       ? String(r.protein.tissue.label).trim()
@@ -1195,6 +1198,9 @@ async function geneRecord(env, url, rawId) {
     ...(proteinLengthAa != null ? { protein_length_aa: proteinLengthAa } : {}),
     ...(molecularWeightKda != null ? { molecular_weight_kda: molecularWeightKda } : {}),
     ...(firstPublicationYear != null ? { first_publication_year: firstPublicationYear } : {}),
+    ...(tissueTau != null ? { tissue_tau: tissueTau } : {}),
+    ...(loeuf != null ? { loeuf } : {}),
+    ...(constraintPercentile != null ? { constraint_percentile: constraintPercentile } : {}),
     ...(primaryTissue ? { primary_tissue: primaryTissue } : {}),
     popularity_score: wikiPageviewsForSymbol(r.symbol),
     essence: tooltipEssence,

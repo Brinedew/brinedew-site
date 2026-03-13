@@ -132,13 +132,13 @@
 
 .icono-vote-box--label {
   --icono-vote-shell: transparent;
-  --icono-vote-line: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 76%, transparent);
-  --icono-vote-seam: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 76%, transparent);
+  --icono-vote-line: transparent;
+  --icono-vote-seam: transparent;
   display: inline-flex;
-  align-items: stretch;
+  align-items: center;
+  justify-content: start;
+  gap: calc(30 / 1220 * 100cqw);
   border: 0;
-  border-top: 1px solid var(--icono-vote-line);
-  border-bottom: 1px solid var(--icono-vote-line);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -147,21 +147,23 @@
 
 .icono-vote-box--label .icono-vote-btn {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
-  padding: 0.55rem 0.1rem;
-  font-family: "IBM Plex Mono" !important;
-  font-size: 0.94rem;
-  font-weight: 500;
-  letter-spacing: 0.16em;
+  min-height: calc(22 / 1220 * 100cqw);
+  padding: 0;
+  font-family: "Special Elite" !important;
+  font-size: calc(22 / 1220 * 100cqw);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  line-height: 0.98;
   text-transform: uppercase;
-}
-
-.icono-vote-box--label .icono-vote-btn + .icono-vote-btn {
-  border-left: 0;
 }
 
 .icono-vote-box--label .icono-vote-btn:hover:not(:disabled) {
   background: transparent;
+  color: var(--icono-vote-ink);
 }
 
 .icono-vote-box--label .icono-vote-btn-copy {
@@ -171,33 +173,31 @@
 
 .icono-vote-box--label .icono-vote-btn-loop {
   position: absolute;
-  inset: 0.1rem -0.35rem;
+  inset: calc(-3 / 1220 * 100cqw) calc(-10 / 1220 * 100cqw);
   width: auto;
-  height: calc(100% - 0.2rem);
-  color: color-mix(in srgb, #4b7fa9 88%, transparent);
+  height: calc(100% + calc(5 / 1220 * 100cqw));
+  color: var(--accent, #1b7269);
   opacity: 0;
   pointer-events: none;
+  transition: opacity 160ms ease;
 }
 
 .icono-vote-box--label .icono-vote-btn.active {
   box-shadow: none;
 }
 
-.icono-vote-box--label .icono-vote-btn--approve.active {
-  background: transparent;
-  color: var(--icono-vote-ink);
+.icono-vote-box--label .icono-vote-btn:hover:not(:disabled) .icono-vote-btn-loop {
+  opacity: 0.38;
 }
 
-.icono-vote-box--label .icono-vote-btn--approve.active .icono-vote-btn-loop {
+.icono-vote-box--label .icono-vote-btn.active .icono-vote-btn-loop {
   opacity: 1;
 }
 
+.icono-vote-box--label .icono-vote-btn--approve.active,
 .icono-vote-box--label .icono-vote-btn--reject.active {
   background: transparent;
-  color: var(--icono-reject);
-  text-decoration: line-through;
-  text-decoration-thickness: 1.2px;
-  text-decoration-color: currentColor;
+  color: var(--icono-vote-ink);
 }
 
 .icono-vote-btn + .icono-vote-btn {
@@ -226,4 +226,10 @@ html[data-theme="dark"] .icono-vote-box {
 html[saved-theme="dark"] .icono-vote-btn,
 html[data-theme="dark"] .icono-vote-btn {
   color: rgba(244, 238, 230, 0.8);
+}
+
+.iconoplasm-tooltip--dark .icono-vote-box--label .icono-vote-btn,
+html[saved-theme="dark"] .icono-vote-box--label .icono-vote-btn,
+html[data-theme="dark"] .icono-vote-box--label .icono-vote-btn {
+  color: var(--icono-vote-ink);
 }
