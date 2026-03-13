@@ -766,6 +766,10 @@
   justify-content: start;
 }
 
+.icono-label-band-cell--category .icono-label-selector-row {
+  margin-top: calc(-25 / 1220 * 100cqw);
+}
+
 .icono-label-category-option--transmembrane {
   grid-column: 1;
 }
