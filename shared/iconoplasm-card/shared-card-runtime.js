@@ -83,24 +83,19 @@
     var politics = String(rawPolitics || "").trim()
     var politicsOriginValues = uniqueDisplayValues(rawPoliticsOrigin, 2)
     var politicsOrigin = politicsOriginValues.length ? String(politicsOriginValues[0] || "").trim() : ""
-    var politicsKey = politics.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
-    var originKey = politicsOrigin.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+    // Clean cutover guardrail: the shared card accepts only canonical website
+    // labels. If production still shows legacy names, fix D1 / sync data rather
+    // than reintroducing renderer-side semantic fallbacks.
+    var politicsKey = politics.toLowerCase().replace(/\s+/g, " ").trim()
+    var originKey = politicsOrigin.toLowerCase().replace(/\s+/g, " ").trim()
     var character = ""
     var molecular = ""
 
-    if (politicsKey === "development" || politicsKey === "pro growth" || politicsKey === "progrowth") {
+    if (politicsKey === "pro-growth" || politicsKey === "pro growth") {
       character = "pro-growth"
-    } else if (
-      politicsKey === "protection" ||
-      politicsKey === "pro control" ||
-      politicsKey === "procontrol"
-    ) {
+    } else if (politicsKey === "pro-control" || politicsKey === "pro control") {
       character = "pro-control"
-    } else if (
-      politicsKey === "opportunist" ||
-      politicsKey === "turncoat" ||
-      politicsKey === "contextual"
-    ) {
+    } else if (politicsKey === "turncoat") {
       character = "turncoat"
     } else if (politicsKey === "neutral" || politicsKey === "housekeeper") {
       return { character: "", molecular: "", isNeutral: true }
@@ -108,21 +103,9 @@
 
     if (originKey === "oncogene") {
       molecular = "oncogene"
-    } else if (
-      originKey === "tumor suppressor" ||
-      originKey === "tumor suppressor gene" ||
-      originKey === "tumour suppressor"
-    ) {
+    } else if (originKey === "tumor suppressor") {
       molecular = "tumor suppressor"
-    } else if (
-      originKey === "both" ||
-      originKey === "contextual" ||
-      originKey === "contextual oncogene tumor suppressor" ||
-      originKey === "contextual oncogene/tumor suppressor" ||
-      originKey === "contextual oncogene / tumor suppressor" ||
-      originKey === "oncogene/tumor suppressor" ||
-      originKey === "tumor suppressor/oncogene"
-    ) {
+    } else if (originKey === "contextual oncogene/tumor suppressor") {
       molecular = "contextual oncogene/tumor suppressor"
     } else if (originKey === "neutral" || originKey === "housekeeper") {
       return { character: "", molecular: "", isNeutral: true }

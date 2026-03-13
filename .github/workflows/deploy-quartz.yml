@@ -107,6 +107,9 @@ jobs:
         working-directory: .wrangler-pages
         run: wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
+      - name: Apply Iconoplasm D1 migrations (production)
+        run: wrangler d1 migrations apply iconoplasm --remote
+
       - name: Deploy Cloudflare Worker (production)
         run: wrangler deploy
 

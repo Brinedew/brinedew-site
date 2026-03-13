@@ -73,9 +73,16 @@ jobs:
       - name: Install Wrangler CLI
         run: npm install -g wrangler@4
 
+      - name: Apply Iconoplasm D1 migrations (staging)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler d1 migrations apply iconoplasm-staging --remote --env staging
+
       - name: Deploy Worker (staging)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: wrangler deploy --env staging
 
       - name: Smoke test Discord OAuth bootstrap (staging)

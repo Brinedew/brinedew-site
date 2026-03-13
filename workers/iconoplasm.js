@@ -405,6 +405,28 @@ function validateEssenceTraitOrigins({
   return ""
 }
 
+function normalizeCanonicalFaction(raw) {
+  const cleaned = sanitizeText(raw, 64)
+  if (!cleaned) return { value: null, error: "" }
+  const key = cleaned.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+  if (key === "pro growth" || key === "progrowth") {
+    return { value: "pro-growth", error: "" }
+  }
+  if (key === "pro control" || key === "procontrol") {
+    return { value: "pro-control", error: "" }
+  }
+  if (key === "turncoat") {
+    return { value: "turncoat", error: "" }
+  }
+  if (key === "neutral" || key === "housekeeper") {
+    return { value: null, error: "" }
+  }
+  return {
+    value: null,
+    error: `Invalid faction label "${cleaned}"; expected pro-growth, pro-control, or turncoat`,
+  }
+}
+
 function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const payload = rawEssence && typeof rawEssence === "object" ? rawEssence : null
   if (!payload) return null
@@ -420,7 +442,8 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const ageTextRaw = sanitizeText(payload.age || payload.age_text, 64)
   const ageText = ageTextRaw || (ageYears != null ? String(ageYears) : null)
   const sex = sanitizeText(payload.sex, 32)
-  const faction = sanitizeText(payload.faction || payload.politics, 64)
+  const factionInfo = normalizeCanonicalFaction(payload.faction || payload.politics)
+  const faction = factionInfo.value
   const skinHex = normalizeHexColor(payload.skin_hex)
   const skinName = sanitizeText(payload.skin_name, 64)
   const aesthetics = normalizeAestheticsList(payload.aesthetics)
@@ -437,6 +460,7 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     aestheticsOrigin,
     politicsOrigin,
   })
+  const validationError = factionInfo.error || traitOriginValidationError
 
   return {
     gene_symbol: symbol,
@@ -456,7 +480,7 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     family_members: familyMembers,
     family_feature: familyFeature,
     manifestation,
-    ...(traitOriginValidationError ? { validation_error: traitOriginValidationError } : {}),
+    ...(validationError ? { validation_error: validationError } : {}),
   }
 }
 
