@@ -356,6 +356,11 @@
     var isOncogene = molecularKey === "oncogene" || isContextual
     var isTumorSuppressor = molecularKey === "tumor suppressor" || isContextual
     var isNeither = !molecularKey
+    var noteClass = "icono-label-hand-note icono-label-hand-note--politics"
+    if (isContextual) noteClass += " icono-label-hand-note--politics-contextual"
+    else if (isOncogene) noteClass += " icono-label-hand-note--politics-oncogene"
+    else if (isTumorSuppressor) noteClass += " icono-label-hand-note--politics-tumor-suppressor"
+    else noteClass += " icono-label-hand-note--politics-neutral"
     return (
       '<div class="icono-label-alignment-grid">' +
       '<div class="icono-label-selector-row icono-label-selector-row--alignment' +
@@ -365,7 +370,9 @@
       renderLabLabelOptionHtml("TUMOR SUPPRESSOR", isTumorSuppressor) +
       (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") +
       "</div>" +
-      '<div class="icono-label-hand-note icono-label-hand-note--politics">' +
+      '<div class="' +
+      noteClass +
+      '">' +
       escapeHtml(politicalNote || "") +
       "</div>" +
       "</div>"
@@ -477,7 +484,6 @@
     var lightnessLabel = hsv ? describeLevelWord(hsv.v) : "unknown"
     return (
       '<div class="icono-label-specimen-micro">' +
-      '<div class="icono-label-specimen-note">spectral analysis</div>' +
       '<div class="icono-label-specimen-swatch-row">' +
       '<span class="icono-label-specimen-swatch" style="background:' +
       escapeHtml(color || "#000000") +
@@ -487,22 +493,30 @@
         (colorName ? colorName + " / " : "") + (color || "UNFILED"),
       ) +
       "</span>" +
-      "</div>" +
-      '<div class="icono-label-specimen-hand-analysis">' +
-      escapeHtml(
-        "hue: " + hueLabel + " / saturation: " + saturationLabel + " / lightness: " + lightnessLabel,
-      ) +
+      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--hue">' +
+      escapeHtml("hue: " + hueLabel) +
+      "</span>" +
       "</div>" +
       '<div class="icono-label-specimen-metric-grid">' +
+      '<div class="icono-label-specimen-analysis-row">' +
       '<span class="icono-label-specimen-metric">HPA tau ' +
       escapeHtml(tau || "n/a") +
       "</span>" +
+      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--sat">' +
+      escapeHtml("saturation: " + saturationLabel) +
+      "</span>" +
+      "</div>" +
       /* Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
          Color lightness is assigned from LOEUF; constraint_percentile exists in the
          upstream protein data but is not part of the color-demographics mapping. */
+      '<div class="icono-label-specimen-analysis-row">' +
       '<span class="icono-label-specimen-metric">gnomAD LOEUF ' +
       escapeHtml(loeuf || "n/a") +
       "</span>" +
+      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--light">' +
+      escapeHtml("lightness: " + lightnessLabel) +
+      "</span>" +
+      "</div>" +
       "</div>" +
       "</div>"
     )
@@ -512,7 +526,7 @@
     return (
       '<div class="icono-label-specimen-footer">' +
       '<div class="icono-label-specimen-notes">' +
-      '<div class="icono-label-specimen-note">emulsion note / glass plate copy</div>' +
+      '<div class="icono-label-specimen-note">emulsion note / glass plate spectral analysis</div>' +
       "</div>" +
       renderLabLabelSpecimenMicrographicsHtml(geneDetail) +
       "</div>"
@@ -574,7 +588,7 @@
       "</div>" +
       '<div class="icono-label-footer-copy-side">' +
       '<div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div>' +
-      '<div class="icono-label-footer-line icono-label-footer-line--typed">keep away from heat / moisture</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">keep away from heat and moisture</div>' +
       '<div class="icono-label-footer-line icono-label-footer-line--caption">registry copy retained in cabinet 5A</div>' +
       "</div>" +
       "</div>"
