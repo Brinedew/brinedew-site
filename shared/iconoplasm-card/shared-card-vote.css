@@ -163,6 +163,11 @@
   text-transform: uppercase;
 }
 
+.icono-vote-box--label .icono-vote-btn--approve,
+.icono-vote-box--label .icono-vote-btn--reject {
+  color: var(--icono-vote-ink);
+}
+
 .icono-vote-box--label .icono-vote-btn:hover:not(:disabled) {
   background: transparent;
   color: var(--icono-vote-ink);
