@@ -430,6 +430,29 @@
     }
   }
 
+  function describeHueWord(hue) {
+    var h = Number(hue)
+    if (!Number.isFinite(h)) return "unknown"
+    if (h < 15 || h >= 345) return "red"
+    if (h < 40) return "orange"
+    if (h < 65) return "yellow"
+    if (h < 95) return "lime"
+    if (h < 150) return "green"
+    if (h < 195) return "cyan"
+    if (h < 235) return "blue"
+    if (h < 275) return "violet"
+    if (h < 320) return "magenta"
+    return "rose"
+  }
+
+  function describeLevelWord(raw) {
+    var n = Number(raw)
+    if (!Number.isFinite(n)) return "unknown"
+    if (n < 34) return "low"
+    if (n < 67) return "medium"
+    return "high"
+  }
+
   function formatMetricNumber(raw, digits) {
     var n = Number(raw)
     if (!Number.isFinite(n)) return ""
@@ -451,7 +474,9 @@
       safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf,
       3,
     )
-    var aaLength = formatMetricNumber(safeGeneDetail.protein_length_aa, 0)
+    var hueLabel = hsv ? describeHueWord(hsv.h) : "unknown"
+    var saturationLabel = hsv ? describeLevelWord(hsv.s) : "unknown"
+    var lightnessLabel = hsv ? describeLevelWord(hsv.v) : "unknown"
     return (
       '<div class="icono-label-specimen-micro">' +
       '<div class="icono-label-specimen-note">spectral analysis</div>' +
@@ -465,13 +490,12 @@
       ) +
       "</span>" +
       "</div>" +
+      '<div class="icono-label-specimen-hand-analysis">' +
+      escapeHtml(
+        "hue: " + hueLabel + " / saturation: " + saturationLabel + " / lightness: " + lightnessLabel,
+      ) +
+      "</div>" +
       '<div class="icono-label-specimen-metric-grid">' +
-      '<span class="icono-label-specimen-metric">HSV ' +
-      escapeHtml(hsv ? hsv.h + " / " + hsv.s + " / " + hsv.v : "n/a") +
-      "</span>" +
-      '<span class="icono-label-specimen-metric">UniProt len ' +
-      escapeHtml(aaLength ? aaLength + " aa" : "n/a") +
-      "</span>" +
       '<span class="icono-label-specimen-metric">HPA tau ' +
       escapeHtml(tau || "n/a") +
       "</span>" +
@@ -666,7 +690,7 @@
       '<div class="icono-label-band-cell icono-label-band-cell--noted">' +
       '<div class="icono-label-caption">first noted</div>' +
       '<div class="icono-label-band-primary">' +
-      '<div class="icono-label-typed-value">' +
+      '<div class="icono-label-typed-value icono-label-typed-value--band">' +
       escapeHtml(firstNoted || " ") +
       "</div>" +
       "</div>" +
@@ -685,7 +709,7 @@
       escapeHtml(handwrittenWeight) +
       "</span>" +
       "</span>" +
-      '<span class="icono-label-typed-value icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>' +
+      '<span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>' +
       '<span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>' +
       "</div>" +
       "</div>" +
