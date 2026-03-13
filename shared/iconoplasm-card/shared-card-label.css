@@ -64,16 +64,16 @@
   --icono-label-pen: var(--accent, #1b7269);
   --icono-label-type: "IBM Plex Mono";
   --icono-label-hand: "Caveat";
-  --icono-label-portrait-fr: 27.3%;
-  --icono-label-form-fr: 72.7%;
-  --icono-label-header-title-fr: 55.4371%;
-  --icono-label-header-meta-fr: 25.1599%;
-  --icono-label-header-qc-fr: 19.403%;
-  --icono-label-row-label-fr: 11.8%;
-  --icono-label-row-body-fr: 88.2%;
-  --icono-label-band-category-fr: 40.35533%;
-  --icono-label-band-noted-fr: 25.634518%;
-  --icono-label-band-mass-fr: 34.010152%;
+  --icono-label-portrait-fr: 29.1%;
+  --icono-label-form-fr: 70.9%;
+  --icono-label-header-title-fr: 56.2%;
+  --icono-label-header-meta-fr: 29.8%;
+  --icono-label-header-qc-fr: 14%;
+  --icono-label-row-label-fr: 8.2%;
+  --icono-label-row-body-fr: 91.8%;
+  --icono-label-band-category-fr: 50%;
+  --icono-label-band-noted-fr: 21%;
+  --icono-label-band-mass-fr: 29%;
   --icono-label-footer-main-fr: 54.568528%;
   --icono-label-footer-side-fr: 45.431472%;
 }
@@ -418,8 +418,28 @@
 .icono-label-filed-block {
   display: flex;
   flex-direction: column;
-  gap: calc(4 / 1220 * 100cqw);
+  gap: calc(7 / 1220 * 100cqw);
   padding: calc(12 / 1220 * 100cqw) calc(16 / 1220 * 100cqw);
+}
+
+.icono-label-family-trait-field {
+  position: relative;
+  min-height: calc(54 / 1220 * 100cqw);
+  display: flex;
+  align-items: flex-start;
+}
+
+.icono-label-family-trait-field--empty {
+  align-items: center;
+}
+
+.icono-label-family-trait-strike {
+  position: absolute;
+  left: 0;
+  right: calc(6 / 1220 * 100cqw);
+  top: 50%;
+  border-top: 1.3px solid color-mix(in srgb, var(--icono-label-pen) 84%, transparent);
+  transform: rotate(-0.15deg);
 }
 
 .icono-label-filed-copy,
@@ -508,13 +528,13 @@
 .icono-label-band-primary {
   display: flex;
   align-items: flex-start;
-  min-height: calc(39 / 1220 * 100cqw);
+  min-height: calc(41 / 1220 * 100cqw);
 }
 
 .icono-label-band-secondary {
   display: flex;
   align-items: flex-start;
-  min-height: calc(33 / 1220 * 100cqw);
+  min-height: calc(28 / 1220 * 100cqw);
 }
 
 .icono-label-selector-row {
@@ -700,7 +720,8 @@
   grid-template-columns: max-content max-content;
   grid-auto-rows: min-content;
   column-gap: calc(26 / 1220 * 100cqw);
-  row-gap: calc(4 / 1220 * 100cqw);
+  row-gap: 0;
+  align-items: start;
   align-content: start;
   justify-content: start;
 }
@@ -713,22 +734,13 @@
   grid-column: 2;
 }
 
-.icono-label-category-grid .icono-label-hand-note--sex {
-  grid-row: 2;
-  margin-top: calc(-2 / 1220 * 100cqw);
-  justify-self: start;
+.icono-label-hand-note--sex-soluble {
+  margin-left: calc(136 / 1220 * 100cqw);
 }
 
-.icono-label-category-grid.is-transmembrane .icono-label-hand-note--sex {
-  grid-column: 1;
-}
-
-.icono-label-category-grid.is-soluble .icono-label-hand-note--sex {
-  grid-column: 2;
-}
-
-.icono-label-category-grid.is-unselected .icono-label-hand-note--sex {
-  grid-column: 1 / -1;
+.icono-label-hand-note--sex-transmembrane,
+.icono-label-hand-note--sex-unselected {
+  margin-left: 0;
 }
 
 .icono-label-footer-copy {

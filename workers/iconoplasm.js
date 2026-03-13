@@ -446,6 +446,9 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const faction = factionInfo.value
   const skinHex = normalizeHexColor(payload.skin_hex)
   const skinName = sanitizeText(payload.skin_name, 64)
+  const tissueTau = optionalFloat(payload.tissue_tau, { min: 0 })
+  const loeuf = optionalFloat(payload.loeuf, { min: 0 })
+  const constraintPercentile = optionalFloat(payload.constraint_percentile, { min: 0 })
   const aesthetics = normalizeAestheticsList(payload.aesthetics)
   const aestheticsOrigin = normalizeTextList(payload.aesthetics_origin)
   const politicsOrigin = normalizeTextList(payload.politics_origin)
@@ -473,6 +476,9 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     faction,
     skin_hex: skinHex,
     skin_name: skinName,
+    tissue_tau: tissueTau,
+    loeuf,
+    constraint_percentile: constraintPercentile,
     aesthetics_json: JSON.stringify(aesthetics),
     aesthetics_origin_json: JSON.stringify(aestheticsOrigin),
     politics_origin_json: JSON.stringify(politicsOrigin),
@@ -528,6 +534,9 @@ function essenceStateHashPayload(rawEssence, fallbackSymbol = "") {
     essence.faction || "",
     essence.skin_hex || "",
     essence.skin_name || "",
+    essence.tissue_tau ?? null,
+    essence.loeuf ?? null,
+    essence.constraint_percentile ?? null,
     essence.aesthetics_json || "[]",
     essence.aesthetics_origin_json || "[]",
     essence.politics_origin_json || "[]",
@@ -558,6 +567,9 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        faction,
        skin_hex,
        skin_name,
+       tissue_tau,
+       loeuf,
+       constraint_percentile,
        aesthetics_json,
        aesthetics_origin_json,
        politics_origin_json,
@@ -579,6 +591,9 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        faction=excluded.faction,
        skin_hex=excluded.skin_hex,
        skin_name=excluded.skin_name,
+       tissue_tau=excluded.tissue_tau,
+       loeuf=excluded.loeuf,
+       constraint_percentile=excluded.constraint_percentile,
        aesthetics_json=excluded.aesthetics_json,
        aesthetics_origin_json=excluded.aesthetics_origin_json,
        politics_origin_json=excluded.politics_origin_json,
@@ -601,6 +616,9 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
       essence.faction,
       essence.skin_hex,
       essence.skin_name,
+      essence.tissue_tau,
+      essence.loeuf,
+      essence.constraint_percentile,
       essence.aesthetics_json,
       essence.aesthetics_origin_json,
       essence.politics_origin_json,
@@ -831,7 +849,8 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
     const placeholders = wantedSymbols.map(() => "?").join(", ")
     const stmt = env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol, full_name, weight_kg, height_cm, sex, age, age_years, faction,
-              skin_hex, skin_name, aesthetics_json, aesthetics_origin_json, politics_origin_json,
+              skin_hex, skin_name, tissue_tau, loeuf, constraint_percentile,
+              aesthetics_json, aesthetics_origin_json, politics_origin_json,
               family_surname, family_members, family_feature, manifestation, updated_at
          FROM icono_gene_essence
         WHERE upper(gene_symbol) IN (${placeholders})
@@ -842,7 +861,8 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
   } else {
     const response = await env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol, full_name, weight_kg, height_cm, sex, age, age_years, faction,
-              skin_hex, skin_name, aesthetics_json, aesthetics_origin_json, politics_origin_json,
+              skin_hex, skin_name, tissue_tau, loeuf, constraint_percentile,
+              aesthetics_json, aesthetics_origin_json, politics_origin_json,
               family_surname, family_members, family_feature, manifestation, updated_at
          FROM icono_gene_essence
         ORDER BY gene_symbol ASC`,
@@ -1013,6 +1033,9 @@ async function essenceState(env, symbol) {
            faction,
            skin_hex,
            skin_name,
+           tissue_tau,
+           loeuf,
+           constraint_percentile,
            aesthetics_json,
            aesthetics_origin_json,
            politics_origin_json,
@@ -1055,6 +1078,11 @@ async function essenceState(env, symbol) {
       ...(row?.faction ? { faction: String(row.faction), politics: String(row.faction) } : {}),
       ...(row?.skin_hex ? { skin_hex: String(row.skin_hex) } : {}),
       ...(row?.skin_name ? { skin_name: String(row.skin_name) } : {}),
+      ...(row?.tissue_tau != null ? { tissue_tau: Number(row.tissue_tau) } : {}),
+      ...(row?.loeuf != null ? { loeuf: Number(row.loeuf) } : {}),
+      ...(row?.constraint_percentile != null
+        ? { constraint_percentile: Number(row.constraint_percentile) }
+        : {}),
       ...(aesthetics.length ? { aesthetics } : {}),
       ...(aestheticsOrigin.length ? { aesthetics_origin: aestheticsOrigin } : {}),
       ...(politicsOrigin.length ? { politics_origin: politicsOrigin } : {}),
@@ -1179,9 +1207,14 @@ async function geneRecord(env, url, rawId) {
   const molecularWeightKda =
     Number.isFinite(massDa) && massDa > 0 ? Math.round((massDa / 1000) * 10) / 10 : null
   const firstPublicationYear = optionalInt(r?.protein?.first_pub_year)
-  const tissueTau = optionalFloat(r?.protein?.tissue?.score, { min: 0 })
-  const loeuf = optionalFloat(r?.protein?.loeuf, { min: 0 })
-  const constraintPercentile = optionalFloat(r?.protein?.constraint_percentile, { min: 0 })
+  const tissueTau =
+    optionalFloat(r?.protein?.tissue?.score, { min: 0 }) ??
+    optionalFloat(syncedEssence?.tissue_tau, { min: 0 })
+  const loeuf =
+    optionalFloat(r?.protein?.loeuf, { min: 0 }) ?? optionalFloat(syncedEssence?.loeuf, { min: 0 })
+  const constraintPercentile =
+    optionalFloat(r?.protein?.constraint_percentile, { min: 0 }) ??
+    optionalFloat(syncedEssence?.constraint_percentile, { min: 0 })
   const primaryTissue =
     r?.protein?.tissue?.label && String(r.protein.tissue.label).trim()
       ? String(r.protein.tissue.label).trim()

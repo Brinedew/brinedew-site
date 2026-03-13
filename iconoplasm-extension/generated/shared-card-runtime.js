@@ -327,25 +327,27 @@
 
   function renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) {
     var categoryKey = String(selectedCategory || "").trim().toLowerCase()
-    var classes = "icono-label-category-grid"
-    if (categoryKey === "transmembrane") classes += " is-transmembrane"
-    else if (categoryKey === "soluble") classes += " is-soluble"
-    else classes += " is-unselected"
     return (
-      '<div class="' +
-      classes +
-      '">' +
+      '<div class="icono-label-category-grid">' +
       '<div class="icono-label-category-option icono-label-category-option--transmembrane">' +
       renderLabLabelOptionHtml("TRANSMEMBRANE", categoryKey === "transmembrane") +
       "</div>" +
       '<div class="icono-label-category-option icono-label-category-option--soluble">' +
       renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble") +
       "</div>" +
-      (sexNote
-        ? '<div class="icono-label-hand-note icono-label-hand-note--sex">' +
-          escapeHtml(sexNote || "") +
-          "</div>"
-        : "") +
+      "</div>"
+    )
+  }
+
+  function renderLabLabelSexNoteHtml(sexNote, selectedCategory) {
+    var note = String(sexNote || "").trim().toLowerCase()
+    if (!note) return ""
+    var categoryKey = String(selectedCategory || "").trim().toLowerCase()
+    return (
+      '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' +
+      escapeHtml(categoryKey || "unselected") +
+      '">' +
+      escapeHtml(note) +
       "</div>"
     )
   }
@@ -438,9 +440,23 @@
     var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
     var color = String(safeGeneDetail.color || "").trim().toUpperCase()
     var hsv = hexToHsv(color)
-    var tau = formatMetricNumber(safeGeneDetail.tissue_tau, 2)
-    var loeuf = formatMetricNumber(safeGeneDetail.loeuf, 3)
-    var constraintPct = formatMetricNumber(safeGeneDetail.constraint_percentile, 2)
+    var essence =
+      safeGeneDetail.essence && typeof safeGeneDetail.essence === "object" ? safeGeneDetail.essence : {}
+    var colorName = String(essence.skin_name || "").trim()
+    var tau = formatMetricNumber(
+      safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau,
+      2,
+    )
+    var loeuf = formatMetricNumber(
+      safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf,
+      3,
+    )
+    var constraintPct = formatMetricNumber(
+      safeGeneDetail.constraint_percentile != null
+        ? safeGeneDetail.constraint_percentile
+        : essence.constraint_percentile,
+      2,
+    )
     var aaLength = formatMetricNumber(safeGeneDetail.protein_length_aa, 0)
     return (
       '<div class="icono-label-specimen-micro">' +
@@ -450,7 +466,9 @@
       escapeHtml(color || "#000000") +
       '"></span>' +
       '<span class="icono-label-specimen-metric">sample ' +
-      escapeHtml(color || "UNFILED") +
+      escapeHtml(
+        (colorName ? colorName + " / " : "") + (color || "UNFILED"),
+      ) +
       "</span>" +
       "</div>" +
       '<div class="icono-label-specimen-metric-grid">' +
@@ -475,17 +493,30 @@
   }
 
   function renderLabLabelSpecimenFooterHtml(geneDetail) {
-    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
-    var color = String(safeGeneDetail.color || "").trim().toUpperCase()
-    if (!color) color = ""
     return (
       '<div class="icono-label-specimen-footer">' +
       '<div class="icono-label-specimen-notes">' +
-      '<div class="icono-label-specimen-note">specimen portrait</div>' +
-      '<div class="icono-label-specimen-note">iconoplasm archive</div>' +
       '<div class="icono-label-specimen-note">emulsion note / glass plate copy</div>' +
       "</div>" +
-      renderLabLabelSpecimenMicrographicsHtml(safeGeneDetail) +
+      renderLabLabelSpecimenMicrographicsHtml(geneDetail) +
+      "</div>"
+    )
+  }
+
+  function renderLabLabelFamilyTraitFieldHtml(familyFeature) {
+    var trait = String(familyFeature || "").trim()
+    if (!trait) {
+      return (
+        '<div class="icono-label-family-trait-field icono-label-family-trait-field--empty">' +
+        '<span class="icono-label-family-trait-strike" aria-hidden="true"></span>' +
+        "</div>"
+      )
+    }
+    return (
+      '<div class="icono-label-family-trait-field">' +
+      '<div class="icono-label-hand-note icono-label-hand-note--family-trait">' +
+      escapeHtml(trait) +
+      "</div>" +
       "</div>"
     )
   }
@@ -616,8 +647,8 @@
       "</div>" +
       "</div>" +
       '<div class="icono-label-filed-block">' +
-      '<div class="icono-label-caption">filed</div>' +
-      renderLabLabelFiledLines(familyFeature) +
+      '<div class="icono-label-caption">family trait</div>' +
+      renderLabLabelFamilyTraitFieldHtml(familyFeature) +
       "</div>" +
       "</div>" +
       '<div class="icono-label-qc-block">' +
@@ -638,7 +669,9 @@
       '<div class="icono-label-band-primary">' +
       renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) +
       "</div>" +
-      '<div class="icono-label-band-secondary"></div>' +
+      '<div class="icono-label-band-secondary">' +
+      renderLabLabelSexNoteHtml(sexNote, selectedCategory) +
+      "</div>" +
       "</div>" +
       '<div class="icono-label-band-cell icono-label-band-cell--noted">' +
       '<div class="icono-label-caption">first noted</div>' +
@@ -658,11 +691,11 @@
       '<div class="icono-label-band-primary">' +
       '<div class="icono-label-mass-line">' +
       '<span class="icono-label-mass-fill">' +
-      '<span class="icono-label-typed-value icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>' +
       '<span class="icono-label-hand-note icono-label-hand-note--mass-number">' +
       escapeHtml(handwrittenWeight) +
       "</span>" +
       "</span>" +
+      '<span class="icono-label-typed-value icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>' +
       '<span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>' +
       "</div>" +
       "</div>" +
