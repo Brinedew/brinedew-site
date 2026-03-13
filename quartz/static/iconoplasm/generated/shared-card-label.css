@@ -153,6 +153,8 @@
 .icono-label-footer-row {
   display: grid;
   grid-template-columns: var(--icono-label-row-label-fr) var(--icono-label-row-body-fr);
+  min-height: 0;
+  overflow: clip;
   border-bottom: 1px solid var(--icono-label-rule);
 }
 
@@ -225,6 +227,23 @@
   letter-spacing: 0.1em;
   line-height: 1.35;
   text-transform: uppercase;
+}
+
+.icono-label-header-stack,
+.icono-label-title-block,
+.icono-label-title-link,
+.icono-label-header-meta,
+.icono-label-header-meta-cell,
+.icono-label-filed-block,
+.icono-label-qc-block,
+.icono-label-band-cell,
+.icono-label-style-stack,
+.icono-label-style-pair,
+.icono-label-alignment-body,
+.icono-label-footer-copy,
+.icono-label-footer-copy-main,
+.icono-label-footer-copy-side {
+  min-height: 0;
 }
 
 .icono-label-header-stack,
