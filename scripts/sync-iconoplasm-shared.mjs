@@ -20,6 +20,13 @@ const targets = [
       path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-vote.css"),
     ],
   },
+  {
+    source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-label.css"),
+      path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-label.css"),
+    ],
+  },
 ]
 
 async function syncTarget({ source, outputs }) {

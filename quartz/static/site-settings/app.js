@@ -24,6 +24,10 @@ import {
     { value: "bricks", label: "Bricks" },
     { value: "masonry", label: "Masonry" },
   ]
+  var CARD_VARIANT_OPTIONS = [
+    { value: "classic", label: "Classic shared card" },
+    { value: "lab-label", label: "Vintage lab label" },
+  ]
   var GENERATION_PROVIDERS = [
     { value: "openai-compatible", label: "OpenAI-compatible" },
     { value: "replicate", label: "Replicate" },
@@ -194,6 +198,14 @@ import {
       "</div>" +
       "</div>" +
       '<div class="site-settings-row">' +
+      '<div class="site-settings-copy"><h3>Card style</h3></div>' +
+      '<div class="site-settings-control">' +
+      '<select class="site-settings-select" id="site-settings-iconoplasm-card-variant">' +
+      selectOptionsMarkup(snapshot.iconoplasm.cardVariant, CARD_VARIANT_OPTIONS) +
+      "</select>" +
+      "</div>" +
+      "</div>" +
+      '<div class="site-settings-row">' +
       '<div class="site-settings-copy"><h3>Image generation</h3></div>' +
       '<div class="site-settings-control site-settings-control--stack">' +
       '<label class="site-settings-field" for="site-settings-provider">' +
@@ -243,6 +255,7 @@ import {
     wireSectionTracking(root)
 
     var layoutEl = document.getElementById("site-settings-iconoplasm-layout")
+    var cardVariantEl = document.getElementById("site-settings-iconoplasm-card-variant")
     var providerEl = document.getElementById("site-settings-provider")
     var apiKeyEl = document.getElementById("site-settings-api-key")
     var modelEl = document.getElementById("site-settings-model")
@@ -275,6 +288,7 @@ import {
       return {
         iconoplasm: buildIconoplasmSettings({
           homeLayout: layoutEl && layoutEl.value,
+          cardVariant: cardVariantEl && cardVariantEl.value,
           generationProvider: providerEl && providerEl.value,
           generationApiKey: apiKeyEl && apiKeyEl.value,
           generationModel: modelEl && modelEl.value,
@@ -310,6 +324,7 @@ import {
     }
 
     bindDirtyTracking(layoutEl)
+    bindDirtyTracking(cardVariantEl)
     bindDirtyTracking(providerEl)
     bindDirtyTracking(apiKeyEl)
     bindDirtyTracking(modelEl)

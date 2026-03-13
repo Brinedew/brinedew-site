@@ -15,6 +15,7 @@
   const PLACEHOLDER_COLOR = '#6B6B78';
   const HIGHLIGHT_MODE_KEY = 'iconoplasm_highlight_mode';
   const TOOLTIP_THEME_KEY = 'iconoplasm_tooltip_theme';
+  const CARD_VARIANT_KEY = 'iconoplasm_card_variant';
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase('https://iconoplasm.brinedew.bio');
   const escapeHtml = IconoCardShared.escapeHtml;
 
@@ -92,6 +93,10 @@
     return String(raw || '').trim().toLowerCase() === 'dark' ? 'dark' : 'light';
   }
 
+  function normalizeCardVariant(raw) {
+    return IconoCardShared.normalizeCardVariant(raw);
+  }
+
   async function loadHighlightMode() {
     try {
       const result = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY]);
@@ -110,10 +115,20 @@
     }
   }
 
+  async function loadCardVariant() {
+    try {
+      const result = await chrome.storage.local.get([CARD_VARIANT_KEY]);
+      cardVariant = normalizeCardVariant(result[CARD_VARIANT_KEY]);
+    } catch (_) {
+      cardVariant = 'classic';
+    }
+  }
+
   function applyTooltipTheme() {
     if (!tooltip) return;
     tooltip.classList.toggle('iconoplasm-tooltip--dark', tooltipTheme === 'dark');
     tooltip.classList.toggle('iconoplasm-tooltip--light', tooltipTheme !== 'dark');
+    tooltip.classList.toggle('iconoplasm-tooltip--variant-lab-label', cardVariant === 'lab-label');
   }
 
   function applyHighlightStyle(el, symbol, color) {
@@ -295,6 +310,8 @@
   let viewportWarmFrame = 0;
   let highlightMode = 'underline';
   let tooltipTheme = 'light';
+  let cardVariant = 'classic';
+  let activeGeneSummary = null;
   const warnedMissingTraitOrigins = new Set();
   const GENE_DETAIL_WARM_BATCH_SIZE = 20;
   const GENE_DETAIL_VISIBLE_LIMIT = 80;
@@ -627,7 +644,7 @@
     // colors natively, and the extension just adds redundant underlines.
     if (window.location.hostname === 'iconoplasm.brinedew.bio') return;
 
-    await Promise.all([loadHighlightMode(), loadTooltipTheme()]);
+    await Promise.all([loadHighlightMode(), loadTooltipTheme(), loadCardVariant()]);
 
     const payload = await new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: 'GET_GENE_DATA' }, resolve);
@@ -758,21 +775,9 @@
         '</div>' +
         '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
       '</div>' +
-      '<div class="iconoplasm-tooltip-body">' +
-        '<div class="iconoplasm-tooltip-header">' +
-          '<div class="icono-shared-card-header-row">' +
-            '<div class="icono-shared-card-header-copy">' +
-              '<div class="iconoplasm-tooltip-symbol"></div>' +
-              '<div class="iconoplasm-tooltip-name"></div>' +
-            '</div>' +
-            '<div class="iconoplasm-tooltip-vote-slot" data-icono-tooltip-vote-slot></div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="iconoplasm-tooltip-meta"></div>' +
-      '</div>';
+      '<div class="iconoplasm-tooltip-body"></div>';
     document.body.appendChild(tooltip);
     applyTooltipTheme();
-    renderTooltipMetaSkeleton();
 
     document.addEventListener('mouseover', onMouseOver);
     document.addEventListener('mouseout', onMouseOut);
@@ -793,61 +798,106 @@
       tooltipTheme = normalizeTooltipTheme(changes[TOOLTIP_THEME_KEY].newValue);
       applyTooltipTheme();
     }
+    if (changes[CARD_VARIANT_KEY]) {
+      cardVariant = normalizeCardVariant(changes[CARD_VARIANT_KEY].newValue);
+      applyTooltipTheme();
+      renderTooltipBody(activeGeneSummary, geneDetailCache.get(activeSymbol) || null, Boolean(activeSymbol));
+    }
   });
 
-  function renderTooltipMetaSkeleton() {
-    const metaEl = tooltip.querySelector('.iconoplasm-tooltip-meta');
-    if (!metaEl) return;
-    metaEl.classList.add('iconoplasm-tooltip-meta--loading');
-    metaEl.innerHTML = IconoCardShared.renderTooltipMetaSkeletonHtml();
-  }
-
-  function renderTooltipMeta(geneDetail) {
-    const metaEl = tooltip.querySelector('.iconoplasm-tooltip-meta');
-    if (!metaEl) return;
-    if (!geneDetail || typeof geneDetail !== 'object') {
-      metaEl.classList.remove('iconoplasm-tooltip-meta--loading');
-      metaEl.innerHTML = '';
-      return;
+  function buildClassicTooltipBodyHtml(summaryGene, geneDetail, loading) {
+    const summary = summaryGene && typeof summaryGene === 'object' ? summaryGene : {};
+    const detail = geneDetail && typeof geneDetail === 'object' ? geneDetail : null;
+    const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || '').trim().toUpperCase();
+    const fullName = String((detail && detail.full_name) || summary.n || symbol).trim();
+    const assetSha = String((((detail || {}).portrait || {}).asset_sha256) || '').trim().toLowerCase();
+    const voteHtml = assetSha
+      ? IconoCardShared.voteBoxMarkup('', { variant: 'brick', showScore: false })
+      : '';
+    let metaHtml = '';
+    if (detail) {
+      const rows = IconoCardShared.collectTooltipMetaRows(detail, {
+        onMissingOrigins: (warnKey, payload) => {
+          if (warnedMissingTraitOrigins.has(warnKey)) return;
+          warnedMissingTraitOrigins.add(warnKey);
+          console.error('[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:', warnKey, payload);
+        },
+      });
+      metaHtml = rows.length ? IconoCardShared.renderTooltipMetaRowsHtml(rows) : '';
+    } else if (loading) {
+      metaHtml = IconoCardShared.renderTooltipMetaSkeletonHtml();
     }
 
-    const rows = IconoCardShared.collectTooltipMetaRows(geneDetail, {
-      onMissingOrigins: (warnKey, detail) => {
-        if (warnedMissingTraitOrigins.has(warnKey)) return;
-        warnedMissingTraitOrigins.add(warnKey);
-        console.error('[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:', warnKey, detail);
-      },
+    return (
+      '<div class="iconoplasm-tooltip-header">' +
+        '<div class="icono-shared-card-header-row">' +
+          '<div class="icono-shared-card-header-copy">' +
+            '<div class="iconoplasm-tooltip-symbol">' + escapeHtml(symbol) + '</div>' +
+            '<div class="iconoplasm-tooltip-name">' + escapeHtml(fullName || symbol) + '</div>' +
+          '</div>' +
+          '<div class="iconoplasm-tooltip-vote-slot" data-icono-tooltip-vote-slot>' +
+            voteHtml +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="iconoplasm-tooltip-meta' + (detail ? '' : ' iconoplasm-tooltip-meta--loading') + '">' +
+        metaHtml +
+      '</div>'
+    );
+  }
+
+  function buildLabLabelTooltipBodyHtml(summaryGene, geneDetail) {
+    const summary = summaryGene && typeof summaryGene === 'object' ? summaryGene : {};
+    const detail = geneDetail && typeof geneDetail === 'object' ? geneDetail : null;
+    const model = detail || {
+      symbol: summary.symbol || activeSymbol || '',
+      full_name: summary.n || summary.symbol || activeSymbol || '',
+      color: summary.c || PLACEHOLDER_COLOR,
+      essence: {},
+    };
+    const assetSha = String((((detail || {}).portrait || {}).asset_sha256) || '').trim().toLowerCase();
+    return IconoCardShared.renderLabLabelCardHtml(model, {
+      voteHtml: assetSha ? IconoCardShared.voteBoxMarkup('', { variant: 'label', showScore: false }) : '',
     });
+  }
 
-    if (!rows.length) {
-      metaEl.classList.remove('iconoplasm-tooltip-meta--loading');
-      metaEl.innerHTML = '';
-      return;
+  function renderTooltipBody(summaryGene, geneDetail, loading) {
+    if (!tooltip) return;
+    const body = tooltip.querySelector('.iconoplasm-tooltip-body');
+    if (!body) return;
+    body.innerHTML =
+      cardVariant === 'lab-label'
+        ? buildLabLabelTooltipBodyHtml(summaryGene, geneDetail)
+        : buildClassicTooltipBodyHtml(summaryGene, geneDetail, loading);
+    if (cardVariant === 'lab-label') {
+      const portrait = tooltip.querySelector('.iconoplasm-tooltip-portrait');
+      if (portrait) {
+        portrait.querySelectorAll('.icono-label-specimen-footer').forEach((node) => node.remove());
+        const fade = portrait.querySelector('.iconoplasm-tooltip-portrait-fade');
+        if (fade) {
+          fade.insertAdjacentHTML(
+            'beforebegin',
+            IconoCardShared.renderLabLabelSpecimenFooterHtml(
+              geneDetail || {
+                symbol: (summaryGene && summaryGene.symbol) || activeSymbol || '',
+                color: (summaryGene && summaryGene.c) || PLACEHOLDER_COLOR,
+              },
+            ),
+          );
+        }
+      }
+    } else {
+      tooltip.querySelectorAll('.icono-label-specimen-footer').forEach((node) => node.remove());
     }
-    metaEl.classList.remove('iconoplasm-tooltip-meta--loading');
-    metaEl.innerHTML = IconoCardShared.renderTooltipMetaRowsHtml(rows);
   }
 
-  function resetTooltipVoteSlot() {
-    if (!tooltip) return;
-    const slot = tooltip.querySelector('[data-icono-tooltip-vote-slot]');
-    if (!slot) return;
-    slot.innerHTML = '';
-  }
-
-  function renderTooltipVoteBox(geneDetail) {
-    if (!tooltip) return;
-    const slot = tooltip.querySelector('[data-icono-tooltip-vote-slot]');
-    if (!slot) return;
+  function wireRenderedTooltipVoteBox(geneDetail) {
+    if (!tooltip || !geneDetail) return;
+    const box = tooltip.querySelector('[data-icono-vote-box]');
+    if (!box) return;
     const symbol = String((geneDetail && geneDetail.symbol) || activeSymbol || '').trim().toUpperCase();
     const assetSha = String((((geneDetail || {}).portrait || {}).asset_sha256) || '').trim().toLowerCase();
-    if (!symbol || !assetSha) {
-      slot.innerHTML = '';
-      return;
-    }
-    slot.innerHTML = IconoCardShared.voteBoxMarkup('', { variant: 'brick', showScore: false });
-    const box = slot.querySelector('[data-icono-vote-box]');
-    if (!box) return;
+    if (!symbol || !assetSha) return;
     IconoCardShared.wireVoteBox(box, {
       symbol,
       assetSha,
@@ -903,6 +953,7 @@
     const gene = geneMap[symbol];
     if (!gene) return;
     activeSymbol = symbol;
+    activeGeneSummary = Object.assign({ symbol }, gene);
     warmGeneDetails(collectNeighborGeneSymbols(target, GENE_DETAIL_WARM_BATCH_SIZE), GENE_DETAIL_WARM_BATCH_SIZE);
 
     const color = gene.c || PLACEHOLDER_COLOR;
@@ -914,39 +965,31 @@
     const portraitFallback = tooltip.querySelector('.iconoplasm-tooltip-portrait-fallback');
     const portraitStatus = tooltip.querySelector('.iconoplasm-tooltip-portrait-status');
     const portraitSymbol = tooltip.querySelector('.iconoplasm-tooltip-portrait-symbol');
-    const symEl = tooltip.querySelector('.iconoplasm-tooltip-symbol');
-    const nameEl = tooltip.querySelector('.iconoplasm-tooltip-name');
     const portraitSrc = resolvePortraitUrl(gene);
     warmPortraitUrls([portraitSrc]);
     loadTooltipPortrait({ symbol, portrait, portraitImg, portraitFallback, portraitStatus, portraitSrc });
     portraitSymbol.textContent = symbol;
-    symEl.textContent = symbol;
-    nameEl.textContent = gene.n || symbol;
-    resetTooltipVoteSlot();
 
     // Keep the reading surface neutral; gene color is an accent only.
     tooltip.style.backgroundColor = '';
     tooltip.style.setProperty('--iconoplasm-gene-color', color);
     fade.style.background = '';
     portraitSymbol.style.color = '';
-    symEl.style.color = '';
-    nameEl.style.color = '';
 
     const hoverSymbol = symbol;
     if (geneDetailCache.has(symbol)) {
       const geneDetail = geneDetailCache.get(symbol);
-      renderTooltipMeta(geneDetail);
-      renderTooltipVoteBox(geneDetail);
+      renderTooltipBody(activeGeneSummary, geneDetail, false);
+      wireRenderedTooltipVoteBox(geneDetail);
     } else {
       // Reserve the metadata area immediately so the title block never jumps.
-      renderTooltipMetaSkeleton();
+      renderTooltipBody(activeGeneSummary, null, true);
       fetchGeneDetailForTooltip(symbol).then((geneDetail) => {
         if (activeSymbol === hoverSymbol && geneDetail) {
-          renderTooltipMeta(geneDetail);
-          renderTooltipVoteBox(geneDetail);
+          renderTooltipBody(activeGeneSummary, geneDetail, false);
+          wireRenderedTooltipVoteBox(geneDetail);
         } else if (activeSymbol === hoverSymbol) {
-          renderTooltipMeta(null);
-          resetTooltipVoteSlot();
+          renderTooltipBody(activeGeneSummary, null, false);
         }
       });
     }
@@ -988,8 +1031,8 @@
   function hideTooltip() {
     cancelHideTimer();
     activeSymbol = null;
+    activeGeneSummary = null;
     portraitLoadToken += 1;
-    resetTooltipVoteSlot();
     tooltip.classList.remove('iconoplasm-tooltip-visible');
   }
 

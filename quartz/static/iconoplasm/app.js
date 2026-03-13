@@ -27,6 +27,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   var GALLERY_INITIAL_PAGE_SIZE = 4
   var GALLERY_DEFAULT_ORDER = "votes"
   var HOME_LAYOUT_DEFAULT = "bricks"
+  var CARD_VARIANT_DEFAULT = "classic"
   var HOME_SKELETON_CARD_COUNT = 4
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
@@ -810,6 +811,11 @@ void syncSharedIconoplasmSettings().catch(function () {
     )
   }
 
+  function resolveCardVariant() {
+    var settings = readIconoplasmSettings()
+    return IconoCardShared.normalizeCardVariant((settings && settings.cardVariant) || CARD_VARIANT_DEFAULT)
+  }
+
   function iconoRowMarkup(label, value) {
     return (
       '<div class="brd-sidebar-row">' +
@@ -968,11 +974,22 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
+  function labelVoteBoxMarkup(genePayload, attrName) {
+    var assetSha = brickVoteAssetSha(genePayload)
+    if (!assetSha) return ""
+    return voteBoxMarkup((attrName || "data-icono-brick-vote-box") + '="' + esc(assetSha) + '"', {
+      variant: "label",
+      showScore: false,
+    })
+  }
+
   function buildBrickCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var detail = portraitDetailCache[key] || null
+    var cardVariant = resolveCardVariant()
+    var isLabelVariant = cardVariant === "lab-label"
     var href = "/gene/" + esc(encodeURIComponent(g.symbol))
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
@@ -980,18 +997,56 @@ void syncSharedIconoplasmSettings().catch(function () {
       ? renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
       : renderTooltipMobileSkeletonHtml('data-icono-card-mobile-meta')
     var voteHtml = brickVoteBoxMarkup(detail || g)
+    var labelVoteHtml = labelVoteBoxMarkup(detail || g, "data-icono-brick-vote-box")
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
+    var specimenFooterHtml = isLabelVariant
+      ? IconoCardShared.renderLabLabelSpecimenFooterHtml(detail || g)
+      : ""
+    var bodyHtml = isLabelVariant
+      ? IconoCardShared.renderLabLabelCardHtml(detail || g, {
+          voteHtml: labelVoteHtml,
+          titleHref: href,
+          titleLinkAttrs: "data-icono-nav",
+        })
+      : '<div class="iconoplasm-tooltip-header">' +
+          '<div class="icono-brick-header-row icono-shared-card-header-row">' +
+          '<a class="icono-brick-header-link" href="' +
+          href +
+          '" data-icono-nav>' +
+          '<div class="iconoplasm-tooltip-symbol">' +
+          esc(g.symbol) +
+          "</div>" +
+          '<div class="iconoplasm-tooltip-name">' +
+          esc(g.full_name || g.symbol) +
+          "</div>" +
+          "</a>" +
+          voteHtml +
+          "</div>" +
+          "</div>" +
+          '<a class="icono-brick-meta-link" href="' +
+          href +
+          '" data-icono-nav>' +
+          '<div class="iconoplasm-tooltip-meta' +
+          (detail ? "" : " iconoplasm-tooltip-meta--loading") +
+          '" data-icono-card-meta>' +
+          metaHtml +
+          "</div>" +
+          "</a>"
     return (
       // Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Layout &
       // Space) + C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction States). Brick cards
       // are no longer one giant anchor because the compact vote control needs to be a real,
       // keyboard-focusable control instead of an invalid nested button inside a link.
-      '<article class="icono-card icono-card--brick" data-icono-index="' +
+      '<article class="icono-card icono-card--brick' +
+      (isLabelVariant ? " icono-card--variant-lab-label" : "") +
+      '" data-icono-index="' +
       cardIndex +
       '" data-icono-symbol="' +
       esc(g.symbol) +
+      '" data-icono-card-variant="' +
+      esc(cardVariant) +
       '" style="--width:' +
       dims.width +
       ";--height:" +
@@ -1027,39 +1082,19 @@ void syncSharedIconoplasmSettings().catch(function () {
       esc(g.symbol) +
       "</div>" +
       "</div>" +
+      specimenFooterHtml +
       '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
       "</a>" +
       '<div class="iconoplasm-tooltip-body">' +
-      '<div class="iconoplasm-tooltip-header">' +
-      '<div class="icono-brick-header-row icono-shared-card-header-row">' +
-      '<a class="icono-brick-header-link" href="' +
-      href +
-      '" data-icono-nav>' +
-      '<div class="iconoplasm-tooltip-symbol">' +
-      esc(g.symbol) +
+      bodyHtml +
       "</div>" +
-      '<div class="iconoplasm-tooltip-name">' +
-      esc(g.full_name || g.symbol) +
-      "</div>" +
-      "</a>" +
-      voteHtml +
-      "</div>" +
-      "</div>" +
-      '<a class="icono-brick-meta-link" href="' +
-      href +
-      '" data-icono-nav>' +
-      '<div class="iconoplasm-tooltip-meta' +
-      (detail ? "" : " iconoplasm-tooltip-meta--loading") +
-      '" data-icono-card-meta>' +
-      metaHtml +
-      "</div>" +
-      "</a>" +
-      "</div>" +
-      '<a class="icono-brick-mobile-link" href="' +
-      href +
-      '" data-icono-nav>' +
-      mobileRowsHtml +
-      "</a>" +
+      (isLabelVariant
+        ? ""
+        : '<a class="icono-brick-mobile-link" href="' +
+          href +
+          '" data-icono-nav>' +
+          mobileRowsHtml +
+          "</a>") +
       "</article>"
     )
   }
@@ -1070,6 +1105,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
     var portraitAssetSha = String((((g || {}).portrait || {}).asset_sha256) || "").trim().toLowerCase()
     var detail = g || null
+    var cardVariant = resolveCardVariant()
+    var isLabelVariant = cardVariant === "lab-label"
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
     // The lead card intentionally consumes the same mobile row-grid renderer as home bricks.
@@ -1119,6 +1156,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           esc(g.symbol) +
           "</div>" +
           "</div>") +
+      (isLabelVariant ? IconoCardShared.renderLabLabelSpecimenFooterHtml(g) : "") +
       '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
       "</div>"
     // Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Components) +
@@ -1128,37 +1166,47 @@ void syncSharedIconoplasmSettings().catch(function () {
     // and the off-spec color chip panel the user asked to remove.
     var voteSlotMarkup = portraitAssetSha
       ? '<div class="iconoplasm-tooltip-vote-slot" data-icono-gene-vote-slot>' +
-        voteBoxMarkup() +
+        voteBoxMarkup("", { variant: isLabelVariant ? "label" : "" }) +
         "</div>"
       : ""
+    var bodyHtml = isLabelVariant
+      ? IconoCardShared.renderLabLabelCardHtml(detail || g, {
+          voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
+        })
+      : '<div class="iconoplasm-tooltip-header">' +
+          '<div class="icono-shared-card-header-row">' +
+          '<div class="icono-shared-card-header-copy">' +
+          '<div class="iconoplasm-tooltip-symbol">' +
+          esc(g.symbol) +
+          "</div>" +
+          '<div class="iconoplasm-tooltip-name">' +
+          esc(g.full_name || g.symbol) +
+          "</div>" +
+          "</div>" +
+          voteSlotMarkup +
+          "</div>" +
+          '<div class="iconoplasm-tooltip-meta" data-icono-card-meta>' +
+          metaHtml +
+          "</div>" +
+          "</div>" +
+          mobileRowsHtml
 
     return (
-      '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card" style="--width:' +
+      '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card' +
+      (isLabelVariant ? " icono-card--variant-lab-label" : "") +
+      '" style="--width:' +
       dims.width +
       ";--height:" +
       dims.height +
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
-      ';">' +
+      '" data-icono-card-variant="' +
+      esc(cardVariant) +
+      '">' +
       portraitMarkup +
       '<div class="iconoplasm-tooltip-body">' +
-      '<div class="iconoplasm-tooltip-header">' +
-      '<div class="icono-shared-card-header-row">' +
-      '<div class="icono-shared-card-header-copy">' +
-      '<div class="iconoplasm-tooltip-symbol">' +
-      esc(g.symbol) +
+      bodyHtml +
       "</div>" +
-      '<div class="iconoplasm-tooltip-name">' +
-      esc(g.full_name || g.symbol) +
-      "</div>" +
-      "</div>" +
-      voteSlotMarkup +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta" data-icono-card-meta>' +
-      metaHtml +
-      "</div>" +
-      "</div>" +
-      mobileRowsHtml +
       "</article>"
     )
   }
@@ -1192,6 +1240,7 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function ensureBrickVoteBox(card, genePayload) {
     if (!card) return
+    if (card.getAttribute("data-icono-card-variant") === "lab-label") return
     var headerRow = card.querySelector(".icono-brick-header-row")
     if (!headerRow) return
     var assetSha = brickVoteAssetSha(genePayload)
@@ -1220,6 +1269,30 @@ void syncSharedIconoplasmSettings().catch(function () {
   function hydrateBrickCard(card, genePayload) {
     if (!card) return
     if (genePayload) hydrateBrickPortrait(card, genePayload)
+    if (card.getAttribute("data-icono-card-variant") === "lab-label") {
+      var body = card.querySelector(".iconoplasm-tooltip-body")
+      if (body) {
+        body.innerHTML = IconoCardShared.renderLabLabelCardHtml(genePayload, {
+          voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
+          titleHref: "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
+          titleLinkAttrs: "data-icono-nav",
+        })
+      }
+      var mediaLink = card.querySelector(".icono-brick-media-link")
+      if (mediaLink) {
+        mediaLink.querySelectorAll(".icono-label-specimen-footer").forEach(function (node) {
+          node.remove()
+        })
+        var fadeEl = mediaLink.querySelector(".iconoplasm-tooltip-portrait-fade")
+        if (fadeEl) {
+          fadeEl.insertAdjacentHTML(
+            "beforebegin",
+            IconoCardShared.renderLabLabelSpecimenFooterHtml(genePayload),
+          )
+        }
+      }
+      return
+    }
     var meta = card.querySelector("[data-icono-card-meta]")
     var mobileMeta = card.querySelector("[data-icono-card-mobile-meta]")
     var metaRows = collectTooltipMetaRows(genePayload)

@@ -10,6 +10,17 @@
   var ICONO_CROSS_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 6 14 14M14 6 6 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
 
+  function iconoPenLoopSvg(className) {
+    return (
+      '<svg class="' +
+      String(className || "icono-pen-loop") +
+      '" viewBox="0 0 132 34" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17" fill="none" stroke="currentColor" stroke-width="1.05" stroke-linecap="round" stroke-dasharray="2.5 4"/>' +
+      "</svg>"
+    )
+  }
+
   function resolveApiBase(explicitBase) {
     var value = String(explicitBase || "").trim()
     if (value) return value.replace(/\/+$/, "")
@@ -79,6 +90,13 @@
       if (out.length >= (limit || 4)) break
     }
     return out
+  }
+
+  function normalizeCardVariant(raw) {
+    var value = String(raw || "")
+      .trim()
+      .toLowerCase()
+    return value === "lab-label" ? "lab-label" : "classic"
   }
 
   function normalizePoliticsDisplay(rawPolitics, rawPoliticsOrigin) {
@@ -267,6 +285,263 @@
     return rows
   }
 
+  function labLabelCatalogNumber(symbol) {
+    var safe = normalizedSymbol(symbol)
+    if (!safe) return "00000"
+    var hash = 2166136261
+    for (var i = 0; i < safe.length; i++) {
+      hash ^= safe.charCodeAt(i)
+      hash +=
+        (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
+    }
+    return String(Math.abs(hash >>> 0) % 100000).padStart(5, "0")
+  }
+
+  function labLabelDisplayName(geneDetail) {
+    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
+    var safeEssence =
+      safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
+        ? safeGeneDetail.essence
+        : {}
+    return (
+      String(safeGeneDetail.full_name || safeEssence.name || safeGeneDetail.symbol || "").trim() ||
+      normalizedSymbol(safeGeneDetail.symbol)
+    )
+  }
+
+  function renderLabLabelOptionHtml(value, selected, extraClass) {
+    var classes = "icono-label-option"
+    if (extraClass) classes += " " + extraClass
+    if (selected) classes += " is-selected"
+    return (
+      '<span class="' +
+      classes +
+      '">' +
+      '<span class="icono-label-option-copy">' +
+      escapeHtml(value) +
+      "</span>" +
+      (selected ? iconoPenLoopSvg("icono-label-option-loop") : "") +
+      "</span>"
+    )
+  }
+
+  function renderLabLabelVoteShell(voteHtml) {
+    return String(voteHtml || "").trim() ? voteHtml : '<div class="icono-label-qc-empty"></div>'
+  }
+
+  function renderLabLabelTitleHtml(symbol, fullName, options) {
+    var opts = options || {}
+    var titleInner =
+      '<div class="icono-label-caption">gene name</div>' +
+      '<div class="icono-label-symbol">' +
+      escapeHtml(symbol) +
+      "</div>" +
+      '<div class="icono-label-name">' +
+      escapeHtml(fullName || symbol) +
+      "</div>"
+    if (opts.titleHref) {
+      return (
+        '<a class="icono-label-title-link" href="' +
+        escapeHtml(opts.titleHref) +
+        '"' +
+        (opts.titleLinkAttrs ? " " + String(opts.titleLinkAttrs) : "") +
+        ">" +
+        titleInner +
+        "</a>"
+      )
+    }
+    return '<div class="icono-label-title-block">' + titleInner + "</div>"
+  }
+
+  function renderLabLabelSpecimenFooterHtml(geneDetail) {
+    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
+    var color = String(safeGeneDetail.color || "").trim().toUpperCase()
+    var symbol = normalizedSymbol(safeGeneDetail.symbol)
+    if (!symbol && !color) return ""
+    return (
+      '<div class="icono-label-specimen-footer">' +
+      '<div class="icono-label-specimen-chip">' +
+      escapeHtml(symbol || "UNFILED") +
+      "</div>" +
+      '<div class="icono-label-specimen-notes">' +
+      '<div class="icono-label-specimen-note">specimen portrait</div>' +
+      '<div class="icono-label-specimen-note">iconoplasm archive</div>' +
+      (color
+        ? '<div class="icono-label-specimen-note">catalog stock ' + escapeHtml(color) + "</div>"
+        : "") +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function renderLabLabelCardHtml(geneDetail, options) {
+    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
+    var safeEssence =
+      safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
+        ? safeGeneDetail.essence
+        : {}
+    var opts = options || {}
+    var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
+    var fullName = labLabelDisplayName(safeGeneDetail)
+    var family = String(safeEssence.family_surname || "").trim()
+    var familyFeature = String(safeEssence.family_feature || "").trim()
+    var filedCopy = familyFeature
+      ? familyFeature
+      : "iconoplasm archive / human gene / field copy"
+    var sexOriginValues = uniqueDisplayValues(
+      safeEssence.sex_origin ||
+        safeEssence.gender_origin ||
+        safeGeneDetail.sex_origin ||
+        safeGeneDetail.gender_origin,
+      2,
+    )
+    var selectedCategory = String(sexOriginValues[0] || "").trim().toLowerCase()
+    var sexNote = String(safeEssence.sex || "").trim().toLowerCase()
+    var firstPublicationYear = Number(safeGeneDetail.first_publication_year)
+    var firstNoted = Number.isFinite(firstPublicationYear) && firstPublicationYear > 0 ? String(Math.round(firstPublicationYear)) : ""
+    var ageNote = ""
+    if (safeEssence.age) {
+      ageNote = String(safeEssence.age).trim()
+    } else if (safeEssence.age_years != null && Number.isFinite(Number(safeEssence.age_years))) {
+      ageNote = String(Math.round(Number(safeEssence.age_years)))
+    }
+    if (ageNote) ageNote += " years old"
+    var weightKg = Number(safeEssence.weight_kg)
+    var handwrittenWeight =
+      Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : ""
+    var aesthetics = uniqueDisplayValues(safeEssence.aesthetics, 4)
+    var aestheticsOrigin = uniqueDisplayValues(safeEssence.aesthetics_origin, 4)
+    var maxStyleRows = Math.max(aesthetics.length, aestheticsOrigin.length, 3)
+    var politicsDisplay = normalizePoliticsDisplay(
+      safeEssence.politics || safeEssence.faction || "",
+      safeEssence.politics_origin,
+    )
+    var molecularAlignment = String(politicsDisplay.molecular || "").toLowerCase()
+    var politicalNote = String(politicsDisplay.character || "").trim()
+    var titleHtml = renderLabLabelTitleHtml(symbol, fullName, opts)
+    var voteHtml = renderLabLabelVoteShell(opts.voteHtml)
+
+    var stylePairsHtml = ""
+    for (var i = 0; i < maxStyleRows; i++) {
+      stylePairsHtml +=
+        '<div class="icono-label-style-pair">' +
+        '<div class="icono-label-origin-text">' +
+        escapeHtml(String(aestheticsOrigin[i] || "").trim() || " ") +
+        "</div>" +
+        '<div class="icono-label-hand-note icono-label-hand-note--style">' +
+        escapeHtml(String(aesthetics[i] || "").trim()) +
+        "</div>" +
+        "</div>"
+    }
+
+    return (
+      '<div class="icono-label-sheet-body">' +
+      '<div class="icono-label-header-row">' +
+      titleHtml +
+      '<div class="icono-label-header-side">' +
+      '<div class="icono-label-header-meta">' +
+      '<div class="icono-label-header-stack">' +
+      '<div class="icono-label-header-meta-cell">' +
+      '<div class="icono-label-caption">emulsion no.</div>' +
+      '<div class="icono-label-serial">' +
+      escapeHtml(labLabelCatalogNumber(symbol)) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-header-meta-cell">' +
+      '<div class="icono-label-caption">family</div>' +
+      '<div class="icono-label-family">' +
+      escapeHtml(family || "UNFILED") +
+      "</div>" +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-filed-block">' +
+      '<div class="icono-label-caption">filed</div>' +
+      '<div class="icono-label-filed-copy">' +
+      escapeHtml(filedCopy) +
+      "</div>" +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-qc-block">' +
+      '<div class="icono-label-caption">qc</div>' +
+      voteHtml +
+      "</div>" +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-band-row">' +
+      '<div class="icono-label-row-label">field notes</div>' +
+      '<div class="icono-label-band-grid">' +
+      '<div class="icono-label-band-cell icono-label-band-cell--category">' +
+      '<div class="icono-label-caption">category</div>' +
+      '<div class="icono-label-selector-row">' +
+      renderLabLabelOptionHtml("TRANSMEMBRANE", selectedCategory === "transmembrane") +
+      renderLabLabelOptionHtml("SOLUBLE", selectedCategory === "soluble") +
+      "</div>" +
+      '<div class="icono-label-hand-note icono-label-hand-note--sex">' +
+      escapeHtml(sexNote) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-band-cell icono-label-band-cell--noted">' +
+      '<div class="icono-label-caption">first noted</div>' +
+      '<div class="icono-label-typed-value">' +
+      escapeHtml(firstNoted || " ") +
+      "</div>" +
+      '<div class="icono-label-hand-note icono-label-hand-note--age">' +
+      escapeHtml(ageNote) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-band-cell icono-label-band-cell--mass">' +
+      '<div class="icono-label-caption">mass</div>' +
+      '<div class="icono-label-hand-note icono-label-hand-note--mass-number">' +
+      escapeHtml(handwrittenWeight) +
+      "</div>" +
+      '<div class="icono-label-mass-line">' +
+      '<span class="icono-label-typed-value icono-label-typed-value--mass">_____</span>' +
+      '<span class="icono-label-typed-value icono-label-typed-value--crossed">kDa</span>' +
+      '<span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>' +
+      "</div>" +
+      "</div>" +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-style-row">' +
+      '<div class="icono-label-row-label">pfam clans</div>' +
+      '<div class="icono-label-style-stack">' +
+      stylePairsHtml +
+      "</div>" +
+      "</div>" +
+      (politicsDisplay.isNeutral
+        ? ""
+        : '<div class="icono-label-alignment-row">' +
+          '<div class="icono-label-row-label">alignment</div>' +
+          '<div class="icono-label-alignment-body">' +
+          '<div class="icono-label-selector-row icono-label-selector-row--alignment">' +
+          renderLabLabelOptionHtml(
+            "ONCOGENE",
+            molecularAlignment === "oncogene" ||
+              molecularAlignment === "contextual oncogene/tumor suppressor",
+          ) +
+          renderLabLabelOptionHtml(
+            "TUMOR SUPPRESSOR",
+            molecularAlignment === "tumor suppressor" ||
+              molecularAlignment === "contextual oncogene/tumor suppressor",
+          ) +
+          "</div>" +
+          '<div class="icono-label-hand-note icono-label-hand-note--politics">' +
+          escapeHtml(politicalNote) +
+          "</div>" +
+          "</div>" +
+          "</div>") +
+      '<div class="icono-label-footer-row">' +
+      '<div class="icono-label-row-label">remarks</div>' +
+      '<div class="icono-label-footer-copy">' +
+      '<div class="icono-label-footer-line">labelled / inspected / filed</div>' +
+      '<div class="icono-label-footer-line">archive room b / human gene cabinet</div>' +
+      '<div class="icono-label-footer-line">keep away from heat / moisture</div>' +
+      "</div>" +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function renderTooltipMetaRowsHtml(rows) {
     if (!Array.isArray(rows) || !rows.length) return ""
     var html = ""
@@ -430,17 +705,24 @@
     var attrs = extraAttrs ? " " + extraAttrs : ""
     var opts = options || {}
     var variant = String(opts.variant || "").trim()
+    var isBrick = variant === "brick"
+    var isLabel = variant === "label"
+    var approveInner = isLabel
+      ? '<span class="icono-vote-btn-copy">FIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop")
+      : ICONO_CHECK_ICON
+    var rejectInner = isLabel ? '<span class="icono-vote-btn-copy">MISFIT</span>' : ICONO_CROSS_ICON
     return (
       '<div class="icono-vote-box' +
-      (variant === "brick" ? " icono-vote-box--brick" : "") +
+      (isBrick ? " icono-vote-box--brick" : "") +
+      (isLabel ? " icono-vote-box--label" : "") +
       '" data-icono-vote-box' +
       attrs +
       ">" +
       '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
-      ICONO_CHECK_ICON +
+      approveInner +
       "</button>" +
       '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
-      ICONO_CROSS_ICON +
+      rejectInner +
       "</button>" +
       "</div>"
     )
@@ -704,8 +986,11 @@
     escapeHtml: escapeHtml,
     normalizedSymbol: normalizedSymbol,
     uniqueDisplayValues: uniqueDisplayValues,
+    normalizeCardVariant: normalizeCardVariant,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,
     collectTooltipMetaRows: collectTooltipMetaRows,
+    renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
+    renderLabLabelCardHtml: renderLabLabelCardHtml,
     renderTooltipMetaRowsHtml: renderTooltipMetaRowsHtml,
     renderTooltipMetaSkeletonHtml: renderTooltipMetaSkeletonHtml,
     renderTooltipMobileRowGridHtml: renderTooltipMobileRowGridHtml,

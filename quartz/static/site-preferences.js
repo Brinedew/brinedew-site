@@ -4,12 +4,14 @@ var READER_MODE_STORAGE_KEY = "readerMode"
 var THEME_COOKIE_KEY = "brinedew_theme"
 var READER_MODE_COOKIE_KEY = "brinedew_reader_mode"
 var ICONOPLASM_LAYOUT_COOKIE_KEY = "brinedew_icono_layout"
+var ICONOPLASM_CARD_VARIANT_COOKIE_KEY = "brinedew_icono_card_variant"
 var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
 var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
 var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
 var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
   homeLayout: "bricks",
+  cardVariant: "classic",
   generationProvider: GENERATION_PROVIDER_DEFAULT,
   generationApiKey: "",
   generationModel: "",
@@ -27,6 +29,14 @@ function normalizeHomeLayout(layout) {
     .toLowerCase()
   if (value === "masonry") return "masonry"
   return ICONOPLASM_DEFAULT_SETTINGS.homeLayout
+}
+
+function normalizeCardVariant(variant) {
+  var value = String(variant || "")
+    .trim()
+    .toLowerCase()
+  if (value === "lab-label") return "lab-label"
+  return ICONOPLASM_DEFAULT_SETTINGS.cardVariant
 }
 
 function normalizeGenerationProvider(provider) {
@@ -442,6 +452,7 @@ export function buildIconoplasmSettings(raw) {
   var source = raw && typeof raw === "object" ? raw : {}
   return {
     homeLayout: normalizeHomeLayout(source.homeLayout),
+    cardVariant: normalizeCardVariant(source.cardVariant),
     generationProvider: normalizeGenerationProvider(source.generationProvider),
     generationApiKey: trimStoredValue(source.generationApiKey, 800),
     generationModel: trimStoredValue(source.generationModel, 200),
@@ -460,8 +471,10 @@ export function readIconoplasmSettings() {
       ? sharedIconoplasmSettingsCache
       : readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}
   var settings = buildIconoplasmSettings(cached)
-  var sharedLayout = normalizeHomeLayout(readCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY))
-  if (sharedLayout) settings.homeLayout = sharedLayout
+  var rawSharedLayout = readCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY)
+  if (rawSharedLayout) settings.homeLayout = normalizeHomeLayout(rawSharedLayout)
+  var rawSharedCardVariant = readCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY)
+  if (rawSharedCardVariant) settings.cardVariant = normalizeCardVariant(rawSharedCardVariant)
   return settings
 }
 
@@ -470,6 +483,7 @@ export function writeIconoplasmSettings(settings) {
   rememberIconoplasmSettings(nextSettings)
   if (!writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, nextSettings)) return false
   if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, nextSettings.homeLayout)) return false
+  if (!writeCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY, nextSettings.cardVariant)) return false
   if (shouldUseSharedSettingsBridge()) {
     void requestSharedIconoplasmSettings("writeIconoplasmSettings", nextSettings)
       .then(function (sharedSettings) {
@@ -486,6 +500,7 @@ export function resetIconoplasmSettings() {
   sharedIconoplasmSettingsCache = null
   if (!removeStorageKey(ICONOPLASM_SETTINGS_STORAGE_KEY)) return false
   if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, "")) return false
+  if (!writeCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY, "")) return false
   if (shouldUseSharedSettingsBridge()) {
     void requestSharedIconoplasmSettings("resetIconoplasmSettings")
       .then(function (sharedSettings) {

@@ -9,8 +9,10 @@ const refreshBtn = document.getElementById('refresh-btn');
 const versionEl = document.getElementById('version-text');
 const highlightModeEl = document.getElementById('highlight-mode');
 const tooltipThemeEl = document.getElementById('tooltip-theme');
+const cardVariantEl = document.getElementById('card-variant');
 const HIGHLIGHT_MODE_KEY = 'iconoplasm_highlight_mode';
 const TOOLTIP_THEME_KEY = 'iconoplasm_tooltip_theme';
+const CARD_VARIANT_KEY = 'iconoplasm_card_variant';
 
 if (versionEl) {
   versionEl.textContent = 'v' + chrome.runtime.getManifest().version;
@@ -37,9 +39,13 @@ function normalizeTooltipTheme(value) {
   return value === 'dark' ? 'dark' : 'light';
 }
 
+function normalizeCardVariant(value) {
+  return value === 'lab-label' ? 'lab-label' : 'classic';
+}
+
 async function loadStatus() {
   try {
-    const localSettings = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY, TOOLTIP_THEME_KEY]);
+    const localSettings = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY, TOOLTIP_THEME_KEY, CARD_VARIANT_KEY]);
     const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
     countEl.textContent = formatCount(status.geneCount);
     hashEl.textContent = status.hash ? status.hash.slice(0, 12) : '--';
@@ -49,6 +55,9 @@ async function loadStatus() {
     }
     if (tooltipThemeEl) {
       tooltipThemeEl.value = normalizeTooltipTheme(localSettings[TOOLTIP_THEME_KEY]);
+    }
+    if (cardVariantEl) {
+      cardVariantEl.value = normalizeCardVariant(localSettings[CARD_VARIANT_KEY]);
     }
 
     if (status.geneCount > 0) {
@@ -99,6 +108,12 @@ if (highlightModeEl) {
 if (tooltipThemeEl) {
   tooltipThemeEl.addEventListener('change', async () => {
     await chrome.storage.local.set({ [TOOLTIP_THEME_KEY]: normalizeTooltipTheme(tooltipThemeEl.value) });
+  });
+}
+
+if (cardVariantEl) {
+  cardVariantEl.addEventListener('change', async () => {
+    await chrome.storage.local.set({ [CARD_VARIANT_KEY]: normalizeCardVariant(cardVariantEl.value) });
   });
 }
 
