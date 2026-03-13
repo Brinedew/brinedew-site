@@ -837,7 +837,7 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
      strength as full rows, but tighten only the leading so multi-aesthetic blocks read
      as nested structure without adding indent or dimming the text. */
   font-size: 0.95rem;
-  line-height: 1.2;
+  line-height: 0.98;
   font-style: normal;
   font-weight: 580;
   opacity: 0.88;

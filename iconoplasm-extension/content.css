@@ -381,7 +381,7 @@
      Keep pair rows aligned to the same text spine as full rows and match their visual
      weight; only tighten the leading so the block reads as subordinate sub-rows. */
   font-size: 15px;
-  line-height: 1.2;
+  line-height: 0.98;
   font-style: normal;
   font-weight: 580;
   opacity: 0.88;
