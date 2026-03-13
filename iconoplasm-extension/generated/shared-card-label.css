@@ -646,32 +646,32 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: calc(18 / 1220 * 100cqw);
+  padding: calc(12 / 1220 * 100cqw);
 }
 
 .icono-label-footer-copy-main {
-  gap: calc(4 / 1220 * 100cqw);
+  gap: calc(3 / 1220 * 100cqw);
 }
 
 .icono-label-footer-copy-side {
-  gap: calc(8 / 1220 * 100cqw);
+  gap: calc(6 / 1220 * 100cqw);
   justify-content: space-between;
   border-left: 1px solid var(--icono-label-rule);
 }
 
 .icono-label-footer-line--caption {
   font-family: var(--icono-label-type);
-  font-size: calc(10 / 1220 * 100cqw);
-  line-height: 1.08;
+  font-size: calc(9 / 1220 * 100cqw);
+  line-height: 1.02;
   letter-spacing: 0.12em;
 }
 
 .icono-label-footer-line--typed {
   color: #34241b;
   font-family: "Special Elite", var(--icono-label-type);
-  font-size: calc(14 / 1220 * 100cqw);
-  line-height: 1.05;
-  letter-spacing: 0.03em;
+  font-size: calc(12 / 1220 * 100cqw);
+  line-height: 0.98;
+  letter-spacing: 0.02em;
 }
 
 .icono-card--variant-lab-label .iconoplasm-tooltip-symbol,
