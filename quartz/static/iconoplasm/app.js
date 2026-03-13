@@ -30,6 +30,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   var HOME_SKELETON_CARD_COUNT = 4
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
+    { value: "uniqueness", label: "Uniqueness" },
     { value: "popularity", label: "Popularity" },
     { value: "newest", label: "Newest" },
     { value: "random", label: "Random" },

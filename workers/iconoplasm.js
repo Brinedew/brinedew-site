@@ -1979,7 +1979,7 @@ function normalizeGalleryOrder(raw) {
     .trim()
     .toLowerCase()
   if (value === "popular") return "popularity"
-  if (["votes", "popularity", "newest", "random"].includes(value)) return value
+  if (["votes", "uniqueness", "popularity", "newest", "random"].includes(value)) return value
   return "votes"
 }
 
@@ -2089,6 +2089,40 @@ function galleryRandomRank(seed, symbol) {
   return hash >>> 0
 }
 
+function buildGalleryUniquenessIndex(catalogBySymbol, essenceRows) {
+  const clanCounts = new Map()
+  const originsBySymbol = new Map()
+  const rows = Array.isArray(essenceRows) ? essenceRows : []
+  for (const row of rows) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol || !(catalogBySymbol instanceof Map) || !catalogBySymbol.has(symbol)) continue
+    let origins = []
+    try {
+      const parsed = JSON.parse(String(row?.aesthetics_origin_json || "[]"))
+      origins = normalizeTextList(parsed)
+    } catch {
+      origins = []
+    }
+    if (!origins.length) continue
+    originsBySymbol.set(symbol, origins)
+    for (const clan of origins) {
+      clanCounts.set(clan, Number(clanCounts.get(clan) || 0) + 1)
+    }
+  }
+
+  const out = new Map()
+  for (const [symbol, origins] of originsBySymbol.entries()) {
+    let dominantClanSize = 0
+    for (const clan of origins) {
+      dominantClanSize = Math.max(dominantClanSize, Number(clanCounts.get(clan) || 0))
+    }
+    if (dominantClanSize > 0) {
+      out.set(symbol, dominantClanSize)
+    }
+  }
+  return out
+}
+
 function sortGalleryItems(items, order, seed = null) {
   const sorted = Array.isArray(items) ? items.slice() : []
   sorted.sort((left, right) => {
@@ -2105,6 +2139,20 @@ function sortGalleryItems(items, order, seed = null) {
         galleryRandomRank(seed, left.symbol) - galleryRandomRank(seed, right.symbol) ||
         compareNullableTextAsc(left.symbol, right.symbol)
       )
+    }
+    if (order === "uniqueness") {
+      const leftRank = Number.isFinite(Number(left.uniqueness_rank))
+        ? Number(left.uniqueness_rank)
+        : null
+      const rightRank = Number.isFinite(Number(right.uniqueness_rank))
+        ? Number(right.uniqueness_rank)
+        : null
+      if (leftRank == null && rightRank == null) {
+        return compareNullableTextAsc(left.symbol, right.symbol)
+      }
+      if (leftRank == null) return 1
+      if (rightRank == null) return -1
+      return leftRank - rightRank || compareNullableTextAsc(left.symbol, right.symbol)
     }
     if (order === "popularity") {
       return (
@@ -2222,15 +2270,27 @@ async function gallerySnapshot(env, url) {
     })
   }
 
+  // Source of truth note: uniqueness must stay based on the synced NiceGUI
+  // mapping/demographics pipeline. aesthetics_origin_json is the stored clan list.
+  // Do not invent a separate website-only clan resolver here.
+  const uniquenessRowsRaw = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, aesthetics_origin_json
+       FROM icono_gene_essence`,
+  ).all()
+  const uniquenessRows = Array.isArray(uniquenessRowsRaw?.results) ? uniquenessRowsRaw.results : []
+  const uniquenessBySymbol = buildGalleryUniquenessIndex(catalogCache.bySymbol, uniquenessRows)
+
   const items = []
   for (const [symbol, cached] of catalogCache.bySymbol.entries()) {
     const published = publishedMap.get(symbol) || null
+    const uniquenessRank = uniquenessBySymbol.get(symbol)
     const fullName = String(cached?.n || symbol || "").trim() || symbol
     const color = String(cached?.c || "#888").trim() || "#888"
     items.push({
       symbol,
       color,
       full_name: fullName,
+      uniqueness_rank: Number.isFinite(Number(uniquenessRank)) ? Number(uniquenessRank) : null,
       width: published?.width ?? null,
       height: published?.height ?? null,
       popularity_score: wikiPageviewsForSymbol(symbol),
