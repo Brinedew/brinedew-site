@@ -316,6 +316,8 @@ function optionalInt(raw) {
 }
 
 function optionalFloat(raw, { min = 0 } = {}) {
+  if (raw == null) return null
+  if (typeof raw === "string" && !raw.trim()) return null
   const n = Number(raw)
   if (!Number.isFinite(n)) return null
   if (n < min) return null
