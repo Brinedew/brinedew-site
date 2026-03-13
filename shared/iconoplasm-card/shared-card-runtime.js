@@ -445,7 +445,6 @@
     var attrs = extraAttrs ? " " + extraAttrs : ""
     var opts = options || {}
     var variant = String(opts.variant || "").trim()
-    var showScore = opts.showScore !== false
     return (
       '<div class="icono-vote-box' +
       (variant === "brick" ? " icono-vote-box--brick" : "") +
@@ -455,9 +454,6 @@
       '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
       ICONO_CHECK_ICON +
       "</button>" +
-      (showScore
-        ? '<span class="icono-vote-stats" data-icono-vote-stats title="Score +0 (0 approvals / 0 rejections)" aria-live="polite">0</span>'
-        : "") +
       '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
       ICONO_CROSS_ICON +
       "</button>" +
