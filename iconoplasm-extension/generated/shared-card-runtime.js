@@ -451,12 +451,6 @@
       safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf,
       3,
     )
-    var constraintPct = formatMetricNumber(
-      safeGeneDetail.constraint_percentile != null
-        ? safeGeneDetail.constraint_percentile
-        : essence.constraint_percentile,
-      2,
-    )
     var aaLength = formatMetricNumber(safeGeneDetail.protein_length_aa, 0)
     return (
       '<div class="icono-label-specimen-micro">' +
@@ -481,11 +475,11 @@
       '<span class="icono-label-specimen-metric">HPA tau ' +
       escapeHtml(tau || "n/a") +
       "</span>" +
+      /* Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
+         Color lightness is assigned from LOEUF; constraint_percentile exists in the
+         upstream protein data but is not part of the color-demographics mapping. */
       '<span class="icono-label-specimen-metric">gnomAD LOEUF ' +
       escapeHtml(loeuf || "n/a") +
-      "</span>" +
-      '<span class="icono-label-specimen-metric">constraint pct ' +
-      escapeHtml(constraintPct || "n/a") +
       "</span>" +
       "</div>" +
       "</div>"
@@ -506,11 +500,7 @@
   function renderLabLabelFamilyTraitFieldHtml(familyFeature) {
     var trait = String(familyFeature || "").trim()
     if (!trait) {
-      return (
-        '<div class="icono-label-family-trait-field icono-label-family-trait-field--empty">' +
-        '<span class="icono-label-family-trait-strike" aria-hidden="true"></span>' +
-        "</div>"
-      )
+      return '<div class="icono-label-family-trait-field icono-label-family-trait-field--empty"></div>'
     }
     return (
       '<div class="icono-label-family-trait-field">' +
@@ -598,7 +588,7 @@
     } else if (safeEssence.age_years != null && Number.isFinite(Number(safeEssence.age_years))) {
       ageNote = String(Math.round(Number(safeEssence.age_years)))
     }
-    if (ageNote) ageNote += " y.o."
+    if (ageNote && !/\by\.?o\.?\b/i.test(ageNote) && !/\byears?\s+old\b/i.test(ageNote)) ageNote += " y.o."
     var weightKg = Number(safeEssence.weight_kg)
     var handwrittenWeight =
       Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : ""

@@ -432,16 +432,7 @@
 }
 
 .icono-label-family-trait-field--empty {
-  align-items: center;
-}
-
-.icono-label-family-trait-strike {
-  position: absolute;
-  left: 0;
-  right: calc(6 / 1220 * 100cqw);
-  top: 50%;
-  border-top: 1.3px solid color-mix(in srgb, var(--icono-label-pen) 84%, transparent);
-  transform: rotate(-0.15deg);
+  align-items: flex-start;
 }
 
 .icono-label-filed-copy,
@@ -544,7 +535,7 @@
   flex-wrap: wrap;
   gap: calc(26 / 1220 * 100cqw);
   min-height: calc(28 / 1220 * 100cqw);
-  align-items: center;
+  align-items: flex-start;
 }
 
 .icono-label-option {
@@ -636,7 +627,7 @@
 
 .icono-label-mass-line {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: calc(8 / 1220 * 100cqw);
   min-height: calc(28 / 1220 * 100cqw);
 }
@@ -712,9 +703,31 @@
   left: calc(-8 / 1220 * 100cqw);
   right: calc(-10 / 1220 * 100cqw);
   top: 50%;
-  border-top: 1.3px solid color-mix(in srgb, var(--icono-label-pen) 88%, transparent);
-  transform: rotate(-0.15deg);
+  height: calc(8 / 1220 * 100cqw);
   pointer-events: none;
+}
+
+.icono-label-alignment-strike::before,
+.icono-label-alignment-strike::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1.3px solid color-mix(in srgb, var(--icono-label-pen) 88%, transparent);
+  transform-origin: center;
+}
+
+.icono-label-alignment-strike::before {
+  top: 50%;
+  transform: rotate(-0.72deg);
+}
+
+.icono-label-alignment-strike::after {
+  left: calc(6 / 1220 * 100cqw);
+  right: calc(4 / 1220 * 100cqw);
+  top: calc(50% + (1 / 1220 * 100cqw));
+  opacity: 0.74;
+  transform: rotate(-0.24deg);
 }
 
 .icono-label-category-grid {
@@ -736,13 +749,10 @@
   grid-column: 2;
 }
 
-.icono-label-hand-note--sex-soluble {
-  margin-left: calc(136 / 1220 * 100cqw);
-}
-
+.icono-label-hand-note--sex-soluble,
 .icono-label-hand-note--sex-transmembrane,
 .icono-label-hand-note--sex-unselected {
-  margin-left: 0;
+  margin-left: calc(152 / 1220 * 100cqw);
 }
 
 .icono-label-footer-copy {
