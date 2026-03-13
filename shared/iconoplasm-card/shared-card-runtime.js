@@ -674,14 +674,12 @@
       stylePairsHtml +
       "</div>" +
       "</div>" +
-      (politicsDisplay.isNeutral
-        ? ""
-        : '<div class="icono-label-alignment-row">' +
-          '<div class="icono-label-row-label">alignment</div>' +
-          '<div class="icono-label-alignment-body">' +
-          renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) +
-          "</div>" +
-          "</div>") +
+      '<div class="icono-label-alignment-row">' +
+      '<div class="icono-label-row-label">alignment</div>' +
+      '<div class="icono-label-alignment-body">' +
+      renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) +
+      "</div>" +
+      "</div>" +
       '<div class="icono-label-footer-row">' +
       '<div class="icono-label-row-label">remarks</div>' +
       renderLabLabelFooterHtml(safeGeneDetail.color, serial) +
