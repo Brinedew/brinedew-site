@@ -1068,6 +1068,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var dims = portraitDimensions(g)
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
+    var portraitAssetSha = String((((g || {}).portrait || {}).asset_sha256) || "").trim().toLowerCase()
     var detail = g || null
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
@@ -1120,6 +1121,16 @@ void syncSharedIconoplasmSettings().catch(function () {
           "</div>") +
       '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
       "</div>"
+    // Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Components) +
+    // C:\Users\Admin\.codex\skills\extract\SKILL.md (single source of truth).
+    // Gene detail must consume the same in-card action pattern as the shared card surfaces.
+    // Keeping a second action bar under the card is what caused vote drift, redundant links,
+    // and the off-spec color chip panel the user asked to remove.
+    var voteSlotMarkup = portraitAssetSha
+      ? '<div class="iconoplasm-tooltip-vote-slot" data-icono-gene-vote-slot>' +
+        voteBoxMarkup() +
+        "</div>"
+      : ""
 
     return (
       '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card" style="--width:' +
@@ -1132,12 +1143,16 @@ void syncSharedIconoplasmSettings().catch(function () {
       portraitMarkup +
       '<div class="iconoplasm-tooltip-body">' +
       '<div class="iconoplasm-tooltip-header">' +
+      '<div class="icono-shared-card-header-row">' +
+      '<div class="icono-shared-card-header-copy">' +
       '<div class="iconoplasm-tooltip-symbol">' +
       esc(g.symbol) +
       "</div>" +
       '<div class="iconoplasm-tooltip-name">' +
       esc(g.full_name || g.symbol) +
       "</div>" +
+      "</div>" +
+      voteSlotMarkup +
       "</div>" +
       '<div class="iconoplasm-tooltip-meta" data-icono-card-meta>' +
       metaHtml +
@@ -1966,47 +1981,9 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function renderGeneContent(container, g) {
-    var hasPortrait = !!publishedPortraitUrl(g, "medium")
-    var portraitNote = hasPortrait
-      ? ""
-      : '<p class="icono-portrait-status">Portrait not yet published</p>'
-
-    var voteBox =
-      hasPortrait && g.portrait && g.portrait.asset_sha256
-        ? '<div class="icono-gene-portrait-footer">' + voteBoxMarkup() + "</div>"
-        : ""
-
-    var links = []
-    if (g.source_links) {
-      if (g.source_links.uniprot)
-        links.push('<a href="' + esc(g.source_links.uniprot) + '">UniProt</a>')
-      if (g.source_links.ncbi) links.push('<a href="' + esc(g.source_links.ncbi) + '">NCBI</a>')
-      if (g.source_links.ensembl)
-        links.push('<a href="' + esc(g.source_links.ensembl) + '">Ensembl</a>')
-    }
-    links.push('<a href="/api/gene/' + esc(encodeURIComponent(g.symbol)) + '">API</a>')
-
     var html =
       '<section class="icono-gene-lead">' +
-      buildGeneLeadCardMarkup(g) +
-      '<div class="icono-gene-detail-bar">' +
-      '<div class="icono-gene-detail-group">' +
-      (g.color
-        ? '<div class="icono-color-chip"><span class="icono-color-dot" style="background:' +
-          esc(g.color) +
-          '"></span>' +
-          esc(g.color) +
-          "</div>"
-        : "") +
-      portraitNote +
-      "</div>" +
-      '<div class="icono-gene-detail-group icono-gene-detail-group--actions">' +
-      voteBox +
-      '<div class="icono-links icono-links--gene">' +
-      links.join(" ") +
-      "</div>" +
-      "</div>" +
-      "</div>"
+      buildGeneLeadCardMarkup(g)
 
     // Manifestation / character description
     var manifestation = g.manifestation || g.description || ""

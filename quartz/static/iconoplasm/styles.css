@@ -957,6 +957,17 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   min-height: 280px;
 }
 
+.icono-gene-lead-card .iconoplasm-tooltip-header .icono-shared-card-header-row {
+  width: 100%;
+}
+
+.icono-gene-lead-card .iconoplasm-tooltip-vote-slot {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
 .iconoplasm-tooltip-mobile-rowgrid {
   display: none;
 }
@@ -988,25 +999,6 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   transition:
     transform 0.18s var(--icono-ease-out),
     opacity 0.16s var(--icono-ease-out);
-}
-
-.icono-gene-detail-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.9rem 1rem;
-  flex-wrap: wrap;
-}
-
-.icono-gene-detail-group {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  flex-wrap: wrap;
-}
-
-.icono-gene-detail-group--actions {
-  justify-content: flex-end;
 }
 
 .icono-nav {
@@ -1132,69 +1124,10 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   text-wrap: pretty;
 }
 
-.icono-color-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.65rem;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--icono-radius-sm);
-  background: var(--ui-bg);
-  font-family: var(--codeFont, monospace);
-  font-size: 0.85rem;
-  color: var(--darkgray);
-  margin-bottom: 0.5rem;
-}
-
-.icono-color-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  display: inline-block;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.icono-portrait-status {
-  font-size: 0.85rem;
-  font-style: italic;
-  color: var(--gray);
-  margin: 0.25rem 0;
-}
-
-.icono-gene-portrait-footer {
-  margin-top: 0.78rem;
-  display: flex;
-  justify-content: flex-start;
-}
-
 /* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Components) +
    C:\Users\Admin\.codex\skills\extract\SKILL.md (single source of truth).
    Vote visuals intentionally live in iconoplasm/generated/shared-card-vote.css. Keep any
    site-local rules limited to placement and sizing so the extension and website stay matched. */
-
-.icono-links {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-top: 0.75rem;
-}
-
-.icono-links a {
-  color: var(--accent);
-  text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 500;
-  padding: 0.25rem 0;
-  border-bottom: 1px solid transparent;
-  transition:
-    border-color 0.16s var(--icono-ease-out),
-    color 0.16s var(--icono-ease-out),
-    transform 0.18s var(--icono-ease-out);
-}
-
-.icono-links a:hover {
-  border-bottom-color: var(--accent);
-}
 
 .icono-candidate-gallery {
   margin-top: 1.9rem;
@@ -1575,52 +1508,12 @@ html[data-theme="dark"] .icono-card--brick {
     color: inherit;
   }
 
-  .icono-gene-detail-bar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .icono-gene-detail-group {
-    width: 100%;
-  }
-
-  .icono-gene-detail-group--actions {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .icono-gene-portrait-footer {
-    width: 100%;
-    margin-top: 0;
-  }
-
   .icono-vote-box {
     width: 100%;
   }
 
   .icono-vote-box--brick {
     width: 2.45rem;
-  }
-
-  .icono-links--gene {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.45rem;
-    margin-top: 0;
-  }
-
-  .icono-links--gene a {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 44px;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    background: var(--ui-bg);
-    border-bottom-color: var(--ui-border);
   }
 
   .icono-gene-header {
@@ -1669,10 +1562,6 @@ html[data-theme="dark"] .icono-card--brick {
     border-left: none;
     border-top: 1px dashed var(--ui-border);
     padding-top: 0.35rem;
-  }
-
-  .icono-gene-detail-group--actions {
-    justify-content: flex-start;
   }
 
   .icono-hero-title {
