@@ -524,6 +524,11 @@
   min-height: calc(41 / 1220 * 100cqw);
 }
 
+.icono-label-band-cell--noted .icono-label-band-primary,
+.icono-label-band-cell--mass .icono-label-band-primary {
+  padding-top: calc(18 / 1220 * 100cqw);
+}
+
 .icono-label-band-secondary {
   display: flex;
   align-items: flex-start;
