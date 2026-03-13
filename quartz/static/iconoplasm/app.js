@@ -1332,6 +1332,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (genePayload) hydrateBrickPortrait(card, genePayload)
     if (card.getAttribute("data-icono-card-variant") === "lab-label") {
       var body = card.querySelector(".iconoplasm-tooltip-body")
+      var portraitShell = card.querySelector(".iconoplasm-tooltip-portrait")
       if (body) {
         body.innerHTML = IconoCardShared.renderLabLabelCardHtml(genePayload, {
           voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
@@ -1339,18 +1340,37 @@ void syncSharedIconoplasmSettings().catch(function () {
           titleLinkAttrs: "data-icono-nav",
         })
       }
-      var mediaLink = card.querySelector(".icono-brick-media-link")
-      if (mediaLink) {
-        mediaLink.querySelectorAll(".icono-label-specimen-footer").forEach(function (node) {
-          node.remove()
-        })
-        var fadeEl = mediaLink.querySelector(".iconoplasm-tooltip-portrait-fade")
-        if (fadeEl) {
-          fadeEl.insertAdjacentHTML(
-            "beforebegin",
-            IconoCardShared.renderLabLabelSpecimenFooterHtml(genePayload),
-          )
-        }
+      if (portraitShell) {
+        var dims = portraitDimensions(genePayload)
+        var portraitUrl = publishedPortraitUrl(genePayload, "medium")
+        var href = "/gene/" + esc(encodeURIComponent(genePayload.symbol || ""))
+        var labelPortraitHtml =
+          portraitUrl
+            ? '<a class="iconoplasm-tooltip-portrait-media icono-brick-media-link" href="' +
+              href +
+              '" data-icono-nav aria-label="Open ' +
+              esc(genePayload.symbol) +
+              ' gene page">' +
+              '<img class="iconoplasm-tooltip-portrait-img" src="' +
+              esc(portraitUrl) +
+              '" alt="' +
+              esc(genePayload.symbol) +
+              ' portrait" loading="eager" decoding="async" fetchpriority="low" width="' +
+              dims.width +
+              '" height="' +
+              dims.height +
+              '">' +
+              "</a>"
+            : '<div class="iconoplasm-tooltip-portrait-fallback">' +
+              '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+              '<div class="iconoplasm-tooltip-portrait-symbol">' +
+              esc(genePayload.symbol) +
+              "</div>" +
+              "</div>"
+        portraitShell.innerHTML = IconoCardShared.renderLabLabelSpecimenRailHtml(
+          labelPortraitHtml,
+          genePayload,
+        )
       }
       return
     }

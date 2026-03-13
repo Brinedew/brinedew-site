@@ -131,10 +131,6 @@
       return { character: "", molecular: "", isNeutral: true }
     }
 
-    if (!character || !molecular) {
-      return { character: "", molecular: "", isNeutral: false }
-    }
-
     return {
       character: character,
       molecular: molecular,
@@ -329,6 +325,51 @@
     return String(voteHtml || "").trim() ? voteHtml : '<div class="icono-label-qc-empty"></div>'
   }
 
+  function renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) {
+    var categoryKey = String(selectedCategory || "").trim().toLowerCase()
+    var classes = "icono-label-category-grid"
+    if (categoryKey === "transmembrane") classes += " is-transmembrane"
+    else if (categoryKey === "soluble") classes += " is-soluble"
+    else classes += " is-unselected"
+    return (
+      '<div class="' +
+      classes +
+      '">' +
+      '<div class="icono-label-category-option icono-label-category-option--transmembrane">' +
+      renderLabLabelOptionHtml("TRANSMEMBRANE", categoryKey === "transmembrane") +
+      "</div>" +
+      '<div class="icono-label-category-option icono-label-category-option--soluble">' +
+      renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble") +
+      "</div>" +
+      '<div class="icono-label-hand-note icono-label-hand-note--sex">' +
+      escapeHtml(sexNote || "") +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) {
+    var molecularKey = String(molecularAlignment || "").trim().toLowerCase()
+    var isContextual = molecularKey === "contextual oncogene/tumor suppressor"
+    var isOncogene = molecularKey === "oncogene" || isContextual
+    var isTumorSuppressor = molecularKey === "tumor suppressor" || isContextual
+    var isNeither = !molecularKey
+    return (
+      '<div class="icono-label-alignment-grid">' +
+      '<div class="icono-label-selector-row icono-label-selector-row--alignment' +
+      (isNeither ? " is-neither" : "") +
+      '">' +
+      renderLabLabelOptionHtml("ONCOGENE", isOncogene) +
+      renderLabLabelOptionHtml("TUMOR SUPPRESSOR", isTumorSuppressor) +
+      (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") +
+      "</div>" +
+      '<div class="icono-label-hand-note icono-label-hand-note--politics">' +
+      escapeHtml(politicalNote || "") +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function renderLabLabelTitleHtml(symbol, fullName, options) {
     var opts = options || {}
     var registryLine = String(
@@ -378,16 +419,11 @@
   }
 
   function renderLabLabelSpecimenRailHtml(mediaHtml, geneDetail) {
-    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
-    var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     return (
       '<div class="icono-label-specimen-viewport">' +
       String(mediaHtml || "") +
-      (symbol
-        ? '<div class="icono-label-specimen-chip">' + escapeHtml(symbol) + "</div>"
-        : "") +
       "</div>" +
-      renderLabLabelSpecimenFooterHtml(safeGeneDetail) +
+      renderLabLabelSpecimenFooterHtml(geneDetail) +
       '<div class="iconoplasm-tooltip-portrait-fade"></div>'
     )
   }
@@ -459,7 +495,7 @@
     } else if (safeEssence.age_years != null && Number.isFinite(Number(safeEssence.age_years))) {
       ageNote = String(Math.round(Number(safeEssence.age_years)))
     }
-    if (ageNote) ageNote += " years old"
+    if (ageNote) ageNote += " y.o."
     var weightKg = Number(safeEssence.weight_kg)
     var handwrittenWeight =
       Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : ""
@@ -511,6 +547,7 @@
       '<div class="icono-label-caption">filed</div>' +
       renderLabLabelFiledLines(familyFeature) +
       "</div>" +
+      "</div>" +
       '<div class="icono-label-qc-block">' +
       '<div class="icono-label-caption">qc</div>' +
       voteHtml +
@@ -521,19 +558,12 @@
       '<div class="icono-label-qc-note icono-label-qc-note--empty" data-icono-qc-note></div>' +
       "</div>" +
       "</div>" +
-      "</div>" +
       '<div class="icono-label-band-row">' +
       '<div class="icono-label-row-label">field notes</div>' +
       '<div class="icono-label-band-grid">' +
       '<div class="icono-label-band-cell icono-label-band-cell--category">' +
       '<div class="icono-label-caption">category</div>' +
-      '<div class="icono-label-selector-row">' +
-      renderLabLabelOptionHtml("TRANSMEMBRANE", selectedCategory === "transmembrane") +
-      renderLabLabelOptionHtml("SOLUBLE", selectedCategory === "soluble") +
-      "</div>" +
-      '<div class="icono-label-hand-note icono-label-hand-note--sex">' +
-      escapeHtml(sexNote) +
-      "</div>" +
+      renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) +
       "</div>" +
       '<div class="icono-label-band-cell icono-label-band-cell--noted">' +
       '<div class="icono-label-caption">first noted</div>' +
@@ -546,13 +576,14 @@
       "</div>" +
       '<div class="icono-label-band-cell icono-label-band-cell--mass">' +
       '<div class="icono-label-caption">mass</div>' +
-      '<div class="icono-label-hand-note icono-label-hand-note--mass-number">' +
-      escapeHtml(handwrittenWeight) +
-      "</div>" +
       '<div class="icono-label-mass-line">' +
-      '<span class="icono-label-typed-value icono-label-typed-value--mass">_____</span>' +
-      '<span class="icono-label-typed-value icono-label-typed-value--crossed">kDa</span>' +
+      '<span class="icono-label-mass-fill">' +
+      '<span class="icono-label-hand-note icono-label-hand-note--mass-number">' +
+      escapeHtml(handwrittenWeight) +
+      "</span>" +
+      "</span>" +
       '<span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>' +
+      '<span class="icono-label-typed-value icono-label-typed-value--crossed">kDa</span>' +
       "</div>" +
       "</div>" +
       "</div>" +
@@ -568,21 +599,7 @@
         : '<div class="icono-label-alignment-row">' +
           '<div class="icono-label-row-label">alignment</div>' +
           '<div class="icono-label-alignment-body">' +
-          '<div class="icono-label-selector-row icono-label-selector-row--alignment">' +
-          renderLabLabelOptionHtml(
-            "ONCOGENE",
-            molecularAlignment === "oncogene" ||
-              molecularAlignment === "contextual oncogene/tumor suppressor",
-          ) +
-          renderLabLabelOptionHtml(
-            "TUMOR SUPPRESSOR",
-            molecularAlignment === "tumor suppressor" ||
-              molecularAlignment === "contextual oncogene/tumor suppressor",
-          ) +
-          "</div>" +
-          '<div class="icono-label-hand-note icono-label-hand-note--politics">' +
-          escapeHtml(politicalNote) +
-          "</div>" +
+          renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) +
           "</div>" +
           "</div>") +
       '<div class="icono-label-footer-row">' +
