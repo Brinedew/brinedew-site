@@ -750,6 +750,9 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function buildHomeShellMarkup(layout) {
     var resolvedLayout = layout === "masonry" ? "masonry" : HOME_LAYOUT_DEFAULT
+    // Single source of truth: content/apps/iconoplasm/index.md intentionally ships an empty
+    // mount root now. Keep the entire home shell here so the page cannot drift into a second
+    // markdown-owned fallback renderer with stale dropdowns, copy, or skeleton markup.
     return (
       '<div class="icono-hero">' +
       '<div class="icono-hero-title">Iconoplasm</div>' +
