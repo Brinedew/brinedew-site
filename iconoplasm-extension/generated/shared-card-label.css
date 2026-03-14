@@ -278,6 +278,11 @@
   text-transform: uppercase;
 }
 
+.icono-label-specimen-metric-value {
+  font-family: "Special Elite";
+  letter-spacing: 0.04em;
+}
+
 .icono-label-sheet-body {
   display: grid;
   grid-template-rows: 29.97% 10.09% 43.85% 8.20% 7.89%;
@@ -617,10 +622,9 @@
   position: relative;
   z-index: 1;
   color: var(--icono-label-ink);
-  font-family: "IBM Plex Mono";
-  font-size: calc(20 / 1220 * 100cqw);
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-family: "Special Elite";
+  font-size: calc(24 / 1220 * 100cqw);
+  letter-spacing: 0.03em;
   line-height: 0.98;
   text-transform: uppercase;
 }

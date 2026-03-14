@@ -491,9 +491,11 @@
       escapeHtml(color || "#000000") +
       '"></span>' +
       '<span class="icono-label-specimen-metric">sample ' +
+      '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(
         (colorName ? colorName + " / " : "") + (color || "UNFILED"),
       ) +
+      "</span>" +
       "</span>" +
       '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--hue">' +
       escapeHtml("hue: " + hueLabel) +
@@ -502,7 +504,9 @@
       '<div class="icono-label-specimen-metric-grid">' +
       '<div class="icono-label-specimen-analysis-row">' +
       '<span class="icono-label-specimen-metric">HPA tau ' +
+      '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(tau || "n/a") +
+      "</span>" +
       "</span>" +
       '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--sat">' +
       escapeHtml("saturation: " + saturationLabel) +
@@ -513,7 +517,9 @@
          upstream protein data but is not part of the color-demographics mapping. */
       '<div class="icono-label-specimen-analysis-row">' +
       '<span class="icono-label-specimen-metric">gnomAD LOEUF ' +
+      '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(loeuf || "n/a") +
+      "</span>" +
       "</span>" +
       '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--light">' +
       escapeHtml("lightness: " + lightnessLabel) +
