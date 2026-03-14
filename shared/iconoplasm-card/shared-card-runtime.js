@@ -7,16 +7,217 @@
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10.5 8.25 13.75 15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   var ICONO_CROSS_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 6 14 14M14 6 6 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  var ICONO_ROUGH_LOOP_VIEWBOX_WIDTH = 132
+  var ICONO_ROUGH_LOOP_VIEWBOX_HEIGHT = 34
+  var iconoRoughLoopSerial = 0
+  var ICONO_ROUGH_LOOP_PRESETS = {
+    default: {
+      width: 116,
+      height: 24,
+      strokeWidth: 1.85,
+      roughness: 1.05,
+      bowing: 1.25,
+      maxRandomnessOffset: 1.1,
+      curveFitting: 0.92,
+      curveStepCount: 9,
+    },
+    "vote-approve": {
+      width: 118,
+      height: 24,
+      strokeWidth: 1.72,
+      roughness: 0.55,
+      bowing: 0.2,
+      maxRandomnessOffset: 0.65,
+      curveFitting: 0.95,
+      curveStepCount: 9,
+      disableMultiStroke: true,
+    },
+    "vote-reject": {
+      width: 124,
+      height: 27,
+      strokeWidth: 2.02,
+      roughness: 3.35,
+      bowing: 4.4,
+      maxRandomnessOffset: 3.2,
+      curveFitting: 0.68,
+      curveStepCount: 10,
+    },
+    "category-transmembrane": {
+      width: 125,
+      height: 26,
+      strokeWidth: 1.86,
+      roughness: 1.95,
+      bowing: 2.15,
+      maxRandomnessOffset: 1.9,
+      curveFitting: 0.82,
+      curveStepCount: 9,
+    },
+    "category-soluble": {
+      width: 117,
+      height: 22,
+      strokeWidth: 1.58,
+      roughness: 0.42,
+      bowing: 0.18,
+      maxRandomnessOffset: 0.5,
+      curveFitting: 0.97,
+      curveStepCount: 8,
+      disableMultiStroke: true,
+    },
+    "alignment-oncogene": {
+      width: 112,
+      height: 24,
+      strokeWidth: 1.82,
+      roughness: 2.15,
+      bowing: 1.05,
+      maxRandomnessOffset: 2,
+      curveFitting: 0.76,
+      curveStepCount: 9,
+    },
+    "alignment-tumor-suppressor": {
+      width: 129,
+      height: 27,
+      strokeWidth: 2.08,
+      roughness: 3.85,
+      bowing: 4.85,
+      maxRandomnessOffset: 3.45,
+      curveFitting: 0.62,
+      curveStepCount: 10,
+    },
+  }
 
-  function iconoPenLoopSvg(className) {
+  function iconoPenLoopFallbackMarkup() {
+    return (
+      '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17" fill="none" stroke="currentColor" stroke-width="1.05" stroke-linecap="round" stroke-dasharray="2.5 4"/>'
+    )
+  }
+
+  function iconoPenLoopSvg(className, presetName) {
+    iconoRoughLoopSerial += 1
+    var loopSeed = 9001 + iconoRoughLoopSerial * 97
     return (
       '<svg class="' +
       String(className || "icono-pen-loop") +
+      '" data-icono-rough-loop="true" data-icono-rough-preset="' +
+      escapeHtml(String(presetName || "default")) +
+      '" data-icono-rough-seed="' +
+      String(loopSeed) +
       '" viewBox="0 0 132 34" preserveAspectRatio="none" aria-hidden="true">' +
-      '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '<path d="M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17" fill="none" stroke="currentColor" stroke-width="1.05" stroke-linecap="round" stroke-dasharray="2.5 4"/>' +
+      iconoPenLoopFallbackMarkup() +
       "</svg>"
     )
+  }
+
+  function iconoResolveRough() {
+    return global && global.rough && typeof global.rough.svg === "function" ? global.rough : null
+  }
+
+  function iconoRoughLoopPreset(name) {
+    var key = String(name || "default").trim().toLowerCase()
+    var preset = ICONO_ROUGH_LOOP_PRESETS[key] || ICONO_ROUGH_LOOP_PRESETS.default
+    var base = ICONO_ROUGH_LOOP_PRESETS.default
+    var resolved = {}
+    for (var prop in base) resolved[prop] = base[prop]
+    for (var presetProp in preset) resolved[presetProp] = preset[presetProp]
+    return resolved
+  }
+
+  function iconoRenderRoughLoop(loopSvg) {
+    if (!loopSvg || loopSvg.getAttribute("data-icono-rough-ready") === "true") return true
+    var roughImpl = iconoResolveRough()
+    if (!roughImpl) return false
+    var preset = iconoRoughLoopPreset(loopSvg.getAttribute("data-icono-rough-preset"))
+    var seed = Number(loopSvg.getAttribute("data-icono-rough-seed"))
+    var roughSvg = roughImpl.svg(loopSvg)
+    while (loopSvg.firstChild) loopSvg.removeChild(loopSvg.firstChild)
+    var ellipse = roughSvg.ellipse(
+      ICONO_ROUGH_LOOP_VIEWBOX_WIDTH / 2,
+      ICONO_ROUGH_LOOP_VIEWBOX_HEIGHT / 2,
+      preset.width,
+      preset.height,
+      {
+        stroke: "currentColor",
+        fill: "none",
+        seed: Number.isFinite(seed) ? seed : undefined,
+        strokeWidth: preset.strokeWidth,
+        roughness: preset.roughness,
+        bowing: preset.bowing,
+        maxRandomnessOffset: preset.maxRandomnessOffset,
+        curveFitting: preset.curveFitting,
+        curveStepCount: preset.curveStepCount,
+        disableMultiStroke: !!preset.disableMultiStroke,
+      },
+    )
+    ellipse.setAttribute("fill", "none")
+    ellipse.setAttribute("stroke-linecap", "round")
+    ellipse.setAttribute("stroke-linejoin", "round")
+    ellipse.setAttribute("vector-effect", "non-scaling-stroke")
+    loopSvg.appendChild(ellipse)
+    loopSvg.setAttribute("data-icono-rough-ready", "true")
+    return true
+  }
+
+  function iconoCollectRoughLoops(root) {
+    var nodes = []
+    if (!root || typeof root.querySelectorAll !== "function") return nodes
+    if (typeof root.matches === "function" && root.matches("[data-icono-rough-loop]")) {
+      nodes.push(root)
+    }
+    var found = root.querySelectorAll('[data-icono-rough-loop]:not([data-icono-rough-ready="true"])')
+    for (var i = 0; i < found.length; i++) nodes.push(found[i])
+    return nodes
+  }
+
+  function hydrateRoughLoops(root) {
+    var scope = root || (global && global.document)
+    var loops = iconoCollectRoughLoops(scope)
+    for (var i = 0; i < loops.length; i++) iconoRenderRoughLoop(loops[i])
+  }
+
+  function startRoughLoopObserver() {
+    if (!global || !global.document) return
+    if (typeof MutationObserver !== "function") {
+      hydrateRoughLoops(global.document)
+      return
+    }
+    if (global.__iconoRoughLoopObserverStarted) return
+    global.__iconoRoughLoopObserverStarted = true
+    var schedule = function (root) {
+      if (typeof global.requestAnimationFrame === "function") {
+        global.requestAnimationFrame(function () {
+          hydrateRoughLoops(root)
+        })
+        return
+      }
+      global.setTimeout(function () {
+        hydrateRoughLoops(root)
+      }, 0)
+    }
+    if (global.document.readyState === "loading") {
+      global.document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+          schedule(global.document)
+        },
+        { once: true },
+      )
+    } else {
+      schedule(global.document)
+    }
+    var observer = new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        var addedNodes = mutations[i] && mutations[i].addedNodes ? mutations[i].addedNodes : []
+        for (var j = 0; j < addedNodes.length; j++) {
+          var node = addedNodes[j]
+          if (!node || node.nodeType !== 1) continue
+          schedule(node)
+        }
+      }
+    })
+    observer.observe(global.document.documentElement, {
+      childList: true,
+      subtree: true,
+    })
   }
 
   function resolveApiBase(explicitBase) {
@@ -303,7 +504,7 @@
     )
   }
 
-  function renderLabLabelOptionHtml(value, selected, extraClass) {
+  function renderLabLabelOptionHtml(value, selected, extraClass, loopPreset) {
     var classes = "icono-label-option"
     if (extraClass) classes += " " + extraClass
     if (selected) classes += " is-selected"
@@ -314,7 +515,7 @@
       '<span class="icono-label-option-copy">' +
       escapeHtml(value) +
       "</span>" +
-      (selected ? iconoPenLoopSvg("icono-label-option-loop") : "") +
+      (selected ? iconoPenLoopSvg("icono-label-option-loop", loopPreset) : "") +
       "</span>"
     )
   }
@@ -328,10 +529,10 @@
     return (
       '<div class="icono-label-category-grid">' +
       '<div class="icono-label-category-option icono-label-category-option--transmembrane">' +
-      renderLabLabelOptionHtml("TRANSMEMBRANE", categoryKey === "transmembrane") +
+      renderLabLabelOptionHtml("TRANSMEMBRANE", categoryKey === "transmembrane", "", "category-transmembrane") +
       "</div>" +
       '<div class="icono-label-category-option icono-label-category-option--soluble">' +
-      renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble") +
+      renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble", "", "category-soluble") +
       "</div>" +
       "</div>"
     )
@@ -366,8 +567,8 @@
       '<div class="icono-label-selector-row icono-label-selector-row--alignment' +
       (isNeither ? " is-neither" : "") +
       '">' +
-      renderLabLabelOptionHtml("ONCOGENE", isOncogene) +
-      renderLabLabelOptionHtml("TUMOR SUPPRESSOR", isTumorSuppressor) +
+      renderLabLabelOptionHtml("ONCOGENE", isOncogene, "", "alignment-oncogene") +
+      renderLabLabelOptionHtml("TUMOR SUPPRESSOR", isTumorSuppressor, "", "alignment-tumor-suppressor") +
       (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") +
       "</div>" +
       '<div class="' +
@@ -522,7 +723,7 @@
       Z: "crimson",
     }
     var hueLabel = letterHueWords[firstLetter] || (hsv ? describeHueWord(hsv.h) : "unknown")
-    var saturationLabel = describeBandInRange(tauRaw, 0, 1, "low vibrant", "mid vibrant", "high vibrant")
+    var saturationLabel = describeBandInRange(tauRaw, 0, 1, "low vibrance", "mid vibrance", "high vibrance")
     var lightnessLabel = describeBandInRange(loeufRaw, 0, 2, "dark shade", "mid shade", "light shade")
     var metrics = ["letter", "HPA tau", "gnomAD LOEUF"]
     var values = [firstLetter, tau || "n/a", loeuf || "n/a"]
@@ -975,10 +1176,10 @@
     var isBrick = variant === "brick"
     var isLabel = variant === "label"
     var approveInner = isLabel
-      ? '<span class="icono-vote-btn-copy">FIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop")
+      ? '<span class="icono-vote-btn-copy">FIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve")
       : ICONO_CHECK_ICON
     var rejectInner = isLabel
-      ? '<span class="icono-vote-btn-copy">MISFIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop")
+      ? '<span class="icono-vote-btn-copy">MISFIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject")
       : ICONO_CROSS_ICON
     return (
       '<div class="icono-vote-box' +
@@ -1260,6 +1461,8 @@
     return { ensureSnapshot: ensureSnapshot }
   }
 
+  startRoughLoopObserver()
+
   global.IconoplasmCardShared = {
     icons: {
       check: ICONO_CHECK_ICON,
@@ -1284,5 +1487,6 @@
     setVoteBoxState: setVoteBoxState,
     wireVoteBox: wireVoteBox,
     voteSummaryDetails: voteSummaryDetails,
+    hydrateRoughLoops: hydrateRoughLoops,
   }
 })(typeof globalThis !== "undefined" ? globalThis : window)

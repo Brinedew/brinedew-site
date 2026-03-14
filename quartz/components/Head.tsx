@@ -348,6 +348,13 @@ export default (() => {
                     src={joinSegments(
                       root,
                       "static",
+                      `iconoplasm/generated/rough.js?v=${CACHE_BUST}`,
+                    )}
+                  ></script>
+                  <script
+                    src={joinSegments(
+                      root,
+                      "static",
                       `iconoplasm/generated/shared-card-runtime.js?v=${CACHE_BUST}`,
                     )}
                   ></script>

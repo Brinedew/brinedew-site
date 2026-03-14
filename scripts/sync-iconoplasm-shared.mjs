@@ -43,6 +43,17 @@ const fontTargets = [
   ],
 }))
 
+const binaryTargets = [
+  ...fontTargets,
+  {
+    source: path.join(repoRoot, "node_modules", "roughjs", "bundled", "rough.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "rough.js"),
+      path.join(repoRoot, "iconoplasm-extension", "generated", "rough.js"),
+    ],
+  },
+]
+
 async function syncTarget({ source, outputs }) {
   const content = await readFile(source, "utf8")
   const banner =
@@ -67,4 +78,4 @@ async function syncBinaryTarget({ source, outputs }) {
   }
 }
 
-await Promise.all(fontTargets.map(syncBinaryTarget))
+await Promise.all(binaryTargets.map(syncBinaryTarget))

@@ -90,6 +90,7 @@
     "remark-rehype": "^11.1.2",
     "remark-smartypants": "^3.0.2",
     "rfdc": "^1.4.1",
+    "roughjs": "^4.6.6",
     "satori": "^0.19.1",
     "serve-handler": "^6.1.6",
     "sharp": "^0.34.5",
