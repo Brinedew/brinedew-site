@@ -122,21 +122,64 @@
     return resolved
   }
 
-  function iconoRenderRoughLoop(loopSvg) {
-    if (!loopSvg || loopSvg.getAttribute("data-icono-rough-ready") === "true") return true
+  function iconoRoughLoopTarget(loopSvg) {
+    if (!loopSvg || !loopSvg.parentElement) return null
+    var target = loopSvg.parentElement.querySelector("[data-icono-rough-copy]")
+    return target || null
+  }
+
+  function iconoMeasureRoughLoop(loopSvg, preset) {
+    var target = iconoRoughLoopTarget(loopSvg)
+    var host = loopSvg && loopSvg.parentElement ? loopSvg.parentElement : null
+    if (!target || !host || typeof target.getBoundingClientRect !== "function") return null
+    var hostRect = host.getBoundingClientRect()
+    var targetRect = target.getBoundingClientRect()
+    var text = String(target.textContent || "").trim()
+    var charCount = Math.max(text.length, 1)
+    var textWidth = Math.max(targetRect.width, 1)
+    var textHeight = Math.max(targetRect.height, 1)
+    var averageCharWidth = textWidth / charCount
+    var widthMultiplier = preset && Number.isFinite(Number(preset.width)) ? Number(preset.width) / Number(ICONO_ROUGH_LOOP_PRESETS.default.width) : 1
+    var heightMultiplier = preset && Number.isFinite(Number(preset.height)) ? Number(preset.height) / Number(ICONO_ROUGH_LOOP_PRESETS.default.height) : 1
+    var paddedWidth = textWidth + averageCharWidth * 2
+    var measuredWidth = Math.max(textWidth * 1.5, paddedWidth) * widthMultiplier
+    var measuredHeight = textHeight * 2 * heightMultiplier
+    var left = targetRect.left - hostRect.left + (textWidth - measuredWidth) / 2
+    var top = targetRect.top - hostRect.top + (textHeight - measuredHeight) / 2
+    return {
+      width: measuredWidth,
+      height: measuredHeight,
+      left: left,
+      top: top,
+    }
+  }
+
+  function iconoRenderRoughLoop(loopSvg, force) {
+    if (!loopSvg) return true
+    if (!force && loopSvg.getAttribute("data-icono-rough-ready") === "true") return true
     var roughImpl = iconoResolveRough()
     if (!roughImpl) return false
     var preset = iconoRoughLoopPreset(loopSvg.getAttribute("data-icono-rough-preset"))
     var seed = Number(loopSvg.getAttribute("data-icono-rough-seed"))
+    var measurement = iconoMeasureRoughLoop(loopSvg, preset)
     var roughSvg = roughImpl.svg(loopSvg)
     loopSvg.setAttribute("overflow", "visible")
     loopSvg.style.overflow = "visible"
+    if (measurement) {
+      loopSvg.setAttribute("viewBox", "0 0 " + measurement.width + " " + measurement.height)
+      loopSvg.style.left = measurement.left + "px"
+      loopSvg.style.top = measurement.top + "px"
+      loopSvg.style.width = measurement.width + "px"
+      loopSvg.style.height = measurement.height + "px"
+    }
     while (loopSvg.firstChild) loopSvg.removeChild(loopSvg.firstChild)
+    var ellipseWidth = measurement ? measurement.width : preset.width
+    var ellipseHeight = measurement ? measurement.height : preset.height * 2
     var ellipse = roughSvg.ellipse(
-      ICONO_ROUGH_LOOP_VIEWBOX_WIDTH / 2,
-      ICONO_ROUGH_LOOP_VIEWBOX_HEIGHT / 2,
-      preset.width,
-      preset.height * 2,
+      ellipseWidth / 2,
+      ellipseHeight / 2,
+      ellipseWidth,
+      ellipseHeight,
       {
         stroke: "currentColor",
         fill: "none",
@@ -160,52 +203,63 @@
     return true
   }
 
-  function iconoCollectRoughLoops(root) {
+  function iconoCollectRoughLoops(root, force) {
     var nodes = []
     if (!root || typeof root.querySelectorAll !== "function") return nodes
     if (typeof root.matches === "function" && root.matches("[data-icono-rough-loop]")) {
       nodes.push(root)
     }
-    var found = root.querySelectorAll('[data-icono-rough-loop]:not([data-icono-rough-ready="true"])')
+    var selector = force ? "[data-icono-rough-loop]" : '[data-icono-rough-loop]:not([data-icono-rough-ready="true"])'
+    var found = root.querySelectorAll(selector)
     for (var i = 0; i < found.length; i++) nodes.push(found[i])
     return nodes
   }
 
-  function hydrateRoughLoops(root) {
+  function hydrateRoughLoops(root, force) {
     var scope = root || (global && global.document)
-    var loops = iconoCollectRoughLoops(scope)
-    for (var i = 0; i < loops.length; i++) iconoRenderRoughLoop(loops[i])
+    var loops = iconoCollectRoughLoops(scope, !!force)
+    for (var i = 0; i < loops.length; i++) iconoRenderRoughLoop(loops[i], !!force)
   }
 
   function startRoughLoopObserver() {
     if (!global || !global.document) return
     if (typeof MutationObserver !== "function") {
-      hydrateRoughLoops(global.document)
+      hydrateRoughLoops(global.document, true)
       return
     }
     if (global.__iconoRoughLoopObserverStarted) return
     global.__iconoRoughLoopObserverStarted = true
-    var schedule = function (root) {
+    var schedule = function (root, force) {
       if (typeof global.requestAnimationFrame === "function") {
         global.requestAnimationFrame(function () {
-          hydrateRoughLoops(root)
+          hydrateRoughLoops(root, !!force)
         })
         return
       }
       global.setTimeout(function () {
-        hydrateRoughLoops(root)
+        hydrateRoughLoops(root, !!force)
       }, 0)
     }
     if (global.document.readyState === "loading") {
       global.document.addEventListener(
         "DOMContentLoaded",
         function () {
-          schedule(global.document)
+          schedule(global.document, true)
         },
         { once: true },
       )
     } else {
-      schedule(global.document)
+      schedule(global.document, true)
+    }
+    if (global.document.fonts && global.document.fonts.ready) {
+      global.document.fonts.ready.then(function () {
+        schedule(global.document, true)
+      })
+    }
+    if (typeof global.addEventListener === "function") {
+      global.addEventListener("resize", function () {
+        schedule(global.document, true)
+      })
     }
     var observer = new MutationObserver(function (mutations) {
       for (var i = 0; i < mutations.length; i++) {
@@ -213,7 +267,7 @@
         for (var j = 0; j < addedNodes.length; j++) {
           var node = addedNodes[j]
           if (!node || node.nodeType !== 1) continue
-          schedule(node)
+          schedule(node, false)
         }
       }
     })
@@ -515,7 +569,7 @@
       '<span class="' +
       classes +
       '">' +
-      '<span class="icono-label-option-copy">' +
+      '<span class="icono-label-option-copy" data-icono-rough-copy="true">' +
       escapeHtml(value) +
       "</span>" +
       (selected ? iconoPenLoopSvg("icono-label-option-loop", loopPreset) : "") +
@@ -1179,10 +1233,10 @@
     var isBrick = variant === "brick"
     var isLabel = variant === "label"
     var approveInner = isLabel
-      ? '<span class="icono-vote-btn-copy">FIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve")
+      ? '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">FIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve")
       : ICONO_CHECK_ICON
     var rejectInner = isLabel
-      ? '<span class="icono-vote-btn-copy">MISFIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject")
+      ? '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject")
       : ICONO_CROSS_ICON
     return (
       '<div class="icono-vote-box' +
