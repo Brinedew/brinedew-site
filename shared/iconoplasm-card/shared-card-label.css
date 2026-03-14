@@ -777,7 +777,7 @@
 }
 
 .icono-label-category-grid {
-  transform: translateY(calc(-40 / 1220 * 100cqw));
+  margin-top: calc(-40 / 1220 * 100cqw);
 }
 
 .icono-label-category-option--transmembrane {
