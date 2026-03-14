@@ -534,28 +534,28 @@
       "</div>" +
       '<div class="icono-label-specimen-decomposition">' +
       '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">letter ' +
+      '<span class="icono-label-specimen-metric">letter</span>' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(firstLetter) +
-      "</span></span>" +
+      "</span>" +
       '<span class="icono-label-specimen-hand-analysis">' +
       escapeHtml(hueLabel) +
       "</span>" +
       "</div>" +
       '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">HPA tau ' +
+      '<span class="icono-label-specimen-metric">HPA tau</span>' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(tau || "n/a") +
-      "</span></span>" +
+      "</span>" +
       '<span class="icono-label-specimen-hand-analysis">' +
       escapeHtml(saturationLabel) +
       "</span>" +
       "</div>" +
       '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">gnomAD LOEUF ' +
+      '<span class="icono-label-specimen-metric">gnomAD LOEUF</span>' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(loeuf || "n/a") +
-      "</span></span>" +
+      "</span>" +
       '<span class="icono-label-specimen-hand-analysis">' +
       escapeHtml(lightnessLabel) +
       "</span>" +
@@ -645,9 +645,14 @@
         ? safeGeneDetail.essence
         : {}
     var opts = options || {}
+    var safePortrait =
+      safeGeneDetail.portrait && typeof safeGeneDetail.portrait === "object"
+        ? safeGeneDetail.portrait
+        : {}
     var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     var fullName = labLabelDisplayName(safeGeneDetail)
-    var serial = labLabelCatalogNumber(symbol)
+    var visionId = String(safePortrait.vision_id || "").trim()
+    var serial = labLabelCatalogNumber(visionId || symbol)
     var family = String(safeEssence.family_surname || "").trim()
     var familyFeature = String(safeEssence.family_feature || "").trim()
     var sexOriginValues = uniqueDisplayValues(
@@ -1036,6 +1041,7 @@
     var assetSha = String(cfg.assetSha || "")
       .trim()
       .toLowerCase()
+    var visionId = String(cfg.visionId || "").trim()
     if (!symbol || !assetSha) return null
     box.setAttribute("data-icono-vote-wired", "true")
     var state = {
@@ -1101,7 +1107,7 @@
             candidate_ref: candidateRef,
             symbol: symbol,
             asset_sha256: assetSha,
-            vision_id: "",
+            vision_id: visionId,
           }),
         },
         {
@@ -1146,7 +1152,7 @@
             candidate_ref: candidateRef,
             symbol: symbol,
             asset_sha256: assetSha,
-            vision_id: "",
+            vision_id: visionId,
             vote_value: nextVote,
           }),
         },

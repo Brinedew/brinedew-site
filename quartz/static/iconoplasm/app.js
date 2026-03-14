@@ -1439,6 +1439,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     return IconoCardShared.wireVoteBox(box, {
       symbol: symbolValue,
       assetSha: assetShaValue,
+      visionId: opts.visionId || "",
       deferSnapshot: !!opts.deferSnapshot,
       apiBaseUrl: API,
       onAuthRequired: showVoteLoginPopup,
@@ -1471,7 +1472,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       .trim()
       .toUpperCase()
     var portrait = (genePayload && genePayload.portrait) || {}
-    wireVoteBox(box, symbol, portrait.asset_sha256)
+    wireVoteBox(box, symbol, portrait.asset_sha256, { visionId: portrait.vision_id || "" })
   }
 
   function wireCandidateVoteBoxes(container, genePayload) {

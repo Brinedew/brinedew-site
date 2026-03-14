@@ -200,7 +200,7 @@
   min-height: auto;
   width: 100%;
   box-sizing: border-box;
-  padding-top: calc(3 / 1220 * 100cqw);
+  padding-top: 0;
   border-top: 1px solid var(--icono-label-rule);
 }
 
@@ -268,13 +268,16 @@
 }
 
 .icono-label-specimen-decomposition .icono-label-specimen-hand-analysis {
-  font-size: calc(30 / 1220 * 100cqw);
+  font-size: calc(28 / 1220 * 100cqw);
+}
+
+.icono-label-specimen-decomposition .icono-label-specimen-metric {
+  min-width: calc(110 / 1220 * 100cqw);
 }
 
 .icono-label-specimen-analysis-row {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: calc(6 / 1220 * 100cqw);
   min-width: 0;
 }
@@ -293,7 +296,7 @@
 .icono-label-specimen-note {
   color: color-mix(in srgb, var(--icono-label-ink) 58%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(13 / 1220 * 100cqw);
+  font-size: calc(10 / 1220 * 100cqw);
   letter-spacing: 0.12em;
   line-height: 1.1;
   text-transform: uppercase;
@@ -307,7 +310,7 @@
   letter-spacing: 0.1em;
   line-height: 1.08;
   text-transform: uppercase;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -315,6 +318,9 @@
   font-family: "Special Elite";
   font-size: calc(20 / 1220 * 100cqw);
   letter-spacing: 0.04em;
+  text-align: center;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 
