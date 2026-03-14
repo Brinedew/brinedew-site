@@ -76,9 +76,9 @@
   --icono-label-band-mass-fr: 29%;
   --icono-label-footer-main-fr: 54.568528%;
   --icono-label-footer-side-fr: 45.431472%;
-  --icono-label-specimen-metric-col: calc(104 / 1220 * 100cqw);
-  --icono-label-specimen-value-col: calc(46 / 1220 * 100cqw);
-  --icono-label-specimen-column-gap: calc(6 / 1220 * 100cqw);
+  --icono-label-specimen-metric-col: calc(110 / 1220 * 100cqw);
+  --icono-label-specimen-value-col: calc(52 / 1220 * 100cqw);
+  --icono-label-specimen-column-gap: calc(8 / 1220 * 100cqw);
   --icono-label-specimen-row-gap: calc(3 / 1220 * 100cqw);
   --icono-label-hand-size: calc(36 / 1220 * 100cqw);
 }
@@ -226,8 +226,6 @@
   gap: calc(4 / 1220 * 100cqw);
   min-width: 0;
   overflow: visible;
-  position: relative;
-  top: calc(-8 / 1220 * 100cqw);
 }
 
 .icono-label-specimen-color-row {
@@ -770,6 +768,10 @@
   transform-origin: left center;
 }
 
+.icono-label-hand-note--age {
+  white-space: nowrap;
+}
+
 .icono-label-hand-note--mass-number {
   display: inline-block;
   font-size: var(--icono-label-hand-size);
@@ -790,9 +792,10 @@
   position: relative;
   display: inline-flex;
   align-items: baseline;
+  justify-content: center;
   gap: calc(8 / 1220 * 100cqw);
   min-width: calc(112 / 1220 * 100cqw);
-  padding: 0 calc(4 / 1220 * 100cqw) calc(1 / 1220 * 100cqw) 0;
+  padding: 0 calc(6 / 1220 * 100cqw) calc(1 / 1220 * 100cqw);
 }
 
 .icono-label-mass-fill::after {
