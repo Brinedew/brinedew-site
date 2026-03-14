@@ -239,6 +239,7 @@
   transform-origin: left center;
   flex: 0 1 auto;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .icono-label-specimen-swatch-hex {
@@ -278,6 +279,7 @@
 .icono-label-specimen-analysis-row {
   display: flex;
   align-items: baseline;
+  position: relative;
   gap: calc(6 / 1220 * 100cqw);
   min-width: 0;
 }
@@ -289,8 +291,10 @@
   line-height: 0.95;
   letter-spacing: 0.01em;
   transform: rotate(-2.5deg);
-  transform-origin: left center;
-  flex: 0 0 auto;
+  transform-origin: right center;
+  position: absolute;
+  right: 0;
+  white-space: nowrap;
 }
 
 .icono-label-specimen-note {
@@ -301,6 +305,7 @@
   line-height: 1.1;
   text-transform: uppercase;
   overflow-wrap: break-word;
+  white-space: nowrap;
 }
 
 .icono-label-specimen-metric {
@@ -875,7 +880,10 @@
 .icono-label-hand-note--sex-soluble,
 .icono-label-hand-note--sex-transmembrane,
 .icono-label-hand-note--sex-unselected {
-  margin-left: calc(152 / 1220 * 100cqw);
+  display: inline-block;
+  min-width: calc(77 / 1220 * 100cqw);
+  text-align: center;
+  margin-left: calc(182 / 1220 * 100cqw);
 }
 
 .icono-label-hand-note--politics-oncogene,
