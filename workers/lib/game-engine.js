@@ -510,7 +510,18 @@ function buildProteinSections(protein, options = {}) {
             }
             return item
           })
-    ).filter(Boolean)
+    )
+      .map((item) => {
+        if (!item) {
+          return null
+        }
+        const text = typeof item.text === "string" ? item.text.trim() : ""
+        if (!text) {
+          return null
+        }
+        return text === item.text ? item : { ...item, text }
+      })
+      .filter(Boolean)
     if (!items.length) {
       return
     }
