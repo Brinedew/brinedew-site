@@ -154,8 +154,7 @@
 
 .icono-label-specimen-viewport {
   position: relative;
-  flex: 0 0 calc(442 / 1220 * 100cqw);
-  height: calc(442 / 1220 * 100cqw);
+  flex: 1 0 calc(442 / 1220 * 100cqw);
   min-height: 0;
   overflow: clip;
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 94%, transparent);
@@ -282,9 +281,15 @@
 }
 
 .icono-label-specimen-metric-hand {
+  color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
+  font-size: calc(22 / 1220 * 100cqw);
   letter-spacing: 0.01em;
+  line-height: 0.95;
   text-transform: none;
+  transform: rotate(-2.5deg);
+  display: inline-block;
+  transform-origin: left center;
 }
 
 .icono-label-sheet-body {
