@@ -10,79 +10,24 @@
   var ICONO_ROUGH_LOOP_VIEWBOX_WIDTH = 132
   var ICONO_ROUGH_LOOP_VIEWBOX_HEIGHT = 34
   var iconoRoughLoopSerial = 0
+  var ICONO_ROUGH_LOOP_STANDARD = {
+    width: 116,
+    height: 24,
+    strokeWidth: 1.82,
+    roughness: 1.62,
+    bowing: 0.79,
+    maxRandomnessOffset: 1.5,
+    curveFitting: 0.82,
+    curveStepCount: 9,
+  }
   var ICONO_ROUGH_LOOP_PRESETS = {
-    default: {
-      width: 116,
-      height: 24,
-      strokeWidth: 1.85,
-      roughness: 1.05,
-      bowing: 1.25,
-      maxRandomnessOffset: 1.1,
-      curveFitting: 0.92,
-      curveStepCount: 9,
-    },
-    "vote-approve": {
-      width: 118,
-      height: 24,
-      strokeWidth: 1.72,
-      roughness: 0.55,
-      bowing: 0.2,
-      maxRandomnessOffset: 0.65,
-      curveFitting: 0.95,
-      curveStepCount: 9,
-      disableMultiStroke: true,
-    },
-    "vote-reject": {
-      width: 124,
-      height: 27,
-      strokeWidth: 2.02,
-      roughness: 3.35,
-      bowing: 4.4,
-      maxRandomnessOffset: 3.2,
-      curveFitting: 0.68,
-      curveStepCount: 10,
-    },
-    "category-transmembrane": {
-      width: 125,
-      height: 26,
-      strokeWidth: 1.86,
-      roughness: 1.95,
-      bowing: 2.15,
-      maxRandomnessOffset: 1.9,
-      curveFitting: 0.82,
-      curveStepCount: 9,
-    },
-    "category-soluble": {
-      width: 117,
-      height: 22,
-      strokeWidth: 1.58,
-      roughness: 0.42,
-      bowing: 0.18,
-      maxRandomnessOffset: 0.5,
-      curveFitting: 0.97,
-      curveStepCount: 8,
-      disableMultiStroke: true,
-    },
-    "alignment-oncogene": {
-      width: 112,
-      height: 24,
-      strokeWidth: 1.82,
-      roughness: 2.15,
-      bowing: 1.05,
-      maxRandomnessOffset: 2,
-      curveFitting: 0.76,
-      curveStepCount: 9,
-    },
-    "alignment-tumor-suppressor": {
-      width: 129,
-      height: 27,
-      strokeWidth: 2.08,
-      roughness: 3.85,
-      bowing: 4.85,
-      maxRandomnessOffset: 3.45,
-      curveFitting: 0.62,
-      curveStepCount: 10,
-    },
+    default: ICONO_ROUGH_LOOP_STANDARD,
+    "vote-approve": ICONO_ROUGH_LOOP_STANDARD,
+    "vote-reject": ICONO_ROUGH_LOOP_STANDARD,
+    "category-transmembrane": ICONO_ROUGH_LOOP_STANDARD,
+    "category-soluble": ICONO_ROUGH_LOOP_STANDARD,
+    "alignment-oncogene": ICONO_ROUGH_LOOP_STANDARD,
+    "alignment-tumor-suppressor": ICONO_ROUGH_LOOP_STANDARD,
   }
 
   function iconoPenLoopFallbackMarkup() {
@@ -139,11 +84,9 @@
     var textWidth = Math.max(targetRect.width, 1)
     var textHeight = Math.max(targetRect.height, 1)
     var averageCharWidth = textWidth / charCount
-    var widthMultiplier = preset && Number.isFinite(Number(preset.width)) ? Number(preset.width) / Number(ICONO_ROUGH_LOOP_PRESETS.default.width) : 1
-    var heightMultiplier = preset && Number.isFinite(Number(preset.height)) ? Number(preset.height) / Number(ICONO_ROUGH_LOOP_PRESETS.default.height) : 1
     var paddedWidth = textWidth + averageCharWidth * 2
-    var measuredWidth = Math.max(textWidth * 1.5, paddedWidth) * widthMultiplier
-    var measuredHeight = textHeight * 2 * heightMultiplier
+    var measuredWidth = Math.max(textWidth * 1.5, paddedWidth)
+    var measuredHeight = textHeight * 2
     var left = targetRect.left - hostRect.left + (textWidth - measuredWidth) / 2
     var top = targetRect.top - hostRect.top + (textHeight - measuredHeight) / 2
     return {
@@ -925,6 +868,12 @@
     var serial = labLabelCatalogNumber(emulsionNumber || symbol)
     var family = String(safeEssence.family_surname || "").trim()
     var familyFeature = String(safeEssence.family_feature || "").trim()
+    var familyMembers = Number(safeEssence.family_members)
+    var hasRealFamily =
+      (Number.isFinite(familyMembers) && familyMembers > 1) ||
+      (!Number.isFinite(familyMembers) && family && family.toUpperCase() !== symbol)
+    var displayedFamily = hasRealFamily ? family : ""
+    var displayedFamilyFeature = hasRealFamily ? familyFeature : ""
     var sexOriginValues = uniqueDisplayValues(
       safeEssence.sex_origin ||
         safeEssence.gender_origin ||
@@ -986,13 +935,13 @@
       '<div class="icono-label-header-meta-cell">' +
       '<div class="icono-label-caption">family</div>' +
       '<div class="icono-label-family">' +
-      escapeHtml(family || "UNFILED") +
+      escapeHtml(displayedFamily) +
       "</div>" +
       "</div>" +
       "</div>" +
       '<div class="icono-label-filed-block">' +
       '<div class="icono-label-caption">family trait</div>' +
-      renderLabLabelFamilyTraitFieldHtml(familyFeature) +
+      renderLabLabelFamilyTraitFieldHtml(displayedFamilyFeature) +
       "</div>" +
       "</div>" +
       '<div class="icono-label-qc-block">' +
