@@ -471,6 +471,8 @@
     var essence =
       safeGeneDetail.essence && typeof safeGeneDetail.essence === "object" ? safeGeneDetail.essence : {}
     var colorName = String(essence.skin_name || "").trim()
+    var symbol = String(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol || "").trim()
+    var firstLetter = (symbol.charAt(0) || "?").toUpperCase()
     var tau = formatMetricNumber(
       safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau,
       2,
@@ -482,48 +484,50 @@
     var hueLabel = hsv ? describeHueWord(hsv.h) : "unknown"
     var saturationLabel = hsv ? describeLevelWord(hsv.s) : "unknown"
     var lightnessLabel = hsv ? describeLevelWord(hsv.v) : "unknown"
+    /* Row 1 = full color (prominent). Rows 2-4 = decomposition (subordinate).
+       Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
+       first_letter -> hue, tissue_tau -> saturation, LOEUF -> lightness. */
     return (
       '<div class="icono-label-specimen-micro">' +
-      '<div class="icono-label-specimen-swatch-row">' +
+      '<div class="icono-label-specimen-color-row">' +
+      (colorName
+        ? '<span class="icono-label-specimen-color-name">' + escapeHtml(colorName) + "</span>"
+        : "") +
+      '<span class="icono-label-specimen-swatch-hex">' +
       '<span class="icono-label-specimen-swatch" style="background:' +
       escapeHtml(color || "#000000") +
       '"></span>' +
-      '<span class="icono-label-specimen-metric">sample ' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(color || "UNFILED") +
       "</span>" +
-      (colorName
-        ? ' <span class="icono-label-specimen-metric-hand">' +
-          escapeHtml(colorName) +
-          "</span>"
-        : "") +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--hue">' +
-      escapeHtml("hue: " + hueLabel) +
       "</span>" +
       "</div>" +
-      '<div class="icono-label-specimen-metric-grid">' +
+      '<div class="icono-label-specimen-decomposition">' +
+      '<div class="icono-label-specimen-analysis-row">' +
+      '<span class="icono-label-specimen-metric">letter ' +
+      '<span class="icono-label-specimen-metric-value">' +
+      escapeHtml(firstLetter) +
+      "</span></span>" +
+      '<span class="icono-label-specimen-hand-analysis">' +
+      escapeHtml(hueLabel) +
+      "</span>" +
+      "</div>" +
       '<div class="icono-label-specimen-analysis-row">' +
       '<span class="icono-label-specimen-metric">HPA tau ' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(tau || "n/a") +
-      "</span>" +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--sat">' +
-      escapeHtml("saturation: " + saturationLabel) +
+      "</span></span>" +
+      '<span class="icono-label-specimen-hand-analysis">' +
+      escapeHtml(saturationLabel) +
       "</span>" +
       "</div>" +
-      /* Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
-         Color lightness is assigned from LOEUF; constraint_percentile exists in the
-         upstream protein data but is not part of the color-demographics mapping. */
       '<div class="icono-label-specimen-analysis-row">' +
       '<span class="icono-label-specimen-metric">gnomAD LOEUF ' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(loeuf || "n/a") +
-      "</span>" +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--light">' +
-      escapeHtml("lightness: " + lightnessLabel) +
+      "</span></span>" +
+      '<span class="icono-label-specimen-hand-analysis">' +
+      escapeHtml(lightnessLabel) +
       "</span>" +
       "</div>" +
       "</div>" +

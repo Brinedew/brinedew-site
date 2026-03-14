@@ -214,14 +214,36 @@
   display: grid;
   grid-template-rows: min-content min-content;
   align-content: start;
-  gap: calc(4 / 1220 * 100cqw);
+  gap: calc(7 / 1220 * 100cqw);
 }
 
-.icono-label-specimen-swatch-row {
-  display: grid;
-  grid-template-columns: calc(14 / 1220 * 100cqw) minmax(0, 1fr) max-content;
+.icono-label-specimen-color-row {
+  display: flex;
   align-items: center;
-  gap: calc(7 / 1220 * 100cqw);
+  justify-content: space-between;
+  gap: calc(6 / 1220 * 100cqw);
+}
+
+.icono-label-specimen-color-name {
+  color: var(--icono-label-pen);
+  font-family: var(--icono-label-hand);
+  font-size: calc(26 / 1220 * 100cqw);
+  letter-spacing: 0.01em;
+  line-height: 0.95;
+  transform: rotate(-2.5deg);
+  transform-origin: left center;
+}
+
+.icono-label-specimen-swatch-hex {
+  display: flex;
+  align-items: center;
+  gap: calc(4 / 1220 * 100cqw);
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
+  font-family: var(--icono-label-type);
+  font-size: calc(11 / 1220 * 100cqw);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .icono-label-specimen-swatch {
@@ -231,11 +253,15 @@
   flex: 0 0 auto;
 }
 
-.icono-label-specimen-metric-grid {
+.icono-label-specimen-decomposition {
   display: grid;
   grid-template-columns: 1fr;
   grid-auto-rows: min-content;
   gap: calc(2 / 1220 * 100cqw);
+}
+
+.icono-label-specimen-decomposition .icono-label-specimen-hand-analysis {
+  font-size: calc(19 / 1220 * 100cqw);
 }
 
 .icono-label-specimen-analysis-row {
@@ -264,6 +290,7 @@
   letter-spacing: 0.12em;
   line-height: 1.1;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .icono-label-specimen-metric {
@@ -280,17 +307,7 @@
   letter-spacing: 0.04em;
 }
 
-.icono-label-specimen-metric-hand {
-  color: var(--icono-label-pen);
-  font-family: var(--icono-label-hand);
-  font-size: calc(22 / 1220 * 100cqw);
-  letter-spacing: 0.01em;
-  line-height: 0.95;
-  text-transform: none;
-  transform: rotate(-2.5deg);
-  display: inline-block;
-  transform-origin: left center;
-}
+
 
 .icono-label-sheet-body {
   display: grid;
