@@ -117,7 +117,7 @@
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
-  overflow: clip;
+  overflow: visible;
   background:
     linear-gradient(180deg, var(--icono-label-paper-2) 0%, color-mix(in srgb, var(--icono-label-paper-2) 94%, #c8bcaa 6%) 100%);
   box-shadow: none;
@@ -156,8 +156,7 @@
 
 .icono-label-specimen-viewport {
   position: relative;
-  flex: 0 0 calc(442 / 1220 * 100cqw);
-  height: calc(442 / 1220 * 100cqw);
+  flex: 1 0 calc(442 / 1220 * 100cqw);
   min-height: 0;
   overflow: clip;
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 94%, transparent);
@@ -196,98 +195,152 @@
 
 .icono-label-specimen-footer {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: min-content min-content;
-  gap: calc(3 / 1220 * 100cqw);
+  gap: calc(1 / 1220 * 100cqw);
   flex: 0 0 auto;
   min-height: auto;
   width: 100%;
   box-sizing: border-box;
-  padding-top: calc(6 / 1220 * 100cqw);
+  padding-top: 0;
   border-top: 1px solid var(--icono-label-rule);
+  overflow: visible;
 }
 
 .icono-label-specimen-notes {
   display: grid;
   grid-auto-rows: min-content;
   width: 100%;
-  gap: calc(4 / 1220 * 100cqw);
+  min-width: 0;
+  gap: calc(3 / 1220 * 100cqw);
 }
 
 .icono-label-specimen-micro {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: min-content min-content;
   align-content: start;
   gap: calc(4 / 1220 * 100cqw);
+  min-width: 0;
+  overflow: visible;
 }
 
-.icono-label-specimen-swatch-row {
-  display: grid;
-  grid-template-columns: calc(14 / 1220 * 100cqw) minmax(0, 1fr) max-content;
+.icono-label-specimen-color-row {
+  display: flex;
   align-items: center;
-  gap: calc(7 / 1220 * 100cqw);
+  justify-content: space-between;
+  gap: calc(6 / 1220 * 100cqw);
+  min-width: 0;
+}
+
+.icono-label-specimen-color-name {
+  color: var(--icono-label-pen);
+  font-family: var(--icono-label-hand);
+  font-size: calc(32 / 1220 * 100cqw);
+  letter-spacing: 0.01em;
+  line-height: 0.95;
+  transform: rotate(-2.5deg);
+  transform-origin: left center;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.icono-label-specimen-swatch-hex {
+  display: flex;
+  align-items: center;
+  gap: calc(4 / 1220 * 100cqw);
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
+  font-family: var(--icono-label-type);
+  font-size: calc(13 / 1220 * 100cqw);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .icono-label-specimen-swatch {
-  inline-size: calc(14 / 1220 * 100cqw);
-  block-size: calc(14 / 1220 * 100cqw);
+  inline-size: calc(16 / 1220 * 100cqw);
+  block-size: calc(16 / 1220 * 100cqw);
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 88%, transparent);
   flex: 0 0 auto;
 }
 
-.icono-label-specimen-metric-grid {
+.icono-label-specimen-decomposition {
   display: grid;
   grid-template-columns: 1fr;
   grid-auto-rows: min-content;
-  gap: calc(2 / 1220 * 100cqw);
+  gap: calc(1 / 1220 * 100cqw);
+  overflow: visible;
+}
+
+.icono-label-specimen-decomposition .icono-label-specimen-hand-analysis {
+  font-size: calc(28 / 1220 * 100cqw);
+}
+
+.icono-label-specimen-decomposition .icono-label-specimen-metric {
+  min-width: 0;
 }
 
 .icono-label-specimen-analysis-row {
   display: grid;
-  grid-template-columns: max-content max-content;
-  align-items: start;
-  justify-content: space-between;
-  column-gap: calc(10 / 1220 * 100cqw);
+  grid-template-columns:
+    minmax(calc(56 / 1220 * 100cqw), max-content)
+    minmax(calc(46 / 1220 * 100cqw), calc(58 / 1220 * 100cqw))
+    max-content;
+  align-items: baseline;
+  position: relative;
+  column-gap: calc(6 / 1220 * 100cqw);
+  min-width: 0;
+  overflow: visible;
 }
 
 .icono-label-specimen-hand-analysis {
   color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
-  font-size: calc(22 / 1220 * 100cqw);
+  font-size: calc(26 / 1220 * 100cqw);
   line-height: 0.95;
   letter-spacing: 0.01em;
   transform: rotate(-2.5deg);
   transform-origin: left center;
+  position: relative;
+  right: auto;
+  white-space: nowrap;
   justify-self: start;
+  z-index: 1;
 }
 
 .icono-label-specimen-note {
   color: color-mix(in srgb, var(--icono-label-ink) 58%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(11 / 1220 * 100cqw);
+  font-size: calc(10 / 1220 * 100cqw);
   letter-spacing: 0.12em;
   line-height: 1.1;
   text-transform: uppercase;
+  overflow-wrap: break-word;
+  white-space: nowrap;
 }
 
 .icono-label-specimen-metric {
   color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(11 / 1220 * 100cqw);
+  font-size: calc(13 / 1220 * 100cqw);
   letter-spacing: 0.1em;
   line-height: 1.08;
   text-transform: uppercase;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .icono-label-specimen-metric-value {
   font-family: "Special Elite";
+  font-size: calc(20 / 1220 * 100cqw);
   letter-spacing: 0.04em;
+  text-align: left;
+  min-width: 0;
+  width: 100%;
 }
 
-.icono-label-specimen-metric-hand {
-  font-family: var(--icono-label-hand);
-  letter-spacing: 0.01em;
-  text-transform: none;
-}
+
 
 .icono-label-sheet-body {
   display: grid;
@@ -449,9 +502,9 @@
 
 .icono-label-serial {
   margin-top: calc(4 / 1220 * 100cqw);
-  color: var(--icono-label-stamp);
+  color: var(--icono-label-ink);
   font-family: "Special Elite";
-  font-size: calc(36 / 1220 * 100cqw);
+  font-size: calc(24 / 1220 * 100cqw);
   line-height: 0.95;
 }
 
@@ -839,7 +892,10 @@
 .icono-label-hand-note--sex-soluble,
 .icono-label-hand-note--sex-transmembrane,
 .icono-label-hand-note--sex-unselected {
-  margin-left: calc(152 / 1220 * 100cqw);
+  display: inline-block;
+  min-width: calc(77 / 1220 * 100cqw);
+  text-align: center;
+  margin-left: calc(182 / 1220 * 100cqw);
 }
 
 .icono-label-hand-note--politics-oncogene,

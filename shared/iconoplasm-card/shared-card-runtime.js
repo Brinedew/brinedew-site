@@ -478,6 +478,20 @@
     return "high"
   }
 
+  function describeBandInRange(raw, min, max, lowLabel, midLabel, highLabel) {
+    var n = Number(raw)
+    var lower = Number(min)
+    var upper = Number(max)
+    if (!Number.isFinite(n) || !Number.isFinite(lower) || !Number.isFinite(upper) || upper <= lower) {
+      return "unknown"
+    }
+    var clamped = Math.min(Math.max(n, lower), upper)
+    var ratio = (clamped - lower) / (upper - lower)
+    if (ratio < 1 / 3) return lowLabel
+    if (ratio < 2 / 3) return midLabel
+    return highLabel
+  }
+
   function formatMetricNumber(raw, digits) {
     var n = Number(raw)
     if (!Number.isFinite(n)) return ""
@@ -493,14 +507,10 @@
     var colorName = String(essence.skin_name || "").trim()
     var symbol = String(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol || "").trim()
     var firstLetter = (symbol.charAt(0) || "?").toUpperCase()
-    var tau = formatMetricNumber(
-      safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau,
-      2,
-    )
-    var loeuf = formatMetricNumber(
-      safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf,
-      3,
-    )
+    var tauRaw = safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau
+    var loeufRaw = safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf
+    var tau = formatMetricNumber(tauRaw, 2)
+    var loeuf = formatMetricNumber(loeufRaw, 3)
     /* Hue word comes from first letter directly (not hex back-conversion),
        because OKHsv→sRGB→standard-HSV shifts the hue angle. */
     var letterHueWords = {
@@ -512,11 +522,11 @@
       Z: "crimson",
     }
     var hueLabel = letterHueWords[firstLetter] || (hsv ? describeHueWord(hsv.h) : "unknown")
-    var saturationLabel = hsv ? describeLevelWord(hsv.s) : "unknown"
-    var lightnessLabel = hsv ? describeLevelWord(hsv.v) : "unknown"
+    var saturationLabel = describeBandInRange(tauRaw, 0, 1, "low vibrant", "mid vibrant", "high vibrant")
+    var lightnessLabel = describeBandInRange(loeufRaw, 0, 2, "dark shade", "mid shade", "light shade")
     /* Row 1 = full color (prominent). Rows 2-4 = decomposition (subordinate).
        Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
-       first_letter -> hue, tissue_tau -> saturation, LOEUF -> lightness. */
+       first_letter -> hue, tissue_tau -> saturation note, LOEUF -> lightness note. */
     return (
       '<div class="icono-label-specimen-micro">' +
       '<div class="icono-label-specimen-color-row">' +

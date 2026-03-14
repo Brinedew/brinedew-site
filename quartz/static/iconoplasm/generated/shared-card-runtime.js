@@ -438,18 +438,38 @@
   }
 
   function describeHueWord(hue) {
+    /* 26 hue zones matching pipeline letter→hue mapping
+       (Datasets/iconoplasm/demographic_mappings.json).
+       Boundaries are midpoints between adjacent letter hues. */
     var h = Number(hue)
     if (!Number.isFinite(h)) return "unknown"
-    if (h < 15 || h >= 345) return "red"
-    if (h < 40) return "orange"
-    if (h < 65) return "yellow"
-    if (h < 95) return "lime"
-    if (h < 150) return "green"
-    if (h < 195) return "cyan"
-    if (h < 235) return "blue"
-    if (h < 275) return "violet"
-    if (h < 320) return "magenta"
-    return "rose"
+    h = ((h % 360) + 360) % 360
+    if (h < 7 || h >= 353) return "red"
+    if (h < 21) return "vermilion"
+    if (h < 35) return "orange"
+    if (h < 49) return "amber"
+    if (h < 62) return "gold"
+    if (h < 76) return "yellow"
+    if (h < 90) return "lime"
+    if (h < 104) return "chartreuse"
+    if (h < 118) return "spring"
+    if (h < 132) return "jade"
+    if (h < 145) return "emerald"
+    if (h < 159) return "teal"
+    if (h < 173) return "cyan"
+    if (h < 187) return "azure"
+    if (h < 201) return "cerulean"
+    if (h < 215) return "blue"
+    if (h < 229) return "sapphire"
+    if (h < 242) return "indigo"
+    if (h < 256) return "violet"
+    if (h < 270) return "purple"
+    if (h < 284) return "amethyst"
+    if (h < 298) return "magenta"
+    if (h < 312) return "fuchsia"
+    if (h < 325) return "rose"
+    if (h < 339) return "cerise"
+    return "crimson"
   }
 
   function describeLevelWord(raw) {
@@ -458,6 +478,20 @@
     if (n < 34) return "low"
     if (n < 67) return "medium"
     return "high"
+  }
+
+  function describeBandInRange(raw, min, max, lowLabel, midLabel, highLabel) {
+    var n = Number(raw)
+    var lower = Number(min)
+    var upper = Number(max)
+    if (!Number.isFinite(n) || !Number.isFinite(lower) || !Number.isFinite(upper) || upper <= lower) {
+      return "unknown"
+    }
+    var clamped = Math.min(Math.max(n, lower), upper)
+    var ratio = (clamped - lower) / (upper - lower)
+    if (ratio < 1 / 3) return lowLabel
+    if (ratio < 2 / 3) return midLabel
+    return highLabel
   }
 
   function formatMetricNumber(raw, digits) {
@@ -473,59 +507,69 @@
     var essence =
       safeGeneDetail.essence && typeof safeGeneDetail.essence === "object" ? safeGeneDetail.essence : {}
     var colorName = String(essence.skin_name || "").trim()
-    var tau = formatMetricNumber(
-      safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau,
-      2,
-    )
-    var loeuf = formatMetricNumber(
-      safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf,
-      3,
-    )
-    var hueLabel = hsv ? describeHueWord(hsv.h) : "unknown"
-    var saturationLabel = hsv ? describeLevelWord(hsv.s) : "unknown"
-    var lightnessLabel = hsv ? describeLevelWord(hsv.v) : "unknown"
+    var symbol = String(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol || "").trim()
+    var firstLetter = (symbol.charAt(0) || "?").toUpperCase()
+    var tauRaw = safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau
+    var loeufRaw = safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf
+    var tau = formatMetricNumber(tauRaw, 2)
+    var loeuf = formatMetricNumber(loeufRaw, 3)
+    /* Hue word comes from first letter directly (not hex back-conversion),
+       because OKHsv→sRGB→standard-HSV shifts the hue angle. */
+    var letterHueWords = {
+      A: "red", B: "vermilion", C: "orange", D: "amber", E: "gold",
+      F: "yellow", G: "lime", H: "chartreuse", I: "spring", J: "jade",
+      K: "emerald", L: "teal", M: "cyan", N: "azure", O: "cerulean",
+      P: "blue", Q: "sapphire", R: "indigo", S: "violet", T: "purple",
+      U: "amethyst", V: "magenta", W: "fuchsia", X: "rose", Y: "cerise",
+      Z: "crimson",
+    }
+    var hueLabel = letterHueWords[firstLetter] || (hsv ? describeHueWord(hsv.h) : "unknown")
+    var saturationLabel = describeBandInRange(tauRaw, 0, 1, "low vibrant", "mid vibrant", "high vibrant")
+    var lightnessLabel = describeBandInRange(loeufRaw, 0, 2, "dark shade", "mid shade", "light shade")
+    /* Row 1 = full color (prominent). Rows 2-4 = decomposition (subordinate).
+       Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
+       first_letter -> hue, tissue_tau -> saturation note, LOEUF -> lightness note. */
     return (
       '<div class="icono-label-specimen-micro">' +
-      '<div class="icono-label-specimen-swatch-row">' +
+      '<div class="icono-label-specimen-color-row">' +
+      '<span class="icono-label-specimen-swatch-hex">' +
       '<span class="icono-label-specimen-swatch" style="background:' +
       escapeHtml(color || "#000000") +
       '"></span>' +
-      '<span class="icono-label-specimen-metric">sample ' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(color || "UNFILED") +
       "</span>" +
-      (colorName
-        ? ' <span class="icono-label-specimen-metric-hand">' +
-          escapeHtml(colorName) +
-          "</span>"
-        : "") +
       "</span>" +
-      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--hue">' +
-      escapeHtml("hue: " + hueLabel) +
+      (colorName
+        ? '<span class="icono-label-specimen-color-name">' + escapeHtml(colorName) + "</span>"
+        : "") +
+      "</div>" +
+      '<div class="icono-label-specimen-decomposition">' +
+      '<div class="icono-label-specimen-analysis-row">' +
+      '<span class="icono-label-specimen-metric">letter</span>' +
+      '<span class="icono-label-specimen-metric-value">' +
+      escapeHtml(firstLetter) +
+      "</span>" +
+      '<span class="icono-label-specimen-hand-analysis">' +
+      escapeHtml(hueLabel) +
       "</span>" +
       "</div>" +
-      '<div class="icono-label-specimen-metric-grid">' +
       '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">HPA tau ' +
+      '<span class="icono-label-specimen-metric">HPA tau</span>' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(tau || "n/a") +
       "</span>" +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--sat">' +
-      escapeHtml("saturation: " + saturationLabel) +
+      '<span class="icono-label-specimen-hand-analysis">' +
+      escapeHtml(saturationLabel) +
       "</span>" +
       "</div>" +
-      /* Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
-         Color lightness is assigned from LOEUF; constraint_percentile exists in the
-         upstream protein data but is not part of the color-demographics mapping. */
       '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">gnomAD LOEUF ' +
+      '<span class="icono-label-specimen-metric">gnomAD LOEUF</span>' +
       '<span class="icono-label-specimen-metric-value">' +
       escapeHtml(loeuf || "n/a") +
       "</span>" +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--light">' +
-      escapeHtml("lightness: " + lightnessLabel) +
+      '<span class="icono-label-specimen-hand-analysis">' +
+      escapeHtml(lightnessLabel) +
       "</span>" +
       "</div>" +
       "</div>" +
@@ -613,9 +657,14 @@
         ? safeGeneDetail.essence
         : {}
     var opts = options || {}
+    var safePortrait =
+      safeGeneDetail.portrait && typeof safeGeneDetail.portrait === "object"
+        ? safeGeneDetail.portrait
+        : {}
     var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     var fullName = labLabelDisplayName(safeGeneDetail)
-    var serial = labLabelCatalogNumber(symbol)
+    var visionId = String(safePortrait.vision_id || "").trim()
+    var serial = labLabelCatalogNumber(visionId || symbol)
     var family = String(safeEssence.family_surname || "").trim()
     var familyFeature = String(safeEssence.family_feature || "").trim()
     var sexOriginValues = uniqueDisplayValues(
@@ -1004,6 +1053,7 @@
     var assetSha = String(cfg.assetSha || "")
       .trim()
       .toLowerCase()
+    var visionId = String(cfg.visionId || "").trim()
     if (!symbol || !assetSha) return null
     box.setAttribute("data-icono-vote-wired", "true")
     var state = {
@@ -1069,7 +1119,7 @@
             candidate_ref: candidateRef,
             symbol: symbol,
             asset_sha256: assetSha,
-            vision_id: "",
+            vision_id: visionId,
           }),
         },
         {
@@ -1114,7 +1164,7 @@
             candidate_ref: candidateRef,
             symbol: symbol,
             asset_sha256: assetSha,
-            vision_id: "",
+            vision_id: visionId,
             vote_value: nextVote,
           }),
         },
