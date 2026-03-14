@@ -146,7 +146,6 @@ export function sanitizeVoteVisionId(raw) {
   if (!visionId) return ""
   if (isRandomArtistMetavisionId(visionId)) return ""
   if (isLegacyArtistVisionId(visionId)) return ""
-  if (/^\d+$/.test(visionId)) return ""
   return visionId
 }
 
@@ -982,10 +981,11 @@ async function portraitState(env, symbol, base) {
       medium_url: null,
       thumb_url: null,
       asset_sha256: null,
+      candidate_image_id: null,
     }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id, pa.candidate_image_id
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
            ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
@@ -1002,6 +1002,7 @@ async function portraitState(env, symbol, base) {
         medium_url: null,
         thumb_url: null,
         asset_sha256: null,
+        candidate_image_id: null,
       }
     return {
       status: "published",
@@ -1009,6 +1010,7 @@ async function portraitState(env, symbol, base) {
       medium_url: row.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
       thumb_url: row.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
       asset_sha256: row.asset_sha256,
+      candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
     }
   } catch {
@@ -1018,6 +1020,7 @@ async function portraitState(env, symbol, base) {
       medium_url: null,
       thumb_url: null,
       asset_sha256: null,
+      candidate_image_id: null,
     }
   }
 }
@@ -2279,6 +2282,8 @@ async function gallerySnapshot(env, url) {
        ps.updated_at AS published_at,
        pa.created_at AS asset_created_at,
        pa.asset_sha256,
+       pa.candidate_image_id,
+      pa.vision_id,
        pa.r2_key_full,
        pa.r2_key_medium,
        pa.r2_key_thumb,
@@ -2300,6 +2305,8 @@ async function gallerySnapshot(env, url) {
        ps.updated_at,
        pa.created_at,
        pa.asset_sha256,
+      pa.candidate_image_id,
+      pa.vision_id,
        pa.r2_key_full,
        pa.r2_key_medium,
        pa.r2_key_thumb,
@@ -2330,6 +2337,8 @@ async function gallerySnapshot(env, url) {
         medium_url: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
         thumb_url: row?.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
         asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
+        candidate_image_id: optionalInt(row?.candidate_image_id),
+        vision_id: String(row?.vision_id || "").trim() || null,
         ...(width != null ? { width } : {}),
         ...(height != null ? { height } : {}),
       },
@@ -2440,6 +2449,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.status,
        pa.autopick_eligible,
        pa.created_at,
+       pa.candidate_image_id,
        pa.vision_id,
        COALESCE(v.upvotes, 0) AS image_upvotes,
        COALESCE(v.downvotes, 0) AS image_downvotes,
@@ -2474,6 +2484,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       status: String(row?.status || "").trim() || "draft",
       autopick_eligible: coerceBoolean(row?.autopick_eligible, true),
       is_current: !!(assetSha && currentSha && assetSha === currentSha),
+      candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
@@ -2917,6 +2928,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
 
       const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
       const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
+      const candidateImageId = optionalInt(p?.candidate_image_id ?? p?.emulsion_id)
       const candidateRef = normalizeCandidateRef(
         p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
         symbol,
@@ -2964,16 +2976,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       } else {
         await env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_image_votes (
-             candidate_ref, gene_symbol, asset_sha256, vision_id, user_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
            ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
              gene_symbol = excluded.gene_symbol,
              asset_sha256 = excluded.asset_sha256,
              vision_id = excluded.vision_id,
+             candidate_image_id = COALESCE(excluded.candidate_image_id, icono_image_votes.candidate_image_id),
              vote_value = excluded.vote_value,
              updated_at = CURRENT_TIMESTAMP`,
         )
-          .bind(candidateRef, symbol, assetSha, visionId, userId, requested)
+          .bind(candidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
           .run()
       }
 
@@ -2999,6 +3012,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             candidate_ref: candidateRef,
             symbol,
             asset_sha256: assetSha,
+            candidate_image_id: candidateImageId,
             user_id: userId,
             snapshot,
             auto_promote: autoPromote,
@@ -3020,6 +3034,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
       const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
       const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
+      const candidateImageId = optionalInt(p?.candidate_image_id ?? p?.emulsion_id)
       const candidateRef = normalizeCandidateRef(
         p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
         symbol,
@@ -3086,6 +3101,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       for (const raw of items) {
         const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
         const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
+        const candidateImageId = optionalInt(raw?.candidate_image_id ?? raw?.emulsion_id)
         const candidateRef = normalizeCandidateRef(
           raw?.candidate_ref ||
             (raw?.candidate_image_id ? `c:${String(raw.candidate_image_id)}` : ""),
@@ -3117,16 +3133,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         }
         await env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_image_votes (
-             candidate_ref, gene_symbol, asset_sha256, vision_id, user_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
            ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
              gene_symbol = excluded.gene_symbol,
              asset_sha256 = excluded.asset_sha256,
              vision_id = excluded.vision_id,
+             candidate_image_id = COALESCE(excluded.candidate_image_id, icono_image_votes.candidate_image_id),
              vote_value = excluded.vote_value,
              updated_at = CURRENT_TIMESTAMP`,
         )
-          .bind(candidateRef, symbol, assetSha, visionId, userId, voteValue)
+          .bind(candidateRef, symbol, assetSha, visionId, candidateImageId, userId, voteValue)
           .run()
         upserted += 1
       }
@@ -3229,16 +3246,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       } else {
         await env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_image_votes (
-             candidate_ref, gene_symbol, asset_sha256, vision_id, user_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
            ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
              gene_symbol = excluded.gene_symbol,
              asset_sha256 = excluded.asset_sha256,
              vision_id = excluded.vision_id,
+             candidate_image_id = COALESCE(excluded.candidate_image_id, icono_image_votes.candidate_image_id),
              vote_value = excluded.vote_value,
              updated_at = CURRENT_TIMESTAMP`,
         )
-          .bind(candidateRef, symbol, assetSha, visionId, userId, requested)
+          .bind(candidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
           .run()
       }
 
@@ -3264,6 +3282,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             candidate_ref: candidateRef,
             symbol,
             asset_sha256: assetSha,
+            candidate_image_id: candidateImageId,
             user_id: userId,
             snapshot,
             auto_promote: autoPromote,
@@ -4149,6 +4168,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           }
           const visionId =
             sanitizeText(item?.vision_id || item?.vision || existingAsset?.vision_id || "", 255) || null
+          const candidateImageId =
+            optionalInt(item?.candidate_image_id ?? item?.emulsion_id ?? existingAsset?.candidate_image_id) ||
+            null
           const artistTag =
             normalizeArtistTag(item?.artist_tag || item?.artistTag || existingAsset?.artist_tag || "") || null
           const artistName =
@@ -4184,8 +4206,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               `INSERT INTO icono_portrait_assets (
                  gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
                  mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
-                 vision_id, artist_tag, artist_name, created_by, created_at
-               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 vision_id, candidate_image_id, artist_tag, artist_name, created_by, created_at
+               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
                  r2_key_full=excluded.r2_key_full,
                  r2_key_medium=excluded.r2_key_medium,
@@ -4199,6 +4221,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  is_stale=0,
                  is_legacy=0,
                  vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
+                 candidate_image_id=COALESCE(excluded.candidate_image_id, icono_portrait_assets.candidate_image_id),
                  artist_tag=COALESCE(excluded.artist_tag, icono_portrait_assets.artist_tag),
                  artist_name=COALESCE(excluded.artist_name, icono_portrait_assets.artist_name),
                  created_by=COALESCE(excluded.created_by, icono_portrait_assets.created_by)`,
@@ -4215,6 +4238,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                 finalStatus,
                 autopickEligible ? 1 : 0,
                 visionId,
+                candidateImageId,
                 artistTag,
                 artistName,
                 createdBy,

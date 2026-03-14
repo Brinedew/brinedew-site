@@ -965,10 +965,25 @@ void syncSharedIconoplasmSettings().catch(function () {
       .toLowerCase()
   }
 
+  function brickVoteCandidateImageId(genePayload) {
+    var candidateImageId = Number((((genePayload || {}).portrait || {}).candidate_image_id) || 0)
+    if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) return ""
+    return String(Math.round(candidateImageId))
+  }
+
+  function brickVoteVisionId(genePayload) {
+    return String((((genePayload || {}).portrait || {}).vision_id) || "").trim()
+  }
+
   function brickVoteBoxMarkup(genePayload) {
     var assetSha = brickVoteAssetSha(genePayload)
     if (!assetSha) return ""
-    return voteBoxMarkup('data-icono-brick-vote-box="' + esc(assetSha) + '"', {
+    var candidateImageId = brickVoteCandidateImageId(genePayload)
+    var visionId = brickVoteVisionId(genePayload)
+    var extraAttrs = 'data-icono-brick-vote-box="' + esc(assetSha) + '"'
+    if (candidateImageId) extraAttrs += ' data-icono-candidate-image-id="' + esc(candidateImageId) + '"'
+    if (visionId) extraAttrs += ' data-icono-vision-id="' + esc(visionId) + '"'
+    return voteBoxMarkup(extraAttrs, {
       variant: "brick",
       showScore: false,
     })
@@ -977,7 +992,12 @@ void syncSharedIconoplasmSettings().catch(function () {
   function labelVoteBoxMarkup(genePayload, attrName) {
     var assetSha = brickVoteAssetSha(genePayload)
     if (!assetSha) return ""
-    return voteBoxMarkup((attrName || "data-icono-brick-vote-box") + '="' + esc(assetSha) + '"', {
+    var candidateImageId = brickVoteCandidateImageId(genePayload)
+    var visionId = brickVoteVisionId(genePayload)
+    var extraAttrs = (attrName || "data-icono-brick-vote-box") + '="' + esc(assetSha) + '"'
+    if (candidateImageId) extraAttrs += ' data-icono-candidate-image-id="' + esc(candidateImageId) + '"'
+    if (visionId) extraAttrs += ' data-icono-vision-id="' + esc(visionId) + '"'
+    return voteBoxMarkup(extraAttrs, {
       variant: "label",
       showScore: false,
     })
@@ -1440,6 +1460,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       symbol: symbolValue,
       assetSha: assetShaValue,
       visionId: opts.visionId || "",
+      candidateImageId: opts.candidateImageId || 0,
       deferSnapshot: !!opts.deferSnapshot,
       apiBaseUrl: API,
       onAuthRequired: showVoteLoginPopup,
@@ -1460,7 +1481,11 @@ void syncSharedIconoplasmSettings().catch(function () {
         box,
         card.getAttribute("data-icono-symbol"),
         box.getAttribute("data-icono-brick-vote-box"),
-        { deferSnapshot: false },
+        {
+          deferSnapshot: false,
+          visionId: box.getAttribute("data-icono-vision-id") || "",
+          candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
+        },
       )
     }
   }
@@ -1472,7 +1497,10 @@ void syncSharedIconoplasmSettings().catch(function () {
       .trim()
       .toUpperCase()
     var portrait = (genePayload && genePayload.portrait) || {}
-    wireVoteBox(box, symbol, portrait.asset_sha256, { visionId: portrait.vision_id || "" })
+    wireVoteBox(box, symbol, portrait.asset_sha256, {
+      visionId: portrait.vision_id || "",
+      candidateImageId: portrait.candidate_image_id || 0,
+    })
   }
 
   function wireCandidateVoteBoxes(container, genePayload) {
@@ -1483,7 +1511,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     var boxes = container.querySelectorAll("[data-icono-candidate-vote-box]")
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i]
-      wireVoteBox(box, symbol, box.getAttribute("data-icono-candidate-vote-box"))
+      wireVoteBox(box, symbol, box.getAttribute("data-icono-candidate-vote-box"), {
+        visionId: box.getAttribute("data-icono-vision-id") || "",
+        candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
+      })
     }
   }
 
@@ -2025,6 +2056,15 @@ void syncSharedIconoplasmSettings().catch(function () {
       var assetSha = String((candidate && candidate.asset_sha256) || "")
         .trim()
         .toLowerCase()
+      var candidateImageId = Number((candidate && candidate.candidate_image_id) || 0)
+      var visionId = String((candidate && candidate.vision_id) || "").trim()
+      var voteAttrs = 'data-icono-candidate-vote-box="' + esc(assetSha) + '"'
+      if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
+        voteAttrs += ' data-icono-candidate-image-id="' + esc(String(Math.round(candidateImageId))) + '"'
+      }
+      if (visionId) {
+        voteAttrs += ' data-icono-vision-id="' + esc(visionId) + '"'
+      }
       html +=
         '<article class="icono-candidate-card" style="--width:' +
         width +
@@ -2063,7 +2103,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         "</span>" +
         "</button>" +
         '<div class="icono-candidate-footer">' +
-        voteBoxMarkup('data-icono-candidate-vote-box="' + esc(assetSha) + '"') +
+        voteBoxMarkup(voteAttrs) +
         "</div>" +
         "</article>"
     }

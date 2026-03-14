@@ -902,11 +902,14 @@
     const box = tooltip.querySelector('[data-icono-vote-box]');
     if (!box) return;
     const symbol = String((geneDetail && geneDetail.symbol) || activeSymbol || '').trim().toUpperCase();
-    const assetSha = String((((geneDetail || {}).portrait || {}).asset_sha256) || '').trim().toLowerCase();
+    const portrait = ((geneDetail || {}).portrait || {});
+    const assetSha = String((portrait.asset_sha256) || '').trim().toLowerCase();
     if (!symbol || !assetSha) return;
     IconoCardShared.wireVoteBox(box, {
       symbol,
       assetSha,
+      visionId: String(portrait.vision_id || '').trim(),
+      candidateImageId: Number(portrait.candidate_image_id || 0),
       apiBaseUrl: ICONOPLASM_API_BASE,
       fetchImpl: extensionApiFetch,
       onAuthRequired: showVoteLoginPopup,

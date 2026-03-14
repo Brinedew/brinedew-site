@@ -658,8 +658,13 @@
         : {}
     var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     var fullName = labLabelDisplayName(safeGeneDetail)
+    var candidateImageId = Number(safePortrait.candidate_image_id)
     var visionId = String(safePortrait.vision_id || "").trim()
-    var serial = labLabelCatalogNumber(visionId || symbol)
+    var emulsionNumber =
+      Number.isFinite(candidateImageId) && candidateImageId > 0
+        ? String(Math.round(candidateImageId))
+        : visionId
+    var serial = labLabelCatalogNumber(emulsionNumber || symbol)
     var family = String(safeEssence.family_surname || "").trim()
     var familyFeature = String(safeEssence.family_feature || "").trim()
     var sexOriginValues = uniqueDisplayValues(
@@ -1064,6 +1069,8 @@
     var snapshotPrimed = false
     var visibilityObserver = null
     var candidateRef = "a:" + symbol + "|" + assetSha
+    var candidateImageId = Number(cfg.candidateImageId || 0)
+    if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0
     var upBtn = box.querySelector("[data-icono-vote-up]")
     var downBtn = box.querySelector("[data-icono-vote-down]")
 
@@ -1114,6 +1121,7 @@
             candidate_ref: candidateRef,
             symbol: symbol,
             asset_sha256: assetSha,
+            candidate_image_id: candidateImageId || undefined,
             vision_id: visionId,
           }),
         },
@@ -1159,6 +1167,7 @@
             candidate_ref: candidateRef,
             symbol: symbol,
             asset_sha256: assetSha,
+            candidate_image_id: candidateImageId || undefined,
             vision_id: visionId,
             vote_value: nextVote,
           }),
