@@ -550,6 +550,10 @@
   padding-top: calc(18 / 1220 * 100cqw);
 }
 
+.icono-label-band-cell--category .icono-label-band-primary {
+  padding-top: 0;
+}
+
 .icono-label-band-cell--noted .icono-label-band-primary,
 .icono-label-band-cell--mass .icono-label-band-primary {
   padding-top: calc(18 / 1220 * 100cqw);
@@ -774,10 +778,6 @@
   align-items: start;
   align-content: start;
   justify-content: start;
-}
-
-.icono-label-category-grid {
-  margin-top: calc(-40 / 1220 * 100cqw);
 }
 
 .icono-label-category-option--transmembrane {
