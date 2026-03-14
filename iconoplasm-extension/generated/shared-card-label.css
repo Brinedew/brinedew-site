@@ -84,7 +84,7 @@
   container-type: inline-size;
   inline-size: min(100%, 1220px);
   max-inline-size: 100%;
-  aspect-ratio: 1220 / 800;
+  aspect-ratio: 1220 / 634;
   grid-template-columns: var(--icono-label-portrait-fr) var(--icono-label-form-fr);
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 92%, transparent);
@@ -138,7 +138,7 @@
   container-type: inline-size;
   inline-size: min(100%, 1220px);
   max-inline-size: calc(100vw - 16px);
-  aspect-ratio: 1220 / 800;
+  aspect-ratio: 1220 / 634;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 92%, transparent);
   border-radius: 0;
@@ -156,8 +156,8 @@
 
 .icono-label-specimen-viewport {
   position: relative;
-  flex: 0 0 calc(610 / 1220 * 100cqw);
-  height: calc(610 / 1220 * 100cqw);
+  flex: 0 0 calc(442 / 1220 * 100cqw);
+  height: calc(442 / 1220 * 100cqw);
   min-height: 0;
   overflow: clip;
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 94%, transparent);
@@ -280,7 +280,7 @@
 
 .icono-label-sheet-body {
   display: grid;
-  grid-template-rows: 23.75% 16% 34.75% 13% 12.5%;
+  grid-template-rows: 29.97% 10.09% 43.85% 8.20% 7.89%;
   min-width: 0;
   height: 100%;
   background:
@@ -536,11 +536,11 @@
 
 .icono-label-band-cell {
   display: grid;
-  grid-template-rows: min-content calc(39 / 1220 * 100cqw) calc(33 / 1220 * 100cqw);
+  grid-template-rows: min-content calc(20 / 1220 * 100cqw) calc(17 / 1220 * 100cqw);
   align-content: start;
-  gap: calc(5 / 1220 * 100cqw);
+  gap: calc(3 / 1220 * 100cqw);
   min-height: 100%;
-  padding: calc(14 / 1220 * 100cqw) calc(18 / 1220 * 100cqw);
+  padding: calc(7 / 1220 * 100cqw) calc(18 / 1220 * 100cqw);
 }
 
 .icono-label-band-cell + .icono-label-band-cell {
@@ -555,8 +555,8 @@
 .icono-label-band-primary {
   display: flex;
   align-items: flex-start;
-  min-height: calc(41 / 1220 * 100cqw);
-  padding-top: calc(18 / 1220 * 100cqw);
+  min-height: calc(20 / 1220 * 100cqw);
+  padding-top: calc(9 / 1220 * 100cqw);
 }
 
 .icono-label-band-cell--category .icono-label-band-primary {
@@ -565,20 +565,20 @@
 
 .icono-label-band-cell--noted .icono-label-band-primary,
 .icono-label-band-cell--mass .icono-label-band-primary {
-  padding-top: calc(18 / 1220 * 100cqw);
+  padding-top: calc(9 / 1220 * 100cqw);
 }
 
 .icono-label-band-secondary {
   display: flex;
   align-items: flex-start;
-  min-height: calc(28 / 1220 * 100cqw);
+  min-height: calc(14 / 1220 * 100cqw);
 }
 
 .icono-label-selector-row {
   display: flex;
   flex-wrap: wrap;
   gap: calc(26 / 1220 * 100cqw);
-  min-height: calc(28 / 1220 * 100cqw);
+  min-height: calc(14 / 1220 * 100cqw);
   align-items: flex-start;
 }
 
@@ -728,8 +728,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: calc(18 / 1220 * 100cqw);
-  padding: calc(16 / 1220 * 100cqw) calc(18 / 1220 * 100cqw);
+  gap: calc(8 / 1220 * 100cqw);
+  padding: calc(8 / 1220 * 100cqw) calc(18 / 1220 * 100cqw);
 }
 
 .icono-label-selector-row--alignment {
@@ -827,15 +827,15 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: calc(12 / 1220 * 100cqw);
+  padding: calc(6 / 1220 * 100cqw) calc(12 / 1220 * 100cqw);
 }
 
 .icono-label-footer-copy-main {
-  gap: calc(3 / 1220 * 100cqw);
+  gap: calc(2 / 1220 * 100cqw);
 }
 
 .icono-label-footer-copy-side {
-  gap: calc(6 / 1220 * 100cqw);
+  gap: calc(3 / 1220 * 100cqw);
   justify-content: space-between;
   border-left: 1px solid var(--icono-label-rule);
 }
