@@ -411,9 +411,9 @@
 }
 
 .icono-label-header-meta-cell {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-rows: min-content 1fr;
+  align-content: start;
   padding:
     calc(14 / 1220 * 100cqw)
     calc(14 / 1220 * 100cqw)
@@ -423,6 +423,13 @@
 
 .icono-label-header-meta-cell + .icono-label-header-meta-cell {
   border-left: 1px solid var(--icono-label-rule);
+  padding-left: calc(12 / 1220 * 100cqw);
+  padding-right: calc(12 / 1220 * 100cqw);
+}
+
+.icono-label-serial,
+.icono-label-family {
+  align-self: end;
 }
 
 .icono-label-serial {
@@ -479,7 +486,7 @@
   height: 100%;
   box-sizing: border-box;
   padding:
-    calc(16 / 1220 * 100cqw)
+    calc(14 / 1220 * 100cqw)
     calc(14 / 1220 * 100cqw)
     calc(14 / 1220 * 100cqw);
   border-left: 1px solid var(--icono-label-rule);
