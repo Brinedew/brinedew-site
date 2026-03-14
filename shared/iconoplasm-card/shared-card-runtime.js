@@ -524,6 +524,29 @@
     var hueLabel = letterHueWords[firstLetter] || (hsv ? describeHueWord(hsv.h) : "unknown")
     var saturationLabel = describeBandInRange(tauRaw, 0, 1, "low vibrant", "mid vibrant", "high vibrant")
     var lightnessLabel = describeBandInRange(loeufRaw, 0, 2, "dark shade", "mid shade", "light shade")
+    var metrics = ["letter", "HPA tau", "gnomAD LOEUF"]
+    var values = [firstLetter, tau || "n/a", loeuf || "n/a"]
+    var handNotes = [hueLabel, saturationLabel, lightnessLabel]
+    var decompositionHtml = ""
+    for (var i = 0; i < metrics.length; i++) {
+      var rowClass = " icono-label-specimen-cell--row-" + String(i + 1)
+      decompositionHtml +=
+        '<span class="icono-label-specimen-cell icono-label-specimen-cell--metric' +
+        rowClass +
+        '"><span class="icono-label-specimen-metric">' +
+        escapeHtml(metrics[i]) +
+        "</span></span>" +
+        '<span class="icono-label-specimen-cell icono-label-specimen-cell--value' +
+        rowClass +
+        '"><span class="icono-label-specimen-metric-value">' +
+        escapeHtml(values[i]) +
+        "</span></span>" +
+        '<span class="icono-label-specimen-cell icono-label-specimen-cell--hand' +
+        rowClass +
+        '"><span class="icono-label-specimen-hand-analysis">' +
+        escapeHtml(handNotes[i]) +
+        "</span></span>"
+    }
     /* Row 1 = full color (prominent). Rows 2-4 = decomposition (subordinate).
        Source of truth: Datasets/iconoplasm/src/apply_demographic_mappings.py.
        first_letter -> hue, tissue_tau -> saturation note, LOEUF -> lightness note. */
@@ -543,33 +566,7 @@
         : "") +
       "</div>" +
       '<div class="icono-label-specimen-decomposition">' +
-      '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">letter</span>' +
-      '<span class="icono-label-specimen-metric-value">' +
-      escapeHtml(firstLetter) +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis">' +
-      escapeHtml(hueLabel) +
-      "</span>" +
-      "</div>" +
-      '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">HPA tau</span>' +
-      '<span class="icono-label-specimen-metric-value">' +
-      escapeHtml(tau || "n/a") +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis">' +
-      escapeHtml(saturationLabel) +
-      "</span>" +
-      "</div>" +
-      '<div class="icono-label-specimen-analysis-row">' +
-      '<span class="icono-label-specimen-metric">gnomAD LOEUF</span>' +
-      '<span class="icono-label-specimen-metric-value">' +
-      escapeHtml(loeuf || "n/a") +
-      "</span>" +
-      '<span class="icono-label-specimen-hand-analysis">' +
-      escapeHtml(lightnessLabel) +
-      "</span>" +
-      "</div>" +
+      decompositionHtml +
       "</div>" +
       "</div>"
     )
