@@ -222,14 +222,14 @@
 
 .icono-label-specimen-swatch-row {
   display: grid;
-  grid-template-columns: calc(12 / 1220 * 100cqw) minmax(0, 1fr) max-content;
+  grid-template-columns: calc(14 / 1220 * 100cqw) minmax(0, 1fr) max-content;
   align-items: center;
   gap: calc(7 / 1220 * 100cqw);
 }
 
 .icono-label-specimen-swatch {
-  inline-size: calc(12 / 1220 * 100cqw);
-  block-size: calc(12 / 1220 * 100cqw);
+  inline-size: calc(14 / 1220 * 100cqw);
+  block-size: calc(14 / 1220 * 100cqw);
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 88%, transparent);
   flex: 0 0 auto;
 }
@@ -252,7 +252,7 @@
 .icono-label-specimen-hand-analysis {
   color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
-  font-size: calc(17 / 1220 * 100cqw);
+  font-size: calc(22 / 1220 * 100cqw);
   line-height: 0.95;
   letter-spacing: 0.01em;
   transform: rotate(-2.5deg);
@@ -263,7 +263,7 @@
 .icono-label-specimen-note {
   color: color-mix(in srgb, var(--icono-label-ink) 58%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(9 / 1220 * 100cqw);
+  font-size: calc(11 / 1220 * 100cqw);
   letter-spacing: 0.12em;
   line-height: 1.1;
   text-transform: uppercase;
@@ -272,7 +272,7 @@
 .icono-label-specimen-metric {
   color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(8.8 / 1220 * 100cqw);
+  font-size: calc(11 / 1220 * 100cqw);
   letter-spacing: 0.1em;
   line-height: 1.08;
   text-transform: uppercase;
@@ -281,6 +281,12 @@
 .icono-label-specimen-metric-value {
   font-family: "Special Elite";
   letter-spacing: 0.04em;
+}
+
+.icono-label-specimen-metric-hand {
+  font-family: var(--icono-label-hand);
+  letter-spacing: 0.01em;
+  text-transform: none;
 }
 
 .icono-label-sheet-body {

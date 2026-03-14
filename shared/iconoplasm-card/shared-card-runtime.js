@@ -490,10 +490,13 @@
       '"></span>' +
       '<span class="icono-label-specimen-metric">sample ' +
       '<span class="icono-label-specimen-metric-value">' +
-      escapeHtml(
-        (colorName ? colorName + " / " : "") + (color || "UNFILED"),
-      ) +
+      escapeHtml(color || "UNFILED") +
       "</span>" +
+      (colorName
+        ? ' <span class="icono-label-specimen-metric-hand">' +
+          escapeHtml(colorName) +
+          "</span>"
+        : "") +
       "</span>" +
       '<span class="icono-label-specimen-hand-analysis icono-label-specimen-hand-analysis--hue">' +
       escapeHtml("hue: " + hueLabel) +
