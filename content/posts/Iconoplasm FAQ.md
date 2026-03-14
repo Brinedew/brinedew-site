@@ -25,15 +25,27 @@ Scott Alexander explicitly requested this kind of tool in [his post](https://sla
 
 [Gijinka](https://knowyourmeme.com/memes/gijinka-moe-anthropomorphism) are memeable humanizations of natural world entities, or even abstract concepts, that have existed on the internet since its invention. There are gijinka of companies, planets, and periodic table elements. The casts of [Cells at Work!](https://en.wikipedia.org/wiki/Cells_at_Work!) and [Osmosis Jones](https://en.wikipedia.org/wiki/Osmosis_Jones) are gijinka of human "cell types", and are fondly remembered by the new generation of biomedical researchers.
 
-2. **Why use AI generation?**
-Economics for 20K images.
+2. **Why use AI generation? Why not pay artists?**
+Economics for 20 thousand images.
 
-3. **I want to remove my art style from the pool**
-You can use the [artist style lookup utility](https://iconoplasm.brinedew.bio/artist-styles) to check how many times an artist name tag was used across the entire gallery. Press "remove artist style" to remove all images with the tag from the site and blacklist its future use.
+I would love to get 20 thousand human-made illustrations. But the price floor for commissioning a basic original character illustration is $10.
+This makes it necessary for me to get a $200k grant just for one image option per gene.
+
+This doesn't include the cost for tracking down and inviting the artists, or setting up and promoting some kind of reward program for content submission.
+Also it limits us to 1 image per character - if we later decide they don't fit well within their gene family, we would have to spend extra on redraws.
+Plus, selecting $10 artists with no QC makes it basically guaranteed that AI-generated work will still be present on the site, just under a human name.
+
+That said, a later conversion to a human-made gallery is not out of the question.
+
+3. **One of the images looks like my art style. I want to remove my art style from the style pool**
+You can use the [artist style lookup utility](https://iconoplasm.brinedew.bio/artist-styles). 
+
+Mention your @name tag as it appears on the styles list https://thetacursed.github.io/Anima-Style-Explorer/
+Press "remove artist style" to remove all images with the tag from the site and blacklist its future use.
  
-If you don't want to register an account on the site, you can send an email to support@brinedew.bio to have an art style removed. Mention your @artist tag as it appears on https://thetacursed.github.io/Anima-Style-Explorer/
+If you don't want to use Discord site login, you can send a blacklist email request to blacklist@brinedew.bio from your business account. The first @name you send me will be blacklisted. Make sure to use the @ symbol in front of the name.
 
-5. **I noticed a poor quality of the canonical image for some gene. What do I do?**
+4. **I noticed a poor quality of the canonical image for some gene. What do I do?**
 Go to the gene page for that gene. Tap "edit image" under the canonical image, and input small corrections as an image prompt. This adds a corrected image to a candidate images pool.
 
 Some corrections you can prompt for:
