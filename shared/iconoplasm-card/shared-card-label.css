@@ -193,13 +193,14 @@
 
 .icono-label-specimen-footer {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: min-content min-content;
-  gap: calc(3 / 1220 * 100cqw);
+  gap: calc(2 / 1220 * 100cqw);
   flex: 0 0 auto;
   min-height: auto;
   width: 100%;
   box-sizing: border-box;
-  padding-top: calc(6 / 1220 * 100cqw);
+  padding-top: calc(4 / 1220 * 100cqw);
   border-top: 1px solid var(--icono-label-rule);
 }
 
@@ -207,14 +208,17 @@
   display: grid;
   grid-auto-rows: min-content;
   width: 100%;
+  min-width: 0;
   gap: calc(4 / 1220 * 100cqw);
 }
 
 .icono-label-specimen-micro {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: min-content min-content;
   align-content: start;
-  gap: calc(7 / 1220 * 100cqw);
+  gap: calc(5 / 1220 * 100cqw);
+  min-width: 0;
 }
 
 .icono-label-specimen-color-row {
@@ -222,16 +226,19 @@
   align-items: center;
   justify-content: space-between;
   gap: calc(6 / 1220 * 100cqw);
+  min-width: 0;
 }
 
 .icono-label-specimen-color-name {
   color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
-  font-size: calc(26 / 1220 * 100cqw);
+  font-size: calc(32 / 1220 * 100cqw);
   letter-spacing: 0.01em;
   line-height: 0.95;
   transform: rotate(-2.5deg);
   transform-origin: left center;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .icono-label-specimen-swatch-hex {
@@ -241,14 +248,14 @@
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(11 / 1220 * 100cqw);
+  font-size: calc(13 / 1220 * 100cqw);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .icono-label-specimen-swatch {
-  inline-size: calc(14 / 1220 * 100cqw);
-  block-size: calc(14 / 1220 * 100cqw);
+  inline-size: calc(16 / 1220 * 100cqw);
+  block-size: calc(16 / 1220 * 100cqw);
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 88%, transparent);
   flex: 0 0 auto;
 }
@@ -261,45 +268,47 @@
 }
 
 .icono-label-specimen-decomposition .icono-label-specimen-hand-analysis {
-  font-size: calc(19 / 1220 * 100cqw);
+  font-size: calc(22 / 1220 * 100cqw);
 }
 
 .icono-label-specimen-analysis-row {
-  display: grid;
-  grid-template-columns: max-content max-content;
-  align-items: start;
+  display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  column-gap: calc(10 / 1220 * 100cqw);
+  gap: calc(6 / 1220 * 100cqw);
+  min-width: 0;
 }
 
 .icono-label-specimen-hand-analysis {
   color: var(--icono-label-pen);
   font-family: var(--icono-label-hand);
-  font-size: calc(22 / 1220 * 100cqw);
+  font-size: calc(26 / 1220 * 100cqw);
   line-height: 0.95;
   letter-spacing: 0.01em;
   transform: rotate(-2.5deg);
   transform-origin: left center;
-  justify-self: start;
+  flex: 0 0 auto;
 }
 
 .icono-label-specimen-note {
   color: color-mix(in srgb, var(--icono-label-ink) 58%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(11 / 1220 * 100cqw);
+  font-size: calc(13 / 1220 * 100cqw);
   letter-spacing: 0.12em;
   line-height: 1.1;
   text-transform: uppercase;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 .icono-label-specimen-metric {
   color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
   font-family: var(--icono-label-type);
-  font-size: calc(11 / 1220 * 100cqw);
+  font-size: calc(13 / 1220 * 100cqw);
   letter-spacing: 0.1em;
   line-height: 1.08;
   text-transform: uppercase;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .icono-label-specimen-metric-value {

@@ -436,18 +436,38 @@
   }
 
   function describeHueWord(hue) {
+    /* 26 hue zones matching pipeline letter→hue mapping
+       (Datasets/iconoplasm/demographic_mappings.json).
+       Boundaries are midpoints between adjacent letter hues. */
     var h = Number(hue)
     if (!Number.isFinite(h)) return "unknown"
-    if (h < 15 || h >= 345) return "red"
-    if (h < 40) return "orange"
-    if (h < 65) return "yellow"
-    if (h < 95) return "lime"
-    if (h < 150) return "green"
-    if (h < 195) return "cyan"
-    if (h < 235) return "blue"
-    if (h < 275) return "violet"
-    if (h < 320) return "magenta"
-    return "rose"
+    h = ((h % 360) + 360) % 360
+    if (h < 7 || h >= 353) return "red"
+    if (h < 21) return "vermilion"
+    if (h < 35) return "orange"
+    if (h < 49) return "amber"
+    if (h < 62) return "gold"
+    if (h < 76) return "yellow"
+    if (h < 90) return "lime"
+    if (h < 104) return "chartreuse"
+    if (h < 118) return "spring"
+    if (h < 132) return "jade"
+    if (h < 145) return "emerald"
+    if (h < 159) return "teal"
+    if (h < 173) return "cyan"
+    if (h < 187) return "azure"
+    if (h < 201) return "cerulean"
+    if (h < 215) return "blue"
+    if (h < 229) return "sapphire"
+    if (h < 242) return "indigo"
+    if (h < 256) return "violet"
+    if (h < 270) return "purple"
+    if (h < 284) return "amethyst"
+    if (h < 298) return "magenta"
+    if (h < 312) return "fuchsia"
+    if (h < 325) return "rose"
+    if (h < 339) return "cerise"
+    return "crimson"
   }
 
   function describeLevelWord(raw) {
@@ -481,7 +501,17 @@
       safeGeneDetail.loeuf != null ? safeGeneDetail.loeuf : essence.loeuf,
       3,
     )
-    var hueLabel = hsv ? describeHueWord(hsv.h) : "unknown"
+    /* Hue word comes from first letter directly (not hex back-conversion),
+       because OKHsv→sRGB→standard-HSV shifts the hue angle. */
+    var letterHueWords = {
+      A: "red", B: "vermilion", C: "orange", D: "amber", E: "gold",
+      F: "yellow", G: "lime", H: "chartreuse", I: "spring", J: "jade",
+      K: "emerald", L: "teal", M: "cyan", N: "azure", O: "cerulean",
+      P: "blue", Q: "sapphire", R: "indigo", S: "violet", T: "purple",
+      U: "amethyst", V: "magenta", W: "fuchsia", X: "rose", Y: "cerise",
+      Z: "crimson",
+    }
+    var hueLabel = letterHueWords[firstLetter] || (hsv ? describeHueWord(hsv.h) : "unknown")
     var saturationLabel = hsv ? describeLevelWord(hsv.s) : "unknown"
     var lightnessLabel = hsv ? describeLevelWord(hsv.v) : "unknown"
     /* Row 1 = full color (prominent). Rows 2-4 = decomposition (subordinate).
@@ -490,9 +520,6 @@
     return (
       '<div class="icono-label-specimen-micro">' +
       '<div class="icono-label-specimen-color-row">' +
-      (colorName
-        ? '<span class="icono-label-specimen-color-name">' + escapeHtml(colorName) + "</span>"
-        : "") +
       '<span class="icono-label-specimen-swatch-hex">' +
       '<span class="icono-label-specimen-swatch" style="background:' +
       escapeHtml(color || "#000000") +
@@ -501,6 +528,9 @@
       escapeHtml(color || "UNFILED") +
       "</span>" +
       "</span>" +
+      (colorName
+        ? '<span class="icono-label-specimen-color-name">' + escapeHtml(colorName) + "</span>"
+        : "") +
       "</div>" +
       '<div class="icono-label-specimen-decomposition">' +
       '<div class="icono-label-specimen-analysis-row">' +
