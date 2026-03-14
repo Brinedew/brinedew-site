@@ -131,12 +131,14 @@
     var preset = iconoRoughLoopPreset(loopSvg.getAttribute("data-icono-rough-preset"))
     var seed = Number(loopSvg.getAttribute("data-icono-rough-seed"))
     var roughSvg = roughImpl.svg(loopSvg)
+    loopSvg.setAttribute("overflow", "visible")
+    loopSvg.style.overflow = "visible"
     while (loopSvg.firstChild) loopSvg.removeChild(loopSvg.firstChild)
     var ellipse = roughSvg.ellipse(
       ICONO_ROUGH_LOOP_VIEWBOX_WIDTH / 2,
       ICONO_ROUGH_LOOP_VIEWBOX_HEIGHT / 2,
       preset.width,
-      preset.height,
+      preset.height * 2,
       {
         stroke: "currentColor",
         fill: "none",
@@ -154,6 +156,7 @@
     ellipse.setAttribute("stroke-linecap", "round")
     ellipse.setAttribute("stroke-linejoin", "round")
     ellipse.setAttribute("vector-effect", "non-scaling-stroke")
+    ellipse.setAttribute("overflow", "visible")
     loopSvg.appendChild(ellipse)
     loopSvg.setAttribute("data-icono-rough-ready", "true")
     return true

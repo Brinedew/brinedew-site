@@ -689,6 +689,7 @@
   justify-content: center;
   min-width: 0;
   padding: 0 calc(2 / 1220 * 100cqw);
+  overflow: visible;
 }
 
 .icono-label-option-copy {
@@ -711,6 +712,7 @@
   transform: translate(-50%, -50%);
   color: var(--icono-label-pen);
   pointer-events: none;
+  overflow: visible;
 }
 
 .icono-label-typed-value,

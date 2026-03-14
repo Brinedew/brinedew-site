@@ -161,6 +161,7 @@
   letter-spacing: 0.03em;
   line-height: 0.98;
   text-transform: uppercase;
+  overflow: visible;
 }
 
 .icono-vote-box--label .icono-vote-btn--approve,
@@ -187,6 +188,7 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease;
+  overflow: visible;
 }
 
 .icono-vote-box--label .icono-vote-btn.active {
