@@ -194,13 +194,13 @@
 
 .icono-label-specimen-footer {
   display: grid;
-  grid-template-rows: min-content 1fr;
-  gap: calc(8 / 1220 * 100cqw);
-  flex: 0 0 calc(146 / 1220 * 100cqw);
-  min-height: calc(146 / 1220 * 100cqw);
+  grid-template-rows: min-content min-content;
+  gap: calc(3 / 1220 * 100cqw);
+  flex: 0 0 auto;
+  min-height: auto;
   width: 100%;
   box-sizing: border-box;
-  padding-top: calc(10 / 1220 * 100cqw);
+  padding-top: calc(6 / 1220 * 100cqw);
   border-top: 1px solid var(--icono-label-rule);
 }
 
@@ -315,6 +315,8 @@
   letter-spacing: 0.18em;
   line-height: 1.08;
   text-transform: uppercase;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .icono-label-title-block,
@@ -562,13 +564,23 @@
 }
 
 .icono-label-band-cell--category .icono-label-band-primary {
-  padding-top: 0;
+  padding-top: calc(9 / 1220 * 100cqw);
 }
 
 .icono-label-band-cell--category .icono-label-band-secondary {
   position: absolute;
-  top: calc(7 / 1220 * 100cqw);
+  top: calc(3 / 1220 * 100cqw);
   left: calc(18 / 1220 * 100cqw);
+}
+
+.icono-label-band-cell--noted {
+  position: relative;
+}
+
+.icono-label-band-cell--noted .icono-label-band-secondary {
+  position: absolute;
+  top: calc(16 / 1220 * 100cqw);
+  right: calc(18 / 1220 * 100cqw);
 }
 
 .icono-label-band-cell--noted .icono-label-band-primary,
@@ -596,25 +608,28 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  padding: 0.06rem 0.06rem;
+  padding: 0 calc(2 / 1220 * 100cqw);
 }
 
 .icono-label-option-copy {
   position: relative;
   z-index: 1;
   color: var(--icono-label-ink);
-  font-family: "Special Elite";
-  font-size: calc(24 / 1220 * 100cqw);
-  letter-spacing: 0.03em;
+  font-family: "IBM Plex Mono";
+  font-size: calc(20 / 1220 * 100cqw);
+  font-weight: 500;
+  letter-spacing: 0.08em;
   line-height: 0.98;
   text-transform: uppercase;
 }
 
 .icono-label-option-loop {
   position: absolute;
-  inset: -0.18rem -0.34rem;
-  width: auto;
-  height: calc(100% + 0.32rem);
+  top: 50%;
+  left: 50%;
+  width: calc(100% + 12 / 1220 * 100cqw);
+  height: calc(100% + 6 / 1220 * 100cqw);
+  transform: translate(-50%, -50%);
   color: var(--icono-label-pen);
   pointer-events: none;
 }
@@ -795,6 +810,10 @@
   align-items: start;
   align-content: start;
   justify-content: start;
+}
+
+.icono-label-category-option {
+  display: flex;
 }
 
 .icono-label-category-option--transmembrane {
