@@ -557,8 +557,18 @@
   padding-top: calc(9 / 1220 * 100cqw);
 }
 
+.icono-label-band-cell--category {
+  position: relative;
+}
+
 .icono-label-band-cell--category .icono-label-band-primary {
   padding-top: 0;
+}
+
+.icono-label-band-cell--category .icono-label-band-secondary {
+  position: absolute;
+  top: calc(7 / 1220 * 100cqw);
+  left: calc(18 / 1220 * 100cqw);
 }
 
 .icono-label-band-cell--noted .icono-label-band-primary,
@@ -737,9 +747,9 @@
 }
 
 .icono-label-alignment-grid {
-  display: grid;
-  grid-template-rows: min-content min-content;
-  justify-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: calc(6 / 1220 * 100cqw);
   width: 100%;
 }
