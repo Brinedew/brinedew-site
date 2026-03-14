@@ -985,7 +985,7 @@ async function portraitState(env, symbol, base) {
     }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
            ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
@@ -1009,6 +1009,7 @@ async function portraitState(env, symbol, base) {
       medium_url: row.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
       thumb_url: row.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
       asset_sha256: row.asset_sha256,
+      vision_id: String(row?.vision_id || "").trim() || null,
     }
   } catch {
     return {
@@ -2439,6 +2440,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.status,
        pa.autopick_eligible,
        pa.created_at,
+       pa.vision_id,
        COALESCE(v.upvotes, 0) AS image_upvotes,
        COALESCE(v.downvotes, 0) AS image_downvotes,
        COALESCE(v.score, 0) AS image_score
@@ -2472,6 +2474,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       status: String(row?.status || "").trim() || "draft",
       autopick_eligible: coerceBoolean(row?.autopick_eligible, true),
       is_current: !!(assetSha && currentSha && assetSha === currentSha),
+      vision_id: String(row?.vision_id || "").trim() || null,
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
       image_score: Number(row?.image_score || 0),
