@@ -139,7 +139,7 @@
     roughEllipseSerial += 1;
     const loopSeed = 9001 + roughEllipseSerial * 97;
     return (
-      '<svg class="iconoplasm-gene-rough-loop" data-icono-rough-loop="true" data-icono-rough-preset="default" data-icono-rough-seed="' +
+      '<svg class="iconoplasm-gene-rough-loop" data-icono-rough-loop="true" data-icono-rough-preset="inline-gene" data-icono-rough-seed="' +
       String(loopSeed) +
       '" viewBox="0 0 132 34" preserveAspectRatio="none" aria-hidden="true">' +
       '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +

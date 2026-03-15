@@ -19,6 +19,20 @@
     maxRandomnessOffset: 1.5,
     curveFitting: 0.82,
     curveStepCount: 9,
+    widthMultiplier: 1.5,
+    paddingCharWidth: 2,
+    heightMultiplier: 2,
+  }
+  var ICONO_ROUGH_LOOP_INLINE_GENE = {
+    strokeWidth: 1.56,
+    roughness: 1.34,
+    bowing: 0.62,
+    maxRandomnessOffset: 1.08,
+    curveFitting: 0.9,
+    curveStepCount: 8,
+    widthMultiplier: 1.16,
+    paddingCharWidth: 0.72,
+    heightMultiplier: 1.24,
   }
   var ICONO_ROUGH_LOOP_PRESETS = {
     default: ICONO_ROUGH_LOOP_STANDARD,
@@ -28,6 +42,7 @@
     "category-soluble": ICONO_ROUGH_LOOP_STANDARD,
     "alignment-oncogene": ICONO_ROUGH_LOOP_STANDARD,
     "alignment-tumor-suppressor": ICONO_ROUGH_LOOP_STANDARD,
+    "inline-gene": ICONO_ROUGH_LOOP_INLINE_GENE,
   }
 
   function iconoPenLoopFallbackMarkup() {
@@ -84,9 +99,9 @@
     var textWidth = Math.max(targetRect.width, 1)
     var textHeight = Math.max(targetRect.height, 1)
     var averageCharWidth = textWidth / charCount
-    var paddedWidth = textWidth + averageCharWidth * 2
-    var measuredWidth = Math.max(textWidth * 1.5, paddedWidth)
-    var measuredHeight = textHeight * 2
+    var paddedWidth = textWidth + averageCharWidth * Number(preset.paddingCharWidth || 2)
+    var measuredWidth = Math.max(textWidth * Number(preset.widthMultiplier || 1.5), paddedWidth)
+    var measuredHeight = textHeight * Number(preset.heightMultiplier || 2)
     var left = targetRect.left - hostRect.left + (textWidth - measuredWidth) / 2
     var top = targetRect.top - hostRect.top + (textHeight - measuredHeight) / 2
     return {
