@@ -18,6 +18,7 @@
   const CARD_VARIANT_KEY = 'iconoplasm_card_variant';
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase('https://iconoplasm.brinedew.bio');
   const escapeHtml = IconoCardShared.escapeHtml;
+  let roughEllipseSerial = 0;
 
   function extensionApiFetch(input, init = {}) {
     const url = typeof input === 'string' ? input : String((input && input.url) || '');
@@ -86,7 +87,10 @@
   }
 
   function normalizeHighlightMode(raw) {
-    return String(raw || '').trim().toLowerCase() === 'pill' ? 'pill' : 'underline';
+    const value = String(raw || '').trim().toLowerCase();
+    if (value === 'pill') return 'pill';
+    if (value === 'ellipse') return 'ellipse';
+    return 'underline';
   }
 
   function normalizeTooltipTheme(raw) {
@@ -131,14 +135,61 @@
     tooltip.classList.toggle('iconoplasm-tooltip--variant-lab-label', cardVariant === 'lab-label');
   }
 
+  function buildHighlightRoughLoopSvg() {
+    roughEllipseSerial += 1;
+    const loopSeed = 9001 + roughEllipseSerial * 97;
+    return (
+      '<svg class="iconoplasm-gene-rough-loop" data-icono-rough-loop="true" data-icono-rough-preset="default" data-icono-rough-seed="' +
+      String(loopSeed) +
+      '" viewBox="0 0 132 34" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17" fill="none" stroke="currentColor" stroke-width="1.05" stroke-linecap="round" stroke-dasharray="2.5 4"/>' +
+      '</svg>'
+    );
+  }
+
+  function ensureHighlightTextWrapper(el) {
+    if (!el) return null;
+    let copy = el.querySelector('.iconoplasm-gene-copy');
+    if (copy) return copy;
+    const text = String((el.dataset && el.dataset.geneLabel) || el.textContent || '');
+    el.textContent = '';
+    copy = document.createElement('span');
+    copy.className = 'iconoplasm-gene-copy';
+    copy.setAttribute('data-icono-rough-copy', 'true');
+    copy.textContent = text;
+    el.appendChild(copy);
+    return copy;
+  }
+
+  function syncEllipseLoop(el, enabled) {
+    if (!el) return;
+    ensureHighlightTextWrapper(el);
+    const existing = el.querySelector('.iconoplasm-gene-rough-loop');
+    if (!enabled) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (!existing) {
+      el.insertAdjacentHTML('beforeend', buildHighlightRoughLoopSvg());
+    }
+    if (IconoCardShared && typeof IconoCardShared.hydrateRoughLoops === 'function') {
+      IconoCardShared.hydrateRoughLoops(el, true);
+    }
+  }
+
   function applyHighlightStyle(el, symbol, color) {
     if (!el) return;
     const tc = textColors(color || PLACEHOLDER_COLOR);
+    ensureHighlightTextWrapper(el);
     el.dataset.gene = symbol;
     el.style.setProperty('--iconoplasm-gene-color', color || PLACEHOLDER_COLOR);
     el.style.setProperty('--iconoplasm-gene-fg', tc.primary);
+    el.style.setProperty('--iconoplasm-gene-muted-separator', tc.separator);
     el.classList.toggle('iconoplasm-gene--pill', highlightMode === 'pill');
-    el.classList.toggle('iconoplasm-gene--underline', highlightMode !== 'pill');
+    el.classList.toggle('iconoplasm-gene--ellipse', highlightMode === 'ellipse');
+    el.classList.toggle('iconoplasm-gene--underline', highlightMode === 'underline');
+    syncEllipseLoop(el, highlightMode === 'ellipse');
   }
 
   function refreshHighlightStyles(root = document) {
@@ -728,7 +779,12 @@
       }
       const span = document.createElement('span');
       span.className = 'iconoplasm-gene';
-      span.textContent = text.slice(m.index, m.index + m.length);
+      span.dataset.geneLabel = text.slice(m.index, m.index + m.length);
+      const copy = document.createElement('span');
+      copy.className = 'iconoplasm-gene-copy';
+      copy.setAttribute('data-icono-rough-copy', 'true');
+      copy.textContent = span.dataset.geneLabel;
+      span.appendChild(copy);
 
       const gene = geneMap[m.symbol];
       const color = gene.c || PLACEHOLDER_COLOR;

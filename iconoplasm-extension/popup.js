@@ -43,6 +43,10 @@ function normalizeCardVariant(value) {
   return value === 'lab-label' ? 'lab-label' : 'classic';
 }
 
+function normalizeHighlightMode(value) {
+  return value === 'pill' || value === 'ellipse' ? value : 'underline';
+}
+
 async function loadStatus() {
   try {
     const localSettings = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY, TOOLTIP_THEME_KEY, CARD_VARIANT_KEY]);
@@ -51,7 +55,7 @@ async function loadStatus() {
     hashEl.textContent = status.hash ? status.hash.slice(0, 12) : '--';
     fetchEl.textContent = formatDate(status.lastFetch);
     if (highlightModeEl) {
-      highlightModeEl.value = localSettings[HIGHLIGHT_MODE_KEY] === 'pill' ? 'pill' : 'underline';
+      highlightModeEl.value = normalizeHighlightMode(localSettings[HIGHLIGHT_MODE_KEY]);
     }
     if (tooltipThemeEl) {
       tooltipThemeEl.value = normalizeTooltipTheme(localSettings[TOOLTIP_THEME_KEY]);
@@ -100,7 +104,7 @@ refreshBtn.addEventListener('click', async () => {
 
 if (highlightModeEl) {
   highlightModeEl.addEventListener('change', async () => {
-    const mode = highlightModeEl.value === 'pill' ? 'pill' : 'underline';
+    const mode = normalizeHighlightMode(highlightModeEl.value);
     await chrome.storage.local.set({ [HIGHLIGHT_MODE_KEY]: mode });
   });
 }
