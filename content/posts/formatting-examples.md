@@ -154,7 +154,7 @@ Here's another footnote[^2].
 
 ## Math Expressions (if MathJax is enabled)
 
-Inline math: $E = mc^2$
+Inline math: $$E = mc^2$$
 
 Block math:
 
@@ -177,6 +177,49 @@ $$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
 	1. Nested item
 	2. Another nested item
 3. Third item
+
+### List Structure Stress Test
+
+1. **Top-level item with multiple paragraphs**
+
+    This paragraph should stay attached to the list item and align under the item text, not break out into the main article flow.
+
+    This is a second paragraph in the same item. It is intentionally separated by a blank line so we can test loose-list rendering.
+
+1. **Top-level item with nested bullets and extra paragraphs**
+
+    Intro paragraph for the second item.
+
+    - First nested bullet
+    - Second nested bullet with its own continuation paragraph.
+
+        This paragraph should remain attached to the nested bullet rather than snapping back to the outer list.
+
+    Back on the parent item again. This paragraph should still belong to the same numbered item.
+
+1. **Top-level item with deeper nesting**
+
+    1. Nested ordered item
+
+        This paragraph belongs to the nested ordered item.
+
+    2. Another nested ordered item
+
+        - Deep nested bullet
+        - Another deep nested bullet
+
+            Continuation paragraph for the deep nested bullet.
+
+    Final paragraph for the outer numbered item after the nested ordered list ends.
+
+1. **Top-level item with a blockquote**
+
+    > This blockquote should stay inside the list item.
+    >
+    > So should this second quoted paragraph.
+
+    Final paragraph after the blockquote.
+
 ### Unordered Lists
 
 - First bullet
