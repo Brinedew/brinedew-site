@@ -1007,6 +1007,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
     var portraitUrl = publishedPortraitUrl(g, "medium")
+    var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
     var detail = portraitDetailCache[key] || null
     var cardVariant = resolveCardVariant()
     var isLabelVariant = cardVariant === "lab-label"
@@ -1023,11 +1024,17 @@ void syncSharedIconoplasmSettings().catch(function () {
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
     var labelPortraitHtml =
       (portraitUrl
-        ? '<a class="iconoplasm-tooltip-portrait-media icono-brick-media-link" href="' +
-          href +
-          '" data-icono-nav aria-label="Open ' +
+        ? '<button type="button" class="iconoplasm-tooltip-portrait-media icono-brick-media-link" data-icono-pswp data-icono-pswp-src="' +
+          esc(portraitFullUrl) +
+          '" data-icono-pswp-alt="' +
           esc(g.symbol) +
-          ' gene page">' +
+          ' portrait" data-pswp-width="' +
+          dims.width +
+          '" data-pswp-height="' +
+          dims.height +
+          '" aria-label="Open full-size portrait for ' +
+          esc(g.symbol) +
+          ' portrait">' +
           '<img class="iconoplasm-tooltip-portrait-img" src="' +
           esc(portraitUrl) +
           '" alt="' +
@@ -1041,7 +1048,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           '" height="' +
           dims.height +
           '">' +
-          "</a>"
+          "</button>"
         : '<div class="iconoplasm-tooltip-portrait-fallback">' +
           '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
           '<div class="iconoplasm-tooltip-portrait-symbol">' +
@@ -1101,18 +1108,26 @@ void syncSharedIconoplasmSettings().catch(function () {
       (isLabelVariant
         ? '<div class="' +
           portraitStateClass +
-          '">' +
+          (portraitUrl ? '" data-icono-lightbox>' : '">') +
           IconoCardShared.renderLabLabelSpecimenRailHtml(labelPortraitHtml, detail || g) +
           "</div>"
-        : '<a class="' +
+        : '<div class="' +
           portraitStateClass +
-          ' icono-brick-media-link" href="' +
-          href +
-          '" data-icono-nav aria-label="Open ' +
-          esc(g.symbol) +
-          ' gene page">' +
+          ' icono-brick-media-link"' +
+          (portraitUrl ? ' data-icono-lightbox>' : '>') +
           (portraitUrl
-            ? '<img class="iconoplasm-tooltip-portrait-img" src="' +
+            ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
+              esc(portraitFullUrl) +
+              '" data-icono-pswp-alt="' +
+              esc(g.symbol) +
+              ' portrait" data-pswp-width="' +
+              dims.width +
+              '" data-pswp-height="' +
+              dims.height +
+              '" aria-label="Open full-size portrait for ' +
+              esc(g.symbol) +
+              ' portrait">' +
+              '<img class="iconoplasm-tooltip-portrait-img" src="' +
               esc(portraitUrl) +
               '" alt="' +
               esc(g.symbol) +
@@ -1124,7 +1139,8 @@ void syncSharedIconoplasmSettings().catch(function () {
               dims.width +
               '" height="' +
               dims.height +
-              '">'
+              '">' +
+              '</button>'
             : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
           '<div class="iconoplasm-tooltip-portrait-fallback">' +
           '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
@@ -1133,7 +1149,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           "</div>" +
           "</div>" +
           '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
-          "</a>") +
+          "</div>") +
       '<div class="iconoplasm-tooltip-body">' +
       bodyHtml +
       "</div>" +
@@ -1363,14 +1379,20 @@ void syncSharedIconoplasmSettings().catch(function () {
       if (portraitShell) {
         var dims = portraitDimensions(genePayload)
         var portraitUrl = publishedPortraitUrl(genePayload, "medium")
-        var href = "/gene/" + esc(encodeURIComponent(genePayload.symbol || ""))
+        var portraitFullUrl = publishedPortraitUrl(genePayload, "full") || portraitUrl
         var labelPortraitHtml =
           portraitUrl
-            ? '<a class="iconoplasm-tooltip-portrait-media icono-brick-media-link" href="' +
-              href +
-              '" data-icono-nav aria-label="Open ' +
+            ? '<button type="button" class="iconoplasm-tooltip-portrait-media icono-brick-media-link" data-icono-pswp data-icono-pswp-src="' +
+              esc(portraitFullUrl) +
+              '" data-icono-pswp-alt="' +
               esc(genePayload.symbol) +
-              ' gene page">' +
+              ' portrait" data-pswp-width="' +
+              dims.width +
+              '" data-pswp-height="' +
+              dims.height +
+              '" aria-label="Open full-size portrait for ' +
+              esc(genePayload.symbol) +
+              ' portrait">' +
               '<img class="iconoplasm-tooltip-portrait-img" src="' +
               esc(portraitUrl) +
               '" alt="' +
@@ -1380,18 +1402,21 @@ void syncSharedIconoplasmSettings().catch(function () {
               '" height="' +
               dims.height +
               '">' +
-              "</a>"
+              "</button>"
             : '<div class="iconoplasm-tooltip-portrait-fallback">' +
               '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
               '<div class="iconoplasm-tooltip-portrait-symbol">' +
               esc(genePayload.symbol) +
               "</div>" +
               "</div>"
+        if (portraitUrl) portraitShell.setAttribute("data-icono-lightbox", "")
+        else portraitShell.removeAttribute("data-icono-lightbox")
         portraitShell.innerHTML = IconoCardShared.renderLabLabelSpecimenRailHtml(
           labelPortraitHtml,
           genePayload,
         )
       }
+      refreshPortraitLightbox()
       return
     }
     var meta = card.querySelector("[data-icono-card-meta]")
@@ -1405,6 +1430,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       mobileMeta.outerHTML = renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
     }
     ensureBrickVoteBox(card, genePayload)
+    refreshPortraitLightbox()
   }
 
   function hydrateBrickCards(cards) {
@@ -1764,6 +1790,7 @@ void syncSharedIconoplasmSettings().catch(function () {
               destroyHomeMasonry()
               warmBrickCardImages(items)
               wireBrickVoteBoxes(newCards)
+              refreshPortraitLightbox()
               void hydrateBrickCards(newCards)
             }
             if (
