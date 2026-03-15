@@ -2082,6 +2082,19 @@ function compareNullableTextAsc(a, b) {
   return String(a || "").localeCompare(String(b || ""))
 }
 
+function compareGalleryPopularityFallback(left, right) {
+  return (
+    Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
+    Number(right.image_score || 0) - Number(left.image_score || 0) ||
+    Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
+    compareNullableTextDesc(
+      left.published_at || left.asset_created_at,
+      right.published_at || right.asset_created_at,
+    ) ||
+    compareNullableTextAsc(left.symbol, right.symbol)
+  )
+}
+
 function clearGallerySnapshotCache() {
   gallerySnapshotCache.catalogHash = null
   gallerySnapshotCache.base = null
@@ -2196,11 +2209,14 @@ function sortGalleryItems(items, order, seed = null) {
   const sorted = Array.isArray(items) ? items.slice() : []
   sorted.sort((left, right) => {
     if (order === "newest") {
+      // Keep popularity as the first fallback for newest.
+      // Many gallery items share the same publish timestamp or no timestamp at all,
+      // and alphabetical fallback made "newest" feel like reverse-A-to-Z browsing.
       return (
         compareNullableTextDesc(
           left.published_at || left.asset_created_at,
           right.published_at || right.asset_created_at,
-        ) || compareNullableTextAsc(left.symbol, right.symbol)
+        ) || compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "random") {
@@ -2217,23 +2233,14 @@ function sortGalleryItems(items, order, seed = null) {
         ? Number(right.uniqueness_rank)
         : null
       if (leftRank == null && rightRank == null) {
-        return compareNullableTextAsc(left.symbol, right.symbol)
+        return compareGalleryPopularityFallback(left, right)
       }
       if (leftRank == null) return 1
       if (rightRank == null) return -1
-      return leftRank - rightRank || compareNullableTextAsc(left.symbol, right.symbol)
+      return leftRank - rightRank || compareGalleryPopularityFallback(left, right)
     }
     if (order === "popularity") {
-      return (
-        Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
-        Number(right.image_score || 0) - Number(left.image_score || 0) ||
-        Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
-        compareNullableTextDesc(
-          left.published_at || left.asset_created_at,
-          right.published_at || right.asset_created_at,
-        ) ||
-        compareNullableTextAsc(left.symbol, right.symbol)
-      )
+      return compareGalleryPopularityFallback(left, right)
     }
     return (
       Number(right.image_score || 0) - Number(left.image_score || 0) ||
