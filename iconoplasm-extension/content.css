@@ -79,7 +79,10 @@
   height: 100%;
   overflow: visible;
   pointer-events: none;
-  color: color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 78%, currentColor 22%);
+  /* Keep ellipse strokes keyed to the gene color itself.
+     If we mix with currentColor here, the same gene shifts between black/blue/body-link tints
+     depending on surrounding page chrome, which makes identical genes look inconsistent. */
+  color: var(--iconoplasm-gene-color, #6B6B78);
   z-index: 0;
 }
 
