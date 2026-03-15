@@ -154,6 +154,8 @@ Here's another footnote[^2].
 
 ## Math Expressions (if MathJax is enabled)
 
+*Editor note: this page intentionally uses explicit math delimiters here because the site parser disables single-dollar inline math on purpose, so ordinary prose like currency does not break when content is published from Obsidian.*
+
 Inline math: $$E = mc^2$$
 
 Block math:
@@ -179,6 +181,8 @@ $$\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}$$
 3. Third item
 
 ### List Structure Stress Test
+
+*Editor note: do not "clean up" the indentation in this section unless you re-check the built HTML. These examples are intentionally spaced to match strict CommonMark list nesting in Quartz, because smaller indents can look acceptable in Obsidian while silently breaking on the published site.*
 
 1. **Top-level item with multiple paragraphs**
 

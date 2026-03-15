@@ -27,6 +27,12 @@ export const Latex: QuartzTransformerPlugin<Partial<Options>> = (opts) => {
   return {
     name: "Latex",
     markdownPlugins() {
+      // Keep single-dollar text math disabled.
+      // Reason: this site is edited primarily through Obsidian prose, and ordinary
+      // currency/text like "$10" or "$200k" was being parsed as inline math on the
+      // published site. We intentionally require explicit math delimiters instead.
+      // If someone wants to revisit this, they should first verify real content on
+      // the live site rather than changing it based on formatter/test examples alone.
       return [[remarkMath, { singleDollarTextMath: false }]]
     },
     htmlPlugins() {
