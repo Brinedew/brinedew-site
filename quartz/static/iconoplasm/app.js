@@ -1778,6 +1778,17 @@ void syncSharedIconoplasmSettings().catch(function () {
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
   }
 
+  function updateMobileLabelSwipeDirection(card, dx) {
+    if (!card) return
+    if (!Number.isFinite(dx) || Math.abs(dx) < 1) {
+      if (card.getAttribute("data-icono-mobile-swipe-pending") !== "true") {
+        card.removeAttribute("data-icono-mobile-swipe-dir")
+      }
+      return
+    }
+    card.setAttribute("data-icono-mobile-swipe-dir", dx > 0 ? "right" : "left")
+  }
+
   function commitMobileLabelSwipe(card, direction) {
     if (!card) return
     if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
@@ -1889,12 +1900,14 @@ void syncSharedIconoplasmSettings().catch(function () {
       gesture.dx = 0
       gesture.dragging = false
       gesture.locked = false
+      card.removeAttribute("data-icono-mobile-swipe-dir")
     })
 
     card.addEventListener("pointermove", function (event) {
       if (gesture.pointerId !== event.pointerId) return
       var dx = event.clientX - gesture.startX
       var dy = event.clientY - gesture.startY
+      updateMobileLabelSwipeDirection(card, dx)
       if (!gesture.dragging) {
         if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return
         if (Math.abs(dy) > Math.abs(dx) * 1.15) {
