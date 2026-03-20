@@ -1687,6 +1687,12 @@ void syncSharedIconoplasmSettings().catch(function () {
     // Production rule: mobile expanded layout is still one physical archival sheet. The sheet
     // should dock off the portrait inside the same card, not by scrolling the whole page until a
     // floating overlay looks approximately right.
+    // Rigid validation targets for collapsed geometry live in CSS comments and should be checked
+    // against production screenshots / hard geometry:
+    // - collapsed seam gap: `peekTop - portraitBottom` ~= 0px
+    // - tab attachment gap: `peekTop - tabBottom` ~= 0px
+    // - any portrait overlap must come from moving the attached dossier upward, never from
+    //   detaching the tab and floating it independently
     var portraitTopWithinCard = portraitRect.top - cardRect.top
     var desiredBodyTop = Math.max(0, portraitTopWithinCard + tabRect.height - 1)
     card.style.setProperty("--icono-label-mobile-dossier-top", desiredBodyTop.toFixed(2) + "px")
