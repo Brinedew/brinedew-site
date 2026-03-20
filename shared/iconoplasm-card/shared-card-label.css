@@ -2032,14 +2032,18 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-band-primary,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-band-secondary {
-    align-items: end;
+    align-items: center;
     justify-content: start;
   }
 
+  /* Mobile lab-label cards are fixed printed forms, not elastic UI stacks. Single-line
+     selector lanes must center their typed options in the lane instead of inheriting the
+     desktop bottom-biased baseline seating. Handwritten marks that need to float higher are
+     positioned independently above these centered typed lanes. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-selector-row {
     grid-auto-flow: column;
     grid-auto-columns: max-content;
-    align-items: end;
+    align-items: center;
     justify-content: start;
   }
 
