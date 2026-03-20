@@ -1097,7 +1097,12 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-footer {
-    display: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: min-content min-content;
+    gap: 0.14rem;
+    padding-top: 0.18rem;
+    border-top: 1px solid color-mix(in srgb, var(--icono-label-rule) 56%, transparent);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body {
@@ -1820,6 +1825,7 @@
     display: grid;
     grid-template-columns: min-content minmax(0, 1fr);
     align-items: center;
+    column-gap: 0.3rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-swatch-hex,
@@ -1851,6 +1857,58 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-option {
     place-items: center;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-notes {
+    gap: 0.08rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-note {
+    font-size: 0.42rem;
+    line-height: 1.08;
+    letter-spacing: 0.12em;
+    white-space: normal;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-micro {
+    gap: 0.12rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-swatch-hex {
+    font-size: 0.44rem;
+    line-height: 1.05;
+    column-gap: 0.18rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-swatch {
+    inline-size: 0.7rem;
+    block-size: 0.7rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-color-name {
+    font-size: 1rem;
+    line-height: 0.92;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-decomposition {
+    grid-template-columns: 3.2rem 1.7rem minmax(max-content, 1fr);
+    row-gap: 0.04rem;
+    column-gap: 0.26rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-metric {
+    font-size: 0.46rem;
+    line-height: 1.06;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-metric-value {
+    font-size: 0.8rem;
+    line-height: 1.04;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-hand-analysis {
+    font-size: 0.92rem;
+    line-height: 0.92;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport .iconoplasm-tooltip-portrait-media {

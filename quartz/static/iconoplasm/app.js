@@ -1677,24 +1677,13 @@ void syncSharedIconoplasmSettings().catch(function () {
     else card.removeAttribute("data-icono-mobile-review-active")
 
     var alignmentBody = card.querySelector(".icono-label-dossier-shell .icono-label-alignment-body")
-    var spectralSource = card.querySelector(".icono-label-specimen-note")
     var existingInline = alignmentBody
       ? alignmentBody.querySelector(".icono-label-inline-note--spectral")
       : null
 
-    if (!isMobileReview) {
-      if (existingInline) existingInline.remove()
-      return
-    }
-
-    var spectralText = spectralSource ? String(spectralSource.textContent || "").trim() : ""
-    if (!alignmentBody || !spectralText) return
-    if (!existingInline) {
-      existingInline = document.createElement("div")
-      existingInline.className = "icono-label-inline-note icono-label-inline-note--spectral"
-      alignmentBody.appendChild(existingInline)
-    }
-    existingInline.textContent = spectralText
+    // Mobile now keeps the spectral/emulsion block in the specimen rail where desktop keeps it.
+    // Do not mirror it into Alignment; that duplicates content and breaks the archival layout.
+    if (existingInline) existingInline.remove()
   }
 
   function setMobileLabelExpanded(card, expanded) {
