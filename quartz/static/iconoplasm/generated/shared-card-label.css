@@ -1020,15 +1020,15 @@
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-portrait-pad: 0.936rem;
     --icono-label-mobile-peek-height: 6.408rem;
-    --icono-label-mobile-preview-height: 7.5rem;
+    --icono-label-mobile-preview-height: 8.3rem;
     --icono-label-mobile-tab-height: 2.328rem;
     --icono-label-mobile-tab-width: 6.6rem;
     --icono-label-mobile-sheet-preview-offset: 0rem;
     --icono-label-mobile-collapse-lift: 3.672rem;
-    --icono-label-mobile-band-row-height: 5.04rem;
+    --icono-label-mobile-band-row-height: 4.6rem;
     --icono-label-mobile-header-row-height: 2.16rem;
     --icono-label-mobile-style-row-height: 9.32rem;
-    --icono-label-mobile-alignment-row-height: 14.4rem;
+    --icono-label-mobile-alignment-row-height: 12.9rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -1557,12 +1557,14 @@
     grid-row: 3;
     min-block-size: var(--icono-label-mobile-style-row-height);
     block-size: var(--icono-label-mobile-style-row-height);
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-row {
     grid-row: 4;
     min-block-size: var(--icono-label-mobile-alignment-row-height);
     block-size: var(--icono-label-mobile-alignment-row-height);
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row,
@@ -1704,6 +1706,7 @@
     grid-template-areas: "body";
     min-block-size: var(--icono-label-mobile-band-row-height);
     block-size: var(--icono-label-mobile-band-row-height);
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row > .icono-label-band-grid {
@@ -1728,12 +1731,14 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category {
     grid-area: category;
+    position: relative;
     border-top: 1px solid var(--icono-label-rule);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--icono-label-rule) 92%, transparent);
     grid-template-rows: min-content min-content;
     gap: 0.1rem;
     padding-top: 0.12rem;
-    padding-bottom: 0.14rem;
+    padding-bottom: 0.06rem;
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted {
@@ -1760,6 +1765,17 @@
     position: static;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-secondary {
+    position: absolute;
+    left: 50%;
+    top: 0.98rem;
+    z-index: 2;
+    width: max-content;
+    transform: translateX(-50%);
+    overflow: visible;
+    pointer-events: none;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted > .icono-label-caption {
     grid-area: caption;
   }
@@ -1769,6 +1785,11 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--mass .icono-label-band-primary {
     min-height: 0;
     padding-top: 0;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-primary {
+    padding-top: 0.34rem;
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-primary {
@@ -1838,13 +1859,24 @@
     margin-left: 0;
     text-align: center;
     top: 0;
+    transform: rotate(-4deg);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--politics-oncogene,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--politics-neutral,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--politics-contextual,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--politics-tumor-suppressor {
-    margin-left: 0.34rem;
+    position: absolute;
+    left: 50%;
+    top: 0.02rem;
+    z-index: 2;
+    width: max-content;
+    max-width: calc(100% + 2.4rem);
+    margin-left: 0;
+    text-align: center;
+    transform: translateX(-50%) rotate(-4deg);
+    transform-origin: center top;
+    pointer-events: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-mass-line {
@@ -1884,18 +1916,23 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     padding: 0.5rem 0.8rem 0.58rem;
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.4rem;
+    gap: 0.22rem;
+    position: relative;
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-selector-row--alignment {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.72rem;
+    padding-top: 0.42rem;
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-inline-note--spectral {
