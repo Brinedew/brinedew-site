@@ -1628,7 +1628,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-stack {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.82fr) minmax(0, 1.02fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
     grid-template-rows: auto;
   }
 
@@ -1657,11 +1657,23 @@
     padding: 0.28rem 0.44rem 0.24rem;
     border-top: 0;
     border-left: 1px solid var(--icono-label-rule);
+    position: relative;
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family-trait-field {
-    display: grid;
-    min-height: 0.7rem;
+    display: block;
+    min-height: 0;
+    block-size: 0;
+    overflow: visible;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--family-trait {
+    position: absolute;
+    left: 0;
+    top: 0;
+    max-width: 100%;
+    pointer-events: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-block {
