@@ -1317,11 +1317,8 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn {
     position: relative;
     min-height: 0.9rem;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: block;
     width: 100%;
-    align-content: center;
-    align-items: center;
     padding: 0 0 0.01rem;
     font-size: 0.56rem;
     line-height: 1;
@@ -1356,9 +1353,6 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject {
     grid-column: 1;
     grid-row: 1;
-    grid-template-columns: 2.18rem minmax(0, 1fr);
-    justify-content: stretch;
-    justify-items: stretch;
     text-align: left;
     padding-right: 0;
   }
@@ -1366,9 +1360,6 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve {
     grid-column: 2;
     grid-row: 1;
-    grid-template-columns: minmax(0, 1fr) 2.18rem;
-    justify-content: stretch;
-    justify-items: stretch;
     text-align: right;
     padding-left: 0;
   }
