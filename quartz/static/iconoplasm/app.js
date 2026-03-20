@@ -1690,23 +1690,6 @@ void syncSharedIconoplasmSettings().catch(function () {
     var portraitTopWithinCard = portraitRect.top - cardRect.top
     var desiredBodyTop = Math.max(0, portraitTopWithinCard + tabRect.height - 1)
     card.style.setProperty("--icono-label-mobile-dossier-top", desiredBodyTop.toFixed(2) + "px")
-    if (card.getAttribute("data-icono-mobile-expanded") !== "true") return
-    window.requestAnimationFrame(function () {
-      if (!card || card.getAttribute("data-icono-mobile-expanded") !== "true") return
-      var settledTab = card.querySelector(".icono-label-mobile-peek-tab")
-      if (!settledTab || typeof settledTab.getBoundingClientRect !== "function") return
-      var settledRect = settledTab.getBoundingClientRect()
-      if (!Number.isFinite(settledRect.top)) return
-      // The collapse tab must end up visibly reachable after expansion. Once the sheet is docked
-      // to the portrait, nudge the page so that tab and portrait land in the top viewing band.
-      var desiredViewportTop = 8
-      var viewportDelta = settledRect.top - desiredViewportTop
-      if (Math.abs(viewportDelta) < 2) return
-      window.scrollBy({
-        top: viewportDelta,
-        behavior: "auto",
-      })
-    })
   }
 
   function syncMobileLabelDossierContent(card) {

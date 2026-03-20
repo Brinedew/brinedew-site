@@ -1096,6 +1096,7 @@
     bottom: 0;
     z-index: 3;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
     min-height: 0;
     padding: 0;
