@@ -1329,11 +1329,6 @@
     line-height: 1;
   }
 
-  .icono-card--variant-lab-label.icono-card--brick {
-    --icono-label-mobile-arrow-right-asset: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60' fill='none'%3E%3Cpath d='M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' transform='translate(60 0) scale(-1 1)'/%3E%3C/svg%3E");
-    --icono-label-mobile-arrow-left-asset: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60' fill='none'%3E%3Cpath d='M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  }
-
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-copy::before {
     content: "";
     position: absolute;
@@ -1353,43 +1348,12 @@
     opacity: var(--icono-label-mobile-approve-circle-opacity, 0) !important;
   }
 
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn::after {
-    content: "";
-    position: absolute;
-    bottom: -0.02rem;
-    inline-size: 1.44rem;
-    block-size: 0.42rem;
-    background-color: color-mix(in srgb, var(--icono-label-ink) 42%, transparent);
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    mask-position: center;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    opacity: 0.88;
-    pointer-events: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn::before {
-    content: none;
-  }
-
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject {
     grid-column: 1;
     grid-row: 1;
     justify-content: flex-start;
     text-align: left;
     padding-right: 0.4rem;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject::after {
-    left: 0;
-    -webkit-mask-image: var(--icono-label-mobile-arrow-left-asset);
-    mask-image: var(--icono-label-mobile-arrow-left-asset);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject::before {
-    content: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve {
@@ -1400,14 +1364,36 @@
     padding-left: 0.4rem;
   }
 
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve::after {
-    right: 0;
-    -webkit-mask-image: var(--icono-label-mobile-arrow-right-asset);
-    mask-image: var(--icono-label-mobile-arrow-right-asset);
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-copy-stack {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.03rem;
   }
 
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve::before {
-    content: none;
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy-stack {
+    align-items: flex-start;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-copy-stack {
+    align-items: flex-end;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow {
+    inline-size: 1.46rem;
+    block-size: 0.42rem;
+    display: block;
+    overflow: visible;
+    color: color-mix(in srgb, var(--icono-label-ink) 42%, transparent);
+    opacity: 0.88;
+    pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-loop {
