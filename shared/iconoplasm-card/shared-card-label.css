@@ -1942,7 +1942,8 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    align-content: center;
+    grid-template-rows: 1.44rem min-content;
+    align-content: start;
     padding: 0.42rem 0.8rem 0.44rem;
     overflow: visible;
   }
@@ -1950,6 +1951,8 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    min-block-size: 1.44rem;
+    block-size: 1.44rem;
     align-content: center;
     gap: 0.22rem;
     position: relative;
