@@ -1594,7 +1594,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
 
   const currentRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT current_asset_sha256
+    `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
      FROM icono_publish_state
      WHERE upper(gene_symbol) = ?
      LIMIT 1`,
@@ -1602,10 +1602,20 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
     .bind(symbolNorm)
     .first()
   const currentAssetSha = normalizeSha256(currentRow?.current_asset_sha256 || "")
+  const adminOverride = Number(currentRow?.admin_override || 0) > 0
+  if (adminOverride) {
+    return {
+      ok: true,
+      changed: false,
+      code: "ADMIN_OVERRIDE",
+      current_asset_sha256: currentAssetSha || null,
+    }
+  }
 
   const topRow = await env.ICONOPLASM_DB.prepare(
     `SELECT
        pa.asset_sha256,
+       COALESCE(pa.is_legacy, 0) AS is_legacy,
        COALESCE(v.upvotes, 0) AS image_upvotes,
        COALESCE(v.downvotes, 0) AS image_downvotes,
        COALESCE(v.score, 0) AS image_score,
@@ -1631,6 +1641,10 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
        AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
      ORDER BY
        COALESCE(v.score, 0) DESC,
+       CASE
+         WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1
+         ELSE 0
+       END DESC,
        COALESCE(v.upvotes, 0) DESC,
        CASE
          WHEN lower(pa.asset_sha256) = ? THEN 1
@@ -1649,21 +1663,15 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
     return { ok: true, changed: false, code: "UNCHANGED", current_asset_sha256: currentAssetSha }
   }
 
-  const topScore = Number(topRow?.image_score || 0)
-  const topUpvotes = Number(topRow?.image_upvotes || 0)
-  const topDownvotes = Number(topRow?.image_downvotes || 0)
-  if (!currentAssetSha && topScore <= 0 && topUpvotes <= 0 && topDownvotes <= 0) {
-    return { ok: true, changed: false, code: "NO_SIGNAL", current_asset_sha256: null }
-  }
-
   const actorNorm = normalizeUserId(actorId || "vote_auto")
   const eventReason = String(reason || "vote_auto_promote").slice(0, 2000) || "vote_auto_promote"
 
   await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)
      ON CONFLICT(gene_symbol) DO UPDATE SET
        current_asset_sha256 = excluded.current_asset_sha256,
+       admin_override = 0,
        updated_by = excluded.updated_by,
        updated_at = CURRENT_TIMESTAMP`,
   )
@@ -1785,7 +1793,8 @@ async function iconoPublishStateBatch(env, rawSymbols) {
        )
        SELECT
          upper(ps.gene_symbol) AS symbol,
-         lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256
+         lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
+         COALESCE(ps.admin_override, 0) AS admin_override
        FROM icono_publish_state ps
        JOIN incoming i
          ON upper(ps.gene_symbol) = i.symbol`,
@@ -1795,7 +1804,10 @@ async function iconoPublishStateBatch(env, rawSymbols) {
     for (const row of results || []) {
       const symbol = normalizeSymbol(row?.symbol || "")
       if (!symbol) continue
-      out.set(symbol, row?.current_asset_sha256 || "")
+      out.set(symbol, {
+        current_asset_sha256: normalizeSha256(row?.current_asset_sha256 || "") || null,
+        admin_override: Number(row?.admin_override || 0) > 0,
+      })
     }
   } catch {}
   return out
@@ -1906,10 +1918,11 @@ async function unpublishCurrentPortrait(env, { symbol, actorId, reason, fromAsse
   if (!symbolNorm || !fromAssetSha) return { ok: false, changed: false, code: "BAD_INPUT" }
 
   await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at)
-     VALUES (?, NULL, ?, CURRENT_TIMESTAMP)
+    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
+     VALUES (?, NULL, ?, CURRENT_TIMESTAMP, 1)
      ON CONFLICT(gene_symbol) DO UPDATE SET
        current_asset_sha256 = NULL,
+       admin_override = 1,
        updated_by = excluded.updated_by,
        updated_at = CURRENT_TIMESTAMP`,
   )
@@ -3619,13 +3632,79 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       else if (legacy === "no") whereParts.push("COALESCE(is_legacy, 0) = 0")
       const where = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : ""
       const stmt = env.ICONOPLASM_DB.prepare(
-        `SELECT gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status,
-                autopick_eligible, COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy,
-                vision_id, artist_tag, artist_name, created_by, created_at
-           FROM icono_portrait_assets
-           ${where}
-          ORDER BY created_at DESC
-          LIMIT ?`,
+        `WITH vote_agg AS (
+           SELECT
+             upper(gene_symbol) AS gene_symbol,
+             lower(asset_sha256) AS asset_sha256,
+             SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+             SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
+             SUM(vote_value) AS score
+           FROM icono_image_votes
+           GROUP BY upper(gene_symbol), lower(asset_sha256)
+         ),
+         vote_rank AS (
+           SELECT
+             upper(pa.gene_symbol) AS gene_symbol,
+             lower(pa.asset_sha256) AS asset_sha256,
+             ROW_NUMBER() OVER (
+               PARTITION BY upper(pa.gene_symbol)
+               ORDER BY
+                 COALESCE(v.score, 0) DESC,
+                 COALESCE(v.upvotes, 0) DESC,
+                 pa.created_at DESC,
+                 lower(pa.asset_sha256) ASC
+             ) AS vote_rank
+           FROM icono_portrait_assets pa
+           LEFT JOIN vote_agg v
+             ON v.gene_symbol = upper(pa.gene_symbol)
+            AND v.asset_sha256 = lower(pa.asset_sha256)
+           WHERE COALESCE(pa.autopick_eligible, 1) = 1
+             AND COALESCE(pa.status, '') <> 'rejected'
+             AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+         )
+         SELECT
+           pa.gene_symbol,
+           pa.asset_sha256,
+           pa.r2_key_full,
+           pa.r2_key_medium,
+           pa.r2_key_thumb,
+           pa.status,
+           pa.autopick_eligible,
+           COALESCE(pa.is_stale, 0) AS is_stale,
+           COALESCE(pa.is_legacy, 0) AS is_legacy,
+           pa.vision_id,
+           pa.artist_tag,
+           pa.artist_name,
+           pa.created_by,
+           pa.created_at,
+           COALESCE(v.upvotes, 0) AS image_upvotes,
+           COALESCE(v.downvotes, 0) AS image_downvotes,
+           COALESCE(v.score, 0) AS image_score,
+           CASE
+             WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+             ELSE 0
+           END AS is_current,
+           COALESCE(ps.admin_override, 0) AS admin_override,
+           CASE
+             WHEN vr.vote_rank = 1 THEN 1
+             ELSE 0
+           END AS is_vote_leader
+         FROM icono_portrait_assets pa
+         LEFT JOIN vote_agg v
+           ON v.gene_symbol = upper(pa.gene_symbol)
+          AND v.asset_sha256 = lower(pa.asset_sha256)
+         LEFT JOIN icono_publish_state ps
+           ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
+         LEFT JOIN vote_rank vr
+           ON vr.gene_symbol = upper(pa.gene_symbol)
+          AND vr.asset_sha256 = lower(pa.asset_sha256)
+         ${where}
+         ORDER BY
+           is_current DESC,
+           COALESCE(v.score, 0) DESC,
+           COALESCE(v.upvotes, 0) DESC,
+           pa.created_at DESC
+         LIMIT ?`,
       ).bind(...params, limit)
       const { results } = await stmt.all()
       const base = portraitBase(url, env)
@@ -3633,6 +3712,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         ...r,
         is_stale: Number(r?.is_stale || 0) > 0,
         is_legacy: Number(r?.is_legacy || 0) > 0,
+        is_current: Number(r?.is_current || 0) > 0,
+        admin_override: Number(r?.admin_override || 0) > 0,
+        is_vote_leader: Number(r?.is_vote_leader || 0) > 0,
+        image_upvotes: Number(r?.image_upvotes || 0),
+        image_downvotes: Number(r?.image_downvotes || 0),
+        image_score: Number(r?.image_score || 0),
         hero_url: r.r2_key_full ? joinUrl(base, r.r2_key_full) : null,
         medium_url: r.r2_key_medium ? joinUrl(base, r.r2_key_medium) : null,
         thumb_url: r.r2_key_thumb ? joinUrl(base, r.r2_key_thumb) : null,
@@ -4018,10 +4103,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
-    if (
-      ["/api/iconoplasm/admin/ingest", "/api/iconoplasm/admin/publish-local"].includes(path) &&
-      request.method === "POST"
-    ) {
+    if (path === "/api/iconoplasm/admin/ingest" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_ingest_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
@@ -4050,7 +4132,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
 
       const actorId = await actor(request, env)
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
-      const defaultPublish = path.endsWith("/publish-local") || coerceBoolean(p?.publish, false)
       const reasonDefault = String(p?.reason || "").slice(0, 2000) || null
       const createdByDefault = String(p?.created_by || p?.createdBy || actorId || "unknown").slice(
         0,
@@ -4058,12 +4139,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
       const base = portraitBase(url, env)
       const prefetchedExistingAssets = await iconoExistingAssetsBatch(env, itemsRaw)
-      const prefetchedPublishState = await iconoPublishStateBatch(
-        env,
-        itemsRaw
-          .filter((item) => coerceBoolean(item?.publish, defaultPublish))
-          .map((item) => item?.symbol || item?.gene_symbol || ""),
-      )
       const prefetchedBlacklistRows = await iconoBlacklistRowsBatch(
         env,
         itemsRaw.map((item) => item?.artist_tag || item?.artistTag || ""),
@@ -4082,11 +4157,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           if (!symbol) throw new Error("Missing or invalid symbol")
           if (!assetSha) throw new Error("Missing or invalid asset_sha256")
 
-          const requestedPublish = coerceBoolean(item?.publish, defaultPublish)
-          const statusRequested = normalizeAssetStatus(
-            item?.status,
-            requestedPublish ? "approved" : "draft",
-          )
+          const statusRequested = normalizeAssetStatus(item?.status, "draft")
           const reason = String(item?.reason || reasonDefault || "").slice(0, 2000) || null
           const createdBy = String(
             item?.created_by || item?.createdBy || createdByDefault || "unknown",
@@ -4196,14 +4267,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               ? coerceBoolean(existingAsset?.autopick_eligible, true)
               : coerceBoolean(autopickEligibleRequested, true)
           const autopickEligible = blacklisted ? false : autopickEligibleBase
-          const publishNow = blacklisted ? false : requestedPublish
           const existingStatus = normalizeAssetStatus(existingAsset?.status || "", "draft")
           let finalStatus = statusRequested
-          if (
-            !publishNow &&
-            finalStatus === "draft" &&
-            (existingStatus === "approved" || existingStatus === "rejected")
-          ) {
+          if (finalStatus === "draft" && (existingStatus === "approved" || existingStatus === "rejected")) {
             finalStatus = existingStatus
           }
           if (blacklisted) finalStatus = "rejected"
@@ -4255,44 +4321,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
 
           const essenceResult = "not_provided"
 
-          let publishResult = "not_requested"
-          let fromAssetSha256 = null
-          if (publishNow) {
-            fromAssetSha256 = prefetchedPublishState.get(symbol) || null
-            if (dryRun) {
-              publishResult = fromAssetSha256 === assetSha ? "already_current" : "would_publish"
-            } else if (fromAssetSha256 === assetSha) {
-              publishResult = "already_current"
-              await env.ICONOPLASM_DB.prepare(
-                "UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?",
-              )
-                .bind(symbol, assetSha)
-                .run()
-            } else {
-              await env.ICONOPLASM_DB.prepare(
-                `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at)
-                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                 ON CONFLICT(gene_symbol) DO UPDATE SET
-                   current_asset_sha256=excluded.current_asset_sha256,
-                   updated_by=excluded.updated_by,
-                   updated_at=CURRENT_TIMESTAMP`,
-              )
-                .bind(symbol, assetSha, actorId)
-                .run()
-              await env.ICONOPLASM_DB.prepare(
-                "UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?",
-              )
-                .bind(symbol, assetSha)
-                .run()
-              await env.ICONOPLASM_DB.prepare(
-                "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)",
-              )
-                .bind(symbol, fromAssetSha256, assetSha, actorId, reason)
-                .run()
-              publishResult = "published"
-            }
-          }
-
           const uploads = {
             full: exists.full
               ? "skipped_existing"
@@ -4330,11 +4358,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               status: finalStatus,
               autopick_eligible: autopickEligible,
               uploads,
-              publish: publishResult,
-              requested_publish: requestedPublish,
+              publish: "site_managed",
               blacklisted,
               blacklist_reason: sanitizeText(blacklistRow?.reason || "", 2000) || null,
-              from_asset_sha256: fromAssetSha256,
               essence: essenceResult,
               hero_url: joinUrl(base, keys.full),
               medium_url: joinUrl(base, keys.medium),
@@ -4412,17 +4438,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const keepRaw = Array.isArray(p?.keep) ? p.keep : []
-      const publishRaw = Array.isArray(p?.publish) ? p.publish : []
       const legacyRaw = Array.isArray(p?.legacy) ? p.legacy : []
       if (keepRaw.length > 50000)
         return done(
           "admin_reconcile_400",
           json({ error: "Too many keep entries (max 50000)" }, 400),
-        )
-      if (publishRaw.length > 20000)
-        return done(
-          "admin_reconcile_400",
-          json({ error: "Too many publish entries (max 20000)" }, 400),
         )
       if (legacyRaw.length > 50000)
         return done(
@@ -4440,17 +4460,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         if (keepSet.has(key)) continue
         keepSet.add(key)
         keep.push({ symbol, asset_sha256: assetSha, key })
-      }
-
-      const publishBySymbol = new Map()
-      for (const raw of publishRaw) {
-        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
-        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
-        if (!symbol || !assetSha) continue
-        const key = `${symbol}|${assetSha}`
-        if (!keepSet.has(key)) continue
-        if (publishBySymbol.has(symbol)) continue
-        publishBySymbol.set(symbol, assetSha)
       }
 
       const legacy = []
@@ -4475,22 +4484,24 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       ).all()
 
       const { results: existingStateRows = [] } = await env.ICONOPLASM_DB.prepare(
-        "SELECT gene_symbol, current_asset_sha256 FROM icono_publish_state",
+        "SELECT gene_symbol, current_asset_sha256, COALESCE(admin_override, 0) AS admin_override FROM icono_publish_state",
       ).all()
       const existingState = new Map()
       for (const row of existingStateRows) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
         if (!symbol) continue
-        const assetSha = normalizeSha256(row?.current_asset_sha256 || "") || null
-        existingState.set(symbol, assetSha)
+        existingState.set(symbol, {
+          current_asset_sha256: normalizeSha256(row?.current_asset_sha256 || "") || null,
+          admin_override: Number(row?.admin_override || 0) > 0,
+        })
       }
+      const touchedSymbols = new Set(keep.map((row) => row.symbol))
 
       let rejected = 0
       let legacyMarked = 0
       let legacyAlreadyMarked = 0
-      let published = 0
+      let autoResolved = 0
       let unpublished = 0
-      let alreadyCurrent = 0
       let ignoredInvalid = 0
 
       for (const row of existingAssets) {
@@ -4503,6 +4514,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         const key = `${symbol}|${assetSha}`
         if (keepSet.has(key)) continue
         if (legacySet.has(key)) {
+          touchedSymbols.add(symbol)
           const alreadyLegacy = Number(row?.is_stale || 0) > 0 && Number(row?.is_legacy || 0) > 0
           if (alreadyLegacy) {
             legacyAlreadyMarked += 1
@@ -4522,6 +4534,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             .run()
           continue
         }
+        touchedSymbols.add(symbol)
         rejected += 1
         if (dryRun) continue
         await env.ICONOPLASM_DB.prepare(
@@ -4536,41 +4549,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .run()
       }
 
-      for (const [symbol, targetAssetSha] of publishBySymbol.entries()) {
-        const currentAssetSha = existingState.has(symbol) ? existingState.get(symbol) : null
-        if (currentAssetSha === targetAssetSha) {
-          alreadyCurrent += 1
-          continue
-        }
-        published += 1
-        if (dryRun) continue
-        await env.ICONOPLASM_DB.prepare(
-          `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at)
-             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(gene_symbol) DO UPDATE SET
-               current_asset_sha256=excluded.current_asset_sha256,
-               updated_by=excluded.updated_by,
-               updated_at=CURRENT_TIMESTAMP`,
-        )
-          .bind(symbol, targetAssetSha, actorId)
-          .run()
-        await env.ICONOPLASM_DB.prepare(
-          "UPDATE icono_portrait_assets SET status='approved' WHERE upper(gene_symbol)=? AND asset_sha256=?",
-        )
-          .bind(symbol, targetAssetSha)
-          .run()
-        await env.ICONOPLASM_DB.prepare(
-          "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)",
-        )
-          .bind(symbol, currentAssetSha, targetAssetSha, actorId, reason)
-          .run()
-      }
-
       if (unpublishMissing) {
-        for (const [symbol, currentAssetSha] of existingState.entries()) {
+        for (const [symbol, currentState] of existingState.entries()) {
+          if (currentState?.admin_override) continue
+          const currentAssetSha = currentState?.current_asset_sha256 || null
           if (!currentAssetSha) continue
-          if (publishBySymbol.has(symbol)) continue
           unpublished += 1
+          touchedSymbols.add(symbol)
           if (dryRun) continue
           await env.ICONOPLASM_DB.prepare(
             "UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
@@ -4585,6 +4570,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         }
       }
 
+      if (!dryRun) {
+        for (const symbol of touchedSymbols) {
+          const result = await autoPromoteTopVotedPortrait(env, {
+            symbol,
+            actorId,
+            reason: "site_reconcile_resolve",
+          })
+          if (result?.changed) autoResolved += 1
+        }
+      }
+
       if (!dryRun) await invalidateGalleryCache(env)
       return done(
         "admin_reconcile",
@@ -4593,14 +4589,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             ok: true,
             dry_run: dryRun,
             keep_count: keep.length,
-            publish_count: publishBySymbol.size,
             legacy_count: legacy.length,
+            touched_symbols: touchedSymbols.size,
             legacy_marked: legacyMarked,
             legacy_already_marked: legacyAlreadyMarked,
             rejected,
-            published,
+            auto_resolved: autoResolved,
             unpublished,
-            already_current: alreadyCurrent,
             ignored_invalid: ignoredInvalid,
           },
           200,
@@ -4612,6 +4607,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     if (
       [
         "/api/iconoplasm/admin/publish",
+        "/api/iconoplasm/admin/clear-override",
         "/api/iconoplasm/admin/reject",
         "/api/iconoplasm/admin/rollback",
         "/api/iconoplasm/admin/unpublish",
@@ -4641,7 +4637,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .bind(symbol)
           .first()
         await env.ICONOPLASM_DB.prepare(
-          `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(gene_symbol) DO UPDATE SET current_asset_sha256=excluded.current_asset_sha256, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP`,
+          `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
+           VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1)
+           ON CONFLICT(gene_symbol) DO UPDATE SET
+             current_asset_sha256=excluded.current_asset_sha256,
+             admin_override=1,
+             updated_by=excluded.updated_by,
+             updated_at=CURRENT_TIMESTAMP`,
         )
           .bind(symbol, asset, actorId)
           .run()
@@ -4664,18 +4666,72 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         await invalidateGalleryCache(env)
         return done(
           "publish",
-          json({ ok: true, action: "publish", symbol, to_asset_sha256: asset }),
+          json({ ok: true, action: "publish", symbol, to_asset_sha256: asset, admin_override: true }),
+        )
+      }
+
+      if (path.endsWith("/clear-override")) {
+        const current = await env.ICONOPLASM_DB.prepare(
+          "SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1",
+        )
+          .bind(symbol)
+          .first()
+        const from = normalizeSha256(current?.current_asset_sha256 || "") || null
+        await env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
+           VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)
+           ON CONFLICT(gene_symbol) DO UPDATE SET
+             current_asset_sha256=excluded.current_asset_sha256,
+             admin_override=0,
+             updated_by=excluded.updated_by,
+             updated_at=CURRENT_TIMESTAMP`,
+        )
+          .bind(symbol, from, actorId)
+          .run()
+        const autoPromote = await autoPromoteTopVotedPortrait(env, {
+          symbol,
+          actorId,
+          reason: "admin_clear_override",
+        })
+        await invalidateGalleryCache(env)
+        return done(
+          "clear_override",
+          json({
+            ok: true,
+            action: "clear_override",
+            symbol,
+            from_asset_sha256: from,
+            auto_promote: autoPromote,
+          }),
         )
       }
 
       if (path.endsWith("/reject")) {
         const asset = String(p?.asset_sha256 || "").trim()
         if (!asset) return done("reject_400", json({ error: "Missing asset_sha256" }, 400))
+        const current = await env.ICONOPLASM_DB.prepare(
+          "SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1",
+        )
+          .bind(symbol)
+          .first()
+        const currentAssetSha = normalizeSha256(current?.current_asset_sha256 || "")
         await env.ICONOPLASM_DB.prepare(
           "UPDATE icono_portrait_assets SET status='rejected', is_stale=0, is_legacy=0 WHERE upper(gene_symbol)=? AND asset_sha256=?",
         )
           .bind(symbol, asset)
           .run()
+        if (currentAssetSha && currentAssetSha === normalizeSha256(asset)) {
+          await env.ICONOPLASM_DB.prepare(
+            "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=1, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+          )
+            .bind(actorId, symbol)
+            .run()
+          await env.ICONOPLASM_DB.prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unpublish', ?, ?, CURRENT_TIMESTAMP)",
+          )
+            .bind(symbol, asset, null, actorId, String(p?.reason || "").slice(0, 2000) || null)
+            .run()
+        }
         await env.ICONOPLASM_DB.prepare(
           "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'reject', ?, ?, CURRENT_TIMESTAMP)",
         )
@@ -4694,7 +4750,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         const from = current?.current_asset_sha256 || null
         if (!from) return done("unpublish_400", json({ error: "No published state to clear" }, 400))
         await env.ICONOPLASM_DB.prepare(
-          "UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+          "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=1, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
         )
           .bind(actorId, symbol)
           .run()
@@ -4766,7 +4822,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         const isCurrent = !!(from && from === normalizeSha256(asset))
         if (isCurrent) {
           await env.ICONOPLASM_DB.prepare(
-            "UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+            "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=1, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
           )
             .bind(actorId, symbol)
             .run()
@@ -4840,7 +4896,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           json({ error: "No prior published asset to roll back to" }, 400),
         )
       await env.ICONOPLASM_DB.prepare(
-        "UPDATE icono_publish_state SET current_asset_sha256=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+        "UPDATE icono_publish_state SET current_asset_sha256=?, admin_override=1, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
       )
         .bind(target, actorId, symbol)
         .run()

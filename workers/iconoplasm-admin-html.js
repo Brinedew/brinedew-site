@@ -194,6 +194,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     }
     .flag-stale { color: #ffd280; }
     .flag-legacy { color: #9ed0ff; }
+    .flag-current { color: #8ee5af; }
+    .flag-leader { color: #ffd166; }
+    .flag-override { color: #ff8dc7; }
 
     .thumbs {
       display: flex;
@@ -254,7 +257,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <div class="wrap">
     <section class="hero">
       <h1>Iconoplasm Admin</h1>
-      <p>Upload/sync is now owned by NiceGUI. This page is for verification and emergency fixes only.</p>
+      <p>Local NiceGUI still owns generation. This page owns live-site canon and publish governance.</p>
       <div class="steps">
         <article class="step">
           <div class="badge"><span class="dot"></span>1. Curate locally</div>
@@ -265,15 +268,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <p class="small">NiceGUI uploads all non-deleted local images. Locally cleared stale images stay here as stale legacy candidates until an admin unstales or purges them.</p>
         </article>
         <article class="step">
-          <div class="badge"><span class="dot"></span>3. Verify here</div>
-          <p class="small">Refresh this table to confirm state. Use emergency actions only when needed.</p>
+          <div class="badge"><span class="dot"></span>3. Govern live canon here</div>
+          <p class="small">See what is live, what voting wants to promote, and whether admin override is locking canon.</p>
         </article>
       </div>
     </section>
 
     <section class="card">
       <h2>Website Portrait Inventory</h2>
-      <p>Read-only by default. Emergency actions are hidden below.</p>
+      <p>The table shows live canon state, vote pressure, and whether admin override is active.</p>
 
       <div class="controls">
         <label>Show
@@ -319,11 +322,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               <th>Gene</th>
               <th>Asset SHA256</th>
               <th>Status</th>
+              <th>Canon</th>
               <th>Flags</th>
               <th>Artist</th>
+              <th>Votes</th>
               <th>Preview</th>
               <th>Uploaded</th>
-              <th>Emergency</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="assets-body"></tbody>
@@ -331,7 +336,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       </div>
 
       <details>
-        <summary>Emergency actions (manual override)</summary>
+        <summary>Action audit reason</summary>
         <div class="controls">
           <label>Reason for audit log
             <input id="action-reason" type="text" placeholder="Why this emergency change is needed" />
@@ -403,6 +408,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return out.length ? out.join('') : '<span class="small">normal</span>';
       }
 
+      function canonCell(asset) {
+        var out = [];
+        if (asset.is_current) out.push('<span class="flag flag-current">live canon</span>');
+        if (asset.is_vote_leader) out.push('<span class="flag flag-leader">vote leader</span>');
+        if (asset.is_current && asset.admin_override) out.push('<span class="flag flag-override">admin override</span>');
+        return out.length ? out.join('') : '<span class="small">candidate</span>';
+      }
+
+      function votesCell(asset) {
+        return [
+          '<div><strong>' + esc(String(asset.image_score || 0)) + '</strong> score</div>',
+          '<div class="small">+' + esc(String(asset.image_upvotes || 0)) + ' / -' + esc(String(asset.image_downvotes || 0)) + '</div>'
+        ].join('');
+      }
+
       function authHeaders() {
         var out = {};
         var token = String(els.token.value || '').trim();
@@ -449,13 +469,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             '<td><strong>' + esc(a.gene_symbol || '') + '</strong></td>',
             '<td class="mono sha" title="' + esc(a.asset_sha256 || '') + '">' + esc(shortSha(a.asset_sha256 || '')) + '</td>',
             '<td>' + statusPill(a.status) + '</td>',
+            '<td>' + canonCell(a) + '</td>',
             '<td>' + flagsCell(a) + '</td>',
             '<td>' + (artistBits.join('') || '<span class="small">-</span>') + '</td>',
+            '<td>' + votesCell(a) + '</td>',
             '<td>' + previewCell(a) + '</td>',
             '<td><div>' + esc(a.created_at || '-') + '</div><div class="small">' + esc(a.created_by || '-') + '</div></td>',
             '<td>',
             '<div class="actions">',
             '<button class="btn-flat" data-action="copy" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Copy SHA</button>',
+            '<button class="btn-primary" data-action="publish" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Set live canon</button>',
+            ((a.is_current && a.admin_override)
+              ? '<button class="btn-flat" data-action="clear-override" data-symbol="' + esc(a.gene_symbol || '') + '">Return to auto</button>'
+              : ''),
             ((a.is_stale || a.is_legacy)
               ? '<button class="btn-primary" data-action="unstale" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Unstale</button>'
               : ''),
@@ -486,15 +512,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var counts = { draft: 0, approved: 0, rejected: 0 };
           var staleCount = 0;
           var legacyCount = 0;
+          var currentCount = 0;
+          var overrideCount = 0;
           state.assets.forEach(function (row) {
             var s = String(row.status || '').toLowerCase();
             if (Object.prototype.hasOwnProperty.call(counts, s)) counts[s] += 1;
             if (row.is_stale) staleCount += 1;
             if (row.is_legacy) legacyCount += 1;
+            if (row.is_current) currentCount += 1;
+            if (row.is_current && row.admin_override) overrideCount += 1;
           });
           els.meta.innerHTML = [
             '<span>' + state.assets.length + ' shown</span>',
             '<span>live ' + counts.approved + '</span>',
+            '<span>current canon ' + currentCount + '</span>',
+            '<span>override ' + overrideCount + '</span>',
             '<span>draft ' + counts.draft + '</span>',
             '<span>rejected ' + counts.rejected + '</span>',
             '<span>stale ' + staleCount + '</span>',
@@ -536,6 +568,25 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var rejectBody = { symbol: symbol, asset_sha256: sha };
           if (reason) rejectBody.reason = reason;
           setLog(await runMutation('/reject', rejectBody));
+          await refreshAssets();
+          return;
+        }
+
+        if (action === 'publish') {
+          if (!sha) throw new Error('Missing SHA for publish');
+          if (!window.confirm('Set this image as live canon for ' + symbol + ' and lock admin override?')) return;
+          var publishBody = { symbol: symbol, asset_sha256: sha };
+          if (reason) publishBody.reason = reason;
+          setLog(await runMutation('/publish', publishBody));
+          await refreshAssets();
+          return;
+        }
+
+        if (action === 'clear-override') {
+          if (!window.confirm('Release admin override for ' + symbol + ' and return canon to automatic vote resolution?')) return;
+          var clearBody = { symbol: symbol };
+          if (reason) clearBody.reason = reason;
+          setLog(await runMutation('/clear-override', clearBody));
           await refreshAssets();
           return;
         }
