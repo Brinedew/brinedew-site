@@ -1974,6 +1974,11 @@
     align-items: center;
     gap: 0.56rem;
     padding-top: 0;
+    /* Raster validation on live screenshots showed the actual black typewriter ink sitting on
+       the bottom edge even when the selector wrapper box was geometrically centered. The
+       typewriter glyphs are bottom-heavy, so the whole typed selector row needs an optical
+       lift. Validate this by screenshot pixel rows, not DOM boxes. */
+    transform: translateY(-0.34rem);
     overflow: visible;
   }
 
