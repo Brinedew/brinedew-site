@@ -1366,16 +1366,17 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-copy-stack {
     display: inline-flex;
-    flex-direction: column;
-    gap: 0.03rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.22rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy-stack {
-    align-items: flex-start;
+    align-items: center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-copy-stack {
-    align-items: flex-end;
+    align-items: center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow {
@@ -1383,9 +1384,10 @@
     block-size: 0.42rem;
     display: block;
     overflow: visible;
-    color: color-mix(in srgb, var(--icono-label-ink) 42%, transparent);
-    opacity: 0.88;
+    color: color-mix(in srgb, var(--icono-label-ink) 68%, transparent);
+    opacity: 0.96;
     pointer-events: none;
+    transform: translateY(0.01rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow path {

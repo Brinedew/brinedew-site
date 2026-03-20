@@ -40,6 +40,22 @@ export default (() => {
     const iconoplasmBootstrapScript = isIconoplasm
       ? `(() => {
   if (typeof window === "undefined" || window.__iconoplasmBootstrap) return
+  window.__iconoSiteOwnsSharedRuntime = true
+  if (
+    window.IconoplasmCardShared &&
+    (!window.IconoplasmCardShared.__meta || window.IconoplasmCardShared.__meta.owner !== "site")
+  ) {
+    try {
+      if (typeof window.IconoplasmCardShared.__dispose === "function") {
+        window.IconoplasmCardShared.__dispose()
+      }
+    } catch (_iconoDisposeError) {}
+    try {
+      delete window.IconoplasmCardShared
+    } catch (_iconoDeleteError) {
+      window.IconoplasmCardShared = null
+    }
+  }
   var host = String(window.location.hostname || "").toLowerCase()
   var origin = window.location.origin
   if (host !== "iconoplasm.brinedew.bio" && host !== "staging.brinedew.bio") {

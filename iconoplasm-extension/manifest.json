@@ -15,6 +15,10 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "exclude_matches": [
+        "https://iconoplasm.brinedew.bio/*",
+        "https://staging.brinedew.bio/*"
+      ],
       "js": ["generated/rough.js", "generated/shared-card-runtime.js", "content.js"],
       "css": ["generated/shared-card-vote.css", "generated/shared-card-label.css", "content.css"],
       "run_at": "document_idle"

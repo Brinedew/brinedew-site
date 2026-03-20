@@ -3,7 +3,34 @@
 (function (global) {
   "use strict"
 
-  if (global && global.IconoplasmCardShared) return
+  var ICONO_SHARED_RUNTIME_VERSION = "20260321a"
+  var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
+  var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
+  var existingMeta =
+    existingShared && existingShared.__meta && typeof existingShared.__meta === "object"
+      ? existingShared.__meta
+      : null
+  var existingOwner = String((existingMeta && existingMeta.owner) || "").trim().toLowerCase()
+
+  if (existingShared) {
+    // Chesterton's fence: keep the duplicate-init guard, but make it ownership-aware.
+    // The extension reuses this shared runtime on arbitrary pages, while the site must own it on
+    // iconoplasm.brinedew.bio itself. If a stale extension/runtime copy arrives first, the site
+    // must replace it instead of silently accepting drift forever.
+    if (!forceSiteOwnership || existingOwner === "site") return
+    if (typeof existingShared.__dispose === "function") {
+      try {
+        existingShared.__dispose()
+      } catch (_error) {
+        // Ignore stale-runtime cleanup failures and proceed with site takeover.
+      }
+    }
+    try {
+      delete global.IconoplasmCardShared
+    } catch (_deleteError) {
+      global.IconoplasmCardShared = null
+    }
+  }
 
   var ICONO_CHECK_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10.5 8.25 13.75 15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
@@ -235,6 +262,27 @@
       childList: true,
       subtree: true,
     })
+    global.__iconoRoughLoopObserverState = {
+      observer: observer,
+    }
+  }
+
+  function stopRoughLoopObserver() {
+    if (!global) return
+    var state =
+      global.__iconoRoughLoopObserverState &&
+      typeof global.__iconoRoughLoopObserverState === "object"
+        ? global.__iconoRoughLoopObserverState
+        : null
+    if (state && state.observer && typeof state.observer.disconnect === "function") {
+      try {
+        state.observer.disconnect()
+      } catch (_observerError) {
+        // Ignore cleanup failures from stale runtimes.
+      }
+    }
+    global.__iconoRoughLoopObserverState = null
+    global.__iconoRoughLoopObserverStarted = false
   }
 
   function resolveApiBase(explicitBase) {
@@ -1214,8 +1262,9 @@
         iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve")
       : ICONO_CHECK_ICON
     var rejectInner = isLabel
-      ? '<span class="icono-vote-btn-copy-stack"><span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span>' +
+      ? '<span class="icono-vote-btn-copy-stack">' +
         rejectArrow +
+        '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span>' +
         "</span>" +
         iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject")
       : ICONO_CROSS_ICON
@@ -1502,6 +1551,11 @@
   startRoughLoopObserver()
 
   global.IconoplasmCardShared = {
+    __meta: {
+      owner: forceSiteOwnership ? "site" : "shared",
+      version: ICONO_SHARED_RUNTIME_VERSION,
+    },
+    __dispose: stopRoughLoopObserver,
     icons: {
       check: ICONO_CHECK_ICON,
       cross: ICONO_CROSS_ICON,
