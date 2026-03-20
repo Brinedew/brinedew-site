@@ -1021,7 +1021,7 @@
     --icono-label-mobile-tab-height: 1.94rem;
     --icono-label-mobile-tab-width: 5.5rem;
     --icono-label-mobile-sheet-preview-offset: 0rem;
-    --icono-label-mobile-collapse-lift: 1.32rem;
+    --icono-label-mobile-collapse-lift: 3.18rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -1173,7 +1173,7 @@
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
     right: 0.82rem;
-    bottom: calc(100% + 0.18rem);
+    bottom: calc(100% + 0.04rem);
     z-index: 1;
     display: flex;
     align-items: center;
@@ -1228,7 +1228,7 @@
     font-weight: 800;
     line-height: 1;
     letter-spacing: 0.09em;
-    transform: translateY(0.42rem);
+    transform: translateY(0.48rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {
