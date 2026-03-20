@@ -1337,11 +1337,11 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy::before {
-    opacity: var(--icono-label-mobile-reject-circle-opacity, 0);
+    opacity: var(--icono-label-mobile-reject-circle-opacity, 0) !important;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-copy::before {
-    opacity: var(--icono-label-mobile-approve-circle-opacity, 0);
+    opacity: var(--icono-label-mobile-approve-circle-opacity, 0) !important;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn::after {
