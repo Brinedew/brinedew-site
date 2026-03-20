@@ -1107,6 +1107,12 @@
     border-top: 1px solid color-mix(in srgb, var(--icono-label-rule) 56%, transparent);
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] {
+    margin-top: 0.22rem;
+    padding-top: 0.24rem;
+    border-top: 1px solid color-mix(in srgb, var(--icono-label-rule) 44%, transparent);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body {
     position: absolute;
     inset-inline: 0;

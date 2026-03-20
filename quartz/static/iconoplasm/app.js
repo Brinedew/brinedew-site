@@ -1676,14 +1676,31 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (isMobileReview) card.setAttribute("data-icono-mobile-review-active", "true")
     else card.removeAttribute("data-icono-mobile-review-active")
 
+    var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
+    var footer = card.querySelector(".icono-label-specimen-footer")
     var alignmentBody = card.querySelector(".icono-label-dossier-shell .icono-label-alignment-body")
-    var existingInline = alignmentBody
-      ? alignmentBody.querySelector(".icono-label-inline-note--spectral")
-      : null
+    if (!footer || !portrait) return
 
-    // Mobile now keeps the spectral/emulsion block in the specimen rail where desktop keeps it.
-    // Do not mirror it into Alignment; that duplicates content and breaks the archival layout.
-    if (existingInline) existingInline.remove()
+    var footerAnchor = portrait.querySelector("[data-icono-specimen-footer-anchor]")
+    if (!footerAnchor && typeof document !== "undefined") {
+      footerAnchor = document.createElement("span")
+      footerAnchor.setAttribute("data-icono-specimen-footer-anchor", "")
+      footerAnchor.hidden = true
+      portrait.insertBefore(footerAnchor, footer)
+    }
+
+    if (isMobileReview && alignmentBody) {
+      // Mobile keeps one canonical footer node, but relocates it below Alignment so all
+      // color/decomposition material lives in the dossier tail instead of the portrait rail.
+      if (footer.parentElement !== alignmentBody) alignmentBody.appendChild(footer)
+      footer.setAttribute("data-icono-mobile-footer-relocated", "true")
+      return
+    }
+
+    if (footerAnchor && footer.parentElement !== portrait) {
+      portrait.insertBefore(footer, footerAnchor.nextSibling)
+    }
+    footer.removeAttribute("data-icono-mobile-footer-relocated")
   }
 
   function setMobileLabelExpanded(card, expanded) {
