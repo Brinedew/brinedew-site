@@ -1008,12 +1008,13 @@
 
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-peek-height: 7.25rem;
-    --icono-label-mobile-dossier-height: clamp(21.5rem, 58dvh, 29rem);
+    --icono-label-mobile-dossier-height: clamp(17.5rem, 48dvh, 23rem);
     inline-size: 100%;
     display: block;
     position: relative;
-    block-size: clamp(35rem, calc(100dvh - 1.25rem), 54rem);
-    min-block-size: 35rem;
+    block-size: auto;
+    min-block-size: 0;
+    max-block-size: calc(100dvh - 1.25rem);
     overflow: clip;
     scroll-snap-align: start;
     scroll-snap-stop: always;
@@ -1038,15 +1039,17 @@
 
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait {
     flex: 1 1 auto;
-    height: 100%;
+    height: auto;
     min-height: 0;
     gap: 0.42rem;
     padding: 0.78rem 0.78rem 0.62rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
+    aspect-ratio: var(--width) / var(--height);
     min-height: 0;
+    max-height: calc(100dvh - var(--icono-label-mobile-peek-height) - 3.25rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-footer {
@@ -1101,8 +1104,8 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab {
     position: absolute;
-    top: -0.58rem;
-    right: 0.82rem;
+    top: -0.92rem;
+    right: -1px;
     z-index: 1;
     display: inline-flex;
     align-items: center;
@@ -1200,7 +1203,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-tab {
-    top: -0.52rem;
+    top: -0.82rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-instruction--open {
