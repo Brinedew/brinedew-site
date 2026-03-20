@@ -1332,15 +1332,6 @@
     border-inline-start: 0;
   }
 
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek {
-    min-height: 3.05rem;
-    padding-top: 0.48rem;
-    padding-bottom: 0.42rem;
-    gap: 0.16rem;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-summary,
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-swipe,
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-instruction--closed {
     display: none;
   }
