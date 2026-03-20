@@ -871,6 +871,7 @@
         ? safeGeneDetail.essence
         : {}
     var opts = options || {}
+    var mobileReview = !!opts.mobileReview
     var safePortrait =
       safeGeneDetail.portrait && typeof safeGeneDetail.portrait === "object"
         ? safeGeneDetail.portrait
@@ -924,6 +925,9 @@
     var politicalNote = String(politicsDisplay.character || "").trim()
     var titleHtml = renderLabLabelTitleHtml(symbol, fullName, opts)
     var voteHtml = renderLabLabelVoteShell(opts.voteHtml)
+    var alignmentSpectralNoteHtml = mobileReview
+      ? '<div class="icono-label-inline-note icono-label-inline-note--spectral">emulsion note / glass plate spectral analysis</div>'
+      : ""
 
     var stylePairsHtml = ""
     for (var i = 0; i < maxStyleRows; i++) {
@@ -939,8 +943,12 @@
     }
 
     return (
-      '<div class="icono-label-sheet-body">' +
-      '<div class="icono-label-header-row">' +
+      '<div class="icono-label-sheet-body' +
+      (mobileReview ? " icono-label-sheet-body--mobile-review" : "") +
+      '">' +
+      '<div class="icono-label-header-row' +
+      (mobileReview ? " icono-label-header-row--mobile-review" : "") +
+      '">' +
       titleHtml +
       '<div class="icono-label-header-stack">' +
       '<div class="icono-label-header-meta">' +
@@ -962,15 +970,17 @@
       renderLabLabelFamilyTraitFieldHtml(displayedFamilyFeature) +
       "</div>" +
       "</div>" +
-      '<div class="icono-label-qc-block">' +
-      '<div class="icono-label-caption">qc</div>' +
-      voteHtml +
-      '<div class="icono-label-qc-meta">' +
-      '<div class="icono-label-qc-meta-item">inspect. A3</div>' +
-      '<div class="icono-label-qc-meta-item">plate 7</div>' +
-      "</div>" +
-      '<div class="icono-label-qc-note" data-icono-qc-note>pending review</div>' +
-      "</div>" +
+      (mobileReview
+        ? ""
+        : '<div class="icono-label-qc-block">' +
+          '<div class="icono-label-caption">qc</div>' +
+          voteHtml +
+          '<div class="icono-label-qc-meta">' +
+          '<div class="icono-label-qc-meta-item">inspect. A3</div>' +
+          '<div class="icono-label-qc-meta-item">plate 7</div>' +
+          "</div>" +
+          '<div class="icono-label-qc-note" data-icono-qc-note>pending review</div>' +
+          "</div>") +
       "</div>" +
       '<div class="icono-label-band-row">' +
       '<div class="icono-label-row-label">field notes</div>' +
@@ -1024,6 +1034,7 @@
       '<div class="icono-label-row-label">alignment</div>' +
       '<div class="icono-label-alignment-body">' +
       renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) +
+      alignmentSpectralNoteHtml +
       "</div>" +
       "</div>" +
       '<div class="icono-label-footer-row">' +

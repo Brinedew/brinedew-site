@@ -841,6 +841,15 @@
   padding: calc(8 / 1220 * 100cqw) calc(18 / 1220 * 100cqw);
 }
 
+.icono-label-inline-note {
+  color: color-mix(in srgb, var(--icono-label-ink) 70%, transparent);
+  font-family: var(--icono-label-type);
+  font-size: calc(9 / 1220 * 100cqw);
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .icono-label-selector-row--alignment {
   position: relative;
   gap: calc(34 / 1220 * 100cqw);
@@ -1008,6 +1017,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-peek-height: 7.25rem;
+    --icono-label-mobile-tab-overhang: 0.68rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -1096,11 +1106,12 @@
     gap: 0.24rem;
     inline-size: 100%;
     min-height: var(--icono-label-mobile-peek-height);
-    padding: 0.8rem 0.98rem 0.78rem 1rem;
+    padding: calc(0.78rem + var(--icono-label-mobile-tab-overhang)) 1rem 0.78rem;
     border: 0;
     border-radius: 0;
     position: relative;
     isolation: isolate;
+    overflow: visible;
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--icono-label-paper) 91%, #e7dccb 9%) 0%, var(--icono-label-paper) 100%);
     color: var(--icono-label-ink);
@@ -1117,63 +1128,70 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab {
     /* Stitch is only the tab-object reference. In production it must still obey the site rules:
        - no angular / asymmetric / homemade office-tab geometry
-       - soft archival rounding, with the bottom edge seated exactly on the dossier seam
+       - soft archival rounding with symmetric shoulders, using a real vector tab asset
+       - bottom edge seated exactly on the dossier seam
        - expanded state must keep the entire collapse affordance inside the viewport
-       - no floating gap and no downward overlap into the slider
+       - no floating gap, no downward overlap into the slider, and no off-frame overhang
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
-    --icono-label-mobile-tab-height: 1.78rem;
-    --icono-label-mobile-tab-width: 5.18rem;
+    --icono-label-mobile-tab-height: 2.16rem;
+    --icono-label-mobile-tab-width: 5.62rem;
     position: absolute;
-    right: 0.72rem;
-    bottom: 100%;
+    right: 0.82rem;
+    top: calc(-1 * var(--icono-label-mobile-tab-overhang));
     z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     inline-size: var(--icono-label-mobile-tab-width);
     block-size: var(--icono-label-mobile-tab-height);
-    padding: 0 0.72rem 0.05rem;
-    border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 94%, transparent);
-    border-bottom: 0;
-    border-radius: 0.62rem 0.62rem 0 0;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, #fffaf2 86%, var(--icono-label-paper) 14%) 0%, color-mix(in srgb, var(--icono-label-paper) 97%, #d8ccb7 3%) 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-    overflow: hidden;
+    padding: 0 0.7rem 0.02rem;
+    border: 0;
+    background: transparent;
+    overflow: visible;
   }
 
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before {
-    content: "";
-    position: absolute;
-    left: 0.62rem;
-    right: 0.62rem;
-    top: 0.46rem;
-    height: 1px;
-    background: color-mix(in srgb, rgba(255, 255, 255, 0.82) 70%, transparent);
-  }
-
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::after {
-    content: "";
+    content: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-art {
     position: absolute;
-    left: -1px;
-    right: -1px;
-    bottom: -1px;
-    height: 1px;
-    background: var(--icono-label-paper);
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-fill {
+    fill: color-mix(in srgb, var(--icono-label-paper) 97%, #efe4d3 3%);
+    stroke: color-mix(in srgb, var(--icono-label-rule-strong) 94%, transparent);
+    stroke-width: 1.4;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-highlight {
+    fill: none;
+    stroke: color-mix(in srgb, rgba(255, 255, 255, 0.8) 78%, transparent);
+    stroke-width: 1.05;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol {
     display: block;
+    position: relative;
+    z-index: 1;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--icono-label-ink);
     font-family: "League Spartan";
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     font-weight: 800;
     line-height: 0.92;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.09em;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {
@@ -1185,9 +1203,9 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe {
     display: grid;
-    align-items: center;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.65rem;
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.3rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-kicker,
@@ -1235,9 +1253,42 @@
     border-top: 1px dashed color-mix(in srgb, var(--icono-label-ink) 24%, transparent);
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-box--label,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe [data-icono-vote-box] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: none;
+    width: 100%;
+    gap: 0;
+    align-items: center;
+    justify-items: stretch;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn {
+    min-height: 1.08rem;
+    padding: 0;
+    font-size: 0.66rem;
+    line-height: 1;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject {
+    justify-content: flex-start;
+    padding-right: 0.5rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve {
+    justify-content: flex-end;
+    padding-left: 0.5rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn + .icono-vote-btn {
+    border-left: 0;
+    border-inline-start: 1px dashed color-mix(in srgb, var(--icono-label-ink) 24%, transparent);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek {
     min-height: 3.05rem;
-    padding-top: 0.78rem;
+    padding-top: calc(0.48rem + var(--icono-label-mobile-tab-overhang));
     padding-bottom: 0.52rem;
     gap: 0.16rem;
   }
@@ -1246,10 +1297,6 @@
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-swipe,
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-instruction--closed {
     display: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-tab {
-    bottom: 100%;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-instruction--open {
@@ -1298,6 +1345,10 @@
     align-items: stretch;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row--mobile-review {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-title-block,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-title-link {
     grid-column: 1 / -1;
@@ -1312,6 +1363,11 @@
     border-left: 0;
     border-top: 1px solid var(--icono-label-rule);
     grid-template-rows: auto auto;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-sheet-body--mobile-review .icono-label-header-stack {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-caption,
@@ -1383,6 +1439,10 @@
     display: none;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-sheet-body--mobile-review .icono-label-qc-block {
+    display: none;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-meta-item {
     font-size: 0.46rem;
     letter-spacing: 0.12em;
@@ -1417,9 +1477,9 @@
     grid-area: category;
     border-top: 0;
     grid-template-rows: min-content min-content;
-    gap: 0.18rem;
-    padding-top: 0.32rem;
-    padding-bottom: 0.28rem;
+    gap: 0.1rem;
+    padding-top: 0.28rem;
+    padding-bottom: 0.24rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted {
@@ -1468,10 +1528,17 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-grid {
-    grid-template-columns: repeat(2, max-content);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    justify-content: stretch;
+    justify-items: center;
+    align-items: start;
+    column-gap: 0.56rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-option {
     width: 100%;
     justify-content: center;
-    column-gap: 0.72rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-option--transmembrane,
@@ -1482,6 +1549,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-primary,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-secondary {
     justify-content: center;
+    width: 100%;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--sex-soluble,
@@ -1522,6 +1590,8 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-body {
+    flex-direction: column;
+    align-items: stretch;
     padding: 0.5rem 0.8rem 0.58rem;
   }
 
@@ -1532,6 +1602,13 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-selector-row--alignment {
     gap: 0.72rem;
     flex-wrap: wrap;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-inline-note--spectral {
+    padding-top: 0.34rem;
+    border-top: 1px dashed color-mix(in srgb, var(--icono-label-ink) 22%, transparent);
+    font-size: 0.54rem;
+    line-height: 1.22;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport .iconoplasm-tooltip-portrait-media {

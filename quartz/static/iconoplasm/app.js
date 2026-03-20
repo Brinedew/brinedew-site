@@ -1107,11 +1107,18 @@ void syncSharedIconoplasmSettings().catch(function () {
     // - the tab owns the gene symbol, so expanded dossier must not introduce a second mobile-only symbol treatment
     // - the tab must stay visually attached to the dossier seam and inherit the desktop symbol voice
     // - the tab must not drift into angular, asymmetric, improvised office-tab geometry
+    // - the mobile swipe surface owns voting; the expanded archival sheet must not render a second QC vote shell
     // - collapsed copy should stay centered within the sheet width instead of reserving a giant dead strip
     // - expanded sizing must be solved by measured layout changes, not by shrinking type until collisions are hidden
+    // - the mobile tab is a real archival object with soft rounded shoulders; no CSS polygon shortcuts
+    // - the tab has to remain fully inside the viewport after expansion so collapse stays reachable
     return (
       '<button type="button" class="icono-label-mobile-peek" data-icono-label-mobile-toggle aria-expanded="false">' +
       '<span class="icono-label-mobile-peek-tab" aria-hidden="true">' +
+      '<svg class="icono-label-mobile-peek-tab-art" viewBox="0 0 188 72" preserveAspectRatio="none" focusable="false" aria-hidden="true">' +
+      '<path class="icono-label-mobile-peek-tab-fill" d="M6 72V44C6 39.6 9.6 36 14 36H51.4C58.6 36 64.7 31.3 69.1 22.1C73.1 13.8 79.6 8 94 8C108.4 8 114.9 13.8 118.9 22.1C123.3 31.3 129.4 36 136.6 36H174C178.4 36 182 39.6 182 44V72H6Z"></path>' +
+      '<path class="icono-label-mobile-peek-tab-highlight" d="M17 42.6H50.2C61.5 42.6 70.8 34.9 76.5 22.8C80.1 15.1 84.8 11.8 94 11.8C103.2 11.8 107.9 15.1 111.5 22.8C117.2 34.9 126.5 42.6 137.8 42.6H171"></path>' +
+      "</svg>" +
       '<span class="icono-label-mobile-peek-tab-symbol">' +
       esc(symbol) +
       "</span>" +
@@ -1128,15 +1135,14 @@ void syncSharedIconoplasmSettings().catch(function () {
       "</span>" +
       "</span>" +
       '<span class="icono-label-mobile-peek-swipe">' +
-      '<span class="icono-label-mobile-peek-swipe-stamp icono-label-mobile-peek-swipe-stamp--left">misfit</span>' +
-      '<span class="icono-label-mobile-peek-swipe-divider" aria-hidden="true"></span>' +
-      '<span class="icono-label-mobile-peek-swipe-stamp icono-label-mobile-peek-swipe-stamp--right">fit</span>' +
+      voteHtml +
       "</span>" +
       "</button>" +
       '<div class="icono-label-dossier-shell" data-icono-label-dossier-shell>' +
       '<div class="icono-label-dossier-sheet">' +
       IconoCardShared.renderLabLabelCardHtml(genePayload, {
-        voteHtml: voteHtml,
+        voteHtml: "",
+        mobileReview: true,
         titleHref: href,
         titleLinkAttrs: "data-icono-nav",
       }) +
@@ -1632,7 +1638,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           : null
     if (!anchor) return
     var rect = anchor.getBoundingClientRect()
-    var desiredTop = anchor === tab ? 10 : 14
+    var desiredTop = anchor === tab ? 26 : 20
     var delta = rect.top - desiredTop
     if (Math.abs(delta) < 2) return
     window.scrollBy({
