@@ -1008,7 +1008,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-peek-height: 7.25rem;
-    --icono-label-mobile-dossier-height: clamp(20rem, 54dvh, 27rem);
+    --icono-label-mobile-dossier-height: clamp(21.5rem, 58dvh, 29rem);
     inline-size: 100%;
     display: block;
     position: relative;
@@ -1080,7 +1080,7 @@
     gap: 0.26rem;
     inline-size: 100%;
     min-height: var(--icono-label-mobile-peek-height);
-    padding: 0.92rem 5.65rem 0.8rem 0.88rem;
+    padding: 0.92rem 5rem 0.8rem 0.88rem;
     border: 0;
     border-radius: 0;
     position: relative;
@@ -1101,24 +1101,24 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab {
     position: absolute;
-    top: -0.76rem;
-    right: 0.74rem;
+    top: -0.58rem;
+    right: 0.82rem;
     z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 4.55rem;
-    max-width: 4.9rem;
-    min-height: 1.76rem;
-    padding: 0.26rem 0.84rem 0.28rem 0.96rem;
-    border: 1px solid color-mix(in srgb, var(--icono-label-rule) 88%, #83684c 12%);
+    min-width: 4rem;
+    max-width: 4.4rem;
+    min-height: 1.54rem;
+    padding: 0.18rem 0.66rem 0.2rem 0.82rem;
+    border: 1px solid color-mix(in srgb, var(--icono-label-rule) 92%, #7b664c 8%);
     border-bottom: 0;
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--icono-label-paper) 80%, #d9c3a2 20%) 0%, color-mix(in srgb, var(--icono-label-paper) 92%, #efe3d0 8%) 100%);
-    clip-path: polygon(0 100%, 0 22%, 18% 0, 100% 0, 90% 100%);
+      linear-gradient(180deg, color-mix(in srgb, var(--icono-label-paper) 78%, #d2bea0 22%) 0%, color-mix(in srgb, var(--icono-label-paper) 94%, #f1e4d2 6%) 100%);
+    clip-path: polygon(0 100%, 0 34%, 18% 0, 100% 0, 100% 100%);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 38%, transparent);
+      0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 34%, transparent);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol {
@@ -1128,10 +1128,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--icono-label-ink);
-    font-family: "League Spartan";
-    font-size: 1.04rem;
-    line-height: 0.92;
-    letter-spacing: 0.08em;
+    font-family: var(--icono-label-type);
+    font-size: 0.74rem;
+    line-height: 1;
+    letter-spacing: 0.16em;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline,
@@ -1200,7 +1200,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-tab {
-    top: -0.68rem;
+    top: -0.52rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-instruction--open {
@@ -1225,7 +1225,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-sheet-body {
     display: grid;
-    grid-template-rows: auto auto 1fr auto auto;
+    grid-template-rows: auto auto 1fr auto;
     min-height: 100%;
     background: transparent;
   }
@@ -1233,9 +1233,12 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-style-row,
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-row,
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-footer-row {
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-footer-row {
+    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row {
@@ -1263,9 +1266,9 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-caption,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-row-label {
-    font-size: 0.5rem;
+    font-size: 0.54rem;
     letter-spacing: 0.16em;
-    line-height: 1.08;
+    line-height: 1.12;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-row-label {
@@ -1275,18 +1278,18 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-symbol {
-    font-size: 1.96rem;
+    font-size: 2.06rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-name {
-    font-size: 0.82rem;
-    line-height: 1.08;
+    font-size: 0.88rem;
+    line-height: 1.12;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-registry-line {
     margin-top: 0.12rem;
-    font-size: 0.5rem;
-    line-height: 1.18;
+    font-size: 0.54rem;
+    line-height: 1.2;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-meta-cell {
@@ -1301,7 +1304,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-serial,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family {
     margin-top: 0.16rem;
-    font-size: 0.94rem;
+    font-size: 0.98rem;
     line-height: 1;
   }
 
@@ -1331,7 +1334,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-note {
     min-height: 1rem;
-    font-size: 0.96rem;
+    font-size: 1rem;
     transform: rotate(-3deg);
   }
 
@@ -1365,12 +1368,12 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-option-copy,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-origin-text {
-    font-size: 0.84rem;
-    line-height: 1;
+    font-size: 0.9rem;
+    line-height: 1.04;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note {
-    font-size: 0.98rem;
+    font-size: 1.02rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-grid,
@@ -1407,8 +1410,8 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-style-stack {
-    gap: 0.32rem;
-    padding: 0.46rem 0.8rem 0.54rem;
+    gap: 0.38rem;
+    padding: 0.54rem 0.8rem 0.62rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-style-pair {
@@ -1416,7 +1419,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-body {
-    padding: 0.44rem 0.8rem 0.5rem;
+    padding: 0.5rem 0.8rem 0.58rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-grid {
@@ -1426,6 +1429,19 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-selector-row--alignment {
     gap: 0.72rem;
     flex-wrap: wrap;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport .iconoplasm-tooltip-portrait-media {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--icono-label-paper) 68%, #d7cab4 32%) 0%, color-mix(in srgb, var(--icono-label-paper) 88%, #ede2d1 12%) 100%);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport .iconoplasm-tooltip-portrait-img {
+    inset: 0.42rem;
+    width: calc(100% - 0.84rem);
+    height: calc(100% - 0.84rem);
+    object-fit: contain;
+    object-position: center center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-strike {
