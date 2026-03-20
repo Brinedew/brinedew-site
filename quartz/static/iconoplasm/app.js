@@ -1623,9 +1623,16 @@ void syncSharedIconoplasmSettings().catch(function () {
   function alignExpandedMobileLabelCard(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
-    if (!toggle || typeof toggle.getBoundingClientRect !== "function") return
-    var rect = toggle.getBoundingClientRect()
-    var desiredTop = 14
+    var tab = card.querySelector(".icono-label-mobile-peek-tab")
+    var anchor =
+      tab && typeof tab.getBoundingClientRect === "function"
+        ? tab
+        : toggle && typeof toggle.getBoundingClientRect === "function"
+          ? toggle
+          : null
+    if (!anchor) return
+    var rect = anchor.getBoundingClientRect()
+    var desiredTop = anchor === tab ? 10 : 14
     var delta = rect.top - desiredTop
     if (Math.abs(delta) < 2) return
     window.scrollBy({
