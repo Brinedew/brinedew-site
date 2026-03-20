@@ -1020,18 +1020,20 @@
     --icono-label-mobile-preview-height: 2.6rem;
     --icono-label-mobile-tab-height: 1.94rem;
     --icono-label-mobile-tab-width: 5.5rem;
+    --icono-label-mobile-sheet-preview-offset: 9.85rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
        - the tab must be symmetric, gently rounded, physically attached to the dossier seam, and never sag into the sheet
        - tab symbol typography must reuse the desktop gene-symbol voice instead of a generic mono label
        - expanded state must not repeat the gene symbol already carried by the tab
-       - expanded layout must be sized against measured live collisions, not eyeballed compression */
+       - expanded layout must be sized against measured live collisions, not eyeballed compression
        - the tab bottom must seat onto the slider seam instead of sinking into the card body
        - tab border language must match the dossier border language; no stronger, darker, or separate object outline
        - the symbol must sit optically centered in the tab, not crowd the top edge
        - collapsed voting must read as MISFIT on the left edge and FIT on the right edge
-       - collapsed state should reveal a thin live preview of the next archival rows so the card reads as one continuous filing object */
+       - collapsed and expanded states are the same physical card at different vertical offsets
+       - preview geometry must come from shifting the one sheet, not from hiding or swapping rows */
     --icono-label-mobile-dossier-height: clamp(30rem, 75dvh, 40rem);
     inline-size: 100%;
     display: block;
@@ -1164,7 +1166,7 @@
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
     right: 0.82rem;
-    bottom: calc(100% - 1px);
+    bottom: calc(100% - 0.24rem);
     z-index: 1;
     display: flex;
     align-items: center;
@@ -1219,7 +1221,7 @@
     font-weight: 800;
     line-height: 0.92;
     letter-spacing: 0.09em;
-    transform: translateY(0.06rem);
+    transform: translateY(0.14rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {
@@ -1277,7 +1279,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name {
     color: color-mix(in srgb, var(--icono-label-ink) 92%, transparent);
     font-family: "Special Elite";
-    font-size: 0.96rem;
+    font-size: 0.78rem;
     line-height: 1.14;
     text-wrap: pretty;
   }
@@ -1362,6 +1364,15 @@
     min-height: 0;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-sheet {
+    transform: translateY(calc(-1 * var(--icono-label-mobile-sheet-preview-offset)));
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-dossier-sheet {
+    transform: translateY(0);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-sheet-body {
     display: grid;
     grid-template-rows: min-content min-content min-content min-content;
@@ -1386,13 +1397,6 @@
     grid-template-columns: minmax(0, 1fr) minmax(5rem, auto);
     grid-template-rows: auto auto;
     align-items: stretch;
-  }
-
-  /* Collapsed mobile cards must preview the next archival rows, not repeat the title block.
-     Keep one canonical sheet DOM, but hide the header strip while the dossier is collapsed so
-     the visible preview reads as a continuous filing card rather than a duplicate mini-header. */
-  .icono-card--variant-lab-label.icono-card--brick:not([data-icono-mobile-expanded="true"]) .icono-label-dossier-shell .icono-label-header-row {
-    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-review-active="true"] .icono-label-dossier-shell .icono-label-header-row {
@@ -1422,7 +1426,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-caption,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-row-label {
-    font-size: 0.54rem;
+    font-size: 0.42rem;
     letter-spacing: 0.16em;
     line-height: 1.12;
   }
@@ -1438,40 +1442,53 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-name {
-    font-size: 1rem;
+    font-size: 0.69rem;
     line-height: 1.08;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-registry-line {
     margin-top: 0.12rem;
-    font-size: 0.54rem;
+    font-size: 0.4rem;
     line-height: 1.2;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-meta {
+    display: contents;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-stack {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.82fr) minmax(0, 1.02fr);
+    grid-template-rows: auto;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-meta-cell {
-    padding: 0.45rem 0.72rem 0.36rem;
+    padding: 0.32rem 0.48rem 0.28rem;
+    border-bottom: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-meta-cell + .icono-label-header-meta-cell {
-    padding-left: 0.58rem;
-    padding-right: 0.58rem;
+    padding-left: 0.42rem;
+    padding-right: 0.42rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-serial,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family {
     margin-top: 0.16rem;
-    font-size: 0.98rem;
+    font-size: 0.66rem;
     line-height: 1;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-filed-block {
-    gap: 0.28rem;
-    padding: 0.42rem 0.72rem 0.54rem;
-    border-top: 1px solid var(--icono-label-rule);
+    grid-column: 3;
+    grid-row: 1;
+    gap: 0.14rem;
+    padding: 0.32rem 0.48rem 0.28rem;
+    border-top: 0;
+    border-left: 1px solid var(--icono-label-rule);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family-trait-field {
-    min-height: 1.2rem;
+    min-height: 0.7rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-block {
@@ -1515,7 +1532,7 @@
     grid-template-rows: min-content min-content min-content;
     gap: 0.14rem;
     min-height: 0;
-    padding: 0.34rem 0.72rem 0.38rem;
+    padding: 0.26rem 0.56rem 0.28rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell + .icono-label-band-cell {
@@ -1535,6 +1552,13 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted {
     grid-area: noted;
     border-top: 1px solid var(--icono-label-rule);
+    grid-template-columns: min-content 1fr;
+    grid-template-rows: min-content auto;
+    grid-template-areas:
+      "caption caption"
+      "primary secondary";
+    column-gap: 0.22rem;
+    row-gap: 0.08rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--mass {
@@ -1548,6 +1572,10 @@
     position: static;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted > .icono-label-caption {
+    grid-area: caption;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-primary,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-primary,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--mass .icono-label-band-primary {
@@ -1555,15 +1583,27 @@
     padding-top: 0;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-primary {
+    grid-area: primary;
+    align-items: flex-end;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-secondary,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-secondary {
     min-height: 0;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-secondary {
+    grid-area: secondary;
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding-bottom: 0.02rem;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-option-copy,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-origin-text {
-    font-size: 0.9rem;
+    font-size: 0.62rem;
     line-height: 1.04;
   }
 
