@@ -1030,6 +1030,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait {
     flex: 1 1 auto;
+    height: auto;
     min-height: 0;
     gap: 0.45rem;
     padding: 0.8rem 0.8rem 0.55rem;
@@ -1060,6 +1061,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body {
     flex: 0 0 auto;
+    height: auto;
     min-height: 0;
     padding: 0;
     border-left: 0;
