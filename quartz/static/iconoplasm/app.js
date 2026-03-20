@@ -1112,6 +1112,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     // - expanded sizing must be solved by measured layout changes, not by shrinking type until collisions are hidden
     // - the mobile tab is a real archival object with soft rounded shoulders; no CSS polygon shortcuts
     // - the tab has to remain fully inside the viewport after expansion so collapse stays reachable
+    // - never ask the canonical archival renderer for a phone-only variant; desktop must stay insulated
+    //   and mobile must adapt the same archival DOM instead of forking content selection
     return (
       '<button type="button" class="icono-label-mobile-peek" data-icono-label-mobile-toggle aria-expanded="false">' +
       '<span class="icono-label-mobile-peek-tab" aria-hidden="true">' +
@@ -1142,7 +1144,6 @@ void syncSharedIconoplasmSettings().catch(function () {
       '<div class="icono-label-dossier-sheet">' +
       IconoCardShared.renderLabLabelCardHtml(genePayload, {
         voteHtml: "",
-        mobileReview: true,
         titleHref: href,
         titleLinkAttrs: "data-icono-nav",
       }) +
@@ -1647,8 +1648,36 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
+  function syncMobileLabelDossierContent(card) {
+    if (!card) return
+    var isMobileReview = isMobileLabelReviewEnabled()
+    if (isMobileReview) card.setAttribute("data-icono-mobile-review-active", "true")
+    else card.removeAttribute("data-icono-mobile-review-active")
+
+    var alignmentBody = card.querySelector(".icono-label-dossier-shell .icono-label-alignment-body")
+    var spectralSource = card.querySelector(".icono-label-specimen-note")
+    var existingInline = alignmentBody
+      ? alignmentBody.querySelector(".icono-label-inline-note--spectral")
+      : null
+
+    if (!isMobileReview) {
+      if (existingInline) existingInline.remove()
+      return
+    }
+
+    var spectralText = spectralSource ? String(spectralSource.textContent || "").trim() : ""
+    if (!alignmentBody || !spectralText) return
+    if (!existingInline) {
+      existingInline = document.createElement("div")
+      existingInline.className = "icono-label-inline-note icono-label-inline-note--spectral"
+      alignmentBody.appendChild(existingInline)
+    }
+    existingInline.textContent = spectralText
+  }
+
   function setMobileLabelExpanded(card, expanded) {
     if (!card) return
+    syncMobileLabelDossierContent(card)
     var resolved = !!expanded
     card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
@@ -1731,6 +1760,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (card.classList.contains("icono-card--brick-static")) return
     if (card.getAttribute("data-icono-mobile-label-wired") === "true") return
     card.setAttribute("data-icono-mobile-label-wired", "true")
+    syncMobileLabelDossierContent(card)
     setMobileLabelExpanded(card, false)
 
     var gesture = {
