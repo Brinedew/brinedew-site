@@ -1016,12 +1016,13 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick {
-    --icono-label-mobile-peek-height: 5.9rem;
-    --icono-label-mobile-preview-height: 3.3rem;
+    --icono-label-mobile-portrait-pad: 0.78rem;
+    --icono-label-mobile-peek-height: 5.34rem;
+    --icono-label-mobile-preview-height: 2.62rem;
     --icono-label-mobile-tab-height: 1.94rem;
     --icono-label-mobile-tab-width: 5.5rem;
     --icono-label-mobile-sheet-preview-offset: 0rem;
-    --icono-label-mobile-collapse-lift: 3.18rem;
+    --icono-label-mobile-collapse-lift: 3.32rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -1041,7 +1042,7 @@
        - collapsed and expanded states are the same physical card at different vertical offsets
        - preview geometry must come from shifting the one sheet, not from hiding or swapping rows */
     --icono-label-mobile-dossier-height: clamp(30rem, 75dvh, 40rem);
-    --icono-label-mobile-dossier-top: 0px;
+    --icono-label-mobile-dossier-top: calc(var(--icono-label-mobile-portrait-pad) + var(--icono-label-mobile-tab-height) - 1px);
     inline-size: 100%;
     display: block;
     position: relative;
@@ -1076,17 +1077,18 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait {
-    flex: 1 1 auto;
+    display: grid;
+    grid-template-rows: minmax(0, max-content);
     aspect-ratio: auto;
     height: auto;
     min-height: 0;
     gap: 0.32rem;
-    padding: 0.78rem 0.78rem 0.4rem;
+    padding: var(--icono-label-mobile-portrait-pad) var(--icono-label-mobile-portrait-pad) 0.4rem;
     overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport {
-    flex: 0 0 auto;
+    display: block;
     aspect-ratio: var(--width) / var(--height);
     min-height: 0;
     max-height: calc(100dvh - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-preview-height) - 3.25rem);
@@ -1124,11 +1126,11 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek {
     display: grid;
     grid-template-rows: min-content min-content min-content;
-    gap: 0.18rem;
+    gap: 0.08rem;
     inline-size: 100%;
     max-inline-size: 100%;
     min-height: var(--icono-label-mobile-peek-height);
-    padding: 0.58rem 1rem 0.38rem;
+    padding: 0.46rem 0.96rem 0.12rem;
     box-sizing: border-box;
     border: 0;
     border-radius: 0;
@@ -1178,14 +1180,13 @@
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
     right: 0.82rem;
-    bottom: calc(100% + 0.04rem);
+    bottom: calc(100% + 1px);
     z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    place-items: center;
     inline-size: var(--icono-label-mobile-tab-width);
     block-size: var(--icono-label-mobile-tab-height);
-    padding: 0 0.72rem 0.08rem;
+    padding: 0 0.72rem 0.1rem;
     border: 0;
     background: transparent;
     overflow: visible;
@@ -1229,11 +1230,11 @@
     white-space: nowrap;
     color: var(--icono-label-ink);
     font-family: "League Spartan";
-    font-size: 0.84rem;
+    font-size: 0.8rem;
     font-weight: 800;
     line-height: 1;
     letter-spacing: 0.09em;
-    transform: translateY(0.48rem);
+    transform: translateY(0.4rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {
@@ -1250,7 +1251,7 @@
     display: grid;
     align-items: stretch;
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.14rem;
+    gap: 0.04rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-kicker,
@@ -1292,7 +1293,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name {
     color: color-mix(in srgb, var(--icono-label-ink) 92%, transparent);
     font-family: "Special Elite";
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     line-height: 1.14;
     min-block-size: calc(0.78rem * 1.14 * 3);
     max-block-size: calc(0.78rem * 1.14 * 3);
@@ -1302,7 +1303,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe-divider {
     min-width: 0;
-    border-top: 1px dashed color-mix(in srgb, var(--icono-label-ink) 24%, transparent);
+    border-top: 1px dashed color-mix(in srgb, var(--icono-label-ink) 14%, transparent);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-box--label,
@@ -1318,11 +1319,11 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn {
     position: relative;
-    min-height: 1.04rem;
+    min-height: 0.9rem;
     display: grid;
     align-content: end;
-    padding: 0 0 0.04rem;
-    font-size: 0.58rem;
+    padding: 0 0 0.01rem;
+    font-size: 0.56rem;
     line-height: 1;
     letter-spacing: 0.12em;
   }
@@ -1355,26 +1356,26 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject {
     grid-column: 1;
     grid-row: 1;
-    grid-template-columns: 1.92rem max-content;
+    grid-template-columns: 2.18rem max-content;
     justify-content: start;
     text-align: left;
-    padding-right: 0.4rem;
+    padding-right: 0.2rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve {
     grid-column: 2;
     grid-row: 1;
-    grid-template-columns: max-content 1.92rem;
+    grid-template-columns: max-content 2.18rem;
     justify-content: end;
     text-align: right;
-    padding-left: 0.4rem;
+    padding-left: 0.2rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-copy-stack {
     display: inline-grid;
     grid-auto-flow: column;
     align-items: center;
-    column-gap: 0.34rem;
+    column-gap: 0.26rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy-stack {
@@ -1386,14 +1387,14 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow {
-    inline-size: 1.88rem;
-    block-size: 0.54rem;
+    inline-size: 2.12rem;
+    block-size: 0.66rem;
     display: block;
     overflow: visible;
-    color: color-mix(in srgb, var(--icono-label-ink) 68%, transparent);
-    opacity: 0.96;
+    color: color-mix(in srgb, var(--icono-label-ink) 80%, transparent);
+    opacity: 1;
     pointer-events: none;
-    transform: translateY(0.12rem);
+    transform: translateY(0.04rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow path {
@@ -1508,7 +1509,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-caption,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-row-label {
-    font-size: 0.42rem;
+    font-size: 0.38rem;
     letter-spacing: 0.16em;
     line-height: 1.12;
   }
@@ -1524,13 +1525,13 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-name {
-    font-size: 0.69rem;
+    font-size: 0.56rem;
     line-height: 1.08;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-registry-line {
     margin-top: 0.12rem;
-    font-size: 0.4rem;
+    font-size: 0.33rem;
     line-height: 1.2;
   }
 
@@ -1544,7 +1545,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-meta-cell {
-    padding: 0.32rem 0.48rem 0.28rem;
+    padding: 0.28rem 0.44rem 0.24rem;
     border-bottom: 0;
   }
 
@@ -1556,20 +1557,22 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-serial,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family {
     margin-top: 0.16rem;
-    font-size: 0.66rem;
+    font-size: 0.54rem;
     line-height: 1;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-filed-block {
     grid-column: 3;
     grid-row: 1;
-    gap: 0.14rem;
-    padding: 0.32rem 0.48rem 0.28rem;
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.28rem 0.44rem 0.24rem;
     border-top: 0;
     border-left: 1px solid var(--icono-label-rule);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family-trait-field {
+    display: grid;
     min-height: 0.7rem;
   }
 
@@ -1627,7 +1630,7 @@
     grid-template-rows: min-content min-content min-content;
     gap: 0.1rem;
     min-height: 0;
-    padding: 0.1rem 0.56rem 0.16rem;
+    padding: 0.08rem 0.52rem 0.12rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell + .icono-label-band-cell {
@@ -1640,8 +1643,8 @@
     border-top: 1px solid var(--icono-label-rule);
     grid-template-rows: min-content min-content;
     gap: 0.1rem;
-    padding-top: 0.14rem;
-    padding-bottom: 0.18rem;
+    padding-top: 0.12rem;
+    padding-bottom: 0.14rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted {
@@ -1680,7 +1683,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-primary {
     grid-area: primary;
-    align-items: flex-end;
+    align-items: end;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-secondary,
@@ -1690,20 +1693,20 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted .icono-label-band-secondary {
     grid-area: secondary;
-    align-items: flex-end;
-    justify-content: flex-start;
+    align-items: end;
+    justify-content: start;
     padding-bottom: 0.02rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-option-copy,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-origin-text {
-    font-size: 0.62rem;
+    font-size: 0.52rem;
     line-height: 1.04;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note {
-    font-size: 1.02rem;
+    font-size: 0.96rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-grid,
@@ -1759,8 +1762,8 @@
     grid-auto-flow: column;
     align-items: end;
     justify-content: start;
-    gap: 0.26rem;
-    min-height: 0.82rem;
+    gap: 0.2rem;
+    min-height: 0.72rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-mass-fill {
@@ -1768,7 +1771,7 @@
     grid-auto-flow: column;
     align-items: end;
     min-width: 3.2rem;
-    gap: 0.38rem;
+    gap: 0.28rem;
     padding-bottom: 0.02rem;
   }
 
@@ -1802,10 +1805,47 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-inline-note--spectral {
-    padding-top: 0.34rem;
+    padding-top: 0.28rem;
     border-top: 1px dashed color-mix(in srgb, var(--icono-label-ink) 22%, transparent);
-    font-size: 0.54rem;
+    font-size: 0.46rem;
     line-height: 1.22;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-color-row {
+    display: grid;
+    grid-template-columns: min-content minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-swatch-hex,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-cell,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-family-trait-field,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-family-trait-field--empty,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-qc-meta,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-band-primary,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-band-secondary,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-selector-row,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-option,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-footer-copy-main,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-footer-copy-side {
+    display: grid;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-band-primary,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-band-secondary {
+    align-items: end;
+    justify-content: start;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-selector-row {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: end;
+    justify-content: start;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-option {
+    place-items: center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport .iconoplasm-tooltip-portrait-media {

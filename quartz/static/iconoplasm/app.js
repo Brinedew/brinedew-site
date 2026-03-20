@@ -1665,37 +1665,10 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function alignExpandedMobileLabelCard(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
-    var body = card.querySelector(".iconoplasm-tooltip-body")
-    var tab = card.querySelector(".icono-label-mobile-peek-tab")
-    var portraitViewport = card.querySelector(".icono-label-specimen-viewport")
-    if (
-      !body ||
-      !tab ||
-      !portraitViewport ||
-      typeof body.getBoundingClientRect !== "function" ||
-      typeof tab.getBoundingClientRect !== "function" ||
-      typeof portraitViewport.getBoundingClientRect !== "function"
-    ) {
-      return
-    }
-    var cardRect = card.getBoundingClientRect()
-    var portraitRect = portraitViewport.getBoundingClientRect()
-    var tabRect = tab.getBoundingClientRect()
-    if (!Number.isFinite(cardRect.top) || !Number.isFinite(portraitRect.top) || !Number.isFinite(tabRect.height)) {
-      return
-    }
-    // Production rule: mobile expanded layout is still one physical archival sheet. The sheet
-    // should dock off the portrait inside the same card, not by scrolling the whole page until a
-    // floating overlay looks approximately right.
-    // Rigid validation targets for collapsed geometry live in CSS comments and should be checked
-    // against production screenshots / hard geometry:
-    // - collapsed seam gap: `peekTop - portraitBottom` ~= 0px
-    // - tab attachment gap: `peekTop - tabBottom` ~= 0px
-    // - any portrait overlap must come from moving the attached dossier upward, never from
-    //   detaching the tab and floating it independently
-    var portraitTopWithinCard = portraitRect.top - cardRect.top
-    var desiredBodyTop = Math.max(0, portraitTopWithinCard + tabRect.height - 1)
-    card.style.setProperty("--icono-label-mobile-dossier-top", desiredBodyTop.toFixed(2) + "px")
+    // The mobile archival sheet is now positioned entirely by CSS. Do not re-introduce
+    // measurement-driven inline offsets here; they break the one-physical-card illusion and
+    // produce false positives in DOM-only validation.
+    card.style.removeProperty("--icono-label-mobile-dossier-top")
   }
 
   function syncMobileLabelDossierContent(card) {
@@ -1733,19 +1706,6 @@ void syncSharedIconoplasmSettings().catch(function () {
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
     alignExpandedMobileLabelCard(card)
-    if (resolved) {
-      // Re-measure after layout settles so the dossier keeps docking to the same portrait instead
-      // of drifting with image decode or late style resolution.
-      window.setTimeout(function () {
-        alignExpandedMobileLabelCard(card)
-      }, 180)
-      window.setTimeout(function () {
-        alignExpandedMobileLabelCard(card)
-      }, 420)
-      window.setTimeout(function () {
-        alignExpandedMobileLabelCard(card)
-      }, 720)
-    }
   }
 
   function setMobileLabelQcCopy(card, copy) {
