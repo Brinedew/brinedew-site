@@ -1106,6 +1106,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     // Mobile review constraints captured from production feedback:
     // - the tab owns the gene symbol, so expanded dossier must not introduce a second mobile-only symbol treatment
     // - the tab must stay visually attached to the dossier seam and inherit the desktop symbol voice
+    // - the tab must not drift into angular, asymmetric, improvised office-tab geometry
     // - collapsed copy should stay centered within the sheet width instead of reserving a giant dead strip
     // - expanded sizing must be solved by measured layout changes, not by shrinking type until collisions are hidden
     return (
