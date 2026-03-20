@@ -1381,19 +1381,19 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-loop {
-    display: block;
-    opacity: 0;
+    display: block !important;
+    opacity: 0 !important;
     transition: opacity 120ms ease;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-dir="left"] .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-loop,
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-dir="right"] .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-loop {
-    opacity: 0.34;
+    opacity: 0.34 !important;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-pending="true"][data-icono-mobile-swipe-dir="left"] .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-loop,
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-pending="true"][data-icono-mobile-swipe-dir="right"] .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-loop {
-    opacity: 0.48;
+    opacity: 0.48 !important;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn + .icono-vote-btn {
