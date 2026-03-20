@@ -1666,6 +1666,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     var tab = card.querySelector(".icono-label-mobile-peek-tab")
+    var portraitViewport = card.querySelector(".icono-label-specimen-viewport")
     var anchor =
       tab && typeof tab.getBoundingClientRect === "function"
         ? tab
@@ -1674,7 +1675,16 @@ void syncSharedIconoplasmSettings().catch(function () {
           : null
     if (!anchor) return
     var rect = anchor.getBoundingClientRect()
-    var desiredTop = anchor === tab ? 8 : 20
+    var portraitRect =
+      portraitViewport && typeof portraitViewport.getBoundingClientRect === "function"
+        ? portraitViewport.getBoundingClientRect()
+        : null
+    var desiredTop =
+      portraitRect && Number.isFinite(portraitRect.top)
+        ? portraitRect.top
+        : anchor === tab
+          ? 8
+          : 20
     var delta = rect.top - desiredTop
     if (Math.abs(delta) < 2) return
     window.scrollBy({
@@ -1719,9 +1729,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
     if (resolved) {
       // Production acceptance rule:
-      // the collapse tab must remain fully inside the viewport after expansion.
-      // Do not treat a smooth-ish scroll as success; re-measure the live tab rect
-      // after layout settles and clamp until tabTop >= 8px.
+      // after expansion, align the tab to the portrait top instead of the raw viewport top.
+      // This keeps the tab in the user's visible card area and prevents overlap with the
+      // previous brick's controls.
       window.setTimeout(function () {
         alignExpandedMobileLabelCard(card)
       }, 180)
