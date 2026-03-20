@@ -77,6 +77,67 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background: var(--ui-bg);
 }
 
+.icono-home-auth {
+  margin: 0 auto 1rem;
+}
+
+.icono-home-auth-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 86%, var(--dark) 14%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--light) 94%, #efe6d7 6%) 0%, color-mix(in srgb, var(--light) 98%, #e7dccc 2%) 100%);
+  box-shadow: 0 8px 20px rgba(27, 18, 11, 0.04);
+}
+
+.icono-home-auth-copy {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.icono-home-auth-kicker {
+  font-family: var(--codeFont, monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-home-auth-title {
+  font-size: 1rem;
+  line-height: 1.1;
+  color: var(--dark);
+}
+
+.icono-home-auth-note {
+  font-size: 0.86rem;
+  line-height: 1.28;
+  color: var(--secondary, var(--darkgray));
+  text-wrap: pretty;
+}
+
+.icono-home-auth-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.7rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
+  background: color-mix(in srgb, var(--light) 80%, white 20%);
+  color: var(--dark);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.icono-home-auth-link:hover {
+  background: color-mix(in srgb, var(--light) 68%, white 32%);
+}
+
 
 /* ───────── Search ───────── */
 .icono-search {
@@ -1402,6 +1463,16 @@ html[data-theme="dark"] .icono-card--brick {
   .icono-gallery-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .icono-home-auth-card {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 0.85rem 0.9rem;
+  }
+
+  .icono-home-auth-link {
+    width: 100%;
   }
 
   .icono-gallery-actions {

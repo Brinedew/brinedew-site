@@ -3,6 +3,7 @@ import {
   syncSharedIconoplasmSettings,
 } from "../site-preferences.js?v=20260309e"
 import {
+  buildLoginUrl,
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
   mountSidebarStack,
@@ -51,6 +52,8 @@ void syncSharedIconoplasmSettings().catch(function () {
   var currentUser = null
   var masonryLibsPromise = null
   var photoSwipeModulePromise = null
+  var hasResolvedAuthState = false
+  var voteLoginRedirectPending = false
   var iconoSidebarState = {
     page: "home",
     homeLayout: HOME_LAYOUT_DEFAULT,
@@ -760,6 +763,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       '<p class="tagline">Mnemonics for genes - <a class="internal" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">read FAQ</a></p>' +
       '<span class="stat" id="icono-gene-count">...</span>' +
       "</div>" +
+      '<div class="icono-home-auth" id="icono-home-auth" hidden></div>' +
       '<div class="icono-gallery-toolbar">' +
       '<div class="icono-search icono-search--toolbar">' +
       '<div class="icono-search-wrapper">' +
@@ -887,24 +891,58 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
     wireSharedUserPanel(stack, {
       onAuthChanged: function (user) {
+        hasResolvedAuthState = true
         currentUser = user
         renderIconoplasmSidebar()
       },
     })
+    renderHomeAuthRail()
   }
 
   function refreshSharedUserState() {
     return fetchAuthenticatedUser()
       .then(function (user) {
+        hasResolvedAuthState = true
         currentUser = user
         renderIconoplasmSidebar()
         return user
       })
       .catch(function () {
+        hasResolvedAuthState = true
         currentUser = null
         renderIconoplasmSidebar()
         return null
       })
+  }
+
+  function voteLoginUrl() {
+    return buildLoginUrl({
+      authBase: API,
+    })
+  }
+
+  function buildHomeAuthRailMarkup() {
+    if (!hasResolvedAuthState || currentUser) return ""
+    return (
+      '<div class="icono-home-auth-card">' +
+      '<div class="icono-home-auth-copy">' +
+      '<div class="icono-home-auth-kicker">review access</div>' +
+      '<div class="icono-home-auth-title">Sign in to rate gene bricks</div>' +
+      '<div class="icono-home-auth-note">Swipe right for fit, left for misfit. Login is now reachable here instead of only at the bottom of the infinite gallery.</div>' +
+      "</div>" +
+      '<a class="icono-home-auth-link" href="' +
+      esc(voteLoginUrl()) +
+      '">Discord Login</a>' +
+      "</div>"
+    )
+  }
+
+  function renderHomeAuthRail() {
+    var slot = document.getElementById("icono-home-auth")
+    if (!slot) return
+    var markup = buildHomeAuthRailMarkup()
+    slot.hidden = !markup
+    slot.innerHTML = markup
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -1020,21 +1058,24 @@ void syncSharedIconoplasmSettings().catch(function () {
     )
   }
 
-  function buildLabLabelMobileDrawerMarkup(genePayload) {
+  function buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href) {
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     var fullName = labLabelDisplayNameForBrick(genePayload)
     return (
-      '<div class="icono-label-mobile-review-shell" data-icono-label-mobile-review-shell>' +
       '<button type="button" class="icono-label-mobile-peek" data-icono-label-mobile-toggle aria-expanded="false">' +
+      '<span class="icono-label-mobile-peek-handle" aria-hidden="true"></span>' +
       '<span class="icono-label-mobile-peek-topline">' +
-      '<span class="icono-label-mobile-peek-kicker">gene name</span>' +
-      '<span class="icono-label-mobile-peek-instruction">tap to open dossier</span>' +
+      '<span class="icono-label-mobile-peek-kicker">gene dossier</span>' +
+      '<span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--closed">tap to open</span>' +
+      '<span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--open">tap to close</span>' +
       "</span>" +
+      '<span class="icono-label-mobile-peek-summary">' +
       '<span class="icono-label-mobile-peek-symbol">' +
       esc(symbol) +
       "</span>" +
       '<span class="icono-label-mobile-peek-name">' +
       esc(fullName) +
+      "</span>" +
       "</span>" +
       '<span class="icono-label-mobile-peek-swipe">' +
       '<span class="icono-label-mobile-peek-swipe-stamp icono-label-mobile-peek-swipe-stamp--left">misfit</span>' +
@@ -1042,24 +1083,20 @@ void syncSharedIconoplasmSettings().catch(function () {
       '<span class="icono-label-mobile-peek-swipe-stamp icono-label-mobile-peek-swipe-stamp--right">fit</span>' +
       "</span>" +
       "</button>" +
-      '<div class="icono-label-mobile-review-sheet" data-icono-label-mobile-review-sheet>' +
-      IconoCardShared.renderLabLabelMobileReviewHtml(genePayload) +
-      "</div>" +
-      "</div>"
-    )
-  }
-
-  function buildLabLabelBrickBodyMarkup(genePayload, voteHtml, href) {
-    return (
-      '<div class="icono-label-desktop-sheet">' +
+      '<div class="icono-label-dossier-shell" data-icono-label-dossier-shell>' +
+      '<div class="icono-label-dossier-sheet">' +
       IconoCardShared.renderLabLabelCardHtml(genePayload, {
         voteHtml: voteHtml,
         titleHref: href,
         titleLinkAttrs: "data-icono-nav",
       }) +
       "</div>" +
-      buildLabLabelMobileDrawerMarkup(genePayload)
+      "</div>" +
     )
+  }
+
+  function buildLabLabelBrickBodyMarkup(genePayload, voteHtml, href) {
+    return buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href)
   }
 
   function buildBrickCardMarkup(g, cardIndex) {
@@ -1530,7 +1567,9 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function showVoteLoginPopup() {
-    window.alert("Please log-in first to vote.")
+    if (voteLoginRedirectPending) return
+    voteLoginRedirectPending = true
+    window.location.assign(voteLoginUrl())
   }
 
   function voteBoxMarkup(extraAttrs, options) {
@@ -1587,7 +1626,7 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function setMobileLabelQcCopy(card, copy) {
     if (!card) return
-    var note = card.querySelector("[data-icono-mobile-qc-note]")
+    var note = card.querySelector("[data-icono-qc-note], [data-icono-mobile-qc-note]")
     if (!note) return
     note.textContent = String(copy || "").trim() || "pending review"
   }
