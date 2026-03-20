@@ -1316,6 +1316,7 @@
     position: relative;
     min-height: 0.9rem;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     width: 100%;
     align-content: center;
     align-items: center;
@@ -1372,6 +1373,8 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-copy-stack {
     display: grid;
+    grid-column: 1;
+    grid-row: 1;
     align-items: center;
     column-gap: 0.26rem;
     align-self: center;
@@ -1412,6 +1415,10 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-loop {
     display: block !important;
+    position: absolute;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%);
     opacity: 0 !important;
     transition: opacity 120ms ease;
   }
