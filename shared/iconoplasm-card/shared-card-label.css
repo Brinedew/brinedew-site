@@ -1112,8 +1112,10 @@
     grid-template-rows: min-content min-content min-content;
     gap: 0.18rem;
     inline-size: 100%;
+    max-inline-size: 100%;
     min-height: var(--icono-label-mobile-peek-height);
     padding: 0.58rem 1rem 0.38rem;
+    box-sizing: border-box;
     border: 0;
     border-radius: 0;
     position: relative;
@@ -1135,6 +1137,8 @@
     gap: 0.18rem;
     width: 100%;
     min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 0;
     border: 0;
     background: transparent;
@@ -1223,6 +1227,9 @@
     align-items: center;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.65rem;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe {
@@ -1253,6 +1260,9 @@
     display: grid;
     gap: 0.12rem;
     inline-size: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name-label {
@@ -1376,6 +1386,13 @@
     grid-template-columns: minmax(0, 1fr) minmax(5rem, auto);
     grid-template-rows: auto auto;
     align-items: stretch;
+  }
+
+  /* Collapsed mobile cards must preview the next archival rows, not repeat the title block.
+     Keep one canonical sheet DOM, but hide the header strip while the dossier is collapsed so
+     the visible preview reads as a continuous filing card rather than a duplicate mini-header. */
+  .icono-card--variant-lab-label.icono-card--brick:not([data-icono-mobile-expanded="true"]) .icono-label-dossier-shell .icono-label-header-row {
+    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-review-active="true"] .icono-label-dossier-shell .icono-label-header-row {
