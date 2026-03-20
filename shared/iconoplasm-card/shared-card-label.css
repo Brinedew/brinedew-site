@@ -1035,6 +1035,7 @@
        - collapsed and expanded states are the same physical card at different vertical offsets
        - preview geometry must come from shifting the one sheet, not from hiding or swapping rows */
     --icono-label-mobile-dossier-height: clamp(30rem, 75dvh, 40rem);
+    --icono-label-mobile-dossier-top: 0px;
     inline-size: 100%;
     display: block;
     position: relative;
@@ -1091,12 +1092,12 @@
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body {
     position: absolute;
     inset-inline: 0;
+    top: var(--icono-label-mobile-dossier-top);
     bottom: 0;
     z-index: 3;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     min-height: 0;
-    height: var(--icono-label-mobile-dossier-height);
     padding: 0;
     border: 0;
     background: transparent;

@@ -1660,37 +1660,36 @@ void syncSharedIconoplasmSettings().catch(function () {
     card.removeAttribute("data-icono-mobile-swipe-dir")
     card.style.removeProperty("--icono-label-mobile-swipe-offset")
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
+    card.style.removeProperty("--icono-label-mobile-dossier-top")
   }
 
   function alignExpandedMobileLabelCard(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
-    var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
+    var body = card.querySelector(".iconoplasm-tooltip-body")
     var tab = card.querySelector(".icono-label-mobile-peek-tab")
     var portraitViewport = card.querySelector(".icono-label-specimen-viewport")
-    var anchor =
-      tab && typeof tab.getBoundingClientRect === "function"
-        ? tab
-        : toggle && typeof toggle.getBoundingClientRect === "function"
-          ? toggle
-          : null
-    if (!anchor) return
-    var rect = anchor.getBoundingClientRect()
-    var portraitRect =
-      portraitViewport && typeof portraitViewport.getBoundingClientRect === "function"
-        ? portraitViewport.getBoundingClientRect()
-        : null
-    var desiredTop =
-      portraitRect && Number.isFinite(portraitRect.top)
-        ? portraitRect.top
-        : anchor === tab
-          ? 8
-          : 20
-    var delta = rect.top - desiredTop
-    if (Math.abs(delta) < 2) return
-    window.scrollBy({
-      top: delta,
-      behavior: "auto",
-    })
+    if (
+      !body ||
+      !tab ||
+      !portraitViewport ||
+      typeof body.getBoundingClientRect !== "function" ||
+      typeof tab.getBoundingClientRect !== "function" ||
+      typeof portraitViewport.getBoundingClientRect !== "function"
+    ) {
+      return
+    }
+    var cardRect = card.getBoundingClientRect()
+    var portraitRect = portraitViewport.getBoundingClientRect()
+    var tabRect = tab.getBoundingClientRect()
+    if (!Number.isFinite(cardRect.top) || !Number.isFinite(portraitRect.top) || !Number.isFinite(tabRect.height)) {
+      return
+    }
+    // Production rule: mobile expanded layout is still one physical archival sheet. The sheet
+    // should dock off the portrait inside the same card, not by scrolling the whole page until a
+    // floating overlay looks approximately right.
+    var portraitTopWithinCard = portraitRect.top - cardRect.top
+    var desiredBodyTop = Math.max(0, portraitTopWithinCard + tabRect.height - 1)
+    card.style.setProperty("--icono-label-mobile-dossier-top", desiredBodyTop.toFixed(2) + "px")
   }
 
   function syncMobileLabelDossierContent(card) {
@@ -1727,11 +1726,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
+    alignExpandedMobileLabelCard(card)
     if (resolved) {
-      // Production acceptance rule:
-      // after expansion, align the tab to the portrait top instead of the raw viewport top.
-      // This keeps the tab in the user's visible card area and prevents overlap with the
-      // previous brick's controls.
+      // Re-measure after layout settles so the dossier keeps docking to the same portrait instead
+      // of drifting with image decode or late style resolution.
       window.setTimeout(function () {
         alignExpandedMobileLabelCard(card)
       }, 180)
