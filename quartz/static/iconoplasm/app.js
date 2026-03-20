@@ -1129,12 +1129,11 @@ void syncSharedIconoplasmSettings().catch(function () {
       "</span>" +
       "</span>" +
       '<span class="icono-label-mobile-peek-topline">' +
-      '<span class="icono-label-mobile-peek-kicker">gene dossier</span>' +
+      '<span class="icono-label-mobile-peek-kicker">full name</span>' +
       '<span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--closed">tap to open</span>' +
       '<span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--open">tap to close</span>' +
       "</span>" +
       '<span class="icono-label-mobile-peek-summary">' +
-      '<span class="icono-label-mobile-peek-name-label">full name</span>' +
       '<span class="icono-label-mobile-peek-name">' +
       esc(fullName) +
       "</span>" +

@@ -1024,7 +1024,7 @@
     --icono-label-mobile-tab-height: 1.94rem;
     --icono-label-mobile-tab-width: 5.5rem;
     --icono-label-mobile-sheet-preview-offset: 0rem;
-    --icono-label-mobile-collapse-lift: 3.32rem;
+    --icono-label-mobile-collapse-lift: 3.06rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -1275,8 +1275,8 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-summary {
     min-height: 0;
     display: grid;
-    grid-template-rows: min-content calc(0.78rem * 1.14 * 3);
-    gap: 0.08rem;
+    grid-template-rows: calc(0.74rem * 1.14 * 3);
+    gap: 0;
     inline-size: 100%;
     min-width: 0;
     max-width: 100%;
@@ -1284,12 +1284,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name-label {
-    color: color-mix(in srgb, var(--icono-label-ink) 68%, transparent);
-    font-family: var(--icono-label-type);
-    font-size: 0.56rem;
-    letter-spacing: 0.16em;
-    line-height: 1.1;
-    text-transform: uppercase;
+    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name {
@@ -1297,8 +1292,8 @@
     font-family: "Special Elite";
     font-size: 0.74rem;
     line-height: 1.14;
-    min-block-size: calc(0.78rem * 1.14 * 3);
-    max-block-size: calc(0.78rem * 1.14 * 3);
+    min-block-size: calc(0.74rem * 1.14 * 3);
+    max-block-size: calc(0.74rem * 1.14 * 3);
     overflow: hidden;
     text-wrap: pretty;
   }
@@ -1643,6 +1638,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category {
     grid-area: category;
     border-top: 1px solid var(--icono-label-rule);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--icono-label-rule) 92%, transparent);
     grid-template-rows: min-content min-content;
     gap: 0.1rem;
     padding-top: 0.12rem;
@@ -1665,6 +1661,7 @@
     grid-area: mass;
     border-top: 0;
     border-left: 1px solid var(--icono-label-rule);
+    box-shadow: inset 1px 0 0 color-mix(in srgb, var(--icono-label-rule) 92%, transparent);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-secondary,
