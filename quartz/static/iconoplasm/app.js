@@ -1114,8 +1114,11 @@ void syncSharedIconoplasmSettings().catch(function () {
     // - the tab has to remain fully inside the viewport after expansion so collapse stays reachable
     // - never ask the canonical archival renderer for a phone-only variant; desktop must stay insulated
     //   and mobile must adapt the same archival DOM instead of forking content selection
+    // - never nest vote buttons inside the peek toggle button; invalid button-in-button HTML causes
+    //   browser reparsing, which leaked the dossier open in collapsed state on production
     return (
-      '<button type="button" class="icono-label-mobile-peek" data-icono-label-mobile-toggle aria-expanded="false">' +
+      '<div class="icono-label-mobile-peek">' +
+      '<button type="button" class="icono-label-mobile-peek-toggle" data-icono-label-mobile-toggle aria-expanded="false">' +
       '<span class="icono-label-mobile-peek-tab" aria-hidden="true">' +
       '<svg class="icono-label-mobile-peek-tab-art" viewBox="0 0 188 72" preserveAspectRatio="none" focusable="false" aria-hidden="true">' +
       '<path class="icono-label-mobile-peek-tab-fill" d="M6 72V44C6 39.6 9.6 36 14 36H51.4C58.6 36 64.7 31.3 69.1 22.1C73.1 13.8 79.6 8 94 8C108.4 8 114.9 13.8 118.9 22.1C123.3 31.3 129.4 36 136.6 36H174C178.4 36 182 39.6 182 44V72H6Z"></path>' +
@@ -1136,10 +1139,11 @@ void syncSharedIconoplasmSettings().catch(function () {
       esc(fullName) +
       "</span>" +
       "</span>" +
-      '<span class="icono-label-mobile-peek-swipe">' +
-      voteHtml +
-      "</span>" +
       "</button>" +
+      '<div class="icono-label-mobile-peek-swipe">' +
+      voteHtml +
+      "</div>" +
+      "</div>" +
       '<div class="icono-label-dossier-shell" data-icono-label-dossier-shell>' +
       '<div class="icono-label-dossier-sheet">' +
       IconoCardShared.renderLabLabelCardHtml(genePayload, {
