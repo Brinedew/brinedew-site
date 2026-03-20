@@ -1669,7 +1669,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--family-trait {
     position: absolute;
     left: 0;
-    top: 0;
+    top: -0.08rem;
     max-width: 100%;
     pointer-events: none;
   }
