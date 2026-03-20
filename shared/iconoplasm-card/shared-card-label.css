@@ -1100,7 +1100,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: min-content min-content;
-    gap: 0.14rem;
+    gap: 0.28rem;
     padding-top: 0.18rem;
     border-top: 1px solid color-mix(in srgb, var(--icono-label-rule) 56%, transparent);
   }
