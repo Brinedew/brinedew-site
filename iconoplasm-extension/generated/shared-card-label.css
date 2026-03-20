@@ -1137,8 +1137,46 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick {
+    /* Mobile archival card has only two writing systems:
+       - one typewriter voice
+       - one handwritten voice
+       Do not reintroduce per-field font sizing/spacing drift here; only the small sans
+       captions may vary independently. */
     --icono-label-mobile-typewriter-size: 0.56rem;
     --icono-label-mobile-hand-size: 1rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-name,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-serial,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-option-copy,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-origin-text,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-metric-value {
+    font-weight: 400;
+    font-kerning: normal;
+    font-variant-ligatures: none;
+    letter-spacing: 0.03em;
+    text-rendering: geometricPrecision;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value--mass {
+    letter-spacing: 0.14em;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value--unit-kda {
+    letter-spacing: 0.01em;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-note,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-color-name,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-hand-analysis {
+    font-weight: 400;
+    font-kerning: normal;
+    letter-spacing: 0.01em;
+    text-rendering: geometricPrecision;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek {
@@ -1198,7 +1236,7 @@
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
     right: 0.82rem;
-    bottom: calc(100% + 1px);
+    bottom: 100%;
     z-index: 1;
     display: grid;
     place-items: center;
@@ -1252,17 +1290,18 @@
     font-weight: 800;
     line-height: 1;
     letter-spacing: 0.09em;
-    transform: translateY(0.4rem);
+    transform: translateY(0.56rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {
     display: grid;
     align-items: center;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) var(--icono-label-mobile-tab-width);
     gap: 0.65rem;
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
+    padding-right: 0.82rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe {
@@ -1282,6 +1321,11 @@
     line-height: 1.05;
     text-transform: uppercase;
     white-space: nowrap;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-instruction {
+    justify-self: center;
+    text-align: center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-instruction--open {
@@ -1864,10 +1908,13 @@
     gap: 0.85rem;
   }
 
+  /* Mobile must keep the archival card as a fixed paper grid. Do not use flex layouts
+     inside the mobile dossier footer; flex made the rows behave like floating UI chips
+     instead of printed table cells and caused visual sag/drift. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-color-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: start;
     gap: calc(6 / 1220 * 100cqw);
     min-width: 0;
   }
@@ -1904,10 +1951,10 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-swatch-hex {
-    display: flex;
+    display: inline-grid;
+    grid-auto-flow: column;
     align-items: center;
     gap: calc(4 / 1220 * 100cqw);
-    flex: 0 0 auto;
     font-size: 0.42rem;
     line-height: 1.08;
   }
@@ -1919,12 +1966,12 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-color-name {
     font-size: var(--icono-label-mobile-hand-size);
-    line-height: 0.96;
-    transform: translateY(calc(5 / 1220 * 100cqw)) rotate(-2.5deg);
-    transform-origin: left center;
-    flex: 0 1 auto;
+    line-height: 0.9;
+    transform: translateY(calc(1 / 1220 * 100cqw)) rotate(-2.5deg);
+    transform-origin: left top;
     min-width: 0;
     white-space: nowrap;
+    align-self: start;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-decomposition {
@@ -1937,16 +1984,22 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-cell {
-    display: flex;
-    align-items: baseline;
+    display: grid;
+    align-items: start;
+    min-width: 0;
+    align-content: start;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-cell--metric {
+    justify-items: start;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-cell--value {
-    justify-content: center;
+    justify-items: center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-cell--hand {
-    justify-content: flex-end;
+    justify-items: end;
     min-width: max-content;
   }
 
@@ -1963,10 +2016,11 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-hand-analysis {
     font-size: var(--icono-label-mobile-hand-size);
-    line-height: 0.96;
+    line-height: 0.9;
     margin-inline-end: 0;
-    transform: translateY(calc(4 / 1220 * 100cqw)) rotate(-2.5deg);
-    transform-origin: right center;
+    transform: translateY(calc(-1 / 1220 * 100cqw)) rotate(-2.5deg);
+    transform-origin: right top;
+    align-self: start;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport .iconoplasm-tooltip-portrait-media {
