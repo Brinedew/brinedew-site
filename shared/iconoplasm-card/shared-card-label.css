@@ -1016,6 +1016,7 @@
     block-size: auto;
     min-block-size: 0;
     max-block-size: calc(100dvh - 1.25rem);
+    padding-bottom: var(--icono-label-mobile-peek-height);
     overflow: clip;
     scroll-snap-align: start;
     scroll-snap-stop: always;
@@ -1040,10 +1041,12 @@
 
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait {
     flex: 1 1 auto;
+    aspect-ratio: auto;
     height: auto;
     min-height: 0;
     gap: 0.42rem;
     padding: 0.78rem 0.78rem 0.62rem;
+    overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport {
