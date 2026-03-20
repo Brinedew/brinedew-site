@@ -1103,6 +1103,11 @@ void syncSharedIconoplasmSettings().catch(function () {
     // Mobile must stay a UX wrapper around the canonical archival card. Do not add a second
     // phone-only dossier renderer here. The only valid source for sheet fields is
     // IconoCardShared.renderLabLabelCardHtml(...), with mobile changing presentation only.
+    // Mobile review constraints captured from production feedback:
+    // - the tab owns the gene symbol, so expanded dossier must not introduce a second mobile-only symbol treatment
+    // - the tab must stay visually attached to the dossier seam and inherit the desktop symbol voice
+    // - collapsed copy should stay centered within the sheet width instead of reserving a giant dead strip
+    // - expanded sizing must be solved by measured layout changes, not by shrinking type until collisions are hidden
     return (
       '<button type="button" class="icono-label-mobile-peek" data-icono-label-mobile-toggle aria-expanded="false">' +
       '<span class="icono-label-mobile-peek-tab" aria-hidden="true">' +

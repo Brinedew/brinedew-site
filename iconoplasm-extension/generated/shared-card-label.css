@@ -1010,7 +1010,13 @@
 
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-peek-height: 7.25rem;
-    --icono-label-mobile-dossier-height: clamp(22rem, 58dvh, 27rem);
+    /* Mobile archival card constraints from production review:
+       - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
+       - the tab must be symmetric, gently rounded, attached to the dossier seam, and never sag into the sheet
+       - tab symbol typography must reuse the desktop gene-symbol voice instead of a generic mono label
+       - expanded state must not repeat the gene symbol already carried by the tab
+       - expanded layout must be sized against measured live collisions, not eyeballed compression */
+    --icono-label-mobile-dossier-height: clamp(24.5rem, 64dvh, 31rem);
     inline-size: 100%;
     display: block;
     position: relative;
@@ -1110,38 +1116,39 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab {
-    /* Ported from the Stitch-generated archival tab study and corrected against
-       Smead-style reinforced straight-cut end-tab references: attached seam,
-       shoulder die-cut, no floating shadow, and no generic web trapezoid. */
-    --icono-label-mobile-tab-height: 1.7rem;
-    --icono-label-mobile-tab-width: 5.05rem;
-    --icono-label-mobile-tab-shoulder: 0.82rem;
-    --icono-label-mobile-tab-border: color-mix(in srgb, var(--icono-label-rule) 94%, #77624a 6%);
-    --icono-label-mobile-tab-fill: color-mix(in srgb, var(--icono-label-paper) 84%, #dcc8aa 16%);
+    /* Stitch reference was used only as a source for "attached archival tab" behavior.
+       House constraints win over the study:
+       - symmetric silhouette
+       - softly rounded archival tab, not angular / neobrutalist
+       - flush with the dossier seam instead of floating or dropping into the sheet
+       - desktop symbol typography voice ("League Spartan"), not the mono registry face */
+    --icono-label-mobile-tab-height: 1.54rem;
+    --icono-label-mobile-tab-width: 4.86rem;
     position: absolute;
-    top: calc(-1 * var(--icono-label-mobile-tab-height) + 1px);
-    right: -1px;
+    top: calc(-1 * var(--icono-label-mobile-tab-height));
+    right: 0.58rem;
     z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     inline-size: var(--icono-label-mobile-tab-width);
     min-height: var(--icono-label-mobile-tab-height);
-    padding: 0.2rem 0.9rem 0.22rem 1rem;
+    padding: 0.16rem 0.72rem 0.18rem;
     border: 0;
     background:
       no-repeat center / 100% 100%
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='138' height='48' viewBox='0 0 138 48'%3E%3Cpath d='M0 47V24l18-18h119v41H0Z' fill='%23f2eadc'/%3E%3Cpath d='M0 47V24l18-18h119' fill='none' stroke='%2383725e' stroke-width='1.2'/%3E%3Cpath d='M137 6v41H0' fill='none' stroke='%2383725e' stroke-width='1.2'/%3E%3Cpath d='M17.8 6v17.7' fill='none' stroke='%23cdbda9' stroke-width='1'/%3E%3Cpath d='M21 13h103' fill='none' stroke='%23fbf7ef' stroke-width='1' opacity='.85'/%3E%3C/svg%3E");
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='148' height='48' viewBox='0 0 148 48'%3E%3Cpath d='M1 48V12C1 5.925 5.925 1 12 1h124c6.075 0 11 4.925 11 11v36H1Z' fill='%23f2eadc'/%3E%3Cpath d='M1 48V12C1 5.925 5.925 1 12 1h124c6.075 0 11 4.925 11 11v36' fill='none' stroke='%2382705d' stroke-width='1.2'/%3E%3Cpath d='M18 10.5h112' fill='none' stroke='%23fbf7ef' stroke-width='1' opacity='.9'/%3E%3C/svg%3E");
     overflow: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before {
     content: "";
     position: absolute;
-    inset: auto auto -1px calc(var(--icono-label-mobile-tab-shoulder) * -1);
-    width: calc(var(--icono-label-mobile-tab-shoulder) + 1px);
+    left: 0.48rem;
+    right: 0.48rem;
+    bottom: 0;
     height: 1px;
-    background: var(--icono-label-mobile-tab-border);
+    background: color-mix(in srgb, var(--icono-label-rule) 74%, transparent);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol {
@@ -1151,10 +1158,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--icono-label-ink);
-    font-family: var(--icono-label-type);
-    font-size: 0.74rem;
-    line-height: 1;
-    letter-spacing: 0.16em;
+    font-family: "League Spartan";
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 0.92;
+    letter-spacing: 0.08em;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline,
@@ -1223,7 +1231,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-tab {
-    top: calc(-1 * var(--icono-label-mobile-tab-height) + 1px);
+    top: calc(-1 * var(--icono-label-mobile-tab-height));
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-instruction--open {
@@ -1248,7 +1256,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-sheet-body {
     display: grid;
-    grid-template-rows: auto auto auto auto;
+    grid-template-rows: min-content min-content min-content min-content;
     align-content: start;
     min-height: 100%;
     background: transparent;
@@ -1275,9 +1283,9 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-title-block,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-title-link {
     grid-column: 1 / -1;
-    grid-template-rows: min-content min-content min-content min-content;
-    row-gap: 0.22rem;
-    padding: 0.62rem 0.8rem 0.54rem;
+    grid-template-rows: min-content min-content min-content;
+    row-gap: 0.16rem;
+    padding: 0.54rem 0.8rem 0.46rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-stack {
@@ -1302,12 +1310,12 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-symbol {
-    font-size: 2.06rem;
+    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-name {
-    font-size: 0.88rem;
-    line-height: 1.12;
+    font-size: 1rem;
+    line-height: 1.08;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-registry-line {
@@ -1363,10 +1371,11 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "category category"
-      "noted mass";
+      "category"
+      "noted"
+      "mass";
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell {
@@ -1377,11 +1386,12 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell + .icono-label-band-cell {
     border-left: 0;
+    border-top: 1px solid var(--icono-label-rule);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category {
     grid-area: category;
-    border-bottom: 1px solid var(--icono-label-rule);
+    border-top: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted {
@@ -1390,7 +1400,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--mass {
     grid-area: mass;
-    border-left: 1px solid var(--icono-label-rule);
+    border-left: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-secondary,
