@@ -1320,6 +1320,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject {
     grid-column: 1;
+    grid-row: 1;
     justify-content: flex-start;
     text-align: left;
     padding-right: 0.4rem;
@@ -1327,6 +1328,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve {
     grid-column: 2;
+    grid-row: 1;
     justify-content: flex-end;
     text-align: right;
     padding-left: 0.4rem;
