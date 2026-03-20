@@ -1666,23 +1666,20 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     var tab = card.querySelector(".icono-label-mobile-peek-tab")
-    var peek = card.querySelector(".icono-label-mobile-peek")
     var anchor =
-      peek && typeof peek.getBoundingClientRect === "function"
-        ? peek
-        : tab && typeof tab.getBoundingClientRect === "function"
-          ? tab
-          : toggle && typeof toggle.getBoundingClientRect === "function"
-            ? toggle
-            : null
+      tab && typeof tab.getBoundingClientRect === "function"
+        ? tab
+        : toggle && typeof toggle.getBoundingClientRect === "function"
+          ? toggle
+          : null
     if (!anchor) return
     var rect = anchor.getBoundingClientRect()
-    var desiredTop = anchor === peek ? 28 : anchor === tab ? 8 : 20
+    var desiredTop = anchor === tab ? 8 : 20
     var delta = rect.top - desiredTop
     if (Math.abs(delta) < 2) return
     window.scrollBy({
       top: delta,
-      behavior: "smooth",
+      behavior: "auto",
     })
   }
 
@@ -1721,12 +1718,19 @@ void syncSharedIconoplasmSettings().catch(function () {
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
     if (resolved) {
+      // Production acceptance rule:
+      // the collapse tab must remain fully inside the viewport after expansion.
+      // Do not treat a smooth-ish scroll as success; re-measure the live tab rect
+      // after layout settles and clamp until tabTop >= 8px.
       window.setTimeout(function () {
         alignExpandedMobileLabelCard(card)
       }, 180)
       window.setTimeout(function () {
         alignExpandedMobileLabelCard(card)
       }, 420)
+      window.setTimeout(function () {
+        alignExpandedMobileLabelCard(card)
+      }, 720)
     }
   }
 
