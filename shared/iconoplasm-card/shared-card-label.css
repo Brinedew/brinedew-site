@@ -1134,6 +1134,11 @@
     transform: translateY(0);
   }
 
+  .icono-card--variant-lab-label.icono-card--brick {
+    --icono-label-mobile-typewriter-size: 0.56rem;
+    --icono-label-mobile-hand-size: 1rem;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek {
     display: grid;
     grid-template-rows: min-content min-content min-content;
@@ -1299,10 +1304,10 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name {
     color: color-mix(in srgb, var(--icono-label-ink) 92%, transparent);
     font-family: "Special Elite";
-    font-size: 0.74rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1.14;
-    min-block-size: calc(0.74rem * 1.14 * 3);
-    max-block-size: calc(0.74rem * 1.14 * 3);
+    min-block-size: calc(var(--icono-label-mobile-typewriter-size) * 1.14 * 3);
+    max-block-size: calc(var(--icono-label-mobile-typewriter-size) * 1.14 * 3);
     overflow: hidden;
     text-wrap: pretty;
   }
@@ -1539,7 +1544,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-name {
-    font-size: 0.56rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1.08;
   }
 
@@ -1571,7 +1576,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-serial,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family {
     margin-top: 0.16rem;
-    font-size: 0.54rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1;
   }
 
@@ -1616,7 +1621,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-note {
     min-height: 1rem;
-    font-size: 1rem;
+    font-size: var(--icono-label-mobile-hand-size);
     transform: rotate(-3deg);
   }
 
@@ -1717,12 +1722,12 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-option-copy,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-origin-text {
-    font-size: 0.52rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1.04;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note {
-    font-size: 0.96rem;
+    font-size: var(--icono-label-mobile-hand-size);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-grid,
@@ -1831,14 +1836,12 @@
      must keep the desktop archival grid. Only its position changes; its internal paper
      geometry does not. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] {
-    --icono-label-mobile-footer-type-size: calc(12 / 1220 * 100cqw);
-    --icono-label-hand-size: calc(32 / 1220 * 100cqw);
-    --icono-label-specimen-metric-col: calc(104 / 1220 * 100cqw);
-    --icono-label-specimen-value-col: calc(50 / 1220 * 100cqw);
-    --icono-label-specimen-column-gap: calc(15 / 1220 * 100cqw);
-    --icono-label-specimen-row-gap: calc(16 / 1220 * 100cqw);
+    --icono-label-specimen-metric-col: 6.6rem;
+    --icono-label-specimen-value-col: 3.4rem;
+    --icono-label-specimen-column-gap: 0.95rem;
+    --icono-label-specimen-row-gap: 1rem;
     margin-top: 0;
-    gap: calc(14 / 1220 * 100cqw);
+    gap: 0.9rem;
     padding-top: 0;
     border-top: 1px solid var(--icono-label-rule);
   }
@@ -1848,7 +1851,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-note {
-    font-size: var(--icono-label-mobile-footer-type-size);
+    font-size: 0.42rem;
     line-height: 1.1;
     letter-spacing: 0.12em;
     white-space: nowrap;
@@ -1856,7 +1859,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-micro {
-    gap: calc(12 / 1220 * 100cqw);
+    gap: 0.85rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-color-row {
@@ -1903,7 +1906,7 @@
     align-items: center;
     gap: calc(4 / 1220 * 100cqw);
     flex: 0 0 auto;
-    font-size: var(--icono-label-mobile-footer-type-size);
+    font-size: 0.42rem;
     line-height: 1.08;
   }
 
@@ -1913,7 +1916,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-color-name {
-    font-size: var(--icono-label-hand-size);
+    font-size: var(--icono-label-mobile-hand-size);
     line-height: 0.96;
     transform: translateY(calc(5 / 1220 * 100cqw)) rotate(-2.5deg);
     transform-origin: left center;
@@ -1936,23 +1939,28 @@
     align-items: baseline;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-cell--value {
+    justify-content: center;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-cell--hand {
     justify-content: flex-end;
     min-width: max-content;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-metric {
-    font-size: var(--icono-label-mobile-footer-type-size);
+    font-size: 0.42rem;
     line-height: 1.08;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-metric-value {
-    font-size: var(--icono-label-mobile-footer-type-size);
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1.08;
+    text-align: center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] .icono-label-specimen-hand-analysis {
-    font-size: var(--icono-label-hand-size);
+    font-size: var(--icono-label-mobile-hand-size);
     line-height: 0.96;
     margin-inline-end: 0;
     transform: translateY(calc(4 / 1220 * 100cqw)) rotate(-2.5deg);
