@@ -1397,6 +1397,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell {
     grid-template-rows: min-content min-content min-content;
     gap: 0.14rem;
+    min-height: 0;
     padding: 0.34rem 0.72rem 0.38rem;
   }
 
