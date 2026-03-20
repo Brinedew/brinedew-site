@@ -1316,7 +1316,9 @@
     position: relative;
     min-height: 0.9rem;
     display: grid;
-    align-content: end;
+    width: 100%;
+    align-content: center;
+    align-items: center;
     padding: 0 0 0.01rem;
     font-size: 0.56rem;
     line-height: 1;
@@ -1353,8 +1355,9 @@
     grid-row: 1;
     grid-template-columns: 2.18rem max-content;
     justify-content: start;
+    justify-items: start;
     text-align: left;
-    padding-right: 0.2rem;
+    padding-right: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve {
@@ -1362,8 +1365,9 @@
     grid-row: 1;
     grid-template-columns: max-content 2.18rem;
     justify-content: end;
+    justify-items: end;
     text-align: right;
-    padding-left: 0.2rem;
+    padding-left: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-copy-stack {
@@ -1371,6 +1375,7 @@
     grid-auto-flow: column;
     align-items: center;
     column-gap: 0.26rem;
+    align-self: center;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy-stack {
@@ -1385,11 +1390,12 @@
     inline-size: 2.12rem;
     block-size: 0.66rem;
     display: block;
+    align-self: center;
     overflow: visible;
     color: color-mix(in srgb, var(--icono-label-ink) 80%, transparent);
     opacity: 1;
     pointer-events: none;
-    transform: translateY(0.04rem);
+    transform: translateY(0);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow path {
