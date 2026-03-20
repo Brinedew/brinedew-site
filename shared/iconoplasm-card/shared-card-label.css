@@ -1014,7 +1014,7 @@
        - tab symbol typography must reuse the desktop gene-symbol voice instead of a generic mono label
        - expanded state must not repeat the gene symbol already carried by the tab
        - expanded layout must be sized against measured live collisions, not eyeballed compression */
-    --icono-label-mobile-dossier-height: clamp(24.5rem, 64dvh, 31rem);
+    --icono-label-mobile-dossier-height: clamp(25.5rem, 66dvh, 32rem);
     inline-size: 100%;
     display: block;
     position: relative;
@@ -1378,8 +1378,8 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell {
     grid-template-rows: min-content min-content min-content;
-    gap: 0.18rem;
-    padding: 0.42rem 0.72rem 0.48rem;
+    gap: 0.14rem;
+    padding: 0.34rem 0.72rem 0.38rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell + .icono-label-band-cell {
