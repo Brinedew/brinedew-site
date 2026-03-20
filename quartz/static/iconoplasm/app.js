@@ -1091,7 +1091,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         titleLinkAttrs: "data-icono-nav",
       }) +
       "</div>" +
-      "</div>" +
+      "</div>"
     )
   }
 
