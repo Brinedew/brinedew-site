@@ -7,7 +7,26 @@ draft: true
 ---
 # Defensive sabotage is not friendly fire
 
-Workflow: My outline -> Gemini 3.1 Pro ->
+Workflow: Manual draft outline -> Gemini 3.1 Pro -> manual editing for taste
+
+> [!info]- Draft outline
+> Defensive sabotage is not friendly fire
+> 
+> Naive aging view: everything is wear and tear
+> 
+> Midwit aging view:
+> injury
+> antagonistic pleiotropy
+> 
+> But if a bridge falls in your country, you have 3 very different casual models of why the bridge fell
+> enemy action
+> friendly fire
+> defensive sabotage
+> 
+> All of them imply different intervention strategies for "how to prevent bridge from falling".
+> E.g. bridge hardening is helpful for enemy action and friendly fire, but counterproductive for defensive sabotage!
+> A lizard won't benefit from making its tail harder to break. Easy breaking is the point!"
+
 
 **I.**
 
@@ -29,14 +48,14 @@ Both of these models are very useful. They map well onto a lot of human patholog
 
 Suppose a major strategic bridge collapses in your country during a war. You are the general in charge of logistics, and you demand to know why the bridge fell. There are three very different causal models for what just happened:
 
-1. **Enemy Action:** The invading army sent bombers to blow up the bridge. (This is the "Injury / Wear and Tear" model).
-    
-2. **Friendly Fire:** Our own artillery was shelling an enemy battalion near the river, missed, and accidentally took out the bridge. (This is the "Antagonistic Pleiotropy / Autoimmune" model).
-    
-3. **Defensive Sabotage:** The enemy was advancing rapidly toward the capital. Our local commander realized they were about to cross the river, so he intentionally rigged the bridge with dynamite and blew it up to stop them.
-    
+1. **Enemy Action:** The invading army sent bombers to blow up the bridge. 
 
-Why does it matter which model is true? Because as the general in charge of logistics, your job is to figure out how to prevent bridges from falling in the future. And your choice of intervention depends entirely on the causal model.
+2. **Friendly Fire:** Our own artillery was shelling an enemy battalion near the river, missed, and accidentally took out the bridge. 
+
+3. **Defensive Sabotage:** The enemy was advancing rapidly toward the capital. Our local commander realized they were about to cross the river, so he intentionally rigged the bridge with dynamite and blew it up to stop them.
+
+
+Why does it matter which model is true? Because your job is to figure out how to prevent bridges from falling in the future. And your choice of intervention depends entirely on the causal model.
 
 If the bridge fell due to Enemy Action, the correct intervention is bridge hardening. You build the next bridge out of reinforced concrete, you put anti-aircraft guns on the towers, and you make it indestructible.
 
