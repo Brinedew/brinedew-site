@@ -1355,9 +1355,9 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject {
     grid-column: 1;
     grid-row: 1;
-    grid-template-columns: 2.18rem max-content;
-    justify-content: start;
-    justify-items: start;
+    grid-template-columns: 2.18rem minmax(0, 1fr);
+    justify-content: stretch;
+    justify-items: stretch;
     text-align: left;
     padding-right: 0;
   }
@@ -1365,9 +1365,9 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve {
     grid-column: 2;
     grid-row: 1;
-    grid-template-columns: max-content 2.18rem;
-    justify-content: end;
-    justify-items: end;
+    grid-template-columns: minmax(0, 1fr) 2.18rem;
+    justify-content: stretch;
+    justify-items: stretch;
     text-align: right;
     padding-left: 0;
   }
@@ -1382,10 +1382,12 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy-stack {
     align-items: center;
+    justify-self: start;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-copy-stack {
     align-items: center;
+    justify-self: end;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-arrow {
