@@ -1776,6 +1776,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     card.removeAttribute("data-icono-mobile-swipe-dir")
     card.style.removeProperty("--icono-label-mobile-swipe-offset")
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
+    card.style.removeProperty("--icono-label-mobile-reject-circle-opacity")
+    card.style.removeProperty("--icono-label-mobile-approve-circle-opacity")
   }
 
   function updateMobileLabelSwipeDirection(card, dx) {
@@ -1784,9 +1786,14 @@ void syncSharedIconoplasmSettings().catch(function () {
       if (card.getAttribute("data-icono-mobile-swipe-pending") !== "true") {
         card.removeAttribute("data-icono-mobile-swipe-dir")
       }
+      card.style.setProperty("--icono-label-mobile-reject-circle-opacity", "0")
+      card.style.setProperty("--icono-label-mobile-approve-circle-opacity", "0")
       return
     }
-    card.setAttribute("data-icono-mobile-swipe-dir", dx > 0 ? "right" : "left")
+    var direction = dx > 0 ? "right" : "left"
+    card.setAttribute("data-icono-mobile-swipe-dir", direction)
+    card.style.setProperty("--icono-label-mobile-reject-circle-opacity", direction === "left" ? "0.42" : "0")
+    card.style.setProperty("--icono-label-mobile-approve-circle-opacity", direction === "right" ? "0.42" : "0")
   }
 
   function commitMobileLabelSwipe(card, direction) {
@@ -1807,6 +1814,8 @@ void syncSharedIconoplasmSettings().catch(function () {
       (direction > 0 ? 1 : -1) * Math.min(window.innerWidth * 0.48, 280) + "px",
     )
     card.style.setProperty("--icono-label-mobile-swipe-rotate", (direction > 0 ? 7 : -7) + "deg")
+    card.style.setProperty("--icono-label-mobile-reject-circle-opacity", direction > 0 ? "0" : "0.56")
+    card.style.setProperty("--icono-label-mobile-approve-circle-opacity", direction > 0 ? "0.56" : "0")
     button.click()
     if (currentUser) {
       setMobileLabelQcCopy(card, direction > 0 ? "looks viable" : "flagged misfit")

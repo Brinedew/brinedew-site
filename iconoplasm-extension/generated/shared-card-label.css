@@ -1336,6 +1336,14 @@
     transition: opacity 120ms ease;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy::before {
+    opacity: var(--icono-label-mobile-reject-circle-opacity, 0);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-copy::before {
+    opacity: var(--icono-label-mobile-approve-circle-opacity, 0);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn::after {
     content: "";
     position: absolute;
@@ -1405,19 +1413,9 @@
     opacity: 0.34 !important;
   }
 
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-dir="left"] .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy::before,
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-dir="right"] .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-copy::before {
-    opacity: 0.42;
-  }
-
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-pending="true"][data-icono-mobile-swipe-dir="left"] .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-loop,
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-pending="true"][data-icono-mobile-swipe-dir="right"] .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-loop {
     opacity: 0.48 !important;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-pending="true"][data-icono-mobile-swipe-dir="left"] .icono-label-mobile-peek-swipe .icono-vote-btn--reject .icono-vote-btn-copy::before,
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-pending="true"][data-icono-mobile-swipe-dir="right"] .icono-label-mobile-peek-swipe .icono-vote-btn--approve .icono-vote-btn-copy::before {
-    opacity: 0.56;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn + .icono-vote-btn {
