@@ -21,6 +21,20 @@
     maxRandomnessOffset: 1.5,
     curveFitting: 0.82,
     curveStepCount: 9,
+    widthMultiplier: 1.5,
+    paddingCharWidth: 2,
+    heightMultiplier: 2,
+  }
+  var ICONO_ROUGH_LOOP_INLINE_GENE = {
+    strokeWidth: 1.56,
+    roughness: 1.34,
+    bowing: 0.62,
+    maxRandomnessOffset: 1.08,
+    curveFitting: 0.9,
+    curveStepCount: 8,
+    widthMultiplier: 1.16,
+    paddingCharWidth: 0.72,
+    heightMultiplier: 1.24,
   }
   var ICONO_ROUGH_LOOP_PRESETS = {
     default: ICONO_ROUGH_LOOP_STANDARD,
@@ -30,6 +44,7 @@
     "category-soluble": ICONO_ROUGH_LOOP_STANDARD,
     "alignment-oncogene": ICONO_ROUGH_LOOP_STANDARD,
     "alignment-tumor-suppressor": ICONO_ROUGH_LOOP_STANDARD,
+    "inline-gene": ICONO_ROUGH_LOOP_INLINE_GENE,
   }
 
   function iconoPenLoopFallbackMarkup() {
@@ -86,9 +101,9 @@
     var textWidth = Math.max(targetRect.width, 1)
     var textHeight = Math.max(targetRect.height, 1)
     var averageCharWidth = textWidth / charCount
-    var paddedWidth = textWidth + averageCharWidth * 2
-    var measuredWidth = Math.max(textWidth * 1.5, paddedWidth)
-    var measuredHeight = textHeight * 2
+    var paddedWidth = textWidth + averageCharWidth * Number(preset.paddingCharWidth || 2)
+    var measuredWidth = Math.max(textWidth * Number(preset.widthMultiplier || 1.5), paddedWidth)
+    var measuredHeight = textHeight * Number(preset.heightMultiplier || 2)
     var left = targetRect.left - hostRect.left + (textWidth - measuredWidth) / 2
     var top = targetRect.top - hostRect.top + (textHeight - measuredHeight) / 2
     return {
@@ -1018,6 +1033,176 @@
     )
   }
 
+  function renderLabLabelMobileReviewHtml(geneDetail, options) {
+    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
+    var safeEssence =
+      safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
+        ? safeGeneDetail.essence
+        : {}
+    var opts = options || {}
+    var safePortrait =
+      safeGeneDetail.portrait && typeof safeGeneDetail.portrait === "object"
+        ? safeGeneDetail.portrait
+        : {}
+    var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
+    var fullName = labLabelDisplayName(safeGeneDetail)
+    var candidateImageId = Number(safePortrait.candidate_image_id)
+    var visionId = String(safePortrait.vision_id || "").trim()
+    var emulsionNumber =
+      Number.isFinite(candidateImageId) && candidateImageId > 0
+        ? String(Math.round(candidateImageId))
+        : visionId
+    var serial = labLabelCatalogNumber(emulsionNumber || symbol)
+    var family = String(safeEssence.family_surname || "").trim()
+    var familyFeature = String(safeEssence.family_feature || "").trim()
+    var familyMembers = Number(safeEssence.family_members)
+    var hasRealFamily =
+      (Number.isFinite(familyMembers) && familyMembers > 1) ||
+      (!Number.isFinite(familyMembers) && family && family.toUpperCase() !== symbol)
+    var displayedFamily = hasRealFamily ? family : ""
+    var sexOriginValues = uniqueDisplayValues(
+      safeEssence.sex_origin ||
+        safeEssence.gender_origin ||
+        safeGeneDetail.sex_origin ||
+        safeGeneDetail.gender_origin,
+      2,
+    )
+    var selectedCategory = String(sexOriginValues[0] || "").trim().toLowerCase()
+    var sexNote = String(safeEssence.sex || "").trim().toLowerCase()
+    var firstPublicationYear = Number(safeGeneDetail.first_publication_year)
+    var firstNoted =
+      Number.isFinite(firstPublicationYear) && firstPublicationYear > 0
+        ? String(Math.round(firstPublicationYear))
+        : ""
+    var ageNote = ""
+    if (safeEssence.age) {
+      ageNote = String(safeEssence.age).trim()
+    } else if (safeEssence.age_years != null && Number.isFinite(Number(safeEssence.age_years))) {
+      ageNote = String(Math.round(Number(safeEssence.age_years)))
+    }
+    if (ageNote && !/\by\.?o\.?\b/i.test(ageNote) && !/\byears?\s+old\b/i.test(ageNote)) {
+      ageNote += " y.o."
+    }
+    var weightKg = Number(safeEssence.weight_kg)
+    var handwrittenWeight =
+      Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : ""
+    var aesthetics = uniqueDisplayValues(safeEssence.aesthetics, 4)
+    var aestheticsOrigin = uniqueDisplayValues(safeEssence.aesthetics_origin, 4)
+    var maxStyleRows = Math.max(aesthetics.length, aestheticsOrigin.length, 3)
+    var politicsDisplay = normalizePoliticsDisplay(
+      safeEssence.politics || safeEssence.faction || "",
+      safeEssence.politics_origin,
+    )
+    var molecularAlignment = String(politicsDisplay.molecular || "").toLowerCase()
+    var politicalNote = String(politicsDisplay.character || "").trim()
+
+    var stylePairsHtml = ""
+    for (var i = 0; i < maxStyleRows; i++) {
+      stylePairsHtml +=
+        '<div class="icono-label-mobile-review-style-pair">' +
+        '<div class="icono-label-origin-text">' +
+        escapeHtml(String(aestheticsOrigin[i] || "").trim() || " ") +
+        "</div>" +
+        '<div class="icono-label-hand-note icono-label-hand-note--style">' +
+        escapeHtml(String(aesthetics[i] || "").trim()) +
+        "</div>" +
+        "</div>"
+    }
+
+    return (
+      '<div class="icono-label-mobile-review" data-icono-label-mobile-review>' +
+      '<div class="icono-label-mobile-review-header">' +
+      '<div class="icono-label-mobile-review-title">' +
+      '<div class="icono-label-caption">gene name</div>' +
+      '<div class="icono-label-symbol">' +
+      escapeHtml(symbol) +
+      "</div>" +
+      '<div class="icono-label-name">' +
+      escapeHtml(fullName || symbol) +
+      "</div>" +
+      '<div class="icono-label-registry-line">' +
+      escapeHtml(String(opts.registryLine || "ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03")) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-qc">' +
+      '<div class="icono-label-caption">qc</div>' +
+      '<div class="icono-label-mobile-review-qc-copy">swipe review</div>' +
+      '<div class="icono-label-hand-note icono-label-mobile-review-qc-note" data-icono-mobile-qc-note>pending review</div>' +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-meta-grid">' +
+      '<div class="icono-label-mobile-review-meta-cell">' +
+      '<div class="icono-label-caption">emulsion no.</div>' +
+      '<div class="icono-label-serial">' +
+      escapeHtml(serial) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-meta-cell">' +
+      '<div class="icono-label-caption">family</div>' +
+      '<div class="icono-label-family">' +
+      escapeHtml(displayedFamily || "unfiled") +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-meta-cell">' +
+      '<div class="icono-label-caption">first noted</div>' +
+      '<div class="icono-label-mobile-review-meta-line">' +
+      '<span class="icono-label-typed-value icono-label-typed-value--band">' +
+      escapeHtml(firstNoted || " ") +
+      "</span>" +
+      '<span class="icono-label-hand-note icono-label-hand-note--age">' +
+      escapeHtml(ageNote) +
+      "</span>" +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-meta-cell">' +
+      '<div class="icono-label-caption">mass</div>' +
+      '<div class="icono-label-mobile-review-meta-line icono-label-mobile-review-meta-line--mass">' +
+      '<span class="icono-label-hand-note icono-label-hand-note--mass-number">' +
+      escapeHtml(handwrittenWeight) +
+      "</span>" +
+      '<span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--unit-kda">kDa</span>' +
+      "</div>" +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-section">' +
+      '<div class="icono-label-mobile-review-section-head">' +
+      '<div class="icono-label-caption">field notes</div>' +
+      '<div class="icono-label-hand-note icono-label-hand-note--sex">' +
+      escapeHtml(sexNote) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-section-body">' +
+      renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-section">' +
+      '<div class="icono-label-caption">pfam clans</div>' +
+      '<div class="icono-label-mobile-review-style-stack">' +
+      stylePairsHtml +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-section">' +
+      '<div class="icono-label-caption">alignment</div>' +
+      '<div class="icono-label-mobile-review-section-body">' +
+      renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-review-remarks">' +
+      '<div class="icono-label-caption">remarks</div>' +
+      '<div class="icono-label-mobile-review-remarks-lines">' +
+      '<div class="icono-label-footer-line icono-label-footer-line--typed">archive room b / bench 3 / human gene cabinet</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--typed">stock tone ' +
+      escapeHtml(String(safeGeneDetail.color || "").trim().toUpperCase() || "UNFILED") +
+      " / sheet " +
+      escapeHtml(serial) +
+      ' / print run 07</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">registry copy retained in cabinet 5A</div>' +
+      "</div>" +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function renderTooltipMetaRowsHtml(rows) {
     if (!Array.isArray(rows) || !rows.length) return ""
     var html = ""
@@ -1487,6 +1672,7 @@
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
     renderLabLabelSpecimenRailHtml: renderLabLabelSpecimenRailHtml,
     renderLabLabelCardHtml: renderLabLabelCardHtml,
+    renderLabLabelMobileReviewHtml: renderLabLabelMobileReviewHtml,
     renderTooltipMetaRowsHtml: renderTooltipMetaRowsHtml,
     renderTooltipMetaSkeletonHtml: renderTooltipMetaSkeletonHtml,
     renderTooltipMobileRowGridHtml: renderTooltipMobileRowGridHtml,

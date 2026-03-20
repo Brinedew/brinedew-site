@@ -1003,6 +1003,65 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
+  function labLabelDisplayNameForBrick(genePayload) {
+    var safeGenePayload = genePayload && typeof genePayload === "object" ? genePayload : {}
+    var essence =
+      safeGenePayload.essence && typeof safeGenePayload.essence === "object"
+        ? safeGenePayload.essence
+        : {}
+    return (
+      String(
+        safeGenePayload.full_name ||
+          essence.name ||
+          safeGenePayload.symbol ||
+          safeGenePayload.canonical_symbol ||
+          "",
+      ).trim() || normalizedSymbol(safeGenePayload.symbol)
+    )
+  }
+
+  function buildLabLabelMobileDrawerMarkup(genePayload) {
+    var symbol = normalizedSymbol(genePayload && genePayload.symbol)
+    var fullName = labLabelDisplayNameForBrick(genePayload)
+    return (
+      '<div class="icono-label-mobile-review-shell" data-icono-label-mobile-review-shell>' +
+      '<button type="button" class="icono-label-mobile-peek" data-icono-label-mobile-toggle aria-expanded="false">' +
+      '<span class="icono-label-mobile-peek-topline">' +
+      '<span class="icono-label-mobile-peek-kicker">gene name</span>' +
+      '<span class="icono-label-mobile-peek-instruction">tap to open dossier</span>' +
+      "</span>" +
+      '<span class="icono-label-mobile-peek-symbol">' +
+      esc(symbol) +
+      "</span>" +
+      '<span class="icono-label-mobile-peek-name">' +
+      esc(fullName) +
+      "</span>" +
+      '<span class="icono-label-mobile-peek-swipe">' +
+      '<span class="icono-label-mobile-peek-swipe-stamp icono-label-mobile-peek-swipe-stamp--left">misfit</span>' +
+      '<span class="icono-label-mobile-peek-swipe-divider" aria-hidden="true"></span>' +
+      '<span class="icono-label-mobile-peek-swipe-stamp icono-label-mobile-peek-swipe-stamp--right">fit</span>' +
+      "</span>" +
+      "</button>" +
+      '<div class="icono-label-mobile-review-sheet" data-icono-label-mobile-review-sheet>' +
+      IconoCardShared.renderLabLabelMobileReviewHtml(genePayload) +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function buildLabLabelBrickBodyMarkup(genePayload, voteHtml, href) {
+    return (
+      '<div class="icono-label-desktop-sheet">' +
+      IconoCardShared.renderLabLabelCardHtml(genePayload, {
+        voteHtml: voteHtml,
+        titleHref: href,
+        titleLinkAttrs: "data-icono-nav",
+      }) +
+      "</div>" +
+      buildLabLabelMobileDrawerMarkup(genePayload)
+    )
+  }
+
   function buildBrickCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
@@ -1056,11 +1115,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           "</div>" +
           "</div>")
     var bodyHtml = isLabelVariant
-      ? IconoCardShared.renderLabLabelCardHtml(detail || g, {
-          voteHtml: labelVoteHtml,
-          titleHref: href,
-          titleLinkAttrs: "data-icono-nav",
-        })
+      ? buildLabLabelBrickBodyMarkup(detail || g, labelVoteHtml, href)
       : '<div class="iconoplasm-tooltip-header">' +
           '<div class="icono-brick-header-row icono-shared-card-header-row">' +
           '<a class="icono-brick-header-link" href="' +
@@ -1370,11 +1425,11 @@ void syncSharedIconoplasmSettings().catch(function () {
       var body = card.querySelector(".iconoplasm-tooltip-body")
       var portraitShell = card.querySelector(".iconoplasm-tooltip-portrait")
       if (body) {
-        body.innerHTML = IconoCardShared.renderLabLabelCardHtml(genePayload, {
-          voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
-          titleHref: "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
-          titleLinkAttrs: "data-icono-nav",
-        })
+        body.innerHTML = buildLabLabelBrickBodyMarkup(
+          genePayload,
+          labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
+          "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
+        )
       }
       if (portraitShell) {
         var dims = portraitDimensions(genePayload)
@@ -1416,6 +1471,8 @@ void syncSharedIconoplasmSettings().catch(function () {
           genePayload,
         )
       }
+      wireMobileLabelCard(card)
+      setMobileLabelExpanded(card, false)
       refreshPortraitLightbox()
       return
     }
@@ -1513,6 +1570,193 @@ void syncSharedIconoplasmSettings().catch(function () {
           candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
         },
       )
+    }
+  }
+
+  function isMobileLabelReviewEnabled() {
+    return typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches
+  }
+
+  function setMobileLabelExpanded(card, expanded) {
+    if (!card) return
+    var resolved = !!expanded
+    card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
+    var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
+    if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
+  }
+
+  function setMobileLabelQcCopy(card, copy) {
+    if (!card) return
+    var note = card.querySelector("[data-icono-mobile-qc-note]")
+    if (!note) return
+    note.textContent = String(copy || "").trim() || "pending review"
+  }
+
+  function nextBrickCard(card) {
+    var node = card && card.nextElementSibling
+    while (node) {
+      if (node.classList && node.classList.contains("icono-card--brick")) return node
+      node = node.nextElementSibling
+    }
+    return null
+  }
+
+  function advanceToNextBrick(card) {
+    var nextCard = nextBrickCard(card)
+    if (!nextCard || typeof nextCard.scrollIntoView !== "function") return
+    window.setTimeout(function () {
+      nextCard.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    }, 140)
+  }
+
+  function clearMobileLabelSwipeState(card) {
+    if (!card) return
+    card.removeAttribute("data-icono-mobile-swiping")
+    card.removeAttribute("data-icono-mobile-swipe-pending")
+    card.removeAttribute("data-icono-mobile-swipe-dir")
+    card.style.removeProperty("--icono-label-mobile-swipe-offset")
+    card.style.removeProperty("--icono-label-mobile-swipe-rotate")
+  }
+
+  function commitMobileLabelSwipe(card, direction) {
+    if (!card) return
+    if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
+    var box = card.querySelector("[data-icono-brick-vote-box]")
+    var button = box
+      ? box.querySelector(direction > 0 ? "[data-icono-vote-up]" : "[data-icono-vote-down]")
+      : null
+    if (!button) {
+      clearMobileLabelSwipeState(card)
+      return
+    }
+    card.setAttribute("data-icono-mobile-swipe-pending", "true")
+    card.setAttribute("data-icono-mobile-swipe-dir", direction > 0 ? "right" : "left")
+    card.style.setProperty(
+      "--icono-label-mobile-swipe-offset",
+      (direction > 0 ? 1 : -1) * Math.min(window.innerWidth * 0.48, 280) + "px",
+    )
+    card.style.setProperty("--icono-label-mobile-swipe-rotate", (direction > 0 ? 7 : -7) + "deg")
+    button.click()
+    if (currentUser) {
+      setMobileLabelQcCopy(card, direction > 0 ? "looks viable" : "flagged misfit")
+      advanceToNextBrick(card)
+    } else {
+      setMobileLabelQcCopy(card, "pending review")
+    }
+    window.setTimeout(function () {
+      clearMobileLabelSwipeState(card)
+    }, 320)
+  }
+
+  function wireMobileLabelCard(card) {
+    if (!card || !card.classList || !card.classList.contains("icono-card--variant-lab-label")) return
+    if (card.classList.contains("icono-card--brick-static")) return
+    if (card.getAttribute("data-icono-mobile-label-wired") === "true") return
+    card.setAttribute("data-icono-mobile-label-wired", "true")
+    setMobileLabelExpanded(card, false)
+
+    var gesture = {
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      dx: 0,
+      dragging: false,
+      locked: false,
+    }
+
+    function resetGesture() {
+      gesture.pointerId = null
+      gesture.startX = 0
+      gesture.startY = 0
+      gesture.dx = 0
+      gesture.dragging = false
+      gesture.locked = false
+      if (card.getAttribute("data-icono-mobile-swipe-pending") !== "true") {
+        clearMobileLabelSwipeState(card)
+      }
+    }
+
+    card.addEventListener("click", function (event) {
+      var toggle =
+        event.target && event.target.closest
+          ? event.target.closest("[data-icono-label-mobile-toggle]")
+          : null
+      if (!toggle) return
+      event.preventDefault()
+      if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
+      setMobileLabelExpanded(card, card.getAttribute("data-icono-mobile-expanded") !== "true")
+    })
+
+    card.addEventListener("pointerdown", function (event) {
+      if (!isMobileLabelReviewEnabled()) return
+      if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
+      if (card.getAttribute("data-icono-mobile-expanded") === "true") return
+      if (event.pointerType === "mouse") return
+      if (event.button != null && event.button !== 0) return
+      var target = event.target
+      if (
+        target &&
+        target.closest &&
+        target.closest("[data-icono-label-mobile-toggle], [data-icono-vote-box], [data-icono-nav], a")
+      ) {
+        return
+      }
+      if (typeof card.setPointerCapture === "function") card.setPointerCapture(event.pointerId)
+      gesture.pointerId = event.pointerId
+      gesture.startX = event.clientX
+      gesture.startY = event.clientY
+      gesture.dx = 0
+      gesture.dragging = false
+      gesture.locked = false
+    })
+
+    card.addEventListener("pointermove", function (event) {
+      if (gesture.pointerId !== event.pointerId) return
+      var dx = event.clientX - gesture.startX
+      var dy = event.clientY - gesture.startY
+      if (!gesture.dragging) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return
+        if (Math.abs(dy) > Math.abs(dx) * 1.15) {
+          gesture.locked = true
+          resetGesture()
+          return
+        }
+        gesture.dragging = true
+      }
+      if (gesture.locked) return
+      gesture.dx = dx
+      card.setAttribute("data-icono-mobile-swiping", "true")
+      card.style.setProperty("--icono-label-mobile-swipe-offset", dx + "px")
+      card.style.setProperty("--icono-label-mobile-swipe-rotate", dx / 22 + "deg")
+    })
+
+    function finishPointer(event) {
+      if (gesture.pointerId !== event.pointerId) return
+      if (typeof card.releasePointerCapture === "function" && card.hasPointerCapture(event.pointerId)) {
+        card.releasePointerCapture(event.pointerId)
+      }
+      if (!gesture.dragging) {
+        resetGesture()
+        return
+      }
+      var threshold = Math.max(72, Math.min(116, Math.round(card.clientWidth * 0.22)))
+      var direction = gesture.dx > 0 ? 1 : -1
+      if (Math.abs(gesture.dx) >= threshold) commitMobileLabelSwipe(card, direction)
+      else clearMobileLabelSwipeState(card)
+      resetGesture()
+    }
+
+    card.addEventListener("pointerup", finishPointer)
+    card.addEventListener("pointercancel", finishPointer)
+  }
+
+  function wireMobileLabelCards(cards) {
+    var items = Array.isArray(cards) ? cards : []
+    for (var i = 0; i < items.length; i++) {
+      wireMobileLabelCard(items[i])
     }
   }
 
@@ -1790,6 +2034,7 @@ void syncSharedIconoplasmSettings().catch(function () {
               destroyHomeMasonry()
               warmBrickCardImages(items)
               wireBrickVoteBoxes(newCards)
+              wireMobileLabelCards(newCards)
               refreshPortraitLightbox()
               void hydrateBrickCards(newCards)
             }
