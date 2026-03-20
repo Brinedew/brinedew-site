@@ -862,6 +862,9 @@
   }
 
   function renderLabLabelCardHtml(geneDetail, options) {
+    // Single source of truth for the archival lab-label sheet across desktop and mobile.
+    // If mobile needs different behavior, wrap/reflow this markup instead of creating a
+    // second renderer with duplicated field selection logic.
     var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
     var safeEssence =
       safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"

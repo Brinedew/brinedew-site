@@ -1100,6 +1100,9 @@ void syncSharedIconoplasmSettings().catch(function () {
   function buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href) {
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     var fullName = labLabelDisplayNameForBrick(genePayload)
+    // Mobile must stay a UX wrapper around the canonical archival card. Do not add a second
+    // phone-only dossier renderer here. The only valid source for sheet fields is
+    // IconoCardShared.renderLabLabelCardHtml(...), with mobile changing presentation only.
     return (
       '<button type="button" class="icono-label-mobile-peek" data-icono-label-mobile-toggle aria-expanded="false">' +
       '<span class="icono-label-mobile-peek-tab" aria-hidden="true">' +
@@ -1137,6 +1140,8 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function buildLabLabelBrickBodyMarkup(genePayload, voteHtml, href) {
+    // Keep one card renderer across desktop and mobile. This function may reorganize the mobile
+    // shell, but it must not fork the archival data model into a separate markup tree.
     return buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href)
   }
 
