@@ -1830,8 +1830,9 @@
   }
 
   /* Mobile footer tail should read like one calm archival band, not a compressed stack:
-     keep 4-12px between footer bands, >=8px between swatch/hex and color name, and no
-     handwritten spill past the paper edge. */
+     keep 4-12px between footer bands, >=8px between swatch/hex and color name, no
+     handwritten spill past the paper edge, and zero real overlap between adjacent
+     handwritten footer notes once rendered. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-color-row {
     display: grid;
     grid-template-columns: min-content minmax(0, 1fr);
@@ -1899,11 +1900,12 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-color-name {
     font-size: 1rem;
     line-height: 0.92;
+    transform: translateY(0.12rem) rotate(-2.5deg);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-decomposition {
     grid-template-columns: 3.2rem 1.7rem minmax(max-content, 1fr);
-    row-gap: 0.06rem;
+    row-gap: 0.14rem;
     column-gap: 0.26rem;
   }
 
@@ -1918,9 +1920,10 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-hand-analysis {
-    font-size: 0.92rem;
-    line-height: 0.92;
+    font-size: 0.88rem;
+    line-height: 0.88;
     margin-inline-end: 0.08rem;
+    transform: translateY(0.03rem) rotate(-2.5deg);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport .iconoplasm-tooltip-portrait-media {
