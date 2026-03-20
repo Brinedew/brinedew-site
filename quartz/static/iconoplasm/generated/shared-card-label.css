@@ -1679,11 +1679,15 @@
     overflow: visible;
   }
 
+  /* Mobile family-trait handwriting is not a centered label chip. It should float a little
+     above the cell midpoint, like a pen annotation on a printed form. Do not "fix" this by
+     centering the handwriting vertically; only the printed typewriter lanes get strict
+     center alignment. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--family-trait {
     position: absolute;
     left: 0;
-    top: 50%;
-    transform: translateY(-48%) rotate(-3deg);
+    top: calc(50% - 0.16rem);
+    transform: translateY(-50%) rotate(-3deg);
     transform-origin: left center;
     max-width: 100%;
     pointer-events: none;
@@ -1895,6 +1899,9 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--politics-neutral,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--politics-contextual,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--politics-tumor-suppressor {
+    /* Alignment handwriting also floats above the centered typed selector lane. Do not try to
+       "correct" overlap by moving the typed options down or by centering the handwriting. The
+       printed options stay centered; the handwritten note lives above that center line. */
     position: absolute;
     left: 50%;
     top: -0.42rem;
@@ -2048,6 +2055,14 @@
     align-items: center;
     justify-content: start;
   }
+
+  /* Validation constraints from live production regressions:
+     - validate against the fixed printed lane, never against a content-sized wrapper
+     - typewriter selector/options rows should read optically centered in their cell
+     - handwriting should stay above the center line unless that specific note is explicitly
+       designed otherwise
+     - do not let marked/unmarked content change lane height or row height
+     - do not reintroduce bottom-hugging mobile type just because desktop used a lower seating */
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-option {
     place-items: center;
