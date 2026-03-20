@@ -1017,10 +1017,10 @@
 
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-peek-height: 5.9rem;
-    --icono-label-mobile-preview-height: 2.6rem;
+    --icono-label-mobile-preview-height: 3.3rem;
     --icono-label-mobile-tab-height: 1.94rem;
     --icono-label-mobile-tab-width: 5.5rem;
-    --icono-label-mobile-sheet-preview-offset: 9.85rem;
+    --icono-label-mobile-sheet-preview-offset: 0rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -1136,7 +1136,7 @@
     border-top: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 88%, transparent);
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, white 55%, transparent),
-      inset 0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 72%, transparent);
+      inset 0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 38%, transparent);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-toggle {
@@ -1360,8 +1360,8 @@
     background:
       radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 22%),
       linear-gradient(180deg, var(--icono-label-paper) 0%, color-mix(in srgb, var(--icono-label-paper) 97%, #c7b99c 3%) 100%);
-    border-top: 1px solid var(--icono-label-rule);
-    box-shadow: 0 -18px 32px rgba(34, 24, 13, 0.12);
+    border-top: 1px solid color-mix(in srgb, var(--icono-label-rule) 42%, transparent);
+    box-shadow: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-sheet,
@@ -1371,12 +1371,10 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-sheet {
-    transform: translateY(calc(-1 * var(--icono-label-mobile-sheet-preview-offset)));
-    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-dossier-sheet {
-    transform: translateY(0);
+    /* Mobile collapsed/expanded states must be one physical card moving vertically.
+       Do not slide a second inner sheet to manufacture a different preview slice. */
+    transform: none;
+    transition: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-sheet-body {
@@ -1415,35 +1413,18 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(5rem, auto);
-    grid-template-rows: auto auto;
-    align-items: stretch;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-review-active="true"] .icono-label-dossier-shell .icono-label-header-row {
-    grid-template-columns: minmax(0, 1fr);
+    display: block;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-title-block,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-title-link {
-    grid-column: 1 / -1;
-    grid-template-rows: min-content min-content min-content;
-    row-gap: 0.16rem;
-    padding: 0.54rem 0.8rem 0.46rem;
+    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-stack {
-    grid-column: 1;
-    grid-row: 2;
     border-left: 0;
-    border-top: 1px solid var(--icono-label-rule);
+    border-top: 0;
     grid-template-rows: auto auto;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-review-active="true"] .icono-label-dossier-shell .icono-label-header-stack {
-    grid-column: 1 / -1;
-    grid-row: 2;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-caption,
@@ -1552,10 +1533,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "body"
-      "label";
+    grid-template-areas: "body";
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row > .icono-label-band-grid {
@@ -1563,17 +1541,14 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row > .icono-label-row-label {
-    grid-area: label;
-    border-right: 0;
-    border-top: 1px solid var(--icono-label-rule);
-    padding: 0.2rem 0.56rem 0.22rem;
+    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell {
     grid-template-rows: min-content min-content min-content;
     gap: 0.14rem;
     min-height: 0;
-    padding: 0.26rem 0.56rem 0.28rem;
+    padding: 0.16rem 0.56rem 0.2rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell + .icono-label-band-cell {
@@ -1586,13 +1561,13 @@
     border-top: 0;
     grid-template-rows: min-content min-content;
     gap: 0.1rem;
-    padding-top: 0.28rem;
-    padding-bottom: 0.24rem;
+    padding-top: 0.18rem;
+    padding-bottom: 0.18rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted {
     grid-area: noted;
-    border-top: 1px solid var(--icono-label-rule);
+    border-top: 0;
     grid-template-columns: min-content 1fr;
     grid-template-rows: min-content auto;
     grid-template-areas:
@@ -1604,8 +1579,8 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--mass {
     grid-area: mass;
-    border-top: 1px solid var(--icono-label-rule);
-    border-left: 1px solid var(--icono-label-rule);
+    border-top: 0;
+    border-left: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-secondary,
