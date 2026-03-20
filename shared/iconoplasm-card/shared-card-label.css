@@ -1303,10 +1303,17 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn {
     min-height: 1rem;
+    display: inline-flex;
+    align-items: center;
     padding: 0;
     font-size: 0.58rem;
     line-height: 1;
     letter-spacing: 0.12em;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn-copy {
+    display: block;
+    line-height: 1;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn--reject {
@@ -1371,6 +1378,22 @@
     align-content: start;
     min-height: 100%;
     background: transparent;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row {
+    grid-row: 1;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row {
+    grid-row: 2;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-style-row {
+    grid-row: 3;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-row {
+    grid-row: 4;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row,
@@ -1516,8 +1539,27 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
     grid-template-areas:
-      "category category"
-      "noted mass";
+      "noted mass"
+      "category category";
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "body"
+      "label";
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row > .icono-label-band-grid {
+    grid-area: body;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-row > .icono-label-row-label {
+    grid-area: label;
+    border-right: 0;
+    border-top: 1px solid var(--icono-label-rule);
+    padding: 0.2rem 0.56rem 0.22rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell {
