@@ -1120,6 +1120,7 @@
     /* Stitch is only the tab-object reference. In production it must still obey the site rules:
        - no angular / asymmetric / homemade office-tab geometry
        - soft archival rounding, with the bottom edge seated exactly on the dossier seam
+       - expanded state must keep the entire collapse affordance inside the viewport
        - no floating gap and no downward overlap into the slider
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     --icono-label-mobile-tab-height: 1.78rem;
@@ -1294,7 +1295,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-header-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(6.25rem, auto);
+    grid-template-columns: minmax(0, 1fr) minmax(5rem, auto);
     grid-template-rows: auto auto;
     align-items: stretch;
   }
@@ -1366,16 +1367,22 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-family-trait-field {
-    min-height: 0.95rem;
+    min-height: 1.2rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-block {
     grid-column: 2;
     grid-row: 2;
-    gap: 0.2rem;
-    padding: 0.44rem 0.62rem 0.52rem;
+    grid-template-rows: min-content min-content 1fr;
+    gap: 0.18rem;
+    padding: 0.44rem 0.54rem 0.48rem;
     border-left: 1px solid var(--icono-label-rule);
     border-top: 1px solid var(--icono-label-rule);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-block .icono-vote-box,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-block [data-icono-vote-box] {
+    display: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-qc-meta-item {
@@ -1411,6 +1418,10 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category {
     grid-area: category;
     border-top: 0;
+    grid-template-rows: min-content min-content;
+    gap: 0.18rem;
+    padding-top: 0.32rem;
+    padding-bottom: 0.28rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--noted {
@@ -1459,7 +1470,10 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, max-content);
+    width: 100%;
+    justify-content: center;
+    column-gap: 0.72rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-category-option--transmembrane,
@@ -1467,12 +1481,17 @@
     grid-column: auto;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-primary,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell--category .icono-label-band-secondary {
+    justify-content: center;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--sex-soluble,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--sex-transmembrane,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note--sex-unselected {
     min-width: 0;
     margin-left: 0;
-    text-align: left;
+    text-align: center;
     top: 0;
   }
 

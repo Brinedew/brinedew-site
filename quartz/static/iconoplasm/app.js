@@ -1620,12 +1620,31 @@ void syncSharedIconoplasmSettings().catch(function () {
     return typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches
   }
 
+  function alignExpandedMobileLabelCard(card) {
+    if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
+    var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
+    if (!toggle || typeof toggle.getBoundingClientRect !== "function") return
+    var rect = toggle.getBoundingClientRect()
+    var desiredTop = 14
+    var delta = rect.top - desiredTop
+    if (Math.abs(delta) < 2) return
+    window.scrollBy({
+      top: delta,
+      behavior: "smooth",
+    })
+  }
+
   function setMobileLabelExpanded(card, expanded) {
     if (!card) return
     var resolved = !!expanded
     card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
+    if (resolved) {
+      window.setTimeout(function () {
+        alignExpandedMobileLabelCard(card)
+      }, 180)
+    }
   }
 
   function setMobileLabelQcCopy(card, copy) {
