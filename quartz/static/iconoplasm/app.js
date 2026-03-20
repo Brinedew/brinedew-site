@@ -1152,10 +1152,25 @@ void syncSharedIconoplasmSettings().catch(function () {
     )
   }
 
+  function buildLabLabelDesktopBodyMarkup(genePayload, voteHtml, href) {
+    // Desktop must render the canonical archival sheet directly.
+    // Do not wrap desktop cards in the mobile dossier shell. That was the regression:
+    // mobile UX chrome leaked into desktop geometry and collapsed the live archival layout.
+    return IconoCardShared.renderLabLabelCardHtml(genePayload, {
+      voteHtml: voteHtml,
+      titleHref: href,
+      titleLinkAttrs: "data-icono-nav",
+    })
+  }
+
   function buildLabLabelBrickBodyMarkup(genePayload, voteHtml, href) {
-    // Keep one card renderer across desktop and mobile. This function may reorganize the mobile
-    // shell, but it must not fork the archival data model into a separate markup tree.
-    return buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href)
+    // One canonical archival renderer, two shells:
+    // - desktop: render the archival sheet directly
+    // - mobile: wrap that same sheet in touch ergonomics
+    // Never send desktop through the mobile shell again.
+    return isMobileLabelReviewEnabled()
+      ? buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href)
+      : buildLabLabelDesktopBodyMarkup(genePayload, voteHtml, href)
   }
 
   function buildBrickCardMarkup(g, cardIndex) {
@@ -1519,8 +1534,12 @@ void syncSharedIconoplasmSettings().catch(function () {
           genePayload,
         )
       }
-      wireMobileLabelCard(card)
-      setMobileLabelExpanded(card, false)
+      if (isMobileLabelReviewEnabled()) {
+        wireMobileLabelCard(card)
+        setMobileLabelExpanded(card, false)
+      } else {
+        resetMobileLabelCardState(card)
+      }
       refreshPortraitLightbox()
       return
     }
@@ -1625,6 +1644,18 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function isMobileLabelReviewEnabled() {
     return typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches
+  }
+
+  function resetMobileLabelCardState(card) {
+    if (!card) return
+    card.removeAttribute("data-icono-mobile-label-wired")
+    card.removeAttribute("data-icono-mobile-review-active")
+    card.removeAttribute("data-icono-mobile-expanded")
+    card.removeAttribute("data-icono-mobile-swiping")
+    card.removeAttribute("data-icono-mobile-swipe-pending")
+    card.removeAttribute("data-icono-mobile-swipe-dir")
+    card.style.removeProperty("--icono-label-mobile-swipe-offset")
+    card.style.removeProperty("--icono-label-mobile-swipe-rotate")
   }
 
   function alignExpandedMobileLabelCard(card) {
@@ -1758,6 +1789,10 @@ void syncSharedIconoplasmSettings().catch(function () {
   function wireMobileLabelCard(card) {
     if (!card || !card.classList || !card.classList.contains("icono-card--variant-lab-label")) return
     if (card.classList.contains("icono-card--brick-static")) return
+    if (!isMobileLabelReviewEnabled()) {
+      resetMobileLabelCardState(card)
+      return
+    }
     if (card.getAttribute("data-icono-mobile-label-wired") === "true") return
     card.setAttribute("data-icono-mobile-label-wired", "true")
     syncMobileLabelDossierContent(card)
