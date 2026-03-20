@@ -1012,6 +1012,7 @@
     inline-size: 100%;
     display: block;
     position: relative;
+    aspect-ratio: auto;
     block-size: auto;
     min-block-size: 0;
     max-block-size: calc(100dvh - 1.25rem);
@@ -1103,25 +1104,49 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab {
+    --icono-label-mobile-tab-height: 1.56rem;
+    --icono-label-mobile-tab-shoulder: 0.9rem;
+    --icono-label-mobile-tab-border: color-mix(in srgb, var(--icono-label-rule) 92%, #7b664c 8%);
+    --icono-label-mobile-tab-bg:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--icono-label-paper) 76%, #d3c09e 24%) 0%,
+        color-mix(in srgb, var(--icono-label-paper) 93%, #f0e3d1 7%) 100%
+      );
     position: absolute;
-    top: -0.92rem;
+    top: -0.95rem;
     right: -1px;
     z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 4rem;
-    max-width: 4.4rem;
-    min-height: 1.54rem;
-    padding: 0.18rem 0.66rem 0.2rem 0.82rem;
-    border: 1px solid color-mix(in srgb, var(--icono-label-rule) 92%, #7b664c 8%);
+    min-width: 4.12rem;
+    max-width: 4.52rem;
+    min-height: var(--icono-label-mobile-tab-height);
+    padding: 0.16rem 0.7rem 0.2rem 0.78rem;
+    border: 1px solid var(--icono-label-mobile-tab-border);
     border-bottom: 0;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--icono-label-paper) 78%, #d2bea0 22%) 0%, color-mix(in srgb, var(--icono-label-paper) 94%, #f1e4d2 6%) 100%);
-    clip-path: polygon(0 100%, 0 34%, 18% 0, 100% 0, 100% 100%);
+    background: var(--icono-label-mobile-tab-bg);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.5),
       0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 34%, transparent);
+    overflow: visible;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--icono-label-mobile-tab-shoulder) * -1 + 1px);
+    bottom: -1px;
+    width: var(--icono-label-mobile-tab-shoulder);
+    height: calc(var(--icono-label-mobile-tab-height) - 0.38rem);
+    border: 1px solid var(--icono-label-mobile-tab-border);
+    border-right: 0;
+    border-bottom: 0;
+    background: var(--icono-label-mobile-tab-bg);
+    transform: skewX(-34deg);
+    transform-origin: bottom right;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol {
@@ -1203,7 +1228,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-tab {
-    top: -0.82rem;
+    top: -0.85rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] .icono-label-mobile-peek-instruction--open {
