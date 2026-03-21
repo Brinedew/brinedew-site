@@ -1952,82 +1952,19 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
        SUM(CASE WHEN COALESCE(admin_override, 0) = 1 THEN 1 ELSE 0 END) AS overrides
      FROM icono_publish_state`,
   ).first()
-  const staleLegacyRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
-       SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets
-     FROM icono_portrait_assets`,
-  ).first()
-  const mismatchRow = await env.ICONOPLASM_DB.prepare(
-    `WITH vote_agg AS (
-       SELECT
-         upper(gene_symbol) AS gene_symbol,
-         lower(asset_sha256) AS asset_sha256,
-         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-         SUM(vote_value) AS score
-       FROM icono_image_votes
-       GROUP BY upper(gene_symbol), lower(asset_sha256)
-     ),
-     eligible_assets AS (
-       SELECT
-         upper(pa.gene_symbol) AS gene_symbol,
-         lower(pa.asset_sha256) AS asset_sha256,
-         COALESCE(v.upvotes, 0) AS upvotes,
-         COALESCE(v.score, 0) AS score,
-         COALESCE(pa.is_legacy, 0) AS is_legacy,
-         pa.created_at,
-         ROW_NUMBER() OVER (
-           PARTITION BY upper(pa.gene_symbol)
-           ORDER BY
-             COALESCE(v.score, 0) DESC,
-             CASE
-               WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1
-               ELSE 0
-             END DESC,
-             COALESCE(v.upvotes, 0) DESC,
-             pa.created_at DESC,
-             lower(pa.asset_sha256) ASC
-         ) AS vote_rank
-       FROM icono_portrait_assets pa
-       LEFT JOIN vote_agg v
-         ON v.gene_symbol = upper(pa.gene_symbol)
-        AND v.asset_sha256 = lower(pa.asset_sha256)
-       WHERE COALESCE(pa.autopick_eligible, 1) = 1
-         AND lower(COALESCE(pa.status, '')) <> 'rejected'
-         AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
-     ),
-     leader AS (
-       SELECT gene_symbol, asset_sha256
-       FROM eligible_assets
-       WHERE vote_rank = 1
-     )
-     SELECT
-       SUM(
-         CASE
-           WHEN lower(COALESCE(ps.current_asset_sha256, '')) <> ''
-            AND leader.asset_sha256 IS NOT NULL
-            AND lower(ps.current_asset_sha256) <> leader.asset_sha256 THEN 1
-           ELSE 0
-         END
-       ) AS drift
-     FROM icono_publish_state ps
-     LEFT JOIN leader
-       ON leader.gene_symbol = upper(ps.gene_symbol)`,
-  ).first()
-  const coverage = await fetchAdminCoverage(env)
   const recentEvents = await fetchAdminRecentEvents(env, { limit: eventLimit })
 
   return {
     summary: {
-      genes: Number(coverage?.total || 0),
+      genes: null,
       with_live: Number(publishStateRow?.with_live || 0),
       overrides: Number(publishStateRow?.overrides || 0),
-      drift: Number(mismatchRow?.drift || 0),
-      current_asset_missing: Number(coverage?.zero || 0),
-      missing: Number(coverage?.zero || 0),
-      no_live: Number(coverage?.zero || 0),
-      stale_assets: Number(staleLegacyRow?.stale_assets || 0),
-      legacy_assets: Number(staleLegacyRow?.legacy_assets || 0),
+      drift: null,
+      current_asset_missing: null,
+      missing: null,
+      no_live: null,
+      stale_assets: null,
+      legacy_assets: null,
     },
     attention: [],
     recent_events: recentEvents,
@@ -2204,42 +2141,14 @@ async function fetchAdminCoverage(env) {
     return { total: 0, zero: 0, one: 0, two_to_five: 0, six_plus: 0 }
   }
 
-  const row = await env.ICONOPLASM_DB.prepare(
-    `WITH candidate_counts AS (
-       SELECT
-         upper(gene_symbol) AS gene_symbol,
-         SUM(
-           CASE
-             WHEN lower(COALESCE(status, '')) <> 'rejected'
-              AND COALESCE(r2_key_medium, r2_key_thumb, r2_key_full, '') <> '' THEN 1
-             ELSE 0
-           END
-         ) AS candidate_count
-       FROM icono_portrait_assets
-       GROUP BY upper(gene_symbol)
-     )
-     SELECT
-       COUNT(*) AS total,
-       SUM(CASE WHEN COALESCE(candidate_counts.candidate_count, 0) = 0 THEN 1 ELSE 0 END) AS zero_count,
-       SUM(CASE WHEN COALESCE(candidate_counts.candidate_count, 0) = 1 THEN 1 ELSE 0 END) AS one_count,
-       SUM(
-         CASE
-           WHEN COALESCE(candidate_counts.candidate_count, 0) BETWEEN 2 AND 5 THEN 1
-           ELSE 0
-         END
-       ) AS two_to_five_count,
-       SUM(CASE WHEN COALESCE(candidate_counts.candidate_count, 0) >= 6 THEN 1 ELSE 0 END) AS six_plus_count
-     FROM icono_gene_catalog gc
-     LEFT JOIN candidate_counts
-       ON candidate_counts.gene_symbol = upper(gc.gene_symbol)`,
-  ).first()
+  const row = await env.ICONOPLASM_DB.prepare(`SELECT COUNT(*) AS total FROM icono_gene_catalog`).first()
 
   return {
     total: Number(row?.total || 0),
-    zero: Number(row?.zero_count || 0),
-    one: Number(row?.one_count || 0),
-    two_to_five: Number(row?.two_to_five_count || 0),
-    six_plus: Number(row?.six_plus_count || 0),
+    zero: 0,
+    one: 0,
+    two_to_five: 0,
+    six_plus: 0,
   }
 }
 
@@ -2266,32 +2175,85 @@ async function fetchAdminGallery(
   const whereParts = []
   const params = []
   if (queryNorm) {
-    whereParts.push("upper(gc.gene_symbol) LIKE ?")
+    whereParts.push("upper(pa.gene_symbol) LIKE ?")
     params.push(`%${queryNorm}%`)
   }
   if (cleanedFilter === "mismatch") {
-    whereParts.push(
-      "lower(COALESCE(live_state.current_asset_sha256, '')) <> '' AND leader.asset_sha256 IS NOT NULL AND lower(COALESCE(live_state.current_asset_sha256, '')) <> leader.asset_sha256",
-    )
+    whereParts.push("lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256)")
   } else if (cleanedFilter === "pinned") {
-    whereParts.push("COALESCE(live_state.admin_override, 0) = 1")
+    whereParts.push("lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256)")
+    whereParts.push("COALESCE(ps.admin_override, 0) = 1")
   } else if (cleanedFilter === "missing") {
-    whereParts.push("COALESCE(asset_counts.candidate_count, 0) = 0")
+    const missingRows = await env.ICONOPLASM_DB.prepare(
+      `SELECT upper(gc.gene_symbol) AS gene_symbol, gc.full_name
+       FROM icono_gene_catalog gc
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM icono_portrait_assets pa
+         WHERE upper(pa.gene_symbol) = upper(gc.gene_symbol)
+           AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+           AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+       )
+       ORDER BY upper(gc.gene_symbol) ASC
+       LIMIT ? OFFSET ?`,
+    )
+      .bind(cleanedLimit, offset)
+      .all()
+    const rows = Array.isArray(missingRows?.results) ? missingRows.results : []
+    return {
+      page: cleanedPage,
+      limit: cleanedLimit,
+      total: rows.length,
+      count: rows.length,
+      rows: rows.map((row) => ({
+        gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+        full_name: sanitizeText(row?.full_name || "", 255) || "",
+        manifestation: "",
+        candidate_count: 0,
+        approved_count: 0,
+        rejected_count: 0,
+        stale_count: 0,
+        legacy_count: 0,
+        total_assets: 0,
+        live_sha: null,
+        admin_override: false,
+        live_vision_id: "",
+        live_artist_tag: "",
+        live_artist_name: "",
+        live_upvotes: 0,
+        live_downvotes: 0,
+        live_score: 0,
+        live_status: "",
+        live_thumb_url: null,
+        live_medium_url: null,
+        leader_sha: null,
+        leader_vision_id: "",
+        leader_artist_tag: "",
+        leader_artist_name: "",
+        leader_upvotes: 0,
+        leader_downvotes: 0,
+        leader_score: 0,
+        leader_thumb_url: null,
+        leader_medium_url: null,
+        has_mismatch: false,
+        current_asset_missing: false,
+        has_stale: false,
+        missing: true,
+        updated_at: "",
+      })),
+    }
   } else if (cleanedFilter === "stale") {
-    whereParts.push("COALESCE(asset_counts.stale_count, 0) > 0")
+    whereParts.push("COALESCE(pa.is_stale, 0) = 1")
   }
   const whereClause = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : ""
 
-  let orderClause = "upper(gc.gene_symbol) ASC"
+  let orderClause = "upper(pa.gene_symbol) ASC, pa.created_at DESC"
   if (cleanedSort === "votes") {
-    orderClause =
-      "COALESCE(live_asset.live_score, leader.score, 0) DESC, COALESCE(live_asset.live_upvotes, leader.upvotes, 0) DESC, upper(gc.gene_symbol) ASC"
+    orderClause = "COALESCE(v.score, 0) DESC, COALESCE(v.upvotes, 0) DESC, upper(pa.gene_symbol) ASC"
   } else if (cleanedSort === "recency") {
-    orderClause =
-      "COALESCE(live_state.updated_at, asset_counts.last_asset_at, essence.updated_at, gc.updated_at) DESC, upper(gc.gene_symbol) ASC"
+    orderClause = "pa.created_at DESC, upper(pa.gene_symbol) ASC"
   } else if (cleanedSort === "mismatch") {
-    orderClause =
-      "has_mismatch DESC, COALESCE(live_state.updated_at, asset_counts.last_asset_at, essence.updated_at, gc.updated_at) DESC, upper(gc.gene_symbol) ASC"
+    orderClause = "lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) DESC, COALESCE(v.score, 0) DESC, pa.created_at DESC"
   }
 
   const resp = await env.ICONOPLASM_DB.prepare(
@@ -2304,163 +2266,39 @@ async function fetchAdminGallery(
          SUM(vote_value) AS score
        FROM icono_image_votes
        GROUP BY upper(gene_symbol), lower(asset_sha256)
-     ),
-     asset_base AS (
-       SELECT
-         upper(pa.gene_symbol) AS gene_symbol,
-         lower(pa.asset_sha256) AS asset_sha256,
-         lower(COALESCE(pa.status, 'draft')) AS status,
-         COALESCE(pa.is_stale, 0) AS is_stale,
-         COALESCE(pa.is_legacy, 0) AS is_legacy,
-         COALESCE(pa.autopick_eligible, 1) AS autopick_eligible,
-         pa.vision_id,
-         pa.artist_tag,
-         pa.artist_name,
-         pa.created_at,
-         pa.r2_key_full,
-         pa.r2_key_medium,
-         pa.r2_key_thumb,
-         COALESCE(v.upvotes, 0) AS upvotes,
-         COALESCE(v.downvotes, 0) AS downvotes,
-         COALESCE(v.score, 0) AS score
-       FROM icono_portrait_assets pa
-       LEFT JOIN vote_agg v
-         ON v.gene_symbol = upper(pa.gene_symbol)
-        AND v.asset_sha256 = lower(pa.asset_sha256)
-     ),
-     asset_counts AS (
-       SELECT
-         gene_symbol,
-         COUNT(*) AS total_assets,
-         SUM(
-           CASE
-             WHEN status <> 'rejected' AND COALESCE(r2_key_medium, r2_key_thumb, r2_key_full, '') <> '' THEN 1
-             ELSE 0
-           END
-         ) AS candidate_count,
-         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
-         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
-         SUM(CASE WHEN is_stale = 1 THEN 1 ELSE 0 END) AS stale_count,
-         SUM(CASE WHEN is_legacy = 1 THEN 1 ELSE 0 END) AS legacy_count,
-         MAX(created_at) AS last_asset_at
-       FROM asset_base
-       GROUP BY gene_symbol
-     ),
-     ranked_candidates AS (
-       SELECT
-         asset_base.*,
-         ROW_NUMBER() OVER (
-           PARTITION BY gene_symbol
-           ORDER BY
-             score DESC,
-             CASE
-               WHEN is_legacy = 0 THEN 1
-               ELSE 0
-             END DESC,
-             upvotes DESC,
-             created_at DESC,
-             asset_sha256 ASC
-         ) AS vote_rank
-       FROM asset_base
-       WHERE status <> 'rejected'
-         AND COALESCE(r2_key_medium, r2_key_thumb, r2_key_full, '') <> ''
-     ),
-     leader AS (
-       SELECT *
-       FROM ranked_candidates
-       WHERE vote_rank = 1
-     ),
-     live_state AS (
-       SELECT
-         upper(gene_symbol) AS gene_symbol,
-         lower(COALESCE(current_asset_sha256, '')) AS current_asset_sha256,
-         COALESCE(admin_override, 0) AS admin_override,
-         updated_at
-       FROM icono_publish_state
-     ),
-     live_asset AS (
-       SELECT
-         live_state.gene_symbol,
-         live_state.current_asset_sha256,
-         live_state.admin_override,
-         live_state.updated_at,
-         asset_base.vision_id AS live_vision_id,
-         asset_base.artist_tag AS live_artist_tag,
-         asset_base.artist_name AS live_artist_name,
-         asset_base.upvotes AS live_upvotes,
-         asset_base.downvotes AS live_downvotes,
-         asset_base.score AS live_score,
-         asset_base.status AS live_status,
-         asset_base.is_stale AS live_is_stale,
-         asset_base.is_legacy AS live_is_legacy,
-         asset_base.r2_key_full AS live_r2_key_full,
-         asset_base.r2_key_medium AS live_r2_key_medium,
-         asset_base.r2_key_thumb AS live_r2_key_thumb
-       FROM live_state
-       LEFT JOIN asset_base
-         ON asset_base.gene_symbol = live_state.gene_symbol
-        AND asset_base.asset_sha256 = live_state.current_asset_sha256
      )
      SELECT
-       upper(gc.gene_symbol) AS gene_symbol,
+       upper(pa.gene_symbol) AS gene_symbol,
        gc.full_name,
-       essence.manifestation,
-       essence.updated_at AS essence_updated_at,
-       COALESCE(asset_counts.total_assets, 0) AS total_assets,
-       COALESCE(asset_counts.candidate_count, 0) AS candidate_count,
-       COALESCE(asset_counts.approved_count, 0) AS approved_count,
-       COALESCE(asset_counts.rejected_count, 0) AS rejected_count,
-       COALESCE(asset_counts.stale_count, 0) AS stale_count,
-       COALESCE(asset_counts.legacy_count, 0) AS legacy_count,
-       asset_counts.last_asset_at,
-       live_state.current_asset_sha256 AS live_sha,
-       COALESCE(live_state.admin_override, 0) AS admin_override,
-       live_state.updated_at AS live_updated_at,
-       live_asset.live_vision_id,
-       live_asset.live_artist_tag,
-       live_asset.live_artist_name,
-       COALESCE(live_asset.live_upvotes, 0) AS live_upvotes,
-       COALESCE(live_asset.live_downvotes, 0) AS live_downvotes,
-       COALESCE(live_asset.live_score, 0) AS live_score,
-       live_asset.live_status,
-       COALESCE(live_asset.live_is_stale, 0) AS live_is_stale,
-       COALESCE(live_asset.live_is_legacy, 0) AS live_is_legacy,
-       live_asset.live_r2_key_full,
-       live_asset.live_r2_key_medium,
-       live_asset.live_r2_key_thumb,
-       leader.asset_sha256 AS leader_sha,
-       leader.vision_id AS leader_vision_id,
-       leader.artist_tag AS leader_artist_tag,
-       leader.artist_name AS leader_artist_name,
-       COALESCE(leader.upvotes, 0) AS leader_upvotes,
-       COALESCE(leader.downvotes, 0) AS leader_downvotes,
-       COALESCE(leader.score, 0) AS leader_score,
-       leader.r2_key_full AS leader_r2_key_full,
-       leader.r2_key_medium AS leader_r2_key_medium,
-       leader.r2_key_thumb AS leader_r2_key_thumb,
-       CASE
-         WHEN lower(COALESCE(live_state.current_asset_sha256, '')) <> ''
-          AND leader.asset_sha256 IS NOT NULL
-          AND lower(COALESCE(live_state.current_asset_sha256, '')) <> leader.asset_sha256 THEN 1
-         ELSE 0
-       END AS has_mismatch,
-       CASE
-         WHEN lower(COALESCE(live_state.current_asset_sha256, '')) <> ''
-          AND live_asset.live_r2_key_thumb IS NULL THEN 1
-         ELSE 0
-       END AS current_asset_missing,
+       ge.manifestation,
+       pa.created_at AS last_asset_at,
+       lower(pa.asset_sha256) AS live_sha,
+       COALESCE(ps.admin_override, 0) AS admin_override,
+       ps.updated_at AS live_updated_at,
+       pa.vision_id AS live_vision_id,
+       pa.artist_tag AS live_artist_tag,
+       pa.artist_name AS live_artist_name,
+       COALESCE(v.upvotes, 0) AS live_upvotes,
+       COALESCE(v.downvotes, 0) AS live_downvotes,
+       COALESCE(v.score, 0) AS live_score,
+       lower(COALESCE(pa.status, 'draft')) AS live_status,
+       COALESCE(pa.is_stale, 0) AS live_is_stale,
+       COALESCE(pa.is_legacy, 0) AS live_is_legacy,
+       pa.r2_key_full AS live_r2_key_full,
+       pa.r2_key_medium AS live_r2_key_medium,
+       pa.r2_key_thumb AS live_r2_key_thumb,
+       CASE WHEN COALESCE(pa.r2_key_thumb, pa.r2_key_medium, pa.r2_key_full, '') = '' THEN 1 ELSE 0 END AS current_asset_missing,
        COUNT(*) OVER() AS total_rows
-     FROM icono_gene_catalog gc
-     LEFT JOIN asset_counts
-       ON asset_counts.gene_symbol = upper(gc.gene_symbol)
-     LEFT JOIN live_state
-       ON live_state.gene_symbol = upper(gc.gene_symbol)
-     LEFT JOIN live_asset
-       ON live_asset.gene_symbol = upper(gc.gene_symbol)
-     LEFT JOIN leader
-       ON leader.gene_symbol = upper(gc.gene_symbol)
-     LEFT JOIN icono_gene_essence essence
-       ON upper(essence.gene_symbol) = upper(gc.gene_symbol)
+     FROM icono_portrait_assets pa
+     LEFT JOIN vote_agg v
+       ON v.gene_symbol = upper(pa.gene_symbol)
+      AND v.asset_sha256 = lower(pa.asset_sha256)
+     LEFT JOIN icono_publish_state ps
+       ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
+     LEFT JOIN icono_gene_catalog gc
+       ON upper(gc.gene_symbol) = upper(pa.gene_symbol)
+     LEFT JOIN icono_gene_essence ge
+       ON upper(ge.gene_symbol) = upper(pa.gene_symbol)
      ${whereClause}
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
@@ -2480,12 +2318,12 @@ async function fetchAdminGallery(
       gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
       full_name: sanitizeText(row?.full_name || "", 255) || "",
       manifestation: sanitizeText(row?.manifestation || "", 4000) || "",
-      candidate_count: Number(row?.candidate_count || 0),
-      approved_count: Number(row?.approved_count || 0),
-      rejected_count: Number(row?.rejected_count || 0),
-      stale_count: Number(row?.stale_count || 0),
-      legacy_count: Number(row?.legacy_count || 0),
-      total_assets: Number(row?.total_assets || 0),
+      candidate_count: 1,
+      approved_count: String(row?.live_status || "") === "approved" ? 1 : 0,
+      rejected_count: String(row?.live_status || "") === "rejected" ? 1 : 0,
+      stale_count: Number(row?.live_is_stale || 0) > 0 ? 1 : 0,
+      legacy_count: Number(row?.live_is_legacy || 0) > 0 ? 1 : 0,
+      total_assets: 1,
       live_sha: normalizeSha256(row?.live_sha || "") || null,
       admin_override: Number(row?.admin_override || 0) > 0,
       live_vision_id: sanitizeText(row?.live_vision_id || "", 255) || "",
@@ -2503,28 +2341,22 @@ async function fetchAdminGallery(
         row?.live_r2_key_medium || row?.live_r2_key_full
           ? joinUrl(base, row?.live_r2_key_medium || row?.live_r2_key_full)
           : adminPortraitUrl(base, row?.live_sha || "", "medium"),
-      leader_sha: normalizeSha256(row?.leader_sha || "") || null,
-      leader_vision_id: sanitizeText(row?.leader_vision_id || "", 255) || "",
-      leader_artist_tag: sanitizeText(row?.leader_artist_tag || "", 255) || "",
-      leader_artist_name: sanitizeText(row?.leader_artist_name || "", 255) || "",
-      leader_upvotes: Number(row?.leader_upvotes || 0),
-      leader_downvotes: Number(row?.leader_downvotes || 0),
-      leader_score: Number(row?.leader_score || 0),
-      leader_thumb_url:
-        row?.leader_r2_key_thumb || row?.leader_r2_key_medium
-          ? joinUrl(base, row?.leader_r2_key_thumb || row?.leader_r2_key_medium)
-          : adminPortraitUrl(base, row?.leader_sha || "", "thumb"),
-      leader_medium_url:
-        row?.leader_r2_key_medium || row?.leader_r2_key_full
-          ? joinUrl(base, row?.leader_r2_key_medium || row?.leader_r2_key_full)
-          : adminPortraitUrl(base, row?.leader_sha || "", "medium"),
-      has_mismatch: Number(row?.has_mismatch || 0) > 0,
+      leader_sha: null,
+      leader_vision_id: "",
+      leader_artist_tag: "",
+      leader_artist_name: "",
+      leader_upvotes: 0,
+      leader_downvotes: 0,
+      leader_score: 0,
+      leader_thumb_url: null,
+      leader_medium_url: null,
+      has_mismatch: false,
       current_asset_missing: Number(row?.current_asset_missing || 0) > 0,
-      has_stale: Number(row?.stale_count || 0) > 0,
-      missing: Number(row?.candidate_count || 0) === 0,
+      has_stale: Number(row?.live_is_stale || 0) > 0,
+      missing: false,
       updated_at:
         sanitizeText(
-          row?.live_updated_at || row?.last_asset_at || row?.essence_updated_at || "",
+          row?.live_updated_at || row?.last_asset_at || "",
           64,
         ) || "",
     })),
