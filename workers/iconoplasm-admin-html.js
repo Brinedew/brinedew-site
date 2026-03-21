@@ -651,11 +651,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       var state = {
         assets: [],
         auditRows: [],
-        auditSummary: null,
+        overviewSummary: null,
+        overviewAttention: [],
         recentEvents: [],
         selectedOutlier: null,
         activeTab: 'overview',
-        archiveLoaded: false
+        archiveLoaded: false,
+        outliersLoaded: false
       };
 
       var els = {
@@ -711,6 +713,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         if (tab === 'archive' && !state.archiveLoaded) {
           refreshAssets();
+        }
+        if (tab === 'outliers' && !state.outliersLoaded) {
+          refreshCanonAudit();
         }
       }
 
@@ -833,7 +838,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderOverview() {
-        var summary = state.auditSummary || {};
+        var summary = state.overviewSummary || {};
         els.overviewMetrics.innerHTML = [
           metricMarkup('Genes audited', summary.genes || 0, 'Rows included in the canon audit feed.'),
           metricMarkup('Canon drift', summary.drift || 0, 'Live canon differs from the vote leader.'),
@@ -843,16 +848,22 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           metricMarkup('Legacy assets', summary.legacy_assets || 0, 'Old local-sync leftovers still hanging around.')
         ].join('');
 
-        var rows = state.auditRows || [];
-        var driftRow = rows.find(function (row) { return row.drift; });
-        var missingRow = rows.find(function (row) { return row.current_asset_missing; });
-        var overrideRow = rows.find(function (row) { return row.admin_override; });
-        var staleRow = rows.slice().sort(function (a, b) { return (b.stale_assets || 0) - (a.stale_assets || 0); }).find(function (row) { return Number(row.stale_assets || 0) > 0; });
-        var notes = [];
-        if (driftRow) notes.push(attentionMarkup(driftRow.symbol + ' is drifting', 'Current canon no longer matches the vote leader.', 'Open archive', driftRow.symbol));
-        if (missingRow) notes.push(attentionMarkup(missingRow.symbol + ' is pointing at a missing live asset', 'Publish state exists but the current asset cannot be resolved.', 'Inspect asset', missingRow.symbol));
-        if (overrideRow) notes.push(attentionMarkup(overrideRow.symbol + ' is override-locked', 'Automatic canonicity is disabled until the override is released.', 'Inspect override', overrideRow.symbol));
-        if (staleRow) notes.push(attentionMarkup(staleRow.symbol + ' has stale backlog', String(staleRow.stale_assets || 0) + ' stale assets are still cluttering the pool.', 'Clean up', staleRow.symbol));
+        var notes = (state.overviewAttention || []).map(function (item) {
+          if (!item || !item.symbol) return '';
+          if (item.kind === 'drift') {
+            return attentionMarkup(item.symbol + ' is drifting', 'Current canon no longer matches the vote leader.', 'Open archive', item.symbol);
+          }
+          if (item.kind === 'missing') {
+            return attentionMarkup(item.symbol + ' is pointing at a missing live asset', 'Publish state exists but the current asset cannot be resolved.', 'Inspect asset', item.symbol);
+          }
+          if (item.kind === 'override') {
+            return attentionMarkup(item.symbol + ' is override-locked', 'Automatic canonicity is disabled until the override is released.', 'Inspect override', item.symbol);
+          }
+          if (item.kind === 'stale') {
+            return attentionMarkup(item.symbol + ' has stale backlog', String(item.stale_assets || 0) + ' stale assets are still cluttering the pool.', 'Clean up', item.symbol);
+          }
+          return '';
+        }).filter(Boolean);
         if (!notes.length) notes.push('<article class="list-row"><div><strong>No urgent exceptions found.</strong><div class="small">That probably means the site is behaving for once.</div></div><div></div></article>');
         els.attentionList.innerHTML = notes.join('');
 
@@ -876,6 +887,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function renderOutlierPlot() {
         var rows = (state.auditRows || []).slice();
+        if (!rows.length) {
+          els.outlierPlot.innerHTML = '<div class="small" style="padding: 12px;">No outlier data loaded yet.</div>';
+          renderOutlierDetail(state.selectedOutlier);
+          return;
+        }
         var maxPopularity = rows.reduce(function (max, row) { return Math.max(max, Number(row.popularity_score || 0)); }, 1);
         var maxScore = rows.reduce(function (max, row) {
           var currentScore = row.current ? Number(row.current.score || 0) : 0;
@@ -896,19 +912,43 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         renderOutlierDetail(state.selectedOutlier);
       }
 
+      async function refreshOverview() {
+        try {
+          var data = await apiJson('/overview?event_limit=24', { method: 'GET' });
+          state.overviewSummary = data.summary || null;
+          state.overviewAttention = Array.isArray(data.attention) ? data.attention : [];
+          state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
+          renderOverview();
+        } catch (err) {
+          setLog({ error: 'Overview load failed', details: err.response || String(err.message || err) });
+        }
+      }
+
       async function refreshCanonAudit() {
         try {
-          var data = await apiJson('/canon-audit?limit=1500&event_limit=60', { method: 'GET' });
+          // Do not load the global canon-audit payload during page boot.
+          // This plot is intentionally lazy because it is the expensive, exploratory view.
+          els.outlierPlot.innerHTML = '<div class="small" style="padding: 12px;">Loading outlier plot…</div>';
+          var data = await apiJson('/canon-audit?limit=1500&event_limit=0', { method: 'GET' });
           state.auditRows = Array.isArray(data.rows) ? data.rows : [];
-          state.auditSummary = data.summary || null;
-          state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
+          state.outliersLoaded = true;
           if (state.selectedOutlier) {
             state.selectedOutlier = state.auditRows.find(function (row) { return row.symbol === state.selectedOutlier.symbol; }) || null;
           }
-          renderOverview();
+          if (!state.selectedOutlier && state.auditRows.length) {
+            state.selectedOutlier = state.auditRows[0];
+          }
           renderOutlierPlot();
         } catch (err) {
+          state.outliersLoaded = false;
           setLog({ error: 'Canon audit failed', details: err.response || String(err.message || err) });
+        }
+      }
+
+      async function refreshDerivedAdminViews() {
+        await refreshOverview();
+        if (state.outliersLoaded) {
+          await refreshCanonAudit();
         }
       }
 
@@ -1037,6 +1077,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (reason) rejectBody.reason = reason;
           setLog(await runMutation('/reject', rejectBody));
           await refreshAssets();
+          await refreshDerivedAdminViews();
           return;
         }
 
@@ -1047,6 +1088,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (reason) publishBody.reason = reason;
           setLog(await runMutation('/publish', publishBody));
           await refreshAssets();
+          await refreshDerivedAdminViews();
           return;
         }
 
@@ -1056,6 +1098,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (reason) clearBody.reason = reason;
           setLog(await runMutation('/clear-override', clearBody));
           await refreshAssets();
+          await refreshDerivedAdminViews();
           return;
         }
 
@@ -1065,6 +1108,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (reason) unpublishBody.reason = reason;
           setLog(await runMutation('/unpublish', unpublishBody));
           await refreshAssets();
+          await refreshDerivedAdminViews();
           return;
         }
 
@@ -1075,6 +1119,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (reason) unstaleBody.reason = reason;
           setLog(await runMutation('/unstale', unstaleBody));
           await refreshAssets();
+          await refreshDerivedAdminViews();
           return;
         }
 
@@ -1085,6 +1130,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (reason) purgeBody.reason = reason;
           setLog(await runMutation('/purge-legacy', purgeBody));
           await refreshAssets();
+          await refreshDerivedAdminViews();
           return;
         }
 
@@ -1094,6 +1140,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (reason) rollbackBody.reason = reason;
           setLog(await runMutation('/rollback', rollbackBody));
           await refreshAssets();
+          await refreshDerivedAdminViews();
           return;
         }
       }
@@ -1164,7 +1211,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                 reason: reason || undefined
               }));
               els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>' + esc(artistTag) + ' removed.</strong><div class="small">If this source was polluting outputs, the cleanup is now recorded in the worker.</div></div><div></div></article>';
-              await refreshCanonAudit();
+              await refreshDerivedAdminViews();
             } catch (err) {
               setLog({ error: String(err.message || err), details: err.response || null });
             } finally {
@@ -1181,8 +1228,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<article class="list-row"><div><strong>What it is not for</strong><div class="small">Not for hand-approving candidates. Candidates are auto-ingested. The admin intervenes when something needs removal, override, decanonicization, or cleanup.</div></div><div></div></article>'
         ].join('');
         els.refresh.addEventListener('click', function () {
+          // Archive refresh must stay archive-scoped. Tying this button back to the
+          // global audit queries would reintroduce the production bug we just removed.
           refreshAssets();
-          refreshCanonAudit();
         });
         els.status.addEventListener('change', refreshAssets);
         els.stale.addEventListener('change', refreshAssets);
@@ -1190,7 +1238,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.limit.addEventListener('change', refreshAssets);
         els.search.addEventListener('input', renderTable);
         bindActions();
-        refreshCanonAudit();
+        refreshOverview();
       }
 
       init();

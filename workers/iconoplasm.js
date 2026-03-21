@@ -1910,12 +1910,263 @@ async function searchArtistStyles(env, { query = "", limit = 50 } = {}) {
     : []
 }
 
+async function fetchAdminRecentEvents(env, { limit = 40 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedEventLimit = Math.max(
+    0,
+    Math.min(200, Number.parseInt(String(limit || "40"), 10) || 40),
+  )
+  if (cleanedEventLimit === 0) return []
+  const eventResp = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       id,
+       gene_symbol,
+       from_asset_sha256,
+       to_asset_sha256,
+       action,
+       actor,
+       reason,
+       created_at
+     FROM icono_publish_events
+     ORDER BY id DESC
+     LIMIT ?`,
+  )
+    .bind(cleanedEventLimit)
+    .all()
+  return Array.isArray(eventResp?.results) ? eventResp.results : []
+}
+
+async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
+  if (!env.ICONOPLASM_DB) {
+    return { summary: null, attention: [], recent_events: [] }
+  }
+
+  // Keep the first admin paint bounded. This endpoint exists specifically so the
+  // page can boot without recomputing and shipping the entire outlier plot.
+  // If we ever need more than a small exception list here, the right answer is
+  // a materialized admin-state table, not quietly stapling canon-audit back on.
+  const [
+    geneCountRow,
+    publishStateRow,
+    assetTotalsRow,
+    missingCurrentRow,
+    driftCountRow,
+    driftAttentionRow,
+    overrideAttentionRow,
+    staleAttentionRow,
+    recentEvents,
+  ] = await Promise.all([
+    env.ICONOPLASM_DB.prepare(
+      `SELECT COUNT(DISTINCT upper(gene_symbol)) AS genes
+       FROM icono_portrait_assets`,
+    ).first(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT
+         SUM(CASE WHEN COALESCE(current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS with_live,
+         SUM(CASE WHEN COALESCE(admin_override, 0) = 1 THEN 1 ELSE 0 END) AS overrides
+       FROM icono_publish_state`,
+    ).first(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT
+         SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
+         SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets
+       FROM icono_portrait_assets`,
+    ).first(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT COUNT(*) AS current_asset_missing
+       FROM icono_publish_state ps
+       LEFT JOIN icono_portrait_assets pa
+         ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+        AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
+       WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+         AND pa.asset_sha256 IS NULL`,
+    ).first(),
+    env.ICONOPLASM_DB.prepare(
+      `WITH vote_agg AS (
+         SELECT
+           upper(gene_symbol) AS gene_symbol,
+           lower(asset_sha256) AS asset_sha256,
+           SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+           SUM(vote_value) AS score
+         FROM icono_image_votes
+         GROUP BY upper(gene_symbol), lower(asset_sha256)
+       ),
+       eligible_assets AS (
+         SELECT
+           upper(pa.gene_symbol) AS gene_symbol,
+           lower(pa.asset_sha256) AS asset_sha256,
+           COALESCE(v.upvotes, 0) AS upvotes,
+           COALESCE(v.score, 0) AS score,
+           COALESCE(pa.is_legacy, 0) AS is_legacy,
+           pa.created_at,
+           ROW_NUMBER() OVER (
+             PARTITION BY upper(pa.gene_symbol)
+             ORDER BY
+               COALESCE(v.score, 0) DESC,
+               CASE WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
+               COALESCE(v.upvotes, 0) DESC,
+               pa.created_at DESC,
+               lower(pa.asset_sha256) ASC
+           ) AS vote_rank
+         FROM icono_portrait_assets pa
+         LEFT JOIN vote_agg v
+           ON v.gene_symbol = upper(pa.gene_symbol)
+          AND v.asset_sha256 = lower(pa.asset_sha256)
+         WHERE COALESCE(pa.autopick_eligible, 1) = 1
+           AND lower(COALESCE(pa.status, '')) <> 'rejected'
+           AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+       )
+       SELECT COUNT(*) AS drift
+       FROM icono_publish_state ps
+       JOIN eligible_assets cur
+         ON cur.gene_symbol = upper(ps.gene_symbol)
+        AND cur.asset_sha256 = lower(ps.current_asset_sha256)
+       JOIN eligible_assets lead
+         ON lead.gene_symbol = upper(ps.gene_symbol)
+        AND lead.vote_rank = 1
+       WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+         AND cur.asset_sha256 <> lead.asset_sha256`,
+    ).first(),
+    env.ICONOPLASM_DB.prepare(
+      `WITH vote_agg AS (
+         SELECT
+           upper(gene_symbol) AS gene_symbol,
+           lower(asset_sha256) AS asset_sha256,
+           SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+           SUM(vote_value) AS score
+         FROM icono_image_votes
+         GROUP BY upper(gene_symbol), lower(asset_sha256)
+       ),
+       eligible_assets AS (
+         SELECT
+           upper(pa.gene_symbol) AS gene_symbol,
+           lower(pa.asset_sha256) AS asset_sha256,
+           COALESCE(v.upvotes, 0) AS upvotes,
+           COALESCE(v.score, 0) AS score,
+           COALESCE(pa.is_legacy, 0) AS is_legacy,
+           pa.created_at,
+           ROW_NUMBER() OVER (
+             PARTITION BY upper(pa.gene_symbol)
+             ORDER BY
+               COALESCE(v.score, 0) DESC,
+               CASE WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
+               COALESCE(v.upvotes, 0) DESC,
+               pa.created_at DESC,
+               lower(pa.asset_sha256) ASC
+           ) AS vote_rank
+         FROM icono_portrait_assets pa
+         LEFT JOIN vote_agg v
+           ON v.gene_symbol = upper(pa.gene_symbol)
+          AND v.asset_sha256 = lower(pa.asset_sha256)
+         WHERE COALESCE(pa.autopick_eligible, 1) = 1
+           AND lower(COALESCE(pa.status, '')) <> 'rejected'
+           AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+       )
+       SELECT
+         upper(ps.gene_symbol) AS gene_symbol,
+         ABS(COALESCE(lead.score, 0) - COALESCE(cur.score, 0)) AS score_gap
+       FROM icono_publish_state ps
+       JOIN eligible_assets cur
+         ON cur.gene_symbol = upper(ps.gene_symbol)
+        AND cur.asset_sha256 = lower(ps.current_asset_sha256)
+       JOIN eligible_assets lead
+         ON lead.gene_symbol = upper(ps.gene_symbol)
+        AND lead.vote_rank = 1
+       WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+         AND cur.asset_sha256 <> lead.asset_sha256
+       ORDER BY score_gap DESC, upper(ps.gene_symbol) ASC
+       LIMIT 1`,
+    ).first(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT upper(gene_symbol) AS gene_symbol
+       FROM icono_publish_state
+       WHERE COALESCE(admin_override, 0) = 1
+       ORDER BY updated_at DESC, upper(gene_symbol) ASC
+       LIMIT 1`,
+    ).first(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT
+         upper(gene_symbol) AS gene_symbol,
+         SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets
+       FROM icono_portrait_assets
+       GROUP BY upper(gene_symbol)
+       HAVING stale_assets > 0
+       ORDER BY stale_assets DESC, upper(gene_symbol) ASC
+       LIMIT 1`,
+    ).first(),
+    fetchAdminRecentEvents(env, { limit: eventLimit }),
+  ])
+
+  const genes = Number(geneCountRow?.genes || 0)
+  const withLive = Number(publishStateRow?.with_live || 0)
+  const attention = []
+
+  if (driftAttentionRow?.gene_symbol) {
+    attention.push({
+      kind: "drift",
+      symbol: normalizeSymbol(driftAttentionRow.gene_symbol),
+      score_gap: Number(driftAttentionRow?.score_gap || 0),
+    })
+  }
+
+  const missingAttentionRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT upper(ps.gene_symbol) AS gene_symbol
+     FROM icono_publish_state ps
+     LEFT JOIN icono_portrait_assets pa
+       ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+      AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
+     WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+       AND pa.asset_sha256 IS NULL
+     ORDER BY ps.updated_at DESC, upper(ps.gene_symbol) ASC
+     LIMIT 1`,
+  ).first()
+  if (missingAttentionRow?.gene_symbol) {
+    attention.push({
+      kind: "missing",
+      symbol: normalizeSymbol(missingAttentionRow.gene_symbol),
+    })
+  }
+
+  if (overrideAttentionRow?.gene_symbol) {
+    attention.push({
+      kind: "override",
+      symbol: normalizeSymbol(overrideAttentionRow.gene_symbol),
+    })
+  }
+
+  if (staleAttentionRow?.gene_symbol) {
+    attention.push({
+      kind: "stale",
+      symbol: normalizeSymbol(staleAttentionRow.gene_symbol),
+      stale_assets: Number(staleAttentionRow?.stale_assets || 0),
+    })
+  }
+
+  return {
+    summary: {
+      genes,
+      with_live: withLive,
+      overrides: Number(publishStateRow?.overrides || 0),
+      drift: Number(driftCountRow?.drift || 0),
+      current_asset_missing: Number(missingCurrentRow?.current_asset_missing || 0),
+      no_live: Math.max(0, genes - withLive),
+      stale_assets: Number(assetTotalsRow?.stale_assets || 0),
+      legacy_assets: Number(assetTotalsRow?.legacy_assets || 0),
+    },
+    attention,
+    recent_events: recentEvents,
+  }
+}
+
 async function fetchAdminCanonAudit(env, { limit = 1500, eventLimit = 40 } = {}) {
   if (!env.ICONOPLASM_DB) return { rows: [], recent_events: [] }
 
-  const cleanedLimit = Math.max(1, Math.min(4000, Number.parseInt(String(limit || "1500"), 10) || 1500))
-  const cleanedEventLimit = Math.max(
+  const cleanedLimit = Math.max(
     1,
+    Math.min(4000, Number.parseInt(String(limit || "1500"), 10) || 1500),
+  )
+  const cleanedEventLimit = Math.max(
+    0,
     Math.min(200, Number.parseInt(String(eventLimit || "40"), 10) || 40),
   )
 
@@ -2042,26 +2293,9 @@ async function fetchAdminCanonAudit(env, { limit = 1500, eventLimit = 40 } = {})
     .bind(cleanedLimit)
     .all()
 
-  const eventResp = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       id,
-       gene_symbol,
-       from_asset_sha256,
-       to_asset_sha256,
-       action,
-       actor,
-       reason,
-       created_at
-     FROM icono_publish_events
-     ORDER BY id DESC
-     LIMIT ?`,
-  )
-    .bind(cleanedEventLimit)
-    .all()
-
   return {
     rows: Array.isArray(auditResp?.results) ? auditResp.results : [],
-    recent_events: Array.isArray(eventResp?.results) ? eventResp.results : [],
+    recent_events: await fetchAdminRecentEvents(env, { limit: cleanedEventLimit }),
   }
 }
 
@@ -3765,6 +3999,46 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
     }
 
+    if (path === "/api/iconoplasm/admin/overview" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_overview_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_overview_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      const eventLimit = Math.max(
+        0,
+        Math.min(100, Number.parseInt(url.searchParams.get("event_limit") || "24", 10)),
+      )
+      const overview = await fetchAdminOverview(env, { eventLimit })
+      const recentEvents = (overview.recent_events || []).map((row) => ({
+        id: Number(row?.id || 0),
+        symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+        from_asset_sha256: normalizeSha256(row?.from_asset_sha256 || "") || null,
+        to_asset_sha256: normalizeSha256(row?.to_asset_sha256 || "") || null,
+        action: sanitizeText(row?.action || "", 64) || "",
+        actor: sanitizeText(row?.actor || "", 255) || "",
+        reason: sanitizeText(row?.reason || "", 2000) || "",
+        created_at: sanitizeText(row?.created_at || "", 64) || "",
+      }))
+
+      return done(
+        "admin_overview",
+        json(
+          {
+            ok: true,
+            summary: overview.summary || {},
+            attention: Array.isArray(overview.attention) ? overview.attention : [],
+            recent_events: recentEvents,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (path === "/api/iconoplasm/admin/canon-audit" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_canon_audit_403", json({ error: "Unauthorized" }, 403))
@@ -3779,7 +4053,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         Math.min(4000, Number.parseInt(url.searchParams.get("limit") || "1500", 10)),
       )
       const eventLimit = Math.max(
-        1,
+        0,
         Math.min(200, Number.parseInt(url.searchParams.get("event_limit") || "40", 10)),
       )
       const base = portraitBase(url, env)
