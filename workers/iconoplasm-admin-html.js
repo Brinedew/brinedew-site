@@ -4,9 +4,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Iconoplasm Admin</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #f5f4f1;
@@ -217,6 +214,29 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       text-align: right;
       font-variant-numeric: tabular-nums;
       max-width: 120px;
+    }
+    .overview-event {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 56px;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0ede8;
+    }
+    .overview-event:last-child { border-bottom: none; }
+    .overview-thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #ece7e1;
+    }
+    .overview-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
     .small { font-size: 12px; color: var(--muted); }
@@ -480,9 +500,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       display: grid;
       gap: 10px;
     }
+    .log-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
     .activity-card {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: 3px 36px minmax(0, 1fr) auto;
       gap: 12px;
       padding: 14px;
       border: 1px solid var(--border);
@@ -496,6 +521,29 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
+    }
+    .activity-accent {
+      align-self: stretch;
+      border-radius: 999px;
+      background: var(--border-strong);
+    }
+    .activity-accent-publish { background: #22c55e; }
+    .activity-accent-reject { background: #ef4444; }
+    .activity-accent-rollback { background: #f59e0b; }
+    .activity-accent-unpublish { background: #6b7280; }
+    .activity-accent-unstale { background: #3b82f6; }
+    .activity-thumb {
+      width: 36px;
+      height: 36px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #ece7e1;
+    }
+    .activity-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
     .activity-actor {
       font-size: 12px;
@@ -709,8 +757,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     </header>
 
     <nav id="admin-tabs">
-      <button class="tab-btn active" data-tab="overview">Overview</button>
-      <button class="tab-btn" data-tab="outliers">Outliers</button>
+      <button class="tab-btn active" data-tab="overview">Home</button>
       <button class="tab-btn" data-tab="archive">Gallery</button>
       <button class="tab-btn" data-tab="styles">Visions</button>
       <button class="tab-btn" data-tab="activity">Log</button>
@@ -740,31 +787,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <p class="small">Recent publish and rollback activity.</p>
           </div>
           <div class="list" id="overview-events"></div>
-        </section>
-      </div>
-    </div>
-
-    <!-- ── outliers ── -->
-    <div class="panel" id="panel-outliers">
-      <div class="section-head">
-        <div>
-          <h2>Pageviews vs. portrait score</h2>
-          <p class="small">Click dots to inspect.</p>
-        </div>
-        <div class="plot-legend">
-          <span class="plot-label"><span style="background: var(--warn)"></span> stale</span>
-          <span class="plot-label"><span style="background: #9050a0"></span> pinned</span>
-          <span class="plot-label"><span style="background: #4a7aba"></span> legacy</span>
-          <span class="plot-label"><span style="background: var(--danger)"></span> missing</span>
-        </div>
-      </div>
-      <div class="split">
-        <section class="plot-wrap">
-          <div class="plot-frame" id="outlier-plot"></div>
-        </section>
-        <section class="stack">
-          <h2>Selected</h2>
-          <div class="list" id="outlier-detail"></div>
         </section>
       </div>
     </div>
@@ -844,7 +866,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <section class="stack">
           <h2>Vision scorecard</h2>
           <p class="small">Which sources are helping, which ones are making a mess, and which are already blacklisted.</p>
-          <div class="vision-list" id="vision-stats-list"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><button class="btn-flat" type="button" data-vision-sort="vision">Vision</button></th>
+                  <th><button class="btn-flat" type="button" data-vision-sort="images">Images</button></th>
+                  <th><button class="btn-flat" type="button" data-vision-sort="score">Avg vote</button></th>
+                  <th><button class="btn-flat" type="button" data-vision-sort="rejection">Rejection rate</button></th>
+                  <th><button class="btn-flat" type="button" data-vision-sort="live">Currently live</button></th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="vision-stats-list"></tbody>
+            </table>
+          </div>
         </section>
         <section class="stack">
           <h2>Vision cleanup</h2>
@@ -873,6 +909,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <div class="panel" id="panel-activity">
       <h2>Activity log</h2>
       <p class="small">Recent changes and admin actions.</p>
+      <div class="log-filters" style="margin-bottom: 12px;">
+        <button class="toggle-pill active" type="button" data-log-filter="all">All actions</button>
+        <button class="toggle-pill" type="button" data-log-filter="publish">Publish</button>
+        <button class="toggle-pill" type="button" data-log-filter="reject">Reject</button>
+        <button class="toggle-pill" type="button" data-log-filter="rollback">Rollback</button>
+        <button class="toggle-pill" type="button" data-log-filter="unpublish">Unpublish</button>
+        <button class="toggle-pill" type="button" data-log-filter="unstale">Unstale</button>
+      </div>
       <div class="controls" style="margin-bottom: 12px;">
         <label>Filter log
           <input id="activity-filter" type="text" placeholder="publish, reject, TP53..." />
@@ -889,26 +933,24 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       var API_BASE = '/api/iconoplasm/admin';
       var state = {
         assets: [],
-        auditRows: [],
         overviewSummary: null,
         overviewCoverage: null,
         overviewAttention: [],
         recentEvents: [],
         visionStats: [],
         blacklistedStyles: [],
-        selectedOutlier: null,
         selectedGene: '',
         selectedGeneDetail: null,
         activeTab: 'overview',
         archiveLoaded: false,
-        outliersLoaded: false
+        visionSort: { key: 'live', dir: 'desc' },
+        activityActionFilter: 'all'
       };
 
       var els = {
         tabs: document.getElementById('admin-tabs'),
         panels: {
           overview: document.getElementById('panel-overview'),
-          outliers: document.getElementById('panel-outliers'),
           archive: document.getElementById('panel-archive'),
           styles: document.getElementById('panel-styles'),
           activity: document.getElementById('panel-activity')
@@ -917,8 +959,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         overviewCoverage: document.getElementById('overview-coverage'),
         attentionList: document.getElementById('attention-list'),
         overviewEvents: document.getElementById('overview-events'),
-        outlierPlot: document.getElementById('outlier-plot'),
-        outlierDetail: document.getElementById('outlier-detail'),
         styleTag: document.getElementById('style-tag'),
         styleName: document.getElementById('style-name'),
         styleReason: document.getElementById('style-reason'),
@@ -960,9 +1000,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         if (tab === 'archive' && !state.archiveLoaded) {
           refreshAssets();
-        }
-        if (tab === 'outliers' && !state.outliersLoaded) {
-          refreshCanonAudit();
         }
         if (tab === 'styles' && !state.visionStats.length) {
           refreshVisionStats();
@@ -1061,9 +1098,38 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         ].join('');
       }
 
+      function overviewEventMarkup(evt) {
+        return [
+          '<article class="overview-event">',
+          '<div class="overview-thumb">',
+          (evt.thumb_url ? '<img src="' + esc(evt.thumb_url) + '" alt="Portrait thumbnail" loading="lazy" width="40" height="40" />' : ''),
+          '</div>',
+          '<div>',
+          '<strong>' + esc(evt.symbol || 'unknown') + '</strong>',
+          '<div class="small">' + esc(evt.action || 'event') + (evt.reason ? ' · ' + esc(evt.reason) : '') + '</div>',
+          '</div>',
+          '<div class="event-meta">' + esc(evt.created_at || '') + '</div>',
+          '</article>'
+        ].join('');
+      }
+
+      function activityAccent(action) {
+        var value = String(action || '').toLowerCase();
+        if (value === 'publish') return 'activity-accent-publish';
+        if (value === 'reject') return 'activity-accent-reject';
+        if (value === 'rollback') return 'activity-accent-rollback';
+        if (value === 'unpublish') return 'activity-accent-unpublish';
+        if (value === 'unstale') return 'activity-accent-unstale';
+        return '';
+      }
+
       function eventMarkup(evt) {
         return [
           '<article class="activity-card">',
+          '<div class="activity-accent ' + activityAccent(evt.action) + '"></div>',
+          '<div class="activity-thumb">',
+          (evt.thumb_url ? '<img src="' + esc(evt.thumb_url) + '" alt="Event thumbnail" loading="lazy" width="36" height="36" />' : ''),
+          '</div>',
           '<div>',
           '<div class="activity-title"><strong>' + esc(evt.symbol || 'unknown') + '</strong>' + statusPill(evt.action || 'event') + '</div>',
           '<div class="small">' + esc(evt.reason || '') + '</div>',
@@ -1077,6 +1143,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function renderActivityFeed() {
         var query = String((els.activityFilter && els.activityFilter.value) || '').trim().toLowerCase();
         var events = (state.recentEvents || []).filter(function (evt) {
+          if (state.activityActionFilter !== 'all' && String(evt.action || '').toLowerCase() !== state.activityActionFilter) return false;
           if (!query) return true;
           return [evt.symbol, evt.action, evt.reason, evt.actor].some(function (value) {
             return String(value || '').toLowerCase().includes(query);
@@ -1103,11 +1170,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var summary = state.overviewSummary || {};
         els.overviewMetrics.innerHTML = [
           metricMarkup('Published', summary.with_live, 'Genes with a live portrait.'),
-          metricMarkup('Mismatched', summary.drift, summary.drift == null ? 'Open Outliers for exact count.' : 'Live portrait differs from top voted.'),
-          metricMarkup('Pinned', summary.overrides || 0, 'Manually set, bypasses auto-selection.'),
-          metricMarkup('Missing', summary.current_asset_missing, summary.current_asset_missing == null ? 'See Outliers or Browse.' : 'Published but image file is gone.'),
-          metricMarkup('Stale', summary.stale_assets, summary.stale_assets == null ? 'Browse to clean up.' : 'Old images waiting for cleanup.'),
-          metricMarkup('Legacy', summary.legacy_assets, summary.legacy_assets == null ? 'Browse to clean up.' : 'Leftovers from old syncs.')
+          metricMarkup('Mismatched', summary.drift, 'Live portrait points at a missing or broken asset.'),
+          metricMarkup('Missing', summary.missing, 'Genes with no usable portrait candidates.'),
+          metricMarkup('Stale', summary.stale_assets, 'Old images waiting for cleanup.'),
+          metricMarkup('Legacy', summary.legacy_assets, 'Leftovers from older sync generations.')
         ].join('');
 
         var coverage = state.overviewCoverage || null;
@@ -1149,7 +1215,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             return attentionMarkup(item.symbol + ' -- mismatched', 'Live portrait differs from what voters picked.', 'Browse', item.symbol);
           }
           if (item.kind === 'missing') {
-            return attentionMarkup(item.symbol + ' -- missing image', 'Published but the file is gone.', 'Look', item.symbol);
+            return attentionMarkup(item.symbol + ' -- missing image', 'Live portrait is missing or this gene has no usable candidates.', 'Look', item.symbol);
           }
           if (item.kind === 'override') {
             return attentionMarkup(item.symbol + ' -- pinned', 'Auto-selection off until you unpin.', 'Look', item.symbol);
@@ -1159,63 +1225,17 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           }
           return '';
         }).filter(Boolean);
-        if (!notes.length) notes.push('<article class="list-row"><div><strong>Nothing needs attention.</strong><div class="small">Use Outliers or Browse for a deeper look.</div></div><div></div></article>');
+        if (!notes.length) notes.push('<article class="list-row"><div><strong>Nothing needs attention.</strong><div class="small">Use Gallery or Log for a deeper look.</div></div><div></div></article>');
         els.attentionList.innerHTML = notes.join('');
 
-        els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 8).map(eventMarkup).join('') || '<article class="activity-card"><div><strong>No recent activity.</strong></div><div></div></article>';
+        els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 12).map(overviewEventMarkup).join('') || '<article class="list-row"><div><strong>No recent activity.</strong></div><div></div></article>';
         renderActivityFeed();
-      }
-
-      function renderOutlierDetail(row) {
-        if (!row) {
-          els.outlierDetail.innerHTML = '<article class="list-row"><div><strong>Click a dot to inspect.</strong></div><div></div></article>';
-          return;
-        }
-        var current = row.current || null;
-        var leader = row.leader || null;
-        els.outlierDetail.innerHTML = [
-          '<article class="list-row"><div><strong>' + esc(row.symbol || '') + '</strong><div class="small">popularity ' + esc(String(row.popularity_score || 0)) + ' &middot; ' + esc(String(row.total_assets || 0)) + ' images</div></div><div>' + (row.symbol ? '<button class="btn-flat" data-jump-symbol="' + esc(row.symbol) + '" data-jump-tab="archive">Browse</button>' : '') + '</div></article>',
-          '<article class="list-row"><div><strong>Why this is here</strong><div class="small">' + esc(row.note || 'Needs attention.') + '</div></div><div class="event-meta">' + esc(String(row.kind || 'attention')) + '</div></article>',
-          '<article class="list-row"><div><strong>Live portrait</strong><div class="small">' + esc(current ? ((current.score || 0) + ' score \u00B7 ' + (current.vision_id || 'no vision')) : 'No live portrait.') + '</div></div><div class="event-meta">' + esc(current ? (current.asset_sha256 || '') : '') + '</div></article>',
-          (leader
-            ? '<article class="list-row"><div><strong>Top voted</strong><div class="small">' + esc((leader.score || 0) + ' score \u00B7 ' + (leader.vision_id || 'no vision')) + '</div></div><div class="event-meta">' + esc(leader.asset_sha256 || '') + '</div></article>'
-            : '<article class="list-row"><div><strong>Next step</strong><div class="small">Open the gene review panel to inspect candidates and fix the exception.</div></div><div></div></article>')
-        ].join('');
-      }
-
-      function renderOutlierPlot() {
-        var rows = (state.auditRows || []).slice();
-        if (!rows.length) {
-          els.outlierPlot.innerHTML = '<div class="small" style="padding: 12px;">Not loaded yet.</div>';
-          renderOutlierDetail(state.selectedOutlier);
-          return;
-        }
-        var maxPopularity = rows.reduce(function (max, row) { return Math.max(max, Number(row.popularity_score || 0)); }, 1);
-        var maxScore = rows.reduce(function (max, row) {
-          var currentScore = row.current ? Number(row.current.score || 0) : 0;
-          var priorityScore = Number(row.priority_score || 0);
-          var leaderScore = row.leader ? Number(row.leader.score || 0) : 0;
-          return Math.max(max, currentScore, leaderScore, priorityScore, 1);
-        }, 1);
-        els.outlierPlot.innerHTML = rows.map(function (row) {
-          var currentScore = row.current ? Number(row.current.score || 0) : Number(row.priority_score || 0);
-          var x = Math.max(4, Math.min(96, (Number(row.popularity_score || 0) / maxPopularity) * 100));
-          var y = Math.max(4, Math.min(96, (currentScore / maxScore) * 100));
-          var klass = 'plot-dot';
-          if (row.current_asset_missing) klass += ' missing';
-          else if (row.kind === 'stale') klass += ' drift';
-          else if (row.kind === 'legacy') klass += ' override';
-          else if (row.admin_override) klass += ' override';
-          if (state.selectedOutlier && state.selectedOutlier.symbol === row.symbol) klass += ' is-selected';
-          return '<button class="' + klass + '" data-outlier-symbol="' + esc(row.symbol || '') + '" style="left:' + x + '%; bottom:' + y + '%" title="' + esc((row.symbol || '') + ' -- views ' + (row.popularity_score || 0) + ' -- priority ' + (row.priority_score || currentScore)) + '"></button>';
-        }).join('');
-        renderOutlierDetail(state.selectedOutlier);
       }
 
       async function refreshOverview() {
         try {
           var results = await Promise.all([
-            apiJson('/overview?event_limit=24', { method: 'GET' }),
+            apiJson('/overview?event_limit=80', { method: 'GET' }),
             apiJson('/coverage', { method: 'GET' })
           ]);
           var data = results[0] || {};
@@ -1229,52 +1249,38 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
       }
 
-      async function refreshCanonAudit() {
-        try {
-          els.outlierPlot.innerHTML = '<div class="small" style="padding: 12px;">Loading...</div>';
-          var data = await apiJson('/outliers?limit=160&missing_limit=24', { method: 'GET' });
-          state.auditRows = Array.isArray(data.rows) ? data.rows : [];
-          state.outliersLoaded = true;
-          if (state.selectedOutlier) {
-            state.selectedOutlier = state.auditRows.find(function (row) { return row.symbol === state.selectedOutlier.symbol; }) || null;
-          }
-          if (!state.selectedOutlier && state.auditRows.length) {
-            state.selectedOutlier = state.auditRows[0];
-          }
-          renderOutlierPlot();
-        } catch (err) {
-          state.outliersLoaded = false;
-          setLog({ error: 'Canon audit failed', details: err.response || String(err.message || err) });
-        }
-      }
-
       async function refreshDerivedAdminViews() {
         await refreshOverview();
-        if (state.outliersLoaded) {
-          await refreshCanonAudit();
-        }
         if (state.visionStats.length) {
           await refreshVisionStats();
         }
       }
 
       function renderVisionStats() {
-        var rows = (state.visionStats || []).slice(0, 24);
+        var sortKey = state.visionSort.key;
+        var sortDir = state.visionSort.dir === 'asc' ? 1 : -1;
+        var rows = (state.visionStats || []).slice().sort(function (left, right) {
+          function label(row) {
+            return String(row.artist_name || row.artist_tag || row.vision_id || '');
+          }
+          if (sortKey === 'vision') return label(left).localeCompare(label(right)) * sortDir;
+          if (sortKey === 'images') return (Number(left.image_count || 0) - Number(right.image_count || 0)) * sortDir;
+          if (sortKey === 'score') return (Number(left.avg_vote || 0) - Number(right.avg_vote || 0)) * sortDir;
+          if (sortKey === 'rejection') return (Number(left.rejection_rate || 0) - Number(right.rejection_rate || 0)) * sortDir;
+          return (Number(left.live_count || 0) - Number(right.live_count || 0)) * sortDir;
+        });
         els.visionStatsList.innerHTML = rows.length ? rows.map(function (row) {
           return [
-            '<article class="vision-row">',
-            '<div class="vision-cell">',
-            '<strong>' + esc(row.artist_name || row.artist_tag || row.vision_id || 'Unknown vision') + '</strong>',
-            '<div class="small">' + esc(row.artist_tag || row.vision_id || '') + '</div>',
-            '<div class="badge-row">' + (row.blacklisted ? '<span class="badge-pill badge-mismatch">Blacklisted</span>' : '<span class="badge-pill badge-live">Active</span>') + '</div>',
-            '</div>',
-            '<div class="vision-cell"><strong>' + esc(String(row.live_count || 0)) + '</strong><div class="small">live picks</div></div>',
-            '<div class="vision-cell"><strong>' + esc(String(row.score || 0)) + '</strong><div class="small">net score</div></div>',
-            '<div class="vision-cell"><strong>' + esc(String(row.image_count || 0)) + '</strong><div class="small">images</div></div>',
-            '<div class="vision-cell"><strong>' + esc(String(Math.round((Number(row.rejection_rate || 0) * 1000)) / 10)) + '%</strong><div class="small">reject rate</div></div>',
-            '</article>'
+            '<tr>',
+            '<td><strong>' + esc(row.artist_name || row.artist_tag || row.vision_id || 'Unknown vision') + '</strong><div class="small">' + esc(row.artist_tag || row.vision_id || '') + '</div></td>',
+            '<td>' + esc(String(row.image_count || 0)) + '</td>',
+            '<td>' + esc(String(Math.round((Number(row.avg_vote || 0) * 100) ) / 100)) + '</td>',
+            '<td>' + esc(String(Math.round((Number(row.rejection_rate || 0) * 1000)) / 10)) + '%</td>',
+            '<td>' + esc(String(row.live_count || 0)) + '</td>',
+            '<td>' + (row.blacklisted ? '<span class="small">Blacklisted</span>' : '<button class="btn-flat" type="button" data-blacklist-tag="' + esc(row.artist_tag || '') + '" data-blacklist-name="' + esc(row.artist_name || '') + '">Blacklist</button>') + '</td>',
+            '</tr>'
           ].join('');
-        }).join('') : '<div class="gallery-empty">No vision stats yet.</div>';
+        }).join('') : '<tr><td colspan="6">No vision stats yet.</td></tr>';
 
         els.stylesNotes.innerHTML = (state.blacklistedStyles || []).length
           ? state.blacklistedStyles.map(function (row) {
@@ -1578,16 +1584,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           });
         }
 
-        if (els.outlierPlot) {
-          els.outlierPlot.addEventListener('click', function (ev) {
-            var btn = ev.target.closest('[data-outlier-symbol]');
-            if (!btn) return;
-            var symbol = String(btn.getAttribute('data-outlier-symbol') || '');
-            state.selectedOutlier = state.auditRows.find(function (row) { return row.symbol === symbol; }) || null;
-            renderOutlierPlot();
-          });
-        }
-
         document.body.addEventListener('click', function (ev) {
           var jump = ev.target.closest('[data-jump-symbol]');
           if (!jump) return;
@@ -1609,6 +1605,37 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             });
           });
         }
+
+        document.body.addEventListener('click', function (ev) {
+          var sortBtn = ev.target.closest('[data-vision-sort]');
+          if (sortBtn) {
+            var key = String(sortBtn.getAttribute('data-vision-sort') || 'live');
+            if (state.visionSort.key === key) {
+              state.visionSort.dir = state.visionSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+              state.visionSort = { key: key, dir: key === 'vision' ? 'asc' : 'desc' };
+            }
+            renderVisionStats();
+            return;
+          }
+
+          var logFilterBtn = ev.target.closest('[data-log-filter]');
+          if (logFilterBtn) {
+            state.activityActionFilter = String(logFilterBtn.getAttribute('data-log-filter') || 'all');
+            document.querySelectorAll('[data-log-filter]').forEach(function (btn) {
+              btn.classList.toggle('active', String(btn.getAttribute('data-log-filter') || 'all') === state.activityActionFilter);
+            });
+            renderActivityFeed();
+            return;
+          }
+
+          var blacklistBtn = ev.target.closest('[data-blacklist-tag]');
+          if (blacklistBtn && els.styleTag) {
+            els.styleTag.value = String(blacklistBtn.getAttribute('data-blacklist-tag') || '');
+            els.styleName.value = String(blacklistBtn.getAttribute('data-blacklist-name') || '');
+            setActiveTab('styles');
+          }
+        });
 
         if (els.detail) {
           els.detail.addEventListener('click', async function (ev) {
