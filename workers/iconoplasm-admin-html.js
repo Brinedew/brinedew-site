@@ -606,6 +606,200 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .vision-cell {
       min-width: 0;
     }
+    .vision-sidebar-column {
+      align-content: start;
+    }
+    .vision-workbench {
+      position: sticky;
+      top: 124px;
+    }
+    .vision-workbench .controls {
+      grid-template-columns: 1fr;
+    }
+    .vision-table-row.is-selected {
+      background: color-mix(in srgb, var(--accent-light) 58%, white);
+    }
+    .vision-open-btn {
+      display: grid;
+      gap: 2px;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      color: inherit;
+      cursor: pointer;
+    }
+    .vision-open-btn strong {
+      font-size: 13px;
+      color: var(--text);
+    }
+    .vision-open-btn .small {
+      color: var(--muted);
+    }
+    .vision-preview-cell {
+      min-width: 280px;
+    }
+    .vision-preview-strip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 58px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .vision-preview-button {
+      --thumb-ratio: 1;
+      position: relative;
+      flex: 0 0 auto;
+      width: clamp(42px, calc(56px * var(--thumb-ratio)), 108px);
+      height: 56px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #f6f2ed;
+      overflow: hidden;
+      padding: 0;
+      cursor: pointer;
+    }
+    .vision-preview-button:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-1px);
+    }
+    .vision-preview-button.is-active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(184, 74, 38, 0.08);
+    }
+    .vision-preview-button img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #fbf8f3;
+    }
+    .vision-preview-gene {
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      bottom: 4px;
+      border-radius: 999px;
+      background: rgba(26, 26, 26, 0.7);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 600;
+      text-align: center;
+      padding: 2px 6px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .vision-preview-more {
+      flex: 0 0 auto;
+      min-width: 48px;
+      min-height: 56px;
+      display: grid;
+      place-items: center;
+      border: 1px dashed var(--border-strong);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255,255,255,0.7);
+    }
+    .vision-preview-empty {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .vision-cleanup-panel {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.82);
+      backdrop-filter: blur(12px);
+    }
+    .vision-cleanup-panel .detail-title {
+      font-size: 22px;
+    }
+    .vision-panel-header {
+      display: grid;
+      gap: 8px;
+    }
+    .vision-panel-frame {
+      display: grid;
+      place-items: center;
+      min-height: 260px;
+      max-height: 420px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fbf8f3;
+      overflow: hidden;
+    }
+    .vision-panel-frame img {
+      max-width: 100%;
+      max-height: 392px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+    .vision-panel-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .vision-panel-nav .pager-status {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .vision-panel-meta {
+      display: grid;
+      gap: 4px;
+    }
+    .vision-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .vision-stat-card {
+      display: grid;
+      gap: 4px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.72);
+    }
+    .vision-stat-card strong {
+      font-size: 18px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .vision-stat-card span {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .vision-panel-actions,
+    .vision-artist-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .vision-panel-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .vision-panel-strip .vision-preview-button {
+      height: 64px;
+      width: clamp(48px, calc(64px * var(--thumb-ratio)), 128px);
+    }
     @media (max-width: 980px) {
       .vision-row {
         grid-template-columns: 1fr 1fr;
@@ -669,6 +863,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         grid-template-columns: 1fr;
       }
       .gallery-sidebar {
+        position: static;
+      }
+      .vision-workbench {
         position: static;
       }
     }
@@ -1068,6 +1265,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               <thead>
                 <tr>
                   <th><button class="btn-flat sort-btn" type="button" data-vision-sort="vision">Vision</button></th>
+                  <th>Examples</th>
                   <th><button class="btn-flat sort-btn" type="button" data-vision-sort="images">Images</button></th>
                   <th><button class="btn-flat sort-btn" type="button" data-vision-sort="score">Avg vote</button></th>
                   <th><button class="btn-flat sort-btn" type="button" data-vision-sort="rejection">Rejection rate</button></th>
@@ -1079,26 +1277,33 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             </table>
           </div>
         </section>
-        <section class="stack">
-          <h2>Vision cleanup</h2>
-          <p class="small">Remove sources that produce bad results.</p>
-          <div class="controls">
-            <label>Vision tag
-              <input id="style-tag" type="text" placeholder="artist-example" />
-            </label>
-            <label>Vision name
-              <input id="style-name" type="text" placeholder="Readable name" />
-            </label>
-            <label>Why
-              <input id="style-reason" type="text" placeholder="Reason for removal" />
-            </label>
-            <button class="btn-danger" id="style-remove">Remove vision</button>
-          </div>
-        </section>
-        <section class="stack">
-          <h2>Blacklist log</h2>
-          <div class="list" id="styles-notes"></div>
-        </section>
+        <div class="stack vision-sidebar-column">
+          <section class="stack vision-workbench">
+            <div class="section-head">
+              <div>
+                <h2>Vision cleanup</h2>
+                <p class="small" id="vision-cleanup-summary">Click a row or thumbnail to inspect this artist.</p>
+              </div>
+            </div>
+            <div class="vision-cleanup-panel" id="vision-cleanup-panel"></div>
+            <div class="controls">
+              <label>Vision tag
+                <input id="style-tag" type="text" placeholder="artist-example" />
+              </label>
+              <label>Vision name
+                <input id="style-name" type="text" placeholder="Readable name" />
+              </label>
+              <label>Why
+                <input id="style-reason" type="text" placeholder="Reason for removal" />
+              </label>
+              <button class="btn-danger" id="style-remove">Remove vision</button>
+            </div>
+          </section>
+          <section class="stack">
+            <h2>Blacklist log</h2>
+            <div class="list" id="styles-notes"></div>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -1137,9 +1342,16 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         overviewAttention: [],
         recentEvents: [],
         visionStats: [],
+        visionPreviewMap: {},
+        loadingVisionPreviewIds: {},
         blacklistedStyles: [],
         visionPage: 1,
         visionPageSize: 50,
+        selectedVisionId: '',
+        selectedVisionDetail: null,
+        selectedVisionAssetSha: '',
+        visionPreviewRequestId: 0,
+        visionDetailRequestId: 0,
         selectedGene: '',
         selectedGeneDetail: null,
         selectedCandidateSha: '',
@@ -1168,6 +1380,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         styleRemove: document.getElementById('style-remove'),
         visionStatsList: document.getElementById('vision-stats-list'),
         visionStatsMeta: document.getElementById('vision-stats-meta'),
+        visionCleanupPanel: document.getElementById('vision-cleanup-panel'),
+        visionCleanupSummary: document.getElementById('vision-cleanup-summary'),
         visionPageSize: document.getElementById('vision-page-size'),
         visionPageLabel: document.getElementById('vision-page-label'),
         visionPageFirst: document.getElementById('vision-page-first'),
@@ -1572,6 +1786,224 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         });
       }
 
+      function formatCompactNumber(value) {
+        var num = Number(value || 0);
+        if (!Number.isFinite(num)) return '0';
+        return num.toLocaleString('en-US');
+      }
+
+      function previewAspectRatio(asset) {
+        var ratio = Number(asset && asset.aspect_ratio);
+        if (Number.isFinite(ratio) && ratio > 0) return Math.max(0.55, Math.min(2.2, ratio));
+        var width = Number(asset && asset.width);
+        var height = Number(asset && asset.height);
+        if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+          return Math.max(0.55, Math.min(2.2, width / height));
+        }
+        return 1;
+      }
+
+      function findSelectedVisionAsset(detail) {
+        var assets = Array.isArray(detail && detail.assets) ? detail.assets : [];
+        if (!assets.length) return null;
+        var preferredSha = String(state.selectedVisionAssetSha || '').toLowerCase();
+        if (preferredSha) {
+          var selected = assets.find(function (asset) {
+            return String(asset.asset_sha256 || '').toLowerCase() === preferredSha;
+          });
+          if (selected) return selected;
+        }
+        return assets[0] || null;
+      }
+
+      function prefillVisionBlacklistInputs(vision) {
+        if (!vision) return;
+        if (els.styleTag) els.styleTag.value = String(vision.artist_tag || vision.vision_id || '');
+        if (els.styleName) els.styleName.value = String(vision.artist_name || '');
+      }
+
+      function renderVisionPreviewButton(visionId, asset, active) {
+        if (!asset || !asset.thumb_url) return '';
+        var label = String(asset.gene_symbol || 'gene');
+        var titleParts = [label];
+        if (asset.artist_name || asset.artist_tag) titleParts.push(String(asset.artist_name || asset.artist_tag));
+        if (asset.status) titleParts.push(String(asset.status));
+        return [
+          '<button class="vision-preview-button' + (active ? ' is-active' : '') + '"',
+          ' type="button"',
+          ' style="--thumb-ratio:' + esc(String(previewAspectRatio(asset))) + '"',
+          ' data-vision-open="' + esc(visionId || '') + '"',
+          ' data-vision-asset="' + esc(asset.asset_sha256 || '') + '"',
+          ' title="' + esc(titleParts.join(' · ')) + '">',
+          '<img src="' + esc(asset.thumb_url) + '" alt="' + esc(label + ' preview') + '" loading="lazy" />',
+          '<span class="vision-preview-gene">' + esc(label) + '</span>',
+          '</button>'
+        ].join('');
+      }
+
+      function renderVisionPreviewCell(row) {
+        var visionId = String(row && row.vision_id || '');
+        var assets = state.visionPreviewMap[visionId] || [];
+        var loading = Boolean(state.loadingVisionPreviewIds[visionId]);
+        if (!assets.length) {
+          return '<div class="vision-preview-empty">' + esc(loading ? 'Loading examples…' : 'Examples appear here.') + '</div>';
+        }
+        var html = assets.map(function (asset) {
+          return renderVisionPreviewButton(visionId, asset, state.selectedVisionAssetSha === asset.asset_sha256 && state.selectedVisionId === visionId);
+        }).join('');
+        var moreCount = Math.max(0, Number(row.image_count || 0) - assets.length);
+        if (moreCount > 0) {
+          html += '<button class="vision-preview-more" type="button" data-vision-open="' + esc(visionId) + '">+' + esc(String(moreCount)) + '</button>';
+        }
+        return '<div class="vision-preview-strip">' + html + '</div>';
+      }
+
+      function renderVisionCleanupPanel() {
+        if (!els.visionCleanupPanel) return;
+        var detail = state.selectedVisionDetail;
+        if (!detail || !detail.vision) {
+          if (els.visionCleanupSummary) {
+            els.visionCleanupSummary.textContent = 'Click a row or thumbnail to inspect this artist.';
+          }
+          els.visionCleanupPanel.innerHTML = [
+            '<div class="detail-kicker">Artist workbench</div>',
+            '<div class="detail-title">Pick a vision</div>',
+            '<div class="detail-copy">The scorecard can now open straight into this side panel. Pick a row to compare that artist across genes, scrub left and right, and run quick actions without leaving the table.</div>'
+          ].join('');
+          return;
+        }
+
+        var vision = detail.vision;
+        var assets = Array.isArray(detail.assets) ? detail.assets : [];
+        var selectedAsset = findSelectedVisionAsset(detail);
+        state.selectedVisionAssetSha = selectedAsset ? String(selectedAsset.asset_sha256 || '') : '';
+        prefillVisionBlacklistInputs(vision);
+
+        var currentIndex = selectedAsset
+          ? assets.findIndex(function (asset) { return asset.asset_sha256 === selectedAsset.asset_sha256; })
+          : -1;
+        var selectedBadges = [];
+        if (vision.blacklisted) selectedBadges.push('<span class="badge-pill badge-mismatch">Blacklisted</span>');
+        if (selectedAsset && selectedAsset.is_current) selectedBadges.push('<span class="badge-pill badge-live">Canonical</span>');
+        if (selectedAsset && selectedAsset.status === 'rejected') selectedBadges.push('<span class="badge-pill badge-missing">Rejected</span>');
+        if (selectedAsset && selectedAsset.is_stale) selectedBadges.push('<span class="badge-pill badge-stale">Stale</span>');
+
+        if (els.visionCleanupSummary) {
+          els.visionCleanupSummary.textContent = String(vision.artist_name || vision.artist_tag || vision.vision_id || 'Selected vision');
+        }
+
+        els.visionCleanupPanel.innerHTML = [
+          '<div class="detail-kicker">Artist workbench</div>',
+          '<div class="vision-panel-header">',
+          '<div class="detail-title">' + esc(vision.artist_name || vision.artist_tag || vision.vision_id || 'Unknown vision') + '</div>',
+          '<div class="small mono">' + esc(vision.artist_tag || vision.vision_id || '') + '</div>',
+          '<div class="badge-row">' + selectedBadges.join('') + '</div>',
+          '</div>',
+          '<div class="vision-panel-frame">',
+          (selectedAsset && selectedAsset.medium_url
+            ? '<img src="' + esc(selectedAsset.medium_url) + '" alt="Selected artist example" loading="lazy" />'
+            : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No preview available</div>'),
+          '</div>',
+          '<div class="vision-panel-nav">',
+          '<button type="button" data-vision-nav="prev"' + (assets.length <= 1 ? ' disabled' : '') + '>Prev</button>',
+          '<span class="pager-status mono">' + esc(assets.length ? ('Image ' + (currentIndex + 1) + ' of ' + assets.length) : 'No images') + '</span>',
+          '<button type="button" data-vision-nav="next"' + (assets.length <= 1 ? ' disabled' : '') + '>Next</button>',
+          '</div>',
+          (selectedAsset ? [
+            '<div class="vision-panel-meta">',
+            '<div><strong>' + esc(selectedAsset.gene_symbol || 'Unknown gene') + '</strong> · ' + esc(selectedAsset.status || 'draft') + '</div>',
+            '<div class="small">score ' + esc(String(selectedAsset.score || 0)) + ' · +' + esc(String(selectedAsset.upvotes || 0)) + ' / -' + esc(String(selectedAsset.downvotes || 0)) + ' · ' + esc(String(selectedAsset.width || '?')) + '×' + esc(String(selectedAsset.height || '?')) + '</div>',
+            '<div class="small mono">' + esc(shortSha(selectedAsset.asset_sha256 || '')) + '</div>',
+            '</div>',
+            '<div class="vision-panel-actions">',
+            '<button class="btn-flat" type="button" data-vision-detail-action="copy" data-sha="' + esc(selectedAsset.asset_sha256 || '') + '">Copy SHA</button>',
+            '<button class="btn-flat" type="button" data-vision-detail-action="open-gene" data-symbol="' + esc(selectedAsset.gene_symbol || '') + '">Open gene review</button>',
+            (!selectedAsset.is_current && selectedAsset.status !== 'rejected'
+              ? '<button class="btn-primary" type="button" data-vision-detail-action="publish" data-symbol="' + esc(selectedAsset.gene_symbol || '') + '" data-sha="' + esc(selectedAsset.asset_sha256 || '') + '">Make canonical</button>'
+              : ''),
+            (selectedAsset.status !== 'rejected'
+              ? '<button class="btn-danger" type="button" data-vision-detail-action="reject" data-symbol="' + esc(selectedAsset.gene_symbol || '') + '" data-sha="' + esc(selectedAsset.asset_sha256 || '') + '">Reject image</button>'
+              : ''),
+            (selectedAsset.is_stale
+              ? '<button type="button" data-vision-detail-action="unstale" data-symbol="' + esc(selectedAsset.gene_symbol || '') + '" data-sha="' + esc(selectedAsset.asset_sha256 || '') + '">Restore image</button>'
+              : ''),
+            '</div>'
+          ].join('') : ''),
+          '<div class="vision-stat-grid">',
+          '<article class="vision-stat-card"><span>Images</span><strong>' + esc(formatCompactNumber(vision.image_count || 0)) + '</strong></article>',
+          '<article class="vision-stat-card"><span>Canonical now</span><strong>' + esc(formatCompactNumber(vision.live_count || 0)) + '</strong></article>',
+          '<article class="vision-stat-card"><span>Avg vote</span><strong>' + esc(String(Math.round((Number(vision.avg_vote || 0) * 100)) / 100)) + '</strong></article>',
+          '<article class="vision-stat-card"><span>Rejected</span><strong>' + esc(String(Math.round((Number(vision.rejection_rate || 0) * 1000)) / 10)) + '%</strong></article>',
+          '</div>',
+          (vision.blacklist_reason ? '<div class="small">Blacklist note: ' + esc(vision.blacklist_reason) + '</div>' : ''),
+          '<div class="detail-kicker">This artist across genes</div>',
+          '<div class="vision-panel-strip">' + assets.map(function (asset) {
+            return renderVisionPreviewButton(vision.vision_id, asset, selectedAsset && selectedAsset.asset_sha256 === asset.asset_sha256);
+          }).join('') + '</div>',
+          '<div class="vision-artist-actions">',
+          '<button class="btn-danger" type="button" data-vision-artist-action="prefill-blacklist" data-vision-tag="' + esc(vision.artist_tag || vision.vision_id || '') + '" data-vision-name="' + esc(vision.artist_name || '') + '"' + (vision.blacklisted ? ' disabled' : '') + '>' + esc(vision.blacklisted ? 'Already blacklisted' : 'Blacklist artist') + '</button>',
+          '</div>'
+        ].join('');
+      }
+
+      async function ensureVisibleVisionPreviews(rows) {
+        var pageRows = Array.isArray(rows) ? rows : [];
+        var missingVisionIds = pageRows
+          .map(function (row) { return String(row && row.vision_id || ''); })
+          .filter(function (visionId) {
+            return visionId && !state.visionPreviewMap[visionId] && !state.loadingVisionPreviewIds[visionId];
+          });
+        if (!missingVisionIds.length) return;
+        missingVisionIds.forEach(function (visionId) {
+          state.loadingVisionPreviewIds[visionId] = true;
+        });
+        renderVisionStats();
+        var requestId = ++state.visionPreviewRequestId;
+        try {
+          var data = await apiJson('/votes/vision-previews?vision_ids=' + encodeURIComponent(missingVisionIds.join(',')) + '&limit=6', { method: 'GET' });
+          if (requestId !== state.visionPreviewRequestId) return;
+          (Array.isArray(data && data.rows) ? data.rows : []).forEach(function (row) {
+            var visionId = String(row && row.vision_id || '');
+            if (!visionId) return;
+            state.visionPreviewMap[visionId] = Array.isArray(row.assets) ? row.assets : [];
+          });
+        } catch (err) {
+          setLog({ error: 'Vision preview load failed', details: err.response || requestErrorMessage(err, 'Preview load failed.') });
+        } finally {
+          missingVisionIds.forEach(function (visionId) {
+            delete state.loadingVisionPreviewIds[visionId];
+          });
+          renderVisionStats();
+        }
+      }
+
+      async function refreshVisionDetail(visionId, options) {
+        var opts = options || {};
+        var cleanedVisionId = String(visionId || '').trim();
+        if (!cleanedVisionId) return;
+        state.selectedVisionId = cleanedVisionId;
+        if (opts.assetSha) state.selectedVisionAssetSha = String(opts.assetSha || '');
+        if (!opts.keepDetail) state.selectedVisionDetail = null;
+        renderVisionCleanupPanel();
+        var requestId = ++state.visionDetailRequestId;
+        try {
+          var data = await apiJson('/votes/vision-detail?vision_id=' + encodeURIComponent(cleanedVisionId) + '&limit=24', { method: 'GET' });
+          if (requestId !== state.visionDetailRequestId) return;
+          state.selectedVisionDetail = data && data.detail ? data.detail : null;
+          if (!opts.assetSha) {
+            var selectedAsset = findSelectedVisionAsset(state.selectedVisionDetail);
+            state.selectedVisionAssetSha = selectedAsset ? String(selectedAsset.asset_sha256 || '') : '';
+          }
+          renderVisionCleanupPanel();
+        } catch (err) {
+          if (requestId !== state.visionDetailRequestId) return;
+          state.selectedVisionDetail = null;
+          if (els.visionCleanupSummary) els.visionCleanupSummary.textContent = 'Vision detail unavailable.';
+          els.visionCleanupPanel.innerHTML = inlineFailureMarkup('Vision detail failed fast', requestErrorMessage(err, 'Could not load this artist.'));
+          setLog({ error: 'Vision detail failed', details: err.response || requestErrorMessage(err, 'Vision detail failed.') });
+        }
+      }
+
       function renderVisionStats() {
         var sortKey = state.visionSort.key;
         var sortDir = state.visionSort.dir === 'asc' ? 1 : -1;
@@ -1615,17 +2047,23 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (els.visionPageLast) els.visionPageLast.disabled = state.visionPage >= totalPages;
 
         els.visionStatsList.innerHTML = pageRows.length ? pageRows.map(function (row) {
+          var isSelected = String(state.selectedVisionId || '') === String(row.vision_id || '');
           return [
-            '<tr>',
-            '<td><strong>' + esc(row.artist_name || row.artist_tag || row.vision_id || 'Unknown vision') + '</strong><div class="small">' + esc(row.artist_tag || row.vision_id || '') + '</div></td>',
+            '<tr class="vision-table-row' + (isSelected ? ' is-selected' : '') + '">',
+            '<td><button class="vision-open-btn" type="button" data-vision-open="' + esc(row.vision_id || '') + '"><strong>' + esc(row.artist_name || row.artist_tag || row.vision_id || 'Unknown vision') + '</strong><span class="small">' + esc(row.artist_tag || row.vision_id || '') + '</span></button></td>',
+            '<td class="vision-preview-cell">' + renderVisionPreviewCell(row) + '</td>',
             '<td>' + esc(String(row.image_count || 0)) + '</td>',
             '<td>' + esc(String(Math.round((Number(row.avg_vote || 0) * 100) ) / 100)) + '</td>',
             '<td>' + esc(String(Math.round((Number(row.rejection_rate || 0) * 1000)) / 10)) + '%</td>',
             '<td>' + esc(String(row.live_count || 0)) + '</td>',
-            '<td>' + (row.blacklisted ? '<span class="small">Blacklisted</span>' : '<button class="btn-flat" type="button" data-blacklist-tag="' + esc(row.artist_tag || '') + '" data-blacklist-name="' + esc(row.artist_name || '') + '">Blacklist</button>') + '</td>',
+            '<td><div class="actions"><button class="btn-flat" type="button" data-vision-open="' + esc(row.vision_id || '') + '">Open panel</button>' + (row.blacklisted ? '<span class="small">Blacklisted</span>' : '<button class="btn-flat" type="button" data-blacklist-tag="' + esc(row.artist_tag || '') + '" data-blacklist-name="' + esc(row.artist_name || '') + '">Blacklist</button>') + '</div></td>',
             '</tr>'
           ].join('');
-        }).join('') : '<tr><td colspan="6">No vision stats yet.</td></tr>';
+        }).join('') : '<tr><td colspan="7">No vision stats yet.</td></tr>';
+
+        ensureVisibleVisionPreviews(pageRows).catch(function (err) {
+          setLog({ error: 'Preview hydration failed', details: err.response || requestErrorMessage(err, 'Preview hydration failed.') });
+        });
 
         els.stylesNotes.innerHTML = (state.blacklistedStyles || []).length
           ? state.blacklistedStyles.map(function (row) {
@@ -1645,17 +2083,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       async function refreshVisionStats() {
         try {
           if (els.visionStatsList) {
-            els.visionStatsList.innerHTML = tableFailureMarkup('Loading vision scorecard…', 'Waiting for the admin read-model endpoints to answer.', 6);
+            els.visionStatsList.innerHTML = tableFailureMarkup('Loading vision scorecard…', 'Waiting for the admin read-model endpoints to answer.', 7);
           }
           var data = await apiJson('/votes/vision-stats', { method: 'GET' });
           state.visionStats = Array.isArray(data.rows) ? data.rows : [];
+          state.visionPreviewMap = {};
+          state.loadingVisionPreviewIds = {};
           state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
           state.visionPage = 1;
           renderVisionStats();
         } catch (err) {
           var message = requestErrorMessage(err, 'Vision stats failed.');
           if (els.visionStatsList) {
-            els.visionStatsList.innerHTML = tableFailureMarkup('Vision scorecard failed fast', message, 6);
+            els.visionStatsList.innerHTML = tableFailureMarkup('Vision scorecard failed fast', message, 7);
           }
           if (els.visionStatsMeta) {
             els.visionStatsMeta.innerHTML = '<span style="color: var(--danger)">Vision stats unavailable.</span>';
@@ -2128,6 +2568,72 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             return;
           }
 
+          var visionOpenBtn = ev.target.closest('[data-vision-open]');
+          if (visionOpenBtn) {
+            var visionId = String(visionOpenBtn.getAttribute('data-vision-open') || '');
+            var assetSha = String(visionOpenBtn.getAttribute('data-vision-asset') || '');
+            refreshVisionDetail(visionId, { assetSha: assetSha || undefined }).catch(function (err) {
+              setLog({ error: 'Vision detail failed', details: err.response || requestErrorMessage(err, 'Vision detail failed.') });
+            });
+            return;
+          }
+
+          var visionNavBtn = ev.target.closest('[data-vision-nav]');
+          if (visionNavBtn) {
+            var detail = state.selectedVisionDetail;
+            var assets = Array.isArray(detail && detail.assets) ? detail.assets : [];
+            if (assets.length <= 1) return;
+            var current = findSelectedVisionAsset(detail);
+            var currentIndex = current ? assets.findIndex(function (asset) { return asset.asset_sha256 === current.asset_sha256; }) : 0;
+            if (currentIndex < 0) currentIndex = 0;
+            var delta = String(visionNavBtn.getAttribute('data-vision-nav') || '') === 'prev' ? -1 : 1;
+            var nextIndex = (currentIndex + delta + assets.length) % assets.length;
+            state.selectedVisionAssetSha = String(assets[nextIndex].asset_sha256 || '');
+            renderVisionCleanupPanel();
+            renderVisionStats();
+            return;
+          }
+
+          var visionArtistActionBtn = ev.target.closest('[data-vision-artist-action]');
+          if (visionArtistActionBtn) {
+            if (String(visionArtistActionBtn.getAttribute('data-vision-artist-action') || '') === 'prefill-blacklist') {
+              if (els.styleTag) els.styleTag.value = String(visionArtistActionBtn.getAttribute('data-vision-tag') || '');
+              if (els.styleName) els.styleName.value = String(visionArtistActionBtn.getAttribute('data-vision-name') || '');
+              if (els.styleReason) els.styleReason.focus();
+            }
+            return;
+          }
+
+          var visionDetailActionBtn = ev.target.closest('[data-vision-detail-action]');
+          if (visionDetailActionBtn) {
+            var detailAction = String(visionDetailActionBtn.getAttribute('data-vision-detail-action') || '');
+            var detailSymbol = String(visionDetailActionBtn.getAttribute('data-symbol') || '');
+            var detailSha = String(visionDetailActionBtn.getAttribute('data-sha') || '');
+            try {
+              visionDetailActionBtn.disabled = true;
+              if (detailAction === 'open-gene') {
+                els.status.value = 'all';
+                els.stale.value = 'name';
+                els.search.value = detailSymbol;
+                setActiveTab('archive');
+                refreshAssets();
+                refreshGeneDetail(detailSymbol).catch(function (err) {
+                  setLog({ error: 'Gene detail failed', details: err.response || requestErrorMessage(err, 'Gene detail failed.') });
+                });
+              } else {
+                await handleTableAction(detailAction, detailSymbol, detailSha);
+                if (state.selectedVisionId) {
+                  await refreshVisionDetail(state.selectedVisionId, { assetSha: detailSha || state.selectedVisionAssetSha, keepDetail: true });
+                }
+              }
+            } catch (err) {
+              setLog({ error: String(err.message || err), details: err.response || null });
+            } finally {
+              visionDetailActionBtn.disabled = false;
+            }
+            return;
+          }
+
           var sortBtn = ev.target.closest('[data-vision-sort]');
           if (sortBtn) {
             var key = String(sortBtn.getAttribute('data-vision-sort') || 'live');
@@ -2179,6 +2685,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (blacklistBtn && els.styleTag) {
             els.styleTag.value = String(blacklistBtn.getAttribute('data-blacklist-tag') || '');
             els.styleName.value = String(blacklistBtn.getAttribute('data-blacklist-name') || '');
+            if (els.styleReason) els.styleReason.focus();
             setActiveTab('styles');
           }
         });
@@ -2227,6 +2734,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               }));
               els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>' + esc(visionTag) + ' removed.</strong><div class="small">Recorded.</div></div><div></div></article>';
               await refreshDerivedAdminViews();
+              if (state.selectedVisionId) {
+                await refreshVisionDetail(state.selectedVisionId, { keepDetail: true });
+              }
             } catch (err) {
               setLog({ error: String(err.message || err), details: err.response || null });
             } finally {
@@ -2239,8 +2749,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function init() {
         setActiveTab('overview');
         syncGalleryModeButtons();
-        els.visionStatsList.innerHTML = '<div class="gallery-empty">Open this tab to load the scorecard.</div>';
+        els.visionStatsList.innerHTML = '<tr><td colspan="7">Open this tab to load the scorecard.</td></tr>';
         if (els.visionStatsMeta) els.visionStatsMeta.textContent = 'Open this tab to load the scorecard.';
+        renderVisionCleanupPanel();
         els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blacklist log.</div></div><div></div></article>';
         els.refresh.addEventListener('click', function () {
           refreshAssets();

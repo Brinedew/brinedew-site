@@ -4316,6 +4316,169 @@ function mapAdminVisionStatsRows(rows) {
   }))
 }
 
+function mapAdminVisionAssetRow(base, row) {
+  const assetSha = normalizeSha256(row?.asset_sha256 || "") || ""
+  const width = optionalInt(row?.width)
+  const height = optionalInt(row?.height)
+  const score = Number(row?.score || 0)
+  const voteCount = Number(row?.vote_count || 0)
+  return {
+    vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+    gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+    asset_sha256: assetSha,
+    artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
+    artist_name: sanitizeText(row?.artist_name || "", 255) || "",
+    status: sanitizeText(row?.status || "", 32) || "draft",
+    width,
+    height,
+    aspect_ratio: width && height ? Math.round((width / height) * 1000) / 1000 : null,
+    bytes: optionalInt(row?.bytes),
+    hero_url:
+      (row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null) ||
+      adminPortraitUrl(base, assetSha, "full"),
+    medium_url:
+      (row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null) ||
+      adminPortraitUrl(base, assetSha, "medium"),
+    thumb_url:
+      (row?.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null) ||
+      adminPortraitUrl(base, assetSha, "thumb"),
+    is_current: Number(row?.is_current || 0) > 0,
+    is_stale: Number(row?.is_stale || 0) > 0,
+    is_legacy: Number(row?.is_legacy || 0) > 0,
+    autopick_eligible: Number(row?.autopick_eligible ?? 1) > 0,
+    upvotes: Number(row?.upvotes || 0),
+    downvotes: Number(row?.downvotes || 0),
+    score,
+    vote_count: voteCount,
+    avg_vote: voteCount > 0 ? Math.round((score / voteCount) * 100) / 100 : 0,
+    created_at: sanitizeText(row?.created_at || "", 64) || "",
+  }
+}
+
+function normalizeAdminVisionAssetLimit(raw, fallback = 6, max = 48) {
+  return Math.max(1, Math.min(max, Number.parseInt(String(raw || fallback), 10) || fallback))
+}
+
+async function fetchAdminVisionAssets(env, { base, visionIds = [], perVisionLimit = 6 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedVisionIds = Array.from(
+    new Set(
+      (Array.isArray(visionIds) ? visionIds : [])
+        .map((value) => validAdminRollupVisionId(value))
+        .filter(Boolean),
+    ),
+  )
+  if (!cleanedVisionIds.length) return []
+  const cleanedLimit = normalizeAdminVisionAssetLimit(perVisionLimit, 6, 48)
+  const assetResp = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming AS (
+       SELECT value AS vision_id
+       FROM json_each(?)
+     ),
+     ranked_assets AS (
+       SELECT
+         pa.vision_id,
+         upper(pa.gene_symbol) AS gene_symbol,
+         lower(pa.asset_sha256) AS asset_sha256,
+         COALESCE(pa.artist_tag, '') AS artist_tag,
+         COALESCE(pa.artist_name, '') AS artist_name,
+         lower(COALESCE(pa.status, 'draft')) AS status,
+         pa.width,
+         pa.height,
+         pa.bytes,
+         pa.r2_key_full,
+         pa.r2_key_medium,
+         pa.r2_key_thumb,
+         COALESCE(pa.autopick_eligible, 1) AS autopick_eligible,
+         COALESCE(pa.is_stale, 0) AS is_stale,
+         COALESCE(pa.is_legacy, 0) AS is_legacy,
+         COALESCE(pa.created_at, '') AS created_at,
+         COALESCE(vs.upvotes, 0) AS upvotes,
+         COALESCE(vs.downvotes, 0) AS downvotes,
+         COALESCE(vs.score, 0) AS score,
+         COALESCE(vs.vote_count, 0) AS vote_count,
+         CASE
+           WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+           ELSE 0
+         END AS is_current,
+         ROW_NUMBER() OVER (
+           PARTITION BY pa.vision_id
+           ORDER BY
+             CASE
+               WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+               ELSE 0
+             END DESC,
+             CASE lower(COALESCE(pa.status, 'draft'))
+               WHEN 'approved' THEN 0
+               WHEN 'draft' THEN 1
+               WHEN 'rejected' THEN 2
+               ELSE 3
+             END ASC,
+             COALESCE(vs.score, 0) DESC,
+             COALESCE(vs.upvotes, 0) DESC,
+             COALESCE(pa.created_at, '') DESC,
+             lower(pa.asset_sha256) ASC
+         ) AS row_num
+       FROM icono_portrait_assets pa
+       JOIN incoming i
+         ON i.vision_id = pa.vision_id
+       LEFT JOIN icono_vote_asset_summary vs
+         ON vs.gene_symbol = upper(pa.gene_symbol)
+        AND vs.asset_sha256 = lower(pa.asset_sha256)
+       LEFT JOIN icono_publish_state ps
+         ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
+       WHERE COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+     )
+     SELECT *
+     FROM ranked_assets
+     WHERE row_num <= ?
+     ORDER BY vision_id ASC, row_num ASC`,
+  )
+    .bind(JSON.stringify(cleanedVisionIds), cleanedLimit)
+    .all()
+  return (Array.isArray(assetResp?.results) ? assetResp.results : []).map((row) =>
+    mapAdminVisionAssetRow(base, row),
+  )
+}
+
+async function fetchAdminVisionDetail(env, { base, visionId, assetLimit = 24 } = {}) {
+  if (!env.ICONOPLASM_DB) return null
+  const cleanedVisionId = validAdminRollupVisionId(visionId)
+  if (!cleanedVisionId) return null
+  const [summaryRows, assets] = await Promise.all([
+    fetchAdminVisionStatsDirect(env, { visionIds: [cleanedVisionId] }),
+    fetchAdminVisionAssets(env, {
+      base,
+      visionIds: [cleanedVisionId],
+      perVisionLimit: normalizeAdminVisionAssetLimit(assetLimit, 24, 60),
+    }),
+  ])
+  const summary = Array.isArray(summaryRows) ? summaryRows[0] || null : null
+  if (!summary) return null
+  return {
+    vision: summary,
+    assets,
+  }
+}
+
+function groupAdminVisionPreviewRows(summaryRows, assetRows) {
+  const assetMap = new Map()
+  for (const asset of Array.isArray(assetRows) ? assetRows : []) {
+    const visionId = validAdminRollupVisionId(asset?.vision_id || "")
+    if (!visionId) continue
+    const existing = assetMap.get(visionId) || []
+    existing.push(asset)
+    assetMap.set(visionId, existing)
+  }
+  return (Array.isArray(summaryRows) ? summaryRows : []).map((row) => ({
+    vision_id: row.vision_id,
+    artist_tag: row.artist_tag,
+    artist_name: row.artist_name,
+    image_count: row.image_count,
+    assets: assetMap.get(row.vision_id) || [],
+  }))
+}
+
 async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedVisionIds = Array.from(
@@ -6027,6 +6190,110 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             count: rows.length,
             rows,
             blacklisted: visionStats.blacklisted,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (
+      path === "/api/iconoplasm/admin/votes/vision-previews" &&
+      (request.method === "POST" || request.method === "GET")
+    ) {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_votes_vision_previews_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_votes_vision_previews_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      let p = {}
+      if (request.method === "POST") {
+        try {
+          p = await request.json()
+        } catch {
+          return done("admin_votes_vision_previews_400", json({ error: "Invalid JSON" }, 400))
+        }
+      }
+      const visionIdsRaw = Array.isArray(p?.vision_ids)
+        ? p.vision_ids
+        : String(url.searchParams.get("vision_ids") || "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean)
+      const visionIds = []
+      const seenVision = new Set()
+      for (const raw of visionIdsRaw) {
+        const visionId = sanitizeVoteVisionId(raw)
+        if (!visionId || seenVision.has(visionId)) continue
+        seenVision.add(visionId)
+        visionIds.push(visionId)
+      }
+      if (visionIds.length > 250) {
+        return done(
+          "admin_votes_vision_previews_400",
+          json({ error: "Too many vision_ids (max 250)" }, 400),
+        )
+      }
+      const previewLimit = normalizeAdminVisionAssetLimit(
+        p?.limit ?? url.searchParams.get("limit"),
+        6,
+        12,
+      )
+      const [visionRows, assetRows] = await Promise.all([
+        fetchAdminVisionStatsDirect(env, { visionIds }),
+        fetchAdminVisionAssets(env, { base: url.origin, visionIds, perVisionLimit: previewLimit }),
+      ])
+      const rows = groupAdminVisionPreviewRows(visionRows, assetRows)
+      return done(
+        "admin_votes_vision_previews",
+        json(
+          {
+            ok: true,
+            count: rows.length,
+            limit: previewLimit,
+            rows,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/vision-detail" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_votes_vision_detail_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_votes_vision_detail_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const visionId = sanitizeVoteVisionId(url.searchParams.get("vision_id") || "")
+      if (!visionId) {
+        return done(
+          "admin_votes_vision_detail_400",
+          json({ error: "Missing or invalid vision_id" }, 400),
+        )
+      }
+      const assetLimit = normalizeAdminVisionAssetLimit(url.searchParams.get("limit"), 24, 60)
+      const detail = await fetchAdminVisionDetail(env, {
+        base: url.origin,
+        visionId,
+        assetLimit,
+      })
+      if (!detail) {
+        return done(
+          "admin_votes_vision_detail_404",
+          json({ error: "Vision not found" }, 404),
+        )
+      }
+      return done(
+        "admin_votes_vision_detail",
+        json(
+          {
+            ok: true,
+            detail,
           },
           200,
           { "Cache-Control": "no-store" },
