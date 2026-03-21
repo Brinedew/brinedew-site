@@ -4297,39 +4297,131 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
   }
 }
 
-async function fetchAdminVisionStats(env) {
+function mapAdminVisionStatsRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+    artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
+    artist_name: sanitizeText(row?.artist_name || "", 255) || "",
+    image_count: Number(row?.image_count || 0),
+    avg_vote: Number(row?.avg_vote || 0),
+    rejected_count: Number(row?.rejected_count || 0),
+    rejection_rate: Number(row?.rejection_rate || 0),
+    upvotes: Number(row?.upvotes || 0),
+    downvotes: Number(row?.downvotes || 0),
+    score: Number(row?.score || 0),
+    live_count: Number(row?.live_count || 0),
+    blacklisted: Number(row?.blacklisted || 0) > 0,
+    blacklist_reason: sanitizeText(row?.blacklist_reason || "", 2000) || "",
+    blacklist_updated_at: sanitizeText(row?.blacklist_updated_at || "", 64) || "",
+  }))
+}
+
+async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedVisionIds = Array.from(
+    new Set((Array.isArray(visionIds) ? visionIds : []).map((value) => validAdminRollupVisionId(value)).filter(Boolean)),
+  )
+  const applyFilter = cleanedVisionIds.length > 0
+  const statsResp = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming AS (
+       SELECT value AS vision_id
+       FROM json_each(?)
+     )
+     SELECT
+       pa.vision_id,
+       MAX(NULLIF(pa.artist_tag, '')) AS artist_tag,
+       MAX(NULLIF(pa.artist_name, '')) AS artist_name,
+       COUNT(*) AS image_count,
+       COALESCE(AVG(
+         CASE
+           WHEN COALESCE(vs.vote_count, 0) > 0 THEN 1.0 * COALESCE(vs.score, 0) / vs.vote_count
+           ELSE NULL
+         END
+       ), 0) AS avg_vote,
+       COALESCE(SUM(CASE WHEN lower(COALESCE(pa.status, '')) = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected_count,
+       COALESCE(SUM(CASE WHEN lower(COALESCE(pa.status, '')) = 'rejected' THEN 1 ELSE 0 END) * 1.0 / NULLIF(COUNT(*), 0), 0) AS rejection_rate,
+       COALESCE(SUM(COALESCE(vs.upvotes, 0)), 0) AS upvotes,
+       COALESCE(SUM(COALESCE(vs.downvotes, 0)), 0) AS downvotes,
+       COALESCE(SUM(COALESCE(vs.score, 0)), 0) AS score,
+       COALESCE(SUM(
+         CASE
+           WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+           ELSE 0
+         END
+       ), 0) AS live_count,
+       MAX(CASE WHEN bl.artist_tag IS NOT NULL THEN 1 ELSE 0 END) AS blacklisted,
+       MAX(NULLIF(bl.reason, '')) AS blacklist_reason,
+       MAX(NULLIF(bl.updated_at, '')) AS blacklist_updated_at
+     FROM icono_portrait_assets pa
+     LEFT JOIN icono_vote_asset_summary vs
+       ON vs.gene_symbol = upper(pa.gene_symbol)
+      AND vs.asset_sha256 = lower(pa.asset_sha256)
+     LEFT JOIN icono_publish_state ps
+       ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
+     LEFT JOIN icono_artist_style_blacklist bl
+       ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
+     WHERE COALESCE(pa.vision_id, '') <> ''
+       AND lower(COALESCE(pa.vision_id, '')) NOT LIKE 'artist-random-%'
+       AND (
+         ? = 0
+         OR pa.vision_id IN (SELECT vision_id FROM incoming)
+       )
+     GROUP BY pa.vision_id
+     ORDER BY live_count DESC, score DESC, image_count DESC, pa.vision_id ASC`,
+  )
+    .bind(JSON.stringify(cleanedVisionIds), applyFilter ? 1 : 0)
+    .all()
+  return mapAdminVisionStatsRows(statsResp?.results)
+}
+
+async function fetchAdminVisionStats(env, { visionIds = [] } = {}) {
   if (!env.ICONOPLASM_DB) return { rows: [], blacklisted: [] }
 
-  await ensureAdminReadModelsReady(env)
-  const statsResp = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
-     FROM icono_admin_vision_rollup
-     ORDER BY live_count DESC, score DESC, image_count DESC, vision_id ASC`,
-  ).all()
-
-  const blacklistResp = await env.ICONOPLASM_DB.prepare(
+  const cleanedVisionIds = Array.from(
+    new Set((Array.isArray(visionIds) ? visionIds : []).map((value) => validAdminRollupVisionId(value)).filter(Boolean)),
+  )
+  const [bootstrapState, blacklistResp] = await Promise.all([
+    fetchAdminReadModelBootstrapState(env),
+    env.ICONOPLASM_DB.prepare(
     `SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
      FROM icono_artist_style_blacklist
      ORDER BY updated_at DESC, artist_tag ASC`,
-  ).all()
+    ).all(),
+  ])
+
+  const bootstrapRunning =
+    bootstrapState && bootstrapState.status !== ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE
+
+  let rows = []
+  if (!bootstrapRunning) {
+    const applyFilter = cleanedVisionIds.length > 0
+    const statsResp = await env.ICONOPLASM_DB.prepare(
+      `WITH incoming AS (
+         SELECT value AS vision_id
+         FROM json_each(?)
+       )
+       SELECT *
+       FROM icono_admin_vision_rollup
+       WHERE (
+         ? = 0
+         OR vision_id IN (SELECT vision_id FROM incoming)
+       )
+       ORDER BY live_count DESC, score DESC, image_count DESC, vision_id ASC`,
+    )
+      .bind(JSON.stringify(cleanedVisionIds), applyFilter ? 1 : 0)
+      .all()
+    rows = mapAdminVisionStatsRows(statsResp?.results)
+  }
+
+  // When the big gene-centric bootstrap is still running, the vision rollup is only
+  // partially populated. In that state we would rather do one direct grouped read
+  // over the indexed raw asset table than serve a silently incomplete scorecard.
+  if (bootstrapRunning || rows.length === 0) {
+    rows = await fetchAdminVisionStatsDirect(env, { visionIds: cleanedVisionIds })
+  }
 
   return {
-    rows: (Array.isArray(statsResp?.results) ? statsResp.results : []).map((row) => ({
-      vision_id: sanitizeText(row?.vision_id || "", 255) || "",
-      artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
-      artist_name: sanitizeText(row?.artist_name || "", 255) || "",
-      image_count: Number(row?.image_count || 0),
-      avg_vote: Number(row?.avg_vote || 0),
-      rejected_count: Number(row?.rejected_count || 0),
-      rejection_rate: Number(row?.rejection_rate || 0),
-      upvotes: Number(row?.upvotes || 0),
-      downvotes: Number(row?.downvotes || 0),
-      score: Number(row?.score || 0),
-      live_count: Number(row?.live_count || 0),
-      blacklisted: Number(row?.blacklisted || 0) > 0,
-      blacklist_reason: sanitizeText(row?.blacklist_reason || "", 2000) || "",
-      blacklist_updated_at: sanitizeText(row?.blacklist_updated_at || "", 64) || "",
-    })),
+    rows,
     blacklisted: (Array.isArray(blacklistResp?.results) ? blacklistResp.results : []).map(
       (row) => ({
         artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
@@ -5925,10 +6017,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           json({ error: "Too many vision_ids (max 2000)" }, 400),
         )
       }
-      const visionStats = await fetchAdminVisionStats(env)
-      const rows = visionIds.length
-        ? visionStats.rows.filter((row) => visionIds.includes(row.vision_id))
-        : visionStats.rows
+      const visionStats = await fetchAdminVisionStats(env, { visionIds })
+      const rows = visionStats.rows
       return done(
         "admin_votes_vision_stats",
         json(
