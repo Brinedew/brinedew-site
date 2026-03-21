@@ -1948,71 +1948,62 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
   // the lazy Outliers tab for now. If overview ever needs exact drift again,
   // the right fix is B-374-style materialized admin state, not sneaking the
   // canon-audit workload back into startup.
-  const [
-    geneCountRow,
-    publishStateRow,
-    assetTotalsRow,
-    missingCurrentRow,
-    missingAttentionRow,
-    overrideAttentionRow,
-    staleAttentionRow,
-    recentEvents,
-  ] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT COUNT(DISTINCT upper(gene_symbol)) AS genes
-       FROM icono_portrait_assets`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         SUM(CASE WHEN COALESCE(current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS with_live,
-         SUM(CASE WHEN COALESCE(admin_override, 0) = 1 THEN 1 ELSE 0 END) AS overrides
-       FROM icono_publish_state`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
-         SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets
-       FROM icono_portrait_assets`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT COUNT(*) AS current_asset_missing
-       FROM icono_publish_state ps
-       LEFT JOIN icono_portrait_assets pa
-         ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
-        AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
-       WHERE COALESCE(ps.current_asset_sha256, '') <> ''
-         AND pa.asset_sha256 IS NULL`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT upper(ps.gene_symbol) AS gene_symbol
-       FROM icono_publish_state ps
-       LEFT JOIN icono_portrait_assets pa
-         ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
-        AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
-       WHERE COALESCE(ps.current_asset_sha256, '') <> ''
-         AND pa.asset_sha256 IS NULL
-       ORDER BY ps.updated_at DESC, upper(ps.gene_symbol) ASC
-       LIMIT 1`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT upper(gene_symbol) AS gene_symbol
-       FROM icono_publish_state
-       WHERE COALESCE(admin_override, 0) = 1
-       ORDER BY updated_at DESC, upper(gene_symbol) ASC
-       LIMIT 1`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         upper(gene_symbol) AS gene_symbol,
-         SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets
-       FROM icono_portrait_assets
-       GROUP BY upper(gene_symbol)
-       HAVING stale_assets > 0
-       ORDER BY stale_assets DESC, upper(gene_symbol) ASC
-       LIMIT 1`,
-    ).first(),
-    fetchAdminRecentEvents(env, { limit: eventLimit }),
-  ])
+  // Keep these sequential. In production, the D1 binding has been more stable
+  // when admin queries are explicit and ordered rather than fanned out.
+  const geneCountRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT COUNT(DISTINCT upper(gene_symbol)) AS genes
+     FROM icono_portrait_assets`,
+  ).first()
+  const publishStateRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       SUM(CASE WHEN COALESCE(current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS with_live,
+       SUM(CASE WHEN COALESCE(admin_override, 0) = 1 THEN 1 ELSE 0 END) AS overrides
+     FROM icono_publish_state`,
+  ).first()
+  const assetTotalsRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
+       SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets
+     FROM icono_portrait_assets`,
+  ).first()
+  const missingCurrentRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT COUNT(*) AS current_asset_missing
+     FROM icono_publish_state ps
+     LEFT JOIN icono_portrait_assets pa
+       ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+      AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
+     WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+       AND pa.asset_sha256 IS NULL`,
+  ).first()
+  const missingAttentionRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT upper(ps.gene_symbol) AS gene_symbol
+     FROM icono_publish_state ps
+     LEFT JOIN icono_portrait_assets pa
+       ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+      AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
+     WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+       AND pa.asset_sha256 IS NULL
+     ORDER BY ps.updated_at DESC, upper(ps.gene_symbol) ASC
+     LIMIT 1`,
+  ).first()
+  const overrideAttentionRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT upper(gene_symbol) AS gene_symbol
+     FROM icono_publish_state
+     WHERE COALESCE(admin_override, 0) = 1
+     ORDER BY updated_at DESC, upper(gene_symbol) ASC
+     LIMIT 1`,
+  ).first()
+  const staleAttentionRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       upper(gene_symbol) AS gene_symbol,
+       SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets
+     FROM icono_portrait_assets
+     GROUP BY upper(gene_symbol)
+     HAVING stale_assets > 0
+     ORDER BY stale_assets DESC, upper(gene_symbol) ASC
+     LIMIT 1`,
+  ).first()
+  const recentEvents = await fetchAdminRecentEvents(env, { limit: eventLimit })
 
   const genes = Number(geneCountRow?.genes || 0)
   const withLive = Number(publishStateRow?.with_live || 0)
@@ -3910,7 +3901,16 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         0,
         Math.min(100, Number.parseInt(url.searchParams.get("event_limit") || "24", 10)),
       )
-      const overview = await fetchAdminOverview(env, { eventLimit })
+      let overview
+      try {
+        overview = await fetchAdminOverview(env, { eventLimit })
+      } catch (error) {
+        console.error(
+          "admin_overview_failed",
+          error?.stack || error?.message || String(error || "unknown error"),
+        )
+        throw error
+      }
       const recentEvents = (overview.recent_events || []).map((row) => ({
         id: Number(row?.id || 0),
         symbol: normalizeSymbol(row?.gene_symbol || "") || "",
