@@ -158,6 +158,15 @@ export function isCanonicalRandomArtistVariantId(raw) {
   return CANONICAL_RANDOM_ARTIST_VARIANT_RE.test(visionId)
 }
 
+function deriveAdminArtistId(raw) {
+  const visionId = normalizeVisionId(raw)
+  if (!visionId) return ""
+  if (!isCanonicalRandomArtistVariantId(visionId)) return ""
+  const match = visionId.match(/-(\d+)$/)
+  if (!match) return ""
+  return String(Number.parseInt(match[1], 10) || "")
+}
+
 export function sanitizeVoteVisionId(raw) {
   const visionId = normalizeVisionId(raw)
   if (!visionId) return ""
@@ -4300,6 +4309,11 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
 function mapAdminVisionStatsRows(rows) {
   return (Array.isArray(rows) ? rows : []).map((row) => ({
     vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+    // The user-facing artist/emulsion ID is the stable resolved variant ordinal
+    // encoded in vision_id (for example anima-v1-42 -> 42). Do not use
+    // candidate_image_id here; that is per image and gives different numbers for
+    // the same artist row.
+    artist_id: sanitizeText(row?.artist_id || "", 64) || deriveAdminArtistId(row?.vision_id || ""),
     artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
     artist_name: sanitizeText(row?.artist_name || "", 255) || "",
     image_count: Number(row?.image_count || 0),
@@ -4325,6 +4339,7 @@ function mapAdminVisionAssetRow(base, row) {
   const voteCount = Number(row?.vote_count || 0)
   return {
     vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+    artist_id: sanitizeText(row?.artist_id || "", 64) || deriveAdminArtistId(row?.vision_id || ""),
     gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
     asset_sha256: assetSha,
     candidate_image_id: candidateImageId,

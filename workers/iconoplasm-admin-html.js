@@ -2020,9 +2020,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         });
       }
 
-      function assetEmulsionId(asset) {
-        var value = Number(asset && asset.candidate_image_id);
-        if (Number.isFinite(value) && value > 0) return String(Math.round(value));
+      function visionArtistId(value) {
+        var artistId = String(value && (value.artist_id || value.emulsion_id) || '').trim();
+        if (artistId) return artistId;
         return '';
       }
 
@@ -2202,19 +2202,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderVisionEmulsionCell(row) {
-        var visionId = String(row && row.vision_id || '');
-        var assets = state.visionPreviewMap[visionId] || [];
-        var ids = [];
-        assets.forEach(function (asset) {
-          var id = assetEmulsionId(asset);
-          if (id && !ids.includes(id)) ids.push(id);
-        });
-        if (!ids.length) {
-          return '<div class="vision-preview-empty">' + esc(state.loadingVisionPreviewIds[visionId] ? 'Loading IDs…' : '—') + '</div>';
-        }
-        return '<div class="vision-emulsion-stack">' + ids.map(function (id) {
-          return '<span class="vision-emulsion-chip mono">' + esc(id) + '</span>';
-        }).join('') + '</div>';
+        var id = visionArtistId(row);
+        if (!id) return '<div class="vision-preview-empty">—</div>';
+        return '<div class="vision-emulsion-stack"><span class="vision-emulsion-chip mono">' + esc(id) + '</span></div>';
       }
 
       function renderVisionCleanupPanel() {
@@ -2271,7 +2261,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             '<div class="vision-panel-meta">',
             '<div><button class="vision-gene-link" type="button" data-vision-detail-action="open-gene" data-symbol="' + esc(selectedAsset.gene_symbol || '') + '"><strong>' + esc(selectedAsset.gene_symbol || 'Unknown gene') + '</strong></button> · ' + esc(selectedAsset.status || 'draft') + '</div>',
             '<div class="small">score ' + esc(String(selectedAsset.score || 0)) + ' · +' + esc(String(selectedAsset.upvotes || 0)) + ' / -' + esc(String(selectedAsset.downvotes || 0)) + ' · ' + esc(String(selectedAsset.width || '?')) + '×' + esc(String(selectedAsset.height || '?')) + '</div>',
-            (assetEmulsionId(selectedAsset) ? '<div class="small mono">Emulsion ' + esc(assetEmulsionId(selectedAsset)) + '</div>' : ''),
+            (visionArtistId(vision) ? '<div class="small mono">Emulsion ' + esc(visionArtistId(vision)) + '</div>' : ''),
             '<div class="small mono">' + esc(shortSha(selectedAsset.asset_sha256 || '')) + '</div>',
             '</div>',
             '<div class="vision-panel-actions">',
