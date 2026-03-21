@@ -571,6 +571,26 @@
     return String(Math.abs(hash >>> 0) % 100000).padStart(5, "0")
   }
 
+  function labLabelArtistIdFromVision(rawVisionId) {
+    var visionId = String(rawVisionId || "").trim().toLowerCase()
+    if (!/^[a-z0-9-]+-v\d+-\d+$/.test(visionId)) return ""
+    var match = visionId.match(/-(\d+)$/)
+    return match ? String(Number.parseInt(match[1], 10) || "") : ""
+  }
+
+  function labLabelEmulsionNumber(portrait) {
+    var safePortrait = portrait && typeof portrait === "object" ? portrait : {}
+    var explicitArtistId = String(safePortrait.artist_id || safePortrait.emulsion_id || "").trim()
+    if (explicitArtistId) return explicitArtistId
+    var visionArtistId = labLabelArtistIdFromVision(safePortrait.vision_id)
+    if (visionArtistId) return visionArtistId
+    var candidateImageId = Number(safePortrait.candidate_image_id)
+    if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
+      return String(Math.round(candidateImageId))
+    }
+    return ""
+  }
+
   function labLabelDisplayName(geneDetail) {
     var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
     var safeEssence =
@@ -1008,13 +1028,12 @@
         : {}
     var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     var fullName = labLabelDisplayName(safeGeneDetail)
-    var candidateImageId = Number(safePortrait.candidate_image_id)
-    var visionId = String(safePortrait.vision_id || "").trim()
-    var emulsionNumber =
-      Number.isFinite(candidateImageId) && candidateImageId > 0
-        ? String(Math.round(candidateImageId))
-        : visionId
-    var serial = labLabelCatalogNumber(emulsionNumber || symbol)
+    // Keep the gene card aligned with admin: emulsion no. is the one stable
+    // artist-level ID, not a hashed label serial and not the per-image
+    // candidate_image_id. Only fall back to the hashed symbol number when we truly
+    // have no artist lineage to show.
+    var emulsionNumber = labLabelEmulsionNumber(safePortrait)
+    var serial = emulsionNumber || labLabelCatalogNumber(symbol)
     var family = String(safeEssence.family_surname || "").trim()
     var familyFeature = String(safeEssence.family_feature || "").trim()
     var familyMembers = Number(safeEssence.family_members)

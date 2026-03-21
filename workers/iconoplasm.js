@@ -167,6 +167,10 @@ function deriveAdminArtistId(raw) {
   return String(Number.parseInt(match[1], 10) || "")
 }
 
+function publicArtistIdForRow(row) {
+  return sanitizeText(row?.artist_id || "", 64) || deriveAdminArtistId(row?.vision_id || "")
+}
+
 export function sanitizeVoteVisionId(raw) {
   const visionId = normalizeVisionId(raw)
   if (!visionId) return ""
@@ -1011,10 +1015,11 @@ async function portraitState(env, symbol, base) {
       thumb_url: null,
       asset_sha256: null,
       candidate_image_id: null,
+      artist_id: null,
     }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id, pa.candidate_image_id
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id, pa.candidate_image_id, pa.artist_id
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
            ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
@@ -1032,6 +1037,7 @@ async function portraitState(env, symbol, base) {
         thumb_url: null,
         asset_sha256: null,
         candidate_image_id: null,
+        artist_id: null,
       }
     return {
       status: "published",
@@ -1041,6 +1047,10 @@ async function portraitState(env, symbol, base) {
       asset_sha256: row.asset_sha256,
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
+      // Public cards and gene pages should show the same one-number-per-artist
+      // emulsion ID as admin. candidate_image_id is per image, so derive from the
+      // resolved artist lineage when no persisted artist_id is present.
+      artist_id: publicArtistIdForRow(row) || null,
     }
   } catch {
     return {
@@ -1050,6 +1060,7 @@ async function portraitState(env, symbol, base) {
       thumb_url: null,
       asset_sha256: null,
       candidate_image_id: null,
+      artist_id: null,
     }
   }
 }
@@ -5080,6 +5091,7 @@ async function gallerySnapshot(env, url) {
         asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
         candidate_image_id: optionalInt(row?.candidate_image_id),
         vision_id: String(row?.vision_id || "").trim() || null,
+        artist_id: publicArtistIdForRow(row) || null,
         ...(width != null ? { width } : {}),
         ...(height != null ? { height } : {}),
       },
@@ -5192,6 +5204,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.created_at,
        pa.candidate_image_id,
        pa.vision_id,
+       pa.artist_id,
        COALESCE(v.upvotes, 0) AS image_upvotes,
        COALESCE(v.downvotes, 0) AS image_downvotes,
        COALESCE(v.score, 0) AS image_score
@@ -5227,6 +5240,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       is_current: !!(assetSha && currentSha && assetSha === currentSha),
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
+      artist_id: publicArtistIdForRow(row) || null,
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
       image_score: Number(row?.image_score || 0),
