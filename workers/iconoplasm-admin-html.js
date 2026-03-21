@@ -1350,6 +1350,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         selectedVisionId: '',
         selectedVisionDetail: null,
         selectedVisionAssetSha: '',
+        visionDetailCache: {},
+        preloadedImageUrls: {},
         visionPreviewRequestId: 0,
         visionDetailRequestId: 0,
         selectedGene: '',
@@ -1792,6 +1794,57 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return num.toLocaleString('en-US');
       }
 
+      function isEditableTarget(target) {
+        if (!target || !(target instanceof Element)) return false;
+        var tag = String(target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'option') return true;
+        return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+      }
+
+      function preloadImage(url) {
+        var safeUrl = String(url || '').trim();
+        if (!safeUrl || state.preloadedImageUrls[safeUrl]) return;
+        state.preloadedImageUrls[safeUrl] = true;
+        try {
+          var img = new Image();
+          img.decoding = 'async';
+          img.src = safeUrl;
+        } catch {}
+      }
+
+      function preloadVisionAssets(assets) {
+        (Array.isArray(assets) ? assets : []).forEach(function (asset) {
+          if (!asset) return;
+          preloadImage(asset.medium_url || asset.thumb_url || asset.hero_url || '');
+        });
+      }
+
+      function sortedVisionRows() {
+        var sortKey = state.visionSort.key;
+        var sortDir = state.visionSort.dir === 'asc' ? 1 : -1;
+        return (state.visionStats || []).slice().sort(function (left, right) {
+          function label(row) {
+            return String(row.artist_name || row.artist_tag || row.vision_id || '');
+          }
+          if (sortKey === 'vision') return label(left).localeCompare(label(right)) * sortDir;
+          if (sortKey === 'images') return (Number(left.image_count || 0) - Number(right.image_count || 0)) * sortDir;
+          if (sortKey === 'score') return (Number(left.avg_vote || 0) - Number(right.avg_vote || 0)) * sortDir;
+          if (sortKey === 'rejection') return (Number(left.rejection_rate || 0) - Number(right.rejection_rate || 0)) * sortDir;
+          var byLive = (Number(left.live_count || 0) - Number(right.live_count || 0)) * sortDir;
+          if (byLive) return byLive;
+          return label(left).localeCompare(label(right)) * sortDir;
+        });
+      }
+
+      function visibleVisionRows() {
+        var rows = sortedVisionRows();
+        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || 50), 10) || 50);
+        var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+        state.visionPage = clampVisionPage(state.visionPage, totalPages);
+        var start = (state.visionPage - 1) * pageSize;
+        return rows.slice(start, start + pageSize);
+      }
+
       function previewAspectRatio(asset) {
         var ratio = Number(asset && asset.aspect_ratio);
         if (Number.isFinite(ratio) && ratio > 0) return Math.max(0.55, Math.min(2.2, ratio));
@@ -1816,6 +1869,94 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return assets[0] || null;
       }
 
+      function currentVisionAssetIndex(detail) {
+        var assets = Array.isArray(detail && detail.assets) ? detail.assets : [];
+        if (!assets.length) return 0;
+        var selected = findSelectedVisionAsset(detail);
+        var index = selected ? assets.findIndex(function (asset) {
+          return asset.asset_sha256 === selected.asset_sha256;
+        }) : 0;
+        return index >= 0 ? index : 0;
+      }
+
+      function mergeVisionAssets(previewAssets, detailAssets) {
+        var bySha = {};
+        var merged = [];
+        (Array.isArray(previewAssets) ? previewAssets : []).concat(Array.isArray(detailAssets) ? detailAssets : []).forEach(function (asset) {
+          var sha = String(asset && asset.asset_sha256 || '').toLowerCase();
+          if (!sha) return;
+          if (!bySha[sha]) {
+            bySha[sha] = Object.assign({}, asset);
+            merged.push(bySha[sha]);
+          } else {
+            Object.assign(bySha[sha], asset);
+          }
+        });
+        return merged;
+      }
+
+      function seedVisionDetailFromPreview(row, assetSha) {
+        if (!row || !row.vision_id) return false;
+        var previewAssets = state.visionPreviewMap[row.vision_id] || [];
+        if (!previewAssets.length) return false;
+        state.selectedVisionDetail = {
+          vision: Object.assign({}, row),
+          assets: mergeVisionAssets(previewAssets, [])
+        };
+        state.selectedVisionAssetSha = String(assetSha || state.selectedVisionAssetSha || previewAssets[0].asset_sha256 || '');
+        renderVisionCleanupPanel();
+        preloadVisionAssets(previewAssets);
+        return true;
+      }
+
+      function preloadVisionNeighbors(detail) {
+        var assets = Array.isArray(detail && detail.assets) ? detail.assets : [];
+        if (!assets.length) return;
+        var currentIndex = currentVisionAssetIndex(detail);
+        [currentIndex, currentIndex - 1, currentIndex + 1].forEach(function (index) {
+          if (index < 0 || index >= assets.length) return;
+          var asset = assets[index];
+          preloadImage(asset && (asset.medium_url || asset.hero_url || asset.thumb_url));
+        });
+      }
+
+      function setSelectedVisionAsset(assetSha) {
+        var cleaned = String(assetSha || '').trim();
+        if (!cleaned || !state.selectedVisionDetail) return;
+        state.selectedVisionAssetSha = cleaned;
+        renderVisionCleanupPanel();
+        renderVisionStats();
+        preloadVisionNeighbors(state.selectedVisionDetail);
+      }
+
+      function navigateSelectedVisionAsset(delta) {
+        var detail = state.selectedVisionDetail;
+        var assets = Array.isArray(detail && detail.assets) ? detail.assets : [];
+        if (assets.length <= 1) return;
+        var currentIndex = currentVisionAssetIndex(detail);
+        var nextIndex = (currentIndex + delta + assets.length) % assets.length;
+        setSelectedVisionAsset(assets[nextIndex].asset_sha256 || '');
+      }
+
+      function selectRelativeVision(delta) {
+        var rows = visibleVisionRows();
+        if (!rows.length) return;
+        var currentId = String(state.selectedVisionId || '');
+        var currentIndex = rows.findIndex(function (row) {
+          return String(row.vision_id || '') === currentId;
+        });
+        if (currentIndex < 0) currentIndex = 0;
+        var nextIndex = currentIndex + delta;
+        if (nextIndex < 0 || nextIndex >= rows.length) return;
+        var nextRow = rows[nextIndex];
+        var previewAssets = state.visionPreviewMap[nextRow.vision_id] || [];
+        var assetIndex = currentVisionAssetIndex(state.selectedVisionDetail);
+        var nextAsset = previewAssets[Math.min(assetIndex, Math.max(0, previewAssets.length - 1))] || previewAssets[0] || null;
+        refreshVisionDetail(nextRow.vision_id, { assetSha: nextAsset ? nextAsset.asset_sha256 : undefined }).catch(function (err) {
+          setLog({ error: 'Vision detail failed', details: err.response || requestErrorMessage(err, 'Vision detail failed.') });
+        });
+      }
+
       function prefillVisionBlacklistInputs(vision) {
         if (!vision) return;
         if (els.styleTag) els.styleTag.value = String(vision.artist_tag || vision.vision_id || '');
@@ -1835,7 +1976,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           ' data-vision-open="' + esc(visionId || '') + '"',
           ' data-vision-asset="' + esc(asset.asset_sha256 || '') + '"',
           ' title="' + esc(titleParts.join(' · ')) + '">',
-          '<img src="' + esc(asset.thumb_url) + '" alt="' + esc(label + ' preview') + '" loading="lazy" />',
+          '<img src="' + esc(asset.thumb_url) + '" alt="' + esc(label + ' preview') + '" loading="eager" />',
           '<span class="vision-preview-gene">' + esc(label) + '</span>',
           '</button>'
         ].join('');
@@ -1878,10 +2019,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var selectedAsset = findSelectedVisionAsset(detail);
         state.selectedVisionAssetSha = selectedAsset ? String(selectedAsset.asset_sha256 || '') : '';
         prefillVisionBlacklistInputs(vision);
+        preloadVisionNeighbors(detail);
 
-        var currentIndex = selectedAsset
-          ? assets.findIndex(function (asset) { return asset.asset_sha256 === selectedAsset.asset_sha256; })
-          : -1;
+        var currentIndex = currentVisionAssetIndex(detail);
         var selectedBadges = [];
         if (vision.blacklisted) selectedBadges.push('<span class="badge-pill badge-mismatch">Blacklisted</span>');
         if (selectedAsset && selectedAsset.is_current) selectedBadges.push('<span class="badge-pill badge-live">Canonical</span>');
@@ -1901,7 +2041,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '</div>',
           '<div class="vision-panel-frame">',
           (selectedAsset && selectedAsset.medium_url
-            ? '<img src="' + esc(selectedAsset.medium_url) + '" alt="Selected artist example" loading="lazy" />'
+            ? '<img src="' + esc(selectedAsset.medium_url) + '" alt="Selected artist example" loading="eager" fetchpriority="high" />'
             : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No preview available</div>'),
           '</div>',
           '<div class="vision-panel-nav">',
@@ -1966,6 +2106,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             var visionId = String(row && row.vision_id || '');
             if (!visionId) return;
             state.visionPreviewMap[visionId] = Array.isArray(row.assets) ? row.assets : [];
+            preloadVisionAssets(state.visionPreviewMap[visionId]);
           });
         } catch (err) {
           setLog({ error: 'Vision preview load failed', details: err.response || requestErrorMessage(err, 'Preview load failed.') });
@@ -1981,15 +2122,41 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var opts = options || {};
         var cleanedVisionId = String(visionId || '').trim();
         if (!cleanedVisionId) return;
+        var currentRow = (state.visionStats || []).find(function (row) {
+          return String(row && row.vision_id || '') === cleanedVisionId;
+        }) || null;
         state.selectedVisionId = cleanedVisionId;
+        renderVisionStats();
         if (opts.assetSha) state.selectedVisionAssetSha = String(opts.assetSha || '');
-        if (!opts.keepDetail) state.selectedVisionDetail = null;
-        renderVisionCleanupPanel();
+        if (!opts.keepDetail) {
+          var cached = state.visionDetailCache[cleanedVisionId] || null;
+          if (cached) {
+            state.selectedVisionDetail = {
+              vision: Object.assign({}, cached.vision),
+              assets: mergeVisionAssets(state.visionPreviewMap[cleanedVisionId] || [], cached.assets || [])
+            };
+            renderVisionCleanupPanel();
+          } else if (!seedVisionDetailFromPreview(currentRow, opts.assetSha)) {
+            state.selectedVisionDetail = null;
+            renderVisionCleanupPanel();
+          }
+        }
         var requestId = ++state.visionDetailRequestId;
         try {
           var data = await apiJson('/votes/vision-detail?vision_id=' + encodeURIComponent(cleanedVisionId) + '&limit=24', { method: 'GET' });
           if (requestId !== state.visionDetailRequestId) return;
-          state.selectedVisionDetail = data && data.detail ? data.detail : null;
+          state.selectedVisionDetail = data && data.detail ? {
+            vision: Object.assign({}, data.detail.vision),
+            assets: mergeVisionAssets(state.visionPreviewMap[cleanedVisionId] || [], data.detail.assets || [])
+          } : null;
+          if (state.selectedVisionDetail) {
+            state.visionDetailCache[cleanedVisionId] = {
+              vision: Object.assign({}, state.selectedVisionDetail.vision),
+              assets: (state.selectedVisionDetail.assets || []).map(function (asset) {
+                return Object.assign({}, asset);
+              })
+            };
+          }
           if (!opts.assetSha) {
             var selectedAsset = findSelectedVisionAsset(state.selectedVisionDetail);
             state.selectedVisionAssetSha = selectedAsset ? String(selectedAsset.asset_sha256 || '') : '';
@@ -1998,6 +2165,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         } catch (err) {
           if (requestId !== state.visionDetailRequestId) return;
           state.selectedVisionDetail = null;
+          renderVisionStats();
           if (els.visionCleanupSummary) els.visionCleanupSummary.textContent = 'Vision detail unavailable.';
           els.visionCleanupPanel.innerHTML = inlineFailureMarkup('Vision detail failed fast', requestErrorMessage(err, 'Could not load this artist.'));
           setLog({ error: 'Vision detail failed', details: err.response || requestErrorMessage(err, 'Vision detail failed.') });
@@ -2006,19 +2174,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function renderVisionStats() {
         var sortKey = state.visionSort.key;
-        var sortDir = state.visionSort.dir === 'asc' ? 1 : -1;
-        var rows = (state.visionStats || []).slice().sort(function (left, right) {
-          function label(row) {
-            return String(row.artist_name || row.artist_tag || row.vision_id || '');
-          }
-          if (sortKey === 'vision') return label(left).localeCompare(label(right)) * sortDir;
-          if (sortKey === 'images') return (Number(left.image_count || 0) - Number(right.image_count || 0)) * sortDir;
-          if (sortKey === 'score') return (Number(left.avg_vote || 0) - Number(right.avg_vote || 0)) * sortDir;
-          if (sortKey === 'rejection') return (Number(left.rejection_rate || 0) - Number(right.rejection_rate || 0)) * sortDir;
-          var byLive = (Number(left.live_count || 0) - Number(right.live_count || 0)) * sortDir;
-          if (byLive) return byLive;
-          return label(left).localeCompare(label(right)) * sortDir;
-        });
+        var rows = sortedVisionRows();
         var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || 50), 10) || 50);
         var totalRows = rows.length;
         var totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
@@ -2088,6 +2244,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var data = await apiJson('/votes/vision-stats', { method: 'GET' });
           state.visionStats = Array.isArray(data.rows) ? data.rows : [];
           state.visionPreviewMap = {};
+          state.visionDetailCache = {};
+          state.preloadedImageUrls = {};
           state.loadingVisionPreviewIds = {};
           state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
           state.visionPage = 1;
@@ -2580,17 +2738,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
           var visionNavBtn = ev.target.closest('[data-vision-nav]');
           if (visionNavBtn) {
-            var detail = state.selectedVisionDetail;
-            var assets = Array.isArray(detail && detail.assets) ? detail.assets : [];
-            if (assets.length <= 1) return;
-            var current = findSelectedVisionAsset(detail);
-            var currentIndex = current ? assets.findIndex(function (asset) { return asset.asset_sha256 === current.asset_sha256; }) : 0;
-            if (currentIndex < 0) currentIndex = 0;
             var delta = String(visionNavBtn.getAttribute('data-vision-nav') || '') === 'prev' ? -1 : 1;
-            var nextIndex = (currentIndex + delta + assets.length) % assets.length;
-            state.selectedVisionAssetSha = String(assets[nextIndex].asset_sha256 || '');
-            renderVisionCleanupPanel();
-            renderVisionStats();
+            navigateSelectedVisionAsset(delta);
             return;
           }
 
@@ -2687,6 +2836,31 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             els.styleName.value = String(blacklistBtn.getAttribute('data-blacklist-name') || '');
             if (els.styleReason) els.styleReason.focus();
             setActiveTab('styles');
+          }
+        });
+
+        document.addEventListener('keydown', function (ev) {
+          if (state.activeTab !== 'styles') return;
+          if (isEditableTarget(ev.target)) return;
+          if (!state.selectedVisionId) return;
+          if (ev.key === 'ArrowLeft') {
+            ev.preventDefault();
+            navigateSelectedVisionAsset(-1);
+            return;
+          }
+          if (ev.key === 'ArrowRight') {
+            ev.preventDefault();
+            navigateSelectedVisionAsset(1);
+            return;
+          }
+          if (ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            selectRelativeVision(-1);
+            return;
+          }
+          if (ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            selectRelativeVision(1);
           }
         });
 
