@@ -1348,11 +1348,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <div class="vision-quick-actions">
               <div class="detail-kicker">Quick actions</div>
               <div class="vision-quick-context" id="vision-quick-context">Select an artist to unlock one-click cleanup actions.</div>
-              <input id="style-tag" type="hidden" />
-              <input id="style-name" type="hidden" />
-              <label>Why
-                <input id="style-reason" type="text" placeholder="Reason for blacklist or cleanup action" />
-              </label>
               <div class="vision-dashboard-actions">
                 <button class="btn-flat" type="button" id="vision-open-current-gene" disabled>Open current gene</button>
                 <button class="btn-flat" type="button" id="vision-copy-current-tag" disabled>Copy artist tag</button>
@@ -1438,9 +1433,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         overviewCoverage: document.getElementById('overview-coverage'),
         attentionList: document.getElementById('attention-list'),
         overviewEvents: document.getElementById('overview-events'),
-        styleTag: document.getElementById('style-tag'),
-        styleName: document.getElementById('style-name'),
-        styleReason: document.getElementById('style-reason'),
         styleRemove: document.getElementById('style-remove'),
         visionStatsList: document.getElementById('vision-stats-list'),
         visionStatsMeta: document.getElementById('vision-stats-meta'),
@@ -2097,17 +2089,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         });
       }
 
-      function prefillVisionBlacklistInputs(vision) {
-        if (!vision) return;
-        if (els.styleTag) els.styleTag.value = String(vision.artist_tag || vision.vision_id || '');
-        if (els.styleName) els.styleName.value = String(vision.artist_name || '');
-      }
-
       function currentVisionContext() {
         var detail = state.selectedVisionDetail;
         var vision = detail && detail.vision ? detail.vision : null;
         var asset = findSelectedVisionAsset(detail);
         return { vision: vision, asset: asset };
+      }
+
+      function visionRowById(visionId) {
+        var cleanedVisionId = String(visionId || '').trim();
+        if (!cleanedVisionId) return null;
+        return (state.visionStats || []).find(function (row) {
+          return String(row && row.vision_id || '') === cleanedVisionId;
+        }) || null;
       }
 
       function renderVisionQuickActions() {
@@ -2150,24 +2144,25 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         });
       }
 
-      async function blacklistCurrentVision() {
-        var context = currentVisionContext();
-        var vision = context.vision;
+      async function blacklistVision(vision) {
         if (!vision) throw new Error('Pick an artist before blacklisting.');
         var artistTag = String(vision.artist_tag || vision.vision_id || '').trim();
         if (!artistTag) throw new Error('Selected artist is missing a vision tag.');
         var visionName = String(vision.artist_name || '').trim();
-        var reason = String((els.styleReason && els.styleReason.value) || '').trim();
         if (!window.confirm('Blacklist ' + artistTag + '?')) return;
         setLog(await runMutation('/artist-styles/remove', {
           artist_tag: artistTag,
-          artist_name: visionName || undefined,
-          reason: reason || undefined
+          artist_name: visionName || undefined
         }));
         await refreshDerivedAdminViews();
         if (state.selectedVisionId) {
           await refreshVisionDetail(state.selectedVisionId, { keepDetail: true, assetSha: state.selectedVisionAssetSha });
         }
+      }
+
+      async function blacklistCurrentVision() {
+        var context = currentVisionContext();
+        await blacklistVision(context.vision);
       }
 
       function renderVisionPreviewButton(visionId, asset, active) {
@@ -2242,7 +2237,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var assets = Array.isArray(detail.assets) ? detail.assets : [];
         var selectedAsset = findSelectedVisionAsset(detail);
         state.selectedVisionAssetSha = selectedAsset ? String(selectedAsset.asset_sha256 || '') : '';
-        prefillVisionBlacklistInputs(vision);
         preloadVisionNeighbors(detail);
 
         var currentIndex = currentVisionAssetIndex(detail);
@@ -2435,7 +2429,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             '<td>' + esc(String(Math.round((Number(row.avg_vote || 0) * 100) ) / 100)) + '</td>',
             '<td>' + esc(String(Math.round((Number(row.rejection_rate || 0) * 1000)) / 10)) + '%</td>',
             '<td>' + esc(String(row.live_count || 0)) + '</td>',
-            '<td><div class="actions"><button class="btn-flat" type="button" data-vision-open="' + esc(row.vision_id || '') + '">Open panel</button>' + (row.blacklisted ? '<span class="small">Blacklisted</span>' : '<button class="btn-flat" type="button" data-blacklist-tag="' + esc(row.artist_tag || '') + '" data-blacklist-name="' + esc(row.artist_name || '') + '">Blacklist</button>') + '</div></td>',
+            '<td><div class="actions"><button class="btn-flat" type="button" data-vision-open="' + esc(row.vision_id || '') + '">Open panel</button>' + (row.blacklisted ? '<span class="small">Blacklisted</span>' : '<button class="btn-flat" type="button" data-vision-row-action="blacklist" data-vision-id="' + esc(row.vision_id || '') + '">Blacklist</button>') + '</div></td>',
             '</tr>'
           ].join('');
         }).join('') : '<tr><td colspan="8">No vision stats yet.</td></tr>';
@@ -3052,12 +3046,22 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             return;
           }
 
-          var blacklistBtn = ev.target.closest('[data-blacklist-tag]');
-          if (blacklistBtn && els.styleTag) {
-            els.styleTag.value = String(blacklistBtn.getAttribute('data-blacklist-tag') || '');
-            els.styleName.value = String(blacklistBtn.getAttribute('data-blacklist-name') || '');
-            if (els.styleReason) els.styleReason.focus();
-            setActiveTab('styles');
+          var visionRowActionBtn = ev.target.closest('[data-vision-row-action]');
+          if (visionRowActionBtn) {
+            var rowAction = String(visionRowActionBtn.getAttribute('data-vision-row-action') || '');
+            var rowVisionId = String(visionRowActionBtn.getAttribute('data-vision-id') || '');
+            if (rowAction === 'blacklist') {
+              var row = visionRowById(rowVisionId);
+              try {
+                visionRowActionBtn.disabled = true;
+                await blacklistVision(row);
+              } catch (err) {
+                setLog({ error: String(err.message || err), details: err.response || null });
+              } finally {
+                visionRowActionBtn.disabled = false;
+              }
+            }
+            return;
           }
         });
 
