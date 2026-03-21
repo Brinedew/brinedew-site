@@ -2896,7 +2896,12 @@ async function ensureAdminReadModelsReady(env) {
       .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
       .first()
     if (!summary) {
-      await syncAdminReadModels(env, { fullRebuild: true, fullVision: true })
+      // Do not bootstrap the entire admin read model from a live request.
+      // Production already crossed the point where a first-run full rebuild can
+      // blow D1 CPU limits, so the heavy backfill now happens in a migration.
+      // Request-time code only makes sure the lightweight dashboard row exists
+      // so the admin page degrades to empty data instead of throwing a 500.
+      await rebuildDashboardSummary(env)
     }
     adminReadModelState.ready = true
   })()
