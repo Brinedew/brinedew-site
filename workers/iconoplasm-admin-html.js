@@ -329,6 +329,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       text-align: left;
       cursor: pointer;
       transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+      content-visibility: auto;
+      contain-intrinsic-size: 220px;
     }
     .gallery-card:hover {
       border-color: var(--border-strong);
@@ -421,6 +423,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       border: 1px solid var(--border);
       border-radius: 12px;
       background: rgba(255,255,255,0.7);
+      content-visibility: auto;
+      contain-intrinsic-size: 110px;
     }
     .candidate-thumb,
     .event-thumb {
@@ -461,6 +465,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       border-radius: 12px;
       background: rgba(255,255,255,0.72);
       align-items: center;
+      content-visibility: auto;
+      contain-intrinsic-size: 84px;
     }
     .vision-cell {
       min-width: 0;
@@ -482,6 +488,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       border: 1px solid var(--border);
       border-radius: 12px;
       background: rgba(255,255,255,0.76);
+      content-visibility: auto;
+      contain-intrinsic-size: 88px;
     }
     .activity-title {
       display: flex;
@@ -744,9 +752,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <p class="small">Click dots to inspect.</p>
         </div>
         <div class="plot-legend">
-          <span class="plot-label"><span style="background: var(--ok)"></span> normal</span>
-          <span class="plot-label"><span style="background: var(--warn)"></span> mismatch</span>
+          <span class="plot-label"><span style="background: var(--warn)"></span> stale</span>
           <span class="plot-label"><span style="background: #9050a0"></span> pinned</span>
+          <span class="plot-label"><span style="background: #4a7aba"></span> legacy</span>
           <span class="plot-label"><span style="background: var(--danger)"></span> missing</span>
         </div>
       </div>
@@ -794,7 +802,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               </select>
             </label>
             <label>Limit
-              <input id="gallery-limit" type="number" min="1" max="200" value="120" />
+              <input id="gallery-limit" type="number" min="1" max="120" value="60" />
             </label>
           </div>
           <div class="toggle-group">
@@ -1167,8 +1175,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var leader = row.leader || null;
         els.outlierDetail.innerHTML = [
           '<article class="list-row"><div><strong>' + esc(row.symbol || '') + '</strong><div class="small">popularity ' + esc(String(row.popularity_score || 0)) + ' &middot; ' + esc(String(row.total_assets || 0)) + ' images</div></div><div>' + (row.symbol ? '<button class="btn-flat" data-jump-symbol="' + esc(row.symbol) + '" data-jump-tab="archive">Browse</button>' : '') + '</div></article>',
+          '<article class="list-row"><div><strong>Why this is here</strong><div class="small">' + esc(row.note || 'Needs attention.') + '</div></div><div class="event-meta">' + esc(String(row.kind || 'attention')) + '</div></article>',
           '<article class="list-row"><div><strong>Live portrait</strong><div class="small">' + esc(current ? ((current.score || 0) + ' score \u00B7 ' + (current.vision_id || 'no vision')) : 'No live portrait.') + '</div></div><div class="event-meta">' + esc(current ? (current.asset_sha256 || '') : '') + '</div></article>',
-          '<article class="list-row"><div><strong>Top voted</strong><div class="small">' + esc(leader ? ((leader.score || 0) + ' score \u00B7 ' + (leader.vision_id || 'no vision')) : 'No votes yet.') + '</div></div><div class="event-meta">' + esc(leader ? (leader.asset_sha256 || '') : '') + '</div></article>'
+          (leader
+            ? '<article class="list-row"><div><strong>Top voted</strong><div class="small">' + esc((leader.score || 0) + ' score \u00B7 ' + (leader.vision_id || 'no vision')) + '</div></div><div class="event-meta">' + esc(leader.asset_sha256 || '') + '</div></article>'
+            : '<article class="list-row"><div><strong>Next step</strong><div class="small">Open the gene review panel to inspect candidates and fix the exception.</div></div><div></div></article>')
         ].join('');
       }
 
@@ -1182,19 +1193,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var maxPopularity = rows.reduce(function (max, row) { return Math.max(max, Number(row.popularity_score || 0)); }, 1);
         var maxScore = rows.reduce(function (max, row) {
           var currentScore = row.current ? Number(row.current.score || 0) : 0;
+          var priorityScore = Number(row.priority_score || 0);
           var leaderScore = row.leader ? Number(row.leader.score || 0) : 0;
-          return Math.max(max, currentScore, leaderScore, 1);
+          return Math.max(max, currentScore, leaderScore, priorityScore, 1);
         }, 1);
         els.outlierPlot.innerHTML = rows.map(function (row) {
-          var currentScore = row.current ? Number(row.current.score || 0) : 0;
+          var currentScore = row.current ? Number(row.current.score || 0) : Number(row.priority_score || 0);
           var x = Math.max(4, Math.min(96, (Number(row.popularity_score || 0) / maxPopularity) * 100));
           var y = Math.max(4, Math.min(96, (currentScore / maxScore) * 100));
           var klass = 'plot-dot';
           if (row.current_asset_missing) klass += ' missing';
-          else if (row.drift) klass += ' drift';
+          else if (row.kind === 'stale') klass += ' drift';
+          else if (row.kind === 'legacy') klass += ' override';
           else if (row.admin_override) klass += ' override';
           if (state.selectedOutlier && state.selectedOutlier.symbol === row.symbol) klass += ' is-selected';
-          return '<button class="' + klass + '" data-outlier-symbol="' + esc(row.symbol || '') + '" style="left:' + x + '%; bottom:' + y + '%" title="' + esc((row.symbol || '') + ' -- views ' + (row.popularity_score || 0) + ' -- score ' + currentScore) + '"></button>';
+          return '<button class="' + klass + '" data-outlier-symbol="' + esc(row.symbol || '') + '" style="left:' + x + '%; bottom:' + y + '%" title="' + esc((row.symbol || '') + ' -- views ' + (row.popularity_score || 0) + ' -- priority ' + (row.priority_score || currentScore)) + '"></button>';
         }).join('');
         renderOutlierDetail(state.selectedOutlier);
       }
@@ -1219,7 +1232,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       async function refreshCanonAudit() {
         try {
           els.outlierPlot.innerHTML = '<div class="small" style="padding: 12px;">Loading...</div>';
-          var data = await apiJson('/canon-audit?limit=1500&event_limit=0', { method: 'GET' });
+          var data = await apiJson('/outliers?limit=160&missing_limit=24', { method: 'GET' });
           state.auditRows = Array.isArray(data.rows) ? data.rows : [];
           state.outliersLoaded = true;
           if (state.selectedOutlier) {
@@ -1296,11 +1309,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return state.assets.slice();
       }
 
+      function dedupeGalleryRows(rows) {
+        var seen = new Set();
+        return (Array.isArray(rows) ? rows : []).filter(function (row) {
+          var symbol = String((row && row.gene_symbol) || '');
+          if (!symbol || seen.has(symbol)) return false;
+          seen.add(symbol);
+          return true;
+        });
+      }
+
       function detailEventMarkup(evt) {
         return [
           '<article class="event-row">',
           '<div class="event-thumb">',
-          (evt.thumb_url ? '<img src="' + esc(evt.thumb_url) + '" alt="Event thumbnail" loading="lazy" />' : ''),
+          (evt.thumb_url ? '<img src="' + esc(evt.thumb_url) + '" alt="Event thumbnail" loading="lazy" width="64" height="64" />' : ''),
           '</div>',
           '<div class="event-meta-block">',
           '<strong>' + esc(evt.action || 'event') + '</strong>',
@@ -1350,7 +1373,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             return [
               '<article class="candidate-row">',
               '<div class="candidate-thumb">',
-              (candidate.thumb_url ? '<img src="' + esc(candidate.thumb_url) + '" alt="Candidate portrait" loading="lazy" />' : ''),
+              (candidate.thumb_url ? '<img src="' + esc(candidate.thumb_url) + '" alt="Candidate portrait" loading="lazy" width="64" height="64" />' : ''),
               '</div>',
               '<div class="candidate-meta">',
               '<div><strong>' + esc(candidate.artist_name || candidate.artist_tag || candidate.vision_id || 'Unknown vision') + '</strong></div>',
@@ -1406,7 +1429,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           return [
             '<button class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" type="button" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
             '<div class="gallery-media">',
-            (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="Portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
+            (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="Portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
             '</div>',
             '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
             '<div class="gallery-subtitle">' + esc((a.candidate_count || 0) + ' candidates · ' + (a.live_vision_id || a.leader_vision_id || 'no vision')) + '</div>',
@@ -1422,15 +1445,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.meta.textContent = 'Loading...';
           var status = encodeURIComponent(String(els.status.value || 'all').toLowerCase());
           var sort = encodeURIComponent(String(els.stale.value || 'name').toLowerCase());
-          var limit = Math.max(1, Math.min(200, Number.parseInt(els.limit.value || '120', 10) || 120));
+          var limit = Math.max(1, Math.min(120, Number.parseInt(els.limit.value || '60', 10) || 60));
           var symbol = encodeURIComponent(String(els.search.value || '').trim().toUpperCase());
           var path = '/gallery?page=1&filter=' + status + '&sort=' + sort + '&limit=' + limit;
           if (symbol) path += '&query=' + symbol;
           var data = await apiJson(path, { method: 'GET' });
-          state.assets = Array.isArray(data.rows) ? data.rows : [];
+          state.assets = dedupeGalleryRows(data.rows);
           state.archiveLoaded = true;
           els.meta.innerHTML = [
-            '<span>' + state.assets.length + ' shown</span>',
+            '<span>' + state.assets.length + ' genes shown</span>',
             '<span>total ' + esc(String(data.total || state.assets.length)) + '</span>',
             '<span>filter ' + esc(String(els.status.value || 'all')) + '</span>',
             '<span>sort ' + esc(String(els.stale.value || 'name')) + '</span>'
