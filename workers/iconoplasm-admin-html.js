@@ -840,12 +840,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function renderOverview() {
         var summary = state.overviewSummary || {};
         els.overviewMetrics.innerHTML = [
-          metricMarkup('Genes audited', summary.genes || 0, 'Rows included in the canon audit feed.'),
+          metricMarkup('Live genes', summary.with_live, 'Cheap startup metric from publish state.'),
           metricMarkup('Canon drift', summary.drift, summary.drift == null ? 'Open Outliers to compute exact drift.' : 'Live canon differs from the vote leader.'),
           metricMarkup('Admin overrides', summary.overrides || 0, 'Genes pinned away from automatic canonicity.'),
-          metricMarkup('Missing live asset', summary.current_asset_missing || 0, 'Publish state points at a missing asset.'),
-          metricMarkup('Stale assets', summary.stale_assets || 0, 'Candidate clutter that still needs cleanup.'),
-          metricMarkup('Legacy assets', summary.legacy_assets || 0, 'Old local-sync leftovers still hanging around.')
+          metricMarkup('Missing live asset', summary.current_asset_missing, summary.current_asset_missing == null ? 'Deep integrity check lives in Outliers or Archive.' : 'Publish state points at a missing asset.'),
+          metricMarkup('Stale assets', summary.stale_assets, summary.stale_assets == null ? 'Use Archive for corpus-wide stale cleanup.' : 'Candidate clutter that still needs cleanup.'),
+          metricMarkup('Legacy assets', summary.legacy_assets, summary.legacy_assets == null ? 'Use Archive for corpus-wide legacy cleanup.' : 'Old local-sync leftovers still hanging around.')
         ].join('');
 
         var notes = (state.overviewAttention || []).map(function (item) {
@@ -864,7 +864,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           }
           return '';
         }).filter(Boolean);
-        if (!notes.length) notes.push('<article class="list-row"><div><strong>No urgent exceptions found.</strong><div class="small">That probably means the site is behaving for once.</div></div><div></div></article>');
+        if (!notes.length) notes.push('<article class="list-row"><div><strong>No cheap startup exceptions found.</strong><div class="small">Use Outliers or Archive for deeper corpus-wide checks.</div></div><div></div></article>');
         els.attentionList.innerHTML = notes.join('');
 
         els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 8).map(eventMarkup).join('') || '<article class="list-row"><div><strong>No recent admin events.</strong></div><div></div></article>';
