@@ -1019,7 +1019,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function authHeaders() {
         var out = {};
-        var token = String(els.token.value || '').trim();
+        var token = String((els.token && els.token.value) || '').trim();
         if (token) out['X-Iconoplasm-Admin-Token'] = token;
         return out;
       }
