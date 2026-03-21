@@ -1,6 +1,6 @@
 /* GENERATED FILE. Edit shared/iconoplasm-card/shared-card-runtime.js and rerun node scripts/sync-iconoplasm-shared.mjs. */
 
-(function (global) {
+;(function (global) {
   "use strict"
 
   var ICONO_SHARED_RUNTIME_VERSION = "20260321a"
@@ -10,7 +10,9 @@
     existingShared && existingShared.__meta && typeof existingShared.__meta === "object"
       ? existingShared.__meta
       : null
-  var existingOwner = String((existingMeta && existingMeta.owner) || "").trim().toLowerCase()
+  var existingOwner = String((existingMeta && existingMeta.owner) || "")
+    .trim()
+    .toLowerCase()
 
   if (existingShared) {
     // Chesterton's fence: keep the duplicate-init guard, but make it ownership-aware.
@@ -102,7 +104,9 @@
   }
 
   function iconoRoughLoopPreset(name) {
-    var key = String(name || "default").trim().toLowerCase()
+    var key = String(name || "default")
+      .trim()
+      .toLowerCase()
     var preset = ICONO_ROUGH_LOOP_PRESETS[key] || ICONO_ROUGH_LOOP_PRESETS.default
     var base = ICONO_ROUGH_LOOP_PRESETS.default
     var resolved = {}
@@ -196,7 +200,9 @@
     if (typeof root.matches === "function" && root.matches("[data-icono-rough-loop]")) {
       nodes.push(root)
     }
-    var selector = force ? "[data-icono-rough-loop]" : '[data-icono-rough-loop]:not([data-icono-rough-ready="true"])'
+    var selector = force
+      ? "[data-icono-rough-loop]"
+      : '[data-icono-rough-loop]:not([data-icono-rough-ready="true"])'
     var found = root.querySelectorAll(selector)
     for (var i = 0; i < found.length; i++) nodes.push(found[i])
     return nodes
@@ -366,7 +372,9 @@
   function normalizePoliticsDisplay(rawPolitics, rawPoliticsOrigin) {
     var politics = String(rawPolitics || "").trim()
     var politicsOriginValues = uniqueDisplayValues(rawPoliticsOrigin, 2)
-    var politicsOrigin = politicsOriginValues.length ? String(politicsOriginValues[0] || "").trim() : ""
+    var politicsOrigin = politicsOriginValues.length
+      ? String(politicsOriginValues[0] || "").trim()
+      : ""
     // Clean cutover guardrail: the shared card accepts only canonical website
     // labels. If production still shows legacy names, fix D1 / sync data rather
     // than reintroducing renderer-side semantic fallbacks.
@@ -457,7 +465,8 @@
     }
 
     var missingAestheticOrigins = aesthetics.length > pairedAestheticCount
-    var missingPoliticsOrigins = Boolean(politicsRaw) && !politicsDisplay.isNeutral && !politicsOrigin.length
+    var missingPoliticsOrigins =
+      Boolean(politicsRaw) && !politicsDisplay.isNeutral && !politicsOrigin.length
     if (politics && politicsOrigin.length) {
       rows.push({
         character: politics,
@@ -482,7 +491,10 @@
 
     var sexText = String(essence.sex || "").trim()
     var sexOrigin = uniqueDisplayValues(
-      essence.sex_origin || essence.gender_origin || safeGeneDetail.sex_origin || safeGeneDetail.gender_origin,
+      essence.sex_origin ||
+        essence.gender_origin ||
+        safeGeneDetail.sex_origin ||
+        safeGeneDetail.gender_origin,
       2,
     )
     if (sexText) {
@@ -508,7 +520,12 @@
 
     var weightKg = Number(essence.weight_kg)
     var molecularWeightKda = Number(safeGeneDetail.molecular_weight_kda)
-    if (Number.isFinite(weightKg) && weightKg > 0 && Number.isFinite(molecularWeightKda) && molecularWeightKda > 0) {
+    if (
+      Number.isFinite(weightKg) &&
+      weightKg > 0 &&
+      Number.isFinite(molecularWeightKda) &&
+      molecularWeightKda > 0
+    ) {
       rows.push({
         character: String(Math.round(weightKg)) + " kg",
         molecular: String(Math.round(molecularWeightKda)) + " kDa",
@@ -551,8 +568,7 @@
     var hash = 2166136261
     for (var i = 0; i < safe.length; i++) {
       hash ^= safe.charCodeAt(i)
-      hash +=
-        (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
+      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
     }
     return String(Math.abs(hash >>> 0) % 100000).padStart(5, "0")
   }
@@ -590,11 +606,18 @@
   }
 
   function renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) {
-    var categoryKey = String(selectedCategory || "").trim().toLowerCase()
+    var categoryKey = String(selectedCategory || "")
+      .trim()
+      .toLowerCase()
     return (
       '<div class="icono-label-category-grid">' +
       '<div class="icono-label-category-option icono-label-category-option--transmembrane">' +
-      renderLabLabelOptionHtml("TRANSMEMBRANE", categoryKey === "transmembrane", "", "category-transmembrane") +
+      renderLabLabelOptionHtml(
+        "TRANSMEMBRANE",
+        categoryKey === "transmembrane",
+        "",
+        "category-transmembrane",
+      ) +
       "</div>" +
       '<div class="icono-label-category-option icono-label-category-option--soluble">' +
       renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble", "", "category-soluble") +
@@ -604,9 +627,13 @@
   }
 
   function renderLabLabelSexNoteHtml(sexNote, selectedCategory) {
-    var note = String(sexNote || "").trim().toLowerCase()
+    var note = String(sexNote || "")
+      .trim()
+      .toLowerCase()
     if (!note) return ""
-    var categoryKey = String(selectedCategory || "").trim().toLowerCase()
+    var categoryKey = String(selectedCategory || "")
+      .trim()
+      .toLowerCase()
     return (
       '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' +
       escapeHtml(categoryKey || "unselected") +
@@ -617,7 +644,9 @@
   }
 
   function renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) {
-    var molecularKey = String(molecularAlignment || "").trim().toLowerCase()
+    var molecularKey = String(molecularAlignment || "")
+      .trim()
+      .toLowerCase()
     var isContextual = molecularKey === "contextual oncogene/tumor suppressor"
     var isOncogene = molecularKey === "oncogene" || isContextual
     var isTumorSuppressor = molecularKey === "tumor suppressor" || isContextual
@@ -633,7 +662,12 @@
       (isNeither ? " is-neither" : "") +
       '">' +
       renderLabLabelOptionHtml("ONCOGENE", isOncogene, "", "alignment-oncogene") +
-      renderLabLabelOptionHtml("TUMOR SUPPRESSOR", isTumorSuppressor, "", "alignment-tumor-suppressor") +
+      renderLabLabelOptionHtml(
+        "TUMOR SUPPRESSOR",
+        isTumorSuppressor,
+        "",
+        "alignment-tumor-suppressor",
+      ) +
       (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") +
       "</div>" +
       '<div class="' +
@@ -748,7 +782,12 @@
     var n = Number(raw)
     var lower = Number(min)
     var upper = Number(max)
-    if (!Number.isFinite(n) || !Number.isFinite(lower) || !Number.isFinite(upper) || upper <= lower) {
+    if (
+      !Number.isFinite(n) ||
+      !Number.isFinite(lower) ||
+      !Number.isFinite(upper) ||
+      upper <= lower
+    ) {
       return "unknown"
     }
     var clamped = Math.min(Math.max(n, lower), upper)
@@ -761,15 +800,22 @@
   function formatMetricNumber(raw, digits) {
     var n = Number(raw)
     if (!Number.isFinite(n)) return ""
-    return n.toFixed(Math.max(0, Number(digits || 0))).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
+    return n
+      .toFixed(Math.max(0, Number(digits || 0)))
+      .replace(/\.0+$/, "")
+      .replace(/(\.\d*?)0+$/, "$1")
   }
 
   function renderLabLabelSpecimenMicrographicsHtml(geneDetail) {
     var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
-    var color = String(safeGeneDetail.color || "").trim().toUpperCase()
+    var color = String(safeGeneDetail.color || "")
+      .trim()
+      .toUpperCase()
     var hsv = hexToHsv(color)
     var essence =
-      safeGeneDetail.essence && typeof safeGeneDetail.essence === "object" ? safeGeneDetail.essence : {}
+      safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
+        ? safeGeneDetail.essence
+        : {}
     var colorName = String(essence.skin_name || "").trim()
     var symbol = String(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol || "").trim()
     var firstLetter = (symbol.charAt(0) || "?").toUpperCase()
@@ -780,16 +826,50 @@
     /* Hue word comes from first letter directly (not hex back-conversion),
        because OKHsv→sRGB→standard-HSV shifts the hue angle. */
     var letterHueWords = {
-      A: "red", B: "vermilion", C: "orange", D: "amber", E: "gold",
-      F: "yellow", G: "lime", H: "chartreuse", I: "spring", J: "jade",
-      K: "emerald", L: "teal", M: "cyan", N: "azure", O: "cerulean",
-      P: "blue", Q: "sapphire", R: "indigo", S: "violet", T: "purple",
-      U: "amethyst", V: "magenta", W: "fuchsia", X: "rose", Y: "cerise",
+      A: "red",
+      B: "vermilion",
+      C: "orange",
+      D: "amber",
+      E: "gold",
+      F: "yellow",
+      G: "lime",
+      H: "chartreuse",
+      I: "spring",
+      J: "jade",
+      K: "emerald",
+      L: "teal",
+      M: "cyan",
+      N: "azure",
+      O: "cerulean",
+      P: "blue",
+      Q: "sapphire",
+      R: "indigo",
+      S: "violet",
+      T: "purple",
+      U: "amethyst",
+      V: "magenta",
+      W: "fuchsia",
+      X: "rose",
+      Y: "cerise",
       Z: "crimson",
     }
     var hueLabel = letterHueWords[firstLetter] || (hsv ? describeHueWord(hsv.h) : "unknown")
-    var saturationLabel = describeBandInRange(tauRaw, 0, 1, "low vibrance", "mid vibrance", "high vibrance")
-    var lightnessLabel = describeBandInRange(loeufRaw, 0, 2, "dark shade", "mid shade", "light shade")
+    var saturationLabel = describeBandInRange(
+      tauRaw,
+      0,
+      1,
+      "low vibrance",
+      "mid vibrance",
+      "high vibrance",
+    )
+    var lightnessLabel = describeBandInRange(
+      loeufRaw,
+      0,
+      2,
+      "dark shade",
+      "mid shade",
+      "light shade",
+    )
     var metrics = ["letter", "HPA tau", "gnomAD LOEUF"]
     var values = [firstLetter, tau || "n/a", loeuf || "n/a"]
     var handNotes = [hueLabel, saturationLabel, lightnessLabel]
@@ -888,7 +968,10 @@
   }
 
   function renderLabLabelFooterHtml(color, serial) {
-    var stockTone = String(color || "").trim().toUpperCase() || "UNFILED"
+    var stockTone =
+      String(color || "")
+        .trim()
+        .toUpperCase() || "UNFILED"
     var sheetNo = String(serial || "").trim() || "00000"
     return (
       '<div class="icono-label-footer-copy">' +
@@ -899,7 +982,7 @@
       escapeHtml(stockTone) +
       " / sheet " +
       escapeHtml(sheetNo) +
-      ' / print run 07</div>' +
+      " / print run 07</div>" +
       '<div class="icono-label-footer-line icono-label-footer-line--typed">seal after review / do not expose to open air</div>' +
       "</div>" +
       '<div class="icono-label-footer-copy-side">' +
@@ -949,17 +1032,25 @@
         safeGeneDetail.gender_origin,
       2,
     )
-    var selectedCategory = String(sexOriginValues[0] || "").trim().toLowerCase()
-    var sexNote = String(safeEssence.sex || "").trim().toLowerCase()
+    var selectedCategory = String(sexOriginValues[0] || "")
+      .trim()
+      .toLowerCase()
+    var sexNote = String(safeEssence.sex || "")
+      .trim()
+      .toLowerCase()
     var firstPublicationYear = Number(safeGeneDetail.first_publication_year)
-    var firstNoted = Number.isFinite(firstPublicationYear) && firstPublicationYear > 0 ? String(Math.round(firstPublicationYear)) : ""
+    var firstNoted =
+      Number.isFinite(firstPublicationYear) && firstPublicationYear > 0
+        ? String(Math.round(firstPublicationYear))
+        : ""
     var ageNote = ""
     if (safeEssence.age) {
       ageNote = String(safeEssence.age).trim()
     } else if (safeEssence.age_years != null && Number.isFinite(Number(safeEssence.age_years))) {
       ageNote = String(Math.round(Number(safeEssence.age_years)))
     }
-    if (ageNote && !/\by\.?o\.?\b/i.test(ageNote) && !/\byears?\s+old\b/i.test(ageNote)) ageNote += " y.o."
+    if (ageNote && !/\by\.?o\.?\b/i.test(ageNote) && !/\byears?\s+old\b/i.test(ageNote))
+      ageNote += " y.o."
     var weightKg = Number(safeEssence.weight_kg)
     var handwrittenWeight =
       Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : ""
@@ -1152,7 +1243,8 @@
   function renderTooltipMobileRowGridHtml(rows, extraAttrs) {
     var safeRows = Array.isArray(rows) ? rows : []
     var attrs = extraAttrs ? " " + extraAttrs : ""
-    if (!safeRows.length) return '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + "></div>"
+    if (!safeRows.length)
+      return '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + "></div>"
     var html = '<div class="iconoplasm-tooltip-mobile-rowgrid"' + attrs + ">"
     for (var i = 0; i < safeRows.length; i++) {
       var row = safeRows[i] || {}

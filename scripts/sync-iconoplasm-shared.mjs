@@ -56,10 +56,9 @@ const binaryTargets = [
 
 async function syncTarget({ source, outputs }) {
   const content = await readFile(source, "utf8")
-  const banner =
-    source.endsWith(".css")
-      ? `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
-      : `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
+  const banner = source.endsWith(".css")
+    ? `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
+    : `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
 
   for (const output of outputs) {
     await mkdir(path.dirname(output), { recursive: true })

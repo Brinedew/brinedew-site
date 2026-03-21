@@ -38,7 +38,12 @@ function currentHost() {
 function isCanonicalAuthHost(host) {
   var value = String(host || "").toLowerCase()
   if (!value) return false
-  return value === "brinedew.bio" || value === "www.brinedew.bio" || value === "localhost" || value === "127.0.0.1"
+  return (
+    value === "brinedew.bio" ||
+    value === "www.brinedew.bio" ||
+    value === "localhost" ||
+    value === "127.0.0.1"
+  )
 }
 
 function canonicalAuthOrigin() {
@@ -174,11 +179,12 @@ export function buildSharedUserPanelMarkup(options) {
     '" aria-label="Settings" title="Settings">' +
     SETTINGS_GEAR_ICON +
     "</a>"
-  var communityAction = user && communityHref
-    ? '<a class="brd-sidebar-btn brd-sidebar-btn--community" href="' +
-      escapeHtml(communityHref) +
-      '" target="_blank" rel="noopener noreferrer">Discord</a>'
-    : ""
+  var communityAction =
+    user && communityHref
+      ? '<a class="brd-sidebar-btn brd-sidebar-btn--community" href="' +
+        escapeHtml(communityHref) +
+        '" target="_blank" rel="noopener noreferrer">Discord</a>'
+      : ""
   var primaryAction = user
     ? '<button type="button" class="brd-sidebar-btn brd-sidebar-btn--quiet" data-brd-user-logout>Sign Out</button>'
     : '<a class="brd-sidebar-btn" href="' +
@@ -227,7 +233,9 @@ function authBridgeWindowReady(iframe) {
   if (!iframe || iframe.getAttribute("src") !== sharedAuthBridgeUrl()) return false
   if (iframe.getAttribute("data-ready") !== "true" || !iframe.contentWindow) return false
   try {
-    var loadedOrigin = String((iframe.contentWindow.location && iframe.contentWindow.location.origin) || "")
+    var loadedOrigin = String(
+      (iframe.contentWindow.location && iframe.contentWindow.location.origin) || "",
+    )
     if (!loadedOrigin || loadedOrigin !== canonicalAuthOrigin()) return false
   } catch (_err) {
     return true
@@ -361,7 +369,8 @@ function requestSharedAuth(type) {
 if (typeof window !== "undefined") {
   window.addEventListener("message", function (event) {
     var data = event && event.data ? event.data : null
-    if (!data || data.channel !== AUTH_BRIDGE_CHANNEL || event.origin !== canonicalAuthOrigin()) return
+    if (!data || data.channel !== AUTH_BRIDGE_CHANNEL || event.origin !== canonicalAuthOrigin())
+      return
     var pending = authBridgePending[data.id]
     if (!pending) return
     window.clearTimeout(pending.timer)
@@ -378,7 +387,9 @@ export function mountSidebarStack(options) {
   var source = options || {}
   var sidebar =
     source.sidebar ||
-    (typeof document !== "undefined" ? document.querySelector(source.sidebarSelector || ".right.sidebar") : null)
+    (typeof document !== "undefined"
+      ? document.querySelector(source.sidebarSelector || ".right.sidebar")
+      : null)
   if (!sidebar) return null
 
   var stackId = String(source.stackId || "brd-sidebar-stack").trim() || "brd-sidebar-stack"

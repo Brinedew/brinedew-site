@@ -8,7 +8,11 @@
 
 /* -- Gene highlight ------------------------------------------------- */
 .iconoplasm-gene {
-  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
   text-decoration-skip-ink: auto;
   cursor: text;
 }
@@ -19,7 +23,7 @@
 }
 
 .iconoplasm-gene--underline {
-  border-bottom: 3px solid var(--iconoplasm-gene-color, #6B6B78);
+  border-bottom: 3px solid var(--iconoplasm-gene-color, #6b6b78);
 }
 
 .iconoplasm-gene--pill {
@@ -46,7 +50,7 @@
   top: -0.06em;
   bottom: -0.05em;
   border-radius: 0.18em;
-  background: color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 72%, transparent);
+  background: color-mix(in srgb, var(--iconoplasm-gene-color, #6b6b78) 72%, transparent);
   box-shadow:
     0 0 0 1px rgba(22, 18, 16, 0.58),
     inset 0 0 0 1px rgba(255, 255, 255, 0.3);
@@ -82,7 +86,7 @@
   /* Keep ellipse strokes keyed to the gene color itself.
      If we mix with currentColor here, the same gene shifts between black/blue/body-link tints
      depending on surrounding page chrome, which makes identical genes look inconsistent. */
-  color: var(--iconoplasm-gene-color, #6B6B78);
+  color: var(--iconoplasm-gene-color, #6b6b78);
   z-index: 0;
 }
 
@@ -112,7 +116,7 @@
   --iconoplasm-tooltip-shadow-4: rgba(40, 32, 24, 0.18);
   --iconoplasm-tooltip-portrait-base: color-mix(
     in srgb,
-    var(--iconoplasm-gene-color, #6B6B78) 20%,
+    var(--iconoplasm-gene-color, #6b6b78) 20%,
     #dfe2df
   );
   position: absolute;
@@ -120,8 +124,9 @@
   pointer-events: none;
   opacity: 0;
   transform: translateY(8px) scale(0.96);
-  transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
-              transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Horizontal layout */
   display: flex;
@@ -157,7 +162,7 @@
   --iconoplasm-tooltip-shadow-4: rgba(0, 0, 0, 0.4);
   --iconoplasm-tooltip-portrait-base: color-mix(
     in srgb,
-    var(--iconoplasm-gene-color, #6B6B78) 24%,
+    var(--iconoplasm-gene-color, #6b6b78) 24%,
     rgba(22, 18, 16, 0.98)
   );
 }
@@ -209,10 +214,18 @@
   background:
     linear-gradient(
       160deg,
-      color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 18%, var(--iconoplasm-tooltip-surface)),
+      color-mix(
+        in srgb,
+        var(--iconoplasm-gene-color, #6b6b78) 18%,
+        var(--iconoplasm-tooltip-surface)
+      ),
       color-mix(in srgb, var(--iconoplasm-tooltip-surface) 92%, transparent)
     ),
-    radial-gradient(circle at top left, color-mix(in srgb, var(--iconoplasm-tooltip-ink) 12%, transparent), transparent 60%);
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 12%, transparent),
+      transparent 60%
+    );
 }
 
 .iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fallback {
@@ -235,14 +248,14 @@
 }
 
 .iconoplasm-tooltip-portrait-status {
-  font-family: 'Crimson Pro', 'Georgia', serif;
+  font-family: "Crimson Pro", "Georgia", serif;
   font-size: 14px;
   letter-spacing: 0.02em;
   opacity: 0.9;
 }
 
 .iconoplasm-tooltip-portrait-symbol {
-  font-family: 'Monaspace Xenon Web', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Monaspace Xenon Web", "SF Mono", "Cascadia Code", "Consolas", monospace;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -302,9 +315,13 @@
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1.05;
-  font-family: 'Monaspace Xenon Web', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Monaspace Xenon Web", "SF Mono", "Cascadia Code", "Consolas", monospace;
   text-align: left;
-  color: color-mix(in srgb, var(--iconoplasm-gene-color, #6B6B78) 42%, var(--iconoplasm-tooltip-ink));
+  color: color-mix(
+    in srgb,
+    var(--iconoplasm-gene-color, #6b6b78) 42%,
+    var(--iconoplasm-tooltip-ink)
+  );
 }
 
 /* Full gene name -- serif body font, like GeneGuessr cards. Color set dynamically by JS. */
@@ -313,7 +330,7 @@
   font-weight: 400;
   line-height: 1.4;
   margin-top: 2px;
-  font-family: 'Crimson Pro', 'Georgia', serif;
+  font-family: "Crimson Pro", "Georgia", serif;
   overflow: visible;
   text-align: left;
   color: var(--iconoplasm-tooltip-muted);
@@ -358,7 +375,7 @@
 }
 
 .iconoplasm-tooltip-meta-label {
-  font-family: 'Crimson Pro', 'Georgia', serif;
+  font-family: "Crimson Pro", "Georgia", serif;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -367,7 +384,7 @@
 }
 
 .iconoplasm-tooltip-meta-value {
-  font-family: 'Crimson Pro', 'Georgia', serif;
+  font-family: "Crimson Pro", "Georgia", serif;
   font-size: 15px;
   font-weight: 580;
   font-style: normal;
@@ -462,13 +479,12 @@
   width: 100%;
   height: 13px;
   border-radius: 999px;
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 0%,
-      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 18%, transparent) 50%,
-      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 100%
-    );
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 0%,
+    color-mix(in srgb, var(--iconoplasm-tooltip-ink) 18%, transparent) 50%,
+    color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 100%
+  );
   opacity: 0.9;
 }
 

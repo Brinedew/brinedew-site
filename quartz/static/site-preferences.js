@@ -203,7 +203,9 @@ function sharedBridgeWindowReady(iframe) {
   if (!iframe || iframe.getAttribute("src") !== sharedBridgeUrl()) return false
   if (iframe.getAttribute("data-ready") !== "true" || !iframe.contentWindow) return false
   try {
-    var loadedOrigin = String((iframe.contentWindow.location && iframe.contentWindow.location.origin) || "")
+    var loadedOrigin = String(
+      (iframe.contentWindow.location && iframe.contentWindow.location.origin) || "",
+    )
     if (!loadedOrigin || loadedOrigin !== canonicalSettingsOrigin()) return false
   } catch (_err) {
     return true
@@ -280,7 +282,10 @@ function ensureSharedBridgeMessageListener() {
     if (event.origin !== canonicalSettingsOrigin()) return
     if (typeof data.id !== "string" || !sharedBridgePending[data.id]) return
     if (data.ok === false) {
-      clearSharedBridgePending(data.id, new Error((data.payload && data.payload.error) || "Settings bridge failed"))
+      clearSharedBridgePending(
+        data.id,
+        new Error((data.payload && data.payload.error) || "Settings bridge failed"),
+      )
       return
     }
     clearSharedBridgePending(data.id, null, data.payload || null)
@@ -411,7 +416,8 @@ export function readEffectiveTheme() {
 export function applyThemePreference(themePreference) {
   var preference = normalizeThemePreference(themePreference)
   var effectiveTheme = preference === "system" ? effectiveSystemTheme() : preference
-  if (!writeStringStorage(THEME_STORAGE_KEY, preference === "system" ? "" : preference)) return false
+  if (!writeStringStorage(THEME_STORAGE_KEY, preference === "system" ? "" : preference))
+    return false
   if (!writeCookieValue(THEME_COOKIE_KEY, preference === "system" ? "" : preference)) return false
   document.documentElement.setAttribute("data-theme", effectiveTheme)
   document.documentElement.setAttribute("saved-theme", effectiveTheme)
@@ -424,7 +430,11 @@ export function applyThemePreference(themePreference) {
 }
 
 export function normalizeReaderModePreference(mode) {
-  return String(mode || "").trim().toLowerCase() === "on" ? "on" : "off"
+  return String(mode || "")
+    .trim()
+    .toLowerCase() === "on"
+    ? "on"
+    : "off"
 }
 
 export function readReaderModePreference() {
@@ -519,7 +529,9 @@ export function iconoplasmSettingsDefaults() {
 
 export function syncSharedIconoplasmSettings() {
   if (!shouldUseSharedSettingsBridge()) {
-    return Promise.resolve(rememberIconoplasmSettings(readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}))
+    return Promise.resolve(
+      rememberIconoplasmSettings(readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}),
+    )
   }
   return requestSharedIconoplasmSettings("readIconoplasmSettings")
     .then(function (sharedSettings) {

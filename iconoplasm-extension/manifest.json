@@ -3,22 +3,15 @@
   "name": "Iconoplasm",
   "version": "0.3.1",
   "description": "Every human gene has a unique color. Iconoplasm highlights gene names on any webpage and reveals their color identity.",
-  "permissions": [
-    "storage"
-  ],
-  "host_permissions": [
-    "https://iconoplasm.brinedew.bio/*"
-  ],
+  "permissions": ["storage"],
+  "host_permissions": ["https://iconoplasm.brinedew.bio/*"],
   "background": {
     "service_worker": "service-worker.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "exclude_matches": [
-        "https://iconoplasm.brinedew.bio/*",
-        "https://staging.brinedew.bio/*"
-      ],
+      "exclude_matches": ["https://iconoplasm.brinedew.bio/*", "https://staging.brinedew.bio/*"],
       "js": ["generated/rough.js", "generated/shared-card-runtime.js", "content.js"],
       "css": ["generated/shared-card-vote.css", "generated/shared-card-label.css", "content.css"],
       "run_at": "document_idle"

@@ -1,6 +1,6 @@
 let isReaderMode = false
 
-const readCookie = (name: string) => {
+const readReaderModeCookie = (name: string) => {
   const parts = (document.cookie || "").split(/;\s*/)
   for (const part of parts) {
     const index = part.indexOf("=")
@@ -11,7 +11,7 @@ const readCookie = (name: string) => {
   return ""
 }
 
-const writeSharedCookie = (name: string, value: string) => {
+const writeReaderModeCookie = (name: string, value: string) => {
   const host = window.location.hostname.toLowerCase()
   const attrs = ["Path=/", "SameSite=Lax", value ? "Max-Age=31536000" : "Max-Age=0"]
   if (host === "brinedew.bio" || host.endsWith(".brinedew.bio")) {
@@ -28,7 +28,8 @@ const emitReaderModeChangeEvent = (mode: "on" | "off") => {
 }
 
 document.addEventListener("nav", () => {
-  isReaderMode = (readCookie("brinedew_reader_mode") || localStorage.getItem("readerMode")) === "on"
+  isReaderMode =
+    (readReaderModeCookie("brinedew_reader_mode") || localStorage.getItem("readerMode")) === "on"
 
   const switchReaderMode = () => {
     isReaderMode = !isReaderMode
@@ -36,10 +37,10 @@ document.addEventListener("nav", () => {
     document.documentElement.setAttribute("reader-mode", newMode)
     if (newMode === "on") {
       localStorage.setItem("readerMode", "on")
-      writeSharedCookie("brinedew_reader_mode", "on")
+      writeReaderModeCookie("brinedew_reader_mode", "on")
     } else {
       localStorage.removeItem("readerMode")
-      writeSharedCookie("brinedew_reader_mode", "")
+      writeReaderModeCookie("brinedew_reader_mode", "")
     }
     emitReaderModeChangeEvent(newMode)
   }

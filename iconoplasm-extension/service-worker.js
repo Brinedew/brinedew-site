@@ -78,9 +78,10 @@ function normalizeIconoplasmApiPath(rawUrl) {
   const value = String(rawUrl || "").trim()
   if (!value) return ""
   try {
-    const url = value.startsWith("http://") || value.startsWith("https://")
-      ? new URL(value)
-      : new URL(value, HOST)
+    const url =
+      value.startsWith("http://") || value.startsWith("https://")
+        ? new URL(value)
+        : new URL(value, HOST)
     if (url.origin !== HOST) return ""
     if (!url.pathname.startsWith("/api/")) return ""
     return `${url.pathname}${url.search}`
@@ -221,21 +222,11 @@ async function fetchPortraitDataUrl(url) {
 
 async function warmPortraitDataUrls(urls) {
   const normalized = Array.isArray(urls)
-    ? Array.from(
-        new Set(
-          urls
-            .map((url) => String(url || "").trim())
-            .filter(Boolean),
-        ),
-      )
+    ? Array.from(new Set(urls.map((url) => String(url || "").trim()).filter(Boolean)))
     : []
   if (!normalized.length) return 0
 
-  await Promise.all(
-    normalized.map((url) =>
-      fetchPortraitDataUrl(url).catch(() => ""),
-    ),
-  )
+  await Promise.all(normalized.map((url) => fetchPortraitDataUrl(url).catch(() => "")))
   return normalized.length
 }
 

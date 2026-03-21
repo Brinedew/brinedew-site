@@ -88,8 +88,11 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   gap: 1rem;
   padding: 0.9rem 1rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 86%, var(--dark) 14%);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--light) 94%, #efe6d7 6%) 0%, color-mix(in srgb, var(--light) 98%, #e7dccc 2%) 100%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--light) 94%, #efe6d7 6%) 0%,
+    color-mix(in srgb, var(--light) 98%, #e7dccc 2%) 100%
+  );
   box-shadow: 0 8px 20px rgba(27, 18, 11, 0.04);
 }
 
@@ -137,7 +140,6 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 .icono-home-auth-link:hover {
   background: color-mix(in srgb, var(--light) 68%, white 32%);
 }
-
 
 /* ───────── Search ───────── */
 .icono-search {

@@ -23,7 +23,11 @@
 
 .icono-vote-box {
   --icono-vote-shell: color-mix(in srgb, var(--ui-bg, #f4ede5) 90%, var(--light, #fff) 10%);
-  --icono-vote-line: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 88%, var(--dark, #221d19) 4%);
+  --icono-vote-line: color-mix(
+    in srgb,
+    var(--ui-border, rgba(61, 49, 39, 0.16)) 88%,
+    var(--dark, #221d19) 4%
+  );
   --icono-vote-seam: color-mix(in srgb, var(--ui-border, rgba(61, 49, 39, 0.16)) 78%, transparent);
   --icono-vote-ink: var(--ui-text, #271f1a);
   --icono-vote-muted: color-mix(in srgb, var(--icono-vote-ink) 68%, transparent);
@@ -107,9 +111,21 @@
 }
 
 .icono-vote-box--brick {
-  --icono-vote-shell: color-mix(in srgb, var(--icono-brick-shell, rgba(255, 248, 238, 0.96)) 86%, var(--icono-brick-surface, rgba(248, 241, 233, 0.98)) 14%);
-  --icono-vote-line: color-mix(in srgb, var(--icono-brick-line-strong, rgba(74, 61, 49, 0.18)) 88%, transparent);
-  --icono-vote-seam: color-mix(in srgb, var(--icono-brick-line, rgba(74, 61, 49, 0.08)) 96%, transparent);
+  --icono-vote-shell: color-mix(
+    in srgb,
+    var(--icono-brick-shell, rgba(255, 248, 238, 0.96)) 86%,
+    var(--icono-brick-surface, rgba(248, 241, 233, 0.98)) 14%
+  );
+  --icono-vote-line: color-mix(
+    in srgb,
+    var(--icono-brick-line-strong, rgba(74, 61, 49, 0.18)) 88%,
+    transparent
+  );
+  --icono-vote-seam: color-mix(
+    in srgb,
+    var(--icono-brick-line, rgba(74, 61, 49, 0.08)) 96%,
+    transparent
+  );
   display: inline-grid;
   grid-template-columns: 1fr;
   grid-template-rows: repeat(2, minmax(0, 1fr));

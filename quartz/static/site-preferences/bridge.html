@@ -21,11 +21,17 @@
         }
 
         function normalizeHomeLayout(layout) {
-          return String(layout || "").trim().toLowerCase() === "masonry" ? "masonry" : "bricks"
+          return String(layout || "")
+            .trim()
+            .toLowerCase() === "masonry"
+            ? "masonry"
+            : "bricks"
         }
 
         function normalizeGenerationProvider(provider) {
-          var value = String(provider || "").trim().toLowerCase()
+          var value = String(provider || "")
+            .trim()
+            .toLowerCase()
           if (["openai-compatible", "replicate", "gemini", "custom"].indexOf(value) >= 0) {
             return value
           }

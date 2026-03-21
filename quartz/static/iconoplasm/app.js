@@ -817,7 +817,9 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function resolveCardVariant() {
     var settings = readIconoplasmSettings()
-    return IconoCardShared.normalizeCardVariant((settings && settings.cardVariant) || CARD_VARIANT_DEFAULT)
+    return IconoCardShared.normalizeCardVariant(
+      (settings && settings.cardVariant) || CARD_VARIANT_DEFAULT,
+    )
   }
 
   function iconoRowMarkup(label, value) {
@@ -998,19 +1000,19 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function brickVoteAssetSha(genePayload) {
-    return String((((genePayload || {}).portrait || {}).asset_sha256) || "")
+    return String(((genePayload || {}).portrait || {}).asset_sha256 || "")
       .trim()
       .toLowerCase()
   }
 
   function brickVoteCandidateImageId(genePayload) {
-    var candidateImageId = Number((((genePayload || {}).portrait || {}).candidate_image_id) || 0)
+    var candidateImageId = Number(((genePayload || {}).portrait || {}).candidate_image_id || 0)
     if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) return ""
     return String(Math.round(candidateImageId))
   }
 
   function brickVoteVisionId(genePayload) {
-    return String((((genePayload || {}).portrait || {}).vision_id) || "").trim()
+    return String(((genePayload || {}).portrait || {}).vision_id || "").trim()
   }
 
   function brickVoteBoxMarkup(genePayload) {
@@ -1019,7 +1021,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     var candidateImageId = brickVoteCandidateImageId(genePayload)
     var visionId = brickVoteVisionId(genePayload)
     var extraAttrs = 'data-icono-brick-vote-box="' + esc(assetSha) + '"'
-    if (candidateImageId) extraAttrs += ' data-icono-candidate-image-id="' + esc(candidateImageId) + '"'
+    if (candidateImageId)
+      extraAttrs += ' data-icono-candidate-image-id="' + esc(candidateImageId) + '"'
     if (visionId) extraAttrs += ' data-icono-vision-id="' + esc(visionId) + '"'
     return voteBoxMarkup(extraAttrs, {
       variant: "brick",
@@ -1033,7 +1036,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     var candidateImageId = brickVoteCandidateImageId(genePayload)
     var visionId = brickVoteVisionId(genePayload)
     var extraAttrs = (attrName || "data-icono-brick-vote-box") + '="' + esc(assetSha) + '"'
-    if (candidateImageId) extraAttrs += ' data-icono-candidate-image-id="' + esc(candidateImageId) + '"'
+    if (candidateImageId)
+      extraAttrs += ' data-icono-candidate-image-id="' + esc(candidateImageId) + '"'
     if (visionId) extraAttrs += ' data-icono-vision-id="' + esc(visionId) + '"'
     return voteBoxMarkup(extraAttrs, {
       variant: "label",
@@ -1058,7 +1062,13 @@ void syncSharedIconoplasmSettings().catch(function () {
     )
   }
 
-  function buildLabLabelPortraitMediaMarkup(symbol, portraitUrl, portraitFullUrl, dims, fetchPriority) {
+  function buildLabLabelPortraitMediaMarkup(
+    symbol,
+    portraitUrl,
+    portraitFullUrl,
+    dims,
+    fetchPriority,
+  ) {
     var resolvedSymbol = normalizedSymbol(symbol)
     if (!portraitUrl) {
       return (
@@ -1188,8 +1198,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
     var mobileRowsHtml = detail
-      ? renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
-      : renderTooltipMobileSkeletonHtml('data-icono-card-mobile-meta')
+      ? renderTooltipMobileRowGridHtml(metaRows, "data-icono-card-mobile-meta")
+      : renderTooltipMobileSkeletonHtml("data-icono-card-mobile-meta")
     var voteHtml = brickVoteBoxMarkup(detail || g)
     var labelVoteHtml = labelVoteBoxMarkup(detail || g, "data-icono-brick-vote-box")
     var portraitStateClass = portraitUrl
@@ -1205,29 +1215,29 @@ void syncSharedIconoplasmSettings().catch(function () {
     var bodyHtml = isLabelVariant
       ? buildLabLabelBrickBodyMarkup(detail || g, labelVoteHtml, href)
       : '<div class="iconoplasm-tooltip-header">' +
-          '<div class="icono-brick-header-row icono-shared-card-header-row">' +
-          '<a class="icono-brick-header-link" href="' +
-          href +
-          '" data-icono-nav>' +
-          '<div class="iconoplasm-tooltip-symbol">' +
-          esc(g.symbol) +
-          "</div>" +
-          '<div class="iconoplasm-tooltip-name">' +
-          esc(g.full_name || g.symbol) +
-          "</div>" +
-          "</a>" +
-          voteHtml +
-          "</div>" +
-          "</div>" +
-          '<a class="icono-brick-meta-link" href="' +
-          href +
-          '" data-icono-nav>' +
-          '<div class="iconoplasm-tooltip-meta' +
-          (detail ? "" : " iconoplasm-tooltip-meta--loading") +
-          '" data-icono-card-meta>' +
-          metaHtml +
-          "</div>" +
-          "</a>"
+        '<div class="icono-brick-header-row icono-shared-card-header-row">' +
+        '<a class="icono-brick-header-link" href="' +
+        href +
+        '" data-icono-nav>' +
+        '<div class="iconoplasm-tooltip-symbol">' +
+        esc(g.symbol) +
+        "</div>" +
+        '<div class="iconoplasm-tooltip-name">' +
+        esc(g.full_name || g.symbol) +
+        "</div>" +
+        "</a>" +
+        voteHtml +
+        "</div>" +
+        "</div>" +
+        '<a class="icono-brick-meta-link" href="' +
+        href +
+        '" data-icono-nav>' +
+        '<div class="iconoplasm-tooltip-meta' +
+        (detail ? "" : " iconoplasm-tooltip-meta--loading") +
+        '" data-icono-card-meta>' +
+        metaHtml +
+        "</div>" +
+        "</a>"
     return (
       // Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Layout &
       // Space) + C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction States). Brick cards
@@ -1257,7 +1267,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         : '<div class="' +
           portraitStateClass +
           ' icono-brick-media-link"' +
-          (portraitUrl ? ' data-icono-lightbox>' : '>') +
+          (portraitUrl ? " data-icono-lightbox>" : ">") +
           (portraitUrl
             ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
               esc(portraitFullUrl) +
@@ -1283,7 +1293,7 @@ void syncSharedIconoplasmSettings().catch(function () {
               '" height="' +
               dims.height +
               '">' +
-              '</button>'
+              "</button>"
             : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
           '<div class="iconoplasm-tooltip-portrait-fallback">' +
           '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
@@ -1311,7 +1321,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     var dims = portraitDimensions(g)
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
-    var portraitAssetSha = String((((g || {}).portrait || {}).asset_sha256) || "").trim().toLowerCase()
+    var portraitAssetSha = String(((g || {}).portrait || {}).asset_sha256 || "")
+      .trim()
+      .toLowerCase()
     var detail = g || null
     var cardVariant = resolveCardVariant()
     var isLabelVariant = cardVariant === "lab-label"
@@ -1321,7 +1333,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     // Keep mobile structure changes centralized so the gene page and gallery do not diverge again.
     var mobileRowsHtml = renderTooltipMobileRowGridHtml(
       detail ? metaRows : [],
-      'data-icono-card-mobile-meta',
+      "data-icono-card-mobile-meta",
     )
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
@@ -1330,39 +1342,39 @@ void syncSharedIconoplasmSettings().catch(function () {
       '<div class="' +
       portraitStateClass +
       '"' +
-      (portraitUrl ? ' data-icono-lightbox' : "") +
+      (portraitUrl ? " data-icono-lightbox" : "") +
       ">" +
       (isLabelVariant
         ? IconoCardShared.renderLabLabelSpecimenRailHtml(
             portraitUrl
               ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
-                esc(portraitFullUrl) +
-                '" data-icono-pswp-alt="' +
-                esc(g.symbol) +
-                ' portrait" data-pswp-width="' +
-                dims.width +
-                '" data-pswp-height="' +
-                dims.height +
-                '" aria-label="Open full-size portrait for ' +
-                esc(g.symbol) +
-                ' portrait">' +
-                '<img class="iconoplasm-tooltip-portrait-img" src="' +
-                esc(portraitUrl) +
-                '" alt="' +
-                esc(g.symbol) +
-                ' portrait" loading="eager" decoding="async" width="' +
-                dims.width +
-                '" height="' +
-                dims.height +
-                '">' +
-                "</button>"
+                  esc(portraitFullUrl) +
+                  '" data-icono-pswp-alt="' +
+                  esc(g.symbol) +
+                  ' portrait" data-pswp-width="' +
+                  dims.width +
+                  '" data-pswp-height="' +
+                  dims.height +
+                  '" aria-label="Open full-size portrait for ' +
+                  esc(g.symbol) +
+                  ' portrait">' +
+                  '<img class="iconoplasm-tooltip-portrait-img" src="' +
+                  esc(portraitUrl) +
+                  '" alt="' +
+                  esc(g.symbol) +
+                  ' portrait" loading="eager" decoding="async" width="' +
+                  dims.width +
+                  '" height="' +
+                  dims.height +
+                  '">' +
+                  "</button>"
               : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
-                '<div class="iconoplasm-tooltip-portrait-fallback">' +
-                '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-                '<div class="iconoplasm-tooltip-portrait-symbol">' +
-                esc(g.symbol) +
-                "</div>" +
-                "</div>",
+                  '<div class="iconoplasm-tooltip-portrait-fallback">' +
+                  '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+                  '<div class="iconoplasm-tooltip-portrait-symbol">' +
+                  esc(g.symbol) +
+                  "</div>" +
+                  "</div>",
             g,
           )
         : portraitUrl
@@ -1414,22 +1426,22 @@ void syncSharedIconoplasmSettings().catch(function () {
           voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
         })
       : '<div class="iconoplasm-tooltip-header">' +
-          '<div class="icono-shared-card-header-row">' +
-          '<div class="icono-shared-card-header-copy">' +
-          '<div class="iconoplasm-tooltip-symbol">' +
-          esc(g.symbol) +
-          "</div>" +
-          '<div class="iconoplasm-tooltip-name">' +
-          esc(g.full_name || g.symbol) +
-          "</div>" +
-          "</div>" +
-          voteSlotMarkup +
-          "</div>" +
-          '<div class="iconoplasm-tooltip-meta" data-icono-card-meta>' +
-          metaHtml +
-          "</div>" +
-          "</div>" +
-          mobileRowsHtml
+        '<div class="icono-shared-card-header-row">' +
+        '<div class="icono-shared-card-header-copy">' +
+        '<div class="iconoplasm-tooltip-symbol">' +
+        esc(g.symbol) +
+        "</div>" +
+        '<div class="iconoplasm-tooltip-name">' +
+        esc(g.full_name || g.symbol) +
+        "</div>" +
+        "</div>" +
+        voteSlotMarkup +
+        "</div>" +
+        '<div class="iconoplasm-tooltip-meta" data-icono-card-meta>' +
+        metaHtml +
+        "</div>" +
+        "</div>" +
+        mobileRowsHtml
 
     return (
       '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card' +
@@ -1554,7 +1566,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       meta.innerHTML = renderTooltipMetaRowsHtml(metaRows)
     }
     if (mobileMeta) {
-      mobileMeta.outerHTML = renderTooltipMobileRowGridHtml(metaRows, 'data-icono-card-mobile-meta')
+      mobileMeta.outerHTML = renderTooltipMobileRowGridHtml(metaRows, "data-icono-card-mobile-meta")
     }
     ensureBrickVoteBox(card, genePayload)
     refreshPortraitLightbox()
@@ -1763,8 +1775,14 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
     var direction = dx > 0 ? "right" : "left"
     card.setAttribute("data-icono-mobile-swipe-dir", direction)
-    card.style.setProperty("--icono-label-mobile-reject-circle-opacity", direction === "left" ? "0.42" : "0")
-    card.style.setProperty("--icono-label-mobile-approve-circle-opacity", direction === "right" ? "0.42" : "0")
+    card.style.setProperty(
+      "--icono-label-mobile-reject-circle-opacity",
+      direction === "left" ? "0.42" : "0",
+    )
+    card.style.setProperty(
+      "--icono-label-mobile-approve-circle-opacity",
+      direction === "right" ? "0.42" : "0",
+    )
   }
 
   function commitMobileLabelSwipe(card, direction) {
@@ -1785,8 +1803,14 @@ void syncSharedIconoplasmSettings().catch(function () {
       (direction > 0 ? 1 : -1) * Math.min(window.innerWidth * 0.48, 280) + "px",
     )
     card.style.setProperty("--icono-label-mobile-swipe-rotate", (direction > 0 ? 7 : -7) + "deg")
-    card.style.setProperty("--icono-label-mobile-reject-circle-opacity", direction > 0 ? "0" : "0.56")
-    card.style.setProperty("--icono-label-mobile-approve-circle-opacity", direction > 0 ? "0.56" : "0")
+    card.style.setProperty(
+      "--icono-label-mobile-reject-circle-opacity",
+      direction > 0 ? "0" : "0.56",
+    )
+    card.style.setProperty(
+      "--icono-label-mobile-approve-circle-opacity",
+      direction > 0 ? "0.56" : "0",
+    )
     button.click()
     if (currentUser) {
       setMobileLabelQcCopy(card, direction > 0 ? "looks viable" : "flagged misfit")
@@ -1800,7 +1824,8 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function wireMobileLabelCard(card) {
-    if (!card || !card.classList || !card.classList.contains("icono-card--variant-lab-label")) return
+    if (!card || !card.classList || !card.classList.contains("icono-card--variant-lab-label"))
+      return
     if (card.classList.contains("icono-card--brick-static")) return
     if (!isMobileLabelReviewEnabled()) {
       resetMobileLabelCardState(card)
@@ -1832,21 +1857,27 @@ void syncSharedIconoplasmSettings().catch(function () {
       }
     }
 
-    card.addEventListener("click", function (event) {
-      if (!isMobileLabelReviewEnabled()) return
-      var portraitHotzone =
-        event.target && event.target.closest
-          ? event.target.closest(".icono-label-specimen-viewport, .iconoplasm-tooltip-portrait-media, .iconoplasm-tooltip-portrait-fallback")
-          : null
-      if (portraitHotzone && card.contains(portraitHotzone)) {
-        event.preventDefault()
-        event.stopPropagation()
-        if (card.getAttribute("data-icono-mobile-expanded") !== "true") {
-          setMobileLabelExpanded(card, true)
+    card.addEventListener(
+      "click",
+      function (event) {
+        if (!isMobileLabelReviewEnabled()) return
+        var portraitHotzone =
+          event.target && event.target.closest
+            ? event.target.closest(
+                ".icono-label-specimen-viewport, .iconoplasm-tooltip-portrait-media, .iconoplasm-tooltip-portrait-fallback",
+              )
+            : null
+        if (portraitHotzone && card.contains(portraitHotzone)) {
+          event.preventDefault()
+          event.stopPropagation()
+          if (card.getAttribute("data-icono-mobile-expanded") !== "true") {
+            setMobileLabelExpanded(card, true)
+          }
+          return
         }
-        return
-      }
-    }, true)
+      },
+      true,
+    )
 
     card.addEventListener("click", function (event) {
       var toggle =
@@ -1869,7 +1900,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       if (
         target &&
         target.closest &&
-        target.closest("[data-icono-label-mobile-toggle], [data-icono-vote-box], [data-icono-nav], a")
+        target.closest(
+          "[data-icono-label-mobile-toggle], [data-icono-vote-box], [data-icono-nav], a",
+        )
       ) {
         return
       }
@@ -1906,7 +1939,10 @@ void syncSharedIconoplasmSettings().catch(function () {
 
     function finishPointer(event) {
       if (gesture.pointerId !== event.pointerId) return
-      if (typeof card.releasePointerCapture === "function" && card.hasPointerCapture(event.pointerId)) {
+      if (
+        typeof card.releasePointerCapture === "function" &&
+        card.hasPointerCapture(event.pointerId)
+      ) {
         card.releasePointerCapture(event.pointerId)
       }
       if (!gesture.dragging) {
@@ -2112,7 +2148,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     function resetGallery(order) {
       var resolvedOrder = order || GALLERY_DEFAULT_ORDER
       var restoreConfig =
-        pendingRestoreState && pendingRestoreState.order === resolvedOrder ? pendingRestoreState : null
+        pendingRestoreState && pendingRestoreState.order === resolvedOrder
+          ? pendingRestoreState
+          : null
       pendingRestoreState = null
       activeRestoreState = restoreConfig
       scrollRestored = !restoreConfig
@@ -2399,11 +2437,11 @@ void syncSharedIconoplasmSettings().catch(function () {
         tc +
         '">' +
         (portraitUrl
-          // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Loading Performance) +
-          // C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Motion / keep exits and
-          // reveals lightweight). The first visible home cards stay eager so the public gallery
-          // feels present immediately, then later cards fall back to lazy loading.
-          ? '<img src="' +
+          ? // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Loading Performance) +
+            // C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Motion / keep exits and
+            // reveals lightweight). The first visible home cards stay eager so the public gallery
+            // feels present immediately, then later cards fall back to lazy loading.
+            '<img src="' +
             esc(portraitUrl) +
             '" alt="' +
             esc(g.symbol) +
@@ -2503,7 +2541,8 @@ void syncSharedIconoplasmSettings().catch(function () {
       var visionId = String((candidate && candidate.vision_id) || "").trim()
       var voteAttrs = 'data-icono-candidate-vote-box="' + esc(assetSha) + '"'
       if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
-        voteAttrs += ' data-icono-candidate-image-id="' + esc(String(Math.round(candidateImageId))) + '"'
+        voteAttrs +=
+          ' data-icono-candidate-image-id="' + esc(String(Math.round(candidateImageId))) + '"'
       }
       if (visionId) {
         voteAttrs += ' data-icono-vision-id="' + esc(visionId) + '"'
@@ -2619,9 +2658,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function renderGeneContent(container, g) {
-    var html =
-      '<section class="icono-gene-lead">' +
-      buildGeneLeadCardMarkup(g)
+    var html = '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g)
 
     // Manifestation / character description
     var manifestation = g.manifestation || g.description || ""
@@ -2748,7 +2785,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (getRoute().page !== "home") return
     var card = link.closest(".icono-card[data-icono-symbol]")
     if (!card) return
-    var symbol = String(card.getAttribute("data-icono-symbol") || "").trim().toUpperCase()
+    var symbol = String(card.getAttribute("data-icono-symbol") || "")
+      .trim()
+      .toUpperCase()
     if (!symbol) return
     var rect = card.getBoundingClientRect()
     pendingHomeAnchor = {

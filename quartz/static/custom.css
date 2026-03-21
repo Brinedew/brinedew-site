@@ -340,7 +340,10 @@ article p {
   color: var(--accent);
   text-decoration: none;
   opacity: 0.8;
-  transition: color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .brd-icon-btn svg {

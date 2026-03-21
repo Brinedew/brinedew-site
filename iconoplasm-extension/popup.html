@@ -1,195 +1,204 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    body {
-      width: 300px;
-      background: #1a1a2e;
-      color: #e8e8ef;
-      font-family: 'Crimson Pro', 'Georgia', serif;
-      -webkit-font-smoothing: antialiased;
-      padding: 16px;
-    }
+      body {
+        width: 300px;
+        background: #1a1a2e;
+        color: #e8e8ef;
+        font-family: "Crimson Pro", "Georgia", serif;
+        -webkit-font-smoothing: antialiased;
+        padding: 16px;
+      }
 
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 16px;
-    }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
 
-    .header-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #DD8C9D, #7B68EE);
-    }
+      .header-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #dd8c9d, #7b68ee);
+      }
 
-    .header h1 {
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
+      .header h1 {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
 
-    .header .version {
-      font-size: 11px;
-      color: rgba(232, 232, 239, 0.3);
-      margin-top: 1px;
-    }
+      .header .version {
+        font-size: 11px;
+        color: rgba(232, 232, 239, 0.3);
+        margin-top: 1px;
+      }
 
-    .divider {
-      height: 0.5px;
-      background: rgba(255, 255, 255, 0.08);
-      margin: 12px 0;
-    }
+      .divider {
+        height: 0.5px;
+        background: rgba(255, 255, 255, 0.08);
+        margin: 12px 0;
+      }
 
-    .stat-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 4px 0;
-    }
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 0;
+      }
 
-    .stat-label {
-      font-size: 12px;
-      color: rgba(232, 232, 239, 0.5);
-    }
+      .stat-label {
+        font-size: 12px;
+        color: rgba(232, 232, 239, 0.5);
+      }
 
-    .stat-value {
-      font-size: 12px;
-      font-weight: 500;
-      color: #e8e8ef;
-      font-family: 'Monaspace Xenon Web', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-      font-variant-numeric: tabular-nums;
-    }
+      .stat-value {
+        font-size: 12px;
+        font-weight: 500;
+        color: #e8e8ef;
+        font-family: "Monaspace Xenon Web", "SF Mono", "Cascadia Code", "Consolas", monospace;
+        font-variant-numeric: tabular-nums;
+      }
 
-    .mode-select {
-      min-width: 110px;
-      padding: 4px 24px 4px 10px;
-      border-radius: 999px;
-      border: 0.5px solid rgba(255, 255, 255, 0.12);
-      background: rgba(255, 255, 255, 0.06);
-      color: #e8e8ef;
-      font-size: 12px;
-      font-family: 'Crimson Pro', 'Georgia', serif;
-    }
+      .mode-select {
+        min-width: 110px;
+        padding: 4px 24px 4px 10px;
+        border-radius: 999px;
+        border: 0.5px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.06);
+        color: #e8e8ef;
+        font-size: 12px;
+        font-family: "Crimson Pro", "Georgia", serif;
+      }
 
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 12px;
-      padding: 8px 10px;
-      background: rgba(255, 255, 255, 0.04);
-      border-radius: 6px;
-      border: 0.5px solid rgba(255, 255, 255, 0.06);
-    }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 6px;
+        border: 0.5px solid rgba(255, 255, 255, 0.06);
+      }
 
-    .status-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #4ade80;
-      flex-shrink: 0;
-    }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #4ade80;
+        flex-shrink: 0;
+      }
 
-    .status-dot.loading {
-      background: #facc15;
-      animation: pulse 1.5s ease infinite;
-    }
+      .status-dot.loading {
+        background: #facc15;
+        animation: pulse 1.5s ease infinite;
+      }
 
-    .status-dot.error {
-      background: #f87171;
-    }
+      .status-dot.error {
+        background: #f87171;
+      }
 
-    .status-text {
-      font-size: 11px;
-      color: rgba(232, 232, 239, 0.5);
-    }
+      .status-text {
+        font-size: 11px;
+        color: rgba(232, 232, 239, 0.5);
+      }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
 
-    button {
-      width: 100%;
-      margin-top: 12px;
-      padding: 8px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 0.5px solid rgba(255, 255, 255, 0.08);
-      border-radius: 6px;
-      color: rgba(232, 232, 239, 0.7);
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 150ms ease;
-    }
+      button {
+        width: 100%;
+        margin-top: 12px;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 0.5px solid rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        color: rgba(232, 232, 239, 0.7);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 150ms ease;
+      }
 
-    button:hover {
-      background: rgba(255, 255, 255, 0.10);
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="header-icon"></div>
-    <div>
-      <h1>Iconoplasm</h1>
-      <div class="version" id="version-text">v0.3.0</div>
+      button:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="header-icon"></div>
+      <div>
+        <h1>Iconoplasm</h1>
+        <div class="version" id="version-text">v0.3.0</div>
+      </div>
     </div>
-  </div>
 
-  <div class="divider"></div>
+    <div class="divider"></div>
 
-  <div class="stat-row">
-    <span class="stat-label">Genes loaded</span>
-    <span class="stat-value" id="gene-count">--</span>
-  </div>
-  <div class="stat-row">
-    <span class="stat-label">Data hash</span>
-    <span class="stat-value" id="data-hash">--</span>
-  </div>
-  <div class="stat-row">
-    <span class="stat-label">Last updated</span>
-    <span class="stat-value" id="last-fetch">--</span>
-  </div>
+    <div class="stat-row">
+      <span class="stat-label">Genes loaded</span>
+      <span class="stat-value" id="gene-count">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Data hash</span>
+      <span class="stat-value" id="data-hash">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Last updated</span>
+      <span class="stat-value" id="last-fetch">--</span>
+    </div>
 
-  <div class="divider"></div>
+    <div class="divider"></div>
 
-  <div class="stat-row">
-    <span class="stat-label">Gene highlight</span>
-    <select id="highlight-mode" class="mode-select">
-      <option value="underline">Underline</option>
-      <option value="pill">Color pills</option>
-      <option value="ellipse">Rough ellipse</option>
-    </select>
-  </div>
-  <div class="stat-row">
-    <span class="stat-label">Tooltip theme</span>
-    <select id="tooltip-theme" class="mode-select">
-      <option value="light">Light</option>
-      <option value="dark">Dark</option>
-    </select>
-  </div>
-  <div class="stat-row">
-    <span class="stat-label">Card style</span>
-    <select id="card-variant" class="mode-select">
-      <option value="classic">Classic</option>
-      <option value="lab-label">Vintage lab label</option>
-    </select>
-  </div>
+    <div class="stat-row">
+      <span class="stat-label">Gene highlight</span>
+      <select id="highlight-mode" class="mode-select">
+        <option value="underline">Underline</option>
+        <option value="pill">Color pills</option>
+        <option value="ellipse">Rough ellipse</option>
+      </select>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Tooltip theme</span>
+      <select id="tooltip-theme" class="mode-select">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Card style</span>
+      <select id="card-variant" class="mode-select">
+        <option value="classic">Classic</option>
+        <option value="lab-label">Vintage lab label</option>
+      </select>
+    </div>
 
-  <div class="status" id="status-bar">
-    <div class="status-dot loading" id="status-dot"></div>
-    <span class="status-text" id="status-text">Checking...</span>
-  </div>
+    <div class="status" id="status-bar">
+      <div class="status-dot loading" id="status-dot"></div>
+      <span class="status-text" id="status-text">Checking...</span>
+    </div>
 
-  <button id="refresh-btn">Refresh gene data</button>
+    <button id="refresh-btn">Refresh gene data</button>
 
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>

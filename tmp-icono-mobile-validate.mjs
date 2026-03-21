@@ -49,7 +49,9 @@ async function run() {
       await page.goto(baseUrl)
       await waitForBrickCards(page)
       await page.waitForTimeout(1800)
-      const firstCard = page.locator(".icono-card.icono-card--brick:not(.icono-card--skeleton)").first()
+      const firstCard = page
+        .locator(".icono-card.icono-card--brick:not(.icono-card--skeleton)")
+        .first()
       const before = await firstCard.evaluate((el) => {
         const charCell = el.querySelector(
           ".iconoplasm-tooltip-mobile-cell--character .iconoplasm-tooltip-meta-value",
