@@ -28,7 +28,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       font-size: 14px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
@@ -340,6 +340,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       backdrop-filter: blur(12px);
     }
     .gallery-card {
+      position: relative;
       display: grid;
       gap: 8px;
       padding: 8px;
@@ -348,6 +349,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       background: rgba(255,255,255,0.55);
       text-align: left;
       cursor: pointer;
+      overflow: hidden;
       transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
       content-visibility: auto;
       contain-intrinsic-size: 220px;
@@ -373,6 +375,37 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       height: 100%;
       object-fit: cover;
     }
+    .gallery-media-split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      height: 100%;
+    }
+    .gallery-media-panel {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      min-width: 0;
+      background: rgba(255,255,255,0.2);
+    }
+    .gallery-media-panel + .gallery-media-panel {
+      border-left: 1px solid rgba(111, 96, 83, 0.16);
+    }
+    .gallery-media-image {
+      min-height: 0;
+    }
+    .gallery-media-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .gallery-media-label {
+      padding: 8px;
+      border-top: 1px solid rgba(111, 96, 83, 0.14);
+      background: rgba(251,248,243,0.92);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
     .gallery-empty {
       display: grid;
       place-items: center;
@@ -392,6 +425,51 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .gallery-subtitle {
       font-size: 12px;
       color: var(--muted);
+    }
+    .gallery-card-meta {
+      display: grid;
+      gap: 4px;
+    }
+    .gallery-card-overlay {
+      position: absolute;
+      inset: auto 8px 8px 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(38,34,29,0.08), rgba(38,34,29,0.88));
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 120ms ease, transform 120ms ease;
+      pointer-events: none;
+    }
+    .gallery-card:hover .gallery-card-overlay,
+    .gallery-card:focus-within .gallery-card-overlay,
+    .gallery-card.is-selected .gallery-card-overlay {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .gallery-overlay-button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      border-radius: 999px;
+      min-height: 30px;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .gallery-overlay-button--primary {
+      background: rgba(247, 181, 114, 0.22);
+      border-color: rgba(247, 181, 114, 0.45);
+    }
+    .gallery-overlay-button--danger {
+      background: rgba(196, 74, 56, 0.2);
+      border-color: rgba(196, 74, 56, 0.45);
     }
     .badge-row {
       display: flex;
@@ -429,6 +507,26 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       line-height: 1.55;
       color: var(--muted);
     }
+    .detail-hero {
+      display: grid;
+      gap: 10px;
+    }
+    .detail-hero-frame {
+      aspect-ratio: 1 / 1;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #ece7e1;
+    }
+    .detail-hero-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .detail-hero-meta {
+      display: grid;
+      gap: 4px;
+    }
     .candidate-list,
     .event-list {
       display: grid;
@@ -445,6 +543,20 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       background: rgba(255,255,255,0.7);
       content-visibility: auto;
       contain-intrinsic-size: 110px;
+    }
+    .candidate-row {
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    }
+    .candidate-row:hover {
+      border-color: var(--border-strong);
+      background: rgba(255,255,255,0.92);
+      transform: translateY(-1px);
+    }
+    .candidate-row.is-selected {
+      border-color: var(--accent);
+      background: rgba(255,255,255,0.96);
+      box-shadow: 0 0 0 1px rgba(184, 74, 38, 0.08);
     }
     .candidate-thumb,
     .event-thumb {
@@ -828,9 +940,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             </label>
           </div>
           <div class="toggle-group">
-            <button class="toggle-pill active" type="button">Live</button>
-            <button class="toggle-pill" type="button">All candidates</button>
-            <button class="toggle-pill" type="button">Side by side</button>
+            <button class="toggle-pill active" type="button" data-gallery-mode="live">Live</button>
+            <button class="toggle-pill" type="button" data-gallery-mode="all">All candidates</button>
+            <button class="toggle-pill" type="button" data-gallery-mode="side-by-side">Side by side</button>
           </div>
         </div>
         <div class="gallery-toolbar-row">
@@ -941,8 +1053,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         blacklistedStyles: [],
         selectedGene: '',
         selectedGeneDetail: null,
+        selectedCandidateSha: '',
         activeTab: 'overview',
         archiveLoaded: false,
+        galleryMode: 'live',
         visionSort: { key: 'live', dir: 'desc' },
         activityActionFilter: 'all'
       };
@@ -1019,6 +1133,18 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var s = String(sha || '');
         if (s.length <= 20) return s;
         return s.slice(0, 10) + '...' + s.slice(-8);
+      }
+
+      function syncGalleryModeButtons() {
+        document.querySelectorAll('[data-gallery-mode]').forEach(function (btn) {
+          btn.classList.toggle('active', String(btn.getAttribute('data-gallery-mode') || 'live') === state.galleryMode);
+        });
+      }
+
+      function activeModeLabel() {
+        if (state.galleryMode === 'all') return 'all candidates';
+        if (state.galleryMode === 'side-by-side') return 'side by side';
+        return 'live only';
       }
 
       function statusPill(status) {
@@ -1340,6 +1466,117 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         ].join('');
       }
 
+      function pickDetailCandidate(detail) {
+        var candidates = Array.isArray(detail && detail.candidates) ? detail.candidates : [];
+        if (!candidates.length) return null;
+        var preferredSha = String(state.selectedCandidateSha || '').toLowerCase();
+        if (preferredSha) {
+          var preferred = candidates.find(function (candidate) {
+            return String(candidate.asset_sha256 || '').toLowerCase() === preferredSha;
+          });
+          if (preferred) return preferred;
+        }
+        var live = candidates.find(function (candidate) {
+          return Boolean(candidate && candidate.is_live);
+        });
+        return live || candidates[0] || null;
+      }
+
+      function galleryOverlayButton(label, action, symbol, sha, tone) {
+        var classes = ['gallery-overlay-button'];
+        if (tone === 'primary') classes.push('gallery-overlay-button--primary');
+        if (tone === 'danger') classes.push('gallery-overlay-button--danger');
+        return '<button class="' + classes.join(' ') + '" type="button" data-card-action="' + esc(action) + '" data-symbol="' + esc(symbol || '') + '" data-sha="' + esc(sha || '') + '">' + esc(label) + '</button>';
+      }
+
+      function renderLiveCard(a) {
+        var imageUrl = a.live_thumb_url || a.leader_thumb_url || a.live_medium_url || a.leader_medium_url || '';
+        var badges = [];
+        if (a.live_sha) badges.push('<span class="badge-pill badge-live">Live</span>');
+        if (a.admin_override) badges.push('<span class="badge-pill badge-pinned">Pinned</span>');
+        if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>');
+        if (a.missing) badges.push('<span class="badge-pill badge-missing">No portrait</span>');
+        if (a.has_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>');
+        var actions = [galleryOverlayButton('Review', 'open', a.gene_symbol, '')];
+        if (a.live_sha) actions.push(galleryOverlayButton('Copy live SHA', 'copy', a.gene_symbol, a.live_sha));
+        if (a.leader_sha && a.leader_sha !== a.live_sha) actions.push(galleryOverlayButton('Pin vote leader', 'publish', a.gene_symbol, a.leader_sha, 'primary'));
+        return [
+          '<article class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" role="button" tabindex="0" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
+          '<div class="gallery-media">',
+          (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="Portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
+          '</div>',
+          '<div class="gallery-card-meta">',
+          '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
+          '<div class="gallery-subtitle">' + esc((a.candidate_count || 0) + ' candidates · ' + (a.live_vision_id || a.leader_vision_id || 'no vision')) + '</div>',
+          '<div class="badge-row">' + badges.join('') + '</div>',
+          '</div>',
+          '<div class="gallery-card-overlay">' + actions.join('') + '</div>',
+          '</article>'
+        ].join('');
+      }
+
+      function renderCandidateCard(a) {
+        var badges = [statusPill(a.status)];
+        if (a.is_live) badges.push('<span class="badge-pill badge-live">Live</span>');
+        if (a.admin_override) badges.push('<span class="badge-pill badge-pinned">Pinned</span>');
+        if (a.is_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>');
+        if (a.is_legacy) badges.push('<span class="badge-pill badge-missing">Legacy</span>');
+        var actions = [galleryOverlayButton('Review', 'open', a.gene_symbol, '')];
+        actions.push(galleryOverlayButton('Copy SHA', 'copy', a.gene_symbol, a.asset_sha256));
+        if (!a.is_live) actions.push(galleryOverlayButton('Pin live', 'publish', a.gene_symbol, a.asset_sha256, 'primary'));
+        actions.push(galleryOverlayButton('Reject', 'reject', a.gene_symbol, a.asset_sha256, 'danger'));
+        return [
+          '<article class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" role="button" tabindex="0" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
+          '<div class="gallery-media">',
+          (a.thumb_url ? '<img src="' + esc(a.thumb_url) + '" alt="Candidate portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
+          '</div>',
+          '<div class="gallery-card-meta">',
+          '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
+          '<div class="gallery-subtitle">' + esc((a.artist_name || a.artist_tag || a.vision_id || 'Unknown vision') + ' · score ' + String(a.image_score || 0)) + '</div>',
+          '<div class="badge-row">' + badges.join('') + '</div>',
+          '</div>',
+          '<div class="gallery-card-overlay">' + actions.join('') + '</div>',
+          '</article>'
+        ].join('');
+      }
+
+      function renderCompareCard(a) {
+        var badges = [];
+        if (a.live_sha) badges.push('<span class="badge-pill badge-live">Live</span>');
+        if (a.leader_sha && a.leader_sha !== a.live_sha) badges.push('<span class="badge-pill badge-pinned">Vote leader differs</span>');
+        if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>');
+        if (a.missing) badges.push('<span class="badge-pill badge-missing">No portrait</span>');
+        var actions = [galleryOverlayButton('Review', 'open', a.gene_symbol, '')];
+        if (a.live_sha) actions.push(galleryOverlayButton('Copy live SHA', 'copy', a.gene_symbol, a.live_sha));
+        if (a.leader_sha && a.leader_sha !== a.live_sha) actions.push(galleryOverlayButton('Pin vote leader', 'publish', a.gene_symbol, a.leader_sha, 'primary'));
+        return [
+          '<article class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" role="button" tabindex="0" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
+          '<div class="gallery-media">',
+          '<div class="gallery-media-split">',
+          '<div class="gallery-media-panel">',
+          '<div class="gallery-media-image">',
+          (a.live_thumb_url ? '<img src="' + esc(a.live_thumb_url) + '" alt="Live portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No live portrait</div>'),
+          '</div>',
+          '<div class="gallery-media-label">Live</div>',
+          '</div>',
+          '<div class="gallery-media-panel">',
+          '<div class="gallery-media-image">',
+          (a.leader_thumb_url ? '<img src="' + esc(a.leader_thumb_url) + '" alt="Vote leader for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No vote leader</div>'),
+          '</div>',
+          '<div class="gallery-media-label">Vote leader</div>',
+          '</div>',
+          '</div>',
+          '</div>',
+          '<div class="gallery-card-meta">',
+          '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
+          '<div class="gallery-subtitle">' + esc((a.live_vision_id || 'no live') + ' vs ' + (a.leader_vision_id || 'no leader')) + '</div>',
+          '<div class="badge-row">' + badges.join('') + '</div>',
+          '</div>',
+          '<div class="gallery-card-overlay">' + actions.join('') + '</div>',
+          '</article>'
+        ].join('');
+      }
+
       function renderGeneDetail() {
         var detail = state.selectedGeneDetail;
         if (!detail) {
@@ -1357,9 +1594,23 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
         var candidates = Array.isArray(detail.candidates) ? detail.candidates : [];
         var recentEvents = Array.isArray(detail.recent_events) ? detail.recent_events : [];
+        var heroCandidate = pickDetailCandidate(detail);
+        state.selectedCandidateSha = heroCandidate ? String(heroCandidate.asset_sha256 || '') : '';
 
         els.detail.innerHTML = [
           '<div class="detail-kicker">Gene review</div>',
+          (heroCandidate ? [
+            '<div class="detail-hero">',
+            '<div class="detail-hero-frame">',
+            (heroCandidate.medium_url ? '<img src="' + esc(heroCandidate.medium_url) + '" alt="Selected portrait for ' + esc(detail.gene_symbol || '') + '" loading="lazy" width="320" height="320" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No preview</div>'),
+            '</div>',
+            '<div class="detail-hero-meta">',
+            '<strong>' + esc(heroCandidate.artist_name || heroCandidate.artist_tag || heroCandidate.vision_id || 'Unknown vision') + '</strong>',
+            '<div class="small">score ' + esc(String(heroCandidate.vote_score || 0)) + ' · +' + esc(String(heroCandidate.image_upvotes || 0)) + ' / -' + esc(String(heroCandidate.image_downvotes || 0)) + '</div>',
+            '<div class="small mono">' + esc(shortSha(heroCandidate.asset_sha256 || '')) + '</div>',
+            '</div>',
+            '</div>'
+          ].join('') : ''),
           '<div class="detail-title">' + esc(detail.gene_symbol || '') + '</div>',
           (detail.full_name ? '<div class="small">' + esc(detail.full_name) + '</div>' : ''),
           '<div class="badge-row">' + headerBadges.join('') + '</div>',
@@ -1377,7 +1628,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             if (candidate.is_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>');
             if (candidate.is_legacy) badges.push('<span class="badge-pill badge-missing">Legacy</span>');
             return [
-              '<article class="candidate-row">',
+              '<article class="candidate-row' + (heroCandidate && String(heroCandidate.asset_sha256 || '') === String(candidate.asset_sha256 || '') ? ' is-selected' : '') + '" data-candidate-sha="' + esc(candidate.asset_sha256 || '') + '">',
               '<div class="candidate-thumb">',
               (candidate.thumb_url ? '<img src="' + esc(candidate.thumb_url) + '" alt="Candidate portrait" loading="lazy" width="64" height="64" />' : ''),
               '</div>',
@@ -1408,6 +1659,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (!safeSymbol) return;
         state.selectedGene = safeSymbol;
         state.selectedGeneDetail = null;
+        state.selectedCandidateSha = '';
         els.detail.innerHTML = [
           '<div class="detail-kicker">Gene review</div>',
           '<div class="detail-title">' + esc(safeSymbol) + '</div>',
@@ -1425,23 +1677,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           return;
         }
         els.body.innerHTML = assets.map(function (a) {
-          var imageUrl = a.live_thumb_url || a.leader_thumb_url || a.live_medium_url || a.leader_medium_url || '';
-          var badges = [];
-          if (a.live_sha) badges.push('<span class="badge-pill badge-live">Live</span>');
-          if (a.admin_override) badges.push('<span class="badge-pill badge-pinned">Pinned</span>');
-          if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>');
-          if (a.missing) badges.push('<span class="badge-pill badge-missing">No portrait</span>');
-          if (a.has_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>');
-          return [
-            '<button class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" type="button" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
-            '<div class="gallery-media">',
-            (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="Portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
-            '</div>',
-            '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
-            '<div class="gallery-subtitle">' + esc((a.candidate_count || 0) + ' candidates · ' + (a.live_vision_id || a.leader_vision_id || 'no vision')) + '</div>',
-            '<div class="badge-row">' + badges.join('') + '</div>',
-            '</button>'
-          ].join('');
+          if (state.galleryMode === 'all') return renderCandidateCard(a);
+          if (state.galleryMode === 'side-by-side') return renderCompareCard(a);
+          return renderLiveCard(a);
         }).join('');
       }
 
@@ -1453,16 +1691,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var sort = encodeURIComponent(String(els.stale.value || 'name').toLowerCase());
           var limit = Math.max(1, Math.min(120, Number.parseInt(els.limit.value || '60', 10) || 60));
           var symbol = encodeURIComponent(String(els.search.value || '').trim().toUpperCase());
-          var path = '/gallery?page=1&filter=' + status + '&sort=' + sort + '&limit=' + limit;
+          var path = '/gallery?page=1&filter=' + status + '&sort=' + sort + '&limit=' + limit + '&mode=' + encodeURIComponent(state.galleryMode);
           if (symbol) path += '&query=' + symbol;
           var data = await apiJson(path, { method: 'GET' });
-          state.assets = dedupeGalleryRows(data.rows);
+          state.galleryMode = String(data.mode || state.galleryMode || 'live');
+          syncGalleryModeButtons();
+          state.assets = state.galleryMode === 'all' ? (Array.isArray(data.rows) ? data.rows : []) : dedupeGalleryRows(data.rows);
           state.archiveLoaded = true;
           els.meta.innerHTML = [
-            '<span>' + state.assets.length + ' genes shown</span>',
+            '<span>' + state.assets.length + (state.galleryMode === 'all' ? ' cards shown' : ' genes shown') + '</span>',
             '<span>total ' + esc(String(data.total || state.assets.length)) + '</span>',
             '<span>filter ' + esc(String(els.status.value || 'all')) + '</span>',
-            '<span>sort ' + esc(String(els.stale.value || 'name')) + '</span>'
+            '<span>sort ' + esc(String(els.stale.value || 'name')) + '</span>',
+            '<span>mode ' + esc(activeModeLabel()) + '</span>'
           ].join(' &middot; ');
           renderTable();
           if (state.selectedGene && state.assets.some(function (row) { return String(row.gene_symbol || '') === state.selectedGene; })) {
@@ -1597,9 +1838,41 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         });
 
         if (els.body) {
-          els.body.addEventListener('click', function (ev) {
+          els.body.addEventListener('click', async function (ev) {
+            var actionBtn = ev.target.closest('[data-card-action]');
+            if (actionBtn) {
+              ev.stopPropagation();
+              var action = String(actionBtn.getAttribute('data-card-action') || '');
+              var symbol = String(actionBtn.getAttribute('data-symbol') || '');
+              var sha = String(actionBtn.getAttribute('data-sha') || '');
+              try {
+                actionBtn.disabled = true;
+                if (action === 'open') {
+                  await refreshGeneDetail(symbol);
+                } else {
+                  await handleTableAction(action, symbol, sha);
+                  if (symbol) await refreshGeneDetail(symbol);
+                }
+              } catch (err) {
+                setLog({ error: String(err.message || err), details: err.response || null });
+              } finally {
+                actionBtn.disabled = false;
+              }
+              return;
+            }
+
             var card = ev.target.closest('[data-gene-symbol]');
             if (!card) return;
+            refreshGeneDetail(String(card.getAttribute('data-gene-symbol') || '')).catch(function (err) {
+              setLog({ error: String(err.message || err), details: err.response || null });
+            });
+          });
+
+          els.body.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Enter' && ev.key !== ' ') return;
+            var card = ev.target.closest('[data-gene-symbol]');
+            if (!card) return;
+            ev.preventDefault();
             refreshGeneDetail(String(card.getAttribute('data-gene-symbol') || '')).catch(function (err) {
               setLog({ error: String(err.message || err), details: err.response || null });
             });
@@ -1607,6 +1880,17 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
 
         document.body.addEventListener('click', function (ev) {
+          var modeBtn = ev.target.closest('[data-gallery-mode]');
+          if (modeBtn) {
+            var nextMode = String(modeBtn.getAttribute('data-gallery-mode') || 'live');
+            if (nextMode !== state.galleryMode) {
+              state.galleryMode = nextMode;
+              syncGalleryModeButtons();
+              refreshAssets();
+            }
+            return;
+          }
+
           var sortBtn = ev.target.closest('[data-vision-sort]');
           if (sortBtn) {
             var key = String(sortBtn.getAttribute('data-vision-sort') || 'live');
@@ -1639,6 +1923,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
         if (els.detail) {
           els.detail.addEventListener('click', async function (ev) {
+            var candidateCard = ev.target.closest('[data-candidate-sha]');
+            if (candidateCard && !ev.target.closest('[data-detail-action]')) {
+              state.selectedCandidateSha = String(candidateCard.getAttribute('data-candidate-sha') || '');
+              renderGeneDetail();
+              return;
+            }
             var btn = ev.target.closest('[data-detail-action]');
             if (!btn) return;
             var action = String(btn.getAttribute('data-detail-action') || '');
@@ -1686,6 +1976,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function init() {
         setActiveTab('overview');
+        syncGalleryModeButtons();
         els.visionStatsList.innerHTML = '<div class="gallery-empty">Open this tab to load the scorecard.</div>';
         els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blacklist log.</div></div><div></div></article>';
         els.refresh.addEventListener('click', function () {

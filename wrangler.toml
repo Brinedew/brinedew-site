@@ -120,11 +120,13 @@ database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
 [[env.staging.kv_namespaces]]
 binding = "KV"
 id = "b0394946bccf4cd3afd9e1ff6de2bedc"
+preview_id = "b0394946bccf4cd3afd9e1ff6de2bedc"
 
 # Read-only access to prod overrides so staging can mirror the live daily puzzle.
 [[env.staging.kv_namespaces]]
 binding = "PROD_KV"
 id = "7d59f063885e415ab3df5301393a114d"
+preview_id = "7d59f063885e415ab3df5301393a114d"
 
 # Separate DO storage (keyed by worker name) so staging sessions do not touch prod.
 [[env.staging.durable_objects.bindings]]
@@ -145,10 +147,12 @@ migrations_dir = "migrations-iconoplasm"
 [[env.staging.r2_buckets]]
 binding = "STRUCTURES_BUCKET"
 bucket_name = "geneguessr-structures-staging"
+preview_bucket_name = "geneguessr-structures-staging"
 
 [[env.staging.r2_buckets]]
 binding = "ICONOPLASM_PORTRAITS"
 bucket_name = "iconoplasm-portraits-staging"
+preview_bucket_name = "iconoplasm-portraits-staging"
 
 [env.staging.triggers]
 crons = []
