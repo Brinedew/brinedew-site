@@ -1046,6 +1046,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <script>
     (function () {
       var API_BASE = '/api/iconoplasm/admin';
+      var ADMIN_READ_TIMEOUT_MS = 12000;
+      var ADMIN_WRITE_TIMEOUT_MS = 30000;
       var state = {
         assets: [],
         overviewSummary: null,
@@ -1203,19 +1205,79 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return out;
       }
 
+      function requestTimeoutError(path, timeoutMs) {
+        var err = new Error('Request timed out after ' + String(Math.round(timeoutMs / 1000)) + 's');
+        err.code = 'TIMEOUT';
+        err.response = {
+          error: 'Request timed out',
+          path: path,
+          timeout_ms: timeoutMs
+        };
+        return err;
+      }
+
+      function requestErrorMessage(err, fallback) {
+        if (err && err.code === 'TIMEOUT') return String(err.message || fallback || 'Request timed out.');
+        if (err && err.response && err.response.error) return String(err.response.error);
+        if (err && err.message) return String(err.message);
+        return String(fallback || err || 'Request failed');
+      }
+
+      function inlineFailureMarkup(title, message) {
+        return [
+          '<div class="gallery-empty">',
+          '<strong>' + esc(title || 'Request failed') + '</strong>',
+          '<div class="small">' + esc(message || 'Please try again.') + '</div>',
+          '</div>'
+        ].join('');
+      }
+
+      function tableFailureMarkup(title, message, colspan) {
+        return [
+          '<tr>',
+          '<td colspan="' + esc(String(colspan || 1)) + '">',
+          inlineFailureMarkup(title, message),
+          '</td>',
+          '</tr>'
+        ].join('');
+      }
+
       async function apiJson(path, options) {
         var opts = options || {};
+        var method = String(opts.method || 'GET').toUpperCase();
+        var timeoutMs = Number(opts.timeoutMs || (method === 'GET' ? ADMIN_READ_TIMEOUT_MS : ADMIN_WRITE_TIMEOUT_MS));
         var headers = Object.assign({}, opts.headers || {}, authHeaders());
-        var resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers: headers, credentials: 'include' }));
-        var text = await resp.text();
-        var data = null;
-        try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
-        if (!resp.ok) {
-          var err = new Error('HTTP ' + resp.status);
-          err.response = data;
-          throw err;
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        var timeoutId = null;
+        if (controller && timeoutMs > 0) {
+          timeoutId = window.setTimeout(function () {
+            controller.abort();
+          }, timeoutMs);
         }
-        return data;
+        try {
+          var requestOptions = Object.assign({}, opts, {
+            headers: headers,
+            credentials: 'include'
+          });
+          if (controller) requestOptions.signal = controller.signal;
+          var resp = await fetch(API_BASE + path, requestOptions);
+          var text = await resp.text();
+          var data = null;
+          try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+          if (!resp.ok) {
+            var err = new Error('HTTP ' + resp.status);
+            err.response = data;
+            throw err;
+          }
+          return data;
+        } catch (err) {
+          if (controller && controller.signal && controller.signal.aborted) {
+            throw requestTimeoutError(path, timeoutMs);
+          }
+          throw err;
+        } finally {
+          if (timeoutId != null) window.clearTimeout(timeoutId);
+        }
       }
 
       function setLog(v) {
@@ -1379,7 +1441,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
           renderOverview();
         } catch (err) {
-          setLog({ error: 'Overview load failed', details: err.response || String(err.message || err) });
+          var message = requestErrorMessage(err, 'Overview load failed.');
+          els.overviewMetrics.innerHTML = inlineFailureMarkup('Overview failed fast', message);
+          els.overviewCoverage.innerHTML = inlineFailureMarkup('Coverage failed fast', message);
+          els.attentionList.innerHTML = '<article class="list-row"><div><strong>Admin overview failed.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
+          els.overviewEvents.innerHTML = '<article class="list-row"><div><strong>Recent activity unavailable.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
+          setLog({ error: 'Overview load failed', details: err.response || message });
         }
       }
 
@@ -1434,14 +1501,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       async function refreshVisionStats() {
         try {
           if (els.visionStatsList) {
-            els.visionStatsList.innerHTML = '<div class="gallery-empty">Loading vision scorecard…</div>';
+            els.visionStatsList.innerHTML = tableFailureMarkup('Loading vision scorecard…', 'Waiting for the admin read-model endpoints to answer.', 6);
           }
           var data = await apiJson('/votes/vision-stats', { method: 'GET' });
           state.visionStats = Array.isArray(data.rows) ? data.rows : [];
           state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
           renderVisionStats();
         } catch (err) {
-          setLog({ error: 'Vision stats failed', details: err.response || String(err.message || err) });
+          var message = requestErrorMessage(err, 'Vision stats failed.');
+          if (els.visionStatsList) {
+            els.visionStatsList.innerHTML = tableFailureMarkup('Vision scorecard failed fast', message, 6);
+          }
+          if (els.stylesNotes) {
+            els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>Vision stats unavailable.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
+          }
+          setLog({ error: 'Vision stats failed', details: err.response || message });
         }
       }
 
