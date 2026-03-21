@@ -841,7 +841,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var summary = state.overviewSummary || {};
         els.overviewMetrics.innerHTML = [
           metricMarkup('Genes audited', summary.genes || 0, 'Rows included in the canon audit feed.'),
-          metricMarkup('Canon drift', summary.drift || 0, 'Live canon differs from the vote leader.'),
+          metricMarkup('Canon drift', summary.drift, summary.drift == null ? 'Open Outliers to compute exact drift.' : 'Live canon differs from the vote leader.'),
           metricMarkup('Admin overrides', summary.overrides || 0, 'Genes pinned away from automatic canonicity.'),
           metricMarkup('Missing live asset', summary.current_asset_missing || 0, 'Publish state points at a missing asset.'),
           metricMarkup('Stale assets', summary.stale_assets || 0, 'Candidate clutter that still needs cleanup.'),

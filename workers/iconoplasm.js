@@ -1943,15 +1943,17 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
 
   // Keep the first admin paint bounded. This endpoint exists specifically so the
   // page can boot without recomputing and shipping the entire outlier plot.
-  // If we ever need more than a small exception list here, the right answer is
-  // a materialized admin-state table, not quietly stapling canon-audit back on.
+  // Exact drift requires recomputing vote leaders across the corpus, which is
+  // the expensive global truth we just removed from page boot. Leave that to
+  // the lazy Outliers tab for now. If overview ever needs exact drift again,
+  // the right fix is B-374-style materialized admin state, not sneaking the
+  // canon-audit workload back into startup.
   const [
     geneCountRow,
     publishStateRow,
     assetTotalsRow,
     missingCurrentRow,
-    driftCountRow,
-    driftAttentionRow,
+    missingAttentionRow,
     overrideAttentionRow,
     staleAttentionRow,
     recentEvents,
@@ -1982,99 +1984,14 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
          AND pa.asset_sha256 IS NULL`,
     ).first(),
     env.ICONOPLASM_DB.prepare(
-      `WITH vote_agg AS (
-         SELECT
-           upper(gene_symbol) AS gene_symbol,
-           lower(asset_sha256) AS asset_sha256,
-           SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-           SUM(vote_value) AS score
-         FROM icono_image_votes
-         GROUP BY upper(gene_symbol), lower(asset_sha256)
-       ),
-       eligible_assets AS (
-         SELECT
-           upper(pa.gene_symbol) AS gene_symbol,
-           lower(pa.asset_sha256) AS asset_sha256,
-           COALESCE(v.upvotes, 0) AS upvotes,
-           COALESCE(v.score, 0) AS score,
-           COALESCE(pa.is_legacy, 0) AS is_legacy,
-           pa.created_at,
-           ROW_NUMBER() OVER (
-             PARTITION BY upper(pa.gene_symbol)
-             ORDER BY
-               COALESCE(v.score, 0) DESC,
-               CASE WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
-               COALESCE(v.upvotes, 0) DESC,
-               pa.created_at DESC,
-               lower(pa.asset_sha256) ASC
-           ) AS vote_rank
-         FROM icono_portrait_assets pa
-         LEFT JOIN vote_agg v
-           ON v.gene_symbol = upper(pa.gene_symbol)
-          AND v.asset_sha256 = lower(pa.asset_sha256)
-         WHERE COALESCE(pa.autopick_eligible, 1) = 1
-           AND lower(COALESCE(pa.status, '')) <> 'rejected'
-           AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
-       )
-       SELECT COUNT(*) AS drift
+      `SELECT upper(ps.gene_symbol) AS gene_symbol
        FROM icono_publish_state ps
-       JOIN eligible_assets cur
-         ON cur.gene_symbol = upper(ps.gene_symbol)
-        AND cur.asset_sha256 = lower(ps.current_asset_sha256)
-       JOIN eligible_assets lead
-         ON lead.gene_symbol = upper(ps.gene_symbol)
-        AND lead.vote_rank = 1
+       LEFT JOIN icono_portrait_assets pa
+         ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+        AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
        WHERE COALESCE(ps.current_asset_sha256, '') <> ''
-         AND cur.asset_sha256 <> lead.asset_sha256`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `WITH vote_agg AS (
-         SELECT
-           upper(gene_symbol) AS gene_symbol,
-           lower(asset_sha256) AS asset_sha256,
-           SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-           SUM(vote_value) AS score
-         FROM icono_image_votes
-         GROUP BY upper(gene_symbol), lower(asset_sha256)
-       ),
-       eligible_assets AS (
-         SELECT
-           upper(pa.gene_symbol) AS gene_symbol,
-           lower(pa.asset_sha256) AS asset_sha256,
-           COALESCE(v.upvotes, 0) AS upvotes,
-           COALESCE(v.score, 0) AS score,
-           COALESCE(pa.is_legacy, 0) AS is_legacy,
-           pa.created_at,
-           ROW_NUMBER() OVER (
-             PARTITION BY upper(pa.gene_symbol)
-             ORDER BY
-               COALESCE(v.score, 0) DESC,
-               CASE WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
-               COALESCE(v.upvotes, 0) DESC,
-               pa.created_at DESC,
-               lower(pa.asset_sha256) ASC
-           ) AS vote_rank
-         FROM icono_portrait_assets pa
-         LEFT JOIN vote_agg v
-           ON v.gene_symbol = upper(pa.gene_symbol)
-          AND v.asset_sha256 = lower(pa.asset_sha256)
-         WHERE COALESCE(pa.autopick_eligible, 1) = 1
-           AND lower(COALESCE(pa.status, '')) <> 'rejected'
-           AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
-       )
-       SELECT
-         upper(ps.gene_symbol) AS gene_symbol,
-         ABS(COALESCE(lead.score, 0) - COALESCE(cur.score, 0)) AS score_gap
-       FROM icono_publish_state ps
-       JOIN eligible_assets cur
-         ON cur.gene_symbol = upper(ps.gene_symbol)
-        AND cur.asset_sha256 = lower(ps.current_asset_sha256)
-       JOIN eligible_assets lead
-         ON lead.gene_symbol = upper(ps.gene_symbol)
-        AND lead.vote_rank = 1
-       WHERE COALESCE(ps.current_asset_sha256, '') <> ''
-         AND cur.asset_sha256 <> lead.asset_sha256
-       ORDER BY score_gap DESC, upper(ps.gene_symbol) ASC
+         AND pa.asset_sha256 IS NULL
+       ORDER BY ps.updated_at DESC, upper(ps.gene_symbol) ASC
        LIMIT 1`,
     ).first(),
     env.ICONOPLASM_DB.prepare(
@@ -2101,25 +2018,6 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
   const withLive = Number(publishStateRow?.with_live || 0)
   const attention = []
 
-  if (driftAttentionRow?.gene_symbol) {
-    attention.push({
-      kind: "drift",
-      symbol: normalizeSymbol(driftAttentionRow.gene_symbol),
-      score_gap: Number(driftAttentionRow?.score_gap || 0),
-    })
-  }
-
-  const missingAttentionRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT upper(ps.gene_symbol) AS gene_symbol
-     FROM icono_publish_state ps
-     LEFT JOIN icono_portrait_assets pa
-       ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
-      AND lower(pa.asset_sha256) = lower(ps.current_asset_sha256)
-     WHERE COALESCE(ps.current_asset_sha256, '') <> ''
-       AND pa.asset_sha256 IS NULL
-     ORDER BY ps.updated_at DESC, upper(ps.gene_symbol) ASC
-     LIMIT 1`,
-  ).first()
   if (missingAttentionRow?.gene_symbol) {
     attention.push({
       kind: "missing",
@@ -2147,7 +2045,7 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
       genes,
       with_live: withLive,
       overrides: Number(publishStateRow?.overrides || 0),
-      drift: Number(driftCountRow?.drift || 0),
+      drift: null,
       current_asset_missing: Number(missingCurrentRow?.current_asset_missing || 0),
       no_live: Math.max(0, genes - withLive),
       stale_assets: Number(assetTotalsRow?.stale_assets || 0),
