@@ -716,6 +716,31 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .btn-danger:hover { background: #a82828; }
     .btn-flat { background: transparent; border-color: transparent; color: var(--accent); padding: 4px 8px; }
     .btn-flat:hover { background: var(--accent-light); }
+    .sort-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      width: 100%;
+      color: var(--muted);
+      font-weight: 600;
+      border-radius: 999px;
+    }
+    .sort-btn:hover { color: var(--text); }
+    .sort-btn.is-active {
+      color: var(--accent);
+      background: var(--accent-light);
+      border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+    }
+    .sort-btn::after {
+      content: 'sort';
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+    .sort-btn[data-sort-dir='asc']::after { content: 'asc'; color: var(--accent); }
+    .sort-btn[data-sort-dir='desc']::after { content: 'desc'; color: var(--accent); }
 
     /* ── stats bar ── */
     .stats {
@@ -733,6 +758,43 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       border-radius: 8px;
       overflow: auto;
       background: var(--surface);
+    }
+    .table-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .table-toolbar .stats {
+      padding: 0;
+      min-width: 0;
+    }
+    .table-pager {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .table-pager label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .table-pager select { min-width: 76px; }
+    .pager-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pager-status {
+      min-width: 110px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
     }
     table {
       width: 100%;
@@ -981,15 +1043,35 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <section class="stack">
           <h2>Vision scorecard</h2>
           <p class="small">Which sources are helping, which ones are making a mess, and which are already blacklisted.</p>
+          <div class="table-toolbar">
+            <div class="stats" id="vision-stats-meta">Open this tab to load the scorecard.</div>
+            <div class="table-pager">
+              <label>Rows
+                <select id="vision-page-size">
+                  <option value="25">25</option>
+                  <option value="50" selected>50</option>
+                  <option value="100">100</option>
+                  <option value="250">250</option>
+                </select>
+              </label>
+              <div class="pager-group">
+                <button type="button" id="vision-page-first">First</button>
+                <button type="button" id="vision-page-prev">Prev</button>
+                <span class="pager-status mono" id="vision-page-label">Page 1 of 1</span>
+                <button type="button" id="vision-page-next">Next</button>
+                <button type="button" id="vision-page-last">Last</button>
+              </div>
+            </div>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th><button class="btn-flat" type="button" data-vision-sort="vision">Vision</button></th>
-                  <th><button class="btn-flat" type="button" data-vision-sort="images">Images</button></th>
-                  <th><button class="btn-flat" type="button" data-vision-sort="score">Avg vote</button></th>
-                  <th><button class="btn-flat" type="button" data-vision-sort="rejection">Rejection rate</button></th>
-                  <th><button class="btn-flat" type="button" data-vision-sort="live">Currently canonical</button></th>
+                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="vision">Vision</button></th>
+                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="images">Images</button></th>
+                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="score">Avg vote</button></th>
+                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="rejection">Rejection rate</button></th>
+                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="live">Currently canonical</button></th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1056,6 +1138,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         recentEvents: [],
         visionStats: [],
         blacklistedStyles: [],
+        visionPage: 1,
+        visionPageSize: 50,
         selectedGene: '',
         selectedGeneDetail: null,
         selectedCandidateSha: '',
@@ -1083,6 +1167,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         styleReason: document.getElementById('style-reason'),
         styleRemove: document.getElementById('style-remove'),
         visionStatsList: document.getElementById('vision-stats-list'),
+        visionStatsMeta: document.getElementById('vision-stats-meta'),
+        visionPageSize: document.getElementById('vision-page-size'),
+        visionPageLabel: document.getElementById('vision-page-label'),
+        visionPageFirst: document.getElementById('vision-page-first'),
+        visionPagePrev: document.getElementById('vision-page-prev'),
+        visionPageNext: document.getElementById('vision-page-next'),
+        visionPageLast: document.getElementById('vision-page-last'),
         stylesNotes: document.getElementById('styles-notes'),
         activityFilter: document.getElementById('activity-filter'),
         activityList: document.getElementById('activity-list'),
@@ -1457,6 +1548,30 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
       }
 
+      function clampVisionPage(page, totalPages) {
+        var cleaned = Number.parseInt(String(page || '1'), 10) || 1;
+        var maxPage = Math.max(1, Number(totalPages || 1));
+        if (cleaned < 1) return 1;
+        if (cleaned > maxPage) return maxPage;
+        return cleaned;
+      }
+
+      function setVisionPage(page) {
+        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || 50), 10) || 50);
+        var totalPages = Math.max(1, Math.ceil((state.visionStats || []).length / pageSize));
+        state.visionPage = clampVisionPage(page, totalPages);
+      }
+
+      function updateVisionSortButtons() {
+        document.querySelectorAll('[data-vision-sort]').forEach(function (btn) {
+          var key = String(btn.getAttribute('data-vision-sort') || '');
+          var active = state.visionSort.key === key;
+          btn.classList.toggle('is-active', active);
+          btn.setAttribute('data-sort-dir', active ? state.visionSort.dir : '');
+          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+
       function renderVisionStats() {
         var sortKey = state.visionSort.key;
         var sortDir = state.visionSort.dir === 'asc' ? 1 : -1;
@@ -1468,9 +1583,38 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (sortKey === 'images') return (Number(left.image_count || 0) - Number(right.image_count || 0)) * sortDir;
           if (sortKey === 'score') return (Number(left.avg_vote || 0) - Number(right.avg_vote || 0)) * sortDir;
           if (sortKey === 'rejection') return (Number(left.rejection_rate || 0) - Number(right.rejection_rate || 0)) * sortDir;
-          return (Number(left.live_count || 0) - Number(right.live_count || 0)) * sortDir;
+          var byLive = (Number(left.live_count || 0) - Number(right.live_count || 0)) * sortDir;
+          if (byLive) return byLive;
+          return label(left).localeCompare(label(right)) * sortDir;
         });
-        els.visionStatsList.innerHTML = rows.length ? rows.map(function (row) {
+        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || 50), 10) || 50);
+        var totalRows = rows.length;
+        var totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+        state.visionPage = clampVisionPage(state.visionPage, totalPages);
+        var start = (state.visionPage - 1) * pageSize;
+        var end = Math.min(totalRows, start + pageSize);
+        var pageRows = rows.slice(start, end);
+
+        updateVisionSortButtons();
+        if (els.visionStatsMeta) {
+          els.visionStatsMeta.innerHTML = totalRows
+            ? [
+                '<span>showing ' + esc(String(start + 1)) + '-' + esc(String(end)) + '</span>',
+                '<span>of ' + esc(String(totalRows)) + ' visions</span>',
+                '<span>sorted by ' + esc(String(sortKey)) + ' ' + esc(String(state.visionSort.dir)) + '</span>'
+              ].join(' &middot; ')
+            : 'No vision stats yet.';
+        }
+        if (els.visionPageLabel) {
+          els.visionPageLabel.textContent = 'Page ' + state.visionPage + ' of ' + totalPages;
+        }
+        if (els.visionPageSize) els.visionPageSize.value = String(pageSize);
+        if (els.visionPageFirst) els.visionPageFirst.disabled = state.visionPage <= 1;
+        if (els.visionPagePrev) els.visionPagePrev.disabled = state.visionPage <= 1;
+        if (els.visionPageNext) els.visionPageNext.disabled = state.visionPage >= totalPages;
+        if (els.visionPageLast) els.visionPageLast.disabled = state.visionPage >= totalPages;
+
+        els.visionStatsList.innerHTML = pageRows.length ? pageRows.map(function (row) {
           return [
             '<tr>',
             '<td><strong>' + esc(row.artist_name || row.artist_tag || row.vision_id || 'Unknown vision') + '</strong><div class="small">' + esc(row.artist_tag || row.vision_id || '') + '</div></td>',
@@ -1506,11 +1650,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var data = await apiJson('/votes/vision-stats', { method: 'GET' });
           state.visionStats = Array.isArray(data.rows) ? data.rows : [];
           state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
+          state.visionPage = 1;
           renderVisionStats();
         } catch (err) {
           var message = requestErrorMessage(err, 'Vision stats failed.');
           if (els.visionStatsList) {
             els.visionStatsList.innerHTML = tableFailureMarkup('Vision scorecard failed fast', message, 6);
+          }
+          if (els.visionStatsMeta) {
+            els.visionStatsMeta.innerHTML = '<span style="color: var(--danger)">Vision stats unavailable.</span>';
           }
           if (els.stylesNotes) {
             els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>Vision stats unavailable.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
@@ -1988,6 +2136,31 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             } else {
               state.visionSort = { key: key, dir: key === 'vision' ? 'asc' : 'desc' };
             }
+            state.visionPage = 1;
+            renderVisionStats();
+            return;
+          }
+
+          if (ev.target.closest('#vision-page-first')) {
+            setVisionPage(1);
+            renderVisionStats();
+            return;
+          }
+
+          if (ev.target.closest('#vision-page-prev')) {
+            setVisionPage(state.visionPage - 1);
+            renderVisionStats();
+            return;
+          }
+
+          if (ev.target.closest('#vision-page-next')) {
+            setVisionPage(state.visionPage + 1);
+            renderVisionStats();
+            return;
+          }
+
+          if (ev.target.closest('#vision-page-last')) {
+            setVisionPage(Math.max(1, Math.ceil((state.visionStats || []).length / Math.max(1, state.visionPageSize || 50))));
             renderVisionStats();
             return;
           }
@@ -2067,6 +2240,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         setActiveTab('overview');
         syncGalleryModeButtons();
         els.visionStatsList.innerHTML = '<div class="gallery-empty">Open this tab to load the scorecard.</div>';
+        if (els.visionStatsMeta) els.visionStatsMeta.textContent = 'Open this tab to load the scorecard.';
         els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blacklist log.</div></div><div></div></article>';
         els.refresh.addEventListener('click', function () {
           refreshAssets();
@@ -2075,6 +2249,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.stale.addEventListener('change', refreshAssets);
         els.limit.addEventListener('change', refreshAssets);
         els.search.addEventListener('input', refreshAssets);
+        if (els.visionPageSize) {
+          els.visionPageSize.addEventListener('change', function () {
+            state.visionPageSize = Math.max(1, Number.parseInt(String(els.visionPageSize.value || '50'), 10) || 50);
+            state.visionPage = 1;
+            renderVisionStats();
+          });
+        }
         if (els.activityFilter) {
           els.activityFilter.addEventListener('input', renderActivityFeed);
         }
