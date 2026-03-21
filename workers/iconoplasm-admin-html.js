@@ -251,13 +251,208 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     }
 
     .small { font-size: 12px; color: var(--muted); }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .tabbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tab-btn {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(8, 14, 24, 0.45);
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.03em;
+    }
+
+    .tab-btn.active {
+      color: var(--text);
+      border-color: #4b7fff;
+      background: rgba(45, 107, 255, 0.18);
+    }
+
+    .panel {
+      display: none;
+      gap: 12px;
+    }
+
+    .panel.active {
+      display: grid;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(8, 14, 24, 0.52);
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .metric-value {
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-note {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+      gap: 12px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(8, 14, 24, 0.45);
+    }
+
+    .list-row strong,
+    .metric-value,
+    .plot-label,
+    .event-meta,
+    .mono {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .plot-wrap {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(8, 14, 24, 0.45);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .plot-frame {
+      position: relative;
+      height: 360px;
+      border-radius: 10px;
+      border: 1px solid rgba(158, 176, 207, 0.14);
+      background:
+        linear-gradient(to right, rgba(158, 176, 207, 0.08) 1px, transparent 1px) 0 0 / 20% 100%,
+        linear-gradient(to top, rgba(158, 176, 207, 0.08) 1px, transparent 1px) 0 0 / 100% 20%,
+        rgba(6, 11, 20, 0.72);
+      overflow: hidden;
+    }
+
+    .plot-dot {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(79, 207, 131, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      transform: translate(-50%, 50%);
+      cursor: pointer;
+    }
+
+    .plot-dot.override { background: rgba(255, 141, 199, 0.86); }
+    .plot-dot.drift { background: rgba(232, 166, 63, 0.9); }
+    .plot-dot.missing { background: rgba(239, 93, 93, 0.9); }
+    .plot-dot.is-selected {
+      width: 14px;
+      height: 14px;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 0 0 5px rgba(45, 107, 255, 0.22);
+      z-index: 2;
+    }
+
+    .plot-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .plot-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .plot-label span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .event-meta {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 980px) {
+      .split {
+        grid-template-columns: 1fr;
+      }
+
+      .plot-frame {
+        height: 280px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <section class="hero">
       <h1>Iconoplasm Admin</h1>
-      <p>Local NiceGUI still owns generation. This page owns live-site canon and publish governance.</p>
+      <p>Local NiceGUI still owns generation. This page is for live-site canonicity management, exception handling, and outlier hunting.</p>
       <div class="steps">
         <article class="step">
           <div class="badge"><span class="dot"></span>1. Curate locally</div>
@@ -275,8 +470,70 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     </section>
 
     <section class="card">
-      <h2>Website Portrait Inventory</h2>
-      <p>The table shows live canon state, vote pressure, and whether admin override is active.</p>
+      <div class="toolbar">
+        <div>
+          <h2>Live admin control room</h2>
+          <p>Overview first, archive second. The job is steering canon and spotting weird cases, not pretending every image needs manual approval.</p>
+        </div>
+        <div class="tabbar" id="admin-tabs">
+          <button class="tab-btn active" data-tab="overview">Overview</button>
+          <button class="tab-btn" data-tab="outliers">Outliers</button>
+          <button class="tab-btn" data-tab="archive">Archive</button>
+          <button class="tab-btn" data-tab="styles">Artist styles</button>
+          <button class="tab-btn" data-tab="activity">Activity</button>
+        </div>
+      </div>
+
+      <div class="panel active" id="panel-overview">
+        <div class="metric-grid" id="overview-metrics"></div>
+        <div class="split">
+          <section class="stack">
+            <div class="section-head">
+              <h3>Needs attention</h3>
+              <p class="small">Canon drift, override lock, stale clutter, and missing live assets.</p>
+            </div>
+            <div class="list" id="attention-list"></div>
+          </section>
+          <section class="stack">
+            <div class="section-head">
+              <h3>Recent changes</h3>
+              <p class="small">Latest publish, rollback, reject, and override events.</p>
+            </div>
+            <div class="list" id="overview-events"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-outliers">
+        <div class="section-head">
+          <div>
+            <h3>Popularity vs vote pressure</h3>
+            <p class="small">Wikipedia pageviews on one axis, current canon score on the other. Click the weird dots first.</p>
+          </div>
+          <div class="plot-legend">
+            <span class="plot-label"><span style="background: rgba(79, 207, 131, 0.78)"></span> normal</span>
+            <span class="plot-label"><span style="background: rgba(232, 166, 63, 0.9)"></span> drift</span>
+            <span class="plot-label"><span style="background: rgba(255, 141, 199, 0.86)"></span> override</span>
+            <span class="plot-label"><span style="background: rgba(239, 93, 93, 0.9)"></span> missing live asset</span>
+          </div>
+        </div>
+        <div class="split">
+          <section class="plot-wrap">
+            <div class="plot-frame" id="outlier-plot"></div>
+          </section>
+          <section class="stack">
+            <div class="section-head">
+              <h3>Selected outlier</h3>
+              <p class="small">Click a dot to inspect the current canon against the vote leader.</p>
+            </div>
+            <div class="list" id="outlier-detail"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="panel active" id="panel-archive" style="display:none;">
+        <h2>Website portrait archive</h2>
+        <p>The full inventory table still lives here for lookup, cleanup, and direct asset actions.</p>
 
       <div class="controls">
         <label>Show
@@ -344,6 +601,46 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         </div>
       </details>
 
+      </div>
+
+      <div class="panel" id="panel-styles">
+        <div class="split">
+          <section class="stack">
+            <div class="section-head">
+              <h3>Style cleanup</h3>
+              <p class="small">Remove artist/style sources when they produce junk or inappropriate results.</p>
+            </div>
+            <div class="controls">
+              <label>Artist tag
+                <input id="style-tag" type="text" placeholder="artist-example" />
+              </label>
+              <label>Artist name
+                <input id="style-name" type="text" placeholder="Readable name" />
+              </label>
+              <label>Reason
+                <input id="style-reason" type="text" placeholder="Why this source is getting removed" />
+              </label>
+              <button class="btn-danger" id="style-remove">Remove artist style</button>
+            </div>
+          </section>
+          <section class="stack">
+            <div class="section-head">
+              <h3>Notes</h3>
+              <p class="small">This is for source cleanup, not for inventing moderation queues that do not exist.</p>
+            </div>
+            <div class="list" id="styles-notes"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-activity">
+        <div class="section-head">
+          <h3>Recent admin activity</h3>
+          <p class="small">A compact ledger of the latest canon and cleanup actions.</p>
+        </div>
+        <div class="list" id="activity-list"></div>
+      </div>
+
       <pre class="log" id="action-log">No actions yet.</pre>
     </section>
   </div>
@@ -351,9 +648,35 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <script>
     (function () {
       var API_BASE = '/api/iconoplasm/admin';
-      var state = { assets: [] };
+      var state = {
+        assets: [],
+        auditRows: [],
+        auditSummary: null,
+        recentEvents: [],
+        selectedOutlier: null,
+        activeTab: 'overview'
+      };
 
       var els = {
+        tabs: document.getElementById('admin-tabs'),
+        panels: {
+          overview: document.getElementById('panel-overview'),
+          outliers: document.getElementById('panel-outliers'),
+          archive: document.getElementById('panel-archive'),
+          styles: document.getElementById('panel-styles'),
+          activity: document.getElementById('panel-activity')
+        },
+        overviewMetrics: document.getElementById('overview-metrics'),
+        attentionList: document.getElementById('attention-list'),
+        overviewEvents: document.getElementById('overview-events'),
+        outlierPlot: document.getElementById('outlier-plot'),
+        outlierDetail: document.getElementById('outlier-detail'),
+        styleTag: document.getElementById('style-tag'),
+        styleName: document.getElementById('style-name'),
+        styleReason: document.getElementById('style-reason'),
+        styleRemove: document.getElementById('style-remove'),
+        stylesNotes: document.getElementById('styles-notes'),
+        activityList: document.getElementById('activity-list'),
         status: document.getElementById('assets-status'),
         stale: document.getElementById('assets-stale'),
         legacy: document.getElementById('assets-legacy'),
@@ -366,6 +689,26 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         actionReason: document.getElementById('action-reason'),
         actionLog: document.getElementById('action-log')
       };
+
+      function setActiveTab(tab) {
+        state.activeTab = tab;
+        Object.keys(els.panels).forEach(function (key) {
+          var panel = els.panels[key];
+          if (!panel) return;
+          if (key === tab) {
+            panel.classList.add('active');
+            panel.style.display = '';
+          } else {
+            panel.classList.remove('active');
+            panel.style.display = 'none';
+          }
+        });
+        if (els.tabs) {
+          els.tabs.querySelectorAll('[data-tab]').forEach(function (btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+          });
+        }
+      }
 
       function esc(v) {
         return String(v == null ? '' : v)
@@ -447,6 +790,122 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function setLog(v) {
         els.actionLog.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+      }
+
+      function metricMarkup(label, value, note) {
+        return [
+          '<article class="metric">',
+          '<div class="metric-label">' + esc(label) + '</div>',
+          '<div class="metric-value">' + esc(String(value == null ? '-' : value)) + '</div>',
+          '<div class="metric-note">' + esc(note || '') + '</div>',
+          '</article>'
+        ].join('');
+      }
+
+      function eventMarkup(evt) {
+        return [
+          '<article class="list-row">',
+          '<div>',
+          '<strong>' + esc(evt.symbol || 'unknown') + '</strong>',
+          '<div class="small">' + esc(evt.reason || 'No reason recorded.') + '</div>',
+          '</div>',
+          '<div class="event-meta">' + esc(evt.action || 'event') + '<br />' + esc(evt.created_at || '') + '</div>',
+          '</article>'
+        ].join('');
+      }
+
+      function attentionMarkup(title, note, buttonLabel, symbol) {
+        return [
+          '<article class="list-row">',
+          '<div>',
+          '<strong>' + esc(title) + '</strong>',
+          '<div class="small">' + esc(note) + '</div>',
+          '</div>',
+          '<div>',
+          (symbol ? '<button class="btn-flat" data-jump-symbol="' + esc(symbol) + '" data-jump-tab="archive">' + esc(buttonLabel || 'Open') + '</button>' : ''),
+          '</div>',
+          '</article>'
+        ].join('');
+      }
+
+      function renderOverview() {
+        var summary = state.auditSummary || {};
+        els.overviewMetrics.innerHTML = [
+          metricMarkup('Genes audited', summary.genes || 0, 'Rows included in the canon audit feed.'),
+          metricMarkup('Canon drift', summary.drift || 0, 'Live canon differs from the vote leader.'),
+          metricMarkup('Admin overrides', summary.overrides || 0, 'Genes pinned away from automatic canonicity.'),
+          metricMarkup('Missing live asset', summary.current_asset_missing || 0, 'Publish state points at a missing asset.'),
+          metricMarkup('Stale assets', summary.stale_assets || 0, 'Candidate clutter that still needs cleanup.'),
+          metricMarkup('Legacy assets', summary.legacy_assets || 0, 'Old local-sync leftovers still hanging around.')
+        ].join('');
+
+        var rows = state.auditRows || [];
+        var driftRow = rows.find(function (row) { return row.drift; });
+        var missingRow = rows.find(function (row) { return row.current_asset_missing; });
+        var overrideRow = rows.find(function (row) { return row.admin_override; });
+        var staleRow = rows.slice().sort(function (a, b) { return (b.stale_assets || 0) - (a.stale_assets || 0); }).find(function (row) { return Number(row.stale_assets || 0) > 0; });
+        var notes = [];
+        if (driftRow) notes.push(attentionMarkup(driftRow.symbol + ' is drifting', 'Current canon no longer matches the vote leader.', 'Open archive', driftRow.symbol));
+        if (missingRow) notes.push(attentionMarkup(missingRow.symbol + ' is pointing at a missing live asset', 'Publish state exists but the current asset cannot be resolved.', 'Inspect asset', missingRow.symbol));
+        if (overrideRow) notes.push(attentionMarkup(overrideRow.symbol + ' is override-locked', 'Automatic canonicity is disabled until the override is released.', 'Inspect override', overrideRow.symbol));
+        if (staleRow) notes.push(attentionMarkup(staleRow.symbol + ' has stale backlog', String(staleRow.stale_assets || 0) + ' stale assets are still cluttering the pool.', 'Clean up', staleRow.symbol));
+        if (!notes.length) notes.push('<article class="list-row"><div><strong>No urgent exceptions found.</strong><div class="small">That probably means the site is behaving for once.</div></div><div></div></article>');
+        els.attentionList.innerHTML = notes.join('');
+
+        els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 8).map(eventMarkup).join('') || '<article class="list-row"><div><strong>No recent admin events.</strong></div><div></div></article>';
+        els.activityList.innerHTML = (state.recentEvents || []).map(eventMarkup).join('') || '<article class="list-row"><div><strong>No recent admin events.</strong></div><div></div></article>';
+      }
+
+      function renderOutlierDetail(row) {
+        if (!row) {
+          els.outlierDetail.innerHTML = '<article class="list-row"><div><strong>No outlier selected.</strong><div class="small">Click a dot to compare current canon against the vote leader.</div></div><div></div></article>';
+          return;
+        }
+        var current = row.current || null;
+        var leader = row.leader || null;
+        els.outlierDetail.innerHTML = [
+          '<article class="list-row"><div><strong>' + esc(row.symbol || '') + '</strong><div class="small">Popularity ' + esc(String(row.popularity_score || 0)) + ' · total assets ' + esc(String(row.total_assets || 0)) + '</div></div><div>' + (row.symbol ? '<button class="btn-flat" data-jump-symbol="' + esc(row.symbol) + '" data-jump-tab="archive">Open archive</button>' : '') + '</div></article>',
+          '<article class="list-row"><div><strong>Current canon</strong><div class="small">' + esc(current ? ((current.score || 0) + ' score · ' + (current.vision_id || 'no vision id')) : 'No live canon asset resolved.') + '</div></div><div class="event-meta">' + esc(current ? (current.asset_sha256 || '') : '') + '</div></article>',
+          '<article class="list-row"><div><strong>Vote leader</strong><div class="small">' + esc(leader ? ((leader.score || 0) + ' score · ' + (leader.vision_id || 'no vision id')) : 'No eligible leader found.') + '</div></div><div class="event-meta">' + esc(leader ? (leader.asset_sha256 || '') : '') + '</div></article>'
+        ].join('');
+      }
+
+      function renderOutlierPlot() {
+        var rows = (state.auditRows || []).slice();
+        var maxPopularity = rows.reduce(function (max, row) { return Math.max(max, Number(row.popularity_score || 0)); }, 1);
+        var maxScore = rows.reduce(function (max, row) {
+          var currentScore = row.current ? Number(row.current.score || 0) : 0;
+          var leaderScore = row.leader ? Number(row.leader.score || 0) : 0;
+          return Math.max(max, currentScore, leaderScore, 1);
+        }, 1);
+        els.outlierPlot.innerHTML = rows.map(function (row) {
+          var currentScore = row.current ? Number(row.current.score || 0) : 0;
+          var x = Math.max(4, Math.min(96, (Number(row.popularity_score || 0) / maxPopularity) * 100));
+          var y = Math.max(4, Math.min(96, (currentScore / maxScore) * 100));
+          var klass = 'plot-dot';
+          if (row.current_asset_missing) klass += ' missing';
+          else if (row.drift) klass += ' drift';
+          else if (row.admin_override) klass += ' override';
+          if (state.selectedOutlier && state.selectedOutlier.symbol === row.symbol) klass += ' is-selected';
+          return '<button class="' + klass + '" data-outlier-symbol="' + esc(row.symbol || '') + '" style="left:' + x + '%; bottom:' + y + '%" title="' + esc((row.symbol || '') + ' · popularity ' + (row.popularity_score || 0) + ' · score ' + currentScore) + '"></button>';
+        }).join('');
+        renderOutlierDetail(state.selectedOutlier);
+      }
+
+      async function refreshCanonAudit() {
+        try {
+          var data = await apiJson('/canon-audit?limit=1500&event_limit=60', { method: 'GET' });
+          state.auditRows = Array.isArray(data.rows) ? data.rows : [];
+          state.auditSummary = data.summary || null;
+          state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
+          if (state.selectedOutlier) {
+            state.selectedOutlier = state.auditRows.find(function (row) { return row.symbol === state.selectedOutlier.symbol; }) || null;
+          }
+          renderOverview();
+          renderOutlierPlot();
+        } catch (err) {
+          setLog({ error: 'Canon audit failed', details: err.response || String(err.message || err) });
+        }
       }
 
       function filteredAssets() {
@@ -631,6 +1090,37 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function bindActions() {
+        if (els.tabs) {
+          els.tabs.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('[data-tab]');
+            if (!btn) return;
+            setActiveTab(String(btn.getAttribute('data-tab') || 'overview'));
+          });
+        }
+
+        if (els.outlierPlot) {
+          els.outlierPlot.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('[data-outlier-symbol]');
+            if (!btn) return;
+            var symbol = String(btn.getAttribute('data-outlier-symbol') || '');
+            state.selectedOutlier = state.auditRows.find(function (row) { return row.symbol === symbol; }) || null;
+            renderOutlierPlot();
+          });
+        }
+
+        document.body.addEventListener('click', function (ev) {
+          var jump = ev.target.closest('[data-jump-symbol]');
+          if (!jump) return;
+          var symbol = String(jump.getAttribute('data-jump-symbol') || '');
+          var tab = String(jump.getAttribute('data-jump-tab') || 'archive');
+          els.status.value = 'all';
+          els.stale.value = 'all';
+          els.legacy.value = 'all';
+          els.search.value = symbol;
+          setActiveTab(tab);
+          refreshAssets();
+        });
+
         els.body.addEventListener('click', async function (ev) {
           var btn = ev.target.closest('button[data-action]');
           if (!btn) return;
@@ -646,10 +1136,45 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             btn.disabled = false;
           }
         });
+
+        if (els.styleRemove) {
+          els.styleRemove.addEventListener('click', async function () {
+            var artistTag = String(els.styleTag.value || '').trim();
+            var artistName = String(els.styleName.value || '').trim();
+            var reason = String(els.styleReason.value || '').trim();
+            if (!artistTag) {
+              setLog('Artist tag is required for style removal.');
+              return;
+            }
+            if (!window.confirm('Remove artist style ' + artistTag + '?')) return;
+            try {
+              els.styleRemove.disabled = true;
+              setLog(await runMutation('/artist-styles/remove', {
+                artist_tag: artistTag,
+                artist_name: artistName || undefined,
+                reason: reason || undefined
+              }));
+              els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>' + esc(artistTag) + ' removed.</strong><div class="small">If this source was polluting outputs, the cleanup is now recorded in the worker.</div></div><div></div></article>';
+              await refreshCanonAudit();
+            } catch (err) {
+              setLog({ error: String(err.message || err), details: err.response || null });
+            } finally {
+              els.styleRemove.disabled = false;
+            }
+          });
+        }
       }
 
       function init() {
-        els.refresh.addEventListener('click', refreshAssets);
+        setActiveTab('overview');
+        els.stylesNotes.innerHTML = [
+          '<article class="list-row"><div><strong>What this tab is for</strong><div class="small">Use it when a source keeps generating junk, inappropriate material, or otherwise poisons the pool. It is source cleanup, not a fake moderation queue.</div></div><div></div></article>',
+          '<article class="list-row"><div><strong>What it is not for</strong><div class="small">Not for hand-approving candidates. Candidates are auto-ingested. The admin intervenes when something needs removal, override, decanonicization, or cleanup.</div></div><div></div></article>'
+        ].join('');
+        els.refresh.addEventListener('click', function () {
+          refreshAssets();
+          refreshCanonAudit();
+        });
         els.status.addEventListener('change', refreshAssets);
         els.stale.addEventListener('change', refreshAssets);
         els.legacy.addEventListener('change', refreshAssets);
@@ -657,6 +1182,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.search.addEventListener('input', renderTable);
         bindActions();
         refreshAssets();
+        refreshCanonAudit();
       }
 
       init();

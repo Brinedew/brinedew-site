@@ -65,7 +65,7 @@ But if the bridge fell due to Defensive Sabotage, bridge hardening is absolutely
 
 Imagine you spend billions of dollars researching an unbreakable, ultra-hardened titanium bridge. You install it over the river. The enemy advances, the local commander panics and pushes the detonator—and nothing happens. The dynamite goes off, but the titanium bridge stands strong. The enemy rolls their tanks across your beautiful, indestructible bridge and burns your capital to the ground.
 
-By failing to recognize the bridge collapse as an intentional, protective measure, your "fix" killed the patient.
+So you find yourself stuck in a lose-lose double bind. Harden the bridges, and lose to invaders who cross them. Or let the bridges fall, and watch as the country's infrastructure deteriorates to the point of being unlivable.
 
 **III.**
 

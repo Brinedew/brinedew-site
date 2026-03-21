@@ -1910,6 +1910,161 @@ async function searchArtistStyles(env, { query = "", limit = 50 } = {}) {
     : []
 }
 
+async function fetchAdminCanonAudit(env, { limit = 1500, eventLimit = 40 } = {}) {
+  if (!env.ICONOPLASM_DB) return { rows: [], recent_events: [] }
+
+  const cleanedLimit = Math.max(1, Math.min(4000, Number.parseInt(String(limit || "1500"), 10) || 1500))
+  const cleanedEventLimit = Math.max(
+    1,
+    Math.min(200, Number.parseInt(String(eventLimit || "40"), 10) || 40),
+  )
+
+  // This aggregate intentionally works at the gene level.
+  // The admin's main job is exception handling around canon state, not adjudicating
+  // every uploaded portrait one-by-one as if there were a manual approval queue.
+  const auditResp = await env.ICONOPLASM_DB.prepare(
+    `WITH vote_agg AS (
+       SELECT
+         upper(gene_symbol) AS gene_symbol,
+         lower(asset_sha256) AS asset_sha256,
+         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
+         SUM(vote_value) AS score
+       FROM icono_image_votes
+       GROUP BY upper(gene_symbol), lower(asset_sha256)
+     ),
+     eligible_assets AS (
+       SELECT
+         upper(pa.gene_symbol) AS gene_symbol,
+         lower(pa.asset_sha256) AS asset_sha256,
+         pa.r2_key_full,
+         pa.r2_key_medium,
+         pa.r2_key_thumb,
+         lower(COALESCE(pa.status, '')) AS status,
+         COALESCE(pa.is_stale, 0) AS is_stale,
+         COALESCE(pa.is_legacy, 0) AS is_legacy,
+         pa.vision_id,
+         pa.artist_tag,
+         pa.artist_name,
+         pa.created_at,
+         COALESCE(v.upvotes, 0) AS upvotes,
+         COALESCE(v.downvotes, 0) AS downvotes,
+         COALESCE(v.score, 0) AS score,
+         ROW_NUMBER() OVER (
+           PARTITION BY upper(pa.gene_symbol)
+           ORDER BY
+             COALESCE(v.score, 0) DESC,
+             CASE
+               WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1
+               ELSE 0
+             END DESC,
+             COALESCE(v.upvotes, 0) DESC,
+             pa.created_at DESC,
+             lower(pa.asset_sha256) ASC
+         ) AS vote_rank
+       FROM icono_portrait_assets pa
+       LEFT JOIN vote_agg v
+         ON v.gene_symbol = upper(pa.gene_symbol)
+        AND v.asset_sha256 = lower(pa.asset_sha256)
+       WHERE COALESCE(pa.autopick_eligible, 1) = 1
+         AND lower(COALESCE(pa.status, '')) <> 'rejected'
+         AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+     ),
+     gene_totals AS (
+       SELECT
+         upper(gene_symbol) AS gene_symbol,
+         COUNT(*) AS total_assets,
+         SUM(CASE WHEN lower(COALESCE(status, '')) = 'rejected' THEN 1 ELSE 0 END) AS rejected_assets,
+         SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
+         SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets,
+         SUM(
+           CASE
+             WHEN COALESCE(autopick_eligible, 1) = 1
+              AND lower(COALESCE(status, '')) <> 'rejected'
+              AND COALESCE(r2_key_medium, r2_key_thumb, r2_key_full, '') <> '' THEN 1
+             ELSE 0
+           END
+         ) AS eligible_assets
+       FROM icono_portrait_assets
+       GROUP BY upper(gene_symbol)
+     )
+     SELECT
+       gt.gene_symbol,
+       lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
+       COALESCE(ps.admin_override, 0) AS admin_override,
+       gt.total_assets,
+       gt.rejected_assets,
+       gt.stale_assets,
+       gt.legacy_assets,
+       gt.eligible_assets,
+
+       cur.asset_sha256 AS current_resolved_asset_sha256,
+       cur.r2_key_full AS current_r2_key_full,
+       cur.r2_key_medium AS current_r2_key_medium,
+       cur.r2_key_thumb AS current_r2_key_thumb,
+       cur.status AS current_status,
+       cur.is_stale AS current_is_stale,
+       cur.is_legacy AS current_is_legacy,
+       cur.vision_id AS current_vision_id,
+       cur.artist_tag AS current_artist_tag,
+       cur.artist_name AS current_artist_name,
+       cur.upvotes AS current_upvotes,
+       cur.downvotes AS current_downvotes,
+       cur.score AS current_score,
+       cur.created_at AS current_created_at,
+
+       lead.asset_sha256 AS leader_asset_sha256,
+       lead.r2_key_full AS leader_r2_key_full,
+       lead.r2_key_medium AS leader_r2_key_medium,
+       lead.r2_key_thumb AS leader_r2_key_thumb,
+       lead.status AS leader_status,
+       lead.is_stale AS leader_is_stale,
+       lead.is_legacy AS leader_is_legacy,
+       lead.vision_id AS leader_vision_id,
+       lead.artist_tag AS leader_artist_tag,
+       lead.artist_name AS leader_artist_name,
+       lead.upvotes AS leader_upvotes,
+       lead.downvotes AS leader_downvotes,
+       lead.score AS leader_score,
+       lead.created_at AS leader_created_at
+     FROM gene_totals gt
+     LEFT JOIN icono_publish_state ps
+       ON upper(ps.gene_symbol) = gt.gene_symbol
+     LEFT JOIN eligible_assets cur
+       ON cur.gene_symbol = gt.gene_symbol
+      AND cur.asset_sha256 = lower(COALESCE(ps.current_asset_sha256, ''))
+     LEFT JOIN eligible_assets lead
+       ON lead.gene_symbol = gt.gene_symbol
+      AND lead.vote_rank = 1
+     ORDER BY gt.eligible_assets DESC, gt.total_assets DESC, gt.gene_symbol ASC
+     LIMIT ?`,
+  )
+    .bind(cleanedLimit)
+    .all()
+
+  const eventResp = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       id,
+       gene_symbol,
+       from_asset_sha256,
+       to_asset_sha256,
+       action,
+       actor,
+       reason,
+       created_at
+     FROM icono_publish_events
+     ORDER BY id DESC
+     LIMIT ?`,
+  )
+    .bind(cleanedEventLimit)
+    .all()
+
+  return {
+    rows: Array.isArray(auditResp?.results) ? auditResp.results : [],
+    recent_events: Array.isArray(eventResp?.results) ? eventResp.results : [],
+  }
+}
+
 async function unpublishCurrentPortrait(env, { symbol, actorId, reason, fromAssetSha256 } = {}) {
   if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
   const symbolNorm = normalizeSymbol(symbol)
@@ -3608,6 +3763,128 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           json({ error: String(error?.message || error || "Artist style removal failed") }, 400),
         )
       }
+    }
+
+    if (path === "/api/iconoplasm/admin/canon-audit" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_canon_audit_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_canon_audit_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      const limit = Math.max(
+        1,
+        Math.min(4000, Number.parseInt(url.searchParams.get("limit") || "1500", 10)),
+      )
+      const eventLimit = Math.max(
+        1,
+        Math.min(200, Number.parseInt(url.searchParams.get("event_limit") || "40", 10)),
+      )
+      const base = portraitBase(url, env)
+      const audit = await fetchAdminCanonAudit(env, { limit, eventLimit })
+      const rows = (audit.rows || []).map((row) => {
+        const symbol = normalizeSymbol(row?.gene_symbol || "")
+        const currentAssetSha = normalizeSha256(row?.current_asset_sha256 || "") || null
+        const currentResolvedAssetSha =
+          normalizeSha256(row?.current_resolved_asset_sha256 || "") || null
+        const leaderAssetSha = normalizeSha256(row?.leader_asset_sha256 || "") || null
+        const drift = Boolean(
+          currentResolvedAssetSha && leaderAssetSha && currentResolvedAssetSha !== leaderAssetSha,
+        )
+        const missingCurrentAsset = Boolean(currentAssetSha && !currentResolvedAssetSha)
+        return {
+          symbol,
+          popularity_score: wikiPageviewsForSymbol(symbol),
+          current_asset_sha256: currentAssetSha,
+          current_asset_missing: missingCurrentAsset,
+          admin_override: Number(row?.admin_override || 0) > 0,
+          total_assets: Number(row?.total_assets || 0),
+          rejected_assets: Number(row?.rejected_assets || 0),
+          stale_assets: Number(row?.stale_assets || 0),
+          legacy_assets: Number(row?.legacy_assets || 0),
+          eligible_assets: Number(row?.eligible_assets || 0),
+          drift,
+
+          current: currentResolvedAssetSha
+            ? {
+                asset_sha256: currentResolvedAssetSha,
+                status: sanitizeText(row?.current_status || "", 32) || "",
+                is_stale: Number(row?.current_is_stale || 0) > 0,
+                is_legacy: Number(row?.current_is_legacy || 0) > 0,
+                vision_id: sanitizeText(row?.current_vision_id || "", 255) || "",
+                artist_tag: sanitizeText(row?.current_artist_tag || "", 255) || "",
+                artist_name: sanitizeText(row?.current_artist_name || "", 255) || "",
+                upvotes: Number(row?.current_upvotes || 0),
+                downvotes: Number(row?.current_downvotes || 0),
+                score: Number(row?.current_score || 0),
+                created_at: sanitizeText(row?.current_created_at || "", 64) || "",
+                hero_url: row?.current_r2_key_full ? joinUrl(base, row.current_r2_key_full) : null,
+                medium_url: row?.current_r2_key_medium
+                  ? joinUrl(base, row.current_r2_key_medium)
+                  : null,
+                thumb_url: row?.current_r2_key_thumb ? joinUrl(base, row.current_r2_key_thumb) : null,
+              }
+            : null,
+
+          leader: leaderAssetSha
+            ? {
+                asset_sha256: leaderAssetSha,
+                status: sanitizeText(row?.leader_status || "", 32) || "",
+                is_stale: Number(row?.leader_is_stale || 0) > 0,
+                is_legacy: Number(row?.leader_is_legacy || 0) > 0,
+                vision_id: sanitizeText(row?.leader_vision_id || "", 255) || "",
+                artist_tag: sanitizeText(row?.leader_artist_tag || "", 255) || "",
+                artist_name: sanitizeText(row?.leader_artist_name || "", 255) || "",
+                upvotes: Number(row?.leader_upvotes || 0),
+                downvotes: Number(row?.leader_downvotes || 0),
+                score: Number(row?.leader_score || 0),
+                created_at: sanitizeText(row?.leader_created_at || "", 64) || "",
+                hero_url: row?.leader_r2_key_full ? joinUrl(base, row.leader_r2_key_full) : null,
+                medium_url: row?.leader_r2_key_medium ? joinUrl(base, row.leader_r2_key_medium) : null,
+                thumb_url: row?.leader_r2_key_thumb ? joinUrl(base, row.leader_r2_key_thumb) : null,
+              }
+            : null,
+        }
+      })
+
+      const summary = {
+        genes: rows.length,
+        with_live: rows.filter((row) => row.current_asset_sha256).length,
+        overrides: rows.filter((row) => row.admin_override).length,
+        drift: rows.filter((row) => row.drift).length,
+        current_asset_missing: rows.filter((row) => row.current_asset_missing).length,
+        no_live: rows.filter((row) => !row.current_asset_sha256).length,
+        stale_assets: rows.reduce((sum, row) => sum + Number(row.stale_assets || 0), 0),
+        legacy_assets: rows.reduce((sum, row) => sum + Number(row.legacy_assets || 0), 0),
+      }
+
+      const recentEvents = (audit.recent_events || []).map((row) => ({
+        id: Number(row?.id || 0),
+        symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+        from_asset_sha256: normalizeSha256(row?.from_asset_sha256 || "") || null,
+        to_asset_sha256: normalizeSha256(row?.to_asset_sha256 || "") || null,
+        action: sanitizeText(row?.action || "", 64) || "",
+        actor: sanitizeText(row?.actor || "", 255) || "",
+        reason: sanitizeText(row?.reason || "", 2000) || "",
+        created_at: sanitizeText(row?.created_at || "", 64) || "",
+      }))
+
+      return done(
+        "admin_canon_audit",
+        json(
+          {
+            ok: true,
+            summary,
+            count: rows.length,
+            rows,
+            recent_events: recentEvents,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
     }
 
     if (path === "/api/iconoplasm/admin/assets" && request.method === "GET") {
