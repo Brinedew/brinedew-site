@@ -2556,7 +2556,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           });
         }
 
-        document.body.addEventListener('click', function (ev) {
+        document.body.addEventListener('click', async function (ev) {
           var modeBtn = ev.target.closest('[data-gallery-mode]');
           if (modeBtn) {
             var nextMode = String(modeBtn.getAttribute('data-gallery-mode') || 'live');
