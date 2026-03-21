@@ -3890,17 +3890,24 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     if (path === "/api/iconoplasm/admin/assets" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_assets_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_assets_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
       const status = (url.searchParams.get("status") || "all").toLowerCase()
       const stale = (url.searchParams.get("stale") || "all").toLowerCase()
       const legacy = (url.searchParams.get("legacy") || "all").toLowerCase()
+      const symbolQuery = normalizeSymbol(url.searchParams.get("symbol") || "")
       const limit = Math.max(
         1,
         Math.min(250, Number.parseInt(url.searchParams.get("limit") || "50", 10)),
       )
       const whereParts = []
       const params = []
+      if (symbolQuery) {
+        whereParts.push("upper(pa.gene_symbol)=?")
+        params.push(symbolQuery)
+      }
       if (status !== "all") {
-        whereParts.push("lower(status)=?")
+        whereParts.push("lower(pa.status)=?")
         params.push(status)
       }
       if (stale === "yes") whereParts.push("COALESCE(is_stale, 0) = 1")
@@ -3918,26 +3925,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
              SUM(vote_value) AS score
            FROM icono_image_votes
            GROUP BY upper(gene_symbol), lower(asset_sha256)
-         ),
-         vote_rank AS (
-           SELECT
-             upper(pa.gene_symbol) AS gene_symbol,
-             lower(pa.asset_sha256) AS asset_sha256,
-             ROW_NUMBER() OVER (
-               PARTITION BY upper(pa.gene_symbol)
-               ORDER BY
-                 COALESCE(v.score, 0) DESC,
-                 COALESCE(v.upvotes, 0) DESC,
-                 pa.created_at DESC,
-                 lower(pa.asset_sha256) ASC
-             ) AS vote_rank
-           FROM icono_portrait_assets pa
-           LEFT JOIN vote_agg v
-             ON v.gene_symbol = upper(pa.gene_symbol)
-            AND v.asset_sha256 = lower(pa.asset_sha256)
-           WHERE COALESCE(pa.autopick_eligible, 1) = 1
-             AND COALESCE(pa.status, '') <> 'rejected'
-             AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
          )
          SELECT
            pa.gene_symbol,
@@ -3962,19 +3949,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
              ELSE 0
            END AS is_current,
            COALESCE(ps.admin_override, 0) AS admin_override,
-           CASE
-             WHEN vr.vote_rank = 1 THEN 1
-             ELSE 0
-           END AS is_vote_leader
+           0 AS is_vote_leader
          FROM icono_portrait_assets pa
          LEFT JOIN vote_agg v
            ON v.gene_symbol = upper(pa.gene_symbol)
           AND v.asset_sha256 = lower(pa.asset_sha256)
          LEFT JOIN icono_publish_state ps
            ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
-         LEFT JOIN vote_rank vr
-           ON vr.gene_symbol = upper(pa.gene_symbol)
-          AND vr.asset_sha256 = lower(pa.asset_sha256)
          ${where}
          ORDER BY
            is_current DESC,

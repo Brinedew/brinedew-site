@@ -654,7 +654,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         auditSummary: null,
         recentEvents: [],
         selectedOutlier: null,
-        activeTab: 'overview'
+        activeTab: 'overview',
+        archiveLoaded: false
       };
 
       var els = {
@@ -707,6 +708,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.tabs.querySelectorAll('[data-tab]').forEach(function (btn) {
             btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
           });
+        }
+        if (tab === 'archive' && !state.archiveLoaded) {
+          refreshAssets();
         }
       }
 
@@ -965,8 +969,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var stale = encodeURIComponent(String(els.stale.value || 'all').toLowerCase());
           var legacy = encodeURIComponent(String(els.legacy.value || 'all').toLowerCase());
           var limit = Math.max(1, Math.min(250, Number.parseInt(els.limit.value || '120', 10) || 120));
-          var data = await apiJson('/assets?status=' + status + '&stale=' + stale + '&legacy=' + legacy + '&limit=' + limit, { method: 'GET' });
+          var symbol = encodeURIComponent(String(els.search.value || '').trim().toUpperCase());
+          var path = '/assets?status=' + status + '&stale=' + stale + '&legacy=' + legacy + '&limit=' + limit;
+          if (symbol) path += '&symbol=' + symbol;
+          var data = await apiJson(path, { method: 'GET' });
           state.assets = Array.isArray(data.assets) ? data.assets : [];
+          state.archiveLoaded = true;
 
           var counts = { draft: 0, approved: 0, rejected: 0 };
           var staleCount = 0;
@@ -993,6 +1001,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           ].join(' · ');
           renderTable();
         } catch (err) {
+          state.archiveLoaded = false;
           els.meta.innerHTML = '<span style="color: var(--danger)">Failed to load assets.</span>';
           setLog({ error: String(err.message || err), details: err.response || null });
         } finally {
@@ -1181,7 +1190,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.limit.addEventListener('change', refreshAssets);
         els.search.addEventListener('input', renderTable);
         bindActions();
-        refreshAssets();
         refreshCanonAudit();
       }
 
