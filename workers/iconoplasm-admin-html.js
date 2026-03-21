@@ -2502,7 +2502,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           });
         }
 
-        document.body.addEventListener('click', function (ev) {
+        document.body.addEventListener('click', async function (ev) {
           var jump = ev.target.closest('[data-jump-symbol]');
           if (!jump) return;
           var symbol = String(jump.getAttribute('data-jump-symbol') || '');
