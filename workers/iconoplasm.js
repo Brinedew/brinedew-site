@@ -4320,12 +4320,14 @@ function mapAdminVisionAssetRow(base, row) {
   const assetSha = normalizeSha256(row?.asset_sha256 || "") || ""
   const width = optionalInt(row?.width)
   const height = optionalInt(row?.height)
+  const candidateImageId = optionalInt(row?.candidate_image_id ?? row?.emulsion_id)
   const score = Number(row?.score || 0)
   const voteCount = Number(row?.vote_count || 0)
   return {
     vision_id: sanitizeText(row?.vision_id || "", 255) || "",
     gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
     asset_sha256: assetSha,
+    candidate_image_id: candidateImageId,
     artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
     artist_name: sanitizeText(row?.artist_name || "", 255) || "",
     status: sanitizeText(row?.status || "", 32) || "draft",
@@ -4382,6 +4384,7 @@ async function fetchAdminVisionAssets(env, { base, visionIds = [], perVisionLimi
          lower(pa.asset_sha256) AS asset_sha256,
          COALESCE(pa.artist_tag, '') AS artist_tag,
          COALESCE(pa.artist_name, '') AS artist_name,
+         pa.candidate_image_id,
          lower(COALESCE(pa.status, 'draft')) AS status,
          pa.width,
          pa.height,
@@ -4450,7 +4453,7 @@ async function fetchAdminVisionDetail(env, { base, visionId, assetLimit = 24 } =
     fetchAdminVisionAssets(env, {
       base,
       visionIds: [cleanedVisionId],
-      perVisionLimit: normalizeAdminVisionAssetLimit(assetLimit, 24, 60),
+      perVisionLimit: normalizeAdminVisionAssetLimit(assetLimit, 24, 240),
     }),
   ])
   const summary = Array.isArray(summaryRows) ? summaryRows[0] || null : null
