@@ -3,17 +3,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Iconoplasm</title>
+  <title>Iconoplasm Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    /* ── palette ── */
     :root {
       --bg: #f5f4f1;
       --surface: #ffffff;
-      --border: #e2dfda;
-      --text: #1c1a17;
-      --muted: #807a72;
+      --border: #e8e4df;
+      --border-strong: #d4cfc8;
+      --text: #1a1a1a;
+      --muted: #6b7280;
+      --faint: #9ca3af;
       --accent: #b84a26;
-      --accent-light: #fdf2ee;
+      --accent-light: #f5ebe7;
       --warn: #9e7415;
       --warn-light: #fef8e8;
       --danger: #bf3030;
@@ -22,13 +26,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       --ok-light: #eef9f2;
     }
 
-    /* ── reset ── */
     *, *::before, *::after { box-sizing: border-box; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       font-size: 14px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
@@ -36,90 +39,152 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     h1, h2, h3, p { margin: 0; }
     p { color: var(--muted); font-size: 13px; }
 
-    /* ── page shell ── */
     .page {
-      max-width: 1240px;
+      max-width: 1440px;
       margin: 0 auto;
-      padding: 28px 32px 48px;
+      padding: 24px 24px 56px;
     }
 
-    /* ── header ── */
     .page > header {
-      margin-bottom: 4px;
+      margin-bottom: 10px;
+      display: grid;
+      gap: 4px;
     }
     .page > header h1 {
-      font-size: 21px;
+      font-size: 28px;
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.03em;
     }
     .page > header p {
-      margin-top: 2px;
       font-size: 13px;
+      color: var(--muted);
+      max-width: 760px;
     }
 
-    /* ── tab nav ── */
     nav#admin-tabs {
       display: flex;
+      gap: 4px;
+      border-top: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
-      margin: 12px 0 24px;
+      margin: 14px 0 24px;
+      min-height: 56px;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: color-mix(in srgb, var(--bg) 94%, transparent);
+      backdrop-filter: blur(10px);
     }
     .tab-btn {
-      padding: 9px 14px;
+      padding: 8px 14px;
       background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
+      border: 1px solid transparent;
+      border-radius: 999px;
       color: var(--muted);
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
-      margin-bottom: -1px;
-      transition: color 0.15s;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
     }
-    .tab-btn:hover { color: var(--text); }
-    .tab-btn.active {
+    .tab-btn:hover {
       color: var(--text);
-      border-bottom-color: var(--accent);
+      background: var(--accent-light);
+      border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
+    }
+    .tab-btn.active {
+      color: var(--surface);
+      background: var(--text);
+      border-color: var(--text);
     }
 
     /* ── panels ── */
     .panel { display: none; }
-    .panel.active { display: grid; gap: 20px; }
+    .panel.active { display: grid; gap: 24px; }
 
-    /* ── metric row ── */
-    .metric-grid {
+    /* ── overview ── */
+    #panel-overview .metric-grid {
       display: flex;
       flex-wrap: wrap;
-      gap: 36px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border);
+      gap: 12px;
     }
-    .metric { display: grid; gap: 2px; }
-    .metric-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--muted);
+    #panel-overview .metric {
+      flex: 1 1 180px;
+      min-width: 180px;
+      display: grid;
+      gap: 6px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #f9f8f6;
     }
-    .metric-value {
-      font-size: 28px;
+    #panel-overview .metric-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #8a8a8a;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    #panel-overview .metric-value {
+      font-size: 32px;
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.04em;
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
-    .metric-note {
-      font-size: 11px;
+    #panel-overview .metric-note {
+      font-size: 12px;
       color: var(--muted);
-      opacity: 0.6;
-      max-width: 180px;
+      max-width: 220px;
+    }
+    .coverage-card {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .coverage-bar {
+      display: flex;
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #ebe7e2;
+    }
+    .coverage-segment { height: 100%; }
+    .coverage-legend {
+      display: grid;
+      gap: 8px;
+    }
+    .coverage-row {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .coverage-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
     }
 
-    /* ── layout helpers ── */
     .split {
       display: grid;
       grid-template-columns: 1.4fr 1fr;
-      gap: 32px;
+      gap: 24px;
     }
     .stack { display: grid; gap: 10px; align-content: start; }
+
+    #panel-overview .stack {
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      gap: 14px;
+    }
 
     .section-head {
       display: flex;
@@ -134,25 +199,24 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
     /* ── lists ── */
     .list { display: grid; gap: 0; }
-    .list-row {
+    #panel-overview .list-row {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 12px;
+      align-items: center;
+      min-height: 56px;
       padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-      align-items: start;
+      border-bottom: 1px solid #f0ede8;
     }
-    .list-row:last-child { border-bottom: none; }
-    .list-row strong { font-weight: 600; font-size: 13px; }
+    #panel-overview .list-row:last-child { border-bottom: none; }
+    #panel-overview .list-row strong { font-weight: 600; font-size: 13px; }
 
-    .event-meta {
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.02em;
+    #panel-overview .event-meta {
+      font-size: 12px;
+      color: var(--faint);
       text-align: right;
       font-variant-numeric: tabular-nums;
-      word-break: break-all;
-      max-width: 200px;
+      max-width: 120px;
     }
 
     .small { font-size: 12px; color: var(--muted); }
@@ -193,6 +257,249 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 10px;
       align-items: end;
+    }
+    .gallery-toolbar {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+    }
+    .gallery-toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .toggle-group {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .toggle-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .toggle-pill.active {
+      background: var(--text);
+      color: var(--surface);
+      border-color: var(--text);
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .gallery-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.9fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .gallery-sidebar {
+      position: sticky;
+      top: 124px;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.78);
+      backdrop-filter: blur(12px);
+    }
+    .gallery-card {
+      display: grid;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: rgba(255,255,255,0.55);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    }
+    .gallery-card:hover {
+      border-color: var(--border-strong);
+      background: rgba(255,255,255,0.92);
+      transform: translateY(-1px);
+    }
+    .gallery-card.is-selected {
+      border-color: var(--accent);
+      background: rgba(255,255,255,0.96);
+    }
+    .gallery-media {
+      aspect-ratio: 1 / 1;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #ece7e1;
+    }
+    .gallery-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .gallery-empty {
+      display: grid;
+      place-items: center;
+      min-height: 220px;
+      border: 1px dashed var(--border-strong);
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.45);
+      text-align: center;
+      padding: 24px;
+    }
+    .gallery-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .gallery-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .badge-live { background: #d1fae5; color: #065f46; }
+    .badge-pinned { background: #fef3c7; color: #92400e; }
+    .badge-mismatch { background: #fee2e2; color: #991b1b; }
+    .badge-missing { background: #f3f4f6; color: #374151; }
+    .badge-stale { background: #f5ebe7; color: var(--accent); }
+    .detail-kicker {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .detail-title {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .detail-copy {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .candidate-list,
+    .event-list {
+      display: grid;
+      gap: 10px;
+    }
+    .candidate-row,
+    .event-row {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.7);
+    }
+    .candidate-thumb,
+    .event-thumb {
+      width: 64px;
+      height: 64px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #ece7e1;
+      border: 1px solid var(--border);
+    }
+    .candidate-thumb img,
+    .event-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .candidate-meta,
+    .event-meta-block {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+    .candidate-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .vision-list {
+      display: grid;
+      gap: 10px;
+    }
+    .vision-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 0.6fr));
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.72);
+      align-items: center;
+    }
+    .vision-cell {
+      min-width: 0;
+    }
+    @media (max-width: 980px) {
+      .vision-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    .activity-feed {
+      display: grid;
+      gap: 10px;
+    }
+    .activity-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.76);
+    }
+    .activity-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .activity-actor {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    @media (max-width: 1120px) {
+      .gallery-layout {
+        grid-template-columns: 1fr;
+      }
+      .gallery-sidebar {
+        position: static;
+      }
     }
     label {
       display: grid;
@@ -379,7 +686,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
     /* ── responsive ── */
     @media (max-width: 900px) {
-      .page { padding: 16px; }
+      .page { padding: 16px 16px 40px; }
       .split { grid-template-columns: 1fr; }
       .plot-frame { height: 260px; }
       .metric-grid { gap: 20px; }
@@ -389,14 +696,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 <body>
   <div class="page">
     <header>
-      <h1>Iconoplasm</h1>
-      <p>What's live, what needs fixing.</p>
+      <h1>Iconoplasm Admin</h1>
+      <p>Images first, bookkeeping second. This page is for steering live canon, spotting breakage fast, and cleaning up the weird cases without drowning in spreadsheet sludge.</p>
     </header>
 
     <nav id="admin-tabs">
       <button class="tab-btn active" data-tab="overview">Overview</button>
       <button class="tab-btn" data-tab="outliers">Outliers</button>
-      <button class="tab-btn" data-tab="archive">Browse</button>
+      <button class="tab-btn" data-tab="archive">Gallery</button>
       <button class="tab-btn" data-tab="styles">Visions</button>
       <button class="tab-btn" data-tab="activity">Log</button>
     </nav>
@@ -404,13 +711,26 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <!-- ── overview ── -->
     <div class="panel active" id="panel-overview">
       <div class="metric-grid" id="overview-metrics"></div>
+      <section class="coverage-card">
+        <div class="section-head">
+          <h2>Coverage</h2>
+          <p class="small">How many genes have nothing, one fragile option, a healthy pool, or way too much clutter.</p>
+        </div>
+        <div id="overview-coverage"></div>
+      </section>
       <div class="split">
         <section class="stack">
-          <h2>Heads up</h2>
+          <div class="section-head">
+            <h2>System health</h2>
+            <p class="small">What needs eyes first.</p>
+          </div>
           <div class="list" id="attention-list"></div>
         </section>
         <section class="stack">
-          <h2>Latest</h2>
+          <div class="section-head">
+            <h2>What changed</h2>
+            <p class="small">Recent publish and rollback activity.</p>
+          </div>
           <div class="list" id="overview-events"></div>
         </section>
       </div>
@@ -443,63 +763,61 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
     <!-- ── browse (archive) ── -->
     <div class="panel" id="panel-archive" style="display:none;">
-      <h2>All portraits</h2>
+      <div class="section-head">
+        <div>
+          <h2>Gallery</h2>
+          <p class="small">This still has the old table under the hood for the moment, but the controls are being reshaped around visual triage instead of spreadsheet spelunking.</p>
+        </div>
+      </div>
 
-      <div class="controls">
-        <label>Show
-          <select id="assets-status">
-            <option value="all" selected>all</option>
-            <option value="approved">live</option>
-            <option value="draft">draft</option>
-            <option value="rejected">rejected</option>
-          </select>
-        </label>
-        <label>Stale
-          <select id="assets-stale">
-            <option value="all" selected>all</option>
-            <option value="yes">stale only</option>
-            <option value="no">not stale</option>
-          </select>
-        </label>
-        <label>Legacy
-          <select id="assets-legacy">
-            <option value="all" selected>all</option>
-            <option value="yes">legacy only</option>
-            <option value="no">not legacy</option>
-          </select>
-        </label>
-        <label>Limit
-          <input id="assets-limit" type="number" min="1" max="250" value="120" />
-        </label>
-        <label>Gene
-          <input id="assets-search" type="text" placeholder="TP53" />
-        </label>
-        <label>Token
-          <input id="admin-token" type="password" placeholder="If no session" />
-        </label>
-        <button class="btn-primary" id="assets-refresh">Refresh</button>
+      <div class="gallery-toolbar">
+        <div class="gallery-toolbar-row">
+          <div class="controls" style="flex: 1 1 720px;">
+            <label>Search genes
+              <input id="gallery-search" type="text" placeholder="Search genes..." />
+            </label>
+            <label>Show
+              <select id="gallery-filter">
+                <option value="all" selected>all portraits</option>
+                <option value="mismatch">has mismatch</option>
+                <option value="pinned">pinned</option>
+                <option value="missing">missing portrait</option>
+                <option value="stale">has stale images</option>
+              </select>
+            </label>
+            <label>Sort
+              <select id="gallery-sort">
+                <option value="name" selected>gene name</option>
+                <option value="votes">vote score</option>
+                <option value="recency">recency</option>
+                <option value="mismatch">mismatch first</option>
+              </select>
+            </label>
+            <label>Limit
+              <input id="gallery-limit" type="number" min="1" max="200" value="120" />
+            </label>
+          </div>
+          <div class="toggle-group">
+            <button class="toggle-pill active" type="button">Live</button>
+            <button class="toggle-pill" type="button">All candidates</button>
+            <button class="toggle-pill" type="button">Side by side</button>
+          </div>
+        </div>
+        <div class="gallery-toolbar-row">
+          <div class="small">Click a gene to open the review panel with candidate images and the admin actions.</div>
+          <button class="btn-primary" id="assets-refresh">Refresh</button>
+        </div>
       </div>
 
       <div class="stats" id="assets-meta">Not loaded.</div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Gene</th>
-              <th>SHA</th>
-              <th>Status</th>
-              <th>Canon</th>
-              <th>State</th>
-              <th>Vision</th>
-              <th>Votes</th>
-              <th>Preview</th>
-              <th>Uploaded</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="assets-body"></tbody>
-        </table>
+      <div class="gallery-layout">
+        <div class="gallery-grid" id="gallery-grid"></div>
+        <aside class="gallery-sidebar" id="gallery-detail">
+          <div class="detail-kicker">Gene review</div>
+          <div class="detail-title">Pick a gene</div>
+          <div class="detail-copy">The gallery now works like a visual inbox. Click any card to inspect candidates, notes, and recent admin actions.</div>
+        </aside>
       </div>
 
       <details>
@@ -515,6 +833,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <!-- ── visions (styles) ── -->
     <div class="panel" id="panel-styles">
       <div class="split">
+        <section class="stack">
+          <h2>Vision scorecard</h2>
+          <p class="small">Which sources are helping, which ones are making a mess, and which are already blacklisted.</p>
+          <div class="vision-list" id="vision-stats-list"></div>
+        </section>
         <section class="stack">
           <h2>Vision cleanup</h2>
           <p class="small">Remove sources that produce bad results.</p>
@@ -532,7 +855,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           </div>
         </section>
         <section class="stack">
-          <h2>About this</h2>
+          <h2>Blacklist log</h2>
           <div class="list" id="styles-notes"></div>
         </section>
       </div>
@@ -542,7 +865,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <div class="panel" id="panel-activity">
       <h2>Activity log</h2>
       <p class="small">Recent changes and admin actions.</p>
-      <div class="list" id="activity-list"></div>
+      <div class="controls" style="margin-bottom: 12px;">
+        <label>Filter log
+          <input id="activity-filter" type="text" placeholder="publish, reject, TP53..." />
+        </label>
+      </div>
+      <div class="activity-feed" id="activity-list"></div>
     </div>
 
     <pre class="log" id="action-log">No actions yet.</pre>
@@ -555,9 +883,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         assets: [],
         auditRows: [],
         overviewSummary: null,
+        overviewCoverage: null,
         overviewAttention: [],
         recentEvents: [],
+        visionStats: [],
+        blacklistedStyles: [],
         selectedOutlier: null,
+        selectedGene: '',
+        selectedGeneDetail: null,
         activeTab: 'overview',
         archiveLoaded: false,
         outliersLoaded: false
@@ -573,6 +906,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           activity: document.getElementById('panel-activity')
         },
         overviewMetrics: document.getElementById('overview-metrics'),
+        overviewCoverage: document.getElementById('overview-coverage'),
         attentionList: document.getElementById('attention-list'),
         overviewEvents: document.getElementById('overview-events'),
         outlierPlot: document.getElementById('outlier-plot'),
@@ -581,17 +915,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         styleName: document.getElementById('style-name'),
         styleReason: document.getElementById('style-reason'),
         styleRemove: document.getElementById('style-remove'),
+        visionStatsList: document.getElementById('vision-stats-list'),
         stylesNotes: document.getElementById('styles-notes'),
+        activityFilter: document.getElementById('activity-filter'),
         activityList: document.getElementById('activity-list'),
-        status: document.getElementById('assets-status'),
-        stale: document.getElementById('assets-stale'),
-        legacy: document.getElementById('assets-legacy'),
-        limit: document.getElementById('assets-limit'),
-        search: document.getElementById('assets-search'),
+        status: document.getElementById('gallery-filter'),
+        stale: document.getElementById('gallery-sort'),
+        limit: document.getElementById('gallery-limit'),
+        search: document.getElementById('gallery-search'),
         token: document.getElementById('admin-token'),
         refresh: document.getElementById('assets-refresh'),
         meta: document.getElementById('assets-meta'),
-        body: document.getElementById('assets-body'),
+        body: document.getElementById('gallery-grid'),
+        detail: document.getElementById('gallery-detail'),
         actionReason: document.getElementById('action-reason'),
         actionLog: document.getElementById('action-log')
       };
@@ -619,6 +955,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         if (tab === 'outliers' && !state.outliersLoaded) {
           refreshCanonAudit();
+        }
+        if (tab === 'styles' && !state.visionStats.length) {
+          refreshVisionStats();
         }
       }
 
@@ -716,14 +1055,26 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function eventMarkup(evt) {
         return [
-          '<article class="list-row">',
+          '<article class="activity-card">',
           '<div>',
-          '<strong>' + esc(evt.symbol || 'unknown') + '</strong>',
+          '<div class="activity-title"><strong>' + esc(evt.symbol || 'unknown') + '</strong>' + statusPill(evt.action || 'event') + '</div>',
           '<div class="small">' + esc(evt.reason || '') + '</div>',
+          (evt.actor ? '<div class="activity-actor">' + esc(evt.actor) + '</div>' : ''),
           '</div>',
-          '<div class="event-meta">' + esc(evt.action || 'event') + '<br />' + esc(evt.created_at || '') + '</div>',
+          '<div class="event-meta">' + esc(evt.created_at || '') + '</div>',
           '</article>'
         ].join('');
+      }
+
+      function renderActivityFeed() {
+        var query = String((els.activityFilter && els.activityFilter.value) || '').trim().toLowerCase();
+        var events = (state.recentEvents || []).filter(function (evt) {
+          if (!query) return true;
+          return [evt.symbol, evt.action, evt.reason, evt.actor].some(function (value) {
+            return String(value || '').toLowerCase().includes(query);
+          });
+        });
+        els.activityList.innerHTML = events.map(eventMarkup).join('') || '<article class="activity-card"><div><strong>No matching activity.</strong></div><div></div></article>';
       }
 
       function attentionMarkup(title, note, buttonLabel, symbol) {
@@ -751,6 +1102,39 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           metricMarkup('Legacy', summary.legacy_assets, summary.legacy_assets == null ? 'Browse to clean up.' : 'Leftovers from old syncs.')
         ].join('');
 
+        var coverage = state.overviewCoverage || null;
+        if (coverage) {
+          var total = Math.max(1, Number(coverage.total || 0));
+          var segments = [
+            { key: 'zero', label: '0 candidates', color: '#c0392b' },
+            { key: 'one', label: '1 candidate', color: '#e67e22' },
+            { key: 'two_to_five', label: '2-5 candidates', color: '#7dcea0' },
+            { key: 'six_plus', label: '6+ candidates', color: '#5dade2' }
+          ];
+          els.overviewCoverage.innerHTML = [
+            '<div class="coverage-bar">',
+            segments.map(function (segment) {
+              var value = Number(coverage[segment.key] || 0);
+              var width = (value / total) * 100;
+              return '<div class="coverage-segment" style="width:' + width + '%; background:' + segment.color + '"></div>';
+            }).join(''),
+            '</div>',
+            '<div class="coverage-legend">',
+            segments.map(function (segment) {
+              return [
+                '<div class="coverage-row">',
+                '<span class="coverage-dot" style="background:' + segment.color + '"></span>',
+                '<span>' + esc(segment.label) + '</span>',
+                '<strong>' + esc(String(coverage[segment.key] || 0)) + '</strong>',
+                '</div>'
+              ].join('');
+            }).join(''),
+            '</div>'
+          ].join('');
+        } else {
+          els.overviewCoverage.innerHTML = '<div class="small">Loading coverage…</div>';
+        }
+
         var notes = (state.overviewAttention || []).map(function (item) {
           if (!item || !item.symbol) return '';
           if (item.kind === 'drift') {
@@ -770,8 +1154,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (!notes.length) notes.push('<article class="list-row"><div><strong>Nothing needs attention.</strong><div class="small">Use Outliers or Browse for a deeper look.</div></div><div></div></article>');
         els.attentionList.innerHTML = notes.join('');
 
-        els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 8).map(eventMarkup).join('') || '<article class="list-row"><div><strong>No recent activity.</strong></div><div></div></article>';
-        els.activityList.innerHTML = (state.recentEvents || []).map(eventMarkup).join('') || '<article class="list-row"><div><strong>No recent activity.</strong></div><div></div></article>';
+        els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 8).map(eventMarkup).join('') || '<article class="activity-card"><div><strong>No recent activity.</strong></div><div></div></article>';
+        renderActivityFeed();
       }
 
       function renderOutlierDetail(row) {
@@ -817,8 +1201,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       async function refreshOverview() {
         try {
-          var data = await apiJson('/overview?event_limit=24', { method: 'GET' });
+          var results = await Promise.all([
+            apiJson('/overview?event_limit=24', { method: 'GET' }),
+            apiJson('/coverage', { method: 'GET' })
+          ]);
+          var data = results[0] || {};
           state.overviewSummary = data.summary || null;
+          state.overviewCoverage = results[1] || null;
           state.overviewAttention = Array.isArray(data.attention) ? data.attention : [];
           state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
           renderOverview();
@@ -851,53 +1240,178 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (state.outliersLoaded) {
           await refreshCanonAudit();
         }
+        if (state.visionStats.length) {
+          await refreshVisionStats();
+        }
+      }
+
+      function renderVisionStats() {
+        var rows = (state.visionStats || []).slice(0, 24);
+        els.visionStatsList.innerHTML = rows.length ? rows.map(function (row) {
+          return [
+            '<article class="vision-row">',
+            '<div class="vision-cell">',
+            '<strong>' + esc(row.artist_name || row.artist_tag || row.vision_id || 'Unknown vision') + '</strong>',
+            '<div class="small">' + esc(row.artist_tag || row.vision_id || '') + '</div>',
+            '<div class="badge-row">' + (row.blacklisted ? '<span class="badge-pill badge-mismatch">Blacklisted</span>' : '<span class="badge-pill badge-live">Active</span>') + '</div>',
+            '</div>',
+            '<div class="vision-cell"><strong>' + esc(String(row.live_count || 0)) + '</strong><div class="small">live picks</div></div>',
+            '<div class="vision-cell"><strong>' + esc(String(row.score || 0)) + '</strong><div class="small">net score</div></div>',
+            '<div class="vision-cell"><strong>' + esc(String(row.image_count || 0)) + '</strong><div class="small">images</div></div>',
+            '<div class="vision-cell"><strong>' + esc(String(Math.round((Number(row.rejection_rate || 0) * 1000)) / 10)) + '%</strong><div class="small">reject rate</div></div>',
+            '</article>'
+          ].join('');
+        }).join('') : '<div class="gallery-empty">No vision stats yet.</div>';
+
+        els.stylesNotes.innerHTML = (state.blacklistedStyles || []).length
+          ? state.blacklistedStyles.map(function (row) {
+              return [
+                '<article class="list-row">',
+                '<div>',
+                '<strong>' + esc(row.artist_name || row.artist_tag || 'Unknown source') + '</strong>',
+                '<div class="small">' + esc(row.reason || 'No reason recorded.') + '</div>',
+                '</div>',
+                '<div class="event-meta">' + esc(row.updated_at || row.created_at || '') + '</div>',
+                '</article>'
+              ].join('');
+            }).join('')
+          : '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">If one starts producing junk, remove it here and it will show up in this log.</div></div><div></div></article>';
+      }
+
+      async function refreshVisionStats() {
+        try {
+          if (els.visionStatsList) {
+            els.visionStatsList.innerHTML = '<div class="gallery-empty">Loading vision scorecard…</div>';
+          }
+          var data = await apiJson('/votes/vision-stats', { method: 'GET' });
+          state.visionStats = Array.isArray(data.rows) ? data.rows : [];
+          state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
+          renderVisionStats();
+        } catch (err) {
+          setLog({ error: 'Vision stats failed', details: err.response || String(err.message || err) });
+        }
       }
 
       function filteredAssets() {
-        var q = String(els.search.value || '').trim().toUpperCase();
-        if (!q) return state.assets.slice();
-        return state.assets.filter(function (a) {
-          return String(a.gene_symbol || '').toUpperCase().includes(q);
-        });
+        return state.assets.slice();
+      }
+
+      function detailEventMarkup(evt) {
+        return [
+          '<article class="event-row">',
+          '<div class="event-thumb">',
+          (evt.thumb_url ? '<img src="' + esc(evt.thumb_url) + '" alt="Event thumbnail" loading="lazy" />' : ''),
+          '</div>',
+          '<div class="event-meta-block">',
+          '<strong>' + esc(evt.action || 'event') + '</strong>',
+          '<div class="small">' + esc(evt.reason || 'No note recorded.') + '</div>',
+          '<div class="small mono">' + esc(evt.created_at || '') + '</div>',
+          '</div>',
+          '</article>'
+        ].join('');
+      }
+
+      function renderGeneDetail() {
+        var detail = state.selectedGeneDetail;
+        if (!detail) {
+          els.detail.innerHTML = [
+            '<div class="detail-kicker">Gene review</div>',
+            '<div class="detail-title">Pick a gene</div>',
+            '<div class="detail-copy">The gallery now works like a visual inbox. Click any card to inspect candidates, notes, and recent admin actions.</div>'
+          ].join('');
+          return;
+        }
+
+        var headerBadges = [];
+        if (detail.live_sha) headerBadges.push('<span class="badge-pill badge-live">Live portrait set</span>');
+        if (detail.admin_override) headerBadges.push('<span class="badge-pill badge-pinned">Pinned override</span>');
+
+        var candidates = Array.isArray(detail.candidates) ? detail.candidates : [];
+        var recentEvents = Array.isArray(detail.recent_events) ? detail.recent_events : [];
+
+        els.detail.innerHTML = [
+          '<div class="detail-kicker">Gene review</div>',
+          '<div class="detail-title">' + esc(detail.gene_symbol || '') + '</div>',
+          (detail.full_name ? '<div class="small">' + esc(detail.full_name) + '</div>' : ''),
+          '<div class="badge-row">' + headerBadges.join('') + '</div>',
+          '<div class="detail-copy">' + esc(detail.manifestation || 'No manifestation note yet.') + '</div>',
+          '<div class="candidate-actions">',
+          '<button class="btn-flat" data-detail-action="rollback" data-symbol="' + esc(detail.gene_symbol || '') + '">Roll back</button>',
+          '<button class="btn-flat" data-detail-action="unpublish" data-symbol="' + esc(detail.gene_symbol || '') + '">Unpublish</button>',
+          (detail.admin_override ? '<button class="btn-flat" data-detail-action="clear-override" data-symbol="' + esc(detail.gene_symbol || '') + '">Unpin</button>' : ''),
+          '</div>',
+          '<div class="detail-kicker">Candidates</div>',
+          '<div class="candidate-list">',
+          (candidates.length ? candidates.map(function (candidate) {
+            var badges = [statusPill(candidate.status)];
+            if (candidate.is_live) badges.push('<span class="badge-pill badge-live">Live</span>');
+            if (candidate.is_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>');
+            if (candidate.is_legacy) badges.push('<span class="badge-pill badge-missing">Legacy</span>');
+            return [
+              '<article class="candidate-row">',
+              '<div class="candidate-thumb">',
+              (candidate.thumb_url ? '<img src="' + esc(candidate.thumb_url) + '" alt="Candidate portrait" loading="lazy" />' : ''),
+              '</div>',
+              '<div class="candidate-meta">',
+              '<div><strong>' + esc(candidate.artist_name || candidate.artist_tag || candidate.vision_id || 'Unknown vision') + '</strong></div>',
+              '<div class="small">score ' + esc(String(candidate.vote_score || 0)) + ' · +' + esc(String(candidate.image_upvotes || 0)) + ' / -' + esc(String(candidate.image_downvotes || 0)) + '</div>',
+              '<div class="small mono">' + esc(shortSha(candidate.asset_sha256 || '')) + '</div>',
+              '<div class="badge-row">' + badges.join('') + '</div>',
+              '<div class="candidate-actions">',
+              '<button class="btn-flat" data-detail-action="copy" data-symbol="' + esc(detail.gene_symbol || '') + '" data-sha="' + esc(candidate.asset_sha256 || '') + '">Copy SHA</button>',
+              (!candidate.is_live ? '<button class="btn-primary" data-detail-action="publish" data-symbol="' + esc(detail.gene_symbol || '') + '" data-sha="' + esc(candidate.asset_sha256 || '') + '">Pin live</button>' : ''),
+              '<button class="btn-danger" data-detail-action="reject" data-symbol="' + esc(detail.gene_symbol || '') + '" data-sha="' + esc(candidate.asset_sha256 || '') + '">Reject</button>',
+              '</div>',
+              '</div>',
+              '</article>'
+            ].join('');
+          }).join('') : '<div class="gallery-empty">No candidate images found for this gene.</div>'),
+          '</div>',
+          '<div class="detail-kicker">Recent events</div>',
+          '<div class="event-list">',
+          (recentEvents.length ? recentEvents.slice(0, 6).map(detailEventMarkup).join('') : '<div class="gallery-empty">No admin events yet.</div>'),
+          '</div>'
+        ].join('');
+      }
+
+      async function refreshGeneDetail(symbol) {
+        var safeSymbol = String(symbol || '').trim().toUpperCase();
+        if (!safeSymbol) return;
+        state.selectedGene = safeSymbol;
+        state.selectedGeneDetail = null;
+        els.detail.innerHTML = [
+          '<div class="detail-kicker">Gene review</div>',
+          '<div class="detail-title">' + esc(safeSymbol) + '</div>',
+          '<div class="detail-copy">Loading candidate images and recent events…</div>'
+        ].join('');
+        var detail = await apiJson('/gene/' + encodeURIComponent(safeSymbol), { method: 'GET' });
+        state.selectedGeneDetail = detail || null;
+        renderGeneDetail();
       }
 
       function renderTable() {
         var assets = filteredAssets();
+        if (!assets.length) {
+          els.body.innerHTML = '<div class="gallery-empty" style="grid-column:1 / -1">Nothing matched this gallery slice.</div>';
+          return;
+        }
         els.body.innerHTML = assets.map(function (a) {
-          var visionBits = [];
-          if (a.artist_tag) visionBits.push('<div><strong>' + esc(a.artist_tag) + '</strong></div>');
-          if (a.artist_name) visionBits.push('<div class="small">' + esc(a.artist_name) + '</div>');
-          if (a.vision_id) visionBits.push('<div class="small mono">' + esc(a.vision_id) + '</div>');
+          var imageUrl = a.live_thumb_url || a.leader_thumb_url || a.live_medium_url || a.leader_medium_url || '';
+          var badges = [];
+          if (a.live_sha) badges.push('<span class="badge-pill badge-live">Live</span>');
+          if (a.admin_override) badges.push('<span class="badge-pill badge-pinned">Pinned</span>');
+          if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>');
+          if (a.missing) badges.push('<span class="badge-pill badge-missing">No portrait</span>');
+          if (a.has_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>');
           return [
-            '<tr>',
-            '<td><strong>' + esc(a.gene_symbol || '') + '</strong></td>',
-            '<td class="mono sha" title="' + esc(a.asset_sha256 || '') + '">' + esc(shortSha(a.asset_sha256 || '')) + '</td>',
-            '<td>' + statusPill(a.status) + '</td>',
-            '<td>' + canonCell(a) + '</td>',
-            '<td>' + flagsCell(a) + '</td>',
-            '<td>' + (visionBits.join('') || '<span class="small">-</span>') + '</td>',
-            '<td>' + votesCell(a) + '</td>',
-            '<td>' + previewCell(a) + '</td>',
-            '<td><div>' + esc(a.created_at || '-') + '</div><div class="small">' + esc(a.created_by || '-') + '</div></td>',
-            '<td>',
-            '<div class="actions">',
-            '<button class="btn-flat" data-action="copy" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Copy SHA</button>',
-            '<button class="btn-primary" data-action="publish" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Pin as live</button>',
-            ((a.is_current && a.admin_override)
-              ? '<button class="btn-flat" data-action="clear-override" data-symbol="' + esc(a.gene_symbol || '') + '">Unpin</button>'
-              : ''),
-            ((a.is_stale || a.is_legacy)
-              ? '<button class="btn-primary" data-action="unstale" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Restore</button>'
-              : ''),
-            (a.is_legacy
-              ? '<button class="btn-danger" data-action="purge-legacy" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Delete</button>'
-              : ''),
-            '<button class="btn-warn" data-action="rollback" data-symbol="' + esc(a.gene_symbol || '') + '">Roll back</button>',
-            '<button class="btn-flat" data-action="unpublish" data-symbol="' + esc(a.gene_symbol || '') + '">Unpublish</button>',
-            '<button class="btn-danger" data-action="reject" data-symbol="' + esc(a.gene_symbol || '') + '" data-sha="' + esc(a.asset_sha256 || '') + '">Reject</button>',
+            '<button class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" type="button" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
+            '<div class="gallery-media">',
+            (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="Portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
             '</div>',
-            '</td>',
-            '</tr>'
+            '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
+            '<div class="gallery-subtitle">' + esc((a.candidate_count || 0) + ' candidates · ' + (a.live_vision_id || a.leader_vision_id || 'no vision')) + '</div>',
+            '<div class="badge-row">' + badges.join('') + '</div>',
+            '</button>'
           ].join('');
         }).join('');
       }
@@ -907,40 +1421,26 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.refresh.disabled = true;
           els.meta.textContent = 'Loading...';
           var status = encodeURIComponent(String(els.status.value || 'all').toLowerCase());
-          var stale = encodeURIComponent(String(els.stale.value || 'all').toLowerCase());
-          var legacy = encodeURIComponent(String(els.legacy.value || 'all').toLowerCase());
-          var limit = Math.max(1, Math.min(250, Number.parseInt(els.limit.value || '120', 10) || 120));
+          var sort = encodeURIComponent(String(els.stale.value || 'name').toLowerCase());
+          var limit = Math.max(1, Math.min(200, Number.parseInt(els.limit.value || '120', 10) || 120));
           var symbol = encodeURIComponent(String(els.search.value || '').trim().toUpperCase());
-          var path = '/assets?status=' + status + '&stale=' + stale + '&legacy=' + legacy + '&limit=' + limit;
-          if (symbol) path += '&symbol=' + symbol;
+          var path = '/gallery?page=1&filter=' + status + '&sort=' + sort + '&limit=' + limit;
+          if (symbol) path += '&query=' + symbol;
           var data = await apiJson(path, { method: 'GET' });
-          state.assets = Array.isArray(data.assets) ? data.assets : [];
+          state.assets = Array.isArray(data.rows) ? data.rows : [];
           state.archiveLoaded = true;
-
-          var counts = { draft: 0, approved: 0, rejected: 0 };
-          var staleCount = 0;
-          var legacyCount = 0;
-          var currentCount = 0;
-          var overrideCount = 0;
-          state.assets.forEach(function (row) {
-            var s = String(row.status || '').toLowerCase();
-            if (Object.prototype.hasOwnProperty.call(counts, s)) counts[s] += 1;
-            if (row.is_stale) staleCount += 1;
-            if (row.is_legacy) legacyCount += 1;
-            if (row.is_current) currentCount += 1;
-            if (row.is_current && row.admin_override) overrideCount += 1;
-          });
           els.meta.innerHTML = [
             '<span>' + state.assets.length + ' shown</span>',
-            '<span>approved ' + counts.approved + '</span>',
-            '<span>current ' + currentCount + '</span>',
-            '<span>pinned ' + overrideCount + '</span>',
-            '<span>draft ' + counts.draft + '</span>',
-            '<span>rejected ' + counts.rejected + '</span>',
-            '<span>stale ' + staleCount + '</span>',
-            '<span>legacy ' + legacyCount + '</span>'
+            '<span>total ' + esc(String(data.total || state.assets.length)) + '</span>',
+            '<span>filter ' + esc(String(els.status.value || 'all')) + '</span>',
+            '<span>sort ' + esc(String(els.stale.value || 'name')) + '</span>'
           ].join(' &middot; ');
           renderTable();
+          if (state.selectedGene && state.assets.some(function (row) { return String(row.gene_symbol || '') === state.selectedGene; })) {
+            refreshGeneDetail(state.selectedGene).catch(function (err) {
+              setLog({ error: String(err.message || err), details: err.response || null });
+            });
+          }
         } catch (err) {
           state.archiveLoaded = false;
           els.meta.innerHTML = '<span style="color: var(--danger)">Failed to load.</span>';
@@ -1071,28 +1571,40 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var symbol = String(jump.getAttribute('data-jump-symbol') || '');
           var tab = String(jump.getAttribute('data-jump-tab') || 'archive');
           els.status.value = 'all';
-          els.stale.value = 'all';
-          els.legacy.value = 'all';
+          els.stale.value = 'name';
           els.search.value = symbol;
           setActiveTab(tab);
           refreshAssets();
         });
 
-        els.body.addEventListener('click', async function (ev) {
-          var btn = ev.target.closest('button[data-action]');
-          if (!btn) return;
-          var action = String(btn.getAttribute('data-action') || '');
-          var symbol = String(btn.getAttribute('data-symbol') || '');
-          var sha = String(btn.getAttribute('data-sha') || '');
-          try {
-            btn.disabled = true;
-            await handleTableAction(action, symbol, sha);
-          } catch (err) {
-            setLog({ error: String(err.message || err), details: err.response || null });
-          } finally {
-            btn.disabled = false;
-          }
-        });
+        if (els.body) {
+          els.body.addEventListener('click', function (ev) {
+            var card = ev.target.closest('[data-gene-symbol]');
+            if (!card) return;
+            refreshGeneDetail(String(card.getAttribute('data-gene-symbol') || '')).catch(function (err) {
+              setLog({ error: String(err.message || err), details: err.response || null });
+            });
+          });
+        }
+
+        if (els.detail) {
+          els.detail.addEventListener('click', async function (ev) {
+            var btn = ev.target.closest('[data-detail-action]');
+            if (!btn) return;
+            var action = String(btn.getAttribute('data-detail-action') || '');
+            var symbol = String(btn.getAttribute('data-symbol') || '');
+            var sha = String(btn.getAttribute('data-sha') || '');
+            try {
+              btn.disabled = true;
+              await handleTableAction(action, symbol, sha);
+              await refreshGeneDetail(symbol);
+            } catch (err) {
+              setLog({ error: String(err.message || err), details: err.response || null });
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        }
 
         if (els.styleRemove) {
           els.styleRemove.addEventListener('click', async function () {
@@ -1124,20 +1636,18 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function init() {
         setActiveTab('overview');
-        els.stylesNotes.innerHTML = [
-          '<article class="list-row"><div><strong>What this is for</strong><div class="small">Remove vision sources that produce junk. Not a moderation queue.</div></div><div></div></article>',
-          '<article class="list-row"><div><strong>What it is not</strong><div class="small">Not for approving individual images. You only step in when something needs removal, pinning, or cleanup.</div></div><div></div></article>'
-        ].join('');
+        els.visionStatsList.innerHTML = '<div class="gallery-empty">Open this tab to load the scorecard.</div>';
+        els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blacklist log.</div></div><div></div></article>';
         els.refresh.addEventListener('click', function () {
-          // Archive refresh must stay archive-scoped. Tying this button back to the
-          // global audit queries would reintroduce the production bug we just removed.
           refreshAssets();
         });
         els.status.addEventListener('change', refreshAssets);
         els.stale.addEventListener('change', refreshAssets);
-        els.legacy.addEventListener('change', refreshAssets);
         els.limit.addEventListener('change', refreshAssets);
-        els.search.addEventListener('input', renderTable);
+        els.search.addEventListener('input', refreshAssets);
+        if (els.activityFilter) {
+          els.activityFilter.addEventListener('input', renderActivityFeed);
+        }
         bindActions();
         refreshOverview();
       }
