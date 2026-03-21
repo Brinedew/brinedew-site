@@ -1150,6 +1150,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return 'canonical only';
       }
 
+      // Terminology rule: "canonical" is the portrait shown in the extension.
+      // Votes auto-pick the canonical portrait unless admin_override is active.
+      // Keep this language consistent in the admin even though legacy route/state
+      // names still use "live" internally.
+
       function statusPill(status) {
         var s = String(status || 'unknown').toLowerCase();
         return '<span class="status status-' + esc(s) + '">' + esc(s) + '</span>';
