@@ -61,7 +61,7 @@ export default (() => {
   if (host !== "iconoplasm.brinedew.bio" && host !== "staging.brinedew.bio") {
     origin = "https://iconoplasm.brinedew.bio"
   }
-  var endpoint = origin + "/api/gallery?order=votes&limit=4&offset=0"
+  var endpoint = origin + "/api/public/v1/gallery?order=votes&limit=4&offset=0"
   var bootstrap = {
     homeGalleryData: null,
     homeGalleryUsed: false,

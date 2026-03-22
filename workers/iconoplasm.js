@@ -6,12 +6,22 @@ import { ICONOPLASM_ARTIST_STYLES_HTML } from "./iconoplasm-artist-styles-html.j
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
-const API_SCHEMA_VERSION = 2
+// Public API cutover note:
+// This worker now exposes one documented public contract under /api/public/v1.
+// The extension and site are expected to use that same contract so we do not
+// quietly drift back into a split legacy/public surface later.
+const API_SCHEMA_VERSION = 3
+const PUBLIC_API_VERSION = "v1"
+const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
 const MIN_EXTENSION_VERSION = "0.3.0"
 
 const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
 const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
 const KV_GALLERY_VERSION = "iconoplasm:gallery-version"
+const PUBLIC_DUMP_PREFIX = "public-dumps"
+const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
+const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
+const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
 
 const catalogCache = {
   hash: null,
@@ -751,14 +761,41 @@ function rateLimit(request, routeKey, maxPerMin) {
   const now = Date.now()
   const item = rlBuckets.get(key)
   if (!item || now - item.start > RL_WINDOW_MS) {
-    rlBuckets.set(key, { start: now, count: 1 })
-    return null
+    const fresh = { start: now, count: 1 }
+    rlBuckets.set(key, fresh)
+    return {
+      retryAfterSeconds: null,
+      headers: {
+        "X-RateLimit-Limit": String(maxPerMin),
+        "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
+        "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - fresh.count)),
+        "X-RateLimit-Reset": String(Math.ceil(RL_WINDOW_MS / 1000)),
+      },
+    }
   }
   item.count += 1
+  const resetSeconds = Math.max(1, Math.ceil((RL_WINDOW_MS - (now - item.start)) / 1000))
   if (item.count > maxPerMin) {
-    return Math.max(1, Math.ceil((RL_WINDOW_MS - (now - item.start)) / 1000))
+    return {
+      retryAfterSeconds: resetSeconds,
+      headers: {
+        "X-RateLimit-Limit": String(maxPerMin),
+        "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": String(resetSeconds),
+        "Retry-After": String(resetSeconds),
+      },
+    }
   }
-  return null
+  return {
+    retryAfterSeconds: null,
+    headers: {
+      "X-RateLimit-Limit": String(maxPerMin),
+      "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
+      "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - item.count)),
+      "X-RateLimit-Reset": String(resetSeconds),
+    },
+  }
 }
 
 async function logReq(route, request, status, started, schema = null) {
@@ -796,6 +833,184 @@ async function extensionManifestObj(url, env) {
       await publishedPortraitFingerprint(env),
     ),
     portrait_base_url: portraitBase(url, env),
+  }
+}
+
+function publicApiPath(suffix = "") {
+  const normalized = String(suffix || "")
+  if (!normalized) return PUBLIC_API_PREFIX
+  return normalized.startsWith("/") ? `${PUBLIC_API_PREFIX}${normalized}` : `${PUBLIC_API_PREFIX}/${normalized}`
+}
+
+function publicUrl(url, suffix = "") {
+  return `${url.origin}${publicApiPath(suffix)}`
+}
+
+function publicCatalogArtifactFilename(hash) {
+  return `catalog.${hash}.json`
+}
+
+function publicCatalogArtifactPath(hash) {
+  return publicApiPath(`/catalog/${publicCatalogArtifactFilename(hash)}`)
+}
+
+function publicCatalogJsonlFilename(hash) {
+  return `catalog.${hash}.jsonl`
+}
+
+function publicCatalogJsonlDumpPath(hash) {
+  return publicApiPath(`/dumps/${publicCatalogJsonlFilename(hash)}`)
+}
+
+function publicCatalogJsonlDumpKey(hash) {
+  return `${PUBLIC_DUMP_PREFIX}/${publicCatalogJsonlFilename(hash)}`
+}
+
+function portraitFingerprintVersion(rawFingerprint) {
+  if (!rawFingerprint || typeof rawFingerprint !== "object") return null
+  const count = Number(rawFingerprint.published_count ?? rawFingerprint.count ?? 0)
+  const latest = portraitHashToken(rawFingerprint.latest_updated_at ?? rawFingerprint.latest ?? "")
+  if (!count && !latest) return null
+  return latest ? `${count}-${latest}` : String(count)
+}
+
+async function publicMetadataObj(url, env) {
+  const manifest = await extensionManifestObj(url, env)
+  if (!manifest) return null
+  const portraitFingerprint = await publishedPortraitFingerprint(env)
+  const portraitVersion = portraitFingerprintVersion(portraitFingerprint)
+  const catalogHash = String(manifest.current_hash || "").split("-")[0] || null
+  return {
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    canonical_key: "symbol",
+    catalog_hash: catalogHash,
+    portrait_hash: portraitVersion,
+    build_version: manifest.current_hash || null,
+    released_at: manifest.generated_at || null,
+    gene_count: manifest.gene_count || null,
+    artifact_schema_version: manifest.schema_version || 1,
+    min_extension_version: env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION,
+    portrait_base_url: manifest.portrait_base_url || portraitBase(url, env),
+    urls: {
+      metadata: publicUrl(url, "/metadata"),
+      schema: publicUrl(url, "/schema"),
+      catalog_manifest: publicUrl(url, "/catalog/manifest"),
+      catalog_artifact: catalogHash ? `${url.origin}${publicCatalogArtifactPath(catalogHash)}` : null,
+      catalog_jsonl: catalogHash ? `${url.origin}${publicCatalogJsonlDumpPath(catalogHash)}` : null,
+      changes: publicUrl(url, "/changes"),
+      batch: publicUrl(url, "/genes/batch"),
+      resolve: publicUrl(url, "/resolve"),
+      search: publicUrl(url, "/genes/search"),
+      gallery: publicUrl(url, "/gallery"),
+    },
+    source_versions: {
+      catalog_table: "ICONOPLASM_DB.icono_gene_catalog",
+      essence_table: "ICONOPLASM_DB.icono_gene_essence",
+      publish_state_table: "ICONOPLASM_DB.icono_publish_state",
+      portraits_bucket: "ICONOPLASM_PORTRAITS",
+      protein_source: "DB.proteins via UniProt",
+    },
+  }
+}
+
+function publicSchemaDoc() {
+  return {
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    canonical_key: "symbol",
+    cursor_format: "ISO-8601 UTC timestamp",
+    batch_limits: {
+      genes_batch_default: PUBLIC_DEFAULT_GENE_BATCH_LIMIT,
+      genes_batch_max: PUBLIC_MAX_GENE_BATCH_LIMIT,
+      resolve_batch_max: PUBLIC_MAX_RESOLVE_BATCH_LIMIT,
+    },
+    field_projection: {
+      supported: true,
+      accepts: ["comma-separated string", "array of strings"],
+      fields: [
+        "symbol",
+        "canonical_symbol",
+        "full_name",
+        "uniprot",
+        "color",
+        "weight_kg",
+        "protein_length_aa",
+        "molecular_weight_kda",
+        "first_publication_year",
+        "tissue_tau",
+        "loeuf",
+        "constraint_percentile",
+        "primary_tissue",
+        "popularity_score",
+        "essence",
+        "manifestation",
+        "portrait",
+        "portrait_candidates",
+        "media",
+        "source_links",
+        "page_url",
+        "resolved_from",
+      ],
+    },
+  }
+}
+
+function parseProjectedFields(rawFields) {
+  const allowed = new Set(publicSchemaDoc().field_projection.fields)
+  const values = Array.isArray(rawFields)
+    ? rawFields
+    : typeof rawFields === "string"
+      ? rawFields.split(",")
+      : []
+  const cleaned = Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .filter((value) => allowed.has(value)),
+    ),
+  )
+  return cleaned.length ? cleaned : null
+}
+
+function projectGeneRecord(record, rawFields) {
+  if (!record || typeof record !== "object") return record
+  const fields = parseProjectedFields(rawFields)
+  if (!fields) return record
+
+  const projected = {
+    api_version: PUBLIC_API_VERSION,
+    schema_version: record.schema_version ?? API_SCHEMA_VERSION,
+    canonical_key: record.canonical_key || "symbol",
+    canonical_symbol: record.canonical_symbol || record.symbol || null,
+  }
+  for (const field of fields) {
+    if (field in record) projected[field] = record[field]
+  }
+  if (!("symbol" in projected) && record.symbol) projected.symbol = record.symbol
+  return projected
+}
+
+function publicMediaEnvelope(url, symbol, portrait) {
+  const assetSha = normalizeSha256(portrait?.asset_sha256 || "")
+  if (!assetSha) return null
+  return {
+    id: assetSha,
+    type: "portrait",
+    symbol,
+    checksum_sha256: assetSha,
+    canonical_url: portrait?.hero_url || portrait?.medium_url || portrait?.thumb_url || null,
+    info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
+    renditions: {
+      full: portrait?.hero_url || null,
+      medium: portrait?.medium_url || null,
+      thumb: portrait?.thumb_url || null,
+    },
+    rights: "CC BY-NC-ND 4.0",
+    license_url: "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+    attribution: "Brinedew / Iconoplasm",
+    source: "iconoplasm-portraits",
   }
 }
 
@@ -1266,6 +1481,7 @@ async function geneRecord(env, url, rawId) {
       ? String(r.protein.tissue.label).trim()
       : null
   return {
+    api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
     canonical_symbol: r.symbol,
@@ -1287,6 +1503,7 @@ async function geneRecord(env, url, rawId) {
       ? { manifestation: syncedEssenceState.manifestation }
       : {}),
     portrait,
+    media: publicMediaEnvelope(url, r.symbol, portrait),
     portrait_candidates: portraitCandidates,
     source_links: sourceLinks(r.symbol, uniprot),
     page_url: `${url.origin}/gene/${encodeURIComponent(r.symbol)}`,
@@ -5266,6 +5483,308 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
   return items
 }
 
+function normalizeRequestedSymbols(rawSymbols, maxCount = PUBLIC_MAX_GENE_BATCH_LIMIT) {
+  const values = Array.isArray(rawSymbols)
+    ? rawSymbols
+    : typeof rawSymbols === "string"
+      ? rawSymbols.split(",")
+      : []
+  return Array.from(
+    new Set(values.map((value) => normalizeSymbol(value)).filter(Boolean)),
+  ).slice(0, maxCount)
+}
+
+async function parseJsonBody(request) {
+  try {
+    const body = await request.json()
+    return body && typeof body === "object" ? body : {}
+  } catch {
+    return {}
+  }
+}
+
+async function resolvePublicIdentifier(env, rawIdentifier) {
+  await warmCatalogCache(env)
+  const symbol = normalizeSymbol(rawIdentifier)
+  if (symbol && catalogCache.bySymbol.has(symbol)) {
+    return {
+      requested: String(rawIdentifier || ""),
+      canonical_symbol: symbol,
+      matched_by: "symbol",
+      found: true,
+    }
+  }
+  const uniprot = normalizeUniprot(rawIdentifier)
+  if (uniprot) {
+    const resolvedSymbol = catalogCache.symbolByUniprot.get(uniprot)
+    if (resolvedSymbol) {
+      return {
+        requested: String(rawIdentifier || ""),
+        canonical_symbol: resolvedSymbol,
+        matched_by: "uniprot",
+        found: true,
+      }
+    }
+  }
+  return {
+    requested: String(rawIdentifier || ""),
+    canonical_symbol: null,
+    matched_by: null,
+    found: false,
+  }
+}
+
+async function handlePublicMetadata(request, env) {
+  const url = new URL(request.url)
+  const metadata = await publicMetadataObj(url, env)
+  if (!metadata) {
+    return json({ error: "Public catalog metadata not found — publish the catalog first" }, 404)
+  }
+  const etag = metadata.build_version ? `"${metadata.build_version}"` : await etagFor(metadata)
+  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "public, max-age=300" },
+    })
+  }
+  return json(metadata, 200, { ETag: etag, "Cache-Control": "public, max-age=300" })
+}
+
+function handlePublicSchema() {
+  return json(publicSchemaDoc(), 200, { "Cache-Control": "public, max-age=3600" })
+}
+
+async function handlePublicCatalogManifest(request, env) {
+  const url = new URL(request.url)
+  const manifest = await extensionManifestObj(url, env)
+  if (!manifest) {
+    return json({ error: "Public catalog manifest not found — publish the catalog first" }, 404)
+  }
+  const portraitFingerprint = await publishedPortraitFingerprint(env)
+  const catalogHash = String(manifest.current_hash || "").split("-")[0] || null
+  const payload = {
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    canonical_key: "symbol",
+    catalog_hash: catalogHash,
+    build_version: manifest.current_hash || null,
+    portrait_hash: portraitFingerprintVersion(portraitFingerprint),
+    released_at: manifest.generated_at || null,
+    gene_count: manifest.gene_count || null,
+    artifact_schema_version: manifest.schema_version || 1,
+    artifact_url: catalogHash ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(catalogHash)}`) : null,
+    dump_urls: {
+      catalog_jsonl: catalogHash ? publicUrl(url, `/dumps/${publicCatalogJsonlFilename(catalogHash)}`) : null,
+    },
+  }
+  const etag = payload.build_version ? `"${payload.build_version}"` : await etagFor(payload)
+  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "public, max-age=300" },
+    })
+  }
+  return json(payload, 200, { ETag: etag, "Cache-Control": "public, max-age=300" })
+}
+
+async function handlePublicCatalogArtifact(env, path) {
+  const match = path.match(/\/api\/public\/v1\/catalog\/catalog\.([a-z0-9-]+)\.json$/i)
+  if (!match) return json({ error: "Invalid public catalog artifact path" }, 400)
+  return handleCatalogArtifact(env, publicCatalogArtifactPath(String(match[1] || "")).replace(PUBLIC_API_PREFIX, "/api"))
+}
+
+async function handlePublicCatalogJsonlDump(env, path) {
+  const match = path.match(/\/api\/public\/v1\/dumps\/catalog\.([a-z0-9-]+)\.jsonl$/i)
+  if (!match) return json({ error: "Invalid public dump path" }, 400)
+  if (!env.ICONOPLASM_PORTRAITS) return json({ error: "Portrait bucket binding missing" }, 500)
+  const hash = String(match[1] || "").split("-")[0]
+  const object = await env.ICONOPLASM_PORTRAITS.get(publicCatalogJsonlDumpKey(hash))
+  if (!object) return json({ error: "Catalog dump not found" }, 404)
+  return new Response(object.body, {
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      ETag: `"${hash}"`,
+    },
+  })
+}
+
+async function handlePublicGeneBatch(request, env) {
+  const body = await parseJsonBody(request)
+  const symbols = normalizeRequestedSymbols(
+    body.symbols || body.ids || body.identifiers || [],
+    Number.parseInt(String(body.limit || PUBLIC_DEFAULT_GENE_BATCH_LIMIT), 10) ||
+      PUBLIC_DEFAULT_GENE_BATCH_LIMIT,
+  ).slice(0, PUBLIC_MAX_GENE_BATCH_LIMIT)
+  const fields = body.fields || null
+  if (!symbols.length) {
+    return json({
+      api_version: PUBLIC_API_VERSION,
+      schema_version: API_SCHEMA_VERSION,
+      genes: [],
+      missing: [],
+    })
+  }
+  const url = new URL(request.url)
+  const records = []
+  const missing = []
+  for (const symbol of symbols) {
+    const record = await geneRecord(env, url, symbol)
+    if (!record) {
+      missing.push(symbol)
+      continue
+    }
+    records.push(projectGeneRecord(record, fields))
+  }
+  return json(
+    {
+      api_version: PUBLIC_API_VERSION,
+      schema_version: API_SCHEMA_VERSION,
+      canonical_key: "symbol",
+      genes: records,
+      missing,
+    },
+    200,
+    { "Cache-Control": "public, max-age=120" },
+  )
+}
+
+async function handlePublicResolve(request, env) {
+  const body = await parseJsonBody(request)
+  const identifiers = Array.isArray(body.identifiers)
+    ? body.identifiers
+    : Array.isArray(body.ids)
+      ? body.ids
+      : []
+  const limited = identifiers.slice(0, PUBLIC_MAX_RESOLVE_BATCH_LIMIT)
+  const results = []
+  for (const identifier of limited) {
+    results.push(await resolvePublicIdentifier(env, identifier))
+  }
+  return json({
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    canonical_key: "symbol",
+    results,
+  })
+}
+
+async function handlePublicChanges(request, env) {
+  if (!env.ICONOPLASM_DB) return json({ error: "ICONOPLASM_DB binding missing" }, 500)
+  const url = new URL(request.url)
+  const since = sanitizeText(url.searchParams.get("since") || "", 64) || "1970-01-01T00:00:00Z"
+  const limit = Math.max(1, Math.min(500, Number.parseInt(url.searchParams.get("limit") || "200", 10)))
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `WITH changed AS (
+       SELECT upper(gene_symbol) AS symbol, 'catalog' AS change_type, updated_at
+       FROM icono_gene_catalog
+       WHERE COALESCE(updated_at, '') > ?
+       UNION ALL
+       SELECT upper(gene_symbol) AS symbol, 'essence' AS change_type, updated_at
+       FROM icono_gene_essence
+       WHERE COALESCE(updated_at, '') > ?
+       UNION ALL
+       SELECT upper(gene_symbol) AS symbol, 'portrait' AS change_type, updated_at
+       FROM icono_publish_state
+       WHERE COALESCE(updated_at, '') > ?
+     )
+     SELECT
+       changed.symbol,
+       MAX(changed.updated_at) AS changed_at,
+       GROUP_CONCAT(DISTINCT changed.change_type) AS change_types,
+       MAX(ps.current_asset_sha256) AS current_asset_sha256
+     FROM changed
+     LEFT JOIN icono_publish_state ps
+       ON upper(ps.gene_symbol) = changed.symbol
+     GROUP BY changed.symbol
+     ORDER BY changed_at ASC, changed.symbol ASC
+     LIMIT ?`,
+  )
+    .bind(since, since, since, limit)
+    .all()
+  const results = Array.isArray(rows?.results)
+    ? rows.results.map((row) => ({
+        symbol: normalizeSymbol(row?.symbol || ""),
+        changed_at: row?.changed_at ? String(row.changed_at) : null,
+        change_types: String(row?.change_types || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        current_asset_sha256: normalizeSha256(row?.current_asset_sha256 || "") || null,
+      }))
+    : []
+  const nextCursor = results.length ? results[results.length - 1]?.changed_at || since : since
+  return json({
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    since,
+    next_cursor: nextCursor,
+    changes: results,
+  })
+}
+
+async function handlePublicMedia(request, env, symbol) {
+  const url = new URL(request.url)
+  const resolvedSymbol = normalizeSymbol(symbol)
+  if (!resolvedSymbol) return json({ error: "Invalid symbol" }, 400)
+  const portrait = await portraitState(env, resolvedSymbol, portraitBase(url, env))
+  const media = publicMediaEnvelope(url, resolvedSymbol, portrait)
+  if (!media) return json({ error: "Published media not found" }, 404)
+  return json({
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    canonical_key: "symbol",
+    symbol: resolvedSymbol,
+    media,
+  })
+}
+
+async function handlePublicGeneSearch(request, env) {
+  const url = new URL(request.url)
+  const q = (url.searchParams.get("q") || "").trim().toUpperCase()
+  if (!q) return json({ genes: [], query: "" }, 200, { "Cache-Control": "public, max-age=30" })
+  await warmCatalogCache(env)
+  const limit = Math.max(1, Math.min(100, Number.parseInt(url.searchParams.get("limit") || "20", 10)))
+  const prefixMatches = []
+  const nameMatches = []
+  const base = portraitBase(url, env)
+  for (const [symbol, gene] of catalogCache.bySymbol) {
+    const entry = { symbol, color: gene?.c || "#888", full_name: gene?.n || symbol }
+    if (gene?.pt) entry.pt = joinUrl(base, gene.pt)
+    if (gene?.ph) entry.ph = joinUrl(base, gene.ph)
+    if (symbol.startsWith(q)) {
+      prefixMatches.push(entry)
+    } else if (gene?.n && gene.n.toUpperCase().includes(q)) {
+      nameMatches.push(entry)
+    }
+  }
+  const genes = prefixMatches.concat(nameMatches).slice(0, limit)
+  return json({ genes, query: q }, 200, { "Cache-Control": "public, max-age=30" })
+}
+
+async function handlePublicGallery(request, env, ctx) {
+  const url = new URL(request.url)
+  const edgeCacheable = request.method === "GET" && galleryCanUseEdgeCache(url)
+  const cache = edgeCacheable ? caches.default : null
+  const cacheKey = edgeCacheable ? await galleryEdgeCacheKey(url, env) : null
+  if (cache && cacheKey) {
+    const cached = await cache.match(cacheKey)
+    if (cached) return cached
+  }
+  const payload = await galleryFeed(
+    env,
+    url,
+    url.searchParams.get("order"),
+    url.searchParams.get("limit"),
+    url.searchParams.get("offset"),
+    url.searchParams.get("seed"),
+  )
+  const response = json(payload, 200, { "Cache-Control": "public, max-age=60, s-maxage=60" })
+  if (cache && cacheKey) ctx.waitUntil(cache.put(cacheKey, response.clone()))
+  return response
+}
+
 async function handleCatalogManifest(request, env) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const url = new URL(request.url)
@@ -5376,6 +5895,17 @@ async function publishCatalogArtifact(env) {
     .join("")
     .slice(0, 12)
   const filename = `catalog.${hash}.json`
+  const catalogJsonl = `${hydrated.genes.map((gene) => JSON.stringify(gene)).join("\n")}\n`
+  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.put === "function") {
+    // Keep dumps alongside portraits under a separate prefix so public sync clients
+    // get a stable immutable snapshot without us needing a brand new bucket.
+    await env.ICONOPLASM_PORTRAITS.put(publicCatalogJsonlDumpKey(hash), catalogJsonl, {
+      httpMetadata: {
+        contentType: "application/x-ndjson; charset=utf-8",
+        cacheControl: "public, max-age=31536000, immutable",
+      },
+    })
+  }
   const manifest = {
     current_hash: hash,
     filename,
@@ -5383,6 +5913,10 @@ async function publishCatalogArtifact(env) {
     schema_version: hydrated.schema_version,
     canonical_key: "symbol",
     gene_count: hydrated.gene_count,
+    dumps: {
+      catalog_jsonl_key: publicCatalogJsonlDumpKey(hash),
+      catalog_jsonl_filename: publicCatalogJsonlFilename(hash),
+    },
   }
 
   await env.KV.put(`${KV_CATALOG_PREFIX}${hash}`, artifactJson)
@@ -5400,6 +5934,7 @@ async function publishCatalogArtifact(env) {
     filename,
     gene_count: hydrated.gene_count,
     schema_version: hydrated.schema_version,
+    catalog_jsonl_filename: publicCatalogJsonlFilename(hash),
   }
 }
 
@@ -5426,188 +5961,198 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
-    if (path === "/api/manifest") {
-      const retry = rateLimit(request, "manifest", 60)
-      if (retry)
+    if (path === publicApiPath("/metadata")) {
+      const rl = rateLimit(request, "public_metadata", 60)
+      if (rl.retryAfterSeconds) {
         return done(
-          "manifest_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, {
-            "Retry-After": String(retry),
-          }),
-        )
-      const m = await extensionManifestObj(url, env)
-      if (!m)
-        return done(
-          "manifest_404",
-          json({ error: "Catalog manifest not found — run iconoplasm catalog publish" }, 404),
-        )
-      const payload = {
-        schema_version: API_SCHEMA_VERSION,
-        canonical_key: "symbol",
-        current_hash: m.current_hash || null,
-        filename: m.filename || null,
-        generated_at: m.generated_at || null,
-        gene_count: m.gene_count || null,
-        artifact_schema_version: m.schema_version || 1,
-        portrait_base_url: m.portrait_base_url || portraitBase(url, env),
-        min_extension_version: env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION,
-      }
-      const etag = payload.current_hash ? `"${payload.current_hash}"` : await etagFor(payload)
-      if (etagMatches(request.headers.get("If-None-Match"), etag)) {
-        return done(
-          "manifest_304",
-          new Response(null, {
-            status: 304,
-            headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "public, max-age=300" },
-          }),
+          "public_metadata_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
           API_SCHEMA_VERSION,
         )
       }
-      return done(
-        "manifest",
-        json(payload, 200, { ETag: etag, "Cache-Control": "public, max-age=300" }),
-        API_SCHEMA_VERSION,
-      )
+      const response = await handlePublicMetadata(request, env)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_metadata", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
     }
 
-    if (path.startsWith("/api/gene/")) {
-      const retry = rateLimit(request, "gene", 240)
-      if (retry)
+    if (path === publicApiPath("/schema")) {
+      const rl = rateLimit(request, "public_schema", 60)
+      if (rl.retryAfterSeconds) {
         return done(
-          "gene_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, {
-            "Retry-After": String(retry),
-          }),
+          "public_schema_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
         )
-      const rawId = path.slice("/api/gene/".length)
+      }
+      const response = handlePublicSchema()
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_schema", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path === publicApiPath("/catalog/manifest")) {
+      const rl = rateLimit(request, "public_catalog_manifest", 60)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_catalog_manifest_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicCatalogManifest(request, env)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_catalog_manifest", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path.startsWith(publicApiPath("/catalog/catalog.")) && path.endsWith(".json")) {
+      const rl = rateLimit(request, "public_catalog_artifact", 120)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_catalog_artifact_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicCatalogArtifact(env, path)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_catalog_artifact", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
+      const rl = rateLimit(request, "public_catalog_dump", 60)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_catalog_dump_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicCatalogJsonlDump(env, path)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_catalog_dump", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path === publicApiPath("/gallery")) {
+      const rl = rateLimit(request, "public_gallery", 60)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_gallery_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicGallery(request, env, ctx)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_gallery", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path === publicApiPath("/genes/search")) {
+      const rl = rateLimit(request, "public_gene_search", 120)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_gene_search_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicGeneSearch(request, env)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_gene_search", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path === publicApiPath("/genes/batch")) {
+      const rl = rateLimit(request, "public_gene_batch", 60)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_gene_batch_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicGeneBatch(request, env)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_gene_batch", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path === publicApiPath("/resolve")) {
+      const rl = rateLimit(request, "public_resolve", 60)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_resolve_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicResolve(request, env)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_resolve", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path === publicApiPath("/changes")) {
+      const rl = rateLimit(request, "public_changes", 60)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_changes_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await handlePublicChanges(request, env)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_changes", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path.startsWith(publicApiPath("/media/"))) {
+      const rl = rateLimit(request, "public_media", 120)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_media_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const rawSymbol = path.slice(publicApiPath("/media/").length)
+      const response = await handlePublicMedia(request, env, rawSymbol)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done("public_media", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+    }
+
+    if (path.startsWith(publicApiPath("/genes/"))) {
+      const rl = rateLimit(request, "public_gene", 240)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_gene_rl",
+          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const rawId = path.slice(publicApiPath("/genes/").length)
       const resolved = await resolveGene(env, rawId)
-      if (!resolved) return done("gene_404", json({ error: "Gene not found" }, 404))
-      const canonicalPath = `/api/gene/${encodeURIComponent(resolved.symbol)}`
-      if (path !== canonicalPath)
-        return done("gene_redirect", Response.redirect(`${url.origin}${canonicalPath}`, 302))
-      const payload = await geneRecord(env, url, resolved.symbol)
+      if (!resolved) return done("public_gene_404", json({ error: "Gene not found" }, 404), API_SCHEMA_VERSION)
+      const canonicalPath = publicApiPath(`/genes/${encodeURIComponent(resolved.symbol)}`)
+      if (path !== canonicalPath) {
+        return done("public_gene_redirect", Response.redirect(`${url.origin}${canonicalPath}`, 302), API_SCHEMA_VERSION)
+      }
+      const payload = projectGeneRecord(await geneRecord(env, url, resolved.symbol), url.searchParams.get("fields"))
       const etag = await etagFor(payload)
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
-        return done(
-          "gene_304",
-          new Response(null, {
-            status: 304,
-            headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "public, max-age=120" },
-          }),
-          API_SCHEMA_VERSION,
-        )
+        const headers = { ...corsHeaders(), ...rl.headers, ETag: etag, "Cache-Control": "public, max-age=120" }
+        return done("public_gene_304", new Response(null, { status: 304, headers }), API_SCHEMA_VERSION)
       }
       return done(
-        "gene",
-        json(payload, 200, { ETag: etag, "Cache-Control": "public, max-age=120" }),
+        "public_gene",
+        json(payload, 200, { ...rl.headers, ETag: etag, "Cache-Control": "public, max-age=120" }),
         API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === "/api/gallery") {
-      const retry = rateLimit(request, "gallery", 60)
-      if (retry)
-        return done(
-          "gallery_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, {
-            "Retry-After": String(retry),
-          }),
-        )
-      const edgeCacheable = request.method === "GET" && galleryCanUseEdgeCache(url)
-      const cache = edgeCacheable ? caches.default : null
-      const cacheKey = edgeCacheable ? await galleryEdgeCacheKey(url, env) : null
-      if (cache && cacheKey) {
-        const cached = await cache.match(cacheKey)
-        if (cached) {
-          return done("gallery_cached", cached, API_SCHEMA_VERSION)
-        }
-      }
-      const payload = await galleryFeed(
-        env,
-        url,
-        url.searchParams.get("order"),
-        url.searchParams.get("limit"),
-        url.searchParams.get("offset"),
-        url.searchParams.get("seed"),
-      )
-      const response = json(payload, 200, { "Cache-Control": "public, max-age=60, s-maxage=60" })
-      if (cache && cacheKey) {
-        ctx.waitUntil(cache.put(cacheKey, response.clone()))
-      }
-      return done("gallery", response, API_SCHEMA_VERSION)
-    }
-
-    // Random gene sample for the homepage grid
-    if (path === "/api/genes/random") {
-      const retry = rateLimit(request, "genes_random", 30)
-      if (retry)
-        return done(
-          "genes_random_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, {
-            "Retry-After": String(retry),
-          }),
-        )
-      await warmCatalogCache(env)
-      const count = Math.max(
-        1,
-        Math.min(120, Number.parseInt(url.searchParams.get("count") || "60", 10)),
-      )
-      const allSymbols = Array.from(catalogCache.bySymbol.keys())
-      const shuffled = allSymbols.sort(() => Math.random() - 0.5).slice(0, count)
-      const base = portraitBase(url, env)
-      const genes = shuffled.map((s) => {
-        const g = catalogCache.bySymbol.get(s)
-        const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
-        if (g?.pt) entry.pt = joinUrl(base, g.pt)
-        if (g?.ph) entry.ph = joinUrl(base, g.ph)
-        return entry
-      })
-      return done(
-        "genes_random",
-        json({ genes, total: allSymbols.length }, 200, { "Cache-Control": "public, max-age=60" }),
-      )
-    }
-
-    // Search genes by symbol prefix or full name substring
-    if (path === "/api/genes/search") {
-      const retry = rateLimit(request, "genes_search", 120)
-      if (retry)
-        return done(
-          "genes_search_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: retry }, 429, {
-            "Retry-After": String(retry),
-          }),
-        )
-      const q = (url.searchParams.get("q") || "").trim().toUpperCase()
-      if (!q) return done("genes_search_empty", json({ genes: [], query: "" }, 200))
-      await warmCatalogCache(env)
-      const limit = Math.max(
-        1,
-        Math.min(100, Number.parseInt(url.searchParams.get("limit") || "20", 10)),
-      )
-      const results = []
-      // Prioritize symbol-prefix matches, then name-substring matches
-      const prefixMatches = []
-      const nameMatches = []
-      const base = portraitBase(url, env)
-      for (const [s, g] of catalogCache.bySymbol) {
-        if (s.startsWith(q)) {
-          const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
-          if (g?.pt) entry.pt = joinUrl(base, g.pt)
-          if (g?.ph) entry.ph = joinUrl(base, g.ph)
-          prefixMatches.push(entry)
-        } else if (g?.n && g.n.toUpperCase().includes(q)) {
-          const entry = { symbol: s, color: g?.c || "#888", full_name: g?.n || s }
-          if (g?.pt) entry.pt = joinUrl(base, g.pt)
-          if (g?.ph) entry.ph = joinUrl(base, g.ph)
-          nameMatches.push(entry)
-        }
-        if (prefixMatches.length + nameMatches.length >= limit * 2) break
-      }
-      const genes = [...prefixMatches, ...nameMatches].slice(0, limit)
-      return done(
-        "genes_search",
-        json({ genes, query: q }, 200, { "Cache-Control": "public, max-age=30" }),
       )
     }
 
@@ -8069,11 +8614,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         }),
       )
     }
-
-    if (path === "/api/catalog/manifest")
-      return done("catalog_manifest", await handleCatalogManifest(request, env))
-    if (path.startsWith("/api/catalog/catalog.") && path.endsWith(".json"))
-      return done("catalog_artifact", await handleCatalogArtifact(env, path))
 
     if (path.startsWith("/api/")) return done("api_404", json({ error: "Not found" }, 404))
 

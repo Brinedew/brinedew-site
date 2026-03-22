@@ -10,18 +10,26 @@
 
 | Extension version | Expected manifest route | Artifact schema                         | Gene page links  |
 | ----------------- | ----------------------- | --------------------------------------- | ---------------- |
-| `0.3.x`           | `/api/manifest`         | v3 (`s`,`c?`,`n`,`u`,`tmh`,`pt?`,`ph?`) | `/gene/<symbol>` |
+| `0.4.x`           | `/api/public/v1/catalog/manifest` | v3 (`s`,`c?`,`n`,`u`,`tmh`,`pt?`,`ph?`) | `/gene/<symbol>` |
 
-## API surface (Phase 2 gate)
+## API surface (public cutover)
 
 - `GET /health`
-- `GET /api/manifest`
-- `GET /api/catalog/catalog.<hash>.json`
-- `GET /api/gene/:symbol` (symbol canonical only)
+- `GET /api/public/v1/metadata`
+- `GET /api/public/v1/schema`
+- `GET /api/public/v1/catalog/manifest`
+- `GET /api/public/v1/catalog/catalog.<hash>.json`
+- `GET /api/public/v1/dumps/catalog.<hash>.jsonl`
+- `GET /api/public/v1/genes/:symbol` (symbol canonical only)
+- `POST /api/public/v1/genes/batch`
+- `POST /api/public/v1/resolve`
+- `GET /api/public/v1/changes?since=<ISO timestamp>`
+- `GET /api/public/v1/genes/search`
+- `GET /api/public/v1/gallery`
 - `GET /gene/:symbol`
 
 ## Cache behavior
 
-- Manifest: short cache + ETag (`max-age=300`)
-- Gene API: short cache + ETag (`max-age=120`)
-- Artifact and portraits: immutable long cache (hash-addressed keys)
+- Metadata + catalog manifest: short cache + ETag (`max-age=300`)
+- Gene API + batch + change feed: short cache (`max-age=120`)
+- Catalog artifact, JSONL dump, and portraits: immutable long cache (hash-addressed keys)

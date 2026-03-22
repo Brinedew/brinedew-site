@@ -2140,7 +2140,9 @@
     if (geneDetailPromiseCache.has(symbol)) return geneDetailPromiseCache.get(symbol)
     const request = (async () => {
       try {
-        const resp = await fetch(ICONOPLASM_API_BASE + "/api/gene/" + encodeURIComponent(symbol))
+        const resp = await fetch(
+          ICONOPLASM_API_BASE + "/api/public/v1/genes/" + encodeURIComponent(symbol),
+        )
         if (!resp.ok) {
           geneDetailCache.set(symbol, null)
           return null

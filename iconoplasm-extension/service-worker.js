@@ -2,8 +2,8 @@
 // Symbol-first contract: gene symbols are canonical keys.
 
 const HOST = "https://iconoplasm.brinedew.bio"
-const API_MANIFEST_V2 = `${HOST}/api/manifest`
-const API_CATALOG = `${HOST}/api/catalog`
+const API_PUBLIC = `${HOST}/api/public/v1`
+const API_CATALOG_MANIFEST = `${API_PUBLIC}/catalog/manifest`
 const DATA_REFRESH_TTL_MS = 5 * 60 * 1000
 const PORTRAIT_DATA_URL_CACHE_LIMIT = 48
 const portraitDataUrlCache = new Map()
@@ -160,7 +160,7 @@ async function ensureFreshGeneData() {
   const stored = await getStoredGeneSnapshot()
   const geneCount = getStoredGeneCount(stored.iconoplasm_genes)
   const hasPortraitSchema =
-    Number(stored.iconoplasm_schema_version || 0) >= 2 &&
+    Number(stored.iconoplasm_schema_version || 0) >= 3 &&
     Boolean(stored.iconoplasm_portrait_base_url)
   const needsArtifactRebuild = geneCount === 0 || !hasPortraitSchema
   const needsRefresh = needsArtifactRebuild || isStaleFetch(stored.iconoplasm_last_fetch)
@@ -231,31 +231,31 @@ async function warmPortraitDataUrls(urls) {
 }
 
 async function fetchManifest() {
-  const v2Resp = await fetch(API_MANIFEST_V2, {
+  const manifestResp = await fetch(API_CATALOG_MANIFEST, {
     headers: {
       "X-Iconoplasm-Extension-Version": chrome.runtime.getManifest().version,
     },
   })
 
-  if (!v2Resp.ok) {
+  if (!manifestResp.ok) {
     return null
   }
-  const manifest = await v2Resp.json()
+  const manifest = await manifestResp.json()
   return {
-    current_hash: manifest.current_hash,
-    filename: manifest.filename,
-    schema_version: manifest.schema_version || 2,
+    current_hash: manifest.build_version || manifest.catalog_hash,
+    filename: manifest.catalog_hash ? `catalog.${manifest.catalog_hash}.json` : null,
+    artifact_url: manifest.artifact_url || null,
+    schema_version: manifest.schema_version || 3,
     portrait_base_url: manifest.portrait_base_url || `${HOST}/portraits`,
     gene_count: manifest.gene_count || null,
   }
 }
 
 function artifactUrl(manifest) {
+  if (manifest?.artifact_url) return manifest.artifact_url
   if (!manifest?.filename) return null
   const cacheKey = encodeURIComponent(String(manifest.current_hash || manifest.filename))
-  // The manifest hash also reflects live portrait publish-state, so keep it
-  // in the artifact URL to bust immutable browser caches when portraits change.
-  return `${API_CATALOG}/${manifest.filename}?v=${cacheKey}`
+  return `${API_PUBLIC}/catalog/${manifest.filename}?v=${cacheKey}`
 }
 
 async function fetchGeneData({ forceArtifactRefresh = false } = {}) {

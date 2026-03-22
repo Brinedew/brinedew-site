@@ -381,7 +381,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (portraitDetailCache[key]) return Promise.resolve(portraitDetailCache[key])
     if (portraitDetailPromiseCache[key]) return portraitDetailPromiseCache[key]
 
-    portraitDetailPromiseCache[key] = fetchJSON("/api/gene/" + encodeURIComponent(key))
+    portraitDetailPromiseCache[key] = fetchJSON(
+      "/api/public/v1/genes/" + encodeURIComponent(key),
+    )
       .then(function (data) {
         portraitDetailCache[key] = data
         return data
@@ -2196,7 +2198,7 @@ void syncSharedIconoplasmSettings().catch(function () {
 
       var requestId = ++activeGalleryRequest
       var path =
-        "/api/gallery?order=" +
+        "/api/public/v1/gallery?order=" +
         encodeURIComponent(galleryState.order) +
         "&limit=" +
         encodeURIComponent(String(pageLimit)) +
@@ -2317,7 +2319,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         return
       }
       timer = setTimeout(function () {
-        fetchJSON("/api/genes/search?q=" + encodeURIComponent(q) + "&limit=12")
+        fetchJSON("/api/public/v1/genes/search?q=" + encodeURIComponent(q) + "&limit=12")
           .then(function (data) {
             currentResults = data.genes || []
             renderSearchResults(resultsEl, currentResults)
@@ -2620,7 +2622,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var contentEl = document.getElementById("icono-gene-content")
     var loadingEl = document.getElementById("icono-gene-loading")
 
-    fetchJSON("/api/gene/" + encodeURIComponent(symbol))
+    fetchJSON("/api/public/v1/genes/" + encodeURIComponent(symbol))
       .then(function (g) {
         loadingEl.style.display = "none"
         iconoSidebarState.gene = {
