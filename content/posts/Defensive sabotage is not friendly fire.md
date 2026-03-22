@@ -7,9 +7,11 @@ draft: true
 ---
 # Defensive sabotage is not friendly fire
 
-Workflow: Manual draft outline -> Gemini 3.1 Pro -> manual editing for taste
 
-> [!info]- Draft outline
+
+> [!info]- Workflow notes
+> **Workflow:** Manual draft outline -> Gemini 3.1 Pro -> manual editing for taste
+> Manual outline:
 > Defensive sabotage is not friendly fire
 > 
 > Naive aging view: everything is wear and tear
