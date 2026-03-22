@@ -6545,6 +6545,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
 
       const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
       const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
+      const candidateImageId = optionalInt(p?.candidate_image_id ?? p?.emulsion_id)
       const candidateRef = normalizeCandidateRef(
         p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
         symbol,
