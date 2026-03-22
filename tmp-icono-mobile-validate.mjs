@@ -18,7 +18,7 @@ async function run() {
     {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
       const page = await context.newPage()
-      await page.route("**/api/gene/**", async (route) => {
+      await page.route("**/api/public/v1/genes/**", async (route) => {
         await new Promise((resolve) => setTimeout(resolve, 1600))
         await route.continue()
       })

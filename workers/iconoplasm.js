@@ -1234,7 +1234,7 @@ async function portraitState(env, symbol, base) {
     }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id, pa.candidate_image_id, pa.artist_id
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id, pa.candidate_image_id
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
            ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
@@ -5421,7 +5421,6 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.created_at,
        pa.candidate_image_id,
        pa.vision_id,
-       pa.artist_id,
        COALESCE(v.upvotes, 0) AS image_upvotes,
        COALESCE(v.downvotes, 0) AS image_downvotes,
        COALESCE(v.score, 0) AS image_score
@@ -5675,45 +5674,101 @@ async function handlePublicChanges(request, env) {
   const url = new URL(request.url)
   const since = sanitizeText(url.searchParams.get("since") || "", 64) || "1970-01-01T00:00:00Z"
   const limit = Math.max(1, Math.min(500, Number.parseInt(url.searchParams.get("limit") || "200", 10)))
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `WITH changed AS (
-       SELECT upper(gene_symbol) AS symbol, 'catalog' AS change_type, updated_at
-       FROM icono_gene_catalog
-       WHERE COALESCE(updated_at, '') > ?
-       UNION ALL
-       SELECT upper(gene_symbol) AS symbol, 'essence' AS change_type, updated_at
-       FROM icono_gene_essence
-       WHERE COALESCE(updated_at, '') > ?
-       UNION ALL
-       SELECT upper(gene_symbol) AS symbol, 'portrait' AS change_type, updated_at
-       FROM icono_publish_state
-       WHERE COALESCE(updated_at, '') > ?
-     )
-     SELECT
-       changed.symbol,
-       MAX(changed.updated_at) AS changed_at,
-       GROUP_CONCAT(DISTINCT changed.change_type) AS change_types,
-       MAX(ps.current_asset_sha256) AS current_asset_sha256
-     FROM changed
-     LEFT JOIN icono_publish_state ps
-       ON upper(ps.gene_symbol) = changed.symbol
-     GROUP BY changed.symbol
-     ORDER BY changed_at ASC, changed.symbol ASC
-     LIMIT ?`,
+  const perSourceLimit = Math.max(limit * 5, 250)
+  const [catalogRows, essenceRows, portraitRows, publishStateRows] = await Promise.all([
+    env.ICONOPLASM_DB.prepare(
+      `SELECT upper(gene_symbol) AS symbol, updated_at
+         FROM icono_gene_catalog
+        WHERE COALESCE(updated_at, '') > ?
+        ORDER BY updated_at ASC, gene_symbol ASC
+        LIMIT ?`,
+    )
+      .bind(since, perSourceLimit)
+      .all(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT upper(gene_symbol) AS symbol, updated_at
+         FROM icono_gene_essence
+        WHERE COALESCE(updated_at, '') > ?
+        ORDER BY updated_at ASC, gene_symbol ASC
+        LIMIT ?`,
+    )
+      .bind(since, perSourceLimit)
+      .all(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT upper(gene_symbol) AS symbol, updated_at
+         FROM icono_publish_state
+        WHERE COALESCE(updated_at, '') > ?
+        ORDER BY updated_at ASC, gene_symbol ASC
+        LIMIT ?`,
+    )
+      .bind(since, perSourceLimit)
+      .all(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT upper(gene_symbol) AS symbol, current_asset_sha256
+         FROM icono_publish_state`,
+    ).all(),
+  ])
+
+  const merged = []
+  for (const row of Array.isArray(catalogRows?.results) ? catalogRows.results : []) {
+    merged.push({
+      symbol: normalizeSymbol(row?.symbol || ""),
+      changed_at: row?.updated_at ? String(row.updated_at) : null,
+      change_type: "catalog",
+    })
+  }
+  for (const row of Array.isArray(essenceRows?.results) ? essenceRows.results : []) {
+    merged.push({
+      symbol: normalizeSymbol(row?.symbol || ""),
+      changed_at: row?.updated_at ? String(row.updated_at) : null,
+      change_type: "essence",
+    })
+  }
+  for (const row of Array.isArray(portraitRows?.results) ? portraitRows.results : []) {
+    merged.push({
+      symbol: normalizeSymbol(row?.symbol || ""),
+      changed_at: row?.updated_at ? String(row.updated_at) : null,
+      change_type: "portrait",
+    })
+  }
+
+  merged.sort((left, right) => {
+    return (
+      compareNullableTextAsc(left.changed_at, right.changed_at) ||
+      compareNullableTextAsc(left.symbol, right.symbol) ||
+      compareNullableTextAsc(left.change_type, right.change_type)
+    )
+  })
+
+  const publishStateBySymbol = new Map(
+    (Array.isArray(publishStateRows?.results) ? publishStateRows.results : [])
+      .map((row) => [
+        normalizeSymbol(row?.symbol || ""),
+        normalizeSha256(row?.current_asset_sha256 || "") || null,
+      ])
+      .filter(([symbol]) => Boolean(symbol)),
   )
-    .bind(since, since, since, limit)
-    .all()
-  const results = Array.isArray(rows?.results)
-    ? rows.results.map((row) => ({
-        symbol: normalizeSymbol(row?.symbol || ""),
-        changed_at: row?.changed_at ? String(row.changed_at) : null,
-        change_types: String(row?.change_types || "")
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        current_asset_sha256: normalizeSha256(row?.current_asset_sha256 || "") || null,
-      }))
-    : []
+
+  const results = []
+  const bySymbol = new Map()
+  for (const row of merged) {
+    if (!row.symbol || !row.changed_at) continue
+    let entry = bySymbol.get(row.symbol)
+    if (!entry) {
+      if (results.length >= limit) break
+      entry = {
+        symbol: row.symbol,
+        changed_at: row.changed_at,
+        change_types: [],
+        current_asset_sha256: publishStateBySymbol.get(row.symbol) || null,
+      }
+      bySymbol.set(row.symbol, entry)
+      results.push(entry)
+    }
+    entry.changed_at = compareNullableTextAsc(entry.changed_at, row.changed_at) >= 0 ? entry.changed_at : row.changed_at
+    if (!entry.change_types.includes(row.change_type)) entry.change_types.push(row.change_type)
+  }
+
   const nextCursor = results.length ? results[results.length - 1]?.changed_at || since : since
   return json({
     api_version: PUBLIC_API_VERSION,
@@ -8620,6 +8675,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     // Non-API routes are handled by the index.js proxy (serves Quartz HTML from Pages)
     return done("404", json({ error: "Not found" }, 404))
   } catch (e) {
+    console.error("[Iconoplasm] Unhandled request error:", e)
     const out = json({ error: "Internal server error" }, 500)
     await logReq("error", request, 500, started, null)
     return asHead(request, out)

@@ -1,7 +1,7 @@
 -- Phase 5: Synced per-gene essence for Iconoplasm website rendering.
 --
 -- Source of truth: NiceGUI sync pipeline writes the current local essence snapshot.
--- Consumer: /api/gene/:symbol reads this table for essence fields shown on gene pages/cards.
+-- Consumer: /api/public/v1/genes/:symbol reads this table for essence fields shown on gene pages/cards.
 
 CREATE TABLE IF NOT EXISTS icono_gene_essence (
   gene_symbol TEXT PRIMARY KEY,

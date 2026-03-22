@@ -8,7 +8,7 @@ async function waitForBrickCards(page) {
 
 test.describe("Iconoplasm mobile card regressions", () => {
   test("shows mobile skeleton rows while detail fetch is pending", async ({ page }) => {
-    await page.route("**/api/gene/**", async (route) => {
+    await page.route("**/api/public/v1/genes/**", async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 1600))
       await route.continue()
     })
