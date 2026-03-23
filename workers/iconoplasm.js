@@ -39,6 +39,7 @@ const gallerySnapshotCache = {
   sorted: new Map(),
 }
 const GALLERY_SNAPSHOT_TTL_MS = 60 * 1000
+const GALLERY_VOTES_SNAPSHOT_TTL_MS = 5 * 1000
 const galleryVersionCache = {
   value: "0",
   loadedAt: 0,
@@ -839,7 +840,9 @@ async function extensionManifestObj(url, env) {
 function publicApiPath(suffix = "") {
   const normalized = String(suffix || "")
   if (!normalized) return PUBLIC_API_PREFIX
-  return normalized.startsWith("/") ? `${PUBLIC_API_PREFIX}${normalized}` : `${PUBLIC_API_PREFIX}/${normalized}`
+  return normalized.startsWith("/")
+    ? `${PUBLIC_API_PREFIX}${normalized}`
+    : `${PUBLIC_API_PREFIX}/${normalized}`
 }
 
 function publicUrl(url, suffix = "") {
@@ -896,7 +899,9 @@ async function publicMetadataObj(url, env) {
       metadata: publicUrl(url, "/metadata"),
       schema: publicUrl(url, "/schema"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
-      catalog_artifact: catalogHash ? `${url.origin}${publicCatalogArtifactPath(catalogHash)}` : null,
+      catalog_artifact: catalogHash
+        ? `${url.origin}${publicCatalogArtifactPath(catalogHash)}`
+        : null,
       catalog_jsonl: catalogHash ? `${url.origin}${publicCatalogJsonlDumpPath(catalogHash)}` : null,
       changes: publicUrl(url, "/changes"),
       batch: publicUrl(url, "/genes/batch"),
@@ -3773,7 +3778,11 @@ async function ensureAdminReadModelBootstrapInitialized(env) {
 
 async function runAdminReadModelBootstrapStep(
   env,
-  { reset = false, symbolBatch = ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT, visionBatch = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT } = {},
+  {
+    reset = false,
+    symbolBatch = ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT,
+    visionBatch = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT,
+  } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
   let state = reset
@@ -4728,7 +4737,11 @@ function groupAdminVisionPreviewRows(summaryRows, assetRows) {
 async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedVisionIds = Array.from(
-    new Set((Array.isArray(visionIds) ? visionIds : []).map((value) => validAdminRollupVisionId(value)).filter(Boolean)),
+    new Set(
+      (Array.isArray(visionIds) ? visionIds : [])
+        .map((value) => validAdminRollupVisionId(value))
+        .filter(Boolean),
+    ),
   )
   const applyFilter = cleanedVisionIds.length > 0
   const statsResp = await env.ICONOPLASM_DB.prepare(
@@ -4787,12 +4800,16 @@ async function fetchAdminVisionStats(env, { visionIds = [] } = {}) {
   if (!env.ICONOPLASM_DB) return { rows: [], blacklisted: [] }
 
   const cleanedVisionIds = Array.from(
-    new Set((Array.isArray(visionIds) ? visionIds : []).map((value) => validAdminRollupVisionId(value)).filter(Boolean)),
+    new Set(
+      (Array.isArray(visionIds) ? visionIds : [])
+        .map((value) => validAdminRollupVisionId(value))
+        .filter(Boolean),
+    ),
   )
   const [bootstrapState, blacklistResp] = await Promise.all([
     fetchAdminReadModelBootstrapState(env),
     env.ICONOPLASM_DB.prepare(
-    `SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
+      `SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
      FROM icono_artist_style_blacklist
      ORDER BY updated_at DESC, artist_tag ASC`,
     ).all(),
@@ -5058,6 +5075,10 @@ function clearGallerySnapshotCache() {
   gallerySnapshotCache.sorted = new Map()
 }
 
+function gallerySnapshotMaxAgeMs(order) {
+  return order === "votes" ? GALLERY_VOTES_SNAPSHOT_TTL_MS : GALLERY_SNAPSHOT_TTL_MS
+}
+
 async function currentGalleryVersion(env) {
   const now = Date.now()
   if (
@@ -5105,6 +5126,11 @@ async function syncAdminReadModelsAndInvalidateGallery(
 
 function galleryCanUseEdgeCache(url) {
   const order = normalizeGalleryOrder(url.searchParams.get("order"))
+  // Vote-sorted pages are the hot freshness path. Keeping them on the worker
+  // edge cache meant globally visible score changes could trail behind writes
+  // because cache invalidation was gated on eventually consistent KV version
+  // bumps. Other orders can stay cheap and cacheable.
+  if (order === "votes") return false
   if (order !== "random") return true
   return Boolean(normalizeGallerySeed(url.searchParams.get("seed")))
 }
@@ -5218,15 +5244,16 @@ function sortGalleryItems(items, order, seed = null) {
   return sorted
 }
 
-async function gallerySnapshot(env, url) {
+async function gallerySnapshot(env, url, { order = "votes" } = {}) {
   await warmCatalogCache(env)
   const catalogTotal = catalogCache.bySymbol.size
   const base = portraitBase(url, env)
   const now = Date.now()
+  const snapshotMaxAgeMs = gallerySnapshotMaxAgeMs(order)
   const cacheFresh =
     gallerySnapshotCache.catalogHash === catalogCache.hash &&
     gallerySnapshotCache.base === base &&
-    now - gallerySnapshotCache.loadedAt < GALLERY_SNAPSHOT_TTL_MS &&
+    now - gallerySnapshotCache.loadedAt < snapshotMaxAgeMs &&
     gallerySnapshotCache.items.length > 0
   if (cacheFresh) {
     return {
@@ -5258,29 +5285,18 @@ async function gallerySnapshot(env, url) {
        pa.r2_key_thumb,
        pa.width,
        pa.height,
-       COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS image_upvotes,
-       COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS image_downvotes,
-       COALESCE(SUM(iv.vote_value), 0) AS image_score
+       COALESCE(vs.upvotes, 0) AS image_upvotes,
+       COALESCE(vs.downvotes, 0) AS image_downvotes,
+       COALESCE(vs.score, 0) AS image_score
      FROM icono_publish_state ps
      JOIN icono_portrait_assets pa
        ON pa.gene_symbol = ps.gene_symbol
       AND pa.asset_sha256 = ps.current_asset_sha256
-     LEFT JOIN icono_image_votes iv
-       ON iv.gene_symbol = ps.gene_symbol
-      AND iv.asset_sha256 = pa.asset_sha256
+     LEFT JOIN icono_vote_asset_summary vs
+       ON vs.gene_symbol = upper(ps.gene_symbol)
+      AND vs.asset_sha256 = lower(pa.asset_sha256)
      WHERE ps.current_asset_sha256 IS NOT NULL
-     GROUP BY
-       ps.gene_symbol,
-       ps.updated_at,
-       pa.created_at,
-       pa.asset_sha256,
-      pa.candidate_image_id,
-      pa.vision_id,
-       pa.r2_key_full,
-       pa.r2_key_medium,
-       pa.r2_key_thumb,
-       pa.width,
-       pa.height`,
+       AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''`,
   ).all()
 
   const publishedRows = Array.isArray(rows?.results) ? rows.results : []
@@ -5370,7 +5386,7 @@ async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
   const offset = normalizeGalleryOffset(rawOffset)
   const seed =
     order === "random" ? normalizeGallerySeed(rawSeed) || crypto.randomUUID().slice(0, 12) : null
-  const snapshot = await gallerySnapshot(env, url)
+  const snapshot = await gallerySnapshot(env, url, { order })
   if (!env.ICONOPLASM_DB) {
     return {
       order,
@@ -5421,20 +5437,13 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.created_at,
        pa.candidate_image_id,
        pa.vision_id,
-       COALESCE(v.upvotes, 0) AS image_upvotes,
-       COALESCE(v.downvotes, 0) AS image_downvotes,
-       COALESCE(v.score, 0) AS image_score
+       COALESCE(vs.upvotes, 0) AS image_upvotes,
+       COALESCE(vs.downvotes, 0) AS image_downvotes,
+       COALESCE(vs.score, 0) AS image_score
      FROM icono_portrait_assets pa
-     LEFT JOIN (
-       SELECT
-         candidate_ref,
-         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
-         SUM(vote_value) AS score
-       FROM icono_image_votes
-       GROUP BY candidate_ref
-     ) v
-       ON v.candidate_ref = ('a:' || upper(pa.gene_symbol) || '|' || lower(pa.asset_sha256))
+     LEFT JOIN icono_vote_asset_summary vs
+       ON vs.gene_symbol = upper(pa.gene_symbol)
+      AND vs.asset_sha256 = lower(pa.asset_sha256)
      WHERE upper(pa.gene_symbol) = ?
        AND COALESCE(pa.status, '') <> 'rejected'
        AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
@@ -5488,9 +5497,10 @@ function normalizeRequestedSymbols(rawSymbols, maxCount = PUBLIC_MAX_GENE_BATCH_
     : typeof rawSymbols === "string"
       ? rawSymbols.split(",")
       : []
-  return Array.from(
-    new Set(values.map((value) => normalizeSymbol(value)).filter(Boolean)),
-  ).slice(0, maxCount)
+  return Array.from(new Set(values.map((value) => normalizeSymbol(value)).filter(Boolean))).slice(
+    0,
+    maxCount,
+  )
 }
 
 async function parseJsonBody(request) {
@@ -5571,9 +5581,13 @@ async function handlePublicCatalogManifest(request, env) {
     released_at: manifest.generated_at || null,
     gene_count: manifest.gene_count || null,
     artifact_schema_version: manifest.schema_version || 1,
-    artifact_url: catalogHash ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(catalogHash)}`) : null,
+    artifact_url: catalogHash
+      ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(catalogHash)}`)
+      : null,
     dump_urls: {
-      catalog_jsonl: catalogHash ? publicUrl(url, `/dumps/${publicCatalogJsonlFilename(catalogHash)}`) : null,
+      catalog_jsonl: catalogHash
+        ? publicUrl(url, `/dumps/${publicCatalogJsonlFilename(catalogHash)}`)
+        : null,
     },
   }
   const etag = payload.build_version ? `"${payload.build_version}"` : await etagFor(payload)
@@ -5589,7 +5603,10 @@ async function handlePublicCatalogManifest(request, env) {
 async function handlePublicCatalogArtifact(env, path) {
   const match = path.match(/\/api\/public\/v1\/catalog\/catalog\.([a-z0-9-]+)\.json$/i)
   if (!match) return json({ error: "Invalid public catalog artifact path" }, 400)
-  return handleCatalogArtifact(env, publicCatalogArtifactPath(String(match[1] || "")).replace(PUBLIC_API_PREFIX, "/api"))
+  return handleCatalogArtifact(
+    env,
+    publicCatalogArtifactPath(String(match[1] || "")).replace(PUBLIC_API_PREFIX, "/api"),
+  )
 }
 
 async function handlePublicCatalogJsonlDump(env, path) {
@@ -5673,7 +5690,10 @@ async function handlePublicChanges(request, env) {
   if (!env.ICONOPLASM_DB) return json({ error: "ICONOPLASM_DB binding missing" }, 500)
   const url = new URL(request.url)
   const since = sanitizeText(url.searchParams.get("since") || "", 64) || "1970-01-01T00:00:00Z"
-  const limit = Math.max(1, Math.min(500, Number.parseInt(url.searchParams.get("limit") || "200", 10)))
+  const limit = Math.max(
+    1,
+    Math.min(500, Number.parseInt(url.searchParams.get("limit") || "200", 10)),
+  )
   const perSourceLimit = Math.max(limit * 5, 250)
   const [catalogRows, essenceRows, portraitRows, publishStateRows] = await Promise.all([
     env.ICONOPLASM_DB.prepare(
@@ -5765,7 +5785,10 @@ async function handlePublicChanges(request, env) {
       bySymbol.set(row.symbol, entry)
       results.push(entry)
     }
-    entry.changed_at = compareNullableTextAsc(entry.changed_at, row.changed_at) >= 0 ? entry.changed_at : row.changed_at
+    entry.changed_at =
+      compareNullableTextAsc(entry.changed_at, row.changed_at) >= 0
+        ? entry.changed_at
+        : row.changed_at
     if (!entry.change_types.includes(row.change_type)) entry.change_types.push(row.change_type)
   }
 
@@ -5800,7 +5823,10 @@ async function handlePublicGeneSearch(request, env) {
   const q = (url.searchParams.get("q") || "").trim().toUpperCase()
   if (!q) return json({ genes: [], query: "" }, 200, { "Cache-Control": "public, max-age=30" })
   await warmCatalogCache(env)
-  const limit = Math.max(1, Math.min(100, Number.parseInt(url.searchParams.get("limit") || "20", 10)))
+  const limit = Math.max(
+    1,
+    Math.min(100, Number.parseInt(url.searchParams.get("limit") || "20", 10)),
+  )
   const prefixMatches = []
   const nameMatches = []
   const base = portraitBase(url, env)
@@ -5820,6 +5846,7 @@ async function handlePublicGeneSearch(request, env) {
 
 async function handlePublicGallery(request, env, ctx) {
   const url = new URL(request.url)
+  const order = normalizeGalleryOrder(url.searchParams.get("order"))
   const edgeCacheable = request.method === "GET" && galleryCanUseEdgeCache(url)
   const cache = edgeCacheable ? caches.default : null
   const cacheKey = edgeCacheable ? await galleryEdgeCacheKey(url, env) : null
@@ -5830,12 +5857,16 @@ async function handlePublicGallery(request, env, ctx) {
   const payload = await galleryFeed(
     env,
     url,
-    url.searchParams.get("order"),
+    order,
     url.searchParams.get("limit"),
     url.searchParams.get("offset"),
     url.searchParams.get("seed"),
   )
-  const response = json(payload, 200, { "Cache-Control": "public, max-age=60, s-maxage=60" })
+  const cacheControl =
+    order === "votes"
+      ? "public, max-age=5, stale-while-revalidate=25"
+      : "public, max-age=60, s-maxage=60"
+  const response = json(payload, 200, { "Cache-Control": cacheControl })
   if (cache && cacheKey) ctx.waitUntil(cache.put(cacheKey, response.clone()))
   return response
 }
@@ -6021,14 +6052,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_metadata_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicMetadata(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_metadata", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_metadata",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path === publicApiPath("/schema")) {
@@ -6036,14 +6075,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_schema_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = handlePublicSchema()
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_schema", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_schema",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path === publicApiPath("/catalog/manifest")) {
@@ -6051,14 +6098,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_catalog_manifest_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicCatalogManifest(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_catalog_manifest", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_catalog_manifest",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path.startsWith(publicApiPath("/catalog/catalog.")) && path.endsWith(".json")) {
@@ -6066,14 +6121,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_catalog_artifact_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicCatalogArtifact(env, path)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_catalog_artifact", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_catalog_artifact",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
@@ -6081,14 +6144,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_catalog_dump_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicCatalogJsonlDump(env, path)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_catalog_dump", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_catalog_dump",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path === publicApiPath("/gallery")) {
@@ -6096,14 +6167,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_gallery_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicGallery(request, env, ctx)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_gallery", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_gallery",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path === publicApiPath("/genes/search")) {
@@ -6111,14 +6190,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_gene_search_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicGeneSearch(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_gene_search", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_gene_search",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path === publicApiPath("/genes/batch")) {
@@ -6126,14 +6213,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_gene_batch_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicGeneBatch(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_gene_batch", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_gene_batch",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path === publicApiPath("/resolve")) {
@@ -6141,14 +6236,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_resolve_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicResolve(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_resolve", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_resolve",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path === publicApiPath("/changes")) {
@@ -6156,14 +6259,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_changes_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const response = await handlePublicChanges(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_changes", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_changes",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path.startsWith(publicApiPath("/media/"))) {
@@ -6171,7 +6282,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_media_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
@@ -6179,7 +6294,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const response = await handlePublicMedia(request, env, rawSymbol)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done("public_media", new Response(response.body, { status: response.status, headers }), API_SCHEMA_VERSION)
+      return done(
+        "public_media",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
     }
 
     if (path.startsWith(publicApiPath("/genes/"))) {
@@ -6187,22 +6306,43 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (rl.retryAfterSeconds) {
         return done(
           "public_gene_rl",
-          json({ error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds }, 429, rl.headers),
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
           API_SCHEMA_VERSION,
         )
       }
       const rawId = path.slice(publicApiPath("/genes/").length)
       const resolved = await resolveGene(env, rawId)
-      if (!resolved) return done("public_gene_404", json({ error: "Gene not found" }, 404), API_SCHEMA_VERSION)
+      if (!resolved)
+        return done("public_gene_404", json({ error: "Gene not found" }, 404), API_SCHEMA_VERSION)
       const canonicalPath = publicApiPath(`/genes/${encodeURIComponent(resolved.symbol)}`)
       if (path !== canonicalPath) {
-        return done("public_gene_redirect", Response.redirect(`${url.origin}${canonicalPath}`, 302), API_SCHEMA_VERSION)
+        return done(
+          "public_gene_redirect",
+          Response.redirect(`${url.origin}${canonicalPath}`, 302),
+          API_SCHEMA_VERSION,
+        )
       }
-      const payload = projectGeneRecord(await geneRecord(env, url, resolved.symbol), url.searchParams.get("fields"))
+      const payload = projectGeneRecord(
+        await geneRecord(env, url, resolved.symbol),
+        url.searchParams.get("fields"),
+      )
       const etag = await etagFor(payload)
       if (etagMatches(request.headers.get("If-None-Match"), etag)) {
-        const headers = { ...corsHeaders(), ...rl.headers, ETag: etag, "Cache-Control": "public, max-age=120" }
-        return done("public_gene_304", new Response(null, { status: 304, headers }), API_SCHEMA_VERSION)
+        const headers = {
+          ...corsHeaders(),
+          ...rl.headers,
+          ETag: etag,
+          "Cache-Control": "public, max-age=120",
+        }
+        return done(
+          "public_gene_304",
+          new Response(null, { status: 304, headers }),
+          API_SCHEMA_VERSION,
+        )
       }
       return done(
         "public_gene",
@@ -6916,10 +7056,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         assetLimit,
       })
       if (!detail) {
-        return done(
-          "admin_votes_vision_detail_404",
-          json({ error: "Vision not found" }, 404),
-        )
+        return done("admin_votes_vision_detail_404", json({ error: "Vision not found" }, 404))
       }
       return done(
         "admin_votes_vision_detail",
@@ -7040,20 +7177,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         try {
           p = await request.json()
         } catch {
-          return done(
-            "admin_read_models_bootstrap_400",
-            json({ error: "Invalid JSON" }, 400),
-          )
+          return done("admin_read_models_bootstrap_400", json({ error: "Invalid JSON" }, 400))
         }
 
         const reset = coerceBoolean(p?.reset ?? p?.restart, false)
         const steps = normalizeAdminReadModelBootstrapSteps(p?.steps)
-        const symbolBatch = normalizeAdminReadModelSymbolBatch(
-          p?.symbol_batch ?? p?.symbolBatch,
-        )
-        const visionBatch = normalizeAdminReadModelVisionBatch(
-          p?.vision_batch ?? p?.visionBatch,
-        )
+        const symbolBatch = normalizeAdminReadModelSymbolBatch(p?.symbol_batch ?? p?.symbolBatch)
+        const visionBatch = normalizeAdminReadModelVisionBatch(p?.vision_batch ?? p?.visionBatch)
 
         let latest = null
         let processedSymbols = 0
@@ -7067,7 +7197,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             })
             processedSymbols += Number(latest?.processed?.symbols || 0)
             processedVisions += Number(latest?.processed?.visions || 0)
-            if (!latest?.advanced || latest?.state?.status === ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE)
+            if (
+              !latest?.advanced ||
+              latest?.state?.status === ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE
+            )
               break
           }
         } catch (error) {
@@ -7095,10 +7228,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
       }
 
-      return done(
-        "admin_read_models_bootstrap_405",
-        json({ error: "Method not allowed" }, 405),
-      )
+      return done("admin_read_models_bootstrap_405", json({ error: "Method not allowed" }, 405))
     }
 
     if (path === "/api/iconoplasm/admin/overview" && request.method === "GET") {
