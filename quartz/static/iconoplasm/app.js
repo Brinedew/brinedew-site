@@ -34,6 +34,10 @@ void syncSharedIconoplasmSettings().catch(function () {
     { value: "votes", label: "Votes" },
     { value: "uniqueness", label: "Uniqueness" },
     { value: "popularity", label: "Popularity" },
+    { value: "heaviest", label: "Heaviest first" },
+    { value: "lightest", label: "Lightest first" },
+    { value: "oldest", label: "Oldest first" },
+    { value: "youngest", label: "Youngest first" },
     { value: "newest", label: "Newest" },
     { value: "random", label: "Random" },
   ]

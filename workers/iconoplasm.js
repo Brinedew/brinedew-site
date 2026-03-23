@@ -10,6 +10,16 @@ const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 // This worker now exposes one documented public contract under /api/public/v1.
 // The extension and site are expected to use that same contract so we do not
 // quietly drift back into a split legacy/public surface later.
+//
+// Voting architecture note:
+// There are two legitimate vote writers in this system:
+// 1) the local operator reviewing fresh candidates before publication, and
+// 2) community users on the public site/extension voting on already-published assets.
+//
+// The local operator path lives in the workstation app and can see pre-publication
+// candidates. Website Ops bulk sync is the boundary that publishes those assets here.
+// This worker owns the public/community path only, so hot reads and writes should be
+// optimized for published assets, cheap ranking refreshes, and Cloudflare request economy.
 const API_SCHEMA_VERSION = 3
 const PUBLIC_API_VERSION = "v1"
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
@@ -3614,10 +3624,11 @@ async function syncVoteReadModelsAndInvalidateGallery(env, { symbols = [], visio
       ...visionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean),
     ]),
   )
-  // Community vote writes are the hot path. Rebuilding dashboard-wide aggregates
-  // here wastes D1 CPU without improving the live gallery. Keep the narrow read
-  // models fresh for public ranking and admin per-gene/per-vision views, and let
-  // heavier operator workflows refresh the coarse dashboard rollups.
+  // Community vote writes are the hot public path after publication. They should keep
+  // the vote-derived read models fresh enough for ranking, per-gene detail, and per-
+  // vision rollups without pretending that every thumbs-up needs a full admin/dashboard
+  // rebuild. The operator/local workflow has heavier sync moments already; spend the D1
+  // budget there instead of on every community click.
   await rebuildVisionRollupsBatch(env, finalVisionIds)
   adminReadModelState.ready = true
   await invalidateGalleryCache(env)
@@ -5045,7 +5056,20 @@ function normalizeGalleryOrder(raw) {
     .trim()
     .toLowerCase()
   if (value === "popular") return "popularity"
-  if (["votes", "uniqueness", "popularity", "newest", "random"].includes(value)) return value
+  if (
+    [
+      "votes",
+      "uniqueness",
+      "popularity",
+      "heaviest",
+      "lightest",
+      "oldest",
+      "youngest",
+      "newest",
+      "random",
+    ].includes(value)
+  )
+    return value
   return "votes"
 }
 
@@ -5077,6 +5101,28 @@ function compareNullableTextDesc(a, b) {
 
 function compareNullableTextAsc(a, b) {
   return String(a || "").localeCompare(String(b || ""))
+}
+
+function compareNullableNumberDescWithNullBottom(left, right) {
+  const leftValue = Number(left)
+  const rightValue = Number(right)
+  const leftPresent = Number.isFinite(leftValue)
+  const rightPresent = Number.isFinite(rightValue)
+  if (!leftPresent && !rightPresent) return 0
+  if (!leftPresent) return 1
+  if (!rightPresent) return -1
+  return rightValue - leftValue
+}
+
+function compareNullableNumberAscWithNullBottom(left, right) {
+  const leftValue = Number(left)
+  const rightValue = Number(right)
+  const leftPresent = Number.isFinite(leftValue)
+  const rightPresent = Number.isFinite(rightValue)
+  if (!leftPresent && !rightPresent) return 0
+  if (!leftPresent) return 1
+  if (!rightPresent) return -1
+  return leftValue - rightValue
 }
 
 function compareGalleryPopularityFallback(left, right) {
@@ -5222,6 +5268,30 @@ function buildGalleryUniquenessIndex(catalogBySymbol, essenceRows) {
 function sortGalleryItems(items, order, seed = null) {
   const sorted = Array.isArray(items) ? items.slice() : []
   sorted.sort((left, right) => {
+    if (order === "heaviest") {
+      return (
+        compareNullableNumberDescWithNullBottom(left.weight_kg, right.weight_kg) ||
+        compareGalleryPopularityFallback(left, right)
+      )
+    }
+    if (order === "lightest") {
+      return (
+        compareNullableNumberAscWithNullBottom(left.weight_kg, right.weight_kg) ||
+        compareGalleryPopularityFallback(left, right)
+      )
+    }
+    if (order === "oldest") {
+      return (
+        compareNullableNumberDescWithNullBottom(left.age_years, right.age_years) ||
+        compareGalleryPopularityFallback(left, right)
+      )
+    }
+    if (order === "youngest") {
+      return (
+        compareNullableNumberAscWithNullBottom(left.age_years, right.age_years) ||
+        compareGalleryPopularityFallback(left, right)
+      )
+    }
     if (order === "newest") {
       // Keep popularity as the first fallback for newest.
       // Many gallery items share the same publish timestamp or no timestamp at all,
@@ -5303,6 +5373,8 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
        ps.gene_symbol AS symbol,
        ps.updated_at AS published_at,
        pa.created_at AS asset_created_at,
+       ge.weight_kg,
+       ge.age_years,
        pa.asset_sha256,
        pa.candidate_image_id,
       pa.vision_id,
@@ -5318,6 +5390,8 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
      JOIN icono_portrait_assets pa
        ON pa.gene_symbol = ps.gene_symbol
       AND pa.asset_sha256 = ps.current_asset_sha256
+     LEFT JOIN icono_gene_essence ge
+       ON upper(ge.gene_symbol) = upper(ps.gene_symbol)
      LEFT JOIN icono_vote_asset_summary vs
        ON vs.gene_symbol = upper(ps.gene_symbol)
       AND vs.asset_sha256 = lower(pa.asset_sha256)
@@ -5335,6 +5409,14 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
     publishedMap.set(symbol, {
       width,
       height,
+      weight_kg:
+        Number.isFinite(Number(row?.weight_kg)) && Number(row.weight_kg) > 0
+          ? Number(row.weight_kg)
+          : null,
+      age_years:
+        Number.isFinite(Number(row?.age_years)) && Number(row.age_years) >= 0
+          ? Number(row.age_years)
+          : null,
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
       image_score: Number(row?.image_score || 0),
@@ -5380,6 +5462,8 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
       uniqueness_rank: Number.isFinite(Number(uniquenessRank)) ? Number(uniquenessRank) : null,
       width: published?.width ?? null,
       height: published?.height ?? null,
+      weight_kg: published?.weight_kg ?? null,
+      age_years: published?.age_years ?? null,
       popularity_score: wikiPageviewsForSymbol(symbol),
       image_upvotes: Number(published?.image_upvotes || 0),
       image_downvotes: Number(published?.image_downvotes || 0),
@@ -6524,6 +6608,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         visionId,
         userId,
       })
+      // Public/community votes update the narrow vote read models only. The big admin
+      // read-model refresh is reserved for operator workflows like ingest/reconcile/sync,
+      // where we are already paying the cost to reshape the published catalog.
       await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
       return done(
         "votes_set",
