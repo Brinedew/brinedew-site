@@ -3598,6 +3598,32 @@ async function syncAdminReadModels(
   return { symbols: symbolList.length, visions: fullVision ? -1 : finalVisionIds.length }
 }
 
+async function syncVoteReadModelsAndInvalidateGallery(env, { symbols = [], visionIds = [] } = {}) {
+  if (!env.ICONOPLASM_DB) return { symbols: 0, visions: 0 }
+
+  const symbolList = Array.from(
+    new Set(symbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
+  )
+  await rebuildVoteAssetSummaryForSymbols(env, symbolList)
+  await rebuildGeneRollupForSymbols(env, symbolList)
+
+  const inferredVisionIds = await collectVisionIdsForSymbols(env, symbolList)
+  const finalVisionIds = Array.from(
+    new Set([
+      ...inferredVisionIds,
+      ...visionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean),
+    ]),
+  )
+  // Community vote writes are the hot path. Rebuilding dashboard-wide aggregates
+  // here wastes D1 CPU without improving the live gallery. Keep the narrow read
+  // models fresh for public ranking and admin per-gene/per-vision views, and let
+  // heavier operator workflows refresh the coarse dashboard rollups.
+  await rebuildVisionRollupsBatch(env, finalVisionIds)
+  adminReadModelState.ready = true
+  await invalidateGalleryCache(env)
+  return { symbols: symbolList.length, visions: finalVisionIds.length }
+}
+
 function normalizeAdminReadModelBootstrapSteps(raw) {
   return Math.max(
     1,
@@ -6498,7 +6524,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         visionId,
         userId,
       })
-      await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
       return done(
         "votes_set",
         json(
@@ -6653,7 +6679,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         if (result?.changed) autoPromoted += 1
       }
 
-      await syncAdminReadModelsAndInvalidateGallery(env, { symbols: Array.from(touchedSymbols) })
+      await syncVoteReadModelsAndInvalidateGallery(env, { symbols: Array.from(touchedSymbols) })
       return done(
         "admin_votes_import",
         json(
@@ -6769,7 +6795,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         visionId,
         userId,
       })
-      await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
       return done(
         "admin_votes_set",
         json(
