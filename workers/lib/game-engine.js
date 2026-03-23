@@ -440,13 +440,51 @@ function formatReactomeList(protein) {
     .filter(Boolean)
 }
 
+function shouldSuppressDisplayedClan(clan, protein) {
+  if (typeof clan !== "string") {
+    return false
+  }
+
+  const normalizedClan = clan.trim().toLowerCase()
+  if (normalizedClan !== "gpcr class a") {
+    return false
+  }
+
+  const domainTexts = [
+    ...(Array.isArray(protein?.domains) ? protein.domains : []),
+    ...(Array.isArray(protein?.domain_names) ? protein.domain_names : []),
+  ]
+    .filter((value) => typeof value === "string")
+    .map((value) => value.trim().toLowerCase())
+
+  if (!domainTexts.length) {
+    return false
+  }
+
+  // InterPro/Pfam sometimes bubbles up the broad "GPCR class A" clan even for
+  // family-3 / VFT-style receptors (for example GRM*, GABBR*, CASR, TAS1R*).
+  // Showing that raw clan label in the game UI is more misleading than helpful,
+  // so we suppress it when the same protein already carries obvious class-C-ish
+  // domain hints.
+  const classCHallmarks = [
+    "receptor family ligand binding region",
+    "nine cysteines domain of family 3 gpcr",
+    "gamma-aminobutyric acid type b receptor",
+    "sweet-taste receptor of 3 gcpr",
+  ]
+
+  return domainTexts.some((text) => classCHallmarks.some((hallmark) => text.includes(hallmark)))
+}
+
 function buildProteinSections(protein, options = {}) {
   const { forClue = false } = options
   const goTermsByAspect = protein?.go_terms || {}
   const goTermNamesByAspect = protein?.go_terms_named || {}
   const domains = Array.isArray(protein?.domains) ? protein.domains : []
   const domainNames = Array.isArray(protein?.domain_names) ? protein.domain_names : []
-  const clans = Array.isArray(protein?.clans) ? protein.clans : []
+  const clans = Array.isArray(protein?.clans)
+    ? protein.clans.filter((clan) => !shouldSuppressDisplayedClan(clan, protein))
+    : []
   const reactomePaths = Array.isArray(protein?.reactome_pathways) ? protein.reactome_pathways : []
   const domainSpoilerTokens = Array.isArray(options.domainSpoilerTokens)
     ? options.domainSpoilerTokens
