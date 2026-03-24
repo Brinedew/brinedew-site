@@ -46,6 +46,7 @@ const gallerySnapshotCache = {
   loadedAt: 0,
   items: [],
   publishedTotal: 0,
+  hasUniquenessRanks: false,
   sorted: new Map(),
 }
 const GALLERY_SNAPSHOT_TTL_MS = 60 * 1000
@@ -507,6 +508,9 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const tissueTau = optionalFloat(payload.tissue_tau, { min: 0 })
   const loeuf = optionalFloat(payload.loeuf, { min: 0 })
   const constraintPercentile = optionalFloat(payload.constraint_percentile, { min: 0 })
+  const leakagePercent = optionalFloat(payload.leakage_percent, { min: 0 })
+  const leakageHits = optionalInt(payload.leakage_hits)
+  const leakageTotal = optionalInt(payload.leakage_total)
   const aesthetics = normalizeAestheticsList(payload.aesthetics)
   const aestheticsOrigin = normalizeTextList(payload.aesthetics_origin)
   const politicsOrigin = normalizeTextList(payload.politics_origin)
@@ -537,6 +541,9 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     tissue_tau: tissueTau,
     loeuf,
     constraint_percentile: constraintPercentile,
+    leakage_percent: leakagePercent,
+    leakage_hits: leakageHits,
+    leakage_total: leakageTotal,
     aesthetics_json: JSON.stringify(aesthetics),
     aesthetics_origin_json: JSON.stringify(aestheticsOrigin),
     politics_origin_json: JSON.stringify(politicsOrigin),
@@ -595,6 +602,9 @@ function essenceStateHashPayload(rawEssence, fallbackSymbol = "") {
     essence.tissue_tau ?? null,
     essence.loeuf ?? null,
     essence.constraint_percentile ?? null,
+    essence.leakage_percent ?? null,
+    essence.leakage_hits ?? null,
+    essence.leakage_total ?? null,
     essence.aesthetics_json || "[]",
     essence.aesthetics_origin_json || "[]",
     essence.politics_origin_json || "[]",
@@ -628,6 +638,9 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        tissue_tau,
        loeuf,
        constraint_percentile,
+      leakage_percent,
+      leakage_hits,
+      leakage_total,
        aesthetics_json,
        aesthetics_origin_json,
        politics_origin_json,
@@ -652,6 +665,9 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        tissue_tau=excluded.tissue_tau,
        loeuf=excluded.loeuf,
        constraint_percentile=excluded.constraint_percentile,
+      leakage_percent=excluded.leakage_percent,
+      leakage_hits=excluded.leakage_hits,
+      leakage_total=excluded.leakage_total,
        aesthetics_json=excluded.aesthetics_json,
        aesthetics_origin_json=excluded.aesthetics_origin_json,
        politics_origin_json=excluded.politics_origin_json,
@@ -677,6 +693,9 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
       essence.tissue_tau,
       essence.loeuf,
       essence.constraint_percentile,
+      essence.leakage_percent,
+      essence.leakage_hits,
+      essence.leakage_total,
       essence.aesthetics_json,
       essence.aesthetics_origin_json,
       essence.politics_origin_json,
@@ -1117,6 +1136,7 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
     const stmt = env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol, full_name, weight_kg, height_cm, sex, age, age_years, faction,
               skin_hex, skin_name, tissue_tau, loeuf, constraint_percentile,
+              leakage_percent, leakage_hits, leakage_total,
               aesthetics_json, aesthetics_origin_json, politics_origin_json,
               family_surname, family_members, family_feature, manifestation, updated_at
          FROM icono_gene_essence
@@ -1129,6 +1149,7 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
     const response = await env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol, full_name, weight_kg, height_cm, sex, age, age_years, faction,
               skin_hex, skin_name, tissue_tau, loeuf, constraint_percentile,
+              leakage_percent, leakage_hits, leakage_total,
               aesthetics_json, aesthetics_origin_json, politics_origin_json,
               family_surname, family_members, family_feature, manifestation, updated_at
          FROM icono_gene_essence
@@ -1150,6 +1171,12 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
       faction: row?.faction || "",
       skin_hex: row?.skin_hex || "",
       skin_name: row?.skin_name || "",
+      tissue_tau: row?.tissue_tau,
+      loeuf: row?.loeuf,
+      constraint_percentile: row?.constraint_percentile,
+      leakage_percent: row?.leakage_percent,
+      leakage_hits: row?.leakage_hits,
+      leakage_total: row?.leakage_total,
       aesthetics: (() => {
         try {
           const parsed = JSON.parse(String(row?.aesthetics_json || "[]"))
@@ -5144,6 +5171,7 @@ function clearGallerySnapshotCache() {
   gallerySnapshotCache.loadedAt = 0
   gallerySnapshotCache.items = []
   gallerySnapshotCache.publishedTotal = 0
+  gallerySnapshotCache.hasUniquenessRanks = false
   gallerySnapshotCache.sorted = new Map()
 }
 
@@ -5346,11 +5374,13 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
   const base = portraitBase(url, env)
   const now = Date.now()
   const snapshotMaxAgeMs = gallerySnapshotMaxAgeMs(order)
+  const needsUniquenessRanks = order === "uniqueness"
   const cacheFresh =
     gallerySnapshotCache.catalogHash === catalogCache.hash &&
     gallerySnapshotCache.base === base &&
     now - gallerySnapshotCache.loadedAt < snapshotMaxAgeMs &&
-    gallerySnapshotCache.items.length > 0
+    gallerySnapshotCache.items.length > 0 &&
+    (!needsUniquenessRanks || gallerySnapshotCache.hasUniquenessRanks)
   if (cacheFresh) {
     return {
       items: gallerySnapshotCache.items,
@@ -5439,15 +5469,25 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
     })
   }
 
-  // Source of truth note: uniqueness must stay based on the synced NiceGUI
-  // mapping/demographics pipeline. aesthetics_origin_json is the stored clan list.
-  // Do not invent a separate website-only clan resolver here.
-  const uniquenessRowsRaw = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, aesthetics_origin_json
-       FROM icono_gene_essence`,
-  ).all()
-  const uniquenessRows = Array.isArray(uniquenessRowsRaw?.results) ? uniquenessRowsRaw.results : []
-  const uniquenessBySymbol = buildGalleryUniquenessIndex(catalogCache.bySymbol, uniquenessRows)
+  let uniquenessBySymbol = new Map()
+  if (needsUniquenessRanks) {
+    // This full-table scan is only needed for the uniqueness sort. Running it for
+    // every gallery request pushed production D1 over its CPU limit and left the
+    // homepage with zero cards, so keep the expensive work behind the one order
+    // that actually uses it.
+    //
+    // Source of truth note: uniqueness must stay based on the synced NiceGUI
+    // mapping/demographics pipeline. aesthetics_origin_json is the stored clan list.
+    // Do not invent a separate website-only clan resolver here.
+    const uniquenessRowsRaw = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, aesthetics_origin_json
+         FROM icono_gene_essence`,
+    ).all()
+    const uniquenessRows = Array.isArray(uniquenessRowsRaw?.results)
+      ? uniquenessRowsRaw.results
+      : []
+    uniquenessBySymbol = buildGalleryUniquenessIndex(catalogCache.bySymbol, uniquenessRows)
+  }
 
   const items = []
   for (const [symbol, cached] of catalogCache.bySymbol.entries()) {
@@ -5481,6 +5521,7 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
   gallerySnapshotCache.loadedAt = now
   gallerySnapshotCache.items = items
   gallerySnapshotCache.publishedTotal = publishedRows.length
+  gallerySnapshotCache.hasUniquenessRanks = needsUniquenessRanks
   gallerySnapshotCache.sorted = new Map()
 
   return {
@@ -5490,12 +5531,352 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
   }
 }
 
+async function galleryVotesFeed(env, url, rawLimit, rawOffset) {
+  const limit = normalizeGalleryLimit(rawLimit)
+  const offset = normalizeGalleryOffset(rawOffset)
+  const base = portraitBase(url, env)
+  const manifest = await catalogManifestObj(env)
+  const catalogTotal = Number(manifest?.gene_count || 0)
+
+  if (!env.ICONOPLASM_DB) {
+    return {
+      order: "votes",
+      total: 0,
+      published_total: 0,
+      offset,
+      limit,
+      has_more: false,
+      catalog_total: catalogTotal,
+      items: [],
+    }
+  }
+
+  const [publishedCountRow, rows] = await Promise.all([
+    env.ICONOPLASM_DB.prepare(
+      `SELECT with_live AS published_total
+         FROM icono_admin_dashboard_summary
+        WHERE summary_key = ?
+        LIMIT 1`,
+    )
+      .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
+      .first(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT
+         gr.gene_symbol AS symbol,
+         gr.full_name,
+         gr.live_created_at AS published_at,
+         gr.live_created_at AS asset_created_at,
+         gr.current_asset_sha256 AS asset_sha256,
+         0 AS candidate_image_id,
+         gr.live_vision_id AS vision_id,
+         gr.live_r2_key_full AS r2_key_full,
+         gr.live_r2_key_medium AS r2_key_medium,
+         gr.live_r2_key_thumb AS r2_key_thumb,
+         NULL AS width,
+         NULL AS height,
+         COALESCE(gr.live_upvotes, 0) AS image_upvotes,
+         COALESCE(gr.live_downvotes, 0) AS image_downvotes,
+         COALESCE(gr.live_score, 0) AS image_score
+       FROM icono_admin_gene_rollup gr
+       WHERE COALESCE(gr.current_asset_sha256, '') <> ''
+         AND COALESCE(gr.current_asset_missing, 0) = 0
+         AND COALESCE(gr.live_r2_key_medium, gr.live_r2_key_thumb, gr.live_r2_key_full, '') <> ''
+       ORDER BY
+         COALESCE(gr.live_score, 0) DESC,
+         COALESCE(gr.live_upvotes, 0) DESC,
+         COALESCE(gr.live_created_at, '') DESC,
+         gr.gene_symbol ASC
+       LIMIT ? OFFSET ?`,
+    )
+      .bind(limit, offset)
+      .all(),
+  ])
+
+  const publishedTotal = Number(publishedCountRow?.published_total || 0)
+  const results = Array.isArray(rows?.results) ? rows.results : []
+  const symbols = results.map((row) => normalizeSymbol(row?.symbol || "")).filter(Boolean)
+  const metadataBySymbol = new Map()
+
+  if (symbols.length) {
+    const metadataRows = await env.ICONOPLASM_DB.prepare(
+      `WITH incoming AS (
+         SELECT upper(value) AS gene_symbol
+         FROM json_each(?)
+       )
+       SELECT
+         incoming.gene_symbol AS symbol,
+         gc.color_hex,
+         ge.weight_kg,
+         ge.age_years
+       FROM incoming
+       LEFT JOIN icono_gene_catalog gc
+         ON upper(gc.gene_symbol) = incoming.gene_symbol
+       LEFT JOIN icono_gene_essence ge
+         ON upper(ge.gene_symbol) = incoming.gene_symbol`,
+    )
+      .bind(JSON.stringify(symbols))
+      .all()
+    for (const row of Array.isArray(metadataRows?.results) ? metadataRows.results : []) {
+      const symbol = normalizeSymbol(row?.symbol || "")
+      if (!symbol) continue
+      metadataBySymbol.set(symbol, row)
+    }
+  }
+
+  const items = results
+    .map((row) => {
+      const symbol = normalizeSymbol(row?.symbol || "")
+      if (!symbol) return null
+      const metadata = metadataBySymbol.get(symbol) || null
+      const width = optionalInt(row?.width)
+      const height = optionalInt(row?.height)
+      return {
+        symbol,
+        color: normalizeHexColor(metadata?.color_hex || "") || "#888",
+        full_name: sanitizeText(row?.full_name || "", 255) || symbol,
+        uniqueness_rank: null,
+        width,
+        height,
+        weight_kg:
+          Number.isFinite(Number(metadata?.weight_kg)) && Number(metadata.weight_kg) > 0
+            ? Number(metadata.weight_kg)
+            : null,
+        age_years:
+          Number.isFinite(Number(metadata?.age_years)) && Number(metadata.age_years) >= 0
+            ? Number(metadata.age_years)
+            : null,
+        popularity_score: wikiPageviewsForSymbol(symbol),
+        image_upvotes: Number(row?.image_upvotes || 0),
+        image_downvotes: Number(row?.image_downvotes || 0),
+        image_score: Number(row?.image_score || 0),
+        published_at: row?.published_at ? String(row.published_at) : null,
+        asset_created_at: row?.asset_created_at ? String(row.asset_created_at) : null,
+        ph: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+        pt: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
+        portrait: {
+          status: "published",
+          hero_url: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+          medium_url: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
+          thumb_url: row?.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
+          asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
+          candidate_image_id: optionalInt(row?.candidate_image_id),
+          vision_id: String(row?.vision_id || "").trim() || null,
+          artist_id: publicArtistIdForRow(row) || null,
+          ...(width != null ? { width } : {}),
+          ...(height != null ? { height } : {}),
+        },
+      }
+    })
+    .filter(Boolean)
+
+  return {
+    order: "votes",
+    total: catalogTotal,
+    published_total: publishedTotal,
+    offset,
+    limit,
+    has_more: offset + items.length < publishedTotal,
+    catalog_total: catalogTotal,
+    items,
+  }
+}
+
+function galleryMetricSpec(order) {
+  switch (order) {
+    case "heaviest":
+      return {
+        metricExpr: "ge.weight_kg",
+        metricDirection: "DESC",
+        uniquenessFromLeakage: false,
+      }
+    case "lightest":
+      return {
+        metricExpr: "ge.weight_kg",
+        metricDirection: "ASC",
+        uniquenessFromLeakage: false,
+      }
+    case "oldest":
+      return {
+        metricExpr: "ge.age_years",
+        metricDirection: "DESC",
+        uniquenessFromLeakage: false,
+      }
+    case "youngest":
+      return {
+        metricExpr: "ge.age_years",
+        metricDirection: "ASC",
+        uniquenessFromLeakage: false,
+      }
+    case "uniqueness":
+      return {
+        metricExpr: "ge.leakage_percent",
+        metricDirection: "ASC",
+        uniquenessFromLeakage: true,
+      }
+    case "newest":
+      return {
+        metricExpr: "gr.live_created_at",
+        metricDirection: "DESC",
+        uniquenessFromLeakage: false,
+      }
+    default:
+      return null
+  }
+}
+
+async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
+  const metricSpec = galleryMetricSpec(order)
+  if (!metricSpec) return null
+
+  const limit = normalizeGalleryLimit(rawLimit)
+  const offset = normalizeGalleryOffset(rawOffset)
+  const base = portraitBase(url, env)
+  const manifest = await catalogManifestObj(env)
+  const catalogTotal = Number(manifest?.gene_count || 0)
+
+  if (!env.ICONOPLASM_DB) {
+    return {
+      order,
+      total: 0,
+      published_total: 0,
+      offset,
+      limit,
+      has_more: false,
+      catalog_total: catalogTotal,
+      items: [],
+    }
+  }
+
+  const { metricExpr, metricDirection, uniquenessFromLeakage } = metricSpec
+  const orderByClause = `
+    CASE WHEN ${metricExpr} IS NULL THEN 1 ELSE 0 END ASC,
+    ${metricExpr} ${metricDirection},
+    COALESCE(gr.live_score, 0) DESC,
+    COALESCE(gr.live_upvotes, 0) DESC,
+    COALESCE(gr.live_created_at, '') DESC,
+    gr.gene_symbol ASC`
+
+  const [publishedCountRow, rows] = await Promise.all([
+    env.ICONOPLASM_DB.prepare(
+      `SELECT with_live AS published_total
+         FROM icono_admin_dashboard_summary
+        WHERE summary_key = ?
+        LIMIT 1`,
+    )
+      .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
+      .first(),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT
+         gr.gene_symbol AS symbol,
+         COALESCE(gc.full_name, gr.full_name) AS full_name,
+         gr.live_created_at AS published_at,
+         gr.live_created_at AS asset_created_at,
+         gr.current_asset_sha256 AS asset_sha256,
+         0 AS candidate_image_id,
+         gr.live_vision_id AS vision_id,
+         gr.live_r2_key_full AS r2_key_full,
+         gr.live_r2_key_medium AS r2_key_medium,
+         gr.live_r2_key_thumb AS r2_key_thumb,
+         NULL AS width,
+         NULL AS height,
+         COALESCE(gr.live_upvotes, 0) AS image_upvotes,
+         COALESCE(gr.live_downvotes, 0) AS image_downvotes,
+         COALESCE(gr.live_score, 0) AS image_score,
+         gc.color_hex,
+         ge.weight_kg,
+         ge.age_years,
+         ge.leakage_percent
+       FROM icono_admin_gene_rollup gr
+       LEFT JOIN icono_gene_catalog gc
+         ON upper(gc.gene_symbol) = upper(gr.gene_symbol)
+       LEFT JOIN icono_gene_essence ge
+         ON upper(ge.gene_symbol) = upper(gr.gene_symbol)
+       WHERE COALESCE(gr.current_asset_sha256, '') <> ''
+         AND COALESCE(gr.current_asset_missing, 0) = 0
+         AND COALESCE(gr.live_r2_key_medium, gr.live_r2_key_thumb, gr.live_r2_key_full, '') <> ''
+       ORDER BY ${orderByClause}
+       LIMIT ? OFFSET ?`,
+    )
+      .bind(limit, offset)
+      .all(),
+  ])
+
+  const publishedTotal = Number(publishedCountRow?.published_total || 0)
+  const results = Array.isArray(rows?.results) ? rows.results : []
+  const items = results
+    .map((row) => {
+      const symbol = normalizeSymbol(row?.symbol || "")
+      if (!symbol) return null
+      const width = optionalInt(row?.width)
+      const height = optionalInt(row?.height)
+      const weightKg =
+        Number.isFinite(Number(row?.weight_kg)) && Number(row.weight_kg) > 0
+          ? Number(row.weight_kg)
+          : null
+      const ageYears =
+        Number.isFinite(Number(row?.age_years)) && Number(row.age_years) >= 0
+          ? Number(row.age_years)
+          : null
+      const leakagePercent =
+        Number.isFinite(Number(row?.leakage_percent)) && Number(row.leakage_percent) >= 0
+          ? Number(row.leakage_percent)
+          : null
+      return {
+        symbol,
+        color: normalizeHexColor(row?.color_hex || "") || "#888",
+        full_name: sanitizeText(row?.full_name || "", 255) || symbol,
+        uniqueness_rank: uniquenessFromLeakage ? leakagePercent : null,
+        width,
+        height,
+        weight_kg: weightKg,
+        age_years: ageYears,
+        popularity_score: wikiPageviewsForSymbol(symbol),
+        image_upvotes: Number(row?.image_upvotes || 0),
+        image_downvotes: Number(row?.image_downvotes || 0),
+        image_score: Number(row?.image_score || 0),
+        published_at: row?.published_at ? String(row.published_at) : null,
+        asset_created_at: row?.asset_created_at ? String(row.asset_created_at) : null,
+        ph: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+        pt: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
+        portrait: {
+          status: "published",
+          hero_url: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
+          medium_url: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
+          thumb_url: row?.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
+          asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
+          candidate_image_id: optionalInt(row?.candidate_image_id),
+          vision_id: String(row?.vision_id || "").trim() || null,
+          artist_id: publicArtistIdForRow(row) || null,
+          ...(width != null ? { width } : {}),
+          ...(height != null ? { height } : {}),
+        },
+      }
+    })
+    .filter(Boolean)
+
+  return {
+    order,
+    total: catalogTotal,
+    published_total: publishedTotal,
+    offset,
+    limit,
+    has_more: offset + items.length < publishedTotal,
+    catalog_total: catalogTotal,
+    items,
+  }
+}
+
 async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
   const order = normalizeGalleryOrder(rawOrder)
   const limit = normalizeGalleryLimit(rawLimit)
   const offset = normalizeGalleryOffset(rawOffset)
   const seed =
     order === "random" ? normalizeGallerySeed(rawSeed) || crypto.randomUUID().slice(0, 12) : null
+  if (order === "votes") {
+    return galleryVotesFeed(env, url, limit, offset)
+  }
+  const metricFeed = await galleryMetricFeed(env, url, order, limit, offset)
+  if (metricFeed) return metricFeed
   const snapshot = await gallerySnapshot(env, url, { order })
   if (!env.ICONOPLASM_DB) {
     return {
