@@ -8842,6 +8842,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
 
       const keepRaw = Array.isArray(p?.keep) ? p.keep : []
       const legacyRaw = Array.isArray(p?.legacy) ? p.legacy : []
+      const scopeSymbolsRaw = Array.isArray(p?.scope_symbols ?? p?.scopeSymbols)
+        ? p.scope_symbols ?? p.scopeSymbols
+        : []
       if (keepRaw.length > 50000)
         return done(
           "admin_reconcile_400",
@@ -8852,6 +8855,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           "admin_reconcile_400",
           json({ error: "Too many legacy entries (max 50000)" }, 400),
         )
+      if (scopeSymbolsRaw.length > 5000)
+        return done(
+          "admin_reconcile_400",
+          json({ error: "Too many scope_symbols entries (max 5000)" }, 400),
+        )
+
+      const scopeSymbols = Array.from(
+        new Set(scopeSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean)),
+      )
+      const scopeSymbolsJson = JSON.stringify(scopeSymbols)
+      const applyScope = scopeSymbols.length > 0 ? 1 : 0
 
       const keep = []
       const keepSet = new Set()
@@ -8883,12 +8897,28 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const reason = String(p?.reason || "").slice(0, 2000) || "local_sync_reconcile"
 
       const { results: existingAssets = [] } = await env.ICONOPLASM_DB.prepare(
-        "SELECT gene_symbol, asset_sha256, status, COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy FROM icono_portrait_assets",
-      ).all()
+        `WITH incoming_scope AS (
+           SELECT upper(value) AS gene_symbol
+           FROM json_each(?)
+         )
+         SELECT gene_symbol, asset_sha256, status, COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy
+         FROM icono_portrait_assets
+         WHERE (? = 0 OR upper(gene_symbol) IN (SELECT gene_symbol FROM incoming_scope))`,
+      )
+        .bind(scopeSymbolsJson, applyScope)
+        .all()
 
       const { results: existingStateRows = [] } = await env.ICONOPLASM_DB.prepare(
-        "SELECT gene_symbol, current_asset_sha256, COALESCE(admin_override, 0) AS admin_override FROM icono_publish_state",
-      ).all()
+        `WITH incoming_scope AS (
+           SELECT upper(value) AS gene_symbol
+           FROM json_each(?)
+         )
+         SELECT gene_symbol, current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
+         FROM icono_publish_state
+         WHERE (? = 0 OR upper(gene_symbol) IN (SELECT gene_symbol FROM incoming_scope))`,
+      )
+        .bind(scopeSymbolsJson, applyScope)
+        .all()
       const existingState = new Map()
       for (const row of existingStateRows) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
@@ -8898,7 +8928,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           admin_override: Number(row?.admin_override || 0) > 0,
         })
       }
-      const touchedSymbols = new Set(keep.map((row) => row.symbol))
+      const touchedSymbols = new Set(scopeSymbols.length ? scopeSymbols : keep.map((row) => row.symbol))
 
       let rejected = 0
       let legacyMarked = 0
@@ -8994,6 +9024,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           {
             ok: true,
             dry_run: dryRun,
+            scoped_symbols: scopeSymbols.length,
             keep_count: keep.length,
             legacy_count: legacy.length,
             touched_symbols: touchedSymbols.size,
