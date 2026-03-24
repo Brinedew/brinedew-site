@@ -1961,6 +1961,9 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
     .first()
 
   const topAssetSha = normalizeSha256(topRow?.asset_sha256 || "")
+  const topUpvotes = Number(topRow?.image_upvotes || 0)
+  const topDownvotes = Number(topRow?.image_downvotes || 0)
+  const topScore = Number(topRow?.image_score || 0)
   if (!topAssetSha) return { ok: true, changed: false, code: "NO_CANDIDATE" }
   if (currentAssetSha && topAssetSha === currentAssetSha) {
     return { ok: true, changed: false, code: "UNCHANGED", current_asset_sha256: currentAssetSha }
@@ -3619,17 +3622,34 @@ async function syncAdminReadModels(
   const symbolList = Array.from(
     new Set(symbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
   )
-  await rebuildVoteAssetSummaryForSymbols(env, symbolList)
-  await rebuildGeneRollupForSymbols(env, symbolList)
-  const inferredVisionIds = await collectVisionIdsForSymbols(env, symbolList)
-  const finalVisionIds = Array.from(
-    new Set([
-      ...inferredVisionIds,
-      ...visionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean),
-    ]),
+  const finalVisionIdSet = new Set(
+    visionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean),
   )
+  const symbolBatchSize = ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT
+  for (let start = 0; start < symbolList.length; start += symbolBatchSize) {
+    const symbolChunk = symbolList.slice(start, start + symbolBatchSize)
+    if (!symbolChunk.length) continue
+    // Architecture guardrail: reconcile can touch most of the catalog in one
+    // run. Rebuilding admin read models for all touched symbols in one giant
+    // JSON-bound D1 statement turned the refresh into a single oversized point
+    // of failure. Chunk the durable work so each slice can finish cleanly.
+    await rebuildVoteAssetSummaryForSymbols(env, symbolChunk)
+    await rebuildGeneRollupForSymbols(env, symbolChunk)
+    const inferredVisionIds = await collectVisionIdsForSymbols(env, symbolChunk)
+    for (const visionId of inferredVisionIds) {
+      finalVisionIdSet.add(visionId)
+    }
+  }
+  const finalVisionIds = Array.from(finalVisionIdSet)
   if (fullVision) await rebuildVisionRollups(env, [], { full: true })
-  else await rebuildVisionRollupsBatch(env, finalVisionIds)
+  else {
+    const visionBatchSize = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT
+    for (let start = 0; start < finalVisionIds.length; start += visionBatchSize) {
+      const visionChunk = finalVisionIds.slice(start, start + visionBatchSize)
+      if (!visionChunk.length) continue
+      await rebuildVisionRollupsBatch(env, visionChunk)
+    }
+  }
   await rebuildDashboardSummary(env)
   adminReadModelState.ready = true
   return { symbols: symbolList.length, visions: fullVision ? -1 : finalVisionIds.length }
