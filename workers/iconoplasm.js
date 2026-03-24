@@ -651,7 +651,7 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
        source,
        updated_by,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol) DO UPDATE SET
        full_name=excluded.full_name,
        weight_kg=excluded.weight_kg,
