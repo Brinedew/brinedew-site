@@ -8482,6 +8482,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
 
       const actorId = await actor(request, env)
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
+      const deferReadModels = coerceBoolean(
+        p?.defer_read_models ?? p?.deferReadModels,
+        false,
+      )
       const reasonDefault = String(p?.reason || "").slice(0, 2000) || null
       const createdByDefault = String(p?.created_by || p?.createdBy || actorId || "unknown").slice(
         0,
@@ -8773,7 +8777,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         }
       }
 
-      if (!dryRun && processed > 0) {
+      if (!dryRun && processed > 0 && !deferReadModels) {
+        // Bulk workstation sync already runs reconcile immediately after ingest.
+        // Rebuilding admin read models and invalidating gallery caches on every
+        // ingest batch turned one sync into hundreds of global refreshes. Keep
+        // the eager behavior for direct admin calls, but let the sync defer the
+        // expensive refresh until reconcile has the full touched-symbol set.
         await syncAdminReadModelsAndInvalidateGallery(env, {
           symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
         })
@@ -8786,6 +8795,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           {
             ok: failed === 0,
             dry_run: dryRun,
+            defer_read_models: deferReadModels,
             processed,
             failed,
             total: itemsRaw.length,
