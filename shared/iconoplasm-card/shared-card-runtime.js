@@ -338,6 +338,15 @@
       .replace(/'/g, "&#39;")
   }
 
+  function jsonScriptSafeString(value) {
+    return JSON.stringify(value)
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e")
+      .replace(/&/g, "\\u0026")
+      .replace(/\u2028/g, "\\u2028")
+      .replace(/\u2029/g, "\\u2029")
+  }
+
   function normalizedSymbol(symbol) {
     return String(symbol || "")
       .trim()
@@ -603,6 +612,21 @@
       String(safeGeneDetail.full_name || safeEssence.name || safeGeneDetail.symbol || "").trim() ||
       normalizedSymbol(safeGeneDetail.symbol)
     )
+  }
+
+  function asObject(value) {
+    return value && typeof value === "object" ? value : {}
+  }
+
+  function addAgeSuffix(ageNote) {
+    var value = String(ageNote || "").trim()
+    if (!value) return ""
+    if (/\by\.?o\.?\b/i.test(value) || /\byears?\s+old\b/i.test(value)) return value
+    return value + " y.o."
+  }
+
+  function blankFallback(value) {
+    return String(value || "").trim() || " "
   }
 
   function renderLabLabelOptionHtml(value, selected, extraClass, loopPreset) {
@@ -1014,26 +1038,13 @@
     )
   }
 
-  function renderLabLabelCardHtml(geneDetail, options) {
-    // Single source of truth for the archival lab-label sheet across desktop and mobile.
-    // If mobile needs different behavior, wrap/reflow this markup instead of creating a
-    // second renderer with duplicated field selection logic.
-    var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
-    var safeEssence =
-      safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
-        ? safeGeneDetail.essence
-        : {}
+  function resolveArchivalCardModel(geneDetail, options) {
+    var safeGeneDetail = asObject(geneDetail)
+    var safeEssence = asObject(safeGeneDetail.essence)
+    var safePortrait = asObject(safeGeneDetail.portrait)
     var opts = options || {}
-    var safePortrait =
-      safeGeneDetail.portrait && typeof safeGeneDetail.portrait === "object"
-        ? safeGeneDetail.portrait
-        : {}
     var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     var fullName = labLabelDisplayName(safeGeneDetail)
-    // Keep the gene card aligned with admin: emulsion no. is the one stable
-    // artist-level ID, not a hashed label serial and not the per-image
-    // candidate_image_id. Only fall back to the hashed symbol number when we truly
-    // have no artist lineage to show.
     var emulsionNumber = labLabelEmulsionNumber(safePortrait)
     var serial = emulsionNumber || labLabelCatalogNumber(symbol)
     var family = String(safeEssence.family_surname || "").trim()
@@ -1068,32 +1079,71 @@
     } else if (safeEssence.age_years != null && Number.isFinite(Number(safeEssence.age_years))) {
       ageNote = String(Math.round(Number(safeEssence.age_years)))
     }
-    if (ageNote && !/\by\.?o\.?\b/i.test(ageNote) && !/\byears?\s+old\b/i.test(ageNote))
-      ageNote += " y.o."
     var weightKg = Number(safeEssence.weight_kg)
     var handwrittenWeight =
       Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : ""
     var aesthetics = uniqueDisplayValues(safeEssence.aesthetics, 4)
     var aestheticsOrigin = uniqueDisplayValues(safeEssence.aesthetics_origin, 4)
     var maxStyleRows = Math.max(aesthetics.length, aestheticsOrigin.length, 3)
+    var stylePairs = []
+    for (var i = 0; i < maxStyleRows; i++) {
+      stylePairs.push({
+        origin: blankFallback(aestheticsOrigin[i]),
+        note: String(aesthetics[i] || "").trim(),
+      })
+    }
     var politicsDisplay = normalizePoliticsDisplay(
       safeEssence.politics || safeEssence.faction || "",
       safeEssence.politics_origin,
     )
-    var molecularAlignment = String(politicsDisplay.molecular || "").toLowerCase()
-    var politicalNote = String(politicsDisplay.character || "").trim()
-    var titleHtml = renderLabLabelTitleHtml(symbol, fullName, opts)
-    var voteHtml = renderLabLabelVoteShell(opts.voteHtml)
+    var mode = String(opts.mode || "sheet")
+      .trim()
+      .toLowerCase()
+    return {
+      ageNote: addAgeSuffix(ageNote),
+      color: String(safeGeneDetail.color || "")
+        .trim()
+        .toUpperCase(),
+      displayedFamily: displayedFamily,
+      displayedFamilyFeature: displayedFamilyFeature,
+      firstNoted: firstNoted,
+      fullName: fullName,
+      handwrittenWeight: handwrittenWeight,
+      mobileReview: !!opts.mobileReview,
+      mode: mode === "brick" ? "brick" : "sheet",
+      molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
+      politicalNote: String(politicsDisplay.character || "").trim(),
+      selectedCategory: selectedCategory,
+      serial: serial,
+      sexNote: sexNote,
+      stylePairs: stylePairs,
+      symbol: symbol,
+      titleHref: String(opts.titleHref || "").trim(),
+      titleLinkAttrs: String(opts.titleLinkAttrs || "").trim(),
+      voteHtml: String(opts.voteHtml || ""),
+    }
+  }
 
+  function renderLabLabelCardHtml(geneDetail, options) {
+    // Canonical archival card contract for both the legacy string renderer and the Lit host.
+    // If archival field mapping changes, do it in resolveArchivalCardModel(...) instead of
+    // splitting by shell or surface again.
+    var model = resolveArchivalCardModel(geneDetail, options)
+    var titleHtml = renderLabLabelTitleHtml(model.symbol, model.fullName, {
+      titleHref: model.titleHref,
+      titleLinkAttrs: model.titleLinkAttrs,
+    })
+    var voteHtml = renderLabLabelVoteShell(model.voteHtml)
     var stylePairsHtml = ""
-    for (var i = 0; i < maxStyleRows; i++) {
+    for (var i = 0; i < model.stylePairs.length; i++) {
+      var pair = model.stylePairs[i] || {}
       stylePairsHtml +=
         '<div class="icono-label-style-pair">' +
         '<div class="icono-label-origin-text">' +
-        escapeHtml(String(aestheticsOrigin[i] || "").trim() || " ") +
+        escapeHtml(blankFallback(pair.origin)) +
         "</div>" +
         '<div class="icono-label-hand-note icono-label-hand-note--style">' +
-        escapeHtml(String(aesthetics[i] || "").trim()) +
+        escapeHtml(String(pair.note || "").trim()) +
         "</div>" +
         "</div>"
     }
@@ -1107,19 +1157,19 @@
       '<div class="icono-label-header-meta-cell">' +
       '<div class="icono-label-caption">emulsion no.</div>' +
       '<div class="icono-label-serial">' +
-      escapeHtml(serial) +
+      escapeHtml(model.serial) +
       "</div>" +
       "</div>" +
       '<div class="icono-label-header-meta-cell">' +
       '<div class="icono-label-caption">family</div>' +
       '<div class="icono-label-family">' +
-      escapeHtml(displayedFamily) +
+      escapeHtml(model.displayedFamily) +
       "</div>" +
       "</div>" +
       "</div>" +
       '<div class="icono-label-filed-block">' +
       '<div class="icono-label-caption">family trait</div>' +
-      renderLabLabelFamilyTraitFieldHtml(displayedFamilyFeature) +
+      renderLabLabelFamilyTraitFieldHtml(model.displayedFamilyFeature) +
       "</div>" +
       "</div>" +
       '<div class="icono-label-qc-block">' +
@@ -1138,22 +1188,22 @@
       '<div class="icono-label-band-cell icono-label-band-cell--category">' +
       '<div class="icono-label-caption">category</div>' +
       '<div class="icono-label-band-primary">' +
-      renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) +
+      renderLabLabelCategoryFieldHtml(model.selectedCategory, model.sexNote) +
       "</div>" +
       '<div class="icono-label-band-secondary">' +
-      renderLabLabelSexNoteHtml(sexNote, selectedCategory) +
+      renderLabLabelSexNoteHtml(model.sexNote, model.selectedCategory) +
       "</div>" +
       "</div>" +
       '<div class="icono-label-band-cell icono-label-band-cell--noted">' +
       '<div class="icono-label-caption">first noted</div>' +
       '<div class="icono-label-band-primary">' +
       '<div class="icono-label-typed-value icono-label-typed-value--band">' +
-      escapeHtml(firstNoted || " ") +
+      escapeHtml(model.firstNoted || " ") +
       "</div>" +
       "</div>" +
       '<div class="icono-label-band-secondary">' +
       '<div class="icono-label-hand-note icono-label-hand-note--age">' +
-      escapeHtml(ageNote) +
+      escapeHtml(model.ageNote) +
       "</div>" +
       "</div>" +
       "</div>" +
@@ -1163,7 +1213,7 @@
       '<div class="icono-label-mass-line">' +
       '<span class="icono-label-mass-fill">' +
       '<span class="icono-label-hand-note icono-label-hand-note--mass-number">' +
-      escapeHtml(handwrittenWeight) +
+      escapeHtml(model.handwrittenWeight) +
       "</span>" +
       "</span>" +
       '<span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>' +
@@ -1183,14 +1233,25 @@
       '<div class="icono-label-alignment-row">' +
       '<div class="icono-label-row-label">alignment</div>' +
       '<div class="icono-label-alignment-body">' +
-      renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) +
+      renderLabLabelAlignmentFieldHtml(model.molecularAlignment, model.politicalNote) +
       "</div>" +
       "</div>" +
       '<div class="icono-label-footer-row">' +
       '<div class="icono-label-row-label">remarks</div>' +
-      renderLabLabelFooterHtml(safeGeneDetail.color, serial) +
+      renderLabLabelFooterHtml(model.color, model.serial) +
       "</div>" +
       "</div>"
+    )
+  }
+
+  function renderLitArchivalCardHtml(geneDetail, options) {
+    var model = resolveArchivalCardModel(geneDetail, options)
+    return (
+      '<icono-lit-archival class="icono-lit-archival-host" data-icono-lit-archival>' +
+      '<script type="application/json" data-icono-lit-archival-model>' +
+      jsonScriptSafeString(model) +
+      "</script>" +
+      "</icono-lit-archival>"
     )
   }
 
@@ -1681,11 +1742,13 @@
     labLabelCatalogNumber: labLabelCatalogNumber,
     labLabelEmulsionNumber: labLabelEmulsionNumber,
     labLabelDisplayName: labLabelDisplayName,
+    resolveArchivalCardModel: resolveArchivalCardModel,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,
     collectTooltipMetaRows: collectTooltipMetaRows,
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
     renderLabLabelSpecimenRailHtml: renderLabLabelSpecimenRailHtml,
     renderLabLabelCardHtml: renderLabLabelCardHtml,
+    renderLitArchivalCardHtml: renderLitArchivalCardHtml,
     renderTooltipMetaRowsHtml: renderTooltipMetaRowsHtml,
     renderTooltipMetaSkeletonHtml: renderTooltipMetaSkeletonHtml,
     renderTooltipMobileRowGridHtml: renderTooltipMobileRowGridHtml,

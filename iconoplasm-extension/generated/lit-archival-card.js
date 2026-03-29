@@ -586,184 +586,20 @@ var roughLoopSerial = 0;
 function sharedCardRuntime() {
   return globalThis && globalThis.IconoplasmCardShared ? globalThis.IconoplasmCardShared : null;
 }
-function normalizedSymbol(symbol) {
-  var shared = sharedCardRuntime();
-  if (shared && typeof shared.normalizedSymbol === "function") {
-    return shared.normalizedSymbol(symbol);
-  }
-  return String(symbol || "").trim().toUpperCase();
-}
-function uniqueDisplayValues(values, limit) {
-  var shared = sharedCardRuntime();
-  if (shared && typeof shared.uniqueDisplayValues === "function") {
-    return shared.uniqueDisplayValues(values, limit);
-  }
-  var out = [];
-  var seen = /* @__PURE__ */ Object.create(null);
-  var source = Array.isArray(values) ? values : [values];
-  for (var i6 = 0; i6 < source.length; i6++) {
-    var value = String(source[i6] || "").trim();
-    if (!value) continue;
-    var key = value.toLowerCase();
-    if (seen[key]) continue;
-    seen[key] = true;
-    out.push(value);
-    if (out.length >= (limit || 4)) break;
-  }
-  return out;
-}
-function normalizePoliticsDisplay(rawPolitics, rawPoliticsOrigin) {
-  var shared = sharedCardRuntime();
-  if (shared && typeof shared.normalizePoliticsDisplay === "function") {
-    return shared.normalizePoliticsDisplay(rawPolitics, rawPoliticsOrigin);
-  }
-  var politics = String(rawPolitics || "").trim();
-  var politicsOriginValues = uniqueDisplayValues(rawPoliticsOrigin, 2);
-  var politicsOrigin = politicsOriginValues.length ? String(politicsOriginValues[0] || "").trim() : "";
-  var politicsKey = politics.toLowerCase().replace(/\s+/g, " ").trim();
-  var originKey = politicsOrigin.toLowerCase().replace(/\s+/g, " ").trim();
-  var character = "";
-  var molecular = "";
-  if (politicsKey === "pro-growth" || politicsKey === "pro growth") character = "pro-growth";
-  else if (politicsKey === "pro-control" || politicsKey === "pro control")
-    character = "pro-control";
-  else if (politicsKey === "turncoat") character = "turncoat";
-  else if (politicsKey === "neutral" || politicsKey === "housekeeper") {
-    return { character: "", molecular: "", isNeutral: true };
-  }
-  if (originKey === "oncogene") molecular = "oncogene";
-  else if (originKey === "tumor suppressor") molecular = "tumor suppressor";
-  else if (originKey === "contextual oncogene/tumor suppressor") {
-    molecular = "contextual oncogene/tumor suppressor";
-  } else if (originKey === "neutral" || originKey === "housekeeper") {
-    return { character: "", molecular: "", isNeutral: true };
-  }
-  return {
-    character,
-    molecular,
-    isNeutral: false
-  };
-}
-function labLabelCatalogNumber(symbol) {
-  var shared = sharedCardRuntime();
-  if (shared && typeof shared.labLabelCatalogNumber === "function") {
-    return shared.labLabelCatalogNumber(symbol);
-  }
-  var safe = normalizedSymbol(symbol);
-  if (!safe) return "00000";
-  var hash = 2166136261;
-  for (var i6 = 0; i6 < safe.length; i6++) {
-    hash ^= safe.charCodeAt(i6);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  return String(Math.abs(hash >>> 0) % 1e5).padStart(5, "0");
-}
-function labLabelEmulsionNumber(portrait) {
-  var shared = sharedCardRuntime();
-  if (shared && typeof shared.labLabelEmulsionNumber === "function") {
-    return shared.labLabelEmulsionNumber(portrait);
-  }
-  var safePortrait = portrait && typeof portrait === "object" ? portrait : {};
-  var explicitArtistId = String(safePortrait.artist_id || safePortrait.emulsion_id || "").trim();
-  if (explicitArtistId) return explicitArtistId;
-  var visionId = String(safePortrait.vision_id || "").trim().toLowerCase();
-  if (/^[a-z0-9-]+-v\d+-\d+$/.test(visionId)) {
-    var match = visionId.match(/-(\d+)$/);
-    if (match) return String(Number.parseInt(match[1], 10) || "");
-  }
-  var candidateImageId = Number(safePortrait.candidate_image_id);
-  if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
-    return String(Math.round(candidateImageId));
-  }
-  return "";
-}
-function labLabelDisplayName(geneDetail) {
-  var shared = sharedCardRuntime();
-  if (shared && typeof shared.labLabelDisplayName === "function") {
-    return shared.labLabelDisplayName(geneDetail);
-  }
-  var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {};
-  var safeEssence = safeGeneDetail.essence && typeof safeGeneDetail.essence === "object" ? safeGeneDetail.essence : {};
-  return String(safeGeneDetail.full_name || safeEssence.name || safeGeneDetail.symbol || "").trim() || normalizedSymbol(safeGeneDetail.symbol);
-}
 function asObject(value) {
   return value && typeof value === "object" ? value : {};
-}
-function addAgeSuffix(ageNote) {
-  var value = String(ageNote || "").trim();
-  if (!value) return "";
-  if (/\by\.?o\.?\b/i.test(value) || /\byears?\s+old\b/i.test(value)) return value;
-  return value + " y.o.";
 }
 function blankFallback(value) {
   return String(value || "").trim() || " ";
 }
 function resolveCardModel(payload) {
   var safePayload = asObject(payload);
-  var safeGeneDetail = asObject(safePayload.gene);
-  var safeEssence = asObject(safeGeneDetail.essence);
-  var safeOptions = asObject(safePayload.options);
-  var safePortrait = asObject(safeGeneDetail.portrait);
-  var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol);
-  var fullName = labLabelDisplayName(safeGeneDetail);
-  var emulsionNumber = labLabelEmulsionNumber(safePortrait);
-  var serial = emulsionNumber || labLabelCatalogNumber(symbol);
-  var family = String(safeEssence.family_surname || "").trim();
-  var familyFeature = String(safeEssence.family_feature || "").trim();
-  var familyMembers = Number(safeEssence.family_members);
-  var hasRealFamily = Number.isFinite(familyMembers) && familyMembers > 1 || !Number.isFinite(familyMembers) && family && family.toUpperCase() !== symbol;
-  var displayedFamily = hasRealFamily ? family : "";
-  var displayedFamilyFeature = hasRealFamily ? familyFeature : "";
-  var sexOriginValues = uniqueDisplayValues(
-    safeEssence.sex_origin || safeEssence.gender_origin || safeGeneDetail.sex_origin || safeGeneDetail.gender_origin,
-    2
-  );
-  var selectedCategory = String(sexOriginValues[0] || "").trim().toLowerCase();
-  var sexNote = String(safeEssence.sex || "").trim().toLowerCase();
-  var firstPublicationYear = Number(safeGeneDetail.first_publication_year);
-  var firstNoted = Number.isFinite(firstPublicationYear) && firstPublicationYear > 0 ? String(Math.round(firstPublicationYear)) : "";
-  var ageNote = "";
-  if (safeEssence.age) ageNote = String(safeEssence.age).trim();
-  else if (safeEssence.age_years != null && Number.isFinite(Number(safeEssence.age_years))) {
-    ageNote = String(Math.round(Number(safeEssence.age_years)));
+  if (safePayload.symbol && Array.isArray(safePayload.stylePairs)) return safePayload;
+  var shared = sharedCardRuntime();
+  if (shared && typeof shared.resolveArchivalCardModel === "function") {
+    return shared.resolveArchivalCardModel(safePayload.gene || safePayload, safePayload.options);
   }
-  var weightKg = Number(safeEssence.weight_kg);
-  var handwrittenWeight = Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : "";
-  var aesthetics = uniqueDisplayValues(safeEssence.aesthetics, 4);
-  var aestheticsOrigin = uniqueDisplayValues(safeEssence.aesthetics_origin, 4);
-  var maxStyleRows = Math.max(aesthetics.length, aestheticsOrigin.length, 3);
-  var stylePairs = [];
-  for (var i6 = 0; i6 < maxStyleRows; i6++) {
-    stylePairs.push({
-      origin: blankFallback(aestheticsOrigin[i6]),
-      note: String(aesthetics[i6] || "").trim()
-    });
-  }
-  var politicsDisplay = normalizePoliticsDisplay(
-    safeEssence.politics || safeEssence.faction || "",
-    safeEssence.politics_origin
-  );
-  var mode = String(safeOptions.mode || "sheet").trim().toLowerCase();
-  return {
-    color: String(safeGeneDetail.color || "").trim().toUpperCase(),
-    displayedFamily,
-    displayedFamilyFeature,
-    firstNoted,
-    fullName,
-    mobileReview: !!safeOptions.mobileReview,
-    mode: mode === "brick" ? "brick" : "sheet",
-    molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
-    politicalNote: String(politicsDisplay.character || "").trim(),
-    selectedCategory,
-    serial,
-    sexNote,
-    stylePairs,
-    symbol,
-    titleHref: String(safeOptions.titleHref || "").trim(),
-    voteHtml: String(safeOptions.voteHtml || ""),
-    handwrittenWeight,
-    ageNote: addAgeSuffix(ageNote)
-  };
+  return safePayload;
 }
 function penLoopFallbackMarkup() {
   return '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17" fill="none" stroke="currentColor" stroke-width="1.05" stroke-linecap="round" stroke-dasharray="2.5 4"/>';

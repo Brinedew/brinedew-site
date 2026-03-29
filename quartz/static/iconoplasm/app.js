@@ -841,77 +841,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     return ""
   }
 
-  function jsonScriptSafeString(value) {
-    return JSON.stringify(value)
-      .replace(/</g, "\\u003c")
-      .replace(/>/g, "\\u003e")
-      .replace(/&/g, "\\u0026")
-      .replace(/\u2028/g, "\\u2028")
-      .replace(/\u2029/g, "\\u2029")
-  }
-
-  function litArchivalGeneSnapshot(genePayload) {
-    var safeGenePayload = genePayload && typeof genePayload === "object" ? genePayload : {}
-    var safeEssence =
-      safeGenePayload.essence && typeof safeGenePayload.essence === "object"
-        ? safeGenePayload.essence
-        : {}
-    var safePortrait =
-      safeGenePayload.portrait && typeof safeGenePayload.portrait === "object"
-        ? safeGenePayload.portrait
-        : {}
-    return {
-      symbol: safeGenePayload.symbol || "",
-      canonical_symbol: safeGenePayload.canonical_symbol || "",
-      full_name: safeGenePayload.full_name || "",
-      color: safeGenePayload.color || "",
-      first_publication_year: safeGenePayload.first_publication_year || "",
-      sex_origin: safeGenePayload.sex_origin || "",
-      gender_origin: safeGenePayload.gender_origin || "",
-      portrait: {
-        artist_id: safePortrait.artist_id || "",
-        candidate_image_id: safePortrait.candidate_image_id || 0,
-        emulsion_id: safePortrait.emulsion_id || "",
-        vision_id: safePortrait.vision_id || "",
-      },
-      essence: {
-        age: safeEssence.age || "",
-        age_years: safeEssence.age_years || "",
-        aesthetics: safeEssence.aesthetics || [],
-        aesthetics_origin: safeEssence.aesthetics_origin || [],
-        family_feature: safeEssence.family_feature || "",
-        family_members: safeEssence.family_members || "",
-        family_surname: safeEssence.family_surname || "",
-        faction: safeEssence.faction || "",
-        gender_origin: safeEssence.gender_origin || "",
-        name: safeEssence.name || "",
-        politics: safeEssence.politics || "",
-        politics_origin: safeEssence.politics_origin || [],
-        sex: safeEssence.sex || "",
-        sex_origin: safeEssence.sex_origin || "",
-        weight_kg: safeEssence.weight_kg || "",
-      },
-    }
-  }
-
-  function buildLitArchivalBodyMarkup(genePayload, options) {
-    var opts = options || {}
-    var payload = {
-      gene: litArchivalGeneSnapshot(genePayload),
-      options: {
-        mode: opts.mode === "brick" ? "brick" : "sheet",
-        mobileReview: !!opts.mobileReview,
-        titleHref: String(opts.titleHref || "").trim(),
-        voteHtml: String(opts.voteHtml || ""),
-      },
-    }
-    return (
-      '<icono-lit-archival class="icono-lit-archival-host" data-icono-lit-archival>' +
-      '<script type="application/json" data-icono-lit-archival-model>' +
-      jsonScriptSafeString(payload) +
-      "</script>" +
-      "</icono-lit-archival>"
-    )
+  function buildArchivalBodyMarkup(genePayload, options) {
+    return IconoCardShared.renderLitArchivalCardHtml(genePayload, options || {})
   }
 
   function iconoRowMarkup(label, value) {
@@ -1137,23 +1068,6 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
-  function labLabelDisplayNameForBrick(genePayload) {
-    var safeGenePayload = genePayload && typeof genePayload === "object" ? genePayload : {}
-    var essence =
-      safeGenePayload.essence && typeof safeGenePayload.essence === "object"
-        ? safeGenePayload.essence
-        : {}
-    return (
-      String(
-        safeGenePayload.full_name ||
-          essence.name ||
-          safeGenePayload.symbol ||
-          safeGenePayload.canonical_symbol ||
-          "",
-      ).trim() || normalizedSymbol(safeGenePayload.symbol)
-    )
-  }
-
   function buildLabLabelPortraitMediaMarkup(
     symbol,
     portraitUrl,
@@ -1199,85 +1113,6 @@ void syncSharedIconoplasmSettings().catch(function () {
     )
   }
 
-  function buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href) {
-    var symbol = normalizedSymbol(genePayload && genePayload.symbol)
-    var fullName = labLabelDisplayNameForBrick(genePayload)
-    // Mobile must stay a UX wrapper around the canonical archival card. Do not add a second
-    // phone-only dossier renderer here. The only valid source for sheet fields is
-    // IconoCardShared.renderLabLabelCardHtml(...), with mobile changing presentation only.
-    // Mobile review constraints captured from production feedback:
-    // - the tab owns the gene symbol, so expanded dossier must not introduce a second mobile-only symbol treatment
-    // - the tab must stay visually attached to the dossier seam and inherit the desktop symbol voice
-    // - the tab must not drift into angular, asymmetric, improvised office-tab geometry
-    // - the mobile swipe surface owns voting; the expanded archival sheet must not render a second QC vote shell
-    // - collapsed copy should stay centered within the sheet width instead of reserving a giant dead strip
-    // - expanded sizing must be solved by measured layout changes, not by shrinking type until collisions are hidden
-    // - the mobile tab is a real archival object with soft rounded shoulders; no CSS polygon shortcuts
-    // - the tab has to remain fully inside the viewport after expansion so collapse stays reachable
-    // - never ask the canonical archival renderer for a phone-only variant; desktop must stay insulated
-    //   and mobile must adapt the same archival DOM instead of forking content selection
-    // - never nest vote buttons inside the peek toggle button; invalid button-in-button HTML causes
-    //   browser reparsing, which leaked the dossier open in collapsed state on production
-    return (
-      '<div class="icono-label-mobile-peek">' +
-      '<button type="button" class="icono-label-mobile-peek-toggle" data-icono-label-mobile-toggle aria-expanded="false">' +
-      '<span class="icono-label-mobile-peek-tab" aria-hidden="true">' +
-      '<svg class="icono-label-mobile-peek-tab-art" viewBox="0 0 188 72" preserveAspectRatio="none" focusable="false" aria-hidden="true">' +
-      '<path class="icono-label-mobile-peek-tab-fill" d="M6 72V44C6 39.6 9.6 36 14 36H51.4C58.6 36 64.7 31.3 69.1 22.1C73.1 13.8 79.6 8 94 8C108.4 8 114.9 13.8 118.9 22.1C123.3 31.3 129.4 36 136.6 36H174C178.4 36 182 39.6 182 44V72H6Z"></path>' +
-      '<path class="icono-label-mobile-peek-tab-highlight" d="M17 42.6H50.2C61.5 42.6 70.8 34.9 76.5 22.8C80.1 15.1 84.8 11.8 94 11.8C103.2 11.8 107.9 15.1 111.5 22.8C117.2 34.9 126.5 42.6 137.8 42.6H171"></path>' +
-      "</svg>" +
-      '<span class="icono-label-mobile-peek-tab-symbol">' +
-      esc(symbol) +
-      "</span>" +
-      "</span>" +
-      '<span class="icono-label-mobile-peek-topline">' +
-      '<span class="icono-label-mobile-peek-kicker">full name</span>' +
-      '<span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--closed">tap to open</span>' +
-      '<span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--open">tap to close</span>' +
-      "</span>" +
-      '<span class="icono-label-mobile-peek-summary">' +
-      '<span class="icono-label-mobile-peek-name">' +
-      esc(fullName) +
-      "</span>" +
-      "</span>" +
-      "</button>" +
-      '<div class="icono-label-mobile-peek-swipe">' +
-      voteHtml +
-      "</div>" +
-      "</div>" +
-      '<div class="icono-label-dossier-shell" data-icono-label-dossier-shell>' +
-      '<div class="icono-label-dossier-sheet">' +
-      IconoCardShared.renderLabLabelCardHtml(genePayload, {
-        voteHtml: "",
-        titleHref: href,
-        titleLinkAttrs: "data-icono-nav",
-      }) +
-      "</div>" +
-      "</div>"
-    )
-  }
-
-  function buildLabLabelDesktopBodyMarkup(genePayload, voteHtml, href) {
-    // Desktop must render the canonical archival sheet directly.
-    // Do not wrap desktop cards in the mobile dossier shell. That was the regression:
-    // mobile UX chrome leaked into desktop geometry and collapsed the live archival layout.
-    return IconoCardShared.renderLabLabelCardHtml(genePayload, {
-      voteHtml: voteHtml,
-      titleHref: href,
-      titleLinkAttrs: "data-icono-nav",
-    })
-  }
-
-  function buildLabLabelBrickBodyMarkup(genePayload, voteHtml, href) {
-    // One canonical archival renderer, two shells:
-    // - desktop: render the archival sheet directly
-    // - mobile: wrap that same sheet in touch ergonomics
-    // Never send desktop through the mobile shell again.
-    return isMobileLabelReviewEnabled()
-      ? buildLabLabelMobileDrawerMarkup(genePayload, voteHtml, href)
-      : buildLabLabelDesktopBodyMarkup(genePayload, voteHtml, href)
-  }
-
   function buildBrickCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
@@ -1286,7 +1121,6 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = portraitDetailCache[key] || null
     var cardVariant = resolveCardVariant()
     var isArchivalVariant = isArchivalCardVariant(cardVariant)
-    var isLitArchivalVariant = cardVariant === "lit-archival"
     var href = "/gene/" + esc(encodeURIComponent(g.symbol))
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
@@ -1306,14 +1140,12 @@ void syncSharedIconoplasmSettings().catch(function () {
       cardIndex < 6 ? "high" : "low",
     )
     var bodyHtml = isArchivalVariant
-      ? isLitArchivalVariant
-        ? buildLitArchivalBodyMarkup(detail || g, {
-            mode: "brick",
-            mobileReview: isMobileLabelReviewEnabled(),
-            titleHref: href,
-            voteHtml: labelVoteHtml,
-          })
-        : buildLabLabelBrickBodyMarkup(detail || g, labelVoteHtml, href)
+      ? buildArchivalBodyMarkup(detail || g, {
+          mode: "brick",
+          mobileReview: isMobileLabelReviewEnabled(),
+          titleHref: href,
+          voteHtml: labelVoteHtml,
+        })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-brick-header-row icono-shared-card-header-row">' +
         '<a class="icono-brick-header-link" href="' +
@@ -1427,7 +1259,6 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = g || null
     var cardVariant = resolveCardVariant()
     var isArchivalVariant = isArchivalCardVariant(cardVariant)
-    var isLitArchivalVariant = cardVariant === "lit-archival"
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
     // The lead card intentionally consumes the same mobile row-grid renderer as home bricks.
@@ -1523,15 +1354,11 @@ void syncSharedIconoplasmSettings().catch(function () {
         "</div>"
       : ""
     var bodyHtml = isArchivalVariant
-      ? isLitArchivalVariant
-        ? buildLitArchivalBodyMarkup(detail || g, {
-            mode: "sheet",
-            mobileReview: false,
-            voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
-          })
-        : IconoCardShared.renderLabLabelCardHtml(detail || g, {
-            voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
-          })
+      ? buildArchivalBodyMarkup(detail || g, {
+          mode: "sheet",
+          mobileReview: false,
+          voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
+        })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-shared-card-header-row">' +
         '<div class="icono-shared-card-header-copy">' +
@@ -1631,21 +1458,13 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (isArchivalCardVariant(card.getAttribute("data-icono-card-variant"))) {
       var body = card.querySelector(".iconoplasm-tooltip-body")
       var portraitShell = card.querySelector(".iconoplasm-tooltip-portrait")
-      var cardVariant = card.getAttribute("data-icono-card-variant")
       if (body) {
-        body.innerHTML =
-          cardVariant === "lit-archival"
-            ? buildLitArchivalBodyMarkup(genePayload, {
-                mode: "brick",
-                mobileReview: isMobileLabelReviewEnabled(),
-                titleHref: "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
-                voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
-              })
-            : buildLabLabelBrickBodyMarkup(
-                genePayload,
-                labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
-                "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
-              )
+        body.innerHTML = buildArchivalBodyMarkup(genePayload, {
+          mode: "brick",
+          mobileReview: isMobileLabelReviewEnabled(),
+          titleHref: "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
+          voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
+        })
       }
       if (portraitShell) {
         var dims = portraitDimensions(genePayload)
