@@ -1053,7 +1053,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
-  function labelVoteBoxMarkup(genePayload, attrName) {
+  function labelVoteBoxMarkup(genePayload, attrName, options) {
+    var opts = options || {}
     var assetSha = brickVoteAssetSha(genePayload)
     if (!assetSha) return ""
     var candidateImageId = brickVoteCandidateImageId(genePayload)
@@ -1065,6 +1066,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     return voteBoxMarkup(extraAttrs, {
       variant: "label",
       showScore: false,
+      showArrows: !!opts.showArrows,
     })
   }
 
@@ -1128,7 +1130,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       ? renderTooltipMobileRowGridHtml(metaRows, "data-icono-card-mobile-meta")
       : renderTooltipMobileSkeletonHtml("data-icono-card-mobile-meta")
     var voteHtml = brickVoteBoxMarkup(detail || g)
-    var labelVoteHtml = labelVoteBoxMarkup(detail || g, "data-icono-brick-vote-box")
+    var labelVoteHtml = labelVoteBoxMarkup(detail || g, "data-icono-brick-vote-box", {
+      showArrows: isMobileLabelReviewEnabled(),
+    })
     var portraitStateClass = portraitUrl
       ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
       : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
@@ -1357,7 +1361,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       ? buildArchivalBodyMarkup(detail || g, {
           mode: "sheet",
           mobileReview: false,
-          voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
+          voteHtml: portraitAssetSha
+            ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", { showArrows: false })
+            : "",
         })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-shared-card-header-row">' +
@@ -1463,7 +1469,9 @@ void syncSharedIconoplasmSettings().catch(function () {
           mode: "brick",
           mobileReview: isMobileLabelReviewEnabled(),
           titleHref: "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
-          voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
+          voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box", {
+            showArrows: isMobileLabelReviewEnabled(),
+          }),
         })
       }
       if (portraitShell) {

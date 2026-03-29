@@ -136,11 +136,15 @@
     }
   }
 
+  function isArchivalCardVariant() {
+    return cardVariant === "lab-label" || cardVariant === "lit-archival"
+  }
+
   function applyTooltipTheme() {
     if (!tooltip) return
     tooltip.classList.toggle("iconoplasm-tooltip--dark", tooltipTheme === "dark")
     tooltip.classList.toggle("iconoplasm-tooltip--light", tooltipTheme !== "dark")
-    tooltip.classList.toggle("iconoplasm-tooltip--variant-lab-label", cardVariant === "lab-label")
+    tooltip.classList.toggle("iconoplasm-tooltip--variant-lab-label", isArchivalCardVariant())
   }
 
   function buildHighlightRoughLoopSvg() {
@@ -2053,7 +2057,7 @@
     )
   }
 
-  function buildLabLabelTooltipBodyHtml(summaryGene, geneDetail) {
+  function buildArchivalTooltipBodyHtml(summaryGene, geneDetail) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
     const model = detail || {
@@ -2065,9 +2069,15 @@
     const assetSha = String(((detail || {}).portrait || {}).asset_sha256 || "")
       .trim()
       .toLowerCase()
-    return IconoCardShared.renderLabLabelCardHtml(model, {
+    return IconoCardShared.renderLitArchivalCardHtml(model, {
+      mode: "sheet",
+      mobileReview: false,
       voteHtml: assetSha
-        ? IconoCardShared.voteBoxMarkup("", { variant: "label", showScore: false })
+        ? IconoCardShared.voteBoxMarkup("", {
+            variant: "label",
+            showScore: false,
+            showArrows: false,
+          })
         : "",
     })
   }
@@ -2079,7 +2089,7 @@
       symbol: summary.symbol || activeSymbol || "",
       color: summary.c || PLACEHOLDER_COLOR,
     }
-    if (cardVariant === "lab-label") {
+    if (isArchivalCardVariant()) {
       return IconoCardShared.renderLabLabelSpecimenRailHtml(
         '<img class="iconoplasm-tooltip-portrait-img" alt="" />' +
           '<div class="iconoplasm-tooltip-portrait-fallback">' +
@@ -2104,8 +2114,8 @@
     const body = tooltip.querySelector(".iconoplasm-tooltip-body")
     if (!body) return
     body.innerHTML =
-      cardVariant === "lab-label"
-        ? buildLabLabelTooltipBodyHtml(summaryGene, geneDetail)
+      isArchivalCardVariant()
+        ? buildArchivalTooltipBodyHtml(summaryGene, geneDetail)
         : buildClassicTooltipBodyHtml(summaryGene, geneDetail, loading)
   }
 

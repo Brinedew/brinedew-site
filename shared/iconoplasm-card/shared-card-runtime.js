@@ -1424,10 +1424,11 @@
     var variant = String(opts.variant || "").trim()
     var isBrick = variant === "brick"
     var isLabel = variant === "label"
-    var approveArrow = isLabel
+    var showArrows = isLabel && !!opts.showArrows
+    var approveArrow = showArrows
       ? '<svg class="icono-vote-btn-arrow icono-vote-btn-arrow--right" viewBox="0 0 60 60" aria-hidden="true" focusable="false"><path d="M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z" transform="translate(60 0) scale(-1 1)"></path></svg>'
       : ""
-    var rejectArrow = isLabel
+    var rejectArrow = showArrows
       ? '<svg class="icono-vote-btn-arrow icono-vote-btn-arrow--left" viewBox="0 0 60 60" aria-hidden="true" focusable="false"><path d="M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z"></path></svg>'
       : ""
     var approveInner = isLabel
