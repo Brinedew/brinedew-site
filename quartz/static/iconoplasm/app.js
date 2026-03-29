@@ -9,6 +9,7 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260310d"
+import "./generated/lit-archival-card.js?v=20260329a"
 
 void syncSharedIconoplasmSettings().catch(function () {
   return null
@@ -828,6 +829,91 @@ void syncSharedIconoplasmSettings().catch(function () {
     )
   }
 
+  function isArchivalCardVariant(cardVariant) {
+    return cardVariant === "lab-label" || cardVariant === "lit-archival"
+  }
+
+  function archivalVariantClass(cardVariant) {
+    if (cardVariant === "lit-archival") {
+      return " icono-card--variant-lab-label icono-card--variant-lit-archival"
+    }
+    if (cardVariant === "lab-label") return " icono-card--variant-lab-label"
+    return ""
+  }
+
+  function jsonScriptSafeString(value) {
+    return JSON.stringify(value)
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e")
+      .replace(/&/g, "\\u0026")
+      .replace(/\u2028/g, "\\u2028")
+      .replace(/\u2029/g, "\\u2029")
+  }
+
+  function litArchivalGeneSnapshot(genePayload) {
+    var safeGenePayload = genePayload && typeof genePayload === "object" ? genePayload : {}
+    var safeEssence =
+      safeGenePayload.essence && typeof safeGenePayload.essence === "object"
+        ? safeGenePayload.essence
+        : {}
+    var safePortrait =
+      safeGenePayload.portrait && typeof safeGenePayload.portrait === "object"
+        ? safeGenePayload.portrait
+        : {}
+    return {
+      symbol: safeGenePayload.symbol || "",
+      canonical_symbol: safeGenePayload.canonical_symbol || "",
+      full_name: safeGenePayload.full_name || "",
+      color: safeGenePayload.color || "",
+      first_publication_year: safeGenePayload.first_publication_year || "",
+      sex_origin: safeGenePayload.sex_origin || "",
+      gender_origin: safeGenePayload.gender_origin || "",
+      portrait: {
+        artist_id: safePortrait.artist_id || "",
+        candidate_image_id: safePortrait.candidate_image_id || 0,
+        emulsion_id: safePortrait.emulsion_id || "",
+        vision_id: safePortrait.vision_id || "",
+      },
+      essence: {
+        age: safeEssence.age || "",
+        age_years: safeEssence.age_years || "",
+        aesthetics: safeEssence.aesthetics || [],
+        aesthetics_origin: safeEssence.aesthetics_origin || [],
+        family_feature: safeEssence.family_feature || "",
+        family_members: safeEssence.family_members || "",
+        family_surname: safeEssence.family_surname || "",
+        faction: safeEssence.faction || "",
+        gender_origin: safeEssence.gender_origin || "",
+        name: safeEssence.name || "",
+        politics: safeEssence.politics || "",
+        politics_origin: safeEssence.politics_origin || [],
+        sex: safeEssence.sex || "",
+        sex_origin: safeEssence.sex_origin || "",
+        weight_kg: safeEssence.weight_kg || "",
+      },
+    }
+  }
+
+  function buildLitArchivalBodyMarkup(genePayload, options) {
+    var opts = options || {}
+    var payload = {
+      gene: litArchivalGeneSnapshot(genePayload),
+      options: {
+        mode: opts.mode === "brick" ? "brick" : "sheet",
+        mobileReview: !!opts.mobileReview,
+        titleHref: String(opts.titleHref || "").trim(),
+        voteHtml: String(opts.voteHtml || ""),
+      },
+    }
+    return (
+      '<icono-lit-archival class="icono-lit-archival-host" data-icono-lit-archival>' +
+      '<script type="application/json" data-icono-lit-archival-model>' +
+      jsonScriptSafeString(payload) +
+      "</script>" +
+      "</icono-lit-archival>"
+    )
+  }
+
   function iconoRowMarkup(label, value) {
     return (
       '<div class="brd-sidebar-row">' +
@@ -1199,7 +1285,8 @@ void syncSharedIconoplasmSettings().catch(function () {
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
     var detail = portraitDetailCache[key] || null
     var cardVariant = resolveCardVariant()
-    var isLabelVariant = cardVariant === "lab-label"
+    var isArchivalVariant = isArchivalCardVariant(cardVariant)
+    var isLitArchivalVariant = cardVariant === "lit-archival"
     var href = "/gene/" + esc(encodeURIComponent(g.symbol))
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
@@ -1218,8 +1305,15 @@ void syncSharedIconoplasmSettings().catch(function () {
       dims,
       cardIndex < 6 ? "high" : "low",
     )
-    var bodyHtml = isLabelVariant
-      ? buildLabLabelBrickBodyMarkup(detail || g, labelVoteHtml, href)
+    var bodyHtml = isArchivalVariant
+      ? isLitArchivalVariant
+        ? buildLitArchivalBodyMarkup(detail || g, {
+            mode: "brick",
+            mobileReview: isMobileLabelReviewEnabled(),
+            titleHref: href,
+            voteHtml: labelVoteHtml,
+          })
+        : buildLabLabelBrickBodyMarkup(detail || g, labelVoteHtml, href)
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-brick-header-row icono-shared-card-header-row">' +
         '<a class="icono-brick-header-link" href="' +
@@ -1250,7 +1344,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       // are no longer one giant anchor because the compact vote control needs to be a real,
       // keyboard-focusable control instead of an invalid nested button inside a link.
       '<article class="icono-card icono-card--brick' +
-      (isLabelVariant ? " icono-card--variant-lab-label" : "") +
+      archivalVariantClass(cardVariant) +
       '" data-icono-index="' +
       cardIndex +
       '" data-icono-symbol="' +
@@ -1264,7 +1358,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
       ';">' +
-      (isLabelVariant
+      (isArchivalVariant
         ? '<div class="' +
           portraitStateClass +
           (portraitUrl ? '" data-icono-lightbox>' : '">') +
@@ -1312,7 +1406,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       '<div class="iconoplasm-tooltip-body">' +
       bodyHtml +
       "</div>" +
-      (isLabelVariant
+      (isArchivalVariant
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
           href +
@@ -1332,7 +1426,8 @@ void syncSharedIconoplasmSettings().catch(function () {
       .toLowerCase()
     var detail = g || null
     var cardVariant = resolveCardVariant()
-    var isLabelVariant = cardVariant === "lab-label"
+    var isArchivalVariant = isArchivalCardVariant(cardVariant)
+    var isLitArchivalVariant = cardVariant === "lit-archival"
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
     // The lead card intentionally consumes the same mobile row-grid renderer as home bricks.
@@ -1350,7 +1445,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       '"' +
       (portraitUrl ? " data-icono-lightbox" : "") +
       ">" +
-      (isLabelVariant
+      (isArchivalVariant
         ? IconoCardShared.renderLabLabelSpecimenRailHtml(
             portraitUrl
               ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
@@ -1424,13 +1519,19 @@ void syncSharedIconoplasmSettings().catch(function () {
     // and the off-spec color chip panel the user asked to remove.
     var voteSlotMarkup = portraitAssetSha
       ? '<div class="iconoplasm-tooltip-vote-slot" data-icono-gene-vote-slot>' +
-        voteBoxMarkup("", { variant: isLabelVariant ? "label" : "" }) +
+        voteBoxMarkup("", { variant: isArchivalVariant ? "label" : "" }) +
         "</div>"
       : ""
-    var bodyHtml = isLabelVariant
-      ? IconoCardShared.renderLabLabelCardHtml(detail || g, {
-          voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
-        })
+    var bodyHtml = isArchivalVariant
+      ? isLitArchivalVariant
+        ? buildLitArchivalBodyMarkup(detail || g, {
+            mode: "sheet",
+            mobileReview: false,
+            voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
+          })
+        : IconoCardShared.renderLabLabelCardHtml(detail || g, {
+            voteHtml: portraitAssetSha ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box") : "",
+          })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-shared-card-header-row">' +
         '<div class="icono-shared-card-header-copy">' +
@@ -1451,7 +1552,7 @@ void syncSharedIconoplasmSettings().catch(function () {
 
     return (
       '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card' +
-      (isLabelVariant ? " icono-card--variant-lab-label" : "") +
+      archivalVariantClass(cardVariant) +
       '" style="--width:' +
       dims.width +
       ";--height:" +
@@ -1498,7 +1599,7 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function ensureBrickVoteBox(card, genePayload) {
     if (!card) return
-    if (card.getAttribute("data-icono-card-variant") === "lab-label") return
+    if (isArchivalCardVariant(card.getAttribute("data-icono-card-variant"))) return
     var headerRow = card.querySelector(".icono-brick-header-row")
     if (!headerRow) return
     var assetSha = brickVoteAssetSha(genePayload)
@@ -1527,15 +1628,24 @@ void syncSharedIconoplasmSettings().catch(function () {
   function hydrateBrickCard(card, genePayload) {
     if (!card) return
     if (genePayload) hydrateBrickPortrait(card, genePayload)
-    if (card.getAttribute("data-icono-card-variant") === "lab-label") {
+    if (isArchivalCardVariant(card.getAttribute("data-icono-card-variant"))) {
       var body = card.querySelector(".iconoplasm-tooltip-body")
       var portraitShell = card.querySelector(".iconoplasm-tooltip-portrait")
+      var cardVariant = card.getAttribute("data-icono-card-variant")
       if (body) {
-        body.innerHTML = buildLabLabelBrickBodyMarkup(
-          genePayload,
-          labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
-          "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
-        )
+        body.innerHTML =
+          cardVariant === "lit-archival"
+            ? buildLitArchivalBodyMarkup(genePayload, {
+                mode: "brick",
+                mobileReview: isMobileLabelReviewEnabled(),
+                titleHref: "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
+                voteHtml: labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
+              })
+            : buildLabLabelBrickBodyMarkup(
+                genePayload,
+                labelVoteBoxMarkup(genePayload, "data-icono-brick-vote-box"),
+                "/gene/" + esc(encodeURIComponent(genePayload.symbol || "")),
+              )
       }
       if (portraitShell) {
         var dims = portraitDimensions(genePayload)

@@ -366,7 +366,9 @@
     var value = String(raw || "")
       .trim()
       .toLowerCase()
-    return value === "lab-label" ? "lab-label" : "classic"
+    if (value === "lab-label") return "lab-label"
+    if (value === "lit-archival") return "lit-archival"
+    return "classic"
   }
 
   function normalizePoliticsDisplay(rawPolitics, rawPoliticsOrigin) {
@@ -1677,6 +1679,10 @@
     normalizedSymbol: normalizedSymbol,
     uniqueDisplayValues: uniqueDisplayValues,
     normalizeCardVariant: normalizeCardVariant,
+    normalizePoliticsDisplay: normalizePoliticsDisplay,
+    labLabelCatalogNumber: labLabelCatalogNumber,
+    labLabelEmulsionNumber: labLabelEmulsionNumber,
+    labLabelDisplayName: labLabelDisplayName,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,
     collectTooltipMetaRows: collectTooltipMetaRows,
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,

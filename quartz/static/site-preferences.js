@@ -36,6 +36,7 @@ function normalizeCardVariant(variant) {
     .trim()
     .toLowerCase()
   if (value === "lab-label") return "lab-label"
+  if (value === "lit-archival") return "lit-archival"
   return ICONOPLASM_DEFAULT_SETTINGS.cardVariant
 }
 

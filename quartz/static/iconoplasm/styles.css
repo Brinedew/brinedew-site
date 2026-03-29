@@ -793,6 +793,10 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   color: var(--icono-brick-ink);
 }
 
+.icono-lit-archival-host {
+  display: contents;
+}
+
 .icono-card--brick .iconoplasm-tooltip-header {
   display: flex;
   flex-direction: column;

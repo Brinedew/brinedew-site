@@ -26,6 +26,7 @@ import {
   var CARD_VARIANT_OPTIONS = [
     { value: "classic", label: "Classic shared card" },
     { value: "lab-label", label: "Vintage lab label" },
+    { value: "lit-archival", label: "Lit archival rewrite" },
   ]
   var GENERATION_PROVIDERS = [
     { value: "openai-compatible", label: "OpenAI-compatible" },
