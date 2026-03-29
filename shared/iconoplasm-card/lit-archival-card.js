@@ -1,6 +1,7 @@
 import { html, nothing, render } from "lit"
 import { unsafeHTML } from "lit/directives/unsafe-html.js"
 
+var MODEL_ATTR = "data-icono-lit-archival-model"
 var MODEL_SELECTOR = 'script[type="application/json"][data-icono-lit-archival-model]'
 var roughLoopSerial = 0
 
@@ -278,7 +279,17 @@ function archivalTemplate(model) {
   return sheetTemplate(model)
 }
 
-function parsePayloadFromNode(node) {
+function parsePayloadFromHost(host) {
+  if (!host) return null
+  var encoded = String(host.getAttribute(MODEL_ATTR) || "").trim()
+  if (encoded) {
+    try {
+      return JSON.parse(decodeURIComponent(encoded))
+    } catch (error) {
+      console.error("[Iconoplasm] failed to parse lit-archival model attribute:", error)
+    }
+  }
+  var node = host.querySelector(MODEL_SELECTOR)
   if (!node) return null
   try {
     return JSON.parse(node.textContent || "{}")
@@ -296,8 +307,7 @@ class IconoLitArchivalCard extends HTMLElement {
 
   connectedCallback() {
     if (!this._model) {
-      var payloadNode = this.querySelector(MODEL_SELECTOR)
-      var payload = parsePayloadFromNode(payloadNode)
+      var payload = parsePayloadFromHost(this)
       if (payload) this._model = resolveCardModel(payload)
     }
     this.render()

@@ -347,6 +347,10 @@
       .replace(/\u2029/g, "\\u2029")
   }
 
+  function jsonAttributeSafeString(value) {
+    return encodeURIComponent(JSON.stringify(value))
+  }
+
   function normalizedSymbol(symbol) {
     return String(symbol || "")
       .trim()
@@ -1247,10 +1251,9 @@
   function renderLitArchivalCardHtml(geneDetail, options) {
     var model = resolveArchivalCardModel(geneDetail, options)
     return (
-      '<icono-lit-archival class="icono-lit-archival-host" data-icono-lit-archival>' +
-      '<script type="application/json" data-icono-lit-archival-model>' +
-      jsonScriptSafeString(model) +
-      "</script>" +
+      '<icono-lit-archival class="icono-lit-archival-host" data-icono-lit-archival data-icono-lit-archival-model="' +
+      escapeHtml(jsonAttributeSafeString(model)) +
+      '">' +
       "</icono-lit-archival>"
     )
   }
