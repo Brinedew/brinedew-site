@@ -116,8 +116,10 @@ draft: false
     However, as a guidance, I can suggest some constraints.
 
     - The protein-to-cell diameter ratio is roughly around 1:10,000 in humans. Intuitively, it would compare to a 1.5m-tall person living in a large 15 km-wide city - somewhere between Paris and Moscow in size.
+    - that said, ![](../Attachments/20260329_090317.jpg)
     - It gets unnecessarily complicated if you try to represent each copy of the protein molecule with its own character, so it makes sense to map gene expression strength to character presence. Highly expressed genes are represented by superpowered characters, barely expressed genes are weak.
-    - RNAs are better thought of as transient ghost-like spirits that can affect the world only in limited ways. Ribosomes would be the shrine where these spirits incarnate into a material shell. The time before ribosomes existed is covered in mystery - perhaps the rumors of the ancient world of songs upon songs.
+    - Many diagrams put cytoplasm below the cell membrane, and extracellular space above it. But here, the orientation I find helpful is that being a cell membrane protein feels like being an ice fisher: cell membrane is what you're walking on, extracellular space is below it (down the hole) and the cell nucleus is above you (obscured and unreachable like the winter sun). In that sense, having a transmembrane domain is akin to "being subjected to gravity".
+    - RNAs could be thought of as transient ghost-like spirits that can affect the world only in limited ways. Ribosomes would be the shrine where these spirits incarnate into a material shell. The time before ribosomes existed is covered in mystery - perhaps the rumors of the ancient world of songs upon songs.
     - DNA is best represented as immaterial soul storage for the characters: gravestones, phylacteria, vinyl records, scrolls. The only way to get rid of the character for good is to destroy the soul storage - otherwise there's always a risk they'll come back from the dead.
     - In real world, we can see what's far ahead on the horizon. However, in iconoplasm worlds, each character has very limited information about what's happening elsewhere in the cell. For example, the characters can't see a cell membrane being ruptured from far away - this information needs to be spread through messengers, rumor networks, or carried as a vague directional smell. Think of it as a dense mist or blur covering the world.
     - Information about what's outside the cell membrane is even more inaccessible. Most characters can't know for sure if they're a part of some grand design like a multicellular body - only the membrane proteins are even directly aware there's other cells nearby. The "developmental plan" must have more of a ritual or sacred connotation rather than rational design, and there's doubt and suspicion when characters use grand narratives to justify drastic action.
@@ -127,6 +129,18 @@ draft: false
     - What's the motivation to initiate the mitosis? There are factions that are pro-and anti-replication, with their own motivations and narratives. Sometimes, one side wins, sometimes, the other.
     - When the pro-Growth side wins, the cell replicates. Sometimes, the characters benefit (germline, regeneration). Other times, they die (oncogenesis).
     - When the pro-Control side wins, the cell enters quiescence. Sometimes, the characters benefit (morphogenesis). Other times, they die (apoptosis, aging).
+
+1. **Any ideas for scenarios to explore from inside the cell?**
+My favourite scenarios are the ones where cell makes a decision to self-sacrifice or hamper itself in some way for some vague and unseen "common good".
+* Enucleation of an erythrocyte.
+* Oncogene-induced apoptosis.
+* Living next to a SASP senescent cell
+* Cell is in a body that just died of heart attack. 
+* Sperm-egg fusion.
+* Leukocyte migration.
+* Lineage potency restriction in early development.
+* Being assigned a transit amplifying role.
+* Immortalisation as a Hela cell
 
 1. **How can we support the project?**
 

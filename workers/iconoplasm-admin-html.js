@@ -1267,7 +1267,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         </div>
         <div class="gallery-toolbar-row">
           <div class="small">Click a gene to inspect candidates. If a manual override exists, the compare view shows the current canonical portrait against the vote winner.</div>
-          <button class="btn-primary" id="assets-refresh">Refresh</button>
+          <div class="actions">
+            <button class="btn-flat" type="button" id="assets-unstale-visible" disabled>Restore stale in view</button>
+            <button class="btn-primary" id="assets-refresh">Refresh</button>
+          </div>
         </div>
       </div>
 
@@ -1455,6 +1458,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         limit: document.getElementById('gallery-limit'),
         search: document.getElementById('gallery-search'),
         token: document.getElementById('admin-token'),
+        unstaleVisible: document.getElementById('assets-unstale-visible'),
         refresh: document.getElementById('assets-refresh'),
         meta: document.getElementById('assets-meta'),
         body: document.getElementById('gallery-grid'),
@@ -2477,6 +2481,31 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return state.assets.slice();
       }
 
+      function batchUnstaleSymbolsForVisibleSlice() {
+        var seen = new Set();
+        filteredAssets().forEach(function (row) {
+          var symbol = String((row && row.gene_symbol) || '').trim().toUpperCase();
+          if (!symbol) return;
+          // This button intentionally acts on the current visible slice so the
+          // admin can narrow the target with the existing search/filter controls
+          // and then apply one batch restore without guessing what else will move.
+          var rowHasStale = Number((row && row.stale_count) || 0) > 0 || Boolean(row && (row.has_stale || row.is_stale));
+          if (rowHasStale) seen.add(symbol);
+        });
+        return Array.from(seen);
+      }
+
+      function syncVisibleBatchActions() {
+        if (!els.unstaleVisible) return;
+        var symbols = batchUnstaleSymbolsForVisibleSlice();
+        var count = symbols.length;
+        els.unstaleVisible.disabled = count === 0;
+        els.unstaleVisible.textContent = count ? ('Restore stale in view (' + count + ')') : 'Restore stale in view';
+        els.unstaleVisible.title = count
+          ? 'Restore stale status for every visible gene in the current gallery slice.'
+          : 'No visible genes in this slice have stale status to restore.';
+      }
+
       function dedupeGalleryRows(rows) {
         var seen = new Set();
         return (Array.isArray(rows) ? rows : []).filter(function (row) {
@@ -2717,6 +2746,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var assets = filteredAssets();
         if (!assets.length) {
           els.body.innerHTML = '<div class="gallery-empty" style="grid-column:1 / -1">Nothing matched this gallery slice.</div>';
+          syncVisibleBatchActions();
           return;
         }
         els.body.innerHTML = assets.map(function (a) {
@@ -2724,6 +2754,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (state.galleryMode === 'side-by-side') return renderCompareCard(a);
           return renderLiveCard(a);
         }).join('');
+        syncVisibleBatchActions();
       }
 
       async function refreshAssets() {
@@ -2856,6 +2887,25 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           await refreshAssets();
           await refreshDerivedAdminViews();
           return;
+        }
+      }
+
+      async function handleVisibleBatchUnstale() {
+        var symbols = batchUnstaleSymbolsForVisibleSlice();
+        if (!symbols.length) throw new Error('No visible stale genes to restore.');
+        var query = String((els.search && els.search.value) || '').trim().toUpperCase();
+        var prompt = query
+          ? 'Restore stale manifestations for ' + symbols.length + ' visible genes matching "' + query + '"?'
+          : 'Restore stale manifestations for ' + symbols.length + ' visible genes in the current gallery slice?';
+        if (!window.confirm(prompt)) return;
+        var body = { symbols: symbols };
+        var reason = reasonOrUndefined();
+        if (reason) body.reason = reason;
+        setLog(await runMutation('/unstale-batch', body));
+        await refreshAssets();
+        await refreshDerivedAdminViews();
+        if (state.selectedGene && symbols.indexOf(String(state.selectedGene || '').toUpperCase()) !== -1) {
+          await refreshGeneDetail(state.selectedGene);
         }
       }
 
@@ -3134,6 +3184,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             setLog('Copied artist tag: ' + artistTag);
           });
         }
+
+        if (els.unstaleVisible) {
+          els.unstaleVisible.addEventListener('click', async function () {
+            try {
+              els.unstaleVisible.disabled = true;
+              await handleVisibleBatchUnstale();
+            } catch (err) {
+              setLog({ error: String(err.message || err), details: err.response || null });
+            } finally {
+              syncVisibleBatchActions();
+            }
+          });
+        }
       }
 
       function init() {
@@ -3144,6 +3207,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         renderVisionCleanupPanel();
         renderVisionQuickActions();
         els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blacklist log.</div></div><div></div></article>';
+        syncVisibleBatchActions();
         els.refresh.addEventListener('click', function () {
           refreshAssets();
         });

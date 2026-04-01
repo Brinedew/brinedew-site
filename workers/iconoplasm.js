@@ -67,6 +67,8 @@ const ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT = 200
 const ADMIN_READ_MODEL_SYMBOL_BATCH_MAX = 1000
 const ADMIN_READ_MODEL_VISION_BATCH_DEFAULT = 150
 const ADMIN_READ_MODEL_VISION_BATCH_MAX = 1000
+const ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX = 1000
+const ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX = 1000
 const ADMIN_READ_MODEL_STEP_DEFAULT = 1
 const ADMIN_READ_MODEL_STEP_MAX = 25
 const adminReadModelState = {
@@ -3612,7 +3614,16 @@ async function bulkRebuildAdminReadModels(env) {
 
 async function syncAdminReadModels(
   env,
-  { symbols = [], visionIds = [], fullVision = false, fullRebuild = false } = {},
+  {
+    symbols = [],
+    visionIds = [],
+    fullVision = false,
+    fullRebuild = false,
+    skipVoteSummaries = false,
+    skipGeneRollups = false,
+    skipVisionRollups = false,
+    skipDashboard = false,
+  } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { symbols: 0, visions: 0 }
   if (fullRebuild) {
@@ -3633,24 +3644,34 @@ async function syncAdminReadModels(
     // run. Rebuilding admin read models for all touched symbols in one giant
     // JSON-bound D1 statement turned the refresh into a single oversized point
     // of failure. Chunk the durable work so each slice can finish cleanly.
-    await rebuildVoteAssetSummaryForSymbols(env, symbolChunk)
-    await rebuildGeneRollupForSymbols(env, symbolChunk)
-    const inferredVisionIds = await collectVisionIdsForSymbols(env, symbolChunk)
-    for (const visionId of inferredVisionIds) {
-      finalVisionIdSet.add(visionId)
+    if (!skipVoteSummaries) {
+      await rebuildVoteAssetSummaryForSymbols(env, symbolChunk)
+    }
+    if (!skipGeneRollups) {
+      await rebuildGeneRollupForSymbols(env, symbolChunk)
+    }
+    if (!skipVisionRollups) {
+      const inferredVisionIds = await collectVisionIdsForSymbols(env, symbolChunk)
+      for (const visionId of inferredVisionIds) {
+        finalVisionIdSet.add(visionId)
+      }
     }
   }
-  const finalVisionIds = Array.from(finalVisionIdSet)
-  if (fullVision) await rebuildVisionRollups(env, [], { full: true })
-  else {
-    const visionBatchSize = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT
-    for (let start = 0; start < finalVisionIds.length; start += visionBatchSize) {
-      const visionChunk = finalVisionIds.slice(start, start + visionBatchSize)
-      if (!visionChunk.length) continue
-      await rebuildVisionRollupsBatch(env, visionChunk)
+  const finalVisionIds = skipVisionRollups ? [] : Array.from(finalVisionIdSet)
+  if (!skipVisionRollups) {
+    if (fullVision) await rebuildVisionRollups(env, [], { full: true })
+    else {
+      const visionBatchSize = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT
+      for (let start = 0; start < finalVisionIds.length; start += visionBatchSize) {
+        const visionChunk = finalVisionIds.slice(start, start + visionBatchSize)
+        if (!visionChunk.length) continue
+        await rebuildVisionRollupsBatch(env, visionChunk)
+      }
     }
   }
-  await rebuildDashboardSummary(env)
+  if (!skipDashboard) {
+    await rebuildDashboardSummary(env)
+  }
   adminReadModelState.ready = true
   return { symbols: symbolList.length, visions: fullVision ? -1 : finalVisionIds.length }
 }
@@ -5238,10 +5259,25 @@ async function invalidateGalleryCache(env) {
 
 async function syncAdminReadModelsAndInvalidateGallery(
   env,
-  { symbols = [], visionIds = [], fullVision = false, fullRebuild = false } = {},
+  {
+    symbols = [],
+    visionIds = [],
+    fullVision = false,
+    fullRebuild = false,
+    skipVisionRollups = false,
+    skipDashboard = false,
+  } = {},
 ) {
-  await syncAdminReadModels(env, { symbols, visionIds, fullVision, fullRebuild })
+  const result = await syncAdminReadModels(env, {
+    symbols,
+    visionIds,
+    fullVision,
+    fullRebuild,
+    skipVisionRollups,
+    skipDashboard,
+  })
   await invalidateGalleryCache(env)
+  return result
 }
 
 function galleryCanUseEdgeCache(url) {
@@ -5441,10 +5477,10 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
        ON pa.gene_symbol = ps.gene_symbol
       AND pa.asset_sha256 = ps.current_asset_sha256
      LEFT JOIN icono_gene_essence ge
-       ON upper(ge.gene_symbol) = upper(ps.gene_symbol)
+       ON ge.gene_symbol = ps.gene_symbol
      LEFT JOIN icono_vote_asset_summary vs
-       ON vs.gene_symbol = upper(ps.gene_symbol)
-      AND vs.asset_sha256 = lower(pa.asset_sha256)
+       ON vs.gene_symbol = ps.gene_symbol
+      AND vs.asset_sha256 = pa.asset_sha256
      WHERE ps.current_asset_sha256 IS NOT NULL
        AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''`,
   ).all()
@@ -5808,9 +5844,9 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
          ge.leakage_percent
        FROM icono_admin_gene_rollup gr
        LEFT JOIN icono_gene_catalog gc
-         ON upper(gc.gene_symbol) = upper(gr.gene_symbol)
+         ON gc.gene_symbol = gr.gene_symbol
        LEFT JOIN icono_gene_essence ge
-         ON upper(ge.gene_symbol) = upper(gr.gene_symbol)
+         ON ge.gene_symbol = gr.gene_symbol
        WHERE COALESCE(gr.current_asset_sha256, '') <> ''
          AND COALESCE(gr.current_asset_missing, 0) = 0
          AND COALESCE(gr.live_r2_key_medium, gr.live_r2_key_thumb, gr.live_r2_key_full, '') <> ''
@@ -7669,6 +7705,122 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
     }
 
+    if (path === "/api/iconoplasm/admin/read-models/sync" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_read_models_sync_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_read_models_sync_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      let p = {}
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_read_models_sync_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
+      const rawVisionIds = Array.isArray(p?.vision_ids ?? p?.visionIds)
+        ? p.vision_ids ?? p.visionIds
+        : []
+      if (rawSymbols.length > ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX)
+        return done(
+          "admin_read_models_sync_400",
+          json(
+            {
+              error: `Too many symbols (max ${ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX})`,
+            },
+            400,
+          ),
+        )
+      if (rawVisionIds.length > ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX)
+        return done(
+          "admin_read_models_sync_400",
+          json(
+            {
+              error: `Too many vision_ids (max ${ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX})`,
+            },
+            400,
+          ),
+        )
+
+      const symbols = Array.from(
+        new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
+      )
+      const visionIds = Array.from(
+        new Set(rawVisionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean)),
+      )
+      const fullVision = coerceBoolean(p?.full_vision ?? p?.fullVision, false)
+      const fullRebuild = coerceBoolean(p?.full_rebuild ?? p?.fullRebuild, false)
+      const skipVoteSummaries = coerceBoolean(
+        p?.skip_vote_summaries ?? p?.skipVoteSummaries,
+        false,
+      )
+      const skipGeneRollups = coerceBoolean(
+        p?.skip_gene_rollups ?? p?.skipGeneRollups,
+        false,
+      )
+      const skipVisionRollups = coerceBoolean(
+        p?.skip_vision_rollups ?? p?.skipVisionRollups,
+        false,
+      )
+      const skipDashboard = coerceBoolean(
+        p?.skip_dashboard ?? p?.skipDashboard,
+        false,
+      )
+      const invalidateGallery = coerceBoolean(
+        p?.invalidate_gallery ?? p?.invalidateGallery,
+        true,
+      )
+
+      // Bulk workstation sync now pushes the slow derived read-model refresh
+      // into this dedicated endpoint after reconcile chunks land. That keeps a
+      // fail-slow read-model rebuild from masquerading as one giant reconcile.
+      const result = invalidateGallery
+        ? await syncAdminReadModelsAndInvalidateGallery(env, {
+            symbols,
+            visionIds,
+            fullVision,
+            fullRebuild,
+            skipVoteSummaries,
+            skipGeneRollups,
+            skipVisionRollups,
+            skipDashboard,
+          })
+        : await syncAdminReadModels(env, {
+            symbols,
+            visionIds,
+            fullVision,
+            fullRebuild,
+            skipVoteSummaries,
+            skipGeneRollups,
+            skipVisionRollups,
+            skipDashboard,
+          })
+
+      return done(
+        "admin_read_models_sync",
+        json(
+          {
+            ok: true,
+            symbols: Number(result?.symbols || 0),
+            visions: Number(result?.visions || 0),
+            invalidate_gallery: invalidateGallery,
+            full_vision: fullVision,
+            full_rebuild: fullRebuild,
+            skip_vote_summaries: skipVoteSummaries,
+            skip_gene_rollups: skipGeneRollups,
+            skip_vision_rollups: skipVisionRollups,
+            skip_dashboard: skipDashboard,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (path === "/api/iconoplasm/admin/read-models/bootstrap") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_read_models_bootstrap_403", json({ error: "Unauthorized" }, 403))
@@ -8370,6 +8522,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const items = Array.isArray(p?.items) ? p.items : []
+      const deferReadModels = Boolean(p?.defer_read_models)
       if (!items.length)
         return done("admin_essence_upsert_400", json({ error: "No items provided" }, 400))
       if (items.length > 1000)
@@ -8416,7 +8569,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         })
       }
 
-      if (processed > 0) {
+      if (processed > 0 && !deferReadModels) {
         await syncAdminReadModels(env, {
           symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
         })
@@ -8430,6 +8583,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             processed,
             invalid,
             total: items.length,
+            defer_read_models: deferReadModels,
             results,
           },
           invalid > 0 && processed === 0 ? 400 : 200,
@@ -8892,6 +9046,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
+      const deferReadModels = coerceBoolean(
+        p?.defer_read_models ?? p?.deferReadModels,
+        false,
+      )
       const unpublishMissing = coerceBoolean(p?.unpublish_missing ?? p?.unpublishMissing, false)
       const actorId = await actor(request, env)
       const reason = String(p?.reason || "").slice(0, 2000) || "local_sync_reconcile"
@@ -9014,7 +9172,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         }
       }
 
-      if (!dryRun)
+      if (!dryRun && !deferReadModels)
         await syncAdminReadModelsAndInvalidateGallery(env, {
           symbols: Array.from(touchedSymbols),
         })
@@ -9034,6 +9192,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             auto_resolved: autoResolved,
             unpublished,
             ignored_invalid: ignoredInvalid,
+            defer_read_models: deferReadModels,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -9049,6 +9208,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         "/api/iconoplasm/admin/rollback",
         "/api/iconoplasm/admin/unpublish",
         "/api/iconoplasm/admin/unstale",
+        "/api/iconoplasm/admin/unstale-batch",
         "/api/iconoplasm/admin/purge-legacy",
       ].includes(path) &&
       request.method === "POST"
@@ -9061,9 +9221,77 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       } catch {
         return done("admin_mut_400", json({ error: "Invalid JSON" }, 400))
       }
+      const actorId = await actor(request, env)
+
+      if (path.endsWith("/unstale-batch")) {
+        const symbols = Array.from(
+          new Set(
+            (Array.isArray(p?.symbols) ? p.symbols : [])
+              .map((value) => normalizeSymbol(value || ""))
+              .filter(Boolean),
+          ),
+        ).slice(0, ADMIN_READ_MODEL_SYMBOL_BATCH_MAX)
+        if (!symbols.length)
+          return done("unstale_batch_400", json({ error: "Missing symbols" }, 400))
+
+        const placeholders = symbols.map(() => "?").join(",")
+        const staleResp = await env.ICONOPLASM_DB.prepare(
+          `SELECT upper(gene_symbol) AS gene_symbol, asset_sha256
+             FROM icono_portrait_assets
+            WHERE upper(gene_symbol) IN (${placeholders})
+              AND COALESCE(is_stale, 0) = 1`,
+        )
+          .bind(...symbols)
+          .all()
+        const staleRows = Array.isArray(staleResp?.results) ? staleResp.results : []
+        const touchedSymbols = Array.from(
+          new Set(staleRows.map((row) => normalizeSymbol(row?.gene_symbol || "")).filter(Boolean)),
+        )
+
+        if (!staleRows.length) {
+          return done(
+            "unstale_batch",
+            json({ ok: true, action: "unstale_batch", touched_symbols: 0, unstaled_assets: 0, symbols }),
+          )
+        }
+
+        // The gallery narrows work with search/filter controls, so the batch
+        // route restores every stale asset for that visible gene slice in one go.
+        await env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_portrait_assets
+              SET is_stale = 0,
+                  is_legacy = 0
+            WHERE upper(gene_symbol) IN (${placeholders})
+              AND COALESCE(is_stale, 0) = 1`,
+        )
+          .bind(...symbols)
+          .run()
+
+        await env.ICONOPLASM_DB.batch(
+          staleRows.map((row) => {
+            const symbolValue = normalizeSymbol(row?.gene_symbol || "")
+            const assetValue = String(row?.asset_sha256 || "").trim()
+            return env.ICONOPLASM_DB.prepare(
+              "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unstale', ?, ?, CURRENT_TIMESTAMP)",
+            ).bind(symbolValue, assetValue, assetValue, actorId, String(p?.reason || "").slice(0, 2000) || null)
+          }),
+        )
+
+        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: touchedSymbols })
+        return done(
+          "unstale_batch",
+          json({
+            ok: true,
+            action: "unstale_batch",
+            touched_symbols: touchedSymbols.length,
+            unstaled_assets: staleRows.length,
+            symbols: touchedSymbols,
+          }),
+        )
+      }
+
       const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
       if (!symbol) return done("admin_mut_400", json({ error: "Missing symbol" }, 400))
-      const actorId = await actor(request, env)
 
       if (path.endsWith("/publish")) {
         const asset = String(p?.asset_sha256 || "").trim()

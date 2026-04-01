@@ -1458,6 +1458,26 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
+  function ensureArchivalBrickVoteBox(card, genePayload) {
+    if (!card) return
+    if (!isArchivalCardVariant(card.getAttribute("data-icono-card-variant"))) return
+    var assetSha = brickVoteAssetSha(genePayload)
+    var box = card.querySelector("[data-icono-brick-vote-box]")
+    if (!box || !assetSha) return
+    // Archival brick hydration replaces `.iconoplasm-tooltip-body` wholesale after detail fetch.
+    // That DOM swap discards the initial vote listeners that were attached when the card first
+    // entered the gallery. Rewire the replacement box immediately so swipe-review still submits
+    // after the card has hydrated, after returning to the gallery, and after any later body swap.
+    wireVoteBox(box, card.getAttribute("data-icono-symbol"), assetSha, {
+      deferSnapshot: false,
+      visionId: box.getAttribute("data-icono-vision-id") || brickVoteVisionId(genePayload) || "",
+      candidateImageId:
+        box.getAttribute("data-icono-candidate-image-id") ||
+        brickVoteCandidateImageId(genePayload) ||
+        0,
+    })
+  }
+
   function hydrateBrickCard(card, genePayload) {
     if (!card) return
     if (genePayload) hydrateBrickPortrait(card, genePayload)
@@ -1474,6 +1494,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           }),
         })
       }
+      ensureArchivalBrickVoteBox(card, genePayload)
       if (portraitShell) {
         var dims = portraitDimensions(genePayload)
         var portraitUrl = publishedPortraitUrl(genePayload, "medium")
