@@ -236,6 +236,9 @@ Nuclear protein "beads" that DNA wraps around to form chromatin, helping package
 **Homologous recombination (HR)**
 Precise DNA repair process that uses an intact copy as a template to fix breaks in a damaged copy.
 
+**Hostage capital**
+Assets or investments designed to be vulnerable to ensure trust, compliance, or political leverage: freezable petrodollars, aristocratic estates.
+
 **Hyperfunction theory**
 Idea that aging mainly results from growth and development programs running too strongly or too long later in life.
 
