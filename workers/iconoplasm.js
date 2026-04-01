@@ -11,6 +11,13 @@ const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 // The extension and site are expected to use that same contract so we do not
 // quietly drift back into a split legacy/public surface later.
 //
+// Data-lineage fence:
+// The local Iconoplasm authoring/control-plane lives at
+// `d:\Coding\Datasets\iconoplasm`. When Website Ops sync or catalog facts look
+// wrong, start there first. This worker is the public website/runtime boundary
+// that ingests and serves published state; it should not grow ad hoc logic that
+// compensates for missing upstream workstation exports.
+//
 // Voting architecture note:
 // There are two legitimate vote writers in this system:
 // 1) the local operator reviewing fresh candidates before publication, and
@@ -37,6 +44,7 @@ const catalogCache = {
   hash: null,
   bySymbol: new Map(),
   symbolByUniprot: new Map(),
+  symbolByAlias: new Map(),
   loadedAt: 0,
 }
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000
@@ -442,6 +450,50 @@ function normalizeTextList(raw, { maxItems = 32, maxLen = 128 } = {}) {
   return out
 }
 
+function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64 } = {}) {
+  const out = []
+  const seen = new Set()
+  const pushValue = (value) => {
+    let cleaned = sanitizeText(value, maxLen)
+    if (!cleaned) return
+    cleaned = cleaned.replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\s+/g, " ").trim()
+    if (!cleaned || cleaned.includes(" ")) return
+    const key = cleaned.toUpperCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(cleaned)
+  }
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      pushValue(item)
+      if (out.length >= maxItems) break
+    }
+    return out
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          pushValue(item)
+          if (out.length >= maxItems) break
+        }
+        return out
+      }
+    } catch {}
+    for (const part of raw.split(",")) {
+      pushValue(part)
+      if (out.length >= maxItems) break
+    }
+  }
+  return out
+}
+
+function normalizeCatalogAliasLookupKey(raw) {
+  const aliases = normalizeCatalogAliases([raw], { maxItems: 1 })
+  return aliases.length ? String(aliases[0]).toUpperCase() : ""
+}
+
 function normalizeAestheticsList(raw) {
   return normalizeTextList(raw)
 }
@@ -574,6 +626,7 @@ function catalogStateHashPayload(rawItem) {
     item.uniprot || "",
     item.color_hex || "",
     item.tmh ? 1 : 0,
+    item.aliases_json || "[]",
   ]
 }
 
@@ -968,6 +1021,7 @@ function publicSchemaDoc() {
         "symbol",
         "canonical_symbol",
         "full_name",
+        "aliases",
         "uniprot",
         "color",
         "weight_kg",
@@ -1074,17 +1128,23 @@ async function warmCatalogCache(env) {
 
   const bySymbol = new Map()
   const symbolByUniprot = new Map()
+  const symbolByAlias = new Map()
   for (const g of artifact?.genes || []) {
     const s = normalizeSymbol(g?.s)
     if (!s) continue
     bySymbol.set(s, g)
     const u = normalizeUniprot(g?.u)
     if (u) symbolByUniprot.set(u, s)
+    for (const alias of normalizeCatalogAliases(g?.a || [])) {
+      const key = normalizeCatalogAliasLookupKey(alias)
+      if (key && !symbolByAlias.has(key)) symbolByAlias.set(key, s)
+    }
   }
   catalogCache.hash = manifest.current_hash
   catalogCache.loadedAt = now
   catalogCache.bySymbol = bySymbol
   catalogCache.symbolByUniprot = symbolByUniprot
+  catalogCache.symbolByAlias = symbolByAlias
 }
 
 function normalizeCatalogPayloadItem(rawItem) {
@@ -1098,6 +1158,9 @@ function normalizeCatalogPayloadItem(rawItem) {
   }
   const colorHex = normalizeHexColor(payload.color_hex || payload.color || payload.c || "")
   const uniprot = normalizeUniprot(payload.uniprot || payload.u || "")
+  const aliases = normalizeCatalogAliases(
+    payload.aliases || payload.a || payload.alias_symbols || payload.aliases_json || [],
+  )
   if (payload.uniprot != null && payload.uniprot !== "" && !uniprot) {
     return { symbol, validation_error: "Catalog item has invalid UniProt accession" }
   }
@@ -1110,13 +1173,14 @@ function normalizeCatalogPayloadItem(rawItem) {
     uniprot,
     color_hex: colorHex,
     tmh: coerceBoolean(payload.tmh, false),
+    aliases_json: JSON.stringify(aliases),
   }
 }
 
 async function fetchCatalogState(env) {
   if (!env.ICONOPLASM_DB) return { gene_count: 0, content_hash: "" }
   const { results } = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, full_name, uniprot, color_hex, tmh
+    `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json
        FROM icono_gene_catalog
       ORDER BY gene_symbol ASC`,
   ).all()
@@ -1223,7 +1287,7 @@ async function fetchCatalogRow(env, symbol) {
   if (!env.ICONOPLASM_DB || !symbol) return null
   try {
     const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, updated_at
+      `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json, updated_at
        FROM icono_gene_catalog
        WHERE upper(gene_symbol) = ?
        LIMIT 1`,
@@ -1237,6 +1301,7 @@ async function fetchCatalogRow(env, symbol) {
       uniprot: normalizeUniprot(row.uniprot || null),
       color_hex: normalizeHexColor(row.color_hex || null),
       tmh: coerceBoolean(row.tmh, false),
+      aliases: normalizeCatalogAliases(row.aliases_json || []),
       updated_at: row?.updated_at ? String(row.updated_at) : null,
     }
   } catch {
@@ -1531,6 +1596,9 @@ async function geneRecord(env, url, rawId) {
     canonical_symbol: r.symbol,
     symbol: r.symbol,
     full_name: fullName,
+    ...(Array.isArray(r?.catalog?.aliases) && r.catalog.aliases.length
+      ? { aliases: r.catalog.aliases }
+      : {}),
     color: r?.catalog?.color_hex || null,
     ...(uniprot ? { uniprot } : {}),
     ...(weightKg != null ? { weight_kg: weightKg } : {}),
@@ -6082,6 +6150,18 @@ async function resolvePublicIdentifier(env, rawIdentifier) {
       }
     }
   }
+  const aliasKey = normalizeCatalogAliasLookupKey(rawIdentifier)
+  if (aliasKey) {
+    const resolvedSymbol = catalogCache.symbolByAlias.get(aliasKey)
+    if (resolvedSymbol) {
+      return {
+        requested: String(rawIdentifier || ""),
+        canonical_symbol: resolvedSymbol,
+        matched_by: "alias",
+        found: true,
+      }
+    }
+  }
   return {
     requested: String(rawIdentifier || ""),
     canonical_symbol: null,
@@ -6473,7 +6553,7 @@ async function handleCatalogArtifact(env, path) {
 async function loadCatalogRowsForPublish(env) {
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, full_name, uniprot, color_hex, tmh
+    `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json
      FROM icono_gene_catalog
      ORDER BY gene_symbol ASC`,
   ).all()
@@ -6489,6 +6569,7 @@ async function loadCatalogRowsForPublish(env) {
     const uniprot = normalizeUniprot(row?.uniprot || null)
     const colorHex = normalizeHexColor(row?.color_hex || null)
     const tmh = coerceBoolean(row?.tmh, false)
+    const aliases = normalizeCatalogAliases(row?.aliases_json || [])
     if (!symbol) throw new Error("Catalog contains invalid gene_symbol")
     if (!fullName) throw new Error(`Catalog row ${symbol} is missing full_name`)
     if (seenSymbols.has(symbol)) throw new Error(`Duplicate catalog symbol ${symbol}`)
@@ -6503,6 +6584,7 @@ async function loadCatalogRowsForPublish(env) {
     const entry = { s: symbol, n: fullName, tmh }
     if (uniprot) entry.u = uniprot
     if (colorHex) entry.c = colorHex
+    if (aliases.length) entry.a = aliases
     genes.push(entry)
   }
   return genes
@@ -6512,7 +6594,7 @@ async function publishCatalogArtifact(env) {
   if (!env.KV) throw new Error("KV binding missing")
   const genes = await loadCatalogRowsForPublish(env)
   const artifact = {
-    schema_version: 3,
+    schema_version: 4,
     generated_at: new Date().toISOString(),
     gene_count: genes.length,
     genes,
@@ -8372,13 +8454,14 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         }
         await env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_gene_catalog (
-             gene_symbol, full_name, uniprot, color_hex, tmh, source, updated_by, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json, source, updated_by, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(gene_symbol) DO UPDATE SET
              full_name=excluded.full_name,
              uniprot=excluded.uniprot,
              color_hex=excluded.color_hex,
              tmh=excluded.tmh,
+             aliases_json=excluded.aliases_json,
              source=excluded.source,
              updated_by=excluded.updated_by,
              updated_at=CURRENT_TIMESTAMP`,
@@ -8389,6 +8472,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             item.uniprot || null,
             item.color_hex || null,
             item.tmh ? 1 : 0,
+            item.aliases_json || "[]",
             source,
             actorId,
           )
