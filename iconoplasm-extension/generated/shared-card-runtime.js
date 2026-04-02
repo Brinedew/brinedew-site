@@ -3,7 +3,7 @@
 ;(function (global) {
   "use strict"
 
-  var ICONO_SHARED_RUNTIME_VERSION = "20260402b"
+  var ICONO_SHARED_RUNTIME_VERSION = "20260402a"
   var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
   var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
   var existingMeta =
@@ -861,16 +861,6 @@
     return highLabel
   }
 
-  function deriveSpecimenColorName(color, explicitName) {
-    var provided = String(explicitName || "").trim()
-    if (provided) return provided
-    var hsv = hexToHsv(color)
-    if (!hsv) return ""
-    var tone = describeBandInRange(hsv.v, 0, 100, "dark", "mid", "light")
-    var hue = describeHueWord(hsv.h)
-    return hue === "unknown" ? "" : tone + " " + hue
-  }
-
   function formatMetricNumber(raw, digits) {
     var n = Number(raw)
     if (!Number.isFinite(n)) return ""
@@ -890,7 +880,7 @@
       safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
         ? safeGeneDetail.essence
         : {}
-    var colorName = deriveSpecimenColorName(color, essence.skin_name)
+    var colorName = String(essence.skin_name || "").trim()
     var symbol = String(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol || "").trim()
     var firstLetter = (symbol.charAt(0) || "?").toUpperCase()
     var tauRaw = safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau
