@@ -2180,7 +2180,18 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   // cannot depend on candidate_ref-shaped joins if the rest of the site already
   // treats `(gene_symbol, asset_sha256)` as the durable image identity.
   const topRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT
+    `WITH vote_agg AS (
+       SELECT
+         upper(gene_symbol) AS gene_symbol,
+         lower(asset_sha256) AS asset_sha256,
+         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
+         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
+         SUM(vote_value) AS score
+       FROM icono_image_votes
+       WHERE upper(gene_symbol) = ?
+       GROUP BY upper(gene_symbol), lower(asset_sha256)
+     )
+     SELECT
        pa.asset_sha256,
        COALESCE(pa.is_legacy, 0) AS is_legacy,
        COALESCE(vs.upvotes, 0) AS image_upvotes,
@@ -2192,7 +2203,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
          ELSE 0
        END AS is_current
      FROM icono_portrait_assets pa
-     LEFT JOIN icono_vote_asset_summary vs
+     LEFT JOIN vote_agg vs
        ON vs.gene_symbol = upper(pa.gene_symbol)
       AND vs.asset_sha256 = lower(pa.asset_sha256)
      WHERE upper(pa.gene_symbol) = ?
@@ -2214,7 +2225,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
        lower(pa.asset_sha256) ASC
      LIMIT 1`,
   )
-    .bind(currentAssetSha || "", symbolNorm, currentAssetSha || "")
+    .bind(symbolNorm, currentAssetSha || "", symbolNorm, currentAssetSha || "")
     .first()
 
   const topAssetSha = normalizeSha256(topRow?.asset_sha256 || "")
