@@ -232,6 +232,44 @@ function voteAssetIdentity(symbol, assetSha256) {
   return normalizeCandidateRef("", symbol, assetSha256)
 }
 
+async function appendVoteEvent(
+  env,
+  { symbol, assetSha256, visionId = "", candidateRef = "", candidateImageId = null, userId, voteValue },
+) {
+  if (!env?.ICONOPLASM_DB) return
+  const safeSymbol = normalizeSymbol(symbol)
+  const safeAssetSha = normalizeSha256(assetSha256)
+  const safeUserId = normalizeUserId(userId)
+  const safeVoteValue = normalizeVoteValue(voteValue)
+  if (!safeSymbol || !safeAssetSha || !safeUserId || safeVoteValue === null) return
+  const safeCandidateRef =
+    normalizeCandidateRef(candidateRef, safeSymbol, safeAssetSha) || voteAssetIdentity(safeSymbol, safeAssetSha)
+  const safeVisionId = sanitizeVoteVisionId(visionId || "")
+  const safeCandidateImageId = optionalInt(candidateImageId)
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_vote_events (
+       gene_symbol,
+       asset_sha256,
+       vision_id,
+       candidate_ref,
+       candidate_image_id,
+       user_id,
+       vote_value,
+       created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+  )
+    .bind(
+      safeSymbol,
+      safeAssetSha,
+      safeVisionId,
+      safeCandidateRef,
+      safeCandidateImageId,
+      safeUserId,
+      safeVoteValue,
+    )
+    .run()
+}
+
 function esc(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")
@@ -7537,6 +7575,16 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .bind(assetCandidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
           .run()
       }
+      const finalVoteValue = requested === 0 || current === requested ? 0 : requested
+      await appendVoteEvent(env, {
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        candidateRef: assetCandidateRef,
+        candidateImageId,
+        userId,
+        voteValue: finalVoteValue,
+      })
 
       const autoPromote = await autoPromoteTopVotedPortrait(env, {
         symbol,
@@ -7686,6 +7734,15 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             .bind(symbol, assetSha, userId)
             .run()
           deleted += 1
+          await appendVoteEvent(env, {
+            symbol,
+            assetSha256: assetSha,
+            visionId,
+            candidateRef: assetCandidateRef,
+            candidateImageId,
+            userId,
+            voteValue: 0,
+          })
           continue
         }
         await env.ICONOPLASM_DB.prepare(
@@ -7703,6 +7760,15 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
           .bind(assetCandidateRef, symbol, assetSha, visionId, candidateImageId, userId, voteValue)
           .run()
+        await appendVoteEvent(env, {
+          symbol,
+          assetSha256: assetSha,
+          visionId,
+          candidateRef: assetCandidateRef,
+          candidateImageId,
+          userId,
+          voteValue,
+        })
         upserted += 1
       }
 
@@ -7826,6 +7892,16 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .bind(assetCandidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
           .run()
       }
+      const finalVoteValue = requested === 0 || current === requested ? 0 : requested
+      await appendVoteEvent(env, {
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        candidateRef: assetCandidateRef,
+        candidateImageId,
+        userId,
+        voteValue: finalVoteValue,
+      })
 
       const autoPromote = await autoPromoteTopVotedPortrait(env, {
         symbol,
@@ -7982,6 +8058,141 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             user_id: userId,
             count: snapshots.length,
             snapshots,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/ledger" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_votes_ledger_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_votes_ledger_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+
+      const limit = Math.max(
+        1,
+        Math.min(5000, Number.parseInt(url.searchParams.get("limit") || "2000", 10) || 2000),
+      )
+      const afterUpdatedAt = String(url.searchParams.get("after_updated_at") || "").trim()
+      const afterGeneSymbol = normalizeSymbol(url.searchParams.get("after_gene_symbol") || "") || ""
+      const afterAssetSha = normalizeSha256(url.searchParams.get("after_asset_sha256") || "") || ""
+      const afterUserId = normalizeUserId(url.searchParams.get("after_user_id") || "")
+
+      const rowsResult = await env.ICONOPLASM_DB.prepare(
+        `SELECT
+           candidate_ref,
+           gene_symbol,
+           asset_sha256,
+           vision_id,
+           candidate_image_id,
+           user_id,
+           vote_value,
+           updated_at
+         FROM icono_image_votes
+         WHERE (
+           ? = ''
+           OR updated_at > ?
+           OR (
+             updated_at = ?
+             AND (
+               upper(gene_symbol) > ?
+               OR (
+                 upper(gene_symbol) = ?
+                 AND (
+                   lower(asset_sha256) > ?
+                   OR (
+                     lower(asset_sha256) = ?
+                     AND user_id > ?
+                   )
+                 )
+               )
+             )
+           )
+         )
+         ORDER BY updated_at ASC, upper(gene_symbol) ASC, lower(asset_sha256) ASC, user_id ASC
+         LIMIT ?`,
+      )
+        .bind(
+          afterUpdatedAt,
+          afterUpdatedAt,
+          afterUpdatedAt,
+          afterGeneSymbol,
+          afterGeneSymbol,
+          afterAssetSha,
+          afterAssetSha,
+          afterUserId,
+          limit,
+        )
+        .all()
+      const rows = Array.isArray(rowsResult?.results) ? rowsResult.results : []
+      const last = rows.length > 0 ? rows[rows.length - 1] : null
+      const maxEventRow = await env.ICONOPLASM_DB.prepare(
+        "SELECT COALESCE(MAX(id), 0) AS max_event_id FROM icono_vote_events",
+      ).first()
+      return done(
+        "admin_votes_ledger",
+        json(
+          {
+            ok: true,
+            count: rows.length,
+            rows,
+            next_cursor: last
+              ? {
+                  updated_at: String(last.updated_at || ""),
+                  gene_symbol: String(last.gene_symbol || ""),
+                  asset_sha256: String(last.asset_sha256 || ""),
+                  user_id: String(last.user_id || ""),
+                }
+              : null,
+            max_event_id: Number(maxEventRow?.max_event_id || 0),
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/events" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_votes_events_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_votes_events_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+
+      const afterId = Math.max(0, Number.parseInt(url.searchParams.get("after_id") || "0", 10) || 0)
+      const limit = Math.max(
+        1,
+        Math.min(5000, Number.parseInt(url.searchParams.get("limit") || "2000", 10) || 2000),
+      )
+      const rowsResult = await env.ICONOPLASM_DB.prepare(
+        `SELECT
+           id,
+           candidate_ref,
+           gene_symbol,
+           asset_sha256,
+           vision_id,
+           candidate_image_id,
+           user_id,
+           vote_value,
+           created_at
+         FROM icono_vote_events
+         WHERE id > ?
+         ORDER BY id ASC
+         LIMIT ?`,
+      )
+        .bind(afterId, limit)
+        .all()
+      const rows = Array.isArray(rowsResult?.results) ? rowsResult.results : []
+      const nextAfterId = rows.length > 0 ? Number(rows[rows.length - 1]?.id || afterId) : afterId
+      return done(
+        "admin_votes_events",
+        json(
+          {
+            ok: true,
+            count: rows.length,
+            rows,
+            next_after_id: nextAfterId,
           },
           200,
           { "Cache-Control": "no-store" },
