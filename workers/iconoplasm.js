@@ -427,6 +427,177 @@ function sanitizeText(raw, maxLen) {
   return v.slice(0, maxLen)
 }
 
+function mapLocalRemovalRequestRow(row) {
+  return {
+    id: Number(row?.id || 0),
+    gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+    asset_sha256: normalizeSha256(row?.asset_sha256 || "") || "",
+    candidate_image_id: optionalInt(row?.candidate_image_id),
+    vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+    requested_by: sanitizeText(row?.requested_by || "", 255) || "",
+    reason: sanitizeText(row?.reason || "", 2000) || "",
+    source: sanitizeText(row?.source || "", 64) || "",
+    requested_at: sanitizeText(row?.requested_at || "", 64) || "",
+    resolved_at: sanitizeText(row?.resolved_at || "", 64) || "",
+    resolved_by: sanitizeText(row?.resolved_by || "", 255) || "",
+    resolved_status: sanitizeText(row?.resolved_status || "", 64) || "",
+    resolved_note: sanitizeText(row?.resolved_note || "", 2000) || "",
+  }
+}
+
+async function queueLocalRemovalRequest(
+  env,
+  {
+    symbol,
+    assetSha256,
+    candidateImageId = null,
+    visionId = "",
+    requestedBy = "",
+    reason = "",
+    source = "admin_remove",
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return null
+  const symbolNorm = normalizeSymbol(symbol)
+  const assetShaNorm = normalizeSha256(assetSha256)
+  if (!symbolNorm || !assetShaNorm) return null
+
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_local_removal_requests
+     WHERE upper(gene_symbol) = ?
+       AND lower(asset_sha256) = ?
+       AND resolved_at IS NULL
+     ORDER BY id DESC
+     LIMIT 1`,
+  )
+    .bind(symbolNorm, assetShaNorm)
+    .first()
+  if (existing) {
+    return {
+      ok: true,
+      queued: false,
+      duplicate: true,
+      request: mapLocalRemovalRequestRow(existing),
+    }
+  }
+
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_local_removal_requests (
+       gene_symbol,
+       asset_sha256,
+       candidate_image_id,
+       vision_id,
+       requested_by,
+       reason,
+       source
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      symbolNorm,
+      assetShaNorm,
+      optionalInt(candidateImageId),
+      sanitizeText(visionId || "", 255) || "",
+      normalizeUserId(requestedBy || "admin_remove"),
+      sanitizeText(reason || "", 2000) || "",
+      sanitizeText(source || "", 64) || "admin_remove",
+    )
+    .run()
+
+  const created = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_local_removal_requests
+     WHERE upper(gene_symbol) = ?
+       AND lower(asset_sha256) = ?
+       AND resolved_at IS NULL
+     ORDER BY id DESC
+     LIMIT 1`,
+  )
+    .bind(symbolNorm, assetShaNorm)
+    .first()
+
+  return {
+    ok: true,
+    queued: true,
+    duplicate: false,
+    request: mapLocalRemovalRequestRow(created),
+  }
+}
+
+async function listPendingLocalRemovalRequests(env, { limit = 200 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(1000, Number.parseInt(String(limit || "200"), 10) || 200),
+  )
+  const resp = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_local_removal_requests
+     WHERE resolved_at IS NULL
+     ORDER BY requested_at ASC, id ASC
+     LIMIT ?`,
+  )
+    .bind(cleanedLimit)
+    .all()
+  return (Array.isArray(resp?.results) ? resp.results : []).map(mapLocalRemovalRequestRow)
+}
+
+async function resolveLocalRemovalRequests(
+  env,
+  {
+    results = [],
+    resolvedBy = "",
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { resolved: 0, requests: [] }
+  const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
+  const cleanedResults = Array.from(
+    new Map(
+      (Array.isArray(results) ? results : [])
+        .map((raw) => {
+          const id = Number(raw?.id || 0)
+          if (!(id > 0)) return null
+          return [
+            id,
+            {
+              id,
+              status: sanitizeText(raw?.status || "", 64) || "applied",
+              note: sanitizeText(raw?.note || "", 2000) || "",
+            },
+          ]
+        })
+        .filter(Boolean),
+    ).values(),
+  )
+  const resolvedRows = []
+  for (const item of cleanedResults) {
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_local_removal_requests
+       SET resolved_at = CURRENT_TIMESTAMP,
+           resolved_by = ?,
+           resolved_status = ?,
+           resolved_note = ?
+       WHERE id = ?
+         AND resolved_at IS NULL`,
+    )
+      .bind(actorNorm, item.status, item.note, item.id)
+      .run()
+    const row = await env.ICONOPLASM_DB.prepare(
+      `SELECT *
+       FROM icono_local_removal_requests
+       WHERE id = ?
+       LIMIT 1`,
+    )
+      .bind(item.id)
+      .first()
+    if (row) resolvedRows.push(mapLocalRemovalRequestRow(row))
+  }
+  return {
+    resolved: resolvedRows.length,
+    requests: resolvedRows,
+  }
+}
+
 function normalizeTextList(raw, { maxItems = 32, maxLen = 128 } = {}) {
   const out = []
   const seen = new Set()
@@ -5164,6 +5335,122 @@ async function unpublishCurrentPortrait(env, { symbol, actorId, reason, fromAsse
   return { ok: true, changed: true, code: "UNPUBLISHED", from_asset_sha256: fromAssetSha }
 }
 
+async function removePortraitAssetAndQueueLocalRemoval(
+  env,
+  {
+    symbol,
+    assetSha256,
+    candidateImageId = null,
+    actorId = "",
+    reason = "",
+    source = "admin_remove",
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
+  const symbolNorm = normalizeSymbol(symbol)
+  const assetShaNorm = normalizeSha256(assetSha256 || "")
+  if (!symbolNorm || !assetShaNorm) return { ok: false, changed: false, code: "BAD_INPUT" }
+  const actorNorm = normalizeUserId(actorId || "admin_remove")
+  const reasonNorm =
+    sanitizeText(reason || "", 2000) ||
+    "Removed candidate portrait that violates site moderation rules."
+
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       r2_key_full,
+       r2_key_medium,
+       r2_key_thumb,
+       candidate_image_id,
+       vision_id
+     FROM icono_portrait_assets
+     WHERE upper(gene_symbol) = ?
+       AND lower(asset_sha256) = ?
+     LIMIT 1`,
+  )
+    .bind(symbolNorm, assetShaNorm)
+    .first()
+  if (!existing) {
+    return { ok: false, changed: false, code: "NOT_FOUND" }
+  }
+
+  const current = await env.ICONOPLASM_DB.prepare(
+    "SELECT current_asset_sha256 FROM icono_publish_state WHERE upper(gene_symbol)=? LIMIT 1",
+  )
+    .bind(symbolNorm)
+    .first()
+  const currentAssetSha = normalizeSha256(current?.current_asset_sha256 || "")
+  const isCurrent = !!(currentAssetSha && currentAssetSha === assetShaNorm)
+
+  const queuedRemoval = await queueLocalRemovalRequest(env, {
+    symbol: symbolNorm,
+    assetSha256: assetShaNorm,
+    candidateImageId: optionalInt(candidateImageId ?? existing?.candidate_image_id),
+    visionId: sanitizeText(existing?.vision_id || "", 255) || "",
+    requestedBy: actorNorm,
+    reason: reasonNorm,
+    source,
+  })
+
+  if (isCurrent) {
+    await env.ICONOPLASM_DB.prepare(
+      "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=0, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+    )
+      .bind(actorNorm, symbolNorm)
+      .run()
+    await env.ICONOPLASM_DB.prepare(
+      "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unpublish', ?, ?, CURRENT_TIMESTAMP)",
+    )
+      .bind(symbolNorm, assetShaNorm, null, actorNorm, reasonNorm)
+      .run()
+  }
+
+  await env.ICONOPLASM_DB.prepare(
+    "DELETE FROM icono_image_votes WHERE upper(gene_symbol)=? AND lower(asset_sha256)=?",
+  )
+    .bind(symbolNorm, assetShaNorm)
+    .run()
+  await env.ICONOPLASM_DB.prepare(
+    "DELETE FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND lower(asset_sha256)=?",
+  )
+    .bind(symbolNorm, assetShaNorm)
+    .run()
+  await env.ICONOPLASM_DB.prepare(
+    "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'remove_candidate', ?, ?, CURRENT_TIMESTAMP)",
+  )
+    .bind(symbolNorm, assetShaNorm, null, actorNorm, reasonNorm)
+    .run()
+
+  const keys = [existing?.r2_key_full, existing?.r2_key_medium, existing?.r2_key_thumb]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.delete === "function") {
+    for (const key of keys) {
+      await env.ICONOPLASM_PORTRAITS.delete(key)
+    }
+  }
+
+  const autoPromote = await autoPromoteTopVotedPortrait(env, {
+    symbol: symbolNorm,
+    actorId: actorNorm,
+    reason: `admin_remove_candidate:${assetShaNorm}`,
+  })
+  await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbolNorm] })
+
+  return {
+    ok: true,
+    changed: true,
+    code: "REMOVED",
+    symbol: symbolNorm,
+    asset_sha256: assetShaNorm,
+    candidate_image_id:
+      optionalInt(candidateImageId ?? existing?.candidate_image_id) ?? null,
+    unpublished_current: isCurrent,
+    deleted_r2_keys: keys.length,
+    queued_local_removal: queuedRemoval || null,
+    auto_promote: autoPromote,
+  }
+}
+
 async function blacklistArtistStyle(
   env,
   {
@@ -7124,6 +7411,30 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
+    if (path === "/api/iconoplasm/admin/me" && request.method === "GET") {
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const authenticated = !!sessionUser?.user_id
+      const admin = authenticated ? await isIconoplasmAdmin(request, env) : false
+      return done(
+        "admin_me",
+        json(
+          {
+            ok: true,
+            authenticated,
+            is_admin: admin,
+            user: authenticated
+              ? {
+                  id: sessionUser.user_id,
+                  username: sessionUser.username || null,
+                }
+              : null,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (path === "/api/iconoplasm/votes/set" && request.method === "POST") {
       if (!env.ICONOPLASM_DB)
         return done("votes_set_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
@@ -8522,6 +8833,66 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
+    if (path === "/api/iconoplasm/admin/local-removals/pending" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_local_removals_pending_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_local_removals_pending_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const limit = Math.max(
+        1,
+        Math.min(1000, Number.parseInt(url.searchParams.get("limit") || "200", 10) || 200),
+      )
+      const requests = await listPendingLocalRemovalRequests(env, { limit })
+      return done(
+        "admin_local_removals_pending",
+        json(
+          {
+            ok: true,
+            count: requests.length,
+            requests,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/local-removals/ack" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_local_removals_ack_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_local_removals_ack_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_local_removals_ack_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const actorId = await actor(request, env)
+      const resolved = await resolveLocalRemovalRequests(env, {
+        results: Array.isArray(p?.results) ? p.results : [],
+        resolvedBy: actorId,
+      })
+      return done(
+        "admin_local_removals_ack",
+        json(
+          {
+            ok: true,
+            resolved: Number(resolved?.resolved || 0),
+            requests: Array.isArray(resolved?.requests) ? resolved.requests : [],
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (path === "/api/iconoplasm/admin/catalog/state" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_catalog_state_403", json({ error: "Unauthorized" }, 403))
@@ -9450,6 +9821,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         "/api/iconoplasm/admin/unstale",
         "/api/iconoplasm/admin/unstale-batch",
         "/api/iconoplasm/admin/purge-legacy",
+        "/api/iconoplasm/admin/remove-candidate",
       ].includes(path) &&
       request.method === "POST"
     ) {
@@ -9805,6 +10177,44 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             unpublished_current: isCurrent,
             deleted_r2_keys: keys.length,
           }),
+        )
+      }
+
+      if (path.endsWith("/remove-candidate")) {
+        const asset = String(p?.asset_sha256 || "").trim()
+        if (!asset)
+          return done("remove_candidate_400", json({ error: "Missing asset_sha256" }, 400))
+        const removal = await removePortraitAssetAndQueueLocalRemoval(env, {
+          symbol,
+          assetSha256: asset,
+          candidateImageId: optionalInt(p?.candidate_image_id ?? p?.emulsion_id),
+          actorId,
+          reason: String(p?.reason || "").slice(0, 2000) || "",
+          source: "admin_remove",
+        })
+        if (!removal?.ok || removal?.code === "NOT_FOUND") {
+          return done(
+            "remove_candidate_404",
+            json({ error: "Asset not found" }, 404),
+          )
+        }
+        return done(
+          "remove_candidate",
+          json(
+            {
+              ok: true,
+              action: "remove_candidate",
+              symbol,
+              asset_sha256: asset,
+              candidate_image_id: optionalInt(p?.candidate_image_id ?? p?.emulsion_id),
+              unpublished_current: !!removal.unpublished_current,
+              deleted_r2_keys: Number(removal.deleted_r2_keys || 0),
+              queued_local_removal: removal.queued_local_removal || null,
+              auto_promote: removal.auto_promote || null,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
         )
       }
 

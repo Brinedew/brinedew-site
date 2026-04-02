@@ -1293,8 +1293,46 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 0.45rem;
+}
+
+.icono-candidate-admin-actions {
+  display: flex;
+  align-items: center;
+}
+
+.icono-candidate-remove-button {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, #8f2b24 38%, var(--ui-border) 62%);
+  background: color-mix(in srgb, #fff4f2 86%, white 14%);
+  color: #7c221d;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.1;
+  font-weight: 700;
+  padding: 0.42rem 0.8rem;
+  cursor: pointer;
+  transition:
+    transform 0.16s var(--icono-ease-out),
+    background-color 0.16s var(--icono-ease-out),
+    border-color 0.16s var(--icono-ease-out),
+    opacity 0.16s var(--icono-ease-out);
+}
+
+.icono-candidate-remove-button:hover:not(:disabled),
+.icono-candidate-remove-button:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, #ffe6e1 88%, white 12%);
+  border-color: color-mix(in srgb, #8f2b24 56%, var(--ui-border) 44%);
+  transform: translateY(-1px);
+}
+
+.icono-candidate-remove-button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+  transform: none;
 }
 
 .icono-load-sentinel {

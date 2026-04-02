@@ -55,6 +55,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   var candidateMasonry = null
   var portraitLightboxCleanup = null
   var currentUser = null
+  var currentUserIsIconoAdmin = false
   var masonryLibsPromise = null
   var photoSwipeModulePromise = null
   var hasResolvedAuthState = false
@@ -101,6 +102,21 @@ void syncSharedIconoplasmSettings().catch(function () {
         return payload
       })
     })
+  }
+
+  function fetchIconoplasmAdminState() {
+    return fetch(API + "/api/iconoplasm/admin/me", {
+      credentials: "include",
+    })
+      .then(function (response) {
+        if (!response.ok) return { authenticated: false, is_admin: false, user: null }
+        return response.json().catch(function () {
+          return { authenticated: false, is_admin: false, user: null }
+        })
+      })
+      .catch(function () {
+        return { authenticated: false, is_admin: false, user: null }
+      })
   }
 
   /* ─── Utility ─── */
@@ -924,27 +940,57 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
     wireSharedUserPanel(stack, {
       onAuthChanged: function (user) {
-        hasResolvedAuthState = true
-        currentUser = user
-        renderIconoplasmSidebar()
+        void updateSharedUserState(user)
       },
     })
     renderHomeAuthRail()
   }
 
+  function rerenderCurrentGeneRoute() {
+    var route = getRoute()
+    if (route.page !== "gene") return
+    var root = document.getElementById(ROOT_ID)
+    if (!root) return
+    destroyHomeMasonry()
+    destroyCandidateMasonry()
+    renderGene(root, route.symbol)
+    refreshPortraitLightbox()
+  }
+
+  function updateSharedUserState(user) {
+    var previousHadUser = !!currentUser
+    var previousAdmin = !!currentUserIsIconoAdmin
+    currentUser = user || null
+    hasResolvedAuthState = true
+    return fetchIconoplasmAdminState()
+      .then(function (sessionState) {
+        currentUserIsIconoAdmin = !!(sessionState && sessionState.is_admin)
+        renderIconoplasmSidebar()
+        if (
+          getRoute().page === "gene" &&
+          (previousHadUser !== !!currentUser || previousAdmin !== !!currentUserIsIconoAdmin)
+        ) {
+          rerenderCurrentGeneRoute()
+        }
+        return currentUser
+      })
+      .catch(function () {
+        currentUserIsIconoAdmin = false
+        renderIconoplasmSidebar()
+        if (getRoute().page === "gene" && (previousHadUser !== !!currentUser || previousAdmin)) {
+          rerenderCurrentGeneRoute()
+        }
+        return currentUser
+      })
+  }
+
   function refreshSharedUserState() {
     return fetchAuthenticatedUser()
       .then(function (user) {
-        hasResolvedAuthState = true
-        currentUser = user
-        renderIconoplasmSidebar()
-        return user
+        return updateSharedUserState(user)
       })
       .catch(function () {
-        hasResolvedAuthState = true
-        currentUser = null
-        renderIconoplasmSidebar()
-        return null
+        return updateSharedUserState(null)
       })
   }
 
@@ -1963,6 +2009,59 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
   }
 
+  function wireCandidateRemoveButtons(container, genePayload) {
+    if (!container || !genePayload || !currentUserIsIconoAdmin) return
+    var buttons = container.querySelectorAll("[data-icono-candidate-remove]")
+    for (var i = 0; i < buttons.length; i++) {
+      ;(function (button) {
+        if (!button || button.getAttribute("data-icono-remove-wired") === "true") return
+        button.setAttribute("data-icono-remove-wired", "true")
+        button.addEventListener("click", function () {
+          var symbol = String(button.getAttribute("data-icono-symbol") || "")
+            .trim()
+            .toUpperCase()
+          var assetSha = String(button.getAttribute("data-icono-asset-sha256") || "")
+            .trim()
+            .toLowerCase()
+          var candidateImageId = Number(button.getAttribute("data-icono-candidate-image-id") || 0) || 0
+          if (!symbol || !assetSha) return
+          if (
+            !window.confirm(
+              "Remove this candidate from the website and queue local deletion so it will not sync back?",
+            )
+          ) {
+            return
+          }
+          var priorLabel = button.textContent || "Remove"
+          button.disabled = true
+          button.textContent = "Removing..."
+          fetchJSON("/api/iconoplasm/admin/remove-candidate", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+            },
+            body: JSON.stringify({
+              symbol: symbol,
+              asset_sha256: assetSha,
+              candidate_image_id: candidateImageId > 0 ? candidateImageId : null,
+            }),
+          })
+            .then(function () {
+              rerenderCurrentGeneRoute()
+            })
+            .catch(function (error) {
+              button.disabled = false
+              button.textContent = priorLabel
+              window.alert(
+                String((error && error.message) || "Failed to remove candidate portrait."),
+              )
+            })
+        })
+      })(buttons[i])
+    }
+  }
+
   /* ─── Client-side router ─── */
 
   function getRoute() {
@@ -2515,6 +2614,21 @@ void syncSharedIconoplasmSettings().catch(function () {
       if (visionId) {
         voteAttrs += ' data-icono-vision-id="' + esc(visionId) + '"'
       }
+      var removeMarkup = ""
+      if (currentUserIsIconoAdmin && assetSha) {
+        removeMarkup =
+          '<div class="icono-candidate-admin-actions">' +
+          '<button type="button" class="icono-candidate-remove-button" data-icono-candidate-remove="true" data-icono-symbol="' +
+          esc(genePayload.symbol) +
+          '" data-icono-asset-sha256="' +
+          esc(assetSha) +
+          '" data-icono-candidate-image-id="' +
+          esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
+          '" aria-label="Remove candidate portrait for ' +
+          esc(genePayload.symbol) +
+          '">Remove</button>' +
+          "</div>"
+      }
       html +=
         '<article class="icono-candidate-card" style="--width:' +
         width +
@@ -2554,6 +2668,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         "</button>" +
         '<div class="icono-candidate-footer">' +
         voteBoxMarkup(voteAttrs) +
+        removeMarkup +
         "</div>" +
         "</article>"
     }
@@ -2640,6 +2755,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     container.innerHTML = html
     wireGeneVoteBox(container, g)
     wireCandidateVoteBoxes(container, g)
+    wireCandidateRemoveButtons(container, g)
     applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
     refreshPortraitLightbox()
   }
