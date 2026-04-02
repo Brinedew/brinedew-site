@@ -43,8 +43,12 @@ scripts/embedding_dump.json
 
 # Root-level junk (temp files, scratch images)
 /nul
+ /tmp/
 /.tmp_quartz_dev*.log
 /.tmp_quartz_dev_pid.txt
+/tmp-icono-hover-server.js
+/tmp-icono-hover-server.err.log
+/tmp-icono-hover-server.out.log
 /*.png
 /*.jpg
 !logo-mask.png

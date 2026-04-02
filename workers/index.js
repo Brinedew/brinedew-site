@@ -157,7 +157,11 @@ import {
   handleLogout,
 } from "./auth.js"
 // Import Iconoplasm handlers
-import { isIconoplasmRequest, handleIconoplasmRequest } from "./iconoplasm.js"
+import {
+  isIconoplasmRequest,
+  handleIconoplasmRequest,
+  repairCanonInvariants,
+} from "./iconoplasm.js"
 // Import Discord bot handlers
 import {
   handleDailySummary,
@@ -1380,6 +1384,7 @@ export default {
 
   /**
    * Scheduled handler:
+   * - 17 * * * * UTC: repair any non-overridden Iconoplasm canon drift/missing live pointers
    * - 23:55 UTC: pre-warm next day's target structure/bootstrap cache
    * - 00:03 UTC: post Discord recap for yesterday using pre-rendered day image from R2 cache
    */
@@ -1398,6 +1403,20 @@ export default {
     console.log(
       `[CRON] Triggered at ${new Date().toISOString()} via "${cronExprRaw}" -> "${cronExpr}"`,
     )
+
+    if (cronExpr === "17 * * * *") {
+      try {
+        const result = await repairCanonInvariants(env, {
+          limit: 250,
+          actorId: "cron",
+          reason: "scheduled_canon_invariant_repair",
+        })
+        console.log("[CRON] Iconoplasm canon maintenance result:", result)
+      } catch (err) {
+        console.error("[CRON] Iconoplasm canon maintenance failed:", err)
+      }
+      return
+    }
 
     if (cronExpr === "3 0 * * *") {
       try {

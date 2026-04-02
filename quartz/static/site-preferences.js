@@ -11,7 +11,7 @@ var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
 var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
   homeLayout: "bricks",
-  cardVariant: "classic",
+  cardVariant: "simple",
   generationProvider: GENERATION_PROVIDER_DEFAULT,
   generationApiKey: "",
   generationModel: "",
@@ -35,8 +35,9 @@ function normalizeCardVariant(variant) {
   var value = String(variant || "")
     .trim()
     .toLowerCase()
-  if (value === "lab-label") return "lab-label"
-  if (value === "lit-archival") return "lit-archival"
+  if (value === "image-only") return "image-only"
+  if (value === "lab-label" || value === "lit-archival") return "lit-archival"
+  if (value === "classic" || value === "simple") return "simple"
   return ICONOPLASM_DEFAULT_SETTINGS.cardVariant
 }
 

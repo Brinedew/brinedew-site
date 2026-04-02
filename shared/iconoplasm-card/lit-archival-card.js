@@ -270,6 +270,9 @@ function mobilePeekTemplate(model) {
 }
 
 function archivalTemplate(model) {
+  if (model.layoutVariant === "image-only") {
+    return imageOnlyTemplate(model)
+  }
   if (model.mode === "brick" && model.mobileReview) {
     return html`${mobilePeekTemplate(model)}
       <div class="icono-label-dossier-shell" data-icono-label-dossier-shell>
@@ -277,6 +280,39 @@ function archivalTemplate(model) {
       </div>`
   }
   return sheetTemplate(model)
+}
+
+function imageOnlyTemplate(model) {
+  var href = String(model.titleHref || "").trim()
+  var portraitSrc = String(model.portraitSrc || "").trim()
+  var portraitAlt = String(model.portraitAlt || "").trim() || (model.symbol ? model.symbol + " portrait" : "Gene portrait")
+  var dims = asObject(model.portraitDimensions)
+  var width = Number(dims.width || 0)
+  var height = Number(dims.height || 0)
+  var media = html`<div class="icono-image-only-media-stage">
+    ${portraitSrc
+      ? html`<img
+          class="icono-image-only-photo"
+          src=${portraitSrc}
+          alt=${portraitAlt}
+          loading="eager"
+          decoding="async"
+          fetchpriority="high"
+          width=${width > 0 ? String(Math.round(width)) : nothing}
+          height=${height > 0 ? String(Math.round(height)) : nothing}
+        />`
+      : html`<div class="icono-image-only-fallback" aria-hidden="true"></div>`}
+  </div>`
+  var overlay = html`<div class="icono-image-only-overlay">
+    <div class="icono-image-only-caption-row">
+      <div class="icono-label-name icono-image-only-name">${model.fullName || model.symbol}</div>
+      <div class="icono-label-symbol icono-image-only-symbol">${model.symbol}</div>
+    </div>
+  </div>`
+  if (href) {
+    return html`<a class="icono-image-only-link" href=${href} data-icono-nav>${media}${overlay}</a>`
+  }
+  return html`<div class="icono-image-only-link">${media}${overlay}</div>`
 }
 
 function parsePayloadFromHost(host) {

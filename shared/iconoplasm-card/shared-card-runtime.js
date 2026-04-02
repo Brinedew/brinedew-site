@@ -60,7 +60,10 @@
     curveFitting: 0.9,
     curveStepCount: 8,
     widthMultiplier: 1.16,
-    paddingCharWidth: 0.72,
+    // Fence: keep breathing room in the measurement preset, not in content.css.
+    // The runtime rehydrates these loops from live text bounds, so CSS-only SVG
+    // box tweaks get overwritten on the next pass and appear to do nothing.
+    paddingCharWidth: 1.22,
     heightMultiplier: 1.24,
   }
   var ICONO_ROUGH_LOOP_PRESETS = {
@@ -377,9 +380,10 @@
     var value = String(raw || "")
       .trim()
       .toLowerCase()
-    if (value === "lab-label") return "lab-label"
-    if (value === "lit-archival") return "lit-archival"
-    return "classic"
+    if (value === "image-only") return "image-only"
+    if (value === "lab-label" || value === "lit-archival") return "lit-archival"
+    if (value === "classic" || value === "simple") return "simple"
+    return "simple"
   }
 
   function normalizePoliticsDisplay(rawPolitics, rawPoliticsOrigin) {
@@ -991,6 +995,102 @@
     )
   }
 
+  function portraitDimensions(geneDetail) {
+    var portrait = geneDetail && geneDetail.portrait
+    var assetSha = String((portrait && portrait.asset_sha256) || "")
+      .trim()
+      .toLowerCase()
+    var candidates = Array.isArray(geneDetail && geneDetail.portrait_candidates)
+      ? geneDetail.portrait_candidates
+      : []
+    var matchedCandidate = null
+    if (assetSha) {
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = candidates[i]
+        var candidateSha = String((candidate && candidate.asset_sha256) || "")
+          .trim()
+          .toLowerCase()
+        if (candidateSha && candidateSha === assetSha) {
+          matchedCandidate = candidate
+          break
+        }
+      }
+    }
+    var width = Number(
+      (portrait && (portrait.width || portrait.image_width)) ||
+        (matchedCandidate && (matchedCandidate.width || matchedCandidate.image_width)) ||
+        (geneDetail && geneDetail.width) ||
+        0,
+    )
+    var height = Number(
+      (portrait && (portrait.height || portrait.image_height)) ||
+        (matchedCandidate && (matchedCandidate.height || matchedCandidate.image_height)) ||
+        (geneDetail && geneDetail.height) ||
+        0,
+    )
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+      return { width: 1, height: 1 }
+    }
+    return {
+      width: Math.max(1, Math.round(width)),
+      height: Math.max(1, Math.round(height)),
+    }
+  }
+
+  function renderLabLabelPortraitMediaHtml(
+    symbol,
+    portraitUrl,
+    portraitFullUrl,
+    dims,
+    options,
+  ) {
+    var opts = options || {}
+    var resolvedSymbol = normalizedSymbol(symbol)
+    var size = portraitDimensions(dims)
+    var extraButtonAttrs = String(opts.buttonAttrs || "").trim()
+    var buttonClassName =
+      "iconoplasm-tooltip-portrait-media icono-brick-media-link" +
+      (opts.extraButtonClass ? " " + String(opts.extraButtonClass).trim() : "")
+    var loading = String(opts.loading || "eager").trim() || "eager"
+    var fetchPriority = String(opts.fetchPriority || "low").trim() || "low"
+    // Fence: the archival portrait rail is a shared visual contract. The website and browser
+    // extension must render the same button/img/fallback structure or they drift on width, crop,
+    // and loading behavior the next time one side evolves.
+    if (!portraitUrl) {
+      return (
+        '<div class="iconoplasm-tooltip-portrait-fallback">' +
+        '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+        '<div class="iconoplasm-tooltip-portrait-symbol">' +
+        escapeHtml(resolvedSymbol) +
+        "</div>" +
+        "</div>"
+      )
+    }
+    return (
+      '<button type="button" class="' +
+      escapeHtml(buttonClassName) +
+      '"' +
+      (extraButtonAttrs ? " " + extraButtonAttrs : "") +
+      ' aria-label="Open full-size portrait for ' +
+      escapeHtml(resolvedSymbol) +
+      ' portrait">' +
+      '<img class="iconoplasm-tooltip-portrait-img" src="' +
+      escapeHtml(portraitUrl) +
+      '" alt="' +
+      escapeHtml(resolvedSymbol) +
+      ' portrait" loading="' +
+      escapeHtml(loading) +
+      '" decoding="async" fetchpriority="' +
+      escapeHtml(fetchPriority) +
+      '" width="' +
+      size.width +
+      '" height="' +
+      size.height +
+      '">' +
+      "</button>"
+    )
+  }
+
   function renderLabLabelSpecimenRailHtml(mediaHtml, geneDetail) {
     return (
       '<div class="icono-label-specimen-viewport">' +
@@ -1103,6 +1203,7 @@
     var mode = String(opts.mode || "sheet")
       .trim()
       .toLowerCase()
+    var layoutVariant = normalizeCardVariant(opts.layoutVariant || "lit-archival")
     return {
       ageNote: addAgeSuffix(ageNote),
       color: String(safeGeneDetail.color || "")
@@ -1113,10 +1214,17 @@
       firstNoted: firstNoted,
       fullName: fullName,
       handwrittenWeight: handwrittenWeight,
+      layoutVariant: layoutVariant,
       mobileReview: !!opts.mobileReview,
       mode: mode === "brick" ? "brick" : "sheet",
       molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
       politicalNote: String(politicsDisplay.character || "").trim(),
+      portraitAlt:
+        String(opts.portraitAlt || "").trim() || (symbol ? symbol + " portrait" : "Gene portrait"),
+      portraitDimensions: portraitDimensions(
+        Object.keys(safePortrait).length ? safeGeneDetail : Object.assign({}, safeGeneDetail, { portrait: {} }),
+      ),
+      portraitSrc: String(opts.portraitSrc || "").trim(),
       selectedCategory: selectedCategory,
       serial: serial,
       sexNote: sexNote,
@@ -1746,9 +1854,11 @@
     labLabelCatalogNumber: labLabelCatalogNumber,
     labLabelEmulsionNumber: labLabelEmulsionNumber,
     labLabelDisplayName: labLabelDisplayName,
+    portraitDimensions: portraitDimensions,
     resolveArchivalCardModel: resolveArchivalCardModel,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,
     collectTooltipMetaRows: collectTooltipMetaRows,
+    renderLabLabelPortraitMediaHtml: renderLabLabelPortraitMediaHtml,
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
     renderLabLabelSpecimenRailHtml: renderLabLabelSpecimenRailHtml,
     renderLabLabelCardHtml: renderLabLabelCardHtml,

@@ -8,6 +8,17 @@
 
 /* -- Gene highlight ------------------------------------------------- */
 .iconoplasm-gene {
+  position: relative;
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: inherit;
+  white-space: inherit;
+  vertical-align: baseline;
   transition:
     opacity 150ms ease,
     background-color 150ms ease,
@@ -18,12 +29,28 @@
 }
 
 .iconoplasm-gene-copy {
+  display: inline;
   position: relative;
   z-index: 1;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: inherit;
+  white-space: inherit;
+  vertical-align: baseline;
 }
 
 .iconoplasm-gene--underline {
-  border-bottom: 3px solid var(--iconoplasm-gene-color, #6b6b78);
+  /* Fence: underline mode must be paint-only. Real borders change the inline
+     box metrics and can shift line breaks on dense text pages. */
+  background-image: linear-gradient(
+    to top,
+    var(--iconoplasm-gene-color, #6b6b78) 0,
+    var(--iconoplasm-gene-color, #6b6b78) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 0.16em;
+  background-position: 0 calc(100% - 0.01em);
 }
 
 .iconoplasm-gene--pill {
@@ -59,7 +86,6 @@
 }
 
 .iconoplasm-gene--ellipse {
-  display: inline-block;
   position: relative;
   z-index: 0;
   margin: 0;
@@ -71,16 +97,20 @@
 }
 
 .iconoplasm-gene--ellipse .iconoplasm-gene-copy {
-  display: inline-block;
-  padding: 0 0.02em;
+  display: inline;
+  padding: 0;
 }
 
 .iconoplasm-gene-rough-loop {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
+  /* Fence: ellipse breathing room belongs in the painted loop box, not in text
+     padding or inline-block wrappers. Growing the wrapper would reintroduce page
+     reflow; growing this absolute overlay keeps layout fixed while loosening the
+     hand-drawn circle around the word. */
+  left: -0.14em;
+  top: -0.16em;
+  width: calc(100% + 0.28em);
+  height: calc(100% + 0.3em);
   overflow: visible;
   pointer-events: none;
   /* Keep ellipse strokes keyed to the gene color itself.
@@ -147,6 +177,10 @@
     0 16px 34px var(--iconoplasm-tooltip-shadow-4);
 
   -webkit-font-smoothing: antialiased;
+}
+
+.iconoplasm-tooltip:not(.iconoplasm-tooltip--frame-card) {
+  min-height: 298px;
 }
 
 .iconoplasm-tooltip.iconoplasm-tooltip--dark {
@@ -288,6 +322,59 @@
   color: var(--iconoplasm-tooltip-ink);
 }
 
+.iconoplasm-tooltip-lit-frame-shell {
+  width: 100%;
+  height: 100%;
+  /* Fence: the iframe used to rely on height:100% alone, which can collapse inside flex items and
+     makes the card appear "present in DOM but not visible". Keep an explicit floor here. */
+  min-height: 298px;
+}
+
+.iconoplasm-tooltip-lit-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 298px;
+  border: 0;
+  background: transparent;
+}
+
+.iconoplasm-tooltip--frame-card {
+  /* Fence: Lit archival is a wide printed sheet, not the compact classic tooltip. Give the iframe
+     enough width to preserve the website's composition instead of crushing it into a narrow card. */
+  width: min(860px, calc(100vw - 16px));
+  min-height: 298px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.iconoplasm-tooltip--variant-image-only.iconoplasm-tooltip--frame-card {
+  width: min(380px, calc(100vw - 16px));
+  aspect-ratio: 384 / 512;
+  min-height: 0;
+}
+
+.iconoplasm-tooltip--frame-card .iconoplasm-tooltip-portrait {
+  display: none;
+}
+
+.iconoplasm-tooltip--frame-card .iconoplasm-tooltip-body {
+  flex: 1 1 auto;
+  padding: 0;
+  min-height: 298px;
+  background: transparent;
+}
+
+.iconoplasm-tooltip--variant-image-only.iconoplasm-tooltip--frame-card .iconoplasm-tooltip-body,
+.iconoplasm-tooltip--variant-image-only .iconoplasm-tooltip-lit-frame-shell,
+.iconoplasm-tooltip--variant-image-only .iconoplasm-tooltip-lit-frame {
+  aspect-ratio: 384 / 512;
+  min-height: 0;
+  height: auto;
+}
+
 .iconoplasm-tooltip-header {
   display: flex;
   flex-direction: column;
@@ -353,6 +440,32 @@
 
 .iconoplasm-tooltip-meta--loading {
   display: flex;
+  min-height: 151px;
+}
+
+.iconoplasm-auth-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(24, 20, 17, 0.94);
+  color: rgba(248, 244, 236, 0.96);
+  font: 500 14px/1.4 "Crimson Pro", "Georgia", serif;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.iconoplasm-auth-toast-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .iconoplasm-tooltip-meta-row {

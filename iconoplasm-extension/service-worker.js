@@ -1,5 +1,10 @@
 // Iconoplasm service worker
 // Symbol-first contract: gene symbols are canonical keys.
+// Chesterton's fence: this extension only consumes the published catalog artifact.
+// Do not treat `d:\\Coding\\Website\\iconoplasm-extension` as the source of truth
+// for aliases, publish state, or candidate facts. The local authoring/control-plane
+// lives at `d:\\Coding\\Datasets\\iconoplasm`, and Website Ops sync publishes the
+// snapshot this service worker reads.
 
 const HOST = "https://iconoplasm.brinedew.bio"
 const API_PUBLIC = `${HOST}/api/public/v1`
@@ -159,10 +164,10 @@ function isStaleFetch(lastFetchIso) {
 async function ensureFreshGeneData() {
   const stored = await getStoredGeneSnapshot()
   const geneCount = getStoredGeneCount(stored.iconoplasm_genes)
-  const hasPortraitSchema =
-    Number(stored.iconoplasm_schema_version || 0) >= 3 &&
+  const hasPublishedCatalogSchema =
+    Number(stored.iconoplasm_schema_version || 0) >= 4 &&
     Boolean(stored.iconoplasm_portrait_base_url)
-  const needsArtifactRebuild = geneCount === 0 || !hasPortraitSchema
+  const needsArtifactRebuild = geneCount === 0 || !hasPublishedCatalogSchema
   const needsRefresh = needsArtifactRebuild || isStaleFetch(stored.iconoplasm_last_fetch)
 
   if (needsRefresh) {
@@ -245,8 +250,8 @@ async function fetchManifest() {
     current_hash: manifest.build_version || manifest.catalog_hash,
     filename: manifest.catalog_hash ? `catalog.${manifest.catalog_hash}.json` : null,
     artifact_url: manifest.artifact_url || null,
-    schema_version: manifest.schema_version || 3,
-    portrait_base_url: manifest.portrait_base_url || `${HOST}/portraits`,
+    schema_version: manifest.artifact_schema_version || manifest.schema_version || 4,
+    portrait_base_url: manifest.portrait_base_url || HOST,
     gene_count: manifest.gene_count || null,
   }
 }
@@ -292,7 +297,10 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
     const artifact = await artifactResp.json()
 
     // Build symbol-keyed lookup map:
-    // { SYMBOL: { c?, n?, u?, pt?, ph? } }
+    // { SYMBOL: { c?, n?, u?, a?, pt?, ph? } }
+    // Fence: keep this a pure projection of the published artifact. If a field is
+    // missing here, fix the workstation export in `d:\\Coding\\Datasets\\iconoplasm`
+    // or the website ingest, not this runtime cache.
     const lookup = {}
     for (const gene of artifact.genes || []) {
       const symbol = String(gene.s || "").toUpperCase()
@@ -301,6 +309,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       if (gene.c) entry.c = gene.c
       if (gene.n) entry.n = gene.n
       if (gene.u) entry.u = gene.u
+      if (Array.isArray(gene.a) && gene.a.length) entry.a = gene.a
       if (gene.pt) entry.pt = gene.pt
       if (gene.ph) entry.ph = gene.ph
       lookup[symbol] = entry
@@ -312,7 +321,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       iconoplasm_gene_count: artifact.gene_count || Object.keys(lookup).length,
       iconoplasm_last_fetch: new Date().toISOString(),
       iconoplasm_schema_version: manifest.schema_version || artifact.schema_version || 1,
-      iconoplasm_portrait_base_url: manifest.portrait_base_url || `${HOST}/portraits`,
+      iconoplasm_portrait_base_url: manifest.portrait_base_url || HOST,
     })
 
     return {

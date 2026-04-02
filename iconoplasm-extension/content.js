@@ -6,10 +6,16 @@
   "use strict"
 
   const IconoCardShared = globalThis.IconoplasmCardShared
+  const IconoContentMatcher = globalThis.IconoplasmContentMatcher
+  const IconoVisibilityScheduler = globalThis.IconoplasmVisibilityScheduler
   if (!IconoCardShared) {
     console.error(
       "[Iconoplasm] shared card runtime missing: load generated/shared-card-runtime.js first",
     )
+    return
+  }
+  if (!IconoContentMatcher) {
+    console.error("[Iconoplasm] content matcher missing: load content-matcher.js first")
     return
   }
 
@@ -19,6 +25,16 @@
   const TOOLTIP_THEME_KEY = "iconoplasm_tooltip_theme"
   const CARD_VARIANT_KEY = "iconoplasm_card_variant"
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase("https://iconoplasm.brinedew.bio")
+  const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
+  const LIT_ARCHIVAL_FRAME_URL = chrome.runtime.getURL("lit-archival-frame.html")
+  const LIT_ARCHIVAL_FRAME_ORIGIN = new URL(LIT_ARCHIVAL_FRAME_URL).origin
+  const LIT_ARCHIVAL_FRAME_SOURCE = "iconoplasm-lit-archival-frame"
+  const LIT_ARCHIVAL_RENDER_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_RENDER"
+  const LIT_ARCHIVAL_PREWARM_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_PREWARM"
+  const LIT_ARCHIVAL_READY_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_READY"
+  const LIT_ARCHIVAL_OPEN_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_OPEN"
+  const LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_AUTH_REQUIRED"
+  const DEFAULT_PORTRAIT_DIMENSIONS = Object.freeze({ width: 768, height: 1024 })
   const escapeHtml = IconoCardShared.escapeHtml
   let roughEllipseSerial = 0
 
@@ -132,12 +148,23 @@
       const result = await chrome.storage.local.get([CARD_VARIANT_KEY])
       cardVariant = normalizeCardVariant(result[CARD_VARIANT_KEY])
     } catch (_) {
-      cardVariant = "classic"
+      cardVariant = "simple"
     }
   }
 
   function isArchivalCardVariant() {
-    return cardVariant === "lab-label" || cardVariant === "lit-archival"
+    return cardVariant === "lit-archival"
+  }
+
+  function isImageOnlyCardVariant() {
+    return cardVariant === "image-only"
+  }
+
+  // Fence: only Lit-owned variants go through the iframe. The simple tooltip stays native DOM so
+  // fast hover metadata does not pay an iframe/runtime tax, while the printed layouts remain
+  // isolated from arbitrary page CSS.
+  function usesTooltipFrameRenderer() {
+    return cardVariant === "lit-archival" || cardVariant === "image-only"
   }
 
   function applyTooltipTheme() {
@@ -145,6 +172,8 @@
     tooltip.classList.toggle("iconoplasm-tooltip--dark", tooltipTheme === "dark")
     tooltip.classList.toggle("iconoplasm-tooltip--light", tooltipTheme !== "dark")
     tooltip.classList.toggle("iconoplasm-tooltip--variant-lab-label", isArchivalCardVariant())
+    tooltip.classList.toggle("iconoplasm-tooltip--variant-image-only", isImageOnlyCardVariant())
+    tooltip.classList.toggle("iconoplasm-tooltip--frame-card", usesTooltipFrameRenderer())
   }
 
   function buildHighlightRoughLoopSvg() {
@@ -1405,15 +1434,20 @@
   ])
 
   // -- State ---------------------------------------------------------
-  let geneMap = null // { SYMBOL: { c?, n?, u?, pt?, ph? } }
+  let geneMap = null // { SYMBOL: { c?, n?, u?, a?, pt?, ph? } }
+  let geneMatcher = null
   let tooltip = null
+  let authToast = null
   let portraitBaseUrl = ""
   let activeSymbol = null
   let hideTimer = null
   let portraitLoadToken = 0
   const portraitDataUrlCache = new Map()
-  const warmedPortraitSrcs = new Set()
+  const portraitDataUrlPromiseCache = new Map()
+  const portraitWarmQueue = []
+  const queuedPortraitSrcs = new Set()
   let portraitWarmScheduled = false
+  let portraitWarmDraining = false
   const geneDetailCache = new Map() // symbol -> gene payload or null
   const geneDetailPromiseCache = new Map() // symbol -> Promise<payload|null>
   const geneDetailWarmQueue = []
@@ -1421,12 +1455,19 @@
   let geneDetailWarmScheduled = false
   let geneDetailWarmDraining = false
   let viewportWarmFrame = 0
+  let visibilityScheduler = null
+  const mutationScanRoots = new Set()
+  let mutationScanScheduled = false
   let highlightMode = "underline"
   let tooltipTheme = "light"
-  let cardVariant = "classic"
+  let cardVariant = "simple"
   let activeGeneSummary = null
+  let litArchivalFrameRequestSerial = 0
   const warnedMissingTraitOrigins = new Set()
-  const GENE_DETAIL_WARM_BATCH_SIZE = 20
+  // Fence: keep background detail batches small. Large batches made the hovered gene wait behind
+  // bulk prewarm work, which is why "simple text loads seconds later" showed up in practice.
+  const GENE_DETAIL_WARM_BATCH_SIZE = 8
+  const PORTRAIT_WARM_BATCH_SIZE = 6
   const GENE_DETAIL_VISIBLE_LIMIT = 80
   const GENE_DETAIL_VIEWPORT_ABOVE_PX = 160
   const GENE_DETAIL_VIEWPORT_BELOW_PX = 960
@@ -1441,7 +1482,15 @@
   }
 
   function showVoteLoginPopup() {
-    window.alert("Please log in on Iconoplasm first to vote.")
+    if (!authToast) return
+    authToast.textContent = "Log in on Iconoplasm to vote on portraits."
+    authToast.classList.add("iconoplasm-auth-toast-visible")
+    window.clearTimeout(Number(authToast.dataset.hideTimer || 0))
+    const hideTimerId = window.setTimeout(() => {
+      authToast.classList.remove("iconoplasm-auth-toast-visible")
+      authToast.dataset.hideTimer = ""
+    }, 2600)
+    authToast.dataset.hideTimer = String(hideTimerId)
   }
 
   function cancelHideTimer() {
@@ -1463,9 +1512,14 @@
     const key = gene.pt || gene.ph
     if (!key) return ""
     if (/^https?:\/\//i.test(key)) return key
-    if (key.startsWith("/")) return "https://iconoplasm.brinedew.bio" + key
-    if (portraitBaseUrl) return portraitBaseUrl.replace(/\/+$/, "") + "/" + key.replace(/^\/+/, "")
-    return "https://iconoplasm.brinedew.bio/" + key.replace(/^\/+/, "")
+    const normalizedKey = key.replace(/^\/+/, "")
+    if (key.startsWith("/") || normalizedKey.startsWith("portraits/")) {
+      return "https://iconoplasm.brinedew.bio/" + normalizedKey
+    }
+    if (portraitBaseUrl) {
+      return portraitBaseUrl.replace(/\/+$/, "") + "/" + normalizedKey
+    }
+    return "https://iconoplasm.brinedew.bio/" + normalizedKey
   }
 
   function deferPortraitWarm(task) {
@@ -1482,6 +1536,39 @@
 
   function delay(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms))
+  }
+
+  function shouldIgnoreMutationNode(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return true
+    const el = /** @type {Element} */ (node)
+    if (el.classList && el.classList.contains("iconoplasm-tooltip")) return true
+    if (el.closest && el.closest(".iconoplasm-tooltip")) return true
+    if (el.classList && el.classList.contains("iconoplasm-gene")) return true
+    if (el.closest && el.closest(".iconoplasm-gene")) return true
+    if (SKIP_TAGS.has(el.tagName)) return true
+    return false
+  }
+
+  function scheduleMutationScan() {
+    if (mutationScanScheduled) return
+    mutationScanScheduled = true
+    window.setTimeout(() => {
+      mutationScanScheduled = false
+      if (!mutationScanRoots.size) return
+
+      const roots = Array.from(mutationScanRoots)
+      mutationScanRoots.clear()
+      let didWrapGenes = false
+      for (const root of roots) {
+        if (scanPage(root) > 0) {
+          didWrapGenes = true
+        }
+      }
+      if (didWrapGenes) {
+        scheduleWarmVisiblePortraits()
+        scheduleWarmVisibleGeneDetails()
+      }
+    }, 0)
   }
 
   function setPortraitFallback(
@@ -1515,25 +1602,44 @@
   }
 
   function warmPortraitUrls(urls) {
-    const uniqueUrls = Array.from(
-      new Set(
-        (Array.isArray(urls) ? urls : []).map((url) => String(url || "").trim()).filter(Boolean),
-      ),
-    ).filter((url) => {
-      if (portraitDataUrlCache.has(url) || warmedPortraitSrcs.has(url)) return false
-      warmedPortraitSrcs.add(url)
-      return true
-    })
-    if (!uniqueUrls.length) return
+    const seen = new Set()
+    let added = false
+    for (const rawUrl of Array.isArray(urls) ? urls : []) {
+      const url = String(rawUrl || "").trim()
+      if (!url || seen.has(url)) continue
+      if (
+        portraitDataUrlCache.has(url) ||
+        portraitDataUrlPromiseCache.has(url) ||
+        queuedPortraitSrcs.has(url)
+      )
+        continue
+      seen.add(url)
+      queuedPortraitSrcs.add(url)
+      portraitWarmQueue.push(url)
+      added = true
+    }
+    if (added) {
+      drainPortraitWarmQueue().catch(() => null)
+    }
+  }
 
+  async function drainPortraitWarmQueue() {
+    if (portraitWarmDraining) return
+    portraitWarmDraining = true
     try {
-      chrome.runtime.sendMessage({ type: "WARM_PORTRAIT_DATA_URLS", urls: uniqueUrls }, () => {
-        void chrome.runtime.lastError
-      })
-    } catch (_) {
-      for (const url of uniqueUrls) {
-        warmedPortraitSrcs.delete(url)
+      while (portraitWarmQueue.length) {
+        const batch = portraitWarmQueue.splice(0, PORTRAIT_WARM_BATCH_SIZE)
+        for (const url of batch) queuedPortraitSrcs.delete(url)
+        const usableSources = await Promise.all(
+          batch.map((url) => getUsablePortraitSrc(url).catch(() => "")),
+        )
+        prewarmLitArchivalFramePortraitSrcs(usableSources)
+        if (portraitWarmQueue.length) {
+          await delay(20)
+        }
       }
+    } finally {
+      portraitWarmDraining = false
     }
   }
 
@@ -1545,9 +1651,11 @@
       if (!geneMap) return
       const urls = []
       const seenSymbols = new Set()
-      const genes = document.querySelectorAll(".iconoplasm-gene")
-      for (const geneEl of genes) {
-        const symbol = geneEl.dataset ? geneEl.dataset.gene : ""
+      const sourceSymbols =
+        visibilityScheduler && visibilityScheduler.hasVisibleSymbols()
+          ? collectObservedVisibleGeneSymbols(limit)
+          : collectVisibleGeneSymbols(limit)
+      for (const symbol of sourceSymbols) {
         if (!symbol || seenSymbols.has(symbol)) continue
         seenSymbols.add(symbol)
         const gene = geneMap[symbol]
@@ -1576,6 +1684,36 @@
       if (symbols.length >= limit) break
     }
     return symbols
+  }
+
+  function collectObservedVisibleGeneSymbols(limit = GENE_DETAIL_VISIBLE_LIMIT) {
+    if (!visibilityScheduler) return []
+    return visibilityScheduler
+      .getVisibleSymbols(limit)
+      .filter((symbol) => geneMap && geneMap[symbol])
+  }
+
+  function ensureVisibilityObserver() {
+    if (visibilityScheduler) return visibilityScheduler
+    if (!IconoVisibilityScheduler) return null
+    // Fence: warming should follow observer-driven visibility rather than repeated layout reads on
+    // scroll/resize. The old getBoundingClientRect loop worked, but it turned visibility into a
+    // hand-rolled scheduler with more main-thread tax than necessary.
+    visibilityScheduler = IconoVisibilityScheduler.createVisibilityScheduler({
+      abovePx: GENE_DETAIL_VIEWPORT_ABOVE_PX,
+      belowPx: GENE_DETAIL_VIEWPORT_BELOW_PX,
+      onVisibleChange: () => {
+        scheduleWarmVisiblePortraits()
+        scheduleWarmVisibleGeneDetails()
+      },
+    })
+    return visibilityScheduler
+  }
+
+  function observeGeneElement(el) {
+    if (!el || !el.dataset || !el.dataset.gene) return
+    const scheduler = ensureVisibilityObserver()
+    if (scheduler) scheduler.observe(el)
   }
 
   function collectNeighborGeneSymbols(targetEl, limit = GENE_DETAIL_WARM_BATCH_SIZE) {
@@ -1616,6 +1754,106 @@
     return symbols
   }
 
+  function collectNeighborPortraitUrls(targetEl, limit = GENE_DETAIL_WARM_BATCH_SIZE) {
+    if (!geneMap) return []
+    const symbols = collectNeighborGeneSymbols(targetEl, limit)
+    const urls = []
+    const seenUrls = new Set()
+    for (const symbol of symbols) {
+      const gene = geneMap[symbol]
+      const portraitSrc = resolvePortraitUrl(gene)
+      if (!portraitSrc || seenUrls.has(portraitSrc)) continue
+      seenUrls.add(portraitSrc)
+      urls.push(portraitSrc)
+    }
+    return urls
+  }
+
+  async function fetchGeneDetailsBatch(symbols) {
+    const uniqueSymbols = []
+    const seenSymbols = new Set()
+    for (const rawSymbol of Array.isArray(symbols) ? symbols : []) {
+      const symbol = String(rawSymbol || "")
+        .trim()
+        .toUpperCase()
+      if (!symbol || seenSymbols.has(symbol)) continue
+      seenSymbols.add(symbol)
+      uniqueSymbols.push(symbol)
+    }
+
+    const unresolvedSymbols = uniqueSymbols.filter(
+      (symbol) => !geneDetailCache.has(symbol) && !geneDetailPromiseCache.has(symbol),
+    )
+
+    if (unresolvedSymbols.length) {
+      const batchRequest = (async () => {
+        try {
+          const resp = await extensionApiFetch(ICONOPLASM_GENE_BATCH_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ symbols: unresolvedSymbols }),
+          })
+          if (!resp.ok) {
+            throw new Error("HTTP " + String(resp.status || 0))
+          }
+          const payload = (await resp.json()) || {}
+          const genes = Array.isArray(payload.genes) ? payload.genes : []
+          const resolvedMap = new Map()
+          for (const record of genes) {
+            const symbol = String((record && record.symbol) || "")
+              .trim()
+              .toUpperCase()
+            if (!symbol) continue
+            const safeRecord = record && typeof record === "object" ? record : null
+            geneDetailCache.set(symbol, safeRecord)
+            resolvedMap.set(symbol, safeRecord)
+          }
+          const missingSymbols = Array.isArray(payload.missing) ? payload.missing : []
+          for (const rawMissing of missingSymbols) {
+            const symbol = String(rawMissing || "")
+              .trim()
+              .toUpperCase()
+            if (!symbol) continue
+            geneDetailCache.set(symbol, null)
+            resolvedMap.set(symbol, null)
+          }
+          for (const symbol of unresolvedSymbols) {
+            if (!resolvedMap.has(symbol)) {
+              geneDetailCache.set(symbol, null)
+            }
+          }
+        } catch (err) {
+          console.error("[Iconoplasm] extension gene detail batch fetch error:", err)
+          for (const symbol of unresolvedSymbols) {
+            geneDetailCache.set(symbol, null)
+          }
+        } finally {
+          for (const symbol of unresolvedSymbols) {
+            geneDetailPromiseCache.delete(symbol)
+          }
+        }
+      })()
+
+      for (const symbol of unresolvedSymbols) {
+        geneDetailPromiseCache.set(
+          symbol,
+          batchRequest.then(() => geneDetailCache.get(symbol) || null),
+        )
+      }
+    }
+
+    const entries = await Promise.all(
+      uniqueSymbols.map(async (symbol) => {
+        if (geneDetailCache.has(symbol)) return [symbol, geneDetailCache.get(symbol) || null]
+        if (geneDetailPromiseCache.has(symbol)) {
+          return [symbol, await geneDetailPromiseCache.get(symbol)]
+        }
+        return [symbol, null]
+      }),
+    )
+    return new Map(entries)
+  }
+
   async function drainGeneDetailWarmQueue() {
     if (geneDetailWarmDraining) return
     geneDetailWarmDraining = true
@@ -1623,9 +1861,7 @@
       while (geneDetailWarmQueue.length) {
         const batch = geneDetailWarmQueue.splice(0, GENE_DETAIL_WARM_BATCH_SIZE)
         for (const symbol of batch) queuedGeneDetailSymbols.delete(symbol)
-        await Promise.all(
-          batch.map((symbol) => fetchGeneDetailForTooltip(symbol).catch(() => null)),
-        )
+        await fetchGeneDetailsBatch(batch)
         if (geneDetailWarmQueue.length) {
           await delay(20)
         }
@@ -1670,7 +1906,11 @@
     geneDetailWarmScheduled = true
     deferGeneDetailWarm(() => {
       geneDetailWarmScheduled = false
-      warmGeneDetails(collectVisibleGeneSymbols(limit), limit)
+      const sourceSymbols =
+        visibilityScheduler && visibilityScheduler.hasVisibleSymbols()
+          ? collectObservedVisibleGeneSymbols(limit)
+          : collectVisibleGeneSymbols(limit)
+      warmGeneDetails(sourceSymbols, limit)
     })
   }
 
@@ -1688,31 +1928,40 @@
     if (portraitDataUrlCache.has(portraitSrc)) {
       return portraitDataUrlCache.get(portraitSrc)
     }
-
-    try {
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage(
-          { type: "GET_PORTRAIT_DATA_URL", url: portraitSrc },
-          (result) => {
-            if (chrome.runtime.lastError) {
-              resolve(null)
-              return
-            }
-            resolve(result)
-          },
-        )
-      })
-
-      const dataUrl = response && response.ok && response.dataUrl ? response.dataUrl : ""
-      if (dataUrl) {
-        portraitDataUrlCache.set(portraitSrc, dataUrl)
-        return dataUrl
-      }
-    } catch (_) {
-      // Fall back to the direct site URL below.
+    if (portraitDataUrlPromiseCache.has(portraitSrc)) {
+      return portraitDataUrlPromiseCache.get(portraitSrc)
     }
 
-    return portraitSrc
+    const request = (async () => {
+      try {
+        const response = await new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            { type: "GET_PORTRAIT_DATA_URL", url: portraitSrc },
+            (result) => {
+              if (chrome.runtime.lastError) {
+                resolve(null)
+                return
+              }
+              resolve(result)
+            },
+          )
+        })
+
+        const dataUrl = response && response.ok && response.dataUrl ? response.dataUrl : ""
+        if (dataUrl) {
+          portraitDataUrlCache.set(portraitSrc, dataUrl)
+          return dataUrl
+        }
+      } catch (_) {
+        // Fall back to the direct site URL below.
+      } finally {
+        portraitDataUrlPromiseCache.delete(portraitSrc)
+      }
+
+      return portraitSrc
+    })()
+    portraitDataUrlPromiseCache.set(portraitSrc, request)
+    return request
   }
 
   async function loadTooltipPortrait({
@@ -1850,6 +2099,9 @@
       geneMap = payload
       portraitBaseUrl = ""
     }
+    // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
+    // as the page adapter that applies matches, not the place where lexical rules accrete forever.
+    geneMatcher = IconoContentMatcher.createGeneMatcher(geneMap, { blocklist: BLOCKLIST })
 
     if (!geneMap || Object.keys(geneMap).length === 0) {
       console.log("[Iconoplasm] No gene data yet. Retrying in 5s.")
@@ -1860,17 +2112,21 @@
     console.log("[Iconoplasm] Loaded", Object.keys(geneMap).length, "genes. Scanning...")
     injectFonts()
     createTooltip()
+    createAuthToast()
     scanPage(document.body)
     refreshHighlightStyles()
     scheduleWarmVisibleGeneDetails()
     scheduleWarmVisiblePortraits()
-    window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
-    window.addEventListener("resize", scheduleViewportWarm, { passive: true })
+    if (!ensureVisibilityObserver()) {
+      window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
+      window.addEventListener("resize", scheduleViewportWarm, { passive: true })
+    }
     observeMutations()
   }
 
   // -- DOM scanning --------------------------------------------------
   function scanPage(root) {
+    if (!root || typeof root.nodeType !== "number") return 0
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         const parent = node.parentElement
@@ -1886,25 +2142,20 @@
 
     const textNodes = []
     while (walker.nextNode()) textNodes.push(walker.currentNode)
-    for (const textNode of textNodes) processTextNode(textNode)
+    let wrappedCount = 0
+    for (const textNode of textNodes) {
+      wrappedCount += processTextNode(textNode)
+    }
+    return wrappedCount
   }
 
   function processTextNode(textNode) {
     const text = textNode.textContent
-    if (!text) return
+    if (!text || !geneMatcher) return 0
 
-    const regex = /\b([A-Z][A-Z0-9](?:[A-Z0-9]*(?:-[A-Z0-9]+)*))\b/g
-    const matches = []
-    let match
+    const matches = geneMatcher.findMatches(text)
 
-    while ((match = regex.exec(text)) !== null) {
-      const symbol = match[1]
-      if (symbol.length <= 4 && BLOCKLIST.has(symbol)) continue
-      if (!geneMap[symbol]) continue
-      matches.push({ symbol, index: match.index, length: match[0].length })
-    }
-
-    if (matches.length === 0) return
+    if (matches.length === 0) return 0
 
     const frag = document.createDocumentFragment()
     let cursor = 0
@@ -1925,6 +2176,7 @@
       const gene = geneMap[m.symbol]
       const color = gene.c || PLACEHOLDER_COLOR
       applyHighlightStyle(span, m.symbol, color)
+      observeGeneElement(span)
       frag.appendChild(span)
       cursor = m.index + m.length
     }
@@ -1934,27 +2186,19 @@
     }
 
     textNode.parentNode.replaceChild(frag, textNode)
+    return matches.length
   }
 
   // -- Mutation observer ---------------------------------------------
   function observeMutations() {
     const observer = new MutationObserver((mutations) => {
-      let didScan = false
       for (const mut of mutations) {
         for (const node of mut.addedNodes) {
-          if (
-            node.nodeType === Node.ELEMENT_NODE &&
-            !(node.classList && node.classList.contains("iconoplasm-tooltip"))
-          ) {
-            scanPage(node)
-            didScan = true
-          }
+          if (shouldIgnoreMutationNode(node)) continue
+          mutationScanRoots.add(node)
         }
       }
-      if (didScan) {
-        scheduleWarmVisiblePortraits()
-        scheduleWarmVisibleGeneDetails()
-      }
+      scheduleMutationScan()
     })
     observer.observe(document.body, { childList: true, subtree: true })
   }
@@ -1974,11 +2218,20 @@
 
     document.addEventListener("mouseover", onMouseOver)
     document.addEventListener("mouseout", onMouseOut)
+    window.addEventListener("message", onLitArchivalFrameMessage)
     tooltip.addEventListener("click", onTooltipClick)
     tooltip.addEventListener("keydown", onTooltipKeyDown)
     tooltip.addEventListener("mouseenter", cancelHideTimer)
     tooltip.addEventListener("mouseleave", onTooltipMouseLeave)
     tooltip.tabIndex = 0
+  }
+
+  function createAuthToast() {
+    authToast = document.createElement("div")
+    authToast.className = "iconoplasm-auth-toast"
+    authToast.setAttribute("role", "status")
+    authToast.setAttribute("aria-live", "polite")
+    document.body.appendChild(authToast)
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -2002,7 +2255,7 @@
     }
   })
 
-  function buildClassicTooltipBodyHtml(summaryGene, geneDetail, loading) {
+  function buildSimpleTooltipBodyHtml(summaryGene, geneDetail, loading) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
     const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
@@ -2057,29 +2310,189 @@
     )
   }
 
-  function buildArchivalTooltipBodyHtml(summaryGene, geneDetail) {
+  function archivalTooltipGeneModel(summaryGene, geneDetail) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
-    const model = detail || {
+    return detail || {
       symbol: summary.symbol || activeSymbol || "",
       full_name: summary.n || summary.symbol || activeSymbol || "",
       color: summary.c || PLACEHOLDER_COLOR,
       essence: {},
     }
-    const assetSha = String(((detail || {}).portrait || {}).asset_sha256 || "")
+  }
+
+  function buildLitTooltipCardModel(summaryGene, geneDetail, portraitSrcOverride) {
+    const geneModel = archivalTooltipGeneModel(summaryGene, geneDetail)
+    const symbol = String(geneModel.symbol || activeSymbol || "")
+      .trim()
+      .toUpperCase()
+    const assetSha = String(((geneDetail || {}).portrait || {}).asset_sha256 || "")
       .trim()
       .toLowerCase()
-    return IconoCardShared.renderLitArchivalCardHtml(model, {
-      mode: "sheet",
+    const portraitSrc =
+      String(portraitSrcOverride || "").trim() || buildTooltipFramePortraitSrc(summaryGene, geneDetail)
+    return IconoCardShared.resolveArchivalCardModel(geneModel, {
+      mode: "brick",
+      layoutVariant: isImageOnlyCardVariant() ? "image-only" : "lit-archival",
       mobileReview: false,
+      portraitAlt: symbol ? symbol + " portrait" : "Gene portrait",
+      portraitSrc,
+      titleHref: symbol ? buildGenePageUrl(symbol) : "",
       voteHtml: assetSha
-        ? IconoCardShared.voteBoxMarkup("", {
+        ? !isImageOnlyCardVariant() &&
+          IconoCardShared.voteBoxMarkup("", {
             variant: "label",
             showScore: false,
             showArrows: false,
           })
         : "",
     })
+  }
+
+  function buildTooltipFramePortraitSrc(summaryGene, geneDetail) {
+    const detailPortrait = geneDetail && geneDetail.portrait ? geneDetail.portrait : null
+    const detailUrl = String(
+      (detailPortrait && (detailPortrait.medium_url || detailPortrait.hero_url || detailPortrait.thumb_url)) ||
+        "",
+    ).trim()
+    if (detailUrl) return detailUrl
+    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
+    return resolvePortraitUrl(summary)
+  }
+
+  function buildTooltipFramePortraitDimensions(summaryGene, geneDetail) {
+    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    if (detail && IconoCardShared && typeof IconoCardShared.portraitDimensions === "function") {
+      const dims = IconoCardShared.portraitDimensions(detail)
+      if (dims && Number(dims.width) > 1 && Number(dims.height) > 1) return dims
+    }
+    // Fence: image-only and Lit archival cards need a stable first-paint aspect ratio. Falling
+    // back to 1:1 during cold hover makes some genes look square until detail hydration lands,
+    // which users perceive as a random crop/zoom jump rather than ordinary loading.
+    return DEFAULT_PORTRAIT_DIMENSIONS
+  }
+
+  function buildLitArchivalTooltipVoteConfig(geneDetail) {
+    if (isImageOnlyCardVariant()) return null
+    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    const symbol = String((detail && detail.symbol) || activeSymbol || "")
+      .trim()
+      .toUpperCase()
+    const portrait = (detail || {}).portrait || {}
+    const assetSha = String(portrait.asset_sha256 || "")
+      .trim()
+      .toLowerCase()
+    if (!symbol || !assetSha) return null
+    return {
+      symbol,
+      assetSha,
+      visionId: String(portrait.vision_id || "").trim(),
+      candidateImageId: Number(portrait.candidate_image_id || 0),
+      apiBaseUrl: ICONOPLASM_API_BASE,
+    }
+  }
+
+  function buildLitArchivalTooltipFrameHtml(summaryGene, geneDetail) {
+    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
+    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
+      .trim()
+      .toUpperCase()
+    return (
+      '<div class="iconoplasm-tooltip-lit-frame-shell">' +
+      '<iframe class="iconoplasm-tooltip-lit-frame" data-icono-frame-ready="false" src="' +
+      escapeHtml(LIT_ARCHIVAL_FRAME_URL) +
+      '" title="' +
+      escapeHtml((symbol || "Gene") + " archival card") +
+      '" scrolling="no" tabindex="-1"></iframe>' +
+      "</div>"
+    )
+  }
+
+  function postLitArchivalFramePayload(iframe, payload) {
+    if (!iframe || !iframe.isConnected || !iframe.contentWindow) return
+    if (!iframe.dataset || iframe.dataset.iconoFrameReady !== "true") {
+      iframe.__iconoPendingPayload = payload
+      return
+    }
+    try {
+      iframe.contentWindow.postMessage(payload, LIT_ARCHIVAL_FRAME_ORIGIN)
+    } catch (err) {
+      console.error("[Iconoplasm] failed to post archival frame payload:", err)
+    }
+  }
+
+  function prewarmLitArchivalFramePortraitSrcs(sources) {
+    if (!tooltip || !usesTooltipFrameRenderer()) return
+    const iframe = tooltip.querySelector(".iconoplasm-tooltip-lit-frame")
+    if (!iframe || !iframe.isConnected || !iframe.contentWindow) return
+    if (!iframe.dataset || iframe.dataset.iconoFrameReady !== "true") return
+    const usableSources = Array.from(
+      new Set(
+        (Array.isArray(sources) ? sources : [])
+          .map((value) => String(value || "").trim())
+          .filter(Boolean),
+      ),
+    )
+    if (!usableSources.length) return
+    try {
+      iframe.contentWindow.postMessage(
+        {
+          type: LIT_ARCHIVAL_PREWARM_MESSAGE,
+          sources: usableSources,
+        },
+        LIT_ARCHIVAL_FRAME_ORIGIN,
+      )
+    } catch (err) {
+      console.error("[Iconoplasm] failed to prewarm archival frame portraits:", err)
+    }
+  }
+
+  function mountLitArchivalTooltipFrame(body, summaryGene, geneDetail) {
+    const iframe = body.querySelector(".iconoplasm-tooltip-lit-frame")
+    if (!iframe) return
+    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
+    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
+      .trim()
+      .toUpperCase()
+    const directPortraitSrc = buildTooltipFramePortraitSrc(summaryGene, geneDetail)
+    const warmedPortraitSrc = directPortraitSrc ? portraitDataUrlCache.get(directPortraitSrc) || "" : ""
+    const payload = {
+      type: LIT_ARCHIVAL_RENDER_MESSAGE,
+      requestId: String(++litArchivalFrameRequestSerial),
+      theme: tooltipTheme,
+      cardVariant,
+      symbol,
+      pageUrl: symbol ? buildGenePageUrl(symbol) : "",
+      loading: !detail,
+      gene: detail || archivalTooltipGeneModel(summaryGene, null),
+      portraitSrc: warmedPortraitSrc || directPortraitSrc,
+      portraitDimensions: buildTooltipFramePortraitDimensions(summaryGene, geneDetail),
+      model: buildLitTooltipCardModel(summaryGene, geneDetail, warmedPortraitSrc || directPortraitSrc),
+      vote: buildLitArchivalTooltipVoteConfig(geneDetail),
+    }
+    if (warmedPortraitSrc) {
+      // Fence: neighboring hovers only feel instant if the rendering iframe has already decoded
+      // the warmed source. Caching bytes in the content script alone still leaves a paint-time
+      // decode gap that users perceive as a blink.
+      prewarmLitArchivalFramePortraitSrcs([warmedPortraitSrc])
+    }
+    postLitArchivalFramePayload(iframe, payload)
+    if (!directPortraitSrc || warmedPortraitSrc) return
+    getUsablePortraitSrc(directPortraitSrc)
+      .then((usablePortraitSrc) => {
+        if (!usablePortraitSrc) return
+        if (!iframe.isConnected) return
+        if (activeSymbol !== symbol) return
+        const hydratedPayload = Object.assign({}, payload, {
+          portraitSrc: usablePortraitSrc,
+          model: buildLitTooltipCardModel(summaryGene, geneDetail, usablePortraitSrc),
+        })
+        prewarmLitArchivalFramePortraitSrcs([usablePortraitSrc])
+        postLitArchivalFramePayload(iframe, hydratedPayload)
+      })
+      .catch(() => null)
   }
 
   function buildTooltipPortraitInnerHtml(summaryGene, geneDetail) {
@@ -2113,13 +2526,20 @@
     if (!tooltip) return
     const body = tooltip.querySelector(".iconoplasm-tooltip-body")
     if (!body) return
-    body.innerHTML =
-      isArchivalCardVariant()
-        ? buildArchivalTooltipBodyHtml(summaryGene, geneDetail)
-        : buildClassicTooltipBodyHtml(summaryGene, geneDetail, loading)
+    if (usesTooltipFrameRenderer()) {
+      // Fence: all maintained rich layouts are Lit-owned now. The removed legacy non-Lit vintage
+      // card must not come back as a third tooltip branch or we will reintroduce spec drift.
+      if (!body.querySelector(".iconoplasm-tooltip-lit-frame")) {
+        body.innerHTML = buildLitArchivalTooltipFrameHtml(summaryGene, geneDetail)
+      }
+      mountLitArchivalTooltipFrame(body, summaryGene, geneDetail)
+      return
+    }
+    body.innerHTML = buildSimpleTooltipBodyHtml(summaryGene, geneDetail, loading)
   }
 
   function wireRenderedTooltipVoteBox(geneDetail) {
+    if (usesTooltipFrameRenderer()) return
     if (!tooltip || !geneDetail) return
     const box = tooltip.querySelector("[data-icono-vote-box]")
     if (!box) return
@@ -2146,30 +2566,14 @@
   }
 
   async function fetchGeneDetailForTooltip(symbol) {
-    if (geneDetailCache.has(symbol)) return geneDetailCache.get(symbol)
-    if (geneDetailPromiseCache.has(symbol)) return geneDetailPromiseCache.get(symbol)
-    const request = (async () => {
-      try {
-        const resp = await fetch(
-          ICONOPLASM_API_BASE + "/api/public/v1/genes/" + encodeURIComponent(symbol),
-        )
-        if (!resp.ok) {
-          geneDetailCache.set(symbol, null)
-          return null
-        }
-        const data = await resp.json()
-        geneDetailCache.set(symbol, data || null)
-        return data || null
-      } catch (err) {
-        console.error("[Iconoplasm] extension gene detail fetch error:", err)
-        geneDetailCache.set(symbol, null)
-        return null
-      } finally {
-        geneDetailPromiseCache.delete(symbol)
-      }
-    })()
-    geneDetailPromiseCache.set(symbol, request)
-    return request
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return null
+    if (geneDetailCache.has(normalizedSymbol)) return geneDetailCache.get(normalizedSymbol)
+    if (geneDetailPromiseCache.has(normalizedSymbol)) return geneDetailPromiseCache.get(normalizedSymbol)
+    const responses = await fetchGeneDetailsBatch([normalizedSymbol])
+    return responses.get(normalizedSymbol) || null
   }
 
   function onTooltipClick(e) {
@@ -2194,40 +2598,56 @@
     if (!gene) return
     activeSymbol = symbol
     activeGeneSummary = Object.assign({ symbol }, gene)
-    warmGeneDetails(
-      collectNeighborGeneSymbols(target, GENE_DETAIL_WARM_BATCH_SIZE),
-      GENE_DETAIL_WARM_BATCH_SIZE,
+    // Fence: fetch the hovered gene before warming neighbors. Reversing this puts the hovered
+    // symbol into the warm queue first, so the visible card waits on background work.
+    const hoverGeneDetailPromise = geneDetailCache.has(symbol)
+      ? Promise.resolve(geneDetailCache.get(symbol) || null)
+      : fetchGeneDetailForTooltip(symbol)
+    const neighborSymbols = collectNeighborGeneSymbols(target, GENE_DETAIL_WARM_BATCH_SIZE).filter(
+      (neighborSymbol) => neighborSymbol !== symbol,
     )
+    warmGeneDetails(neighborSymbols, GENE_DETAIL_WARM_BATCH_SIZE - 1)
+    warmPortraitUrls(collectNeighborPortraitUrls(target, GENE_DETAIL_WARM_BATCH_SIZE))
 
     const color = gene.c || PLACEHOLDER_COLOR
+    const usesFrameRenderer = usesTooltipFrameRenderer()
 
     // Fill tooltip content
     const portrait = tooltip.querySelector(".iconoplasm-tooltip-portrait")
-    if (portrait) {
+    if (portrait && !usesFrameRenderer) {
       portrait.innerHTML = buildTooltipPortraitInnerHtml(activeGeneSummary, null)
     }
-    const portraitImg = tooltip.querySelector(".iconoplasm-tooltip-portrait-img")
-    const fade = tooltip.querySelector(".iconoplasm-tooltip-portrait-fade")
-    const portraitFallback = tooltip.querySelector(".iconoplasm-tooltip-portrait-fallback")
-    const portraitStatus = tooltip.querySelector(".iconoplasm-tooltip-portrait-status")
-    const portraitSymbol = tooltip.querySelector(".iconoplasm-tooltip-portrait-symbol")
-    const portraitSrc = resolvePortraitUrl(gene)
-    warmPortraitUrls([portraitSrc])
-    loadTooltipPortrait({
-      symbol,
-      portrait,
-      portraitImg,
-      portraitFallback,
-      portraitStatus,
-      portraitSrc,
-    })
-    portraitSymbol.textContent = symbol
+    const portraitImg = usesFrameRenderer
+      ? null
+      : tooltip.querySelector(".iconoplasm-tooltip-portrait-img")
+    const fade = usesFrameRenderer ? null : tooltip.querySelector(".iconoplasm-tooltip-portrait-fade")
+    const portraitFallback = usesFrameRenderer
+      ? null
+      : tooltip.querySelector(".iconoplasm-tooltip-portrait-fallback")
+    const portraitStatus = usesFrameRenderer
+      ? null
+      : tooltip.querySelector(".iconoplasm-tooltip-portrait-status")
+    const portraitSymbol = usesFrameRenderer
+      ? null
+      : tooltip.querySelector(".iconoplasm-tooltip-portrait-symbol")
+    if (!usesFrameRenderer) {
+      const portraitSrc = resolvePortraitUrl(gene)
+      loadTooltipPortrait({
+        symbol,
+        portrait,
+        portraitImg,
+        portraitFallback,
+        portraitStatus,
+        portraitSrc,
+      })
+      if (portraitSymbol) portraitSymbol.textContent = symbol
+    }
 
     // Keep the reading surface neutral; gene color is an accent only.
     tooltip.style.backgroundColor = ""
     tooltip.style.setProperty("--iconoplasm-gene-color", color)
-    fade.style.background = ""
-    portraitSymbol.style.color = ""
+    if (fade) fade.style.background = ""
+    if (portraitSymbol) portraitSymbol.style.color = ""
 
     const hoverSymbol = symbol
     if (geneDetailCache.has(symbol)) {
@@ -2237,7 +2657,7 @@
     } else {
       // Reserve the metadata area immediately so the title block never jumps.
       renderTooltipBody(activeGeneSummary, null, true)
-      fetchGeneDetailForTooltip(symbol).then((geneDetail) => {
+      hoverGeneDetailPromise.then((geneDetail) => {
         if (activeSymbol === hoverSymbol && geneDetail) {
           renderTooltipBody(activeGeneSummary, geneDetail, false)
           wireRenderedTooltipVoteBox(geneDetail)
@@ -2281,6 +2701,29 @@
     if (related && (related.closest(".iconoplasm-tooltip") || related.closest(".iconoplasm-gene")))
       return
     scheduleHideTooltip()
+  }
+
+  function onLitArchivalFrameMessage(event) {
+    const data = event && event.data && typeof event.data === "object" ? event.data : null
+    if (!data || data.source !== LIT_ARCHIVAL_FRAME_SOURCE) return
+    const iframe = tooltip ? tooltip.querySelector(".iconoplasm-tooltip-lit-frame") : null
+    if (!iframe || event.source !== iframe.contentWindow) return
+    if (data.type === LIT_ARCHIVAL_READY_MESSAGE) {
+      iframe.dataset.iconoFrameReady = "true"
+      if (iframe.__iconoPendingPayload) {
+        const pendingPayload = iframe.__iconoPendingPayload
+        iframe.__iconoPendingPayload = null
+        postLitArchivalFramePayload(iframe, pendingPayload)
+      }
+      return
+    }
+    if (data.type === LIT_ARCHIVAL_OPEN_MESSAGE) {
+      openGenePage(String(data.symbol || activeSymbol || "").trim().toUpperCase())
+      return
+    }
+    if (data.type === LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE) {
+      showVoteLoginPopup()
+    }
   }
 
   function hideTooltip() {

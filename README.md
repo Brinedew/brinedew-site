@@ -11,6 +11,10 @@ Source for my personal site. Wet lab biologist, interested in aging and cancer, 
 - `workers/` - Cloudflare backend for GeneGuessr
 - `scripts/` - protein enrichment pipelines, data processing
 
+## Iconoplasm note
+
+For Iconoplasm specifically, this repo is the website/runtime side, not the local authoring workstation. If published catalog data, alias export, or Website Ops payloads look wrong, start in `d:\Coding\Datasets\iconoplasm` first. That sibling repo is the control plane that publishes what this website and the browser extension consume.
+
 ## how it works
 
 Obsidian vault in `content/`, Quartz builds static HTML, Cloudflare Pages serves static assets, and the Cloudflare Worker handles API + cron.

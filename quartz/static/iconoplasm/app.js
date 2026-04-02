@@ -29,7 +29,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   var GALLERY_INITIAL_PAGE_SIZE = 4
   var GALLERY_DEFAULT_ORDER = "votes"
   var HOME_LAYOUT_DEFAULT = "bricks"
-  var CARD_VARIANT_DEFAULT = "classic"
+  var CARD_VARIANT_DEFAULT = "simple"
   var HOME_SKELETON_CARD_COUNT = 4
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
@@ -830,14 +830,22 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function isArchivalCardVariant(cardVariant) {
-    return cardVariant === "lab-label" || cardVariant === "lit-archival"
+    return cardVariant === "lit-archival"
+  }
+
+  function isImageOnlyCardVariant(cardVariant) {
+    return cardVariant === "image-only"
+  }
+
+  function isLitCardVariant(cardVariant) {
+    return isArchivalCardVariant(cardVariant) || isImageOnlyCardVariant(cardVariant)
   }
 
   function archivalVariantClass(cardVariant) {
     if (cardVariant === "lit-archival") {
       return " icono-card--variant-lab-label icono-card--variant-lit-archival"
     }
-    if (cardVariant === "lab-label") return " icono-card--variant-lab-label"
+    if (cardVariant === "image-only") return " icono-card--variant-image-only"
     return ""
   }
 
@@ -1077,42 +1085,19 @@ void syncSharedIconoplasmSettings().catch(function () {
     dims,
     fetchPriority,
   ) {
-    var resolvedSymbol = normalizedSymbol(symbol)
-    if (!portraitUrl) {
-      return (
-        '<div class="iconoplasm-tooltip-portrait-fallback">' +
-        '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-        '<div class="iconoplasm-tooltip-portrait-symbol">' +
-        esc(resolvedSymbol) +
-        "</div>" +
-        "</div>"
-      )
-    }
-    return (
-      '<button type="button" class="iconoplasm-tooltip-portrait-media icono-brick-media-link" data-icono-pswp data-icono-pswp-src="' +
-      esc(portraitFullUrl) +
-      '" data-icono-pswp-alt="' +
-      esc(resolvedSymbol) +
-      ' portrait" data-pswp-width="' +
-      dims.width +
-      '" data-pswp-height="' +
-      dims.height +
-      '" aria-label="Open full-size portrait for ' +
-      esc(resolvedSymbol) +
-      ' portrait">' +
-      '<img class="iconoplasm-tooltip-portrait-img" src="' +
-      esc(portraitUrl) +
-      '" alt="' +
-      esc(resolvedSymbol) +
-      ' portrait" loading="eager" decoding="async" fetchpriority="' +
-      esc(fetchPriority || "low") +
-      '" width="' +
-      dims.width +
-      '" height="' +
-      dims.height +
-      '">' +
-      "</button>"
-    )
+    return IconoCardShared.renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, {
+      buttonAttrs:
+        'data-icono-pswp data-icono-pswp-src="' +
+        esc(portraitFullUrl) +
+        '" data-icono-pswp-alt="' +
+        esc(normalizedSymbol(symbol)) +
+        ' portrait" data-pswp-width="' +
+        dims.width +
+        '" data-pswp-height="' +
+        dims.height +
+        '"',
+      fetchPriority: fetchPriority || "low",
+    })
   }
 
   function buildBrickCardMarkup(g, cardIndex) {
@@ -1123,6 +1108,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = portraitDetailCache[key] || null
     var cardVariant = resolveCardVariant()
     var isArchivalVariant = isArchivalCardVariant(cardVariant)
+    var isImageOnlyVariant = isImageOnlyCardVariant(cardVariant)
     var href = "/gene/" + esc(encodeURIComponent(g.symbol))
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
@@ -1143,12 +1129,15 @@ void syncSharedIconoplasmSettings().catch(function () {
       dims,
       cardIndex < 6 ? "high" : "low",
     )
-    var bodyHtml = isArchivalVariant
+    var bodyHtml = isLitCardVariant(cardVariant)
       ? buildArchivalBodyMarkup(detail || g, {
           mode: "brick",
+          layoutVariant: isImageOnlyVariant ? "image-only" : "lit-archival",
           mobileReview: isMobileLabelReviewEnabled(),
+          portraitAlt: g.symbol + " portrait",
+          portraitSrc: portraitUrl,
           titleHref: href,
-          voteHtml: labelVoteHtml,
+          voteHtml: isImageOnlyVariant ? "" : labelVoteHtml,
         })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-brick-header-row icono-shared-card-header-row">' +
@@ -1194,55 +1183,59 @@ void syncSharedIconoplasmSettings().catch(function () {
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
       ';">' +
-      (isArchivalVariant
-        ? '<div class="' +
-          portraitStateClass +
-          (portraitUrl ? '" data-icono-lightbox>' : '">') +
-          IconoCardShared.renderLabLabelSpecimenRailHtml(labelPortraitHtml, detail || g) +
-          "</div>"
-        : '<div class="' +
-          portraitStateClass +
-          ' icono-brick-media-link"' +
-          (portraitUrl ? " data-icono-lightbox>" : ">") +
-          (portraitUrl
-            ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
-              esc(portraitFullUrl) +
-              '" data-icono-pswp-alt="' +
-              esc(g.symbol) +
-              ' portrait" data-pswp-width="' +
-              dims.width +
-              '" data-pswp-height="' +
-              dims.height +
-              '" aria-label="Open full-size portrait for ' +
-              esc(g.symbol) +
-              ' portrait">' +
-              '<img class="iconoplasm-tooltip-portrait-img" src="' +
-              esc(portraitUrl) +
-              '" alt="' +
-              esc(g.symbol) +
-              // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
-              // scroll show empty portrait boxes for a beat before the browser picked them up.
-              ' portrait" loading="eager" decoding="async" fetchpriority="' +
-              (cardIndex < 6 ? "high" : "low") +
-              '" width="' +
-              dims.width +
-              '" height="' +
-              dims.height +
-              '">' +
-              "</button>"
-            : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
-          '<div class="iconoplasm-tooltip-portrait-fallback">' +
-          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-          '<div class="iconoplasm-tooltip-portrait-symbol">' +
-          esc(g.symbol) +
-          "</div>" +
-          "</div>" +
-          '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+      (isImageOnlyVariant
+        ? bodyHtml
+        : isArchivalVariant
+          ? '<div class="' +
+            portraitStateClass +
+            (portraitUrl ? '" data-icono-lightbox>' : '">') +
+            IconoCardShared.renderLabLabelSpecimenRailHtml(labelPortraitHtml, detail || g) +
+            "</div>"
+          : '<div class="' +
+            portraitStateClass +
+            ' icono-brick-media-link"' +
+            (portraitUrl ? " data-icono-lightbox>" : ">") +
+            (portraitUrl
+              ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
+                esc(portraitFullUrl) +
+                '" data-icono-pswp-alt="' +
+                esc(g.symbol) +
+                ' portrait" data-pswp-width="' +
+                dims.width +
+                '" data-pswp-height="' +
+                dims.height +
+                '" aria-label="Open full-size portrait for ' +
+                esc(g.symbol) +
+                ' portrait">' +
+                '<img class="iconoplasm-tooltip-portrait-img" src="' +
+                esc(portraitUrl) +
+                '" alt="' +
+                esc(g.symbol) +
+                // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
+                // scroll show empty portrait boxes for a beat before the browser picked them up.
+                ' portrait" loading="eager" decoding="async" fetchpriority="' +
+                (cardIndex < 6 ? "high" : "low") +
+                '" width="' +
+                dims.width +
+                '" height="' +
+                dims.height +
+                '">' +
+                "</button>"
+              : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
+            '<div class="iconoplasm-tooltip-portrait-fallback">' +
+            '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+            '<div class="iconoplasm-tooltip-portrait-symbol">' +
+            esc(g.symbol) +
+            "</div>" +
+            "</div>" +
+            '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+            "</div>") +
+      (isImageOnlyVariant
+        ? ""
+        : '<div class="iconoplasm-tooltip-body">' +
+          bodyHtml +
           "</div>") +
-      '<div class="iconoplasm-tooltip-body">' +
-      bodyHtml +
-      "</div>" +
-      (isArchivalVariant
+      (isLitCardVariant(cardVariant)
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
           href +
@@ -1263,6 +1256,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var detail = g || null
     var cardVariant = resolveCardVariant()
     var isArchivalVariant = isArchivalCardVariant(cardVariant)
+    var isImageOnlyVariant = isImageOnlyCardVariant(cardVariant)
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
     // The lead card intentionally consumes the same mobile row-grid renderer as home bricks.
@@ -1357,11 +1351,16 @@ void syncSharedIconoplasmSettings().catch(function () {
         voteBoxMarkup("", { variant: isArchivalVariant ? "label" : "" }) +
         "</div>"
       : ""
-    var bodyHtml = isArchivalVariant
+    var bodyHtml = isLitCardVariant(cardVariant)
       ? buildArchivalBodyMarkup(detail || g, {
           mode: "sheet",
+          layoutVariant: isImageOnlyVariant ? "image-only" : "lit-archival",
           mobileReview: false,
-          voteHtml: portraitAssetSha
+          portraitAlt: g.symbol + " portrait",
+          portraitSrc: portraitUrl,
+          voteHtml:
+            !isImageOnlyVariant &&
+            portraitAssetSha
             ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", { showArrows: false })
             : "",
         })
@@ -1395,10 +1394,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       '" data-icono-card-variant="' +
       esc(cardVariant) +
       '">' +
-      portraitMarkup +
-      '<div class="iconoplasm-tooltip-body">' +
-      bodyHtml +
-      "</div>" +
+      (isImageOnlyVariant ? bodyHtml : portraitMarkup + '<div class="iconoplasm-tooltip-body">' + bodyHtml + "</div>") +
       "</article>"
     )
   }

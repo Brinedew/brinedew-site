@@ -19,6 +19,7 @@
     "docs": "npm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build --serve",
     "watch": "npm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs watch -d content",
     "check": "tsc --noEmit && npx prettier . --check",
+    "benchmark:iconoplasm-extension": "node ./scripts/benchmark-iconoplasm-extension.mjs",
     "format": "npx prettier . --write",
     "test": "tsx --test",
     "profile": "0x -D prof node ./quartz/bootstrap-cli.mjs build --concurrency=1"

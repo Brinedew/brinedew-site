@@ -1,0 +1,217 @@
+@font-face {
+  font-family: "Crimson Pro";
+  src: url("fonts/CrimsonPro-Variable.woff2") format("woff2");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Monaspace Xenon Web";
+  src: url("fonts/MonaspaceXenon-Var.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --light: oklch(96% 0.015 75);
+  --dark: oklch(20% 0.035 50);
+  --accent: oklch(50% 0.08 185);
+  --ui-border: oklch(82% 0.02 70);
+  --secondary: oklch(40% 0.04 55);
+  --radius-xl: 14px;
+  --radius-lg: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 368px;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--light) 97%, white 3%), color-mix(in srgb, var(--light) 94%, #eadfce 6%));
+  color: var(--dark);
+  font-family: "Crimson Pro", serif;
+  font-synthesis: none;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.popup-shell {
+  display: grid;
+  gap: 0.95rem;
+  padding: 1rem;
+}
+
+.popup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.popup-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.78rem;
+  min-width: 0;
+}
+
+.popup-brand-mark {
+  flex: 0 0 auto;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ui-border) 84%, transparent),
+    0 8px 18px rgba(33, 21, 12, 0.08);
+}
+
+.popup-brand-copy h1 {
+  margin: 0.1rem 0 0;
+  font-size: 1.58rem;
+  font-weight: 430;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+
+.popup-kicker,
+.popup-section-kicker,
+.popup-field legend {
+  margin: 0;
+  padding: 0;
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.popup-version {
+  flex: 0 0 auto;
+  padding: 0.32rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--light) 72%, white 28%);
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.74rem;
+  color: var(--secondary);
+}
+
+.popup-section {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--light) 82%, white 18%);
+  box-shadow: 0 10px 24px rgba(33, 21, 12, 0.05);
+}
+
+.popup-section-head {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.popup-section-head h2 {
+  margin: 0;
+  font-size: 1.16rem;
+  font-weight: 600;
+  line-height: 1.08;
+}
+
+.popup-section-note {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.95rem;
+  line-height: 1.38;
+  text-wrap: pretty;
+}
+
+.popup-field-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.popup-field {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.popup-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.popup-segmented--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.popup-segment {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.popup-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.popup-segment-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.45rem;
+  min-width: 0;
+  padding: 0.58rem 0.86rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--light) 74%, white 26%);
+  color: var(--dark);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.popup-radio:checked + .popup-segment-label {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--light));
+  color: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.popup-radio:focus-visible + .popup-segment-label {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.popup-segment-label:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--ui-border));
+  background: color-mix(in srgb, var(--light) 88%, white 12%);
+}

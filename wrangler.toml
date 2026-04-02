@@ -91,11 +91,12 @@ bucket_name = "geneguessr-structures"
 binding = "ICONOPLASM_PORTRAITS"
 bucket_name = "iconoplasm-portraits"
 
-# Daily cron jobs:
+# Cron jobs:
+# - 17 minutes past every hour UTC: repair non-overridden Iconoplasm canon drift
 # - 23:55 UTC pre-warm next day's target structure
 # - 00:03 UTC post Discord recap (image + text) directly from Worker
 [triggers]
-crons = ["55 23 * * *", "3 0 * * *"]
+crons = ["17 * * * *", "55 23 * * *", "3 0 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"

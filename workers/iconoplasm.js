@@ -13,7 +13,8 @@ const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 //
 // Data-lineage fence:
 // The local Iconoplasm authoring/control-plane lives at
-// `d:\Coding\Datasets\iconoplasm`. When Website Ops sync or catalog facts look
+<<<<<<< HEAD
+// `d:\\Coding\\Datasets\\iconoplasm`. When Website Ops sync or catalog facts look
 // wrong, start there first. This worker is the public website/runtime boundary
 // that ingests and serves published state; it should not grow ad hoc logic that
 // compensates for missing upstream workstation exports.
@@ -226,6 +227,10 @@ function normalizeCandidateRef(raw, symbol = null, assetSha256 = null) {
   const sha = normalizeSha256(assetSha256)
   if (!sym || !sha) return null
   return `a:${sym}|${sha}`
+}
+
+function voteAssetIdentity(symbol, assetSha256) {
+  return normalizeCandidateRef("", symbol, assetSha256)
 }
 
 function esc(s) {
@@ -1690,9 +1695,10 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
   const symbolNorm = normalizeSymbol(symbol)
   const assetShaNorm = normalizeSha256(assetSha256)
   const candidateRefNorm = normalizeCandidateRef(candidateRef, symbolNorm, assetShaNorm)
+  const assetCandidateRef = voteAssetIdentity(symbolNorm, assetShaNorm)
   const visionNorm = sanitizeVoteVisionId(visionId)
   const userNorm = normalizeUserId(userId)
-  if (!candidateRefNorm) {
+  if (!candidateRefNorm || !symbolNorm || !assetShaNorm) {
     return {
       image_upvotes: 0,
       image_downvotes: 0,
@@ -1701,7 +1707,7 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
       vision_upvotes: 0,
       vision_downvotes: 0,
       vision_score: 0,
-      candidate_ref: "",
+      candidate_ref: assetCandidateRef || candidateRefNorm || "",
       vision_id: visionNorm,
     }
   }
@@ -1712,19 +1718,21 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
        COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
        COALESCE(SUM(vote_value), 0) AS score
      FROM icono_image_votes
-     WHERE candidate_ref = ?`,
+     WHERE upper(gene_symbol) = ?
+       AND lower(asset_sha256) = ?`,
   )
-    .bind(candidateRefNorm)
+    .bind(symbolNorm, assetShaNorm)
     .first()
 
   const userVoteRow = await env.ICONOPLASM_DB.prepare(
     `SELECT vote_value
      FROM icono_image_votes
-     WHERE candidate_ref = ?
+     WHERE upper(gene_symbol) = ?
+       AND lower(asset_sha256) = ?
        AND user_id = ?
      LIMIT 1`,
   )
-    .bind(candidateRefNorm, userNorm)
+    .bind(symbolNorm, assetShaNorm, userNorm)
     .first()
 
   let visionAgg = null
@@ -1749,7 +1757,7 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
     vision_upvotes: Number(visionAgg?.upvotes || 0),
     vision_downvotes: Number(visionAgg?.downvotes || 0),
     vision_score: Number(visionAgg?.score || 0),
-    candidate_ref: candidateRefNorm,
+    candidate_ref: assetCandidateRef || candidateRefNorm,
     vision_id: visionNorm,
   }
 }
@@ -1768,9 +1776,12 @@ async function iconoVoteSnapshotsBatch(env, { items, userId }) {
     try {
       const chunkJson = JSON.stringify(
         chunk.map((item) => ({
-          candidate_ref: String(item?.candidate_ref || "").trim(),
           symbol: normalizeSymbol(item?.symbol || ""),
           asset_sha256: normalizeSha256(item?.asset_sha256 || ""),
+          candidate_ref: voteAssetIdentity(
+            normalizeSymbol(item?.symbol || ""),
+            normalizeSha256(item?.asset_sha256 || ""),
+          ),
           vision_id: sanitizeVoteVisionId(item?.vision_id || ""),
         })),
       )
@@ -1786,19 +1797,30 @@ async function iconoVoteSnapshotsBatch(env, { items, userId }) {
          ),
          image_agg AS (
            SELECT
-             iv.candidate_ref,
+             upper(iv.gene_symbol) AS gene_symbol,
+             lower(iv.asset_sha256) AS asset_sha256,
              COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
              COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
              COALESCE(SUM(iv.vote_value), 0) AS score
            FROM icono_image_votes iv
-           WHERE iv.candidate_ref IN (SELECT candidate_ref FROM input)
-           GROUP BY iv.candidate_ref
+           WHERE EXISTS (
+             SELECT 1
+             FROM input
+             WHERE input.symbol = upper(iv.gene_symbol)
+               AND input.asset_sha256 = lower(iv.asset_sha256)
+           )
+           GROUP BY upper(iv.gene_symbol), lower(iv.asset_sha256)
          ),
          user_votes AS (
-           SELECT iv.candidate_ref, iv.vote_value
+           SELECT upper(iv.gene_symbol) AS gene_symbol, lower(iv.asset_sha256) AS asset_sha256, iv.vote_value
            FROM icono_image_votes iv
            WHERE iv.user_id = ?
-             AND iv.candidate_ref IN (SELECT candidate_ref FROM input)
+             AND EXISTS (
+               SELECT 1
+               FROM input
+               WHERE input.symbol = upper(iv.gene_symbol)
+                 AND input.asset_sha256 = lower(iv.asset_sha256)
+             )
          ),
          vision_agg AS (
            SELECT
@@ -1826,9 +1848,11 @@ async function iconoVoteSnapshotsBatch(env, { items, userId }) {
            COALESCE(vision_agg.score, 0) AS vision_score
          FROM input
          LEFT JOIN image_agg
-           ON image_agg.candidate_ref = input.candidate_ref
+           ON image_agg.gene_symbol = input.symbol
+          AND image_agg.asset_sha256 = input.asset_sha256
          LEFT JOIN user_votes
-           ON user_votes.candidate_ref = input.candidate_ref
+           ON user_votes.gene_symbol = input.symbol
+          AND user_votes.asset_sha256 = input.asset_sha256
          LEFT JOIN vision_agg
            ON vision_agg.vision_id = input.vision_id
          ORDER BY input.idx ASC`,
@@ -1985,40 +2009,38 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
     }
   }
 
+  // Chesterton's fence: publish-state auto-promotion must rank candidates with
+  // the exact same vote identity that admin/audit surfaces use. Older vote rows
+  // may carry legacy `candidate_ref` values like `c:2704`, so canon selection
+  // cannot depend on candidate_ref-shaped joins if the rest of the site already
+  // treats `(gene_symbol, asset_sha256)` as the durable image identity.
   const topRow = await env.ICONOPLASM_DB.prepare(
     `SELECT
        pa.asset_sha256,
        COALESCE(pa.is_legacy, 0) AS is_legacy,
-       COALESCE(v.upvotes, 0) AS image_upvotes,
-       COALESCE(v.downvotes, 0) AS image_downvotes,
-       COALESCE(v.score, 0) AS image_score,
+       COALESCE(vs.upvotes, 0) AS image_upvotes,
+       COALESCE(vs.downvotes, 0) AS image_downvotes,
+       COALESCE(vs.score, 0) AS image_score,
        pa.created_at,
        CASE
          WHEN lower(pa.asset_sha256) = ? THEN 1
          ELSE 0
        END AS is_current
      FROM icono_portrait_assets pa
-     LEFT JOIN (
-       SELECT
-         candidate_ref,
-         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
-         SUM(vote_value) AS score
-       FROM icono_image_votes
-       GROUP BY candidate_ref
-     ) v
-       ON v.candidate_ref = ('a:' || upper(pa.gene_symbol) || '|' || lower(pa.asset_sha256))
+     LEFT JOIN icono_vote_asset_summary vs
+       ON vs.gene_symbol = upper(pa.gene_symbol)
+      AND vs.asset_sha256 = lower(pa.asset_sha256)
      WHERE upper(pa.gene_symbol) = ?
        AND COALESCE(pa.autopick_eligible, 1) = 1
        AND COALESCE(pa.status, '') <> 'rejected'
        AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
      ORDER BY
-       COALESCE(v.score, 0) DESC,
+       COALESCE(vs.score, 0) DESC,
        CASE
          WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1
          ELSE 0
        END DESC,
-       COALESCE(v.upvotes, 0) DESC,
+       COALESCE(vs.upvotes, 0) DESC,
        CASE
          WHEN lower(pa.asset_sha256) = ? THEN 1
          ELSE 0
@@ -2131,6 +2153,7 @@ async function iconoExistingAssetsBatch(env, rawItems) {
          lower(pa.asset_sha256) AS asset_sha256,
          pa.status,
          pa.autopick_eligible,
+         COALESCE(pa.is_stale, 0) AS is_stale,
          pa.r2_key_full,
          pa.r2_key_medium,
          pa.r2_key_thumb,
@@ -4230,6 +4253,83 @@ async function fetchAdminCanonAudit(env, { limit = 1500, eventLimit = 40 } = {})
   return {
     rows: Array.isArray(auditResp?.results) ? auditResp.results : [],
     recent_events: await fetchAdminRecentEvents(env, { limit: cleanedEventLimit }),
+  }
+}
+
+export async function repairCanonInvariants(
+  env,
+  { limit = 250, actorId = "system", reason = "" } = {},
+) {
+  if (!env.ICONOPLASM_DB) {
+    return { ok: false, scanned: 0, changed: 0, unresolved: 0, symbols: [] }
+  }
+
+  await ensureAdminReadModelsReady(env)
+  const cleanedLimit = Math.max(1, Math.min(1000, Number.parseInt(String(limit || 250), 10) || 250))
+  const auditReason =
+    String(reason || "scheduled_canon_invariant_repair").slice(0, 2000) ||
+    "scheduled_canon_invariant_repair"
+  const resp = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       gene_symbol,
+       current_asset_sha256,
+       leader_asset_sha256,
+       candidate_count,
+       current_asset_missing,
+       admin_override
+     FROM icono_admin_gene_rollup
+     WHERE COALESCE(admin_override, 0) = 0
+       AND (
+         (COALESCE(candidate_count, 0) > 0 AND COALESCE(current_asset_sha256, '') = '')
+         OR COALESCE(current_asset_missing, 0) = 1
+         OR (
+           COALESCE(candidate_count, 0) > 0
+           AND COALESCE(current_asset_sha256, '') <> ''
+           AND COALESCE(leader_asset_sha256, '') <> ''
+           AND lower(current_asset_sha256) <> lower(leader_asset_sha256)
+         )
+       )
+     ORDER BY
+       COALESCE(current_asset_missing, 0) DESC,
+       COALESCE(candidate_count, 0) DESC,
+       gene_symbol ASC
+     LIMIT ?`,
+  )
+    .bind(cleanedLimit)
+    .all()
+
+  const rows = Array.isArray(resp?.results) ? resp.results : []
+  const touchedSymbols = []
+  const changedSymbols = []
+  const unresolved = []
+  for (const row of rows) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    touchedSymbols.push(symbol)
+    const result = await autoPromoteTopVotedPortrait(env, {
+      symbol,
+      actorId,
+      reason: auditReason,
+    })
+    if (result?.changed) changedSymbols.push(symbol)
+    else unresolved.push(symbol)
+  }
+
+  if (touchedSymbols.length) {
+    await syncAdminReadModelsAndInvalidateGallery(env, {
+      symbols: touchedSymbols,
+      skipVisionRollups: true,
+    })
+  }
+
+  return {
+    ok: true,
+    scanned: touchedSymbols.length,
+    changed: changedSymbols.length,
+    unresolved: unresolved.length,
+    symbols: touchedSymbols,
+    changed_symbols: changedSymbols,
+    unresolved_symbols: unresolved,
   }
 }
 
@@ -7058,6 +7158,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         symbol,
         assetSha,
       )
+      const assetCandidateRef = voteAssetIdentity(symbol, assetSha)
       const visionId = normalizeVisionId(p?.vision_id || "")
       const requested = normalizeVoteValue(p?.vote_value)
       if (!candidateRef)
@@ -7078,39 +7179,46 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const userId = normalizeUserId(sessionUser.user_id)
+      // Chesterton's fence: callers may still send legacy `c:<id>` refs, but a
+      // user's durable vote identity is `(gene_symbol, asset_sha256, user_id)`.
+      // Reads, writes, and canon ranking all need that same identity so one old
+      // client cannot fork the score ledger for the same image.
       const existing = await env.ICONOPLASM_DB.prepare(
         `SELECT vote_value
          FROM icono_image_votes
-         WHERE candidate_ref = ?
+         WHERE upper(gene_symbol) = ?
+           AND lower(asset_sha256) = ?
            AND user_id = ?
          LIMIT 1`,
       )
-        .bind(candidateRef, userId)
+        .bind(symbol, assetSha, userId)
         .first()
       const current = Number(existing?.vote_value || 0)
 
       if (requested === 0 || current === requested) {
         await env.ICONOPLASM_DB.prepare(
           `DELETE FROM icono_image_votes
-           WHERE candidate_ref = ?
+           WHERE upper(gene_symbol) = ?
+             AND lower(asset_sha256) = ?
              AND user_id = ?`,
         )
-          .bind(candidateRef, userId)
+          .bind(symbol, assetSha, userId)
           .run()
       } else {
         await env.ICONOPLASM_DB.prepare(
+          `DELETE FROM icono_image_votes
+           WHERE upper(gene_symbol) = ?
+             AND lower(asset_sha256) = ?
+             AND user_id = ?`,
+        )
+          .bind(symbol, assetSha, userId)
+          .run()
+        await env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_image_votes (
              candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-           ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
-             gene_symbol = excluded.gene_symbol,
-             asset_sha256 = excluded.asset_sha256,
-             vision_id = excluded.vision_id,
-             candidate_image_id = COALESCE(excluded.candidate_image_id, icono_image_votes.candidate_image_id),
-             vote_value = excluded.vote_value,
-             updated_at = CURRENT_TIMESTAMP`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         )
-          .bind(candidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
+          .bind(assetCandidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
           .run()
       }
 
@@ -7121,7 +7229,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       })
 
       const snapshot = await iconoVoteSnapshot(env, {
-        candidateRef,
+        candidateRef: assetCandidateRef,
         symbol,
         assetSha256: assetSha,
         visionId,
@@ -7130,13 +7238,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       // Public/community votes update the narrow vote read models only. The big admin
       // read-model refresh is reserved for operator workflows like ingest/reconcile/sync,
       // where we are already paying the cost to reshape the published catalog.
-      await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      if (autoPromote?.changed) {
+        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      } else {
+        await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      }
       return done(
         "votes_set",
         json(
           {
             ok: true,
-            candidate_ref: candidateRef,
+            candidate_ref: assetCandidateRef,
             symbol,
             asset_sha256: assetSha,
             candidate_image_id: candidateImageId,
@@ -7235,6 +7347,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           symbol,
           assetSha,
         )
+        const assetCandidateRef = voteAssetIdentity(symbol, assetSha)
         const visionId = normalizeVisionId(raw?.vision_id || "")
         const userId = normalizeUserId(raw?.user_id || raw?.user || "local")
         const voteValue = normalizeVoteValue(raw?.vote_value)
@@ -7250,27 +7363,29 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         if (voteValue === 0) {
           await env.ICONOPLASM_DB.prepare(
             `DELETE FROM icono_image_votes
-             WHERE candidate_ref = ?
+             WHERE upper(gene_symbol) = ?
+               AND lower(asset_sha256) = ?
                AND user_id = ?`,
           )
-            .bind(candidateRef, userId)
+            .bind(symbol, assetSha, userId)
             .run()
           deleted += 1
           continue
         }
         await env.ICONOPLASM_DB.prepare(
+          `DELETE FROM icono_image_votes
+           WHERE upper(gene_symbol) = ?
+             AND lower(asset_sha256) = ?
+             AND user_id = ?`,
+        )
+          .bind(symbol, assetSha, userId)
+          .run()
+        await env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_image_votes (
              candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-           ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
-             gene_symbol = excluded.gene_symbol,
-             asset_sha256 = excluded.asset_sha256,
-             vision_id = excluded.vision_id,
-             candidate_image_id = COALESCE(excluded.candidate_image_id, icono_image_votes.candidate_image_id),
-             vote_value = excluded.vote_value,
-             updated_at = CURRENT_TIMESTAMP`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         )
-          .bind(candidateRef, symbol, assetSha, visionId, candidateImageId, userId, voteValue)
+          .bind(assetCandidateRef, symbol, assetSha, visionId, candidateImageId, userId, voteValue)
           .run()
         upserted += 1
       }
@@ -7285,7 +7400,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         if (result?.changed) autoPromoted += 1
       }
 
-      await syncVoteReadModelsAndInvalidateGallery(env, { symbols: Array.from(touchedSymbols) })
+      if (autoPromoted > 0) {
+        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: Array.from(touchedSymbols) })
+      } else {
+        await syncVoteReadModelsAndInvalidateGallery(env, { symbols: Array.from(touchedSymbols) })
+      }
       return done(
         "admin_votes_import",
         json(
@@ -7323,6 +7442,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         symbol,
         assetSha,
       )
+      const assetCandidateRef = voteAssetIdentity(symbol, assetSha)
       const visionId = normalizeVisionId(p?.vision_id || "")
       const userId = normalizeUserId(p?.user_id || p?.user || "local")
       const requested = normalizeVoteValue(p?.vote_value)
@@ -7355,36 +7475,39 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const existing = await env.ICONOPLASM_DB.prepare(
         `SELECT vote_value
          FROM icono_image_votes
-         WHERE candidate_ref = ?
+         WHERE upper(gene_symbol) = ?
+           AND lower(asset_sha256) = ?
            AND user_id = ?
          LIMIT 1`,
       )
-        .bind(candidateRef, userId)
+        .bind(symbol, assetSha, userId)
         .first()
       const current = Number(existing?.vote_value || 0)
 
       if (requested === 0 || current === requested) {
         await env.ICONOPLASM_DB.prepare(
           `DELETE FROM icono_image_votes
-           WHERE candidate_ref = ?
+           WHERE upper(gene_symbol) = ?
+             AND lower(asset_sha256) = ?
              AND user_id = ?`,
         )
-          .bind(candidateRef, userId)
+          .bind(symbol, assetSha, userId)
           .run()
       } else {
         await env.ICONOPLASM_DB.prepare(
+          `DELETE FROM icono_image_votes
+           WHERE upper(gene_symbol) = ?
+             AND lower(asset_sha256) = ?
+             AND user_id = ?`,
+        )
+          .bind(symbol, assetSha, userId)
+          .run()
+        await env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_image_votes (
              candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-           ON CONFLICT(candidate_ref, user_id) DO UPDATE SET
-             gene_symbol = excluded.gene_symbol,
-             asset_sha256 = excluded.asset_sha256,
-             vision_id = excluded.vision_id,
-             candidate_image_id = COALESCE(excluded.candidate_image_id, icono_image_votes.candidate_image_id),
-             vote_value = excluded.vote_value,
-             updated_at = CURRENT_TIMESTAMP`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         )
-          .bind(candidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
+          .bind(assetCandidateRef, symbol, assetSha, visionId, candidateImageId, userId, requested)
           .run()
       }
 
@@ -7395,19 +7518,23 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       })
 
       const snapshot = await iconoVoteSnapshot(env, {
-        candidateRef,
+        candidateRef: assetCandidateRef,
         symbol,
         assetSha256: assetSha,
         visionId,
         userId,
       })
-      await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      if (autoPromote?.changed) {
+        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      } else {
+        await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      }
       return done(
         "admin_votes_set",
         json(
           {
             ok: true,
-            candidate_ref: candidateRef,
+            candidate_ref: assetCandidateRef,
             symbol,
             asset_sha256: assetSha,
             candidate_image_id: candidateImageId,
@@ -8429,6 +8556,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const items = Array.isArray(p?.items) ? p.items : []
+      const deferReadModels = coerceBoolean(
+        p?.defer_read_models ?? p?.deferReadModels,
+        false,
+      )
       if (!items.length)
         return done("admin_catalog_upsert_400", json({ error: "No items provided" }, 400))
       if (items.length > 1000)
@@ -8481,7 +8612,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         results.push({ ok: true, symbol: item.gene_symbol })
       }
 
-      if (processed > 0) {
+      if (processed > 0 && !deferReadModels) {
         await syncAdminReadModels(env, {
           symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
         })
@@ -8495,6 +8626,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             processed,
             invalid,
             total: items.length,
+            defer_read_models: deferReadModels,
             results,
           },
           invalid > 0 && processed === 0 ? 400 : 200,
@@ -8520,6 +8652,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const keepSymbolsRaw = Array.isArray(p?.keep_symbols) ? p.keep_symbols : []
+      const deferReadModels = coerceBoolean(
+        p?.defer_read_models ?? p?.deferReadModels,
+        false,
+      )
       if (!keepSymbolsRaw.length)
         return done("admin_catalog_reconcile_400", json({ error: "No keep_symbols provided" }, 400))
       if (keepSymbolsRaw.length > 25000)
@@ -8550,7 +8686,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .run()
       }
 
-      if (toDelete.length > 0) {
+      if (toDelete.length > 0 && !deferReadModels) {
         await syncAdminReadModels(env, { symbols: toDelete })
       }
 
@@ -8561,6 +8697,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             ok: true,
             kept: keepSymbols.size,
             deleted: toDelete.length,
+            defer_read_models: deferReadModels,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -8887,13 +9024,22 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           const width = optionalInt(item?.width ?? fullPayload?.width)
           const height = optionalInt(item?.height ?? fullPayload?.height)
           const bytes = optionalInt(item?.bytes ?? fullPayload?.bytes ?? fullBytes?.byteLength)
+          // Chesterton's fence: the workstation may tell us a candidate is stale,
+          // but it does not get to disqualify website canon. Auto-pick
+          // eligibility is website-owned policy: reject / blacklist paths can
+          // force it off, while routine workstation sync should not.
+          const existingStatus = normalizeAssetStatus(existingAsset?.status || "", "draft")
+          const isStaleRequested = item?.is_stale ?? item?.isStale
+          const isStale =
+            isStaleRequested === undefined || isStaleRequested === null
+              ? coerceBoolean(existingAsset?.is_stale, false)
+              : coerceBoolean(isStaleRequested, false)
           const autopickEligibleRequested = item?.autopick_eligible ?? item?.autopickEligible
           const autopickEligibleBase =
             autopickEligibleRequested === undefined || autopickEligibleRequested === null
-              ? coerceBoolean(existingAsset?.autopick_eligible, true)
+              ? true
               : coerceBoolean(autopickEligibleRequested, true)
           const autopickEligible = blacklisted ? false : autopickEligibleBase
-          const existingStatus = normalizeAssetStatus(existingAsset?.status || "", "draft")
           let finalStatus = statusRequested
           if (
             finalStatus === "draft" &&
@@ -8902,6 +9048,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             finalStatus = existingStatus
           }
           if (blacklisted) finalStatus = "rejected"
+          const persistedAutopickEligible = finalStatus === "rejected" ? false : autopickEligible
+          const persistedIsStale = finalStatus === "rejected" ? false : isStale
 
           if (!dryRun) {
             await env.ICONOPLASM_DB.prepare(
@@ -8909,7 +9057,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
                  mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
                  vision_id, candidate_image_id, artist_tag, artist_name, created_by, created_at
-               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
                  r2_key_full=excluded.r2_key_full,
                  r2_key_medium=excluded.r2_key_medium,
@@ -8920,7 +9068,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
                  status=excluded.status,
                  autopick_eligible=excluded.autopick_eligible,
-                 is_stale=0,
+                 is_stale=excluded.is_stale,
                  is_legacy=0,
                  vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
                  candidate_image_id=COALESCE(excluded.candidate_image_id, icono_portrait_assets.candidate_image_id),
@@ -8938,7 +9086,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                 height,
                 bytes,
                 finalStatus,
-                autopickEligible ? 1 : 0,
+                persistedAutopickEligible ? 1 : 0,
+                persistedIsStale ? 1 : 0,
                 visionId,
                 candidateImageId,
                 artistTag,
@@ -8985,7 +9134,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               artist_tag: artistTag,
               artist_name: artistName,
               status: finalStatus,
-              autopick_eligible: autopickEligible,
+              autopick_eligible: persistedAutopickEligible,
+              is_stale: persistedIsStale,
               uploads,
               publish: "site_managed",
               blacklisted,
@@ -9361,6 +9511,15 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           }),
         )
 
+        let autoResolved = 0
+        for (const touchedSymbol of touchedSymbols) {
+          const result = await autoPromoteTopVotedPortrait(env, {
+            symbol: touchedSymbol,
+            actorId,
+            reason: "admin_unstale_batch_auto_promote",
+          })
+          if (result?.changed) autoResolved += 1
+        }
         await syncAdminReadModelsAndInvalidateGallery(env, { symbols: touchedSymbols })
         return done(
           "unstale_batch",
@@ -9369,6 +9528,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             action: "unstale_batch",
             touched_symbols: touchedSymbols.length,
             unstaled_assets: staleRows.length,
+            auto_resolved: autoResolved,
             symbols: touchedSymbols,
           }),
         )
@@ -9477,7 +9637,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           .run()
         if (currentAssetSha && currentAssetSha === normalizeSha256(asset)) {
           await env.ICONOPLASM_DB.prepare(
-            "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=1, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
+            "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=0, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(gene_symbol)=?",
           )
             .bind(actorId, symbol)
             .run()
@@ -9492,8 +9652,20 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
           .bind(symbol, asset, asset, actorId, String(p?.reason || "").slice(0, 2000) || null)
           .run()
+        // Chesterton's fence: rejecting an asset changes the eligible candidate
+        // pool. That is moderation, not a request to pin "no portrait", so let
+        // site-owned canon recompute immediately unless the operator later sets
+        // an explicit override via publish/unpublish/rollback.
+        const autoPromote = await autoPromoteTopVotedPortrait(env, {
+          symbol,
+          actorId,
+          reason: "admin_reject_auto_promote",
+        })
         await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
-        return done("reject", json({ ok: true, action: "reject", symbol, asset_sha256: asset }))
+        return done(
+          "reject",
+          json({ ok: true, action: "reject", symbol, asset_sha256: asset, auto_promote: autoPromote }),
+        )
       }
 
       if (path.endsWith("/unpublish")) {
@@ -9540,8 +9712,16 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
           .bind(symbol, asset, asset, actorId, String(p?.reason || "").slice(0, 2000) || null)
           .run()
+        const autoPromote = await autoPromoteTopVotedPortrait(env, {
+          symbol,
+          actorId,
+          reason: "admin_unstale_auto_promote",
+        })
         await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
-        return done("unstale", json({ ok: true, action: "unstale", symbol, asset_sha256: asset }))
+        return done(
+          "unstale",
+          json({ ok: true, action: "unstale", symbol, asset_sha256: asset, auto_promote: autoPromote }),
+        )
       }
 
       if (path.endsWith("/purge-legacy")) {
@@ -9583,12 +9763,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             .run()
         }
 
-        const candidateRef = normalizeCandidateRef("", symbol, asset)
-        if (candidateRef) {
-          await env.ICONOPLASM_DB.prepare("DELETE FROM icono_image_votes WHERE candidate_ref = ?")
-            .bind(candidateRef)
-            .run()
-        }
+        await env.ICONOPLASM_DB.prepare(
+          "DELETE FROM icono_image_votes WHERE upper(gene_symbol)=? AND lower(asset_sha256)=?",
+        )
+          .bind(symbol, normalizeSha256(asset))
+          .run()
         await env.ICONOPLASM_DB.prepare(
           "DELETE FROM icono_portrait_assets WHERE upper(gene_symbol)=? AND asset_sha256=?",
         )

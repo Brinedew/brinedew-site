@@ -24,9 +24,9 @@ import {
     { value: "masonry", label: "Masonry" },
   ]
   var CARD_VARIANT_OPTIONS = [
-    { value: "classic", label: "Classic shared card" },
-    { value: "lab-label", label: "Vintage lab label" },
-    { value: "lit-archival", label: "Lit archival rewrite" },
+    { value: "simple", label: "Simple shared card" },
+    { value: "lit-archival", label: "Vintage lab label" },
+    { value: "image-only", label: "Image only" },
   ]
   var GENERATION_PROVIDERS = [
     { value: "openai-compatible", label: "OpenAI-compatible" },
