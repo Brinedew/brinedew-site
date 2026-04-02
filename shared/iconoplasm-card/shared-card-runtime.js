@@ -1,7 +1,7 @@
 ;(function (global) {
   "use strict"
 
-  var ICONO_SHARED_RUNTIME_VERSION = "20260321a"
+  var ICONO_SHARED_RUNTIME_VERSION = "20260402a"
   var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
   var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
   var existingMeta =
@@ -213,6 +213,16 @@
     var scope = root || (global && global.document)
     var loops = iconoCollectRoughLoops(scope, !!force)
     for (var i = 0; i < loops.length; i++) iconoRenderRoughLoop(loops[i], !!force)
+  }
+
+  function normalizeHandwrittenText(value) {
+    var text = String(value || "").trim()
+    if (!text) return ""
+    try {
+      return text.normalize("NFD")
+    } catch (_error) {
+      return text
+    }
   }
 
   function startRoughLoopObserver() {
@@ -1193,7 +1203,7 @@
     for (var i = 0; i < maxStyleRows; i++) {
       stylePairs.push({
         origin: blankFallback(aestheticsOrigin[i]),
-        note: String(aesthetics[i] || "").trim(),
+        note: normalizeHandwrittenText(aesthetics[i]),
       })
     }
     var politicsDisplay = normalizePoliticsDisplay(
@@ -1205,20 +1215,20 @@
       .toLowerCase()
     var layoutVariant = normalizeCardVariant(opts.layoutVariant || "lit-archival")
     return {
-      ageNote: addAgeSuffix(ageNote),
+      ageNote: normalizeHandwrittenText(addAgeSuffix(ageNote)),
       color: String(safeGeneDetail.color || "")
         .trim()
         .toUpperCase(),
       displayedFamily: displayedFamily,
-      displayedFamilyFeature: displayedFamilyFeature,
+      displayedFamilyFeature: normalizeHandwrittenText(displayedFamilyFeature),
       firstNoted: firstNoted,
       fullName: fullName,
-      handwrittenWeight: handwrittenWeight,
+      handwrittenWeight: normalizeHandwrittenText(handwrittenWeight),
       layoutVariant: layoutVariant,
       mobileReview: !!opts.mobileReview,
       mode: mode === "brick" ? "brick" : "sheet",
       molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
-      politicalNote: String(politicsDisplay.character || "").trim(),
+      politicalNote: normalizeHandwrittenText(politicsDisplay.character),
       portraitAlt:
         String(opts.portraitAlt || "").trim() || (symbol ? symbol + " portrait" : "Gene portrait"),
       portraitDimensions: portraitDimensions(
@@ -1227,7 +1237,7 @@
       portraitSrc: String(opts.portraitSrc || "").trim(),
       selectedCategory: selectedCategory,
       serial: serial,
-      sexNote: sexNote,
+      sexNote: normalizeHandwrittenText(sexNote),
       stylePairs: stylePairs,
       symbol: symbol,
       titleHref: String(opts.titleHref || "").trim(),

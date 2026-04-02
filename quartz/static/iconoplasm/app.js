@@ -9,7 +9,7 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260310d"
-import "./generated/lit-archival-card.js?v=20260329b"
+import "./generated/lit-archival-card.js?v=20260402a"
 
 void syncSharedIconoplasmSettings().catch(function () {
   return null

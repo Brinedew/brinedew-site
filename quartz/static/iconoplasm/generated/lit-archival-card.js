@@ -593,14 +593,44 @@ function asObject(value) {
 function blankFallback(value) {
   return String(value || "").trim() || " ";
 }
+function normalizeHandwrittenText(value) {
+  var text = String(value || "").trim();
+  if (!text) return "";
+  try {
+    return text.normalize("NFD");
+  } catch (_error) {
+    return text;
+  }
+}
+function normalizeCardModelHandwriting(payload) {
+  var safePayload = asObject(payload);
+  var normalized = Object.assign({}, safePayload);
+  normalized.ageNote = normalizeHandwrittenText(safePayload.ageNote);
+  normalized.displayedFamilyFeature = normalizeHandwrittenText(safePayload.displayedFamilyFeature);
+  normalized.handwrittenWeight = normalizeHandwrittenText(safePayload.handwrittenWeight);
+  normalized.politicalNote = normalizeHandwrittenText(safePayload.politicalNote);
+  normalized.sexNote = normalizeHandwrittenText(safePayload.sexNote);
+  normalized.stylePairs = Array.isArray(safePayload.stylePairs) ? safePayload.stylePairs.map(function(pair) {
+    var safePair = asObject(pair);
+    return {
+      origin: blankFallback(safePair.origin),
+      note: normalizeHandwrittenText(safePair.note)
+    };
+  }) : [];
+  return normalized;
+}
 function resolveCardModel(payload) {
   var safePayload = asObject(payload);
-  if (safePayload.symbol && Array.isArray(safePayload.stylePairs)) return safePayload;
+  if (safePayload.symbol && Array.isArray(safePayload.stylePairs)) {
+    return normalizeCardModelHandwriting(safePayload);
+  }
   var shared = sharedCardRuntime();
   if (shared && typeof shared.resolveArchivalCardModel === "function") {
-    return shared.resolveArchivalCardModel(safePayload.gene || safePayload, safePayload.options);
+    return normalizeCardModelHandwriting(
+      shared.resolveArchivalCardModel(safePayload.gene || safePayload, safePayload.options)
+    );
   }
-  return safePayload;
+  return normalizeCardModelHandwriting(safePayload);
 }
 function modelOpensInNewTab(model) {
   return String(model && model.titleLinkAttrs || "").indexOf('target="_blank"') >= 0;
