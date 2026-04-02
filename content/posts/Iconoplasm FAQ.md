@@ -142,6 +142,8 @@ My favourite scenarios are the ones where cell makes a decision to self-sacrific
 * Being assigned a transit amplifying role.
 * Immortalisation as a Hela cell
 
+![[image-24.png]]
+
 1. **How can we support the project?**
 
     Please participate! Vote on some images, generate and edit the picks, write lore pages. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on [[Support Me]] page.
