@@ -8481,9 +8481,15 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (!env.ICONOPLASM_DB)
         return done("admin_assets_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
       const resp = await env.ICONOPLASM_DB.prepare(
-        `SELECT
+         `SELECT
            pa.gene_symbol,
            pa.asset_sha256,
+           pa.candidate_image_id,
+           pa.vision_id,
+           pa.artist_tag,
+           pa.artist_name,
+           pa.status,
+           COALESCE(pa.is_stale, 0) AS is_stale,
            COALESCE(v.upvotes, 0) AS image_upvotes,
            COALESCE(v.downvotes, 0) AS image_downvotes,
            COALESCE(v.score, 0) AS image_score
@@ -8504,6 +8510,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         .map((row) => ({
           symbol: normalizeSymbol(row?.gene_symbol || ""),
           asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
+          candidate_image_id: optionalInt(row?.candidate_image_id),
+          vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+          artist_tag: normalizeArtistTag(row?.artist_tag || "") || "",
+          artist_name: sanitizeText(row?.artist_name || "", 255) || "",
+          status: normalizeAssetStatus(row?.status || "", "draft"),
+          is_stale: Number(row?.is_stale || 0) > 0,
           image_upvotes: Number(row?.image_upvotes || 0),
           image_downvotes: Number(row?.image_downvotes || 0),
           image_score: Number(row?.image_score || 0),
