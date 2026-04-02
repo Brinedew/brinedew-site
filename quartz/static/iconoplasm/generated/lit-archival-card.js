@@ -602,6 +602,9 @@ function resolveCardModel(payload) {
   }
   return safePayload;
 }
+function modelOpensInNewTab(model) {
+  return String(model && model.titleLinkAttrs || "").indexOf('target="_blank"') >= 0;
+}
 function penLoopFallbackMarkup() {
   return '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17" fill="none" stroke="currentColor" stroke-width="1.05" stroke-linecap="round" stroke-dasharray="2.5 4"/>';
 }
@@ -675,7 +678,13 @@ function titleTemplate(model) {
     <div class="icono-label-name">${model.fullName || model.symbol}</div>
     <div class="icono-label-registry-line">ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03</div>`;
   if (model.titleHref) {
-    return b2`<a class="icono-label-title-link" href=${model.titleHref} data-icono-nav>${titleInner}</a>`;
+    return b2`<a
+      class="icono-label-title-link"
+      href=${model.titleHref}
+      target=${modelOpensInNewTab(model) ? "_blank" : A}
+      rel=${modelOpensInNewTab(model) ? "noopener noreferrer" : A}
+      >${titleInner}</a
+    >`;
   }
   return b2`<div class="icono-label-title-block">${titleInner}</div>`;
 }
@@ -845,7 +854,13 @@ function imageOnlyTemplate(model) {
     </div>
   </div>`;
   if (href) {
-    return b2`<a class="icono-image-only-link" href=${href} data-icono-nav>${media}${overlay}</a>`;
+    return b2`<a
+      class="icono-image-only-link"
+      href=${href}
+      target=${modelOpensInNewTab(model) ? "_blank" : A}
+      rel=${modelOpensInNewTab(model) ? "noopener noreferrer" : A}
+      >${media}${overlay}</a
+    >`;
   }
   return b2`<div class="icono-image-only-link">${media}${overlay}</div>`;
 }

@@ -1110,6 +1110,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var isArchivalVariant = isArchivalCardVariant(cardVariant)
     var isImageOnlyVariant = isImageOnlyCardVariant(cardVariant)
     var href = "/gene/" + esc(encodeURIComponent(g.symbol))
+    var geneLinkAttrs = 'target="_blank" rel="noopener noreferrer"'
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
     var metaHtml = detail ? renderTooltipMetaRowsHtml(metaRows) : renderTooltipMetaSkeletonHtml()
     var mobileRowsHtml = detail
@@ -1137,13 +1138,16 @@ void syncSharedIconoplasmSettings().catch(function () {
           portraitAlt: g.symbol + " portrait",
           portraitSrc: portraitUrl,
           titleHref: href,
+          titleLinkAttrs: geneLinkAttrs,
           voteHtml: isImageOnlyVariant ? "" : labelVoteHtml,
         })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-brick-header-row icono-shared-card-header-row">' +
         '<a class="icono-brick-header-link" href="' +
         href +
-        '" data-icono-nav>' +
+        '" ' +
+        geneLinkAttrs +
+        ">" +
         '<div class="iconoplasm-tooltip-symbol">' +
         esc(g.symbol) +
         "</div>" +
@@ -1156,7 +1160,9 @@ void syncSharedIconoplasmSettings().catch(function () {
         "</div>" +
         '<a class="icono-brick-meta-link" href="' +
         href +
-        '" data-icono-nav>' +
+        '" ' +
+        geneLinkAttrs +
+        ">" +
         '<div class="iconoplasm-tooltip-meta' +
         (detail ? "" : " iconoplasm-tooltip-meta--loading") +
         '" data-icono-card-meta>' +
@@ -1239,7 +1245,9 @@ void syncSharedIconoplasmSettings().catch(function () {
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
           href +
-          '" data-icono-nav>' +
+          '" ' +
+          geneLinkAttrs +
+          ">" +
           mobileRowsHtml +
           "</a>") +
       "</article>"
@@ -2346,7 +2354,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       html +=
         '<a class="icono-search-result" href="/gene/' +
         esc(encodeURIComponent(g.symbol)) +
-        '" data-icono-nav>' +
+        '" target="_blank" rel="noopener noreferrer">' +
         '<span class="icono-search-result-swatch" style="background:' +
         esc(g.color) +
         '"></span>' +
@@ -2378,7 +2386,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       html +=
         '<a class="icono-card icono-card--masonry" href="/gene/' +
         esc(encodeURIComponent(g.symbol)) +
-        '" data-icono-nav data-icono-index="' +
+        '" target="_blank" rel="noopener noreferrer" data-icono-index="' +
         cardIndex +
         '" data-icono-symbol="' +
         esc(g.symbol) +

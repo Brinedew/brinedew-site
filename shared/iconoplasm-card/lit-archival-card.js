@@ -27,6 +27,10 @@ function resolveCardModel(payload) {
   return safePayload
 }
 
+function modelOpensInNewTab(model) {
+  return String((model && model.titleLinkAttrs) || "").indexOf('target="_blank"') >= 0
+}
+
 function penLoopFallbackMarkup() {
   return (
     '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
@@ -133,7 +137,13 @@ function titleTemplate(model) {
     <div class="icono-label-name">${model.fullName || model.symbol}</div>
     <div class="icono-label-registry-line">ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03</div>`
   if (model.titleHref) {
-    return html`<a class="icono-label-title-link" href=${model.titleHref} data-icono-nav>${titleInner}</a>`
+    return html`<a
+      class="icono-label-title-link"
+      href=${model.titleHref}
+      target=${modelOpensInNewTab(model) ? "_blank" : nothing}
+      rel=${modelOpensInNewTab(model) ? "noopener noreferrer" : nothing}
+      >${titleInner}</a
+    >`
   }
   return html`<div class="icono-label-title-block">${titleInner}</div>`
 }
@@ -310,7 +320,13 @@ function imageOnlyTemplate(model) {
     </div>
   </div>`
   if (href) {
-    return html`<a class="icono-image-only-link" href=${href} data-icono-nav>${media}${overlay}</a>`
+    return html`<a
+      class="icono-image-only-link"
+      href=${href}
+      target=${modelOpensInNewTab(model) ? "_blank" : nothing}
+      rel=${modelOpensInNewTab(model) ? "noopener noreferrer" : nothing}
+      >${media}${overlay}</a
+    >`
   }
   return html`<div class="icono-image-only-link">${media}${overlay}</div>`
 }
