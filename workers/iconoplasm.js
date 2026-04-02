@@ -1183,12 +1183,7 @@ function normalizeCatalogPayloadItem(rawItem) {
 
 async function fetchCatalogState(env) {
   if (!env.ICONOPLASM_DB) return { gene_count: 0, content_hash: "" }
-  const { results } = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json
-       FROM icono_gene_catalog
-      ORDER BY gene_symbol ASC`,
-  ).all()
-  const rows = Array.isArray(results) ? results : []
+  const rows = await loadCatalogRowsForPublish(env)
   return {
     gene_count: rows.length,
     content_hash: await hashCatalogItems(rows),
