@@ -13,7 +13,6 @@ const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 //
 // Data-lineage fence:
 // The local Iconoplasm authoring/control-plane lives at
-<<<<<<< HEAD
 // `d:\\Coding\\Datasets\\iconoplasm`. When Website Ops sync or catalog facts look
 // wrong, start there first. This worker is the public website/runtime boundary
 // that ingests and serves published state; it should not grow ad hoc logic that
