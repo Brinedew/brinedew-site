@@ -6282,6 +6282,8 @@ async function syncAdminReadModelsAndInvalidateGallery(
     visionIds = [],
     fullVision = false,
     fullRebuild = false,
+    skipVoteSummaries = false,
+    skipGeneRollups = false,
     skipVisionRollups = false,
     skipDashboard = false,
   } = {},
@@ -6291,6 +6293,12 @@ async function syncAdminReadModelsAndInvalidateGallery(
     visionIds,
     fullVision,
     fullRebuild,
+    // Keep the invalidate-gallery wrapper behaviorally identical to the plain
+    // read-model sync path. The workstation relies on these skip flags to break
+    // the large Website sync into smaller durable phases; dropping them here
+    // turns a scoped refresh back into an accidental full rebuild.
+    skipVoteSummaries,
+    skipGeneRollups,
     skipVisionRollups,
     skipDashboard,
   })
