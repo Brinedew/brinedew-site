@@ -498,15 +498,16 @@ function buildGenerationRequestLaneKey({ geneSymbol, requestMode, requestedVisio
 }
 
 function generationRequestVisionLabel(row) {
-  return (
-    sanitizeText(
-      row?.requested_emulsion_label || row?.requested_artist_name || row?.artist_name || "",
-      255,
-    ) ||
-    sanitizeText(row?.requested_artist_tag || row?.artist_tag || "", 255) ||
-    sanitizeText(row?.requested_vision_id || row?.vision_id || "", 255) ||
-    ""
-  )
+  // Public website copy must never expose artist names or tags. The local GUI owns
+  // artist-to-emulsion mapping; the site only gets the stable public emulsion number.
+  const artistId = publicArtistIdForRow({
+    artist_id: row?.requested_artist_id || row?.artist_id || "",
+    vision_id: row?.requested_vision_id || row?.vision_id || "",
+  })
+  if (artistId) return `Emulsion ${artistId}`
+  return sanitizeVoteVisionId(row?.requested_vision_id || row?.vision_id || "")
+    ? "Specific emulsion"
+    : ""
 }
 
 function mapGenerationRequestRow(row) {
@@ -574,30 +575,7 @@ function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
 }
 
 async function enrichGenerationRequestRows(env, rows) {
-  const safeRows = Array.isArray(rows) ? rows : []
-  const requestedVisionIds = Array.from(
-    new Set(
-      safeRows
-        .map((row) => sanitizeVoteVisionId(row?.requested_vision_id || ""))
-        .filter(Boolean),
-    ),
-  )
-  if (!requestedVisionIds.length) return safeRows.map(mapGenerationRequestRow)
-  const visionRows = await fetchAdminVisionStatsDirect(env, { visionIds: requestedVisionIds })
-  const visionMap = new Map(
-    (Array.isArray(visionRows) ? visionRows : []).map((row) => [String(row.vision_id || ""), row]),
-  )
-  return safeRows.map((row) => {
-    const requestedVisionId = sanitizeVoteVisionId(row?.requested_vision_id || "")
-    const visionRow = requestedVisionId ? visionMap.get(requestedVisionId) || null : null
-    return mapGenerationRequestRow({
-      ...row,
-      requested_artist_name: visionRow?.artist_name || row?.requested_artist_name || "",
-      requested_artist_tag: visionRow?.artist_tag || row?.requested_artist_tag || "",
-      requested_emulsion_label:
-        generationRequestVisionLabel(visionRow) || row?.requested_emulsion_label || "",
-    })
-  })
+  return (Array.isArray(rows) ? rows : []).map(mapGenerationRequestRow)
 }
 
 async function listOpenGenerationRequests(
@@ -698,7 +676,7 @@ async function createGenerationRequest(
 async function listGenerationRequestVisionOptions(env) {
   if (!env.ICONOPLASM_DB) return []
   const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT vision_id, artist_name, artist_tag, image_count, live_count
+    `SELECT vision_id, image_count, live_count
      FROM icono_admin_vision_rollup
      WHERE COALESCE(vision_id, '') <> ''
      ORDER BY live_count DESC, image_count DESC, vision_id ASC
@@ -709,17 +687,12 @@ async function listGenerationRequestVisionOptions(env) {
     .map((row) => {
       const visionId = sanitizeVoteVisionId(row?.vision_id || "")
       if (!visionId) return null
-      const label =
-        sanitizeText(row?.artist_name || "", 255) ||
-        sanitizeText(row?.artist_tag || "", 255) ||
-        publicArtistIdForRow(row) ||
-        visionId
+      const artistId = publicArtistIdForRow(row)
+      const label = artistId ? `Emulsion ${artistId}` : "Specific emulsion"
       return {
         vision_id: visionId,
         label,
-        artist_name: sanitizeText(row?.artist_name || "", 255) || "",
-        artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
-        artist_id: publicArtistIdForRow(row),
+        artist_id: artistId,
         image_count: Number(row?.image_count || 0),
         live_count: Number(row?.live_count || 0),
       }
@@ -1872,6 +1845,7 @@ async function portraitState(env, symbol, base) {
       thumb_url: null,
       asset_sha256: null,
       candidate_image_id: null,
+      emulsion_label: null,
       artist_id: null,
     }
   try {
@@ -1894,6 +1868,7 @@ async function portraitState(env, symbol, base) {
         thumb_url: null,
         asset_sha256: null,
         candidate_image_id: null,
+        emulsion_label: null,
         artist_id: null,
       }
     return {
@@ -1904,6 +1879,7 @@ async function portraitState(env, symbol, base) {
       asset_sha256: row.asset_sha256,
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
+      emulsion_label: generationRequestVisionLabel(row) || null,
       // Public cards and gene pages should show the same one-number-per-artist
       // emulsion ID as admin. candidate_image_id is per image, so derive from the
       // resolved artist lineage when no persisted artist_id is present.
@@ -1917,6 +1893,7 @@ async function portraitState(env, symbol, base) {
       thumb_url: null,
       asset_sha256: null,
       candidate_image_id: null,
+      emulsion_label: null,
       artist_id: null,
     }
   }
@@ -6835,6 +6812,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       is_current: !!(assetSha && currentSha && assetSha === currentSha),
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
+      emulsion_label: generationRequestVisionLabel(row) || null,
       artist_id: publicArtistIdForRow(row) || null,
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),

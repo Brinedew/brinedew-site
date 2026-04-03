@@ -158,6 +158,49 @@ void syncSharedIconoplasmSettings().catch(function () {
     return fullUrl || mediumUrl || thumbUrl
   }
 
+  function emulsionDisplayInfo(item) {
+    var source = item || {}
+    var artistId = String(source.artist_id || "").trim()
+    var label = String(source.emulsion_label || "").trim()
+    // Keep the public gene page on numeric emulsion IDs only. Artist-name mapping
+    // lives in the local workstation GUI and should not leak onto the website.
+    var primary = label || (artistId ? "Emulsion " + artistId : "")
+    return {
+      artistId: artistId,
+      label: label,
+      primary: primary,
+    }
+  }
+
+  function renderEmulsionMetaMarkup(item, options) {
+    var info = emulsionDisplayInfo(item)
+    if (!info.primary) return ""
+    var opts = options || {}
+    var className = "icono-emulsion-meta"
+    if (opts.className) className += " " + opts.className
+    var kicker = String(opts.kicker || "").trim()
+    return (
+      '<div class="' +
+      className +
+      '">' +
+      (kicker ? '<div class="icono-emulsion-meta-kicker">' + esc(kicker) + '</div>' : "") +
+      '<div class="icono-emulsion-meta-primary">' +
+      esc(info.primary) +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function renderPublishedEmulsionNotice(genePayload) {
+    var portrait = (genePayload && genePayload.portrait) || null
+    var metaMarkup = renderEmulsionMetaMarkup(portrait, {
+      kicker: "current published portrait",
+      className: "icono-gene-emulsion-meta",
+    })
+    if (!metaMarkup) return ""
+    return '<div class="icono-gene-emulsion-callout">' + metaMarkup + "</div>"
+  }
+
   function portraitDimensions(genePayload) {
     var portrait = genePayload && genePayload.portrait
     var assetSha = String((portrait && portrait.asset_sha256) || "")
@@ -2125,7 +2168,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           '<div class="icono-home-auth-copy">' +
           '<div class="icono-home-auth-kicker">request access</div>' +
           '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
-          '<div class="icono-home-auth-note">Requests feed the workstation queue. Random default is the standard lane; you can choose a specific emulsion after login.</div>' +
+          '<div class="icono-home-auth-note">Requests feed the workstation queue. You can choose a specific emulsion ID after login.</div>' +
           '</div>' +
           '<div style="display:grid;gap:12px;">' +
           '<a class="icono-home-auth-link" href="' +
@@ -2163,7 +2206,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         '<div class="icono-home-auth-title">Request more portraits for ' +
         esc(symbol) +
         '</div>' +
-        '<div class="icono-home-auth-note">Each submit adds one queue row. Same gene plus different emulsions stay separate; random requests clear when a request-run upload lands for this gene.</div>' +
+        '<div class="icono-home-auth-note">Same gene plus different emulsions stay separate; random requests clear when a request-run upload lands for this gene.</div>' +
         '</div>' +
         '<div style="display:grid;gap:12px;">' +
         '<form data-icono-request-form style="display:grid;gap:10px;">' +
@@ -2784,6 +2827,10 @@ void syncSharedIconoplasmSettings().catch(function () {
         .toLowerCase()
       var candidateImageId = Number((candidate && candidate.candidate_image_id) || 0)
       var visionId = String((candidate && candidate.vision_id) || "").trim()
+      var candidateMetaMarkup = renderEmulsionMetaMarkup(candidate, {
+        kicker: "candidate emulsion",
+        className: "icono-candidate-emulsion-meta",
+      })
       var voteAttrs = 'data-icono-candidate-vote-box="' + esc(assetSha) + '"'
       if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
         voteAttrs +=
@@ -2844,6 +2891,7 @@ void syncSharedIconoplasmSettings().catch(function () {
         '">' +
         "</span>" +
         "</button>" +
+        (candidateMetaMarkup ? '<div class="icono-candidate-meta">' + candidateMetaMarkup + '</div>' : "") +
         '<div class="icono-candidate-footer">' +
         voteBoxMarkup(voteAttrs) +
         removeMarkup +
@@ -2926,6 +2974,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (manifestation) {
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
+    html += renderPublishedEmulsionNotice(g)
     html +=
       '<section class="icono-home-auth-card icono-gene-request-panel" data-icono-request-panel="' +
       esc(g.symbol) +

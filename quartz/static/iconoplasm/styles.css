@@ -141,6 +141,36 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background: color-mix(in srgb, var(--light) 68%, white 32%);
 }
 
+.icono-emulsion-meta {
+  display: grid;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.icono-emulsion-meta-kicker {
+  font-family: var(--codeFont, monospace);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-emulsion-meta-primary {
+  font-size: 0.94rem;
+  line-height: 1.28;
+  color: var(--dark);
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.icono-gene-emulsion-callout {
+  margin-top: 0.2rem;
+}
+
+.icono-gene-emulsion-meta .icono-emulsion-meta-primary {
+  font-size: 0.98rem;
+}
+
 /* ───────── Search ───────── */
 .icono-search {
   max-width: 480px;
@@ -1287,6 +1317,14 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   display: block;
   margin: 0;
   box-shadow: inset 0 0 0 1px var(--icono-ring-image);
+}
+
+.icono-candidate-meta {
+  margin-top: 0.52rem;
+}
+
+.icono-candidate-emulsion-meta .icono-emulsion-meta-primary {
+  font-size: 0.9rem;
 }
 
 .icono-candidate-footer {
