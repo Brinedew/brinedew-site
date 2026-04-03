@@ -2,7 +2,7 @@ import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
-import { ICONOPLASM_ARTIST_STYLES_HTML } from "./iconoplasm-artist-styles-html.js"
+import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
@@ -145,6 +145,18 @@ function normalizeUserId(raw) {
   const v = String(raw || "").trim()
   if (!v) return "local"
   return v.slice(0, 255)
+}
+
+// Public blacklist submissions should not store raw visitor IPs in D1.
+// We still need a stable guest identity though, otherwise one visitor can fire
+// off several different names and bypass the duplicate check just by changing
+// the artist input each time. Hash IP + user-agent into a short guest token so
+// we can enforce "one live request at a time" without keeping plain IPs.
+async function buildArtistBlacklistRequesterId(request) {
+  const ip = sanitizeText(request?.headers?.get("CF-Connecting-IP") || "", 64) || "unknown"
+  const userAgent = sanitizeText(request?.headers?.get("User-Agent") || "", 255) || "unknown"
+  const digest = await sha256Hex(`artist-blacklist-guest-v1\n${ip}\n${userAgent}`)
+  return normalizeUserId(`guest_${digest.slice(0, 24)}`)
 }
 
 function isGuestUserId(raw) {
@@ -475,6 +487,22 @@ function mapLocalRemovalRequestRow(row) {
     requested_by: sanitizeText(row?.requested_by || "", 255) || "",
     reason: sanitizeText(row?.reason || "", 2000) || "",
     source: sanitizeText(row?.source || "", 64) || "",
+    requested_at: sanitizeText(row?.requested_at || "", 64) || "",
+    resolved_at: sanitizeText(row?.resolved_at || "", 64) || "",
+    resolved_by: sanitizeText(row?.resolved_by || "", 255) || "",
+    resolved_status: sanitizeText(row?.resolved_status || "", 64) || "",
+    resolved_note: sanitizeText(row?.resolved_note || "", 2000) || "",
+  }
+}
+
+function mapArtistBlacklistSubmissionRow(row) {
+  return {
+    id: Number(row?.id || 0),
+    artist_name_input: normalizeArtistBlacklistSubmissionInput(row?.artist_name_input || "") || "",
+    normalized_input: sanitizeText(row?.normalized_input || "", 255) || "",
+    requested_by: sanitizeText(row?.requested_by || "", 255) || "",
+    source: sanitizeText(row?.source || "", 64) || "",
+    turnstile_passed: Number(row?.turnstile_passed || 0) > 0,
     requested_at: sanitizeText(row?.requested_at || "", 64) || "",
     resolved_at: sanitizeText(row?.resolved_at || "", 64) || "",
     resolved_by: sanitizeText(row?.resolved_by || "", 255) || "",
@@ -858,6 +886,174 @@ async function queueLocalRemovalRequest(
     queued: true,
     duplicate: false,
     request: mapLocalRemovalRequestRow(created),
+  }
+}
+
+async function queueArtistBlacklistSubmission(
+  env,
+  {
+    artistNameInput,
+    requestedBy = "",
+    source = "public_form",
+    turnstilePassed = false,
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return null
+  const artistNameInputNorm = normalizeArtistBlacklistSubmissionInput(artistNameInput)
+  const normalizedInput = normalizeArtistBlacklistSubmissionKey(artistNameInputNorm)
+  const requesterNorm = normalizeUserId(requestedBy || "public_form")
+  if (!artistNameInputNorm || !normalizedInput) return null
+
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_artist_blacklist_submissions
+     WHERE normalized_input = ?
+       AND resolved_at IS NULL
+     ORDER BY id DESC
+     LIMIT 1`,
+  )
+    .bind(normalizedInput)
+    .first()
+  if (existing) {
+    return {
+      ok: true,
+      queued: false,
+      duplicate: true,
+      request: mapArtistBlacklistSubmissionRow(existing),
+    }
+  }
+
+  // Product rule: one visitor gets one blacklist submission, full stop.
+  // We intentionally do not reopen the gate after review because the form is
+  // supposed to be a one-shot opt-out request channel, not a moderation inbox
+  // that one person can keep feeding forever.
+  const existingForRequester = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_artist_blacklist_submissions
+     WHERE requested_by = ?
+     ORDER BY requested_at ASC, id ASC
+     LIMIT 1`,
+  )
+    .bind(requesterNorm)
+    .first()
+  if (existingForRequester) {
+    return {
+      ok: true,
+      queued: false,
+      duplicate: false,
+      requesterLocked: true,
+      request: mapArtistBlacklistSubmissionRow(existingForRequester),
+    }
+  }
+
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_artist_blacklist_submissions (
+       artist_name_input,
+       normalized_input,
+       requested_by,
+       source,
+       turnstile_passed
+     ) VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      artistNameInputNorm,
+      normalizedInput,
+      requesterNorm,
+      sanitizeText(source || "", 64) || "public_form",
+      turnstilePassed ? 1 : 0,
+    )
+    .run()
+
+  const created = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_artist_blacklist_submissions
+     WHERE normalized_input = ?
+       AND resolved_at IS NULL
+     ORDER BY id DESC
+     LIMIT 1`,
+  )
+    .bind(normalizedInput)
+    .first()
+
+  return {
+    ok: true,
+    queued: true,
+    duplicate: false,
+    request: mapArtistBlacklistSubmissionRow(created),
+  }
+}
+
+async function listPendingArtistBlacklistSubmissions(env, { limit = 200 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(1000, Number.parseInt(String(limit || "200"), 10) || 200),
+  )
+  const resp = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_artist_blacklist_submissions
+     WHERE resolved_at IS NULL
+     ORDER BY requested_at ASC, id ASC
+     LIMIT ?`,
+  )
+    .bind(cleanedLimit)
+    .all()
+  return (Array.isArray(resp?.results) ? resp.results : []).map(mapArtistBlacklistSubmissionRow)
+}
+
+async function resolveArtistBlacklistSubmissions(
+  env,
+  {
+    results = [],
+    resolvedBy = "",
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { resolved: 0, requests: [] }
+  const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
+  const cleanedResults = Array.from(
+    new Map(
+      (Array.isArray(results) ? results : [])
+        .map((raw) => {
+          const id = Number(raw?.id || 0)
+          if (!(id > 0)) return null
+          return [
+            id,
+            {
+              id,
+              status: sanitizeText(raw?.status || "", 64) || "applied",
+              note: sanitizeText(raw?.note || "", 2000) || "",
+            },
+          ]
+        })
+        .filter(Boolean),
+    ).values(),
+  )
+  const resolvedRows = []
+  for (const item of cleanedResults) {
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_artist_blacklist_submissions
+       SET resolved_at = CURRENT_TIMESTAMP,
+           resolved_by = ?,
+           resolved_status = ?,
+           resolved_note = ?
+       WHERE id = ?
+         AND resolved_at IS NULL`,
+    )
+      .bind(actorNorm, item.status, item.note, item.id)
+      .run()
+    const row = await env.ICONOPLASM_DB.prepare(
+      `SELECT *
+       FROM icono_artist_blacklist_submissions
+       WHERE id = ?
+       LIMIT 1`,
+    )
+      .bind(item.id)
+      .first()
+    if (row) resolvedRows.push(mapArtistBlacklistSubmissionRow(row))
+  }
+  return {
+    resolved: resolvedRows.length,
+    requests: resolvedRows,
   }
 }
 
@@ -1391,6 +1587,73 @@ function rateLimit(request, routeKey, maxPerMin) {
       "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - item.count)),
       "X-RateLimit-Reset": String(resetSeconds),
     },
+  }
+}
+
+function normalizeArtistBlacklistSubmissionInput(raw) {
+  return sanitizeText(raw, 255).replace(/\s+/g, " ").trim()
+}
+
+function normalizeArtistBlacklistSubmissionKey(raw) {
+  const cleaned = normalizeArtistBlacklistSubmissionInput(raw)
+  if (!cleaned) return ""
+  const bare = cleaned.startsWith("@") ? cleaned.slice(1) : cleaned
+  const token = bare
+    .toLowerCase()
+    .replace(/\\\(/g, "(")
+    .replace(/\\\)/g, ")")
+    .replace(/\\/g, "")
+    .replace(/&/g, " and ")
+    .replace(/'/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[^a-z0-9()]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/\(_/g, "(")
+    .replace(/_\)/g, ")")
+  return token ? `@${token}` : ""
+}
+
+async function verifyTurnstileSubmission(env, request, token) {
+  const secret = sanitizeText(env.ICONOPLASM_TURNSTILE_SECRET_KEY || "", 255) || ""
+  if (!secret) {
+    return { configured: false, passed: true, reason: "unconfigured" }
+  }
+  const cleanedToken = sanitizeText(token || "", 4096) || ""
+  if (!cleanedToken) {
+    return { configured: true, passed: false, reason: "missing" }
+  }
+
+  const payload = new URLSearchParams()
+  payload.set("secret", secret)
+  payload.set("response", cleanedToken)
+  const remoteIp = sanitizeText(request.headers.get("CF-Connecting-IP") || "", 64) || ""
+  if (remoteIp) payload.set("remoteip", remoteIp)
+
+  try {
+    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: payload,
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      return { configured: true, passed: false, reason: `siteverify_http_${resp.status}` }
+    }
+    return {
+      configured: true,
+      passed: Boolean(data?.success),
+      reason: Array.isArray(data?.["error-codes"]) ? data["error-codes"].join(",") : "",
+    }
+  } catch (error) {
+    return {
+      configured: true,
+      passed: false,
+      reason:
+        sanitizeText(String(error?.message || error || "turnstile_failed"), 255) ||
+        "turnstile_failed",
+    }
   }
 }
 
@@ -8821,10 +9084,123 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
+    if (path === "/api/iconoplasm/artist-blacklist-submissions" && request.method === "POST") {
+      const rl = rateLimit(request, "artist_blacklist_submission", 5)
+      if (rl.retryAfterSeconds !== null) {
+        return done(
+          "artist_blacklist_submission_429",
+          json(
+            { error: "Too many submissions. Try again in a minute." },
+            429,
+            { "Cache-Control": "no-store", ...rl.headers },
+          ),
+        )
+      }
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "artist_blacklist_submission_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500, { ...rl.headers }),
+        )
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done(
+          "artist_blacklist_submission_400",
+          json({ error: "Invalid JSON" }, 400, { ...rl.headers }),
+        )
+      }
+
+      const honeypot = sanitizeText(p?.website || "", 255) || ""
+      if (honeypot) {
+        return done(
+          "artist_blacklist_submission_bot",
+          json(
+            { ok: true, queued: false, ignored: true },
+            200,
+            { "Cache-Control": "no-store", ...rl.headers },
+          ),
+        )
+      }
+
+      const artistNameInput = normalizeArtistBlacklistSubmissionInput(
+        p?.artist_name_input || p?.artistNameInput || p?.artist_input || "",
+      )
+      if (!artistNameInput) {
+        return done(
+          "artist_blacklist_submission_400",
+          json({ error: "Missing artist name or @tag" }, 400, { ...rl.headers }),
+        )
+      }
+
+      const turnstile = await verifyTurnstileSubmission(
+        env,
+        request,
+        p?.turnstile_token || p?.turnstileToken || p?.cf_turnstile_response || "",
+      )
+      if (turnstile.configured && !turnstile.passed) {
+        return done(
+          "artist_blacklist_submission_400",
+          json({ error: "Please complete the bot check and try again." }, 400, { ...rl.headers }),
+        )
+      }
+
+      const requesterId = await buildArtistBlacklistRequesterId(request)
+      const result = await queueArtistBlacklistSubmission(env, {
+        artistNameInput,
+        requestedBy: requesterId,
+        source: "public_form",
+        turnstilePassed: turnstile.passed,
+      })
+      if (!result) {
+        return done(
+          "artist_blacklist_submission_400",
+          json({ error: "Could not queue blacklist request." }, 400, { ...rl.headers }),
+        )
+      }
+      if (result.requesterLocked) {
+        return done(
+          "artist_blacklist_submission_409",
+          json(
+            {
+              error: "You already sent a blacklist request. We only allow one submission per person.",
+              ok: false,
+              queued: false,
+              requesterLocked: true,
+              request: result.request,
+            },
+            409,
+            { "Cache-Control": "no-store", ...rl.headers },
+          ),
+        )
+      }
+      return done(
+        "artist_blacklist_submission",
+        json(
+          {
+            ok: true,
+            queued: Boolean(result.queued),
+            duplicate: Boolean(result.duplicate),
+            requesterLocked: Boolean(result.requesterLocked),
+            request: result.request,
+          },
+          200,
+          { "Cache-Control": "no-store", ...rl.headers },
+        ),
+      )
+    }
+
     if (path === "/artist-styles") {
       return done(
         "artist_styles_page",
-        html(ICONOPLASM_ARTIST_STYLES_HTML, 200, { "Cache-Control": "no-store" }),
+        html(
+          renderIconoplasmArtistStylesHtml({
+            turnstileSiteKey: sanitizeText(env.ICONOPLASM_TURNSTILE_SITE_KEY || "", 255) || "",
+          }),
+          200,
+          { "Cache-Control": "no-store" },
+        ),
       )
     }
 
@@ -8876,6 +9252,75 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           json({ error: String(error?.message || error || "Artist style removal failed") }, 400),
         )
       }
+    }
+
+    if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done(
+          "artist_blacklist_submissions_pending_403",
+          json({ error: "Unauthorized" }, 403),
+        )
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "artist_blacklist_submissions_pending_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const limit = Math.max(
+        1,
+        Math.min(1000, Number.parseInt(url.searchParams.get("limit") || "200", 10) || 200),
+      )
+      const requests = await listPendingArtistBlacklistSubmissions(env, { limit })
+      return done(
+        "artist_blacklist_submissions_pending",
+        json(
+          {
+            ok: true,
+            count: requests.length,
+            requests,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done(
+          "artist_blacklist_submissions_ack_403",
+          json({ error: "Unauthorized" }, 403),
+        )
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "artist_blacklist_submissions_ack_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done(
+          "artist_blacklist_submissions_ack_400",
+          json({ error: "Invalid JSON" }, 400),
+        )
+      }
+      const actorId = await actor(request, env)
+      const resolved = await resolveArtistBlacklistSubmissions(env, {
+        results: Array.isArray(p?.results) ? p.results : [],
+        resolvedBy: actorId,
+      })
+      return done(
+        "artist_blacklist_submissions_ack",
+        json(
+          {
+            ok: true,
+            resolved: resolved.resolved,
+            requests: resolved.requests,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
     }
 
     if (path === "/api/iconoplasm/admin/read-models/sync" && request.method === "POST") {

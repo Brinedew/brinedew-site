@@ -46,11 +46,11 @@ draft: false
 
 1. **One of the images looks like my art style. I want to remove my art style from the style pool.**
 
-    You can use the [artist style lookup utility](https://iconoplasm.brinedew.bio/artist-styles).
+    You can use the [artist style blacklist form](https://iconoplasm.brinedew.bio/artist-styles).
 
-    Mention your @name tag as it appears on the styles list: <https://thetacursed.github.io/Anima-Style-Explorer/>
+    Enter your name or your @name tag as it appears on the styles list: <https://thetacursed.github.io/Anima-Style-Explorer/>
 
-    Press "remove artist style" to remove all images with the tag from the site and blacklist its future use.
+    The site will queue the request and the local Iconoplasm workstation will blacklist it during Website Ops sync.
 
     If you don't want to use Discord site login, you can send a blacklist email request to <blacklist@brinedew.bio> from your business account. The first @name you send me will be blacklisted. Make sure to use the @ symbol in front of the name.
 
