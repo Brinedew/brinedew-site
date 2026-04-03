@@ -1407,6 +1407,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         visionPreviewMap: {},
         loadingVisionPreviewIds: {},
         blacklistedStyles: [],
+        pendingLocalRemovals: [],
         pendingBlacklistSubmissions: [],
         visionPage: 1,
         visionPageSize: 50,
@@ -2281,6 +2282,87 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         renderVisionQuickActions();
       }
 
+      function stylesLogActionLabel(action) {
+        var cleaned = String(action || '').trim().toLowerCase();
+        if (cleaned === 'remove_candidate') return 'Removed image';
+        if (cleaned === 'purge_legacy') return 'Purged legacy image';
+        if (cleaned === 'reject') return 'Rejected image';
+        return cleaned ? cleaned.replaceAll('_', ' ') : 'Moderation event';
+      }
+
+      function renderStylesPendingList() {
+        if (!els.stylesPending) return;
+        var pendingRows = [];
+
+        pendingRows = pendingRows.concat((state.pendingLocalRemovals || []).map(function (row) {
+          return [
+            '<article class="list-row">',
+            '<div>',
+            '<strong>' + esc(row.gene_symbol || 'Unknown gene') + ' · local image removal</strong>',
+            '<div class="small">SHA ' + esc(shortSha(row.asset_sha256 || '')) + ' · queued by ' + esc(row.requested_by || 'unknown') + (row.source ? ' · ' + esc(row.source) : '') + '</div>',
+            (row.reason ? '<div class="small">' + esc(row.reason) + '</div>' : ''),
+            '</div>',
+            '<div class="event-meta">' + esc(row.requested_at || '') + '</div>',
+            '</article>'
+          ].join('');
+        }));
+
+        pendingRows = pendingRows.concat((state.pendingBlacklistSubmissions || []).map(function (row) {
+          return [
+            '<article class="list-row">',
+            '<div>',
+            '<strong>' + esc(row.artist_name_input || row.normalized_input || 'Unknown submission') + ' · artist-tag request</strong>',
+            '<div class="small">Queued by ' + esc(row.requested_by || 'unknown') + (row.source ? ' · ' + esc(row.source) : '') + '</div>',
+            '</div>',
+            '<div class="event-meta">' + esc(row.requested_at || '') + '</div>',
+            '</article>'
+          ].join('');
+        }));
+
+        els.stylesPending.innerHTML = pendingRows.length
+          ? pendingRows.join('')
+          : '<article class="list-row"><div><strong>No pending submissions.</strong><div class="small">Queued image removals and public artist-tag requests will show up here until workstation sync consumes them.</div></div><div></div></article>';
+      }
+
+      function renderStylesNotesList() {
+        if (!els.stylesNotes) return;
+        var logRows = [];
+        var recentModerationEvents = (state.recentEvents || []).filter(function (evt) {
+          return ['remove_candidate', 'purge_legacy', 'reject'].includes(String(evt.action || '').toLowerCase());
+        }).slice(0, 10);
+
+        logRows = logRows.concat(recentModerationEvents.map(function (evt) {
+          var sha = evt.to_asset_sha256 || evt.from_asset_sha256 || '';
+          return [
+            '<article class="list-row">',
+            '<div>',
+            '<strong>' + esc(evt.symbol || 'Unknown gene') + ' · ' + esc(stylesLogActionLabel(evt.action)) + '</strong>',
+            '<div class="small">' + esc(evt.actor || 'unknown actor') + (sha ? ' · SHA ' + esc(shortSha(sha)) : '') + '</div>',
+            '<div class="small">' + esc(evt.reason || 'No reason recorded.') + '</div>',
+            '</div>',
+            '<div class="event-meta">' + esc(evt.created_at || '') + '</div>',
+            '</article>'
+          ].join('');
+        }));
+
+        logRows = logRows.concat((state.blacklistedStyles || []).map(function (row) {
+          return [
+            '<article class="list-row">',
+            '<div>',
+            '<strong>' + esc(row.artist_name || row.artist_tag || 'Unknown source') + '</strong>',
+            '<div class="small">Artist style blocklist entry</div>',
+            '<div class="small">' + esc(row.reason || 'No reason recorded.') + '</div>',
+            '</div>',
+            '<div class="event-meta">' + esc(row.updated_at || row.created_at || '') + '</div>',
+            '</article>'
+          ].join('');
+        }));
+
+        els.stylesNotes.innerHTML = logRows.length
+          ? logRows.join('')
+          : '<article class="list-row"><div><strong>No blacklist activity yet.</strong><div class="small">Recent image removals and current artist blocklist entries will show up here.</div></div><div></div></article>';
+      }
+
       async function ensureVisibleVisionPreviews(rows) {
         var pageRows = Array.isArray(rows) ? rows : [];
         var missingVisionIds = pageRows
@@ -2411,35 +2493,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           setLog({ error: 'Preview hydration failed', details: err.response || requestErrorMessage(err, 'Preview hydration failed.') });
         });
 
-        if (els.stylesPending) {
-          els.stylesPending.innerHTML = (state.pendingBlacklistSubmissions || []).length
-            ? state.pendingBlacklistSubmissions.map(function (row) {
-                return [
-                  '<article class="list-row">',
-                  '<div>',
-                  '<strong>' + esc(row.artist_name_input || row.normalized_input || 'Unknown submission') + '</strong>',
-                  '<div class="small">Queued by ' + esc(row.requested_by || 'unknown') + (row.source ? ' · ' + esc(row.source) : '') + '</div>',
-                  '</div>',
-                  '<div class="event-meta">' + esc(row.requested_at || '') + '</div>',
-                  '</article>'
-                ].join('');
-              }).join('')
-            : '<article class="list-row"><div><strong>No pending submissions.</strong><div class="small">New artist-tag requests from the public form will show up here until workstation sync consumes them.</div></div><div></div></article>';
-        }
-
-        els.stylesNotes.innerHTML = (state.blacklistedStyles || []).length
-          ? state.blacklistedStyles.map(function (row) {
-              return [
-                '<article class="list-row">',
-                '<div>',
-                '<strong>' + esc(row.artist_name || row.artist_tag || 'Unknown source') + '</strong>',
-                '<div class="small">' + esc(row.reason || 'No reason recorded.') + '</div>',
-                '</div>',
-                '<div class="event-meta">' + esc(row.updated_at || row.created_at || '') + '</div>',
-                '</article>'
-              ].join('');
-            }).join('')
-          : '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Once workstation sync applies a public artist-tag request, it will appear here.</div></div><div></div></article>';
+        renderStylesPendingList();
+        renderStylesNotesList();
       }
 
       async function refreshVisionStats() {
@@ -2449,10 +2504,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           }
           var results = await Promise.all([
             apiJson('/votes/vision-stats', { method: 'GET' }),
-            apiJson('/artist-blacklist-submissions/pending?limit=100', { method: 'GET' })
+            apiJson('/artist-blacklist-submissions/pending?limit=100', { method: 'GET' }),
+            apiJson('/local-removals/pending?limit=100', { method: 'GET' })
           ]);
           var data = results[0] || {};
           var pendingData = results[1] || {};
+          var localRemovalData = results[2] || {};
           state.visionStats = Array.isArray(data.rows) ? data.rows : [];
           state.visionPreviewMap = {};
           state.visionDetailCache = {};
@@ -2460,6 +2517,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.preloadedImageUrls = {};
           state.loadingVisionPreviewIds = {};
           state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
+          state.pendingLocalRemovals = Array.isArray(localRemovalData.requests) ? localRemovalData.requests : [];
           state.pendingBlacklistSubmissions = Array.isArray(pendingData.requests) ? pendingData.requests : [];
           state.visionPage = 1;
           renderVisionStats();
@@ -3179,9 +3237,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         renderVisionCleanupPanel();
         renderVisionQuickActions();
         if (els.stylesPending) {
-          els.stylesPending.innerHTML = '<article class="list-row"><div><strong>No pending submissions.</strong><div class="small">Open the tab to load the public artist-tag queue.</div></div><div></div></article>';
+          els.stylesPending.innerHTML = '<article class="list-row"><div><strong>No pending submissions.</strong><div class="small">Open the tab to load queued image removals and public artist-tag requests.</div></div><div></div></article>';
         }
-        els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blocklist state.</div></div><div></div></article>';
+        els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklist activity yet.</strong><div class="small">Open the tab to load recent image removals and the current artist blocklist.</div></div><div></div></article>';
         syncVisibleBatchActions();
         els.refresh.addEventListener('click', function () {
           refreshAssets();
