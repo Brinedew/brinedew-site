@@ -483,6 +483,332 @@ function mapLocalRemovalRequestRow(row) {
   }
 }
 
+function normalizeGenerationRequestMode(raw) {
+  const value = String(raw || "")
+    .trim()
+    .toLowerCase()
+  return value === "specific" ? "specific" : "random"
+}
+
+function buildGenerationRequestLaneKey({ geneSymbol, requestMode, requestedVisionId } = {}) {
+  const symbol = normalizeSymbol(geneSymbol || "") || ""
+  const mode = normalizeGenerationRequestMode(requestMode)
+  const visionId = mode === "specific" ? sanitizeVoteVisionId(requestedVisionId || "") : ""
+  return `${symbol}|${mode}|${visionId || "random"}`
+}
+
+function generationRequestVisionLabel(row) {
+  return (
+    sanitizeText(
+      row?.requested_emulsion_label || row?.requested_artist_name || row?.artist_name || "",
+      255,
+    ) ||
+    sanitizeText(row?.requested_artist_tag || row?.artist_tag || "", 255) ||
+    sanitizeText(row?.requested_vision_id || row?.vision_id || "", 255) ||
+    ""
+  )
+}
+
+function mapGenerationRequestRow(row) {
+  const geneSymbol = normalizeSymbol(row?.gene_symbol || "") || ""
+  const requestMode = normalizeGenerationRequestMode(row?.request_mode)
+  const requestedVisionId =
+    requestMode === "specific" ? sanitizeVoteVisionId(row?.requested_vision_id || "") : ""
+  return {
+    id: Number(row?.id || 0),
+    gene_symbol: geneSymbol,
+    full_name: sanitizeText(row?.full_name || "", 255) || "",
+    requester_user_id: sanitizeText(row?.requester_user_id || "", 255) || "",
+    requester_username: sanitizeText(row?.requester_username || "", 255) || "",
+    request_mode: requestMode,
+    requested_vision_id: requestedVisionId,
+    requested_emulsion_label:
+      requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
+    status: sanitizeText(row?.status || "", 64) || "open",
+    created_at: sanitizeText(row?.created_at || "", 64) || "",
+    updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+    fulfilled_at: sanitizeText(row?.fulfilled_at || "", 64) || "",
+    fulfilled_by: sanitizeText(row?.fulfilled_by || "", 255) || "",
+    fulfilled_asset_sha256: normalizeSha256(row?.fulfilled_asset_sha256 || "") || "",
+    fulfilled_vision_id: sanitizeVoteVisionId(row?.fulfilled_vision_id || "") || "",
+    fulfillment_note: sanitizeText(row?.fulfillment_note || "", 2000) || "",
+    lane_key: buildGenerationRequestLaneKey({
+      geneSymbol,
+      requestMode,
+      requestedVisionId,
+    }),
+  }
+}
+
+function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
+  const requesterNorm = normalizeUserId(requesterUserId || "")
+  const laneMap = new Map()
+  for (const rawRow of Array.isArray(rows) ? rows : []) {
+    const row = mapGenerationRequestRow(rawRow)
+    if (!row.id || !row.gene_symbol) continue
+    const existing = laneMap.get(row.lane_key)
+    const requesterMatches = requesterNorm && row.requester_user_id === requesterNorm
+    if (existing) {
+      existing.request_count += 1
+      if (requesterMatches) existing.my_request_count += 1
+      existing.request_ids.push(row.id)
+      continue
+    }
+    laneMap.set(row.lane_key, {
+      lane_key: row.lane_key,
+      gene_symbol: row.gene_symbol,
+      full_name: row.full_name,
+      request_mode: row.request_mode,
+      requested_vision_id: row.requested_vision_id,
+      requested_emulsion_label: row.requested_emulsion_label,
+      request_count: 1,
+      my_request_count: requesterMatches ? 1 : 0,
+      request_ids: [row.id],
+      created_at: row.created_at,
+    })
+  }
+  return Array.from(laneMap.values()).sort(function (a, b) {
+    return String(a.created_at || "").localeCompare(String(b.created_at || "")) ||
+      String(a.lane_key || "").localeCompare(String(b.lane_key || ""))
+  })
+}
+
+async function enrichGenerationRequestRows(env, rows) {
+  const safeRows = Array.isArray(rows) ? rows : []
+  const requestedVisionIds = Array.from(
+    new Set(
+      safeRows
+        .map((row) => sanitizeVoteVisionId(row?.requested_vision_id || ""))
+        .filter(Boolean),
+    ),
+  )
+  if (!requestedVisionIds.length) return safeRows.map(mapGenerationRequestRow)
+  const visionRows = await fetchAdminVisionStatsDirect(env, { visionIds: requestedVisionIds })
+  const visionMap = new Map(
+    (Array.isArray(visionRows) ? visionRows : []).map((row) => [String(row.vision_id || ""), row]),
+  )
+  return safeRows.map((row) => {
+    const requestedVisionId = sanitizeVoteVisionId(row?.requested_vision_id || "")
+    const visionRow = requestedVisionId ? visionMap.get(requestedVisionId) || null : null
+    return mapGenerationRequestRow({
+      ...row,
+      requested_artist_name: visionRow?.artist_name || row?.requested_artist_name || "",
+      requested_artist_tag: visionRow?.artist_tag || row?.requested_artist_tag || "",
+      requested_emulsion_label:
+        generationRequestVisionLabel(visionRow) || row?.requested_emulsion_label || "",
+    })
+  })
+}
+
+async function listOpenGenerationRequests(
+  env,
+  { limit = 500, geneSymbol = "", requesterUserId = "" } = {},
+) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedLimit = Math.max(1, Math.min(2000, Number.parseInt(String(limit || "500"), 10) || 500))
+  const symbolNorm = normalizeSymbol(geneSymbol || "") || ""
+  const requesterNorm = normalizeUserId(requesterUserId || "")
+  const whereParts = ["gr.status = 'open'"]
+  const params = []
+  if (symbolNorm) {
+    whereParts.push("upper(gr.gene_symbol) = ?")
+    params.push(symbolNorm)
+  }
+  if (requesterNorm && !isGuestUserId(requesterNorm)) {
+    whereParts.push("gr.requester_user_id = ?")
+    params.push(requesterNorm)
+  }
+  const resp = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       gr.*, 
+       COALESCE(gc.full_name, '') AS full_name
+     FROM icono_generation_requests gr
+     LEFT JOIN icono_gene_catalog gc
+       ON upper(gc.gene_symbol) = upper(gr.gene_symbol)
+     WHERE ${whereParts.join(" AND ")}
+     ORDER BY gr.created_at ASC, gr.id ASC
+     LIMIT ?`,
+  )
+    .bind(...params, cleanedLimit)
+    .all()
+  return enrichGenerationRequestRows(env, Array.isArray(resp?.results) ? resp.results : [])
+}
+
+async function createGenerationRequest(
+  env,
+  {
+    geneSymbol,
+    requesterUserId,
+    requesterUsername = "",
+    requestMode = "random",
+    requestedVisionId = "",
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  const symbolNorm = normalizeSymbol(geneSymbol || "")
+  if (!symbolNorm) return { ok: false, error: "Missing or invalid gene symbol" }
+  const requesterNorm = normalizeUserId(requesterUserId || "")
+  if (!requesterNorm || isGuestUserId(requesterNorm)) {
+    return { ok: false, error: "Authentication required" }
+  }
+  const mode = normalizeGenerationRequestMode(requestMode)
+  const visionNorm = mode === "specific" ? sanitizeVoteVisionId(requestedVisionId || "") : ""
+  if (mode === "specific" && !visionNorm) {
+    return { ok: false, error: "Choose a specific emulsion before submitting a specific request." }
+  }
+  const insertResp = await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_generation_requests (
+       gene_symbol,
+       requester_user_id,
+       requester_username,
+       request_mode,
+       requested_vision_id,
+       status,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)`,
+  )
+    .bind(
+      symbolNorm,
+      requesterNorm,
+      sanitizeText(requesterUsername || "", 255) || "",
+      mode,
+      visionNorm,
+    )
+    .run()
+  const requestId = Number(insertResp?.meta?.last_row_id || 0)
+  const created = requestId
+    ? await env.ICONOPLASM_DB.prepare(
+        `SELECT gr.*, COALESCE(gc.full_name, '') AS full_name
+         FROM icono_generation_requests gr
+         LEFT JOIN icono_gene_catalog gc
+           ON upper(gc.gene_symbol) = upper(gr.gene_symbol)
+         WHERE gr.id = ?
+         LIMIT 1`,
+      )
+        .bind(requestId)
+        .first()
+    : null
+  const mapped = (await enrichGenerationRequestRows(env, created ? [created] : []))[0] || null
+  return {
+    ok: true,
+    request: mapped,
+  }
+}
+
+async function listGenerationRequestVisionOptions(env) {
+  if (!env.ICONOPLASM_DB) return []
+  const resp = await env.ICONOPLASM_DB.prepare(
+    `SELECT vision_id, artist_name, artist_tag, image_count, live_count
+     FROM icono_admin_vision_rollup
+     WHERE COALESCE(vision_id, '') <> ''
+     ORDER BY live_count DESC, image_count DESC, vision_id ASC
+     LIMIT 64`,
+  ).all()
+  const rows = Array.isArray(resp?.results) ? resp.results : []
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const visionId = sanitizeVoteVisionId(row?.vision_id || "")
+      if (!visionId) return null
+      const label =
+        sanitizeText(row?.artist_name || "", 255) ||
+        sanitizeText(row?.artist_tag || "", 255) ||
+        publicArtistIdForRow(row) ||
+        visionId
+      return {
+        vision_id: visionId,
+        label,
+        artist_name: sanitizeText(row?.artist_name || "", 255) || "",
+        artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
+        artist_id: publicArtistIdForRow(row),
+        image_count: Number(row?.image_count || 0),
+        live_count: Number(row?.live_count || 0),
+      }
+    })
+    .filter(Boolean)
+}
+
+async function fulfillGenerationRequests(
+  env,
+  {
+    items = [],
+    resolvedBy = "workstation_sync",
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { ok: false, fulfilled: 0, request_ids: [], error: "ICONOPLASM_DB binding missing" }
+  const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
+  const fulfilledIds = new Set()
+  let skipped = 0
+
+  for (const rawItem of Array.isArray(items) ? items : []) {
+    if (!rawItem || typeof rawItem !== "object") {
+      skipped += 1
+      continue
+    }
+    let requestIds = Array.from(
+      new Set(
+        (Array.isArray(rawItem.request_ids) ? rawItem.request_ids : [])
+          .map((value) => Number(value || 0))
+          .filter((value) => value > 0),
+      ),
+    )
+    const requestMode = normalizeGenerationRequestMode(rawItem.request_mode)
+    const symbolNorm = normalizeSymbol(rawItem.gene_symbol || rawItem.symbol || "") || ""
+    const requestedVisionId =
+      requestMode === "specific" ? sanitizeVoteVisionId(rawItem.requested_vision_id || "") : ""
+    if (!requestIds.length && requestMode === "specific" && symbolNorm && requestedVisionId) {
+      const fallbackResp = await env.ICONOPLASM_DB.prepare(
+        `SELECT id
+         FROM icono_generation_requests
+         WHERE status = 'open'
+           AND upper(gene_symbol) = ?
+           AND request_mode = 'specific'
+           AND requested_vision_id = ?
+         ORDER BY created_at ASC, id ASC`,
+      )
+        .bind(symbolNorm, requestedVisionId)
+        .all()
+      requestIds = (Array.isArray(fallbackResp?.results) ? fallbackResp.results : [])
+        .map((row) => Number(row?.id || 0))
+        .filter((value) => value > 0)
+    }
+    if (!requestIds.length) {
+      skipped += 1
+      continue
+    }
+    const fulfilledVisionId = sanitizeVoteVisionId(rawItem.fulfilled_vision_id || rawItem.vision_id || "")
+    const fulfilledAssetSha = normalizeSha256(rawItem.fulfilled_asset_sha256 || rawItem.asset_sha256 || "") || ""
+    const note = sanitizeText(rawItem.note || rawItem.fulfillment_note || "", 2000) || ""
+    for (const requestId of requestIds) {
+      const updateResp = await env.ICONOPLASM_DB.prepare(
+        `UPDATE icono_generation_requests
+         SET status = 'fulfilled',
+             updated_at = CURRENT_TIMESTAMP,
+             fulfilled_at = CURRENT_TIMESTAMP,
+             fulfilled_by = ?,
+             fulfilled_asset_sha256 = ?,
+             fulfilled_vision_id = ?,
+             fulfillment_note = ?
+         WHERE id = ?
+           AND status = 'open'`,
+      )
+        .bind(actorNorm, fulfilledAssetSha, fulfilledVisionId, note, requestId)
+        .run()
+      if (Number(updateResp?.meta?.changes || 0) > 0) {
+        fulfilledIds.add(requestId)
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    fulfilled: fulfilledIds.size,
+    skipped,
+    request_ids: Array.from(fulfilledIds).sort(function (a, b) {
+      return a - b
+    }),
+  }
+}
+
 async function queueLocalRemovalRequest(
   env,
   {
@@ -842,7 +1168,6 @@ function catalogStateHashPayload(rawItem) {
     item.aliases_json || "[]",
   ]
 }
-
 async function hashCatalogItems(rawItems) {
   const rows = []
   for (const rawItem of Array.isArray(rawItems) ? rawItems : []) {
@@ -7481,6 +7806,140 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           200,
           { "Cache-Control": "no-store" },
         ),
+      )
+    }
+
+    const geneRequestMatch = path.match(/^\/api\/iconoplasm\/requests\/gene\/([^/]+)$/)
+    if (geneRequestMatch && request.method === "GET") {
+      if (!env.ICONOPLASM_DB)
+        return done("gene_requests_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const symbol = normalizeSymbol(geneRequestMatch[1])
+      if (!symbol) return done("gene_requests_400", json({ error: "Invalid symbol" }, 400))
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const userId = normalizeUserId(sessionUser?.user_id || "")
+      const [requestRows, requestOptions] = await Promise.all([
+        listOpenGenerationRequests(env, { limit: 500, geneSymbol: symbol }),
+        listGenerationRequestVisionOptions(env),
+      ])
+      const myRows = sessionUser?.user_id
+        ? requestRows.filter((row) => row.requester_user_id === userId)
+        : []
+      return done(
+        "gene_requests",
+        json(
+          {
+            ok: true,
+            authenticated: Boolean(sessionUser?.user_id),
+            can_request: Boolean(sessionUser?.user_id),
+            user: sessionUser?.user_id
+              ? {
+                  id: userId,
+                  username: sessionUser.username || null,
+                }
+              : null,
+            gene_symbol: symbol,
+            request_options: requestOptions,
+            my_open_requests: myRows,
+            my_lane_summary: summarizeGenerationRequestRows(myRows, { requesterUserId: userId }),
+            gene_lane_summary: summarizeGenerationRequestRows(requestRows, { requesterUserId: userId }),
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/requests" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB)
+        return done("create_generation_request_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "create_generation_request_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first to request new candidates." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("create_generation_request_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const result = await createGenerationRequest(env, {
+        geneSymbol: p?.symbol || p?.gene_symbol || "",
+        requesterUserId: sessionUser.user_id,
+        requesterUsername: sessionUser.username || "",
+        requestMode: p?.request_mode || p?.mode || "random",
+        requestedVisionId: p?.requested_vision_id || p?.vision_id || "",
+      })
+      if (!result.ok) {
+        return done(
+          "create_generation_request_400",
+          json({ ok: false, error: String(result.error || "Could not create request") }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      return done(
+        "create_generation_request",
+        json(
+          {
+            ok: true,
+            request: result.request || null,
+            message: "Request queued. The workstation will see it on the next refresh.",
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/requests/open" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_requests_open_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_requests_open_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const limit = Math.max(
+        1,
+        Math.min(2000, Number.parseInt(url.searchParams.get("limit") || "500", 10) || 500),
+      )
+      const symbol = normalizeSymbol(url.searchParams.get("symbol") || "") || ""
+      const rows = await listOpenGenerationRequests(env, { limit, geneSymbol: symbol })
+      return done(
+        "admin_requests_open",
+        json(
+          {
+            ok: true,
+            count: rows.length,
+            rows,
+            lane_summary: summarizeGenerationRequestRows(rows),
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/requests/fulfill" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_requests_fulfill_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_requests_fulfill_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p = {}
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_requests_fulfill_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const result = await fulfillGenerationRequests(env, {
+        items: Array.isArray(p?.items) ? p.items : [],
+        resolvedBy: await actor(request, env),
+      })
+      return done(
+        "admin_requests_fulfill",
+        json(result, 200, { "Cache-Control": "no-store" }),
       )
     }
 

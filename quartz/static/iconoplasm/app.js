@@ -2062,6 +2062,184 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
   }
 
+  function geneRequestLaneLabel(item) {
+    if (!item || String(item.request_mode || "").trim().toLowerCase() !== "specific") {
+      return "Random default"
+    }
+    return (
+      String(item.requested_emulsion_label || "").trim() ||
+      String(item.requested_vision_id || "").trim() ||
+      "Specific emulsion"
+    )
+  }
+
+  function renderGeneRequestSummaryMarkup(title, rows, countField) {
+    var safeRows = Array.isArray(rows) ? rows : []
+    if (!safeRows.length) return ""
+    var html =
+      '<div class="icono-gene-request-summary">' +
+      '<div class="icono-home-auth-kicker">' +
+      esc(title) +
+      "</div>" +
+      '<ul style="margin:8px 0 0;padding-left:18px;display:grid;gap:6px;">'
+    for (var i = 0; i < safeRows.length; i++) {
+      var item = safeRows[i] || {}
+      var count = Number(item[countField] || 0) || 0
+      html +=
+        "<li>" +
+        esc(geneRequestLaneLabel(item)) +
+        " - " +
+        esc(String(count)) +
+        " request" +
+        (count === 1 ? "" : "s") +
+        "</li>"
+    }
+    html += "</ul></div>"
+    return html
+  }
+
+  function wireGeneRequestPanel(container, genePayload) {
+    if (!container || !genePayload) return
+    var panel = container.querySelector("[data-icono-request-panel]")
+    if (!panel) return
+    var body = panel.querySelector("[data-icono-request-body]")
+    if (!body) return
+    var symbol = normalizedSymbol(genePayload.symbol)
+    if (!symbol) return
+
+    function setStatus(message, tone) {
+      var note = body.querySelector("[data-icono-request-note]")
+      if (!note) return
+      note.textContent = String(message || "").trim()
+      note.hidden = !note.textContent
+      note.style.color = tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
+    }
+
+    function renderPanel(state) {
+      var safeState = state || {}
+      var requestOptions = Array.isArray(safeState.request_options) ? safeState.request_options : []
+      var myLaneSummary = Array.isArray(safeState.my_lane_summary) ? safeState.my_lane_summary : []
+      var geneLaneSummary = Array.isArray(safeState.gene_lane_summary) ? safeState.gene_lane_summary : []
+      if (!safeState.authenticated) {
+        body.innerHTML =
+          '<div class="icono-home-auth-copy">' +
+          '<div class="icono-home-auth-kicker">request access</div>' +
+          '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
+          '<div class="icono-home-auth-note">Requests feed the workstation queue. Random default is the standard lane; you can choose a specific emulsion after login.</div>' +
+          '</div>' +
+          '<div style="display:grid;gap:12px;">' +
+          '<a class="icono-home-auth-link" href="' +
+          esc(voteLoginUrl()) +
+          '">Discord Login</a>' +
+          renderGeneRequestSummaryMarkup('Open requests on this gene', geneLaneSummary, 'request_count') +
+          '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
+          '</div>'
+        return
+      }
+
+      var selectOptions =
+        '<option value="">Random default</option>' +
+        requestOptions
+          .map(function (option) {
+            var label = String(option.label || option.vision_id || "").trim()
+            var meta = []
+            var imageCount = Number(option.image_count || 0) || 0
+            if (imageCount > 0) meta.push(imageCount + " images")
+            var liveCount = Number(option.live_count || 0) || 0
+            if (liveCount > 0) meta.push(liveCount + " live")
+            return (
+              '<option value="' +
+              esc(String(option.vision_id || "")) +
+              '">' +
+              esc(label + (meta.length ? ' - ' + meta.join(', ') : '')) +
+              '</option>'
+            )
+          })
+          .join("")
+
+      body.innerHTML =
+        '<div class="icono-home-auth-copy">' +
+        '<div class="icono-home-auth-kicker">request new candidates</div>' +
+        '<div class="icono-home-auth-title">Request more portraits for ' +
+        esc(symbol) +
+        '</div>' +
+        '<div class="icono-home-auth-note">Each submit adds one queue row. Same gene plus different emulsions stay separate; random requests clear when a request-run upload lands for this gene.</div>' +
+        '</div>' +
+        '<div style="display:grid;gap:12px;">' +
+        '<form data-icono-request-form style="display:grid;gap:10px;">' +
+        '<label style="display:grid;gap:6px;">' +
+        '<span style="font-size:0.9rem;opacity:0.78;">Emulsion</span>' +
+        '<select data-icono-request-vision style="padding:10px 12px;border-radius:12px;border:1px solid rgba(15,23,42,0.12);background:#fff;">' +
+        selectOptions +
+        '</select>' +
+        '</label>' +
+        '<button type="submit" class="icono-home-auth-link" style="border:none;cursor:pointer;">request new candidates (free)</button>' +
+        '</form>' +
+        renderGeneRequestSummaryMarkup('Your open requests', myLaneSummary, 'my_request_count') +
+        renderGeneRequestSummaryMarkup('Open requests on this gene', geneLaneSummary, 'request_count') +
+        '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
+        '</div>'
+
+      var form = body.querySelector("[data-icono-request-form]")
+      var select = body.querySelector("[data-icono-request-vision]")
+      if (!form || !select) return
+      form.addEventListener("submit", function (event) {
+        event.preventDefault()
+        var requestedVisionId = String(select.value || "").trim()
+        var payload = {
+          symbol: symbol,
+          request_mode: requestedVisionId ? "specific" : "random",
+          requested_vision_id: requestedVisionId || null,
+        }
+        var button = form.querySelector('button[type="submit"]')
+        if (button) {
+          button.disabled = true
+          button.textContent = "Requesting..."
+        }
+        setStatus("", "")
+        fetchJSON("/api/iconoplasm/requests", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+          },
+          body: JSON.stringify(payload),
+        })
+          .then(function () {
+            setStatus("Request queued. The workstation will pick it up on refresh.", "success")
+            return loadState()
+          })
+          .catch(function (error) {
+            setStatus(String((error && error.message) || "Could not queue request."), "error")
+          })
+          .finally(function () {
+            if (button) {
+              button.disabled = false
+              button.textContent = "request new candidates (free)"
+            }
+          })
+      })
+    }
+
+    function loadState() {
+      body.innerHTML = '<div class="icono-home-auth-note">Loading request state...</div>'
+      return fetchJSON("/api/iconoplasm/requests/gene/" + encodeURIComponent(symbol), {
+        credentials: "include",
+      }).then(function (state) {
+        renderPanel(state)
+        return state
+      })
+    }
+
+    void loadState().catch(function (error) {
+      body.innerHTML =
+        '<div class="icono-home-auth-note">Could not load request state.</div>' +
+        '<div data-icono-request-note style="font-size:0.92rem;color:#b42318;">' +
+        esc(String((error && error.message) || "Unknown error")) +
+        '</div>'
+    })
+  }
+
   /* ─── Client-side router ─── */
 
   function getRoute() {
@@ -2748,12 +2926,21 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (manifestation) {
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
+    html +=
+      '<section class="icono-home-auth-card icono-gene-request-panel" data-icono-request-panel="' +
+      esc(g.symbol) +
+      '">' +
+      '<div data-icono-request-body>' +
+      '<div class="icono-home-auth-note">Loading request state...</div>' +
+      '</div>' +
+      '</section>'
     html += "</section>"
 
     html += renderCandidateGallery(g)
 
     container.innerHTML = html
     wireGeneVoteBox(container, g)
+    wireGeneRequestPanel(container, g)
     wireCandidateVoteBoxes(container, g)
     wireCandidateRemoveButtons(container, g)
     applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
