@@ -10345,11 +10345,6 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
       const base = portraitBase(url, env)
       const prefetchedExistingAssets = await iconoExistingAssetsBatch(env, itemsRaw)
-      const prefetchedBlacklistRows = await iconoBlacklistRowsBatch(
-        env,
-        itemsRaw.map((item) => item?.artist_tag || item?.artistTag || ""),
-      )
-
       const results = []
       let processed = 0
       let failed = 0
@@ -10586,7 +10581,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               uploads,
               publish: "site_managed",
               blacklisted,
-              blacklist_reason: sanitizeText(blacklistRow?.reason || "", 2000) || null,
+              blacklist_reason: null,
               essence: essenceResult,
               hero_url: joinUrl(base, keys.full),
               medium_url: joinUrl(base, keys.medium),
