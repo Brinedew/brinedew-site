@@ -1343,20 +1343,23 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <section class="stack vision-workbench">
             <div class="section-head">
               <div>
-                <h2>Vision cleanup</h2>
-                <p class="small" id="vision-cleanup-summary">Click a row or thumbnail to inspect this artist.</p>
+                <h2>Vision detail</h2>
+                <p class="small" id="vision-cleanup-summary">Click a row or thumbnail to inspect this artist. Admin submits removals through the public artist-tag form.</p>
               </div>
             </div>
             <div class="vision-cleanup-panel" id="vision-cleanup-panel"></div>
             <div class="vision-quick-actions">
-              <div class="detail-kicker">Quick actions</div>
-              <div class="vision-quick-context" id="vision-quick-context">Select an artist to unlock one-click cleanup actions.</div>
+              <div class="detail-kicker">Monitoring</div>
+              <div class="vision-quick-context" id="vision-quick-context">This panel does not blacklist artists directly. Use the public artist-tag form, then watch queue and blocklist state here.</div>
               <div class="vision-dashboard-actions">
                 <button class="btn-flat" type="button" id="vision-open-current-gene" disabled>Open current gene</button>
                 <button class="btn-flat" type="button" id="vision-copy-current-tag" disabled>Copy artist tag</button>
-                <button class="btn-danger" id="style-remove" disabled>Blacklist current artist</button>
               </div>
             </div>
+          </section>
+          <section class="stack">
+            <h2>Pending submissions</h2>
+            <div class="list" id="styles-pending"></div>
           </section>
           <section class="stack">
             <h2>Blacklist log</h2>
@@ -1404,6 +1407,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         visionPreviewMap: {},
         loadingVisionPreviewIds: {},
         blacklistedStyles: [],
+        pendingBlacklistSubmissions: [],
         visionPage: 1,
         visionPageSize: 50,
         selectedVisionId: '',
@@ -1436,7 +1440,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         overviewCoverage: document.getElementById('overview-coverage'),
         attentionList: document.getElementById('attention-list'),
         overviewEvents: document.getElementById('overview-events'),
-        styleRemove: document.getElementById('style-remove'),
         visionStatsList: document.getElementById('vision-stats-list'),
         visionStatsMeta: document.getElementById('vision-stats-meta'),
         visionCleanupPanel: document.getElementById('vision-cleanup-panel'),
@@ -1444,6 +1447,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         visionQuickContext: document.getElementById('vision-quick-context'),
         visionOpenCurrentGene: document.getElementById('vision-open-current-gene'),
         visionCopyCurrentTag: document.getElementById('vision-copy-current-tag'),
+        stylesPending: document.getElementById('styles-pending'),
         visionPageSize: document.getElementById('vision-page-size'),
         visionPageLabel: document.getElementById('vision-page-label'),
         visionPageFirst: document.getElementById('vision-page-first'),
@@ -2117,13 +2121,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             ? [
                 '<strong>' + esc(vision.artist_name || vision.artist_tag || vision.vision_id || 'Selected artist') + '</strong>',
                 '<span class="small mono">' + esc(vision.artist_tag || vision.vision_id || '') + '</span>',
-                (asset && asset.gene_symbol ? '<span class="small">Current gene: ' + esc(asset.gene_symbol) + '</span>' : '')
+                (asset && asset.gene_symbol ? '<span class="small">Current gene: ' + esc(asset.gene_symbol) + '</span>' : ''),
+                '<span class="small">Submit removals through the public artist-tag form.</span>'
               ].filter(Boolean).join(' · ')
-            : 'Select an artist to unlock one-click cleanup actions.';
-        }
-        if (els.styleRemove) {
-          els.styleRemove.disabled = !vision || Boolean(vision.blacklisted);
-          els.styleRemove.textContent = vision && vision.blacklisted ? 'Already blacklisted' : 'Blacklist current artist';
+            : 'Select an artist to inspect details. Submit removals through the public artist-tag form, then watch this panel for queue and blocklist state.';
         }
         if (els.visionOpenCurrentGene) {
           els.visionOpenCurrentGene.disabled = !(asset && asset.gene_symbol);
@@ -2146,27 +2147,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         refreshGeneDetail(detailSymbol).catch(function (err) {
           setLog({ error: 'Gene detail failed', details: err.response || requestErrorMessage(err, 'Gene detail failed.') });
         });
-      }
-
-      async function blacklistVision(vision) {
-        if (!vision) throw new Error('Pick an artist before blacklisting.');
-        var artistTag = String(vision.artist_tag || vision.vision_id || '').trim();
-        if (!artistTag) throw new Error('Selected artist is missing a vision tag.');
-        var visionName = String(vision.artist_name || '').trim();
-        if (!window.confirm('Blacklist ' + artistTag + '?')) return;
-        setLog(await runMutation('/artist-styles/remove', {
-          artist_tag: artistTag,
-          artist_name: visionName || undefined
-        }));
-        await refreshDerivedAdminViews();
-        if (state.selectedVisionId) {
-          await refreshVisionDetail(state.selectedVisionId, { keepDetail: true, assetSha: state.selectedVisionAssetSha });
-        }
-      }
-
-      async function blacklistCurrentVision() {
-        var context = currentVisionContext();
-        await blacklistVision(context.vision);
       }
 
       function renderVisionPreviewButton(visionId, asset, active) {
@@ -2296,7 +2276,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<div class="vision-artist-actions">',
           '<button class="btn-flat" type="button" data-vision-artist-action="copy-tag">Copy artist tag</button>',
           '<button class="btn-flat" type="button" data-vision-artist-action="open-current-gene"' + (selectedAsset && selectedAsset.gene_symbol ? '' : ' disabled') + '>Open gene page</button>',
-          '<button class="btn-danger" type="button" data-vision-artist-action="blacklist"' + (vision.blacklisted ? ' disabled' : '') + '>' + esc(vision.blacklisted ? 'Already blacklisted' : 'Blacklist artist') + '</button>',
           '</div>'
         ].join('');
         renderVisionQuickActions();
@@ -2423,7 +2402,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             '<td>' + esc(String(Math.round((Number(row.avg_vote || 0) * 100) ) / 100)) + '</td>',
             '<td>' + esc(String(Math.round((Number(row.rejection_rate || 0) * 1000)) / 10)) + '%</td>',
             '<td>' + esc(String(row.live_count || 0)) + '</td>',
-            '<td><div class="actions"><button class="btn-flat" type="button" data-vision-open="' + esc(row.vision_id || '') + '">Open panel</button>' + (row.blacklisted ? '<span class="small">Blacklisted</span>' : '<button class="btn-flat" type="button" data-vision-row-action="blacklist" data-vision-id="' + esc(row.vision_id || '') + '">Blacklist</button>') + '</div></td>',
+            '<td><div class="actions"><button class="btn-flat" type="button" data-vision-open="' + esc(row.vision_id || '') + '">Open panel</button>' + (row.blacklisted ? '<span class="small">Blacklisted</span>' : '<span class="small">Use public form</span>') + '</div></td>',
             '</tr>'
           ].join('');
         }).join('') : '<tr><td colspan="8">No vision stats yet.</td></tr>';
@@ -2431,6 +2410,22 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         ensureVisibleVisionPreviews(pageRows).catch(function (err) {
           setLog({ error: 'Preview hydration failed', details: err.response || requestErrorMessage(err, 'Preview hydration failed.') });
         });
+
+        if (els.stylesPending) {
+          els.stylesPending.innerHTML = (state.pendingBlacklistSubmissions || []).length
+            ? state.pendingBlacklistSubmissions.map(function (row) {
+                return [
+                  '<article class="list-row">',
+                  '<div>',
+                  '<strong>' + esc(row.artist_name_input || row.normalized_input || 'Unknown submission') + '</strong>',
+                  '<div class="small">Queued by ' + esc(row.requested_by || 'unknown') + (row.source ? ' · ' + esc(row.source) : '') + '</div>',
+                  '</div>',
+                  '<div class="event-meta">' + esc(row.requested_at || '') + '</div>',
+                  '</article>'
+                ].join('');
+              }).join('')
+            : '<article class="list-row"><div><strong>No pending submissions.</strong><div class="small">New artist-tag requests from the public form will show up here until workstation sync consumes them.</div></div><div></div></article>';
+        }
 
         els.stylesNotes.innerHTML = (state.blacklistedStyles || []).length
           ? state.blacklistedStyles.map(function (row) {
@@ -2444,7 +2439,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                 '</article>'
               ].join('');
             }).join('')
-          : '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">If one starts producing junk, remove it here and it will show up in this log.</div></div><div></div></article>';
+          : '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Once workstation sync applies a public artist-tag request, it will appear here.</div></div><div></div></article>';
       }
 
       async function refreshVisionStats() {
@@ -2452,7 +2447,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (els.visionStatsList) {
             els.visionStatsList.innerHTML = tableFailureMarkup('Loading vision scorecard…', 'Waiting for the admin read-model endpoints to answer.', 8);
           }
-          var data = await apiJson('/votes/vision-stats', { method: 'GET' });
+          var results = await Promise.all([
+            apiJson('/votes/vision-stats', { method: 'GET' }),
+            apiJson('/artist-blacklist-submissions/pending?limit=100', { method: 'GET' })
+          ]);
+          var data = results[0] || {};
+          var pendingData = results[1] || {};
           state.visionStats = Array.isArray(data.rows) ? data.rows : [];
           state.visionPreviewMap = {};
           state.visionDetailCache = {};
@@ -2460,6 +2460,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.preloadedImageUrls = {};
           state.loadingVisionPreviewIds = {};
           state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
+          state.pendingBlacklistSubmissions = Array.isArray(pendingData.requests) ? pendingData.requests : [];
           state.visionPage = 1;
           renderVisionStats();
         } catch (err) {
@@ -2472,6 +2473,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           }
           if (els.stylesNotes) {
             els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>Vision stats unavailable.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
+          }
+          if (els.stylesPending) {
+            els.stylesPending.innerHTML = '<article class="list-row"><div><strong>Submission queue unavailable.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
           }
           setLog({ error: 'Vision stats failed', details: err.response || message });
         }
@@ -3010,8 +3014,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               setLog('Copied artist tag for ' + String((context.vision && (context.vision.artist_name || context.vision.artist_tag || context.vision.vision_id)) || 'selected artist'));
             } else if (artistAction === 'open-current-gene') {
               await openVisionGene(context.asset && context.asset.gene_symbol);
-            } else if (artistAction === 'blacklist') {
-              await blacklistCurrentVision();
             }
             return;
           }
@@ -3086,23 +3088,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             return;
           }
 
-          var visionRowActionBtn = ev.target.closest('[data-vision-row-action]');
-          if (visionRowActionBtn) {
-            var rowAction = String(visionRowActionBtn.getAttribute('data-vision-row-action') || '');
-            var rowVisionId = String(visionRowActionBtn.getAttribute('data-vision-id') || '');
-            if (rowAction === 'blacklist') {
-              var row = visionRowById(rowVisionId);
-              try {
-                visionRowActionBtn.disabled = true;
-                await blacklistVision(row);
-              } catch (err) {
-                setLog({ error: String(err.message || err), details: err.response || null });
-              } finally {
-                visionRowActionBtn.disabled = false;
-              }
-            }
-            return;
-          }
         });
 
         document.addEventListener('keydown', function (ev) {
@@ -3155,19 +3140,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           });
         }
 
-        if (els.styleRemove) {
-          els.styleRemove.addEventListener('click', async function () {
-            try {
-              els.styleRemove.disabled = true;
-              await blacklistCurrentVision();
-            } catch (err) {
-              setLog({ error: String(err.message || err), details: err.response || null });
-            } finally {
-              els.styleRemove.disabled = false;
-            }
-          });
-        }
-
         if (els.visionOpenCurrentGene) {
           els.visionOpenCurrentGene.addEventListener('click', function () {
             var context = currentVisionContext();
@@ -3206,7 +3178,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (els.visionStatsMeta) els.visionStatsMeta.textContent = 'Open this tab to load the scorecard.';
         renderVisionCleanupPanel();
         renderVisionQuickActions();
-        els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blacklist log.</div></div><div></div></article>';
+        if (els.stylesPending) {
+          els.stylesPending.innerHTML = '<article class="list-row"><div><strong>No pending submissions.</strong><div class="small">Open the tab to load the public artist-tag queue.</div></div><div></div></article>';
+        }
+        els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No blacklisted styles.</strong><div class="small">Open the tab to load the current blocklist state.</div></div><div></div></article>';
         syncVisibleBatchActions();
         els.refresh.addEventListener('click', function () {
           refreshAssets();

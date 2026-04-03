@@ -189,6 +189,13 @@ function normalizeArtistStylesPageHtml(html) {
   // edited. Normalize the critical anti-abuse copy at response time so repeat
   // submitters always see the same generic success state instead of an oracle.
   return source
+    .replaceAll("Blacklist artist style", "Blocklist artist tag")
+    .replaceAll("Blacklist an artist style.", "Blocklist an artist tag.")
+    .replaceAll("If an Iconoplasm image looks like your style, enter your name or @tag and send it.", "If an Iconoplasm image matches your style, send the artist tag exactly as shown on the site.")
+    .replaceAll("Artist name or @tag", "Artist tag")
+    .replaceAll("Loish or @loish", "@artist_(name)")
+    .replaceAll("Use the name or @tag from the style list.", "Use the exact tag from the emulsion or style list. Spaces are not allowed.")
+    .replaceAll("Enter the artist name or @tag first.", "Enter the artist tag first. Example: @artist_(name)")
     .replace(
       "setStatus(data && data.duplicate ? 'That name was already submitted.' : 'Thanks. We got it.', 'ok');",
       "setStatus('Thanks. We got it.', 'ok');",
@@ -908,6 +915,7 @@ async function queueArtistBlacklistSubmission(
     requestedBy = "",
     source = "public_form",
     turnstilePassed = false,
+    enforceRequesterLock = true,
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return null
@@ -939,22 +947,24 @@ async function queueArtistBlacklistSubmission(
   // We intentionally do not reopen the gate after review because the form is
   // supposed to be a one-shot opt-out request channel, not a moderation inbox
   // that one person can keep feeding forever.
-  const existingForRequester = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
-     FROM icono_artist_blacklist_submissions
-     WHERE requested_by = ?
-     ORDER BY requested_at ASC, id ASC
-     LIMIT 1`,
-  )
-    .bind(requesterNorm)
-    .first()
-  if (existingForRequester) {
-    return {
-      ok: true,
-      queued: false,
-      duplicate: false,
-      requesterLocked: true,
-      request: mapArtistBlacklistSubmissionRow(existingForRequester),
+  if (enforceRequesterLock) {
+    const existingForRequester = await env.ICONOPLASM_DB.prepare(
+      `SELECT *
+       FROM icono_artist_blacklist_submissions
+       WHERE requested_by = ?
+       ORDER BY requested_at ASC, id ASC
+       LIMIT 1`,
+    )
+      .bind(requesterNorm)
+      .first()
+    if (existingForRequester) {
+      return {
+        ok: true,
+        queued: false,
+        duplicate: false,
+        requesterLocked: true,
+        request: mapArtistBlacklistSubmissionRow(existingForRequester),
+      }
     }
   }
 
@@ -1871,6 +1881,8 @@ function projectGeneRecord(record, rawFields) {
 function publicMediaEnvelope(url, symbol, portrait) {
   const assetSha = normalizeSha256(portrait?.asset_sha256 || "")
   if (!assetSha) return null
+  const width = optionalInt(portrait?.width)
+  const height = optionalInt(portrait?.height)
   return {
     id: assetSha,
     type: "portrait",
@@ -1878,6 +1890,8 @@ function publicMediaEnvelope(url, symbol, portrait) {
     checksum_sha256: assetSha,
     canonical_url: portrait?.hero_url || portrait?.medium_url || portrait?.thumb_url || null,
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
+    ...(width != null ? { width } : {}),
+    ...(height != null ? { height } : {}),
     renditions: {
       full: portrait?.hero_url || null,
       medium: portrait?.medium_url || null,
@@ -2118,6 +2132,8 @@ async function portraitState(env, symbol, base) {
       hero_url: null,
       medium_url: null,
       thumb_url: null,
+      width: null,
+      height: null,
       asset_sha256: null,
       candidate_image_id: null,
       emulsion_label: null,
@@ -2125,7 +2141,7 @@ async function portraitState(env, symbol, base) {
     }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.vision_id, pa.candidate_image_id
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.width, pa.height, pa.vision_id, pa.candidate_image_id
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
            ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
@@ -2141,6 +2157,8 @@ async function portraitState(env, symbol, base) {
         hero_url: null,
         medium_url: null,
         thumb_url: null,
+        width: null,
+        height: null,
         asset_sha256: null,
         candidate_image_id: null,
         emulsion_label: null,
@@ -2151,6 +2169,8 @@ async function portraitState(env, symbol, base) {
       hero_url: row.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
       medium_url: row.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
       thumb_url: row.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
+      width: optionalInt(row?.width),
+      height: optionalInt(row?.height),
       asset_sha256: row.asset_sha256,
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
@@ -2166,6 +2186,8 @@ async function portraitState(env, symbol, base) {
       hero_url: null,
       medium_url: null,
       thumb_url: null,
+      width: null,
+      height: null,
       asset_sha256: null,
       candidate_image_id: null,
       emulsion_label: null,
@@ -3041,45 +3063,28 @@ async function searchArtistStyles(env, { query = "", limit = 50 } = {}) {
   const like = queryNorm ? `%${queryNorm}%` : ""
   const { results } = await env.ICONOPLASM_DB.prepare(
     `SELECT
-       lower(pa.artist_tag) AS artist_tag,
-       MAX(NULLIF(pa.artist_name, '')) AS artist_name,
-       COUNT(*) AS total_count,
-       SUM(CASE WHEN lower(COALESCE(pa.status, '')) <> 'rejected' THEN 1 ELSE 0 END) AS visible_count,
-       SUM(CASE WHEN lower(COALESCE(pa.status, '')) = 'approved' THEN 1 ELSE 0 END) AS approved_count,
-       SUM(CASE WHEN lower(COALESCE(pa.status, '')) = 'draft' THEN 1 ELSE 0 END) AS draft_count,
-       SUM(CASE WHEN lower(COALESCE(pa.status, '')) = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
-       SUM(
-         CASE
-           WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
-           ELSE 0
-         END
-       ) AS live_count,
-       MAX(CASE WHEN bl.artist_tag IS NOT NULL THEN 1 ELSE 0 END) AS blacklisted,
+       lower(bl.artist_tag) AS artist_tag,
+       MAX(NULLIF(bl.artist_name, '')) AS artist_name,
+       0 AS total_count,
+       0 AS visible_count,
+       0 AS approved_count,
+       0 AS draft_count,
+       0 AS rejected_count,
+       0 AS live_count,
+       1 AS blacklisted,
        MAX(NULLIF(bl.reason, '')) AS blacklist_reason,
        MAX(NULLIF(bl.created_by, '')) AS blacklist_created_by,
        MAX(NULLIF(bl.updated_at, '')) AS blacklist_updated_at
-     FROM icono_portrait_assets pa
-     LEFT JOIN icono_publish_state ps
-       ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
-      AND lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256)
-     LEFT JOIN icono_artist_style_blacklist bl
-       ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
-     WHERE COALESCE(pa.artist_tag, '') <> ''
-       AND (
-         ? = ''
-         OR lower(pa.artist_tag) LIKE ?
-         OR lower(COALESCE(pa.artist_name, '')) LIKE ?
-       )
-     GROUP BY lower(pa.artist_tag)
+     FROM icono_artist_style_blacklist bl
+     WHERE COALESCE(bl.artist_tag, '') <> ''
+       AND (? = '' OR lower(bl.artist_tag) LIKE ?)
+     GROUP BY lower(bl.artist_tag)
      ORDER BY
        blacklisted DESC,
-       live_count DESC,
-       visible_count DESC,
-       total_count DESC,
        artist_tag ASC
      LIMIT ?`,
   )
-    .bind(queryNorm, like, like, cleanedLimit)
+    .bind(queryNorm, like, cleanedLimit)
     .all()
 
   return Array.isArray(results)
@@ -6090,39 +6095,10 @@ async function blacklistArtistStyle(
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const artistTagNorm = normalizeArtistTag(artistTag)
   if (!artistTagNorm) throw new Error("Missing or invalid artist_tag")
-  const artistNameNorm = sanitizeText(artistName || "", 255) || null
+  const artistNameNorm = null
   const actorNorm = normalizeUserId(actorId || "artist_style_blacklist")
   const reasonNorm =
     sanitizeText(reason || "", 2000) || `Removed blacklisted artist style ${artistTagNorm}`
-
-  const affectedRowsRaw = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       upper(pa.gene_symbol) AS gene_symbol,
-       lower(pa.asset_sha256) AS asset_sha256,
-       lower(COALESCE(pa.status, '')) AS status,
-       CASE
-         WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
-         ELSE 0
-       END AS is_current
-     FROM icono_portrait_assets pa
-     LEFT JOIN icono_publish_state ps
-       ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
-     WHERE lower(COALESCE(pa.artist_tag, '')) = ?`,
-  )
-    .bind(artistTagNorm)
-    .all()
-  const affectedRows = Array.isArray(affectedRowsRaw?.results) ? affectedRowsRaw.results : []
-  const affectedSymbols = new Set()
-  const publishedSymbols = new Map()
-  let visibleCount = 0
-  for (const row of affectedRows) {
-    const symbol = normalizeSymbol(row?.gene_symbol || "")
-    const assetSha = normalizeSha256(row?.asset_sha256 || "")
-    if (!symbol || !assetSha) continue
-    affectedSymbols.add(symbol)
-    if (String(row?.status || "") !== "rejected") visibleCount += 1
-    if (Number(row?.is_current || 0) > 0) publishedSymbols.set(symbol, assetSha)
-  }
 
   if (!dryRun) {
     await env.ICONOPLASM_DB.prepare(
@@ -6142,39 +6118,6 @@ async function blacklistArtistStyle(
     )
       .bind(artistTagNorm, artistNameNorm, reasonNorm, actorNorm)
       .run()
-
-    await env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_portrait_assets
-       SET status = 'rejected',
-           is_stale = 0,
-           is_legacy = 0,
-           autopick_eligible = 0
-       WHERE lower(COALESCE(artist_tag, '')) = ?`,
-    )
-      .bind(artistTagNorm)
-      .run()
-  }
-
-  const promotions = []
-  const unpublished = []
-  for (const [symbol, assetSha] of publishedSymbols.entries()) {
-    if (dryRun) continue
-    const promoteResult = await autoPromoteTopVotedPortrait(env, {
-      symbol,
-      actorId: actorNorm,
-      reason: `artist_style_blacklist:${artistTagNorm}`,
-    })
-    if (promoteResult?.changed) {
-      promotions.push({ symbol, ...promoteResult })
-      continue
-    }
-    const unpublishResult = await unpublishCurrentPortrait(env, {
-      symbol,
-      actorId: actorNorm,
-      reason: reasonNorm,
-      fromAssetSha256: assetSha,
-    })
-    unpublished.push({ symbol, ...unpublishResult })
   }
 
   return {
@@ -6182,15 +6125,15 @@ async function blacklistArtistStyle(
     dry_run: dryRun,
     artist_tag: artistTagNorm,
     artist_name: artistNameNorm,
-    affected_symbols: Array.from(affectedSymbols),
-    affected_assets: affectedRows.length,
-    affected_visible_assets: visibleCount,
-    affected_genes: affectedSymbols.size,
-    affected_live_genes: publishedSymbols.size,
-    promoted_genes: promotions.length,
-    unpublished_genes: unpublished.length,
-    promotions,
-    unpublished,
+    affected_symbols: [],
+    affected_assets: 0,
+    affected_visible_assets: 0,
+    affected_genes: 0,
+    affected_live_genes: 0,
+    promoted_genes: 0,
+    unpublished_genes: 0,
+    promotions: [],
+    unpublished: [],
   }
 }
 
@@ -9097,7 +9040,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     }
 
     if (path === "/api/iconoplasm/artist-blacklist-submissions" && request.method === "POST") {
-      const rl = rateLimit(request, "artist_blacklist_submission", 5)
+      const adminSubmitter = await isIconoplasmAdmin(request, env)
+      const rl = adminSubmitter
+        ? { retryAfterSeconds: null, headers: {} }
+        : rateLimit(request, "artist_blacklist_submission", 5)
       if (rl.retryAfterSeconds !== null) {
         return done(
           "artist_blacklist_submission_429",
@@ -9142,7 +9088,20 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (!artistNameInput) {
         return done(
           "artist_blacklist_submission_400",
-          json({ error: "Missing artist name or @tag" }, 400, { ...rl.headers }),
+          json({ error: "Missing artist tag" }, 400, { ...rl.headers }),
+        )
+      }
+      if (/\s/.test(artistNameInput)) {
+        return done(
+          "artist_blacklist_submission_400",
+          json({ error: "Artist tags cannot contain spaces. Example: @artist_(name)" }, 400, { ...rl.headers }),
+        )
+      }
+      const artistTagInput = normalizeArtistTag(artistNameInput)
+      if (!artistTagInput || artistTagInput !== artistNameInput) {
+        return done(
+          "artist_blacklist_submission_400",
+          json({ error: "Use the exact artist tag. Example: @artist_(name)" }, 400, { ...rl.headers }),
         )
       }
 
@@ -9158,12 +9117,15 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
       }
 
-      const requesterId = await buildArtistBlacklistRequesterId(request)
+      const requesterId = adminSubmitter
+        ? "admin_artist_blacklist"
+        : await buildArtistBlacklistRequesterId(request)
       const result = await queueArtistBlacklistSubmission(env, {
-        artistNameInput,
+        artistNameInput: artistTagInput,
         requestedBy: requesterId,
-        source: "public_form",
+        source: adminSubmitter ? "admin_form" : "public_form",
         turnstilePassed: turnstile.passed,
+        enforceRequesterLock: !adminSubmitter,
       })
       if (!result) {
         return done(
@@ -10503,19 +10465,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             optionalInt(
               item?.candidate_image_id ?? item?.emulsion_id ?? existingAsset?.candidate_image_id,
             ) || null
-          const artistTag =
-            normalizeArtistTag(
-              item?.artist_tag || item?.artistTag || existingAsset?.artist_tag || "",
-            ) || null
-          const artistName =
-            sanitizeText(
-              item?.artist_name || item?.artistName || existingAsset?.artist_name || "",
-              255,
-            ) || null
-          const blacklistRow =
-            (artistTag && prefetchedBlacklistRows.get(artistTag)) ||
-            (artistTag ? await getArtistStyleBlacklistRow(env, artistTag) : null)
-          const blacklisted = Boolean(blacklistRow)
+          const artistTag = null
+          const artistName = null
+          const blacklisted = false
           const width = optionalInt(item?.width ?? fullPayload?.width)
           const height = optionalInt(item?.height ?? fullPayload?.height)
           const bytes = optionalInt(item?.bytes ?? fullPayload?.bytes ?? fullBytes?.byteLength)
@@ -10567,8 +10519,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  is_legacy=0,
                  vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
                  candidate_image_id=COALESCE(excluded.candidate_image_id, icono_portrait_assets.candidate_image_id),
-                 artist_tag=COALESCE(excluded.artist_tag, icono_portrait_assets.artist_tag),
-                 artist_name=COALESCE(excluded.artist_name, icono_portrait_assets.artist_name),
+                  artist_tag=NULL,
+                  artist_name=NULL,
                  created_by=COALESCE(excluded.created_by, icono_portrait_assets.created_by)`,
             )
               .bind(

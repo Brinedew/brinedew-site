@@ -15,7 +15,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Blocklist artist style</title>
+  <title>Blocklist artist tag</title>
   ${
     turnstileConfigured
       ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
@@ -245,17 +245,17 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
   <main class="wrap">
     <section class="hero">
       <div class="kicker">Iconoplasm opt-out</div>
-      <h1>Blocklist an artist style.</h1>
+      <h1>Blocklist an artist tag.</h1>
       <p class="lede">
-        If an Iconoplasm image looks like your style, enter your name or @tag and send it.
+        If an Iconoplasm image matches your style, send the artist tag exactly as shown on the site.
       </p>
     </section>
 
     <section class="panel">
       <form id="blacklist-form">
         <label>
-          Artist name or @tag
-          <input id="artist-input" name="artist-input" type="text" maxlength="255" autocomplete="off" placeholder="Loish or @loish" required />
+          Artist tag
+          <input id="artist-input" name="artist-input" type="text" maxlength="255" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="@artist_(name)" required />
         </label>
 
         <div class="honeypot" aria-hidden="true">
@@ -273,7 +273,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
 
         <div class="actions">
           <button id="submit-btn" type="submit">Submit blocklist request</button>
-          <div class="help">Use the name or @tag from the style list.</div>
+          <div class="help">Use the exact tag from the emulsion or style list. Spaces are not allowed.</div>
         </div>
 
         <div id="status" class="status" data-tone="neutral">Nothing submitted yet.</div>
@@ -295,6 +295,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
       var submitBtn = document.getElementById('submit-btn');
       var status = document.getElementById('status');
       var turnstileConfigured = ${turnstileConfigured ? "true" : "false"};
+      var artistTagPattern = /^@[a-z0-9()_-]{1,254}$/i;
 
       function setStatus(message, tone) {
         status.textContent = String(message || '');
@@ -305,7 +306,17 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
         event.preventDefault();
         var artistName = String(artistInput.value || '').trim();
         if (!artistName) {
-          setStatus('Enter the artist name or @tag first.', 'error');
+          setStatus('Enter the artist tag first. Example: @artist_(name)', 'error');
+          artistInput.focus();
+          return;
+        }
+        if (/\\s/.test(artistName)) {
+          setStatus('Artist tags cannot contain spaces. Example: @artist_(name)', 'error');
+          artistInput.focus();
+          return;
+        }
+        if (!artistTagPattern.test(artistName)) {
+          setStatus('Use the exact artist tag. Example: @artist_(name)', 'error');
           artistInput.focus();
           return;
         }

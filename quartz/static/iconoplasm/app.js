@@ -51,6 +51,8 @@ void syncSharedIconoplasmSettings().catch(function () {
   var portraitDetailPromiseCache = Object.create(null)
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
+  var portraitRetainedImageCache = Object.create(null)
+  var portraitRetainedImageOrder = []
   var homeMasonry = null
   var candidateMasonry = null
   var portraitLightboxCleanup = null
@@ -340,22 +342,52 @@ void syncSharedIconoplasmSettings().catch(function () {
     return photoSwipeModulePromise
   }
 
-  function preloadImage(url) {
+  function rememberRetainedPortraitImage(url, img) {
     var resolvedUrl = String(url || "").trim()
+    if (!resolvedUrl || !img) return
+    if (!portraitRetainedImageCache[resolvedUrl]) {
+      portraitRetainedImageOrder.push(resolvedUrl)
+    }
+    portraitRetainedImageCache[resolvedUrl] = img
+    while (portraitRetainedImageOrder.length > 12) {
+      var evictedUrl = portraitRetainedImageOrder.shift()
+      if (!evictedUrl) continue
+      delete portraitRetainedImageCache[evictedUrl]
+    }
+  }
+
+  function preloadImage(url, options) {
+    var resolvedUrl = String(url || "").trim()
+    var opts = options || {}
     if (!resolvedUrl) return Promise.resolve("")
     if (portraitImageCache[resolvedUrl]) return Promise.resolve(resolvedUrl)
     if (portraitImagePromiseCache[resolvedUrl]) return portraitImagePromiseCache[resolvedUrl]
 
     portraitImagePromiseCache[resolvedUrl] = new Promise(function (resolve) {
       var img = new Image()
+      var finished = false
+      img.decoding = "async"
       function finish(value) {
+        if (finished) return
+        finished = true
         if (value) portraitImageCache[resolvedUrl] = true
+        if (value && opts.retain) rememberRetainedPortraitImage(resolvedUrl, img)
         delete portraitImagePromiseCache[resolvedUrl]
         resolve(value)
       }
       img.addEventListener(
         "load",
         function () {
+          if (typeof img.decode === "function") {
+            img.decode()
+              .catch(function () {
+                return null
+              })
+              .finally(function () {
+                finish(resolvedUrl)
+              })
+            return
+          }
           finish(resolvedUrl)
         },
         { once: true },
@@ -2994,6 +3026,16 @@ void syncSharedIconoplasmSettings().catch(function () {
     wireCandidateRemoveButtons(container, g)
     applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
     refreshPortraitLightbox()
+    var fullPortraitUrl = publishedPortraitUrl(g, "full")
+    if (fullPortraitUrl) {
+      // The gene page already knows which full-size portrait the lightbox will open. Warm it
+      // after the main view settles so the first zoom avoids an on-demand fetch, and keep a small
+      // retained image cache so reopening the same portrait is less likely to flash a loader just
+      // to rebuild and decode a fresh <img> element.
+      deferWork(function () {
+        void preloadImage(fullPortraitUrl, { retain: true })
+      })
+    }
   }
 
   /* ─── Rendering: 404 ─── */
