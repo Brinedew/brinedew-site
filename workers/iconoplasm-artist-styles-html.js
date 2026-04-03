@@ -15,7 +15,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Blacklist artist style</title>
+  <title>Blocklist artist style</title>
   ${
     turnstileConfigured
       ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
@@ -245,7 +245,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
   <main class="wrap">
     <section class="hero">
       <div class="kicker">Iconoplasm opt-out</div>
-      <h1>Blacklist an artist style.</h1>
+      <h1>Blocklist an artist style.</h1>
       <p class="lede">
         If an Iconoplasm image looks like your style, enter your name or @tag and send it.
       </p>
@@ -272,7 +272,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
         }
 
         <div class="actions">
-          <button id="submit-btn" type="submit">Submit blacklist request</button>
+          <button id="submit-btn" type="submit">Submit blocklist request</button>
           <div class="help">Use the name or @tag from the style list.</div>
         </div>
 
@@ -318,7 +318,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
         }
 
         submitBtn.disabled = true;
-        setStatus('Submitting blacklist request...', 'neutral');
+        setStatus('Submitting blocklist request...', 'neutral');
 
         try {
           var resp = await fetch('/api/iconoplasm/artist-blacklist-submissions', {
@@ -343,8 +343,8 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
             throw new Error(String((data && data.error) || ('HTTP ' + resp.status)));
           }
 
-          setStatus(data && data.duplicate ? 'That name was already submitted.' : 'Thanks. We got it.', 'ok');
-          if (!data || !data.duplicate) {
+          setStatus('Thanks. We got it.', 'ok');
+          if (!data || data.accepted !== false) {
             form.reset();
           }
           if (turnstileConfigured && window.turnstile && typeof window.turnstile.reset === 'function') {

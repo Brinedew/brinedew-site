@@ -148,14 +148,12 @@ function normalizeUserId(raw) {
 }
 
 // Public blacklist submissions should not store raw visitor IPs in D1.
-// We still need a stable guest identity though, otherwise one visitor can fire
-// off several different names and bypass the duplicate check just by changing
-// the artist input each time. Hash IP + user-agent into a short guest token so
-// we can enforce "one live request at a time" without keeping plain IPs.
+// Use an IP-only guest bucket here so switching browsers does not create a new
+// submission identity. This is still anonymous, but it matches the product
+// rule better than the earlier IP+UA hybrid.
 async function buildArtistBlacklistRequesterId(request) {
   const ip = sanitizeText(request?.headers?.get("CF-Connecting-IP") || "", 64) || "unknown"
-  const userAgent = sanitizeText(request?.headers?.get("User-Agent") || "", 255) || "unknown"
-  const digest = await sha256Hex(`artist-blacklist-guest-v1\n${ip}\n${userAgent}`)
+  const digest = await sha256Hex(`artist-blacklist-guest-v2\n${ip}`)
   return normalizeUserId(`guest_${digest.slice(0, 24)}`)
 }
 
@@ -182,6 +180,20 @@ function normalizeArtistTag(raw) {
   const withAt = base.startsWith("@") ? base : `@${base}`
   if (!/^@[a-z0-9()_-]{1,254}$/i.test(withAt)) return null
   return withAt.slice(0, 255)
+}
+
+function normalizeArtistStylesPageHtml(html) {
+  const source = String(html || "")
+  // Deployment reality has been annoyingly sticky here: the route has kept
+  // serving an older inline submit handler even after the template module was
+  // edited. Normalize the critical anti-abuse copy at response time so repeat
+  // submitters always see the same generic success state instead of an oracle.
+  return source
+    .replace(
+      "setStatus(data && data.duplicate ? 'That name was already submitted.' : 'Thanks. We got it.', 'ok');",
+      "setStatus('Thanks. We got it.', 'ok');",
+    )
+    .replace("if (!data || !data.duplicate) {", "if (!data || data.accepted !== false) {")
 }
 
 export function isRandomArtistMetavisionId(raw) {
@@ -9161,16 +9173,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
       if (result.requesterLocked) {
         return done(
-          "artist_blacklist_submission_409",
+          "artist_blacklist_submission_repeat",
           json(
             {
-              error: "You already sent a blacklist request. We only allow one submission per person.",
-              ok: false,
+              ok: true,
               queued: false,
+              accepted: false,
+              ignored: true,
               requesterLocked: true,
               request: result.request,
             },
-            409,
+            200,
             { "Cache-Control": "no-store", ...rl.headers },
           ),
         )
@@ -9182,6 +9195,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             ok: true,
             queued: Boolean(result.queued),
             duplicate: Boolean(result.duplicate),
+            accepted: Boolean(result.queued),
+            ignored: Boolean(result.duplicate),
             requesterLocked: Boolean(result.requesterLocked),
             request: result.request,
           },
@@ -9192,15 +9207,14 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     }
 
     if (path === "/artist-styles") {
+      const artistStylesHtml = normalizeArtistStylesPageHtml(
+        renderIconoplasmArtistStylesHtml({
+          turnstileSiteKey: sanitizeText(env.ICONOPLASM_TURNSTILE_SITE_KEY || "", 255) || "",
+        }),
+      )
       return done(
         "artist_styles_page",
-        html(
-          renderIconoplasmArtistStylesHtml({
-            turnstileSiteKey: sanitizeText(env.ICONOPLASM_TURNSTILE_SITE_KEY || "", 255) || "",
-          }),
-          200,
-          { "Cache-Control": "no-store" },
-        ),
+        html(artistStylesHtml, 200, { "Cache-Control": "no-store" }),
       )
     }
 
