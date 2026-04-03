@@ -155,3 +155,30 @@ test("admin blacklist submissions can queue multiple tags from the same account"
     ["admin_form", "admin_form"],
   )
 })
+
+test("admin artist-style remove keeps the provided artist name", async () => {
+  const env = buildEnv()
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/artist-styles/remove", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer secret-admin-token",
+      },
+      body: JSON.stringify({
+        artist_tag: "@a1bg_artist",
+        artist_name: "A1BG Artist",
+        dry_run: true,
+      }),
+    }),
+    env,
+    {},
+  )
+
+  const json = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(json.ok, true)
+  assert.equal(json.artist_tag, "@a1bg_artist")
+  assert.equal(json.artist_name, "A1BG Artist")
+})

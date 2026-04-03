@@ -6095,7 +6095,18 @@ async function blacklistArtistStyle(
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const artistTagNorm = normalizeArtistTag(artistTag)
   if (!artistTagNorm) throw new Error("Missing or invalid artist_tag")
-  const artistNameNorm = null
+  let artistNameNorm = sanitizeText(artistName || "", 255) || ""
+  if (!artistNameNorm) {
+    const existingArtist = await env.ICONOPLASM_DB.prepare(
+      `SELECT MAX(NULLIF(artist_name, '')) AS artist_name
+       FROM icono_portrait_assets
+       WHERE lower(COALESCE(artist_tag, '')) = ?`,
+    )
+      .bind(artistTagNorm)
+      .first()
+    artistNameNorm = sanitizeText(existingArtist?.artist_name || "", 255) || ""
+  }
+  const artistNameValue = artistNameNorm || null
   const actorNorm = normalizeUserId(actorId || "artist_style_blacklist")
   const reasonNorm =
     sanitizeText(reason || "", 2000) || `Removed blacklisted artist style ${artistTagNorm}`
@@ -6116,7 +6127,7 @@ async function blacklistArtistStyle(
          created_by = excluded.created_by,
          updated_at = CURRENT_TIMESTAMP`,
     )
-      .bind(artistTagNorm, artistNameNorm, reasonNorm, actorNorm)
+      .bind(artistTagNorm, artistNameValue, reasonNorm, actorNorm)
       .run()
   }
 
