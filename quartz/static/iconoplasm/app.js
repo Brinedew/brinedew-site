@@ -31,6 +31,23 @@ void syncSharedIconoplasmSettings().catch(function () {
   var HOME_COLLECTION_PAGE_SIZE = 24
   var HOME_COLLECTION_INITIAL_PAGE_SIZE = 12
   var HOME_COLLECTION_DEFAULT_ORDER = "recent"
+  var GUEST_STARTER_GENES = [
+    {
+      gene_symbol: "INS",
+      first_discovered_at: "2026-01-03T00:00:00.000Z",
+      last_encountered_at: "2026-01-03T00:00:00.000Z",
+    },
+    {
+      gene_symbol: "LEP",
+      first_discovered_at: "2026-01-02T00:00:00.000Z",
+      last_encountered_at: "2026-01-02T00:00:00.000Z",
+    },
+    {
+      gene_symbol: "GCG",
+      first_discovered_at: "2026-01-01T00:00:00.000Z",
+      last_encountered_at: "2026-01-01T00:00:00.000Z",
+    },
+  ]
   var HOME_LAYOUT_DEFAULT = "bricks"
   var CARD_VARIANT_DEFAULT = "simple"
   var HOME_SKELETON_CARD_COUNT = 4
@@ -922,6 +939,17 @@ void syncSharedIconoplasmSettings().catch(function () {
     return sorted
   }
 
+  function guestStarterDiscoveryEntries() {
+    // Guests need a starter trio so the collection mechanic begins with a recognizable shape
+    // instead of a blank wall. Keep these concrete and culturally familiar rather than only
+    // biomed-famous.
+    return normalizeDiscoveryEntries(
+      GUEST_STARTER_GENES.map(function (entry) {
+        return Object.assign({ encounter_count: 1 }, entry)
+      }),
+    )
+  }
+
   function fallbackDiscoveredGene(entry) {
     var symbol = normalizedSymbol(entry && entry.gene_symbol)
     return {
@@ -954,7 +982,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     var primaryNote = discoveredCount
       ? collectionState && collectionState.authenticated
         ? "Every confirmed hover lands here automatically, newest encounters first."
-        : "You can browse the catalog signed out, but synced discoveries need a login."
+        : "Guests start with insulin, leptin, and glucagon. Sign in to keep collecting."
       : collectionState && collectionState.authenticated
         ? "Your first confirmed hover will start the shelf. Search above while you wait."
         : "Sign in to keep discoveries synced between the extension and the website."
@@ -2719,7 +2747,9 @@ void syncSharedIconoplasmSettings().catch(function () {
           var discoveryData = results[0] || {}
           var countData = results[1] || {}
           galleryState.authenticated = !!discoveryData.authenticated
-          galleryState.discoveryEntries = normalizeDiscoveryEntries(discoveryData.discoveries)
+          galleryState.discoveryEntries = galleryState.authenticated
+            ? normalizeDiscoveryEntries(discoveryData.discoveries)
+            : guestStarterDiscoveryEntries()
           galleryState.total = Math.max(0, Number(countData.total || 0) || 0)
           galleryState.publishedTotal = Math.max(0, Number(countData.publishedTotal || 0) || 0)
           galleryState.sortedDiscoveries = sortDiscoveryEntries(
