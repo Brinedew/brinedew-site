@@ -39,7 +39,13 @@ class FakeDiscoveryStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
-    if (this.sql.includes("FROM icono_gene_discoveries")) {
+    if (this.sql.includes("FROM icono_gene_catalog gc")) {
+      const [userId] = this.args
+      return {
+        results: this.db.listAllCatalogDiscoveries(userId),
+      }
+    }
+    if (this.sql.includes("FROM icono_gene_discoveries d")) {
       const [userId] = this.args
       return {
         results: this.db.listDiscoveries(userId),
@@ -54,6 +60,13 @@ class FakeDiscoveryDb {
     this.calls = []
     this.rows = new Map()
     this.tick = 0
+    this.geneNames = new Map([
+      ["TP53", "Tumor protein p53"],
+      ["BRCA1", "BRCA1 DNA repair associated"],
+      ["EGFR", "Epidermal growth factor receptor"],
+      ["FURIN", "Furin"],
+      ["NRM", "Nurim"],
+    ])
   }
 
   prepare(sql) {
@@ -81,7 +94,33 @@ class FakeDiscoveryDb {
         return String(left.first_discovered_at || "").localeCompare(String(right.first_discovered_at || "")) ||
           String(left.gene_symbol || "").localeCompare(String(right.gene_symbol || ""))
       })
-      .map((row) => ({ ...row }))
+      .map((row) => ({
+        ...row,
+        full_name:
+          this.geneNames.get(String(row.gene_symbol || "").toUpperCase()) ||
+          String(row.gene_symbol || "").toUpperCase(),
+      }))
+  }
+
+  listAllCatalogDiscoveries(userId) {
+    return Array.from(this.geneNames.entries())
+      .sort((left, right) => String(left[0] || "").localeCompare(String(right[0] || "")))
+      .map(([geneSymbol, fullName]) => {
+        const existing = this.getDiscovery(userId, geneSymbol)
+        return {
+          gene_symbol: geneSymbol,
+          full_name: fullName,
+          first_discovered_at: existing?.first_discovered_at || "",
+          last_encountered_at: existing?.last_encountered_at || "",
+          encounter_count: existing?.encounter_count || 0,
+          first_source: existing?.first_source || "",
+          last_source: existing?.last_source || "",
+          first_trigger: existing?.first_trigger || "",
+          last_trigger: existing?.last_trigger || "",
+          first_dwell_ms: existing?.first_dwell_ms ?? null,
+          last_dwell_ms: existing?.last_dwell_ms ?? null,
+        }
+      })
   }
 
   insertDiscovery(args) {
@@ -146,6 +185,7 @@ function buildEnv({ sessions } = {}) {
   return {
     ICONOPLASM_DB: new FakeDiscoveryDb(),
     GAME_SESSIONS: new FakeGameSessions(sessions),
+    ICONOPLASM_ADMIN_TOKEN: "admin-token",
   }
 }
 
@@ -266,6 +306,64 @@ test("discoveries me returns the signed-in user's discovered symbols", async () 
   assert.equal(payload?.authenticated, true)
   assert.deepEqual(payload?.discovered_symbols, ["TP53", "BRCA1"])
   assert.equal(payload?.discovered_count, 2)
+  assert.equal(payload?.discoveries?.[0]?.full_name, "Tumor protein p53")
+  assert.equal(payload?.show_all_applied, false)
+})
+
+test("discoveries me ignores show-all requests from non-admin users", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "alex" },
+    },
+  })
+  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
+      method: "GET",
+      headers: { Cookie: "session=abc" },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.show_all_requested, true)
+  assert.equal(payload?.show_all_applied, false)
+  assert.deepEqual(payload?.discovered_symbols, ["TP53"])
+})
+
+test("discoveries me lets admins override their shelf with the full catalog", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "alex" },
+    },
+  })
+  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
+      method: "GET",
+      headers: {
+        Cookie: "session=abc",
+        "x-iconoplasm-admin-token": "admin-token",
+      },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.show_all_requested, true)
+  assert.equal(payload?.show_all_applied, true)
+  assert.equal(payload?.discovered_count, 5)
+  assert.ok(payload?.discovered_symbols.includes("FURIN"))
+  assert.equal(
+    payload?.discoveries?.find((row) => row.gene_symbol === "TP53")?.full_name,
+    "Tumor protein p53",
+  )
 })
 
 test("discoveries merge upserts guest-local symbols into the signed-in account", async () => {

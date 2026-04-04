@@ -15,6 +15,8 @@ Source for my personal site. Wet lab biologist, interested in aging and cancer, 
 
 For Iconoplasm specifically, this repo is the website/runtime side, not the local authoring workstation. If published catalog data, alias export, or Website Ops payloads look wrong, start in `d:\Coding\Datasets\iconoplasm` first. That sibling repo is the control plane that publishes what this website and the browser extension consume.
 
+If you need to answer a data question from the live Iconoplasm database, do not re-derive the retrieval steps from scratch. Start with `docs/ICONOPLASM_OPERATIONS.md`, which has the remote D1 query workflow, the tables that matter, and a canned example for shortest-name lookups.
+
 ## how it works
 
 Obsidian vault in `content/`, Quartz builds static HTML, Cloudflare Pages serves static assets, and the Cloudflare Worker handles API + cron.

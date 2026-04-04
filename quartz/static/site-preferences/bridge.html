@@ -14,6 +14,8 @@
         var STORAGE_KEY = "brinedew.iconoplasm.settings.v1"
         var DEFAULTS = {
           homeLayout: "bricks",
+          cardVariant: "simple",
+          showAllGenes: false,
           generationProvider: "openai-compatible",
           generationApiKey: "",
           generationModel: "",
@@ -26,6 +28,24 @@
             .toLowerCase() === "masonry"
             ? "masonry"
             : "bricks"
+        }
+
+        function normalizeCardVariant(variant) {
+          var value = String(variant || "")
+            .trim()
+            .toLowerCase()
+          if (value === "image-only") return "image-only"
+          if (value === "lab-label" || value === "lit-archival") return "lit-archival"
+          if (value === "classic" || value === "simple") return "simple"
+          return DEFAULTS.cardVariant
+        }
+
+        function normalizeBooleanSetting(value) {
+          if (value === true) return true
+          var normalized = String(value || "")
+            .trim()
+            .toLowerCase()
+          return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on"
         }
 
         function normalizeGenerationProvider(provider) {
@@ -48,6 +68,8 @@
           var source = raw && typeof raw === "object" ? raw : {}
           return {
             homeLayout: normalizeHomeLayout(source.homeLayout),
+            cardVariant: normalizeCardVariant(source.cardVariant),
+            showAllGenes: normalizeBooleanSetting(source.showAllGenes),
             generationProvider: normalizeGenerationProvider(source.generationProvider),
             generationApiKey: trimStoredValue(source.generationApiKey, 800),
             generationModel: trimStoredValue(source.generationModel, 200),

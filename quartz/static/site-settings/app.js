@@ -35,6 +35,22 @@ import {
     { value: "custom", label: "Custom endpoint" },
   ]
   var currentUser = null
+  var currentUserIsIconoAdmin = false
+
+  function fetchIconoplasmAdminState() {
+    return fetch("/api/iconoplasm/admin/me", {
+      credentials: "include",
+    })
+      .then(function (response) {
+        if (!response.ok) return { authenticated: false, is_admin: false, user: null }
+        return response.json().catch(function () {
+          return { authenticated: false, is_admin: false, user: null }
+        })
+      })
+      .catch(function () {
+        return { authenticated: false, is_admin: false, user: null }
+      })
+  }
 
   function esc(value) {
     var node = document.createElement("div")
@@ -169,7 +185,15 @@ import {
     wireSharedUserPanel(stack, {
       onAuthChanged: function (user) {
         currentUser = user
-        render()
+        void fetchIconoplasmAdminState()
+          .then(function (state) {
+            currentUserIsIconoAdmin = !!(state && state.is_admin)
+            render()
+          })
+          .catch(function () {
+            currentUserIsIconoAdmin = false
+            render()
+          })
       },
     })
     return stack
@@ -235,6 +259,15 @@ import {
       esc(snapshot.iconoplasm.generationEndpoint) +
       '" placeholder="Optional override">' +
       "</label>" +
+      (currentUserIsIconoAdmin
+        ? '<label class="site-settings-toggle" for="site-settings-show-all-genes">' +
+          '<input id="site-settings-show-all-genes" type="checkbox"' +
+          (snapshot.iconoplasm.showAllGenes ? " checked" : "") +
+          ">" +
+          '<span><span class="site-settings-toggle-title">Show all genes</span>' +
+          '<span class="site-settings-toggle-note">Override your personal discovery shelf in this browser and treat the whole catalog as unlocked until you turn this back off.</span></span>' +
+          "</label>"
+        : "") +
       "</div>" +
       "</div>" +
       "</section>" +
@@ -260,6 +293,7 @@ import {
     var apiKeyEl = document.getElementById("site-settings-api-key")
     var modelEl = document.getElementById("site-settings-model")
     var endpointEl = document.getElementById("site-settings-endpoint")
+    var showAllGenesEl = document.getElementById("site-settings-show-all-genes")
     var toggleBtn = document.getElementById("site-settings-api-key-toggle")
     var saveBtn = document.getElementById("site-settings-save")
     var resetBtn = document.getElementById("site-settings-reset")
@@ -289,6 +323,7 @@ import {
         iconoplasm: buildIconoplasmSettings({
           homeLayout: layoutEl && layoutEl.value,
           cardVariant: cardVariantEl && cardVariantEl.value,
+          showAllGenes: showAllGenesEl ? showAllGenesEl.checked : snapshot.iconoplasm.showAllGenes,
           generationProvider: providerEl && providerEl.value,
           generationApiKey: apiKeyEl && apiKeyEl.value,
           generationModel: modelEl && modelEl.value,
@@ -329,6 +364,7 @@ import {
     bindDirtyTracking(apiKeyEl)
     bindDirtyTracking(modelEl)
     bindDirtyTracking(endpointEl)
+    bindDirtyTracking(showAllGenesEl)
 
     if (saveBtn) {
       saveBtn.addEventListener("click", function () {
@@ -376,13 +412,20 @@ import {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
     render()
-    void fetchAuthenticatedUser()
-      .then(function (user) {
-        currentUser = user
+    void Promise.all([
+      fetchAuthenticatedUser().catch(function () {
+        return null
+      }),
+      fetchIconoplasmAdminState(),
+    ])
+      .then(function (results) {
+        currentUser = results[0] || null
+        currentUserIsIconoAdmin = !!(results[1] && results[1].is_admin)
         render()
       })
       .catch(function () {
         currentUser = null
+        currentUserIsIconoAdmin = false
       })
   }
 

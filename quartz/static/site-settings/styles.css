@@ -137,6 +137,38 @@
   letter-spacing: 0.01em;
 }
 
+.site-settings-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: start;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--light) 92%, transparent);
+}
+
+.site-settings-toggle input {
+  margin-top: 0.1rem;
+  inline-size: 1rem;
+  block-size: 1rem;
+  accent-color: var(--accent);
+}
+
+.site-settings-toggle-title {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--dark);
+  font-weight: 600;
+}
+
+.site-settings-toggle-note {
+  display: block;
+  color: var(--secondary, var(--darkgray));
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
 .site-settings-input,
 .site-settings-select {
   width: 100%;

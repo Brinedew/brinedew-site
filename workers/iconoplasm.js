@@ -169,6 +169,13 @@ function normalizeDiscoveryTrigger(raw) {
   return null
 }
 
+function normalizeBooleanQueryFlag(raw) {
+  const value = String(raw || "")
+    .trim()
+    .toLowerCase()
+  return value === "1" || value === "true" || value === "yes" || value === "on"
+}
+
 function normalizeDiscoveryDwellMs(raw) {
   const dwellMs = optionalInt(raw)
   if (dwellMs == null) return null
@@ -620,6 +627,7 @@ function mapGenerationRequestRow(row) {
 function mapGeneDiscoveryRow(row) {
   return {
     gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+    full_name: sanitizeText(row?.full_name || "", 255) || "",
     first_discovered_at: sanitizeText(row?.first_discovered_at || "", 64) || "",
     last_encountered_at: sanitizeText(row?.last_encountered_at || "", 64) || "",
     encounter_count: Math.max(0, Number.parseInt(String(row?.encounter_count || "0"), 10) || 0),
@@ -969,10 +977,48 @@ async function listUserGeneDiscoveries(env, { userId, limit = 5000 } = {}) {
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
   const cleanedLimit = Math.max(1, Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000))
   const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
-     FROM icono_gene_discoveries
-     WHERE user_id = ?
-     ORDER BY first_discovered_at ASC, upper(gene_symbol) ASC
+    `SELECT
+       d.*,
+       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name
+     FROM icono_gene_discoveries d
+     LEFT JOIN icono_gene_essence ge
+       ON upper(ge.gene_symbol) = upper(d.gene_symbol)
+     LEFT JOIN icono_gene_catalog gc
+       ON upper(gc.gene_symbol) = upper(d.gene_symbol)
+     WHERE d.user_id = ?
+     ORDER BY d.first_discovered_at ASC, upper(d.gene_symbol) ASC
+     LIMIT ?`,
+  )
+    .bind(userIdNorm, cleanedLimit)
+    .all()
+  return (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow)
+}
+
+async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const userIdNorm = normalizeUserId(userId || "")
+  if (!userIdNorm || isGuestUserId(userIdNorm)) return []
+  const cleanedLimit = Math.max(1, Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000))
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       gc.gene_symbol,
+       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(gc.gene_symbol)) AS full_name,
+       d.first_discovered_at,
+       d.last_encountered_at,
+       COALESCE(d.encounter_count, 0) AS encounter_count,
+       COALESCE(d.first_source, '') AS first_source,
+       COALESCE(d.last_source, '') AS last_source,
+       COALESCE(d.first_trigger, '') AS first_trigger,
+       COALESCE(d.last_trigger, '') AS last_trigger,
+       d.first_dwell_ms,
+       d.last_dwell_ms
+     FROM icono_gene_catalog gc
+     LEFT JOIN icono_gene_essence ge
+       ON upper(ge.gene_symbol) = upper(gc.gene_symbol)
+     LEFT JOIN icono_gene_discoveries d
+       ON d.user_id = ?
+      AND upper(d.gene_symbol) = upper(gc.gene_symbol)
+     ORDER BY upper(gc.gene_symbol) ASC
      LIMIT ?`,
   )
     .bind(userIdNorm, cleanedLimit)
@@ -8336,7 +8382,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
       }
       const userId = normalizeUserId(sessionUser.user_id)
-      const discoveries = await listUserGeneDiscoveries(env, { userId })
+      const showAllRequested = normalizeBooleanQueryFlag(url.searchParams.get("show_all"))
+      const showAllApplied = showAllRequested && (await isIconoplasmAdmin(request, env))
+      const discoveries = showAllApplied
+        ? await listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit: 10000 })
+        : await listUserGeneDiscoveries(env, { userId })
       return done(
         "discoveries_me",
         json(
@@ -8348,6 +8398,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               username: sessionUser.username || null,
             },
             discoveries,
+            show_all_requested: showAllRequested,
+            show_all_applied: showAllApplied,
             discovered_symbols: discoveries.map((row) => row.gene_symbol).filter(Boolean),
             discovered_count: discoveries.length,
           },

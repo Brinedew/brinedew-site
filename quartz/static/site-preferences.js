@@ -12,6 +12,7 @@ var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
   homeLayout: "bricks",
   cardVariant: "simple",
+  showAllGenes: false,
   generationProvider: GENERATION_PROVIDER_DEFAULT,
   generationApiKey: "",
   generationModel: "",
@@ -47,6 +48,14 @@ function normalizeGenerationProvider(provider) {
     .toLowerCase()
   if (["openai-compatible", "replicate", "gemini", "custom"].indexOf(value) >= 0) return value
   return GENERATION_PROVIDER_DEFAULT
+}
+
+function normalizeBooleanSetting(value) {
+  if (value === true) return true
+  var normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on"
 }
 
 function trimStoredValue(value, maxLength) {
@@ -465,6 +474,7 @@ export function buildIconoplasmSettings(raw) {
   return {
     homeLayout: normalizeHomeLayout(source.homeLayout),
     cardVariant: normalizeCardVariant(source.cardVariant),
+    showAllGenes: normalizeBooleanSetting(source.showAllGenes),
     generationProvider: normalizeGenerationProvider(source.generationProvider),
     generationApiKey: trimStoredValue(source.generationApiKey, 800),
     generationModel: trimStoredValue(source.generationModel, 200),

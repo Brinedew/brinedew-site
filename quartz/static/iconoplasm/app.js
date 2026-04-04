@@ -3,6 +3,12 @@ import {
   syncSharedIconoplasmSettings,
 } from "../site-preferences.js?v=20260309e"
 import {
+  HOME_COLLECTION_ORDERS,
+  normalizeDiscoveryEntries,
+  normalizeHomeCollectionOrder,
+  sortDiscoveryEntries,
+} from "./discovery-collection.js"
+import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
@@ -51,10 +57,6 @@ void syncSharedIconoplasmSettings().catch(function () {
   var HOME_LAYOUT_DEFAULT = "bricks"
   var CARD_VARIANT_DEFAULT = "simple"
   var HOME_SKELETON_CARD_COUNT = 4
-  var HOME_COLLECTION_ORDERS = [
-    { value: "recent", label: "Recently discovered" },
-    { value: "symbol", label: "A–Z" },
-  ]
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
     { value: "uniqueness", label: "Uniqueness" },
@@ -153,7 +155,12 @@ void syncSharedIconoplasmSettings().catch(function () {
   }
 
   function fetchDiscoveryState() {
-    return fetchAuthedJSON("/api/iconoplasm/discoveries/me")
+    var settings = readIconoplasmSettings()
+    var path = "/api/iconoplasm/discoveries/me"
+    if (settings && settings.showAllGenes) {
+      path += "?show_all=1"
+    }
+    return fetchAuthedJSON(path)
   }
 
   function fetchHomeCollectionCounts() {
@@ -874,16 +881,6 @@ void syncSharedIconoplasmSettings().catch(function () {
     return null
   }
 
-  function normalizeHomeCollectionOrder(value) {
-    var candidate = String(value || "")
-      .trim()
-      .toLowerCase()
-    for (var i = 0; i < HOME_COLLECTION_ORDERS.length; i++) {
-      if (HOME_COLLECTION_ORDERS[i].value === candidate) return candidate
-    }
-    return HOME_COLLECTION_DEFAULT_ORDER
-  }
-
   function homeCollectionOptionsMarkup() {
     var html = ""
     for (var i = 0; i < HOME_COLLECTION_ORDERS.length; i++) {
@@ -898,45 +895,6 @@ void syncSharedIconoplasmSettings().catch(function () {
         "</option>"
     }
     return html
-  }
-
-  function parseIsoTimestamp(value) {
-    var parsed = Date.parse(String(value || ""))
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  function normalizeDiscoveryEntries(entries) {
-    var source = Array.isArray(entries) ? entries : []
-    var uniqueSymbols = Object.create(null)
-    var normalized = []
-    for (var i = 0; i < source.length; i++) {
-      var raw = source[i]
-      var symbol = normalizedSymbol(raw && (raw.gene_symbol || raw.symbol))
-      if (!symbol || uniqueSymbols[symbol]) continue
-      uniqueSymbols[symbol] = true
-      normalized.push({
-        gene_symbol: symbol,
-        first_discovered_at: String((raw && raw.first_discovered_at) || "").trim(),
-        last_encountered_at: String((raw && raw.last_encountered_at) || "").trim(),
-        encounter_count: Math.max(0, Number((raw && raw.encounter_count) || 0) || 0),
-      })
-    }
-    return normalized
-  }
-
-  function sortDiscoveryEntries(entries, order) {
-    var sorted = (Array.isArray(entries) ? entries : []).slice()
-    var resolvedOrder = normalizeHomeCollectionOrder(order)
-    sorted.sort(function (a, b) {
-      if (resolvedOrder === "symbol") {
-        return String(a.gene_symbol || "").localeCompare(String(b.gene_symbol || ""))
-      }
-      var aTime = parseIsoTimestamp(a.last_encountered_at || a.first_discovered_at)
-      var bTime = parseIsoTimestamp(b.last_encountered_at || b.first_discovered_at)
-      if (aTime !== bTime) return bTime - aTime
-      return String(a.gene_symbol || "").localeCompare(String(b.gene_symbol || ""))
-    })
-    return sorted
   }
 
   function guestStarterDiscoveryEntries() {
@@ -979,13 +937,15 @@ void syncSharedIconoplasmSettings().catch(function () {
     var remainingCount = totalCount > 0 ? Math.max(0, totalCount - discoveredCount) : 0
     var progressPct = totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = Math.max(progressPct, discoveredCount > 0 ? 2 : 0)
-    var primaryNote = discoveredCount
-      ? collectionState && collectionState.authenticated
+    var primaryNote = collectionState && collectionState.showAllGenes
+      ? "Admin override is showing the full catalog in this browser. Turn it off in Settings to go back to your personal shelf."
+      : discoveredCount
+        ? collectionState && collectionState.authenticated
         ? "Every confirmed hover lands here automatically, newest encounters first."
         : "Guests start with insulin, leptin, and glucagon. Sign in to keep collecting."
-      : collectionState && collectionState.authenticated
-        ? "Your first confirmed hover will start the shelf. Search above while you wait."
-        : "Sign in to keep discoveries synced between the extension and the website."
+        : collectionState && collectionState.authenticated
+          ? "Your first confirmed hover will start the shelf. Search above while you wait."
+          : "Sign in to keep discoveries synced between the extension and the website."
     var progressCopy = totalCount > 0
       ? discoveredCount.toLocaleString() +
         " of " +
@@ -2653,6 +2613,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       ready: false,
       readyPromise: null,
       authenticated: false,
+      showAllGenes: false,
       discoveryEntries: [],
       sortedDiscoveries: [],
     }
@@ -2747,6 +2708,7 @@ void syncSharedIconoplasmSettings().catch(function () {
           var discoveryData = results[0] || {}
           var countData = results[1] || {}
           galleryState.authenticated = !!discoveryData.authenticated
+          galleryState.showAllGenes = !!discoveryData.show_all_applied
           galleryState.discoveryEntries = galleryState.authenticated
             ? normalizeDiscoveryEntries(discoveryData.discoveries)
             : guestStarterDiscoveryEntries()
