@@ -3106,6 +3106,9 @@ void syncSharedIconoplasmSettings().catch(function () {
   var activeHomeRenderCleanup = null
   var queuedHomeHistorySync = null
   var pendingHomeAnchor = null
+  var mobileLabelReviewMode = false
+  var mobileLabelBreakpointObserverStarted = false
+  var queuedMobileLabelBreakpointRefresh = false
 
   function readHistoryState() {
     var state = window.history.state
@@ -3166,6 +3169,55 @@ void syncSharedIconoplasmSettings().catch(function () {
       activeHomeRenderCleanup = null
       cleanup()
     }
+  }
+
+  function reconcileMobileLabelBreakpoint() {
+    if (typeof window === "undefined") return
+    var nextMode = isMobileLabelReviewEnabled()
+    if (nextMode === mobileLabelReviewMode) return
+    mobileLabelReviewMode = nextMode
+    var route = getRoute()
+    if (route.page === "home") {
+      // Card markup chooses between desktop and mobile review modes during render.
+      // If the viewport crosses the breakpoint after first paint, we need a real rerender,
+      // not just CSS, or desktop-built cards stay stuck without mobile review affordances.
+      syncHomeHistoryState(true)
+      render()
+      return
+    }
+    if (route.page === "gene") {
+      rerenderCurrentGeneRoute()
+    }
+  }
+
+  function queueMobileLabelBreakpointRefresh() {
+    if (queuedMobileLabelBreakpointRefresh) return
+    queuedMobileLabelBreakpointRefresh = true
+    var flush = function () {
+      queuedMobileLabelBreakpointRefresh = false
+      reconcileMobileLabelBreakpoint()
+    }
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(flush)
+      return
+    }
+    window.setTimeout(flush, 0)
+  }
+
+  function startMobileLabelBreakpointObserver() {
+    if (mobileLabelBreakpointObserverStarted || typeof window === "undefined") return
+    mobileLabelBreakpointObserverStarted = true
+    mobileLabelReviewMode = isMobileLabelReviewEnabled()
+    var mq = window.matchMedia("(max-width: 720px)")
+    var handleBreakpointChange = function () {
+      queueMobileLabelBreakpointRefresh()
+    }
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", handleBreakpointChange)
+    } else if (typeof mq.addListener === "function") {
+      mq.addListener(handleBreakpointChange)
+    }
+    window.addEventListener("resize", handleBreakpointChange, { passive: true })
   }
 
   function readHomeRestoreState() {
@@ -3239,6 +3291,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   function render() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    mobileLabelReviewMode = isMobileLabelReviewEnabled()
     clearActiveHomeRenderState()
     lastRenderedPath = window.location.pathname + window.location.search
     destroyHomeMasonry()
@@ -3287,6 +3340,7 @@ void syncSharedIconoplasmSettings().catch(function () {
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    startMobileLabelBreakpointObserver()
     replaceHistoryStatePatch({})
     render()
     void refreshSharedUserState()
