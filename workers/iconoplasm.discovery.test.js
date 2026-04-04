@@ -366,6 +366,54 @@ test("discoveries me lets admins override their shelf with the full catalog", as
   )
 })
 
+test("iconoplasm admin me treats the owner Discord session as admin even if the ID secret drifts", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "brinedew" },
+    },
+  })
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/me", {
+      method: "GET",
+      headers: { Cookie: "session=abc" },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.authenticated, true)
+  assert.equal(payload?.is_admin, true)
+  assert.equal(payload?.user?.username, "brinedew")
+})
+
+test("discoveries me accepts show-all from the owner Discord session without an admin token", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "brinedew" },
+    },
+  })
+  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
+      method: "GET",
+      headers: { Cookie: "session=abc" },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.show_all_requested, true)
+  assert.equal(payload?.show_all_applied, true)
+  assert.equal(payload?.discovered_count, 5)
+  assert.ok(payload?.discovered_symbols.includes("FURIN"))
+})
+
 test("discoveries merge upserts guest-local symbols into the signed-in account", async () => {
   const env = buildEnv({
     sessions: {
