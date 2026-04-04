@@ -10821,6 +10821,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const touchedSymbols = new Set(scopeSymbols.length ? scopeSymbols : keep.map((row) => row.symbol))
 
       let rejected = 0
+      let restoredKeep = 0
       let legacyMarked = 0
       let legacyAlreadyMarked = 0
       let autoResolved = 0
@@ -10835,10 +10836,39 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           continue
         }
         const key = `${symbol}|${assetSha}`
-        if (keepSet.has(key)) continue
+        if (keepSet.has(key)) {
+          const status = String(row?.status || "").toLowerCase()
+          const restoreRejectedKeep =
+            status === "rejected" || Number(row?.is_stale || 0) > 0 || Number(row?.is_legacy || 0) > 0
+          if (!restoreRejectedKeep) continue
+          touchedSymbols.add(symbol)
+          restoredKeep += 1
+          if (dryRun) continue
+          // The workstation keep-set is the durable source of truth for which
+          // candidates still exist locally. If a keep-item was previously
+          // rejected by an old reconcile bug, leaving it rejected here makes
+          // every later GUI sync look successful while the public site stays
+          // quietly wrong. Restore these keep-items to ordinary sync-visible
+          // state; operators who want a candidate gone permanently must queue a
+          // local removal so it stops appearing in keep altogether.
+          await env.ICONOPLASM_DB.prepare(
+            "UPDATE icono_portrait_assets SET status=CASE WHEN lower(COALESCE(status, ''))='rejected' THEN 'draft' ELSE status END, autopick_eligible=CASE WHEN lower(COALESCE(status, ''))='rejected' THEN 1 ELSE COALESCE(autopick_eligible, 1) END, is_stale=0, is_legacy=0 WHERE upper(gene_symbol)=? AND asset_sha256=?",
+          )
+            .bind(symbol, assetSha)
+            .run()
+          await env.ICONOPLASM_DB.prepare(
+            "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'restore_keep', ?, ?, CURRENT_TIMESTAMP)",
+          )
+            .bind(symbol, assetSha, assetSha, actorId, reason)
+            .run()
+          continue
+        }
         if (legacySet.has(key)) {
           touchedSymbols.add(symbol)
-          const alreadyLegacy = Number(row?.is_stale || 0) > 0 && Number(row?.is_legacy || 0) > 0
+          const alreadyLegacy =
+            Number(row?.is_stale || 0) > 0 &&
+            Number(row?.is_legacy || 0) > 0 &&
+            String(row?.status || "").toLowerCase() !== "rejected"
           if (alreadyLegacy) {
             legacyAlreadyMarked += 1
             continue
@@ -10846,7 +10876,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           legacyMarked += 1
           if (dryRun) continue
           await env.ICONOPLASM_DB.prepare(
-            "UPDATE icono_portrait_assets SET is_stale=1, is_legacy=1 WHERE upper(gene_symbol)=? AND asset_sha256=?",
+            "UPDATE icono_portrait_assets SET status=CASE WHEN lower(COALESCE(status, ''))='rejected' THEN 'draft' ELSE status END, is_stale=1, is_legacy=1 WHERE upper(gene_symbol)=? AND asset_sha256=?",
           )
             .bind(symbol, assetSha)
             .run()
@@ -10918,6 +10948,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             keep_count: keep.length,
             legacy_count: legacy.length,
             touched_symbols: touchedSymbols.size,
+            restored_keep: restoredKeep,
             legacy_marked: legacyMarked,
             legacy_already_marked: legacyAlreadyMarked,
             rejected,
