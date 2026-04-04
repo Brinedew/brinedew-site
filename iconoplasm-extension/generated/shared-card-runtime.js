@@ -1765,6 +1765,15 @@
           state.authenticated = true
           state.snapshot = (data && data.snapshot) || state.snapshot
           notifySnapshot()
+          if (typeof cfg.onVoteCommitted === "function") {
+            try {
+              cfg.onVoteCommitted(data, state)
+            } catch (callbackError) {
+              if (typeof cfg.onError === "function") {
+                cfg.onError("vote_committed", callbackError)
+              }
+            }
+          }
         })
         .catch(function (err) {
           state.snapshot = previousSnapshot

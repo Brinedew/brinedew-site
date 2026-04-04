@@ -474,12 +474,26 @@ void syncSharedIconoplasmSettings().catch(function () {
   function fetchGeneDetail(symbol) {
     var key = normalizedSymbol(symbol)
     if (!key) return Promise.resolve(null)
-    if (portraitDetailCache[key]) return Promise.resolve(portraitDetailCache[key])
-    if (portraitDetailPromiseCache[key]) return portraitDetailPromiseCache[key]
+    var options = arguments.length > 1 && arguments[1] ? arguments[1] : {}
+    if (options.forceFresh) {
+      // When a vote auto-promotes a new canonical portrait, the Worker still marks
+      // public gene JSON cacheable. Bust both our in-memory cache and the request URL
+      // so the current page reflects the new canonical immediately instead of after a
+      // browser cache grace period or a couple of annoyed reloads.
+      delete portraitDetailCache[key]
+      delete portraitDetailPromiseCache[key]
+    }
+    if (!options.forceFresh && portraitDetailCache[key]) return Promise.resolve(portraitDetailCache[key])
+    if (!options.forceFresh && portraitDetailPromiseCache[key]) return portraitDetailPromiseCache[key]
 
-    portraitDetailPromiseCache[key] = fetchJSON(
-      "/api/public/v1/genes/" + encodeURIComponent(key),
-    )
+    var detailPath = "/api/public/v1/genes/" + encodeURIComponent(key)
+    var requestInit = undefined
+    if (options.forceFresh) {
+      detailPath += "?fresh=" + encodeURIComponent(String(Date.now()))
+      requestInit = { cache: "no-store" }
+    }
+
+    portraitDetailPromiseCache[key] = fetchJSON(detailPath, requestInit)
       .then(function (data) {
         portraitDetailCache[key] = data
         return data
@@ -492,6 +506,13 @@ void syncSharedIconoplasmSettings().catch(function () {
       })
 
     return portraitDetailPromiseCache[key]
+  }
+
+  function invalidateGeneDetail(symbol) {
+    var key = normalizedSymbol(symbol)
+    if (!key) return
+    delete portraitDetailCache[key]
+    delete portraitDetailPromiseCache[key]
   }
 
   function hydrateGridPortrait(container, symbol, genePayload) {
@@ -1021,14 +1042,16 @@ void syncSharedIconoplasmSettings().catch(function () {
     renderHomeAuthRail()
   }
 
-  function rerenderCurrentGeneRoute() {
+  function rerenderCurrentGeneRoute(options) {
+    var opts = options || {}
     var route = getRoute()
     if (route.page !== "gene") return
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    if (opts.forceFresh) invalidateGeneDetail(route.symbol)
     destroyHomeMasonry()
     destroyCandidateMasonry()
-    renderGene(root, route.symbol)
+    renderGene(root, route.symbol, opts)
     refreshPortraitLightbox()
   }
 
@@ -1720,10 +1743,24 @@ void syncSharedIconoplasmSettings().catch(function () {
       deferSnapshot: !!opts.deferSnapshot,
       apiBaseUrl: API,
       onAuthRequired: showVoteLoginPopup,
+      onVoteCommitted: function (data, state) {
+        if (typeof opts.onVoteCommitted === "function") {
+          opts.onVoteCommitted(data, state)
+        }
+      },
       onError: function (phase, err) {
         console.error("[Iconoplasm] vote " + phase + " error:", err)
       },
     })
+  }
+
+  function refreshGeneAfterVoteAutoPromote(symbol, voteResponse) {
+    var autoPromote = voteResponse && voteResponse.auto_promote
+    if (!autoPromote || !autoPromote.changed) return
+    var route = getRoute()
+    if (route.page !== "gene") return
+    if (normalizedSymbol(route.symbol) !== normalizedSymbol(symbol)) return
+    rerenderCurrentGeneRoute({ forceFresh: true })
   }
 
   function wireBrickVoteBoxes(cards) {
@@ -2066,6 +2103,9 @@ void syncSharedIconoplasmSettings().catch(function () {
     wireVoteBox(box, symbol, portrait.asset_sha256, {
       visionId: portrait.vision_id || "",
       candidateImageId: portrait.candidate_image_id || 0,
+      onVoteCommitted: function (data) {
+        refreshGeneAfterVoteAutoPromote(symbol, data)
+      },
     })
   }
 
@@ -2080,6 +2120,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       wireVoteBox(box, symbol, box.getAttribute("data-icono-candidate-vote-box"), {
         visionId: box.getAttribute("data-icono-vision-id") || "",
         candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
+        onVoteCommitted: function (data) {
+          refreshGeneAfterVoteAutoPromote(symbol, data)
+        },
       })
     }
   }
@@ -2123,7 +2166,7 @@ void syncSharedIconoplasmSettings().catch(function () {
             }),
           })
             .then(function () {
-              rerenderCurrentGeneRoute()
+              rerenderCurrentGeneRoute({ forceFresh: true })
             })
             .catch(function (error) {
               button.disabled = false
@@ -2936,7 +2979,8 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   /* ─── Rendering: Gene detail page ─── */
 
-  function renderGene(root, symbol) {
+  function renderGene(root, symbol, options) {
+    var opts = options || {}
     iconoSidebarState.page = "gene"
     iconoSidebarState.homeLayout = resolveHomeLayout()
     iconoSidebarState.gene = {
@@ -2961,8 +3005,17 @@ void syncSharedIconoplasmSettings().catch(function () {
     var contentEl = document.getElementById("icono-gene-content")
     var loadingEl = document.getElementById("icono-gene-loading")
 
-    fetchJSON("/api/public/v1/genes/" + encodeURIComponent(symbol))
+    var detailPath = "/api/public/v1/genes/" + encodeURIComponent(symbol)
+    var detailRequestInit = undefined
+    if (opts.forceFresh) {
+      detailPath += "?fresh=" + encodeURIComponent(String(Date.now()))
+      detailRequestInit = { cache: "no-store" }
+      invalidateGeneDetail(symbol)
+    }
+
+    fetchJSON(detailPath, detailRequestInit)
       .then(function (g) {
+        portraitDetailCache[normalizedSymbol(g && g.symbol ? g.symbol : symbol)] = g
         loadingEl.style.display = "none"
         iconoSidebarState.gene = {
           symbol: normalizedSymbol(g && g.symbol ? g.symbol : symbol),
