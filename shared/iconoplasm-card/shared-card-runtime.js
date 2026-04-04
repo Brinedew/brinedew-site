@@ -1,3 +1,5 @@
+import { resolveDisplayedColorName } from "./color-name-db.js"
+
 ;(function (global) {
   "use strict"
 
@@ -832,38 +834,6 @@
     return "crimson"
   }
 
-  function toTitleCaseWords(value) {
-    return String(value || "")
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .map(function (word) {
-        return word.charAt(0).toUpperCase() + word.slice(1)
-      })
-      .join(" ")
-  }
-
-  function describeDisplayedColorName(hex) {
-    var hsv = hexToHsv(hex)
-    if (!hsv) return ""
-    var hueName = describeHueWord(hsv.h)
-    var saturation = Number(hsv.s)
-    var value = Number(hsv.v)
-    var prefix = ""
-
-    if (value >= 92 && saturation <= 22) prefix = "ice"
-    else if (value >= 84 && saturation <= 40) prefix = "pale"
-    else if (value >= 72 && saturation <= 58) prefix = "soft"
-    else if (value <= 32 && saturation >= 40) prefix = "deep"
-    else if (value <= 45 && saturation <= 24) prefix = "smoky"
-    else if (saturation <= 18) prefix = "mist"
-    else if (saturation <= 36) prefix = "dusty"
-    else if (saturation >= 72 && value >= 70) prefix = "vivid"
-    else if (saturation >= 56 && value <= 58) prefix = "rich"
-
-    return toTitleCaseWords((prefix ? prefix + " " : "") + hueName)
-  }
-
   function describeLevelWord(raw) {
     var n = Number(raw)
     if (!Number.isFinite(n)) return "unknown"
@@ -910,11 +880,10 @@
       safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
         ? safeGeneDetail.essence
         : {}
-    /* Single source of truth: the label names the exact color it displays.
-       Do not pull this from essence.skin_name; that is a different pipeline
-       field and caused the hex row to go blank when the essence payload lacked
-       a skin-name even though the card color itself was present. */
-    var colorName = describeDisplayedColorName(color)
+     /* Never trust ad hoc display labels here. The shared resolver only accepts synced names that
+       are real entries in the calibrated palette file, and otherwise falls back to a calibrated
+       lookup from that same dataset. */
+     var colorName = resolveDisplayedColorName(color, essence)
     var symbol = String(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol || "").trim()
     var firstLetter = (symbol.charAt(0) || "?").toUpperCase()
     var tauRaw = safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau

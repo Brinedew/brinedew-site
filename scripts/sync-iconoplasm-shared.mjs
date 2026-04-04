@@ -8,13 +8,6 @@ const repoRoot = path.resolve(__dirname, "..")
 
 const targets = [
   {
-    source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js"),
-    outputs: [
-      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-runtime.js"),
-      path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-runtime.js"),
-    ],
-  },
-  {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-vote.css"),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-vote.css"),
@@ -57,11 +50,20 @@ const binaryTargets = [
 
 const bundledTargets = [
   {
+    source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-runtime.js"),
+      path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-runtime.js"),
+    ],
+    format: "iife",
+  },
+  {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js"),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "lit-archival-card.js"),
       path.join(repoRoot, "iconoplasm-extension", "generated", "lit-archival-card.js"),
     ],
+    format: "esm",
   },
 ]
 
@@ -94,7 +96,7 @@ async function bundleTarget({ source, outputs }) {
   const result = await esbuild.build({
     entryPoints: [source],
     bundle: true,
-    format: "esm",
+    format: arguments[0]?.format || "esm",
     platform: "browser",
     target: ["es2022"],
     minify: false,
