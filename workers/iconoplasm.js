@@ -39,6 +39,8 @@ const PUBLIC_DUMP_PREFIX = "public-dumps"
 const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
+const DISCOVERY_SOURCE_EXTENSION_HOVER = "extension_hover"
+const DISCOVERY_TRIGGER_HOVER_DWELL = "hover_dwell"
 
 const catalogCache = {
   hash: null,
@@ -145,6 +147,28 @@ function normalizeUserId(raw) {
   const v = String(raw || "").trim()
   if (!v) return "local"
   return v.slice(0, 255)
+}
+
+function normalizeDiscoverySource(raw) {
+  const v = String(raw || "")
+    .trim()
+    .toLowerCase()
+  if (v === DISCOVERY_SOURCE_EXTENSION_HOVER) return v
+  return null
+}
+
+function normalizeDiscoveryTrigger(raw) {
+  const v = String(raw || "")
+    .trim()
+    .toLowerCase()
+  if (v === DISCOVERY_TRIGGER_HOVER_DWELL) return v
+  return null
+}
+
+function normalizeDiscoveryDwellMs(raw) {
+  const dwellMs = optionalInt(raw)
+  if (dwellMs == null) return null
+  return Math.max(0, Math.min(60000, dwellMs))
 }
 
 // Public blacklist submissions should not store raw visitor IPs in D1.
@@ -589,6 +613,21 @@ function mapGenerationRequestRow(row) {
   }
 }
 
+function mapGeneDiscoveryRow(row) {
+  return {
+    gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+    first_discovered_at: sanitizeText(row?.first_discovered_at || "", 64) || "",
+    last_encountered_at: sanitizeText(row?.last_encountered_at || "", 64) || "",
+    encounter_count: Math.max(0, Number.parseInt(String(row?.encounter_count || "0"), 10) || 0),
+    first_source: sanitizeText(row?.first_source || "", 64) || "",
+    last_source: sanitizeText(row?.last_source || "", 64) || "",
+    first_trigger: sanitizeText(row?.first_trigger || "", 64) || "",
+    last_trigger: sanitizeText(row?.last_trigger || "", 64) || "",
+    first_dwell_ms: optionalInt(row?.first_dwell_ms),
+    last_dwell_ms: optionalInt(row?.last_dwell_ms),
+  }
+}
+
 function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
   const requesterNorm = normalizeUserId(requesterUserId || "")
   const laneMap = new Map()
@@ -827,6 +866,96 @@ async function fulfillGenerationRequests(
     request_ids: Array.from(fulfilledIds).sort(function (a, b) {
       return a - b
     }),
+  }
+}
+
+async function recordGeneDiscoveryEncounter(
+  env,
+  {
+    userId,
+    geneSymbol,
+    source = DISCOVERY_SOURCE_EXTENSION_HOVER,
+    trigger = DISCOVERY_TRIGGER_HOVER_DWELL,
+    dwellMs = null,
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  const userIdNorm = normalizeUserId(userId || "")
+  const geneSymbolNorm = normalizeSymbol(geneSymbol || "")
+  const sourceNorm = normalizeDiscoverySource(source)
+  const triggerNorm = normalizeDiscoveryTrigger(trigger)
+  const dwellMsNorm = normalizeDiscoveryDwellMs(dwellMs)
+  if (!geneSymbolNorm) return { ok: false, error: "Missing or invalid gene symbol" }
+  if (!userIdNorm || isGuestUserId(userIdNorm)) return { ok: false, error: "Authentication required" }
+  if (!sourceNorm) return { ok: false, error: "Missing or invalid discovery source" }
+  if (!triggerNorm) return { ok: false, error: "Missing or invalid discovery trigger" }
+  if (triggerNorm === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMsNorm == null) {
+    return { ok: false, error: "hover_dwell discovery events must include dwell_ms" }
+  }
+
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_gene_discoveries
+     WHERE user_id = ?
+       AND upper(gene_symbol) = ?
+     LIMIT 1`,
+  )
+    .bind(userIdNorm, geneSymbolNorm)
+    .first()
+
+  if (existing) {
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_gene_discoveries
+       SET last_encountered_at = CURRENT_TIMESTAMP,
+           encounter_count = encounter_count + 1,
+           last_source = ?,
+           last_trigger = ?,
+           last_dwell_ms = ?
+       WHERE user_id = ?
+         AND upper(gene_symbol) = ?`,
+    )
+      .bind(sourceNorm, triggerNorm, dwellMsNorm, userIdNorm, geneSymbolNorm)
+      .run()
+  } else {
+    await env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_gene_discoveries (
+         user_id,
+         gene_symbol,
+         first_source,
+         last_source,
+         first_trigger,
+         last_trigger,
+         first_dwell_ms,
+         last_dwell_ms
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        userIdNorm,
+        geneSymbolNorm,
+        sourceNorm,
+        sourceNorm,
+        triggerNorm,
+        triggerNorm,
+        dwellMsNorm,
+        dwellMsNorm,
+      )
+      .run()
+  }
+
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_gene_discoveries
+     WHERE user_id = ?
+       AND upper(gene_symbol) = ?
+     LIMIT 1`,
+  )
+    .bind(userIdNorm, geneSymbolNorm)
+    .first()
+
+  return {
+    ok: true,
+    created: !existing,
+    discovery: mapGeneDiscoveryRow(row || {}),
   }
 }
 
@@ -8021,6 +8150,101 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               id: sessionUser.user_id,
               username: sessionUser.username || null,
             },
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/discoveries/encounter" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB) {
+        return done(
+          "discoveries_encounter_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      }
+      const payload = await parseJsonBody(request)
+      const symbol = normalizeSymbol(payload?.symbol || payload?.gene_symbol || "")
+      const source = normalizeDiscoverySource(payload?.source || DISCOVERY_SOURCE_EXTENSION_HOVER)
+      const trigger = normalizeDiscoveryTrigger(payload?.trigger || DISCOVERY_TRIGGER_HOVER_DWELL)
+      const dwellMs = normalizeDiscoveryDwellMs(payload?.dwell_ms ?? payload?.dwellMs)
+      if (!symbol) {
+        return done(
+          "discoveries_encounter_400",
+          json({ ok: false, error: "Missing or invalid gene symbol" }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      if (!source) {
+        return done(
+          "discoveries_encounter_400",
+          json({ ok: false, error: "Missing or invalid discovery source" }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      if (!trigger) {
+        return done(
+          "discoveries_encounter_400",
+          json({ ok: false, error: "Missing or invalid discovery trigger" }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      if (trigger === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMs == null) {
+        return done(
+          "discoveries_encounter_400",
+          json({ ok: false, error: "hover_dwell discovery events must include dwell_ms" }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "discoveries_encounter_guest",
+          json(
+            {
+              ok: true,
+              authenticated: false,
+              recorded: false,
+              symbol,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+
+      const result = await recordGeneDiscoveryEncounter(env, {
+        userId: sessionUser.user_id,
+        geneSymbol: symbol,
+        source,
+        trigger,
+        dwellMs,
+      })
+      if (!result.ok) {
+        return done(
+          "discoveries_encounter_400",
+          json({ ok: false, error: String(result.error || "Could not record discovery") }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+
+      return done(
+        "discoveries_encounter",
+        json(
+          {
+            ok: true,
+            authenticated: true,
+            recorded: true,
+            created: Boolean(result.created),
+            symbol,
+            discovery: result.discovery,
           },
           200,
           { "Cache-Control": "no-store" },

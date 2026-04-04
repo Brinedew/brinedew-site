@@ -26,6 +26,8 @@
   const CARD_VARIANT_KEY = "iconoplasm_card_variant"
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase("https://iconoplasm.brinedew.bio")
   const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
+  const ICONOPLASM_DISCOVERY_ENCOUNTER_URL =
+    ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/encounter"
   const LIT_ARCHIVAL_FRAME_URL = chrome.runtime.getURL("lit-archival-frame.html")
   const LIT_ARCHIVAL_FRAME_ORIGIN = new URL(LIT_ARCHIVAL_FRAME_URL).origin
   const LIT_ARCHIVAL_FRAME_SOURCE = "iconoplasm-lit-archival-frame"
@@ -35,6 +37,8 @@
   const LIT_ARCHIVAL_OPEN_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_OPEN"
   const LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_AUTH_REQUIRED"
   const DEFAULT_PORTRAIT_DIMENSIONS = Object.freeze({ width: 768, height: 1024 })
+  const DISCOVERY_HOVER_DWELL_MS = 900
+  const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
   const escapeHtml = IconoCardShared.escapeHtml
   let roughEllipseSerial = 0
 
@@ -1441,6 +1445,10 @@
   let portraitBaseUrl = ""
   let activeSymbol = null
   let hideTimer = null
+  const discoveryTimerBySymbol = new Map()
+  const discoveryCooldownUntilBySymbol = new Map()
+  const discoveryInFlightSymbols = new Set()
+  const discoveredPageSymbols = new Set()
   let portraitLoadToken = 0
   const portraitDataUrlCache = new Map()
   const portraitDataUrlPromiseCache = new Map()
@@ -1506,6 +1514,99 @@
       hideTimer = null
       hideTooltip()
     }, delayMs)
+  }
+
+  function clearPendingDiscovery(symbol = activeSymbol) {
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return
+    const timerId = discoveryTimerBySymbol.get(normalizedSymbol)
+    if (!timerId) return
+    window.clearTimeout(timerId)
+    discoveryTimerBySymbol.delete(normalizedSymbol)
+  }
+
+  function isDiscoveryCoolingDown(symbol) {
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return false
+    const cooldownUntil = Number(discoveryCooldownUntilBySymbol.get(normalizedSymbol) || 0)
+    if (cooldownUntil > Date.now()) return true
+    discoveryCooldownUntilBySymbol.delete(normalizedSymbol)
+    return false
+  }
+
+  function markDiscoveryCooldown(symbol, cooldownMs = DISCOVERY_SYMBOL_COOLDOWN_MS) {
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return
+    discoveryCooldownUntilBySymbol.set(normalizedSymbol, Date.now() + cooldownMs)
+  }
+
+  async function postDiscoveryEncounter(symbol) {
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return
+    if (discoveredPageSymbols.has(normalizedSymbol)) return
+    if (discoveryInFlightSymbols.has(normalizedSymbol)) return
+    if (isDiscoveryCoolingDown(normalizedSymbol)) return
+
+    discoveryInFlightSymbols.add(normalizedSymbol)
+    markDiscoveryCooldown(normalizedSymbol)
+    try {
+      const response = await extensionApiFetch(ICONOPLASM_DISCOVERY_ENCOUNTER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: normalizedSymbol,
+          source: "extension_hover",
+          trigger: "hover_dwell",
+          dwell_ms: DISCOVERY_HOVER_DWELL_MS,
+        }),
+        credentials: "include",
+      })
+      if (!response.ok) {
+        console.warn(
+          "[Iconoplasm] discovery encounter write failed for",
+          normalizedSymbol,
+          "with HTTP",
+          response.status,
+        )
+        return
+      }
+      const payload = await response.json().catch(() => null)
+      if (payload && payload.authenticated && payload.recorded) {
+        discoveredPageSymbols.add(normalizedSymbol)
+      }
+    } catch (err) {
+      console.error("[Iconoplasm] discovery encounter write error:", err)
+    } finally {
+      discoveryInFlightSymbols.delete(normalizedSymbol)
+    }
+  }
+
+  function scheduleDiscoveryEncounter(symbol) {
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return
+    if (discoveredPageSymbols.has(normalizedSymbol)) return
+    if (discoveryInFlightSymbols.has(normalizedSymbol)) return
+    if (isDiscoveryCoolingDown(normalizedSymbol)) return
+
+    clearPendingDiscovery(normalizedSymbol)
+    const timerId = window.setTimeout(() => {
+      discoveryTimerBySymbol.delete(normalizedSymbol)
+      if (activeSymbol !== normalizedSymbol) return
+      if (!tooltip || !tooltip.classList.contains("iconoplasm-tooltip-visible")) return
+      if (document.visibilityState === "hidden") return
+      postDiscoveryEncounter(normalizedSymbol).catch(() => null)
+    }, DISCOVERY_HOVER_DWELL_MS)
+    discoveryTimerBySymbol.set(normalizedSymbol, timerId)
   }
 
   function resolvePortraitUrl(gene) {
@@ -2596,6 +2697,9 @@
     const symbol = target.dataset.gene
     const gene = geneMap[symbol]
     if (!gene) return
+    if (activeSymbol && activeSymbol !== symbol) {
+      clearPendingDiscovery(activeSymbol)
+    }
     activeSymbol = symbol
     activeGeneSummary = Object.assign({ symbol }, gene)
     // Fence: fetch the hovered gene before warming neighbors. Reversing this puts the hovered
@@ -2685,6 +2789,7 @@
     }
 
     tooltip.classList.add("iconoplasm-tooltip-visible")
+    scheduleDiscoveryEncounter(symbol)
   }
 
   function onMouseOut(e) {
@@ -2693,6 +2798,7 @@
     const related = e.relatedTarget
     if (related && (related.closest(".iconoplasm-tooltip") || related.closest(".iconoplasm-gene")))
       return
+    clearPendingDiscovery(activeSymbol)
     scheduleHideTooltip()
   }
 
@@ -2700,6 +2806,7 @@
     const related = e.relatedTarget
     if (related && (related.closest(".iconoplasm-tooltip") || related.closest(".iconoplasm-gene")))
       return
+    clearPendingDiscovery(activeSymbol)
     scheduleHideTooltip()
   }
 
@@ -2728,6 +2835,7 @@
 
   function hideTooltip() {
     cancelHideTimer()
+    clearPendingDiscovery(activeSymbol)
     activeSymbol = null
     activeGeneSummary = null
     portraitLoadToken += 1
