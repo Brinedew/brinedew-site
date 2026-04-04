@@ -98,6 +98,33 @@ function buildSubmissionRequest({ artistTag, ip, admin = false }) {
   })
 }
 
+test("legacy artist-styles route redirects to /blocklist", async () => {
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/artist-styles?source=faq"),
+    buildEnv(),
+    {},
+  )
+
+  assert.equal(response.status, 308)
+  assert.equal(
+    response.headers.get("Location"),
+    "https://iconoplasm.brinedew.bio/blocklist?source=faq",
+  )
+})
+
+test("blocklist route serves the public blocklist page", async () => {
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/blocklist"),
+    buildEnv(),
+    {},
+  )
+
+  const html = await response.text()
+  assert.equal(response.status, 200)
+  assert.match(html, /Blocklist an artist tag\./)
+  assert.match(html, /Use the exact @tag as shown on the site\. Spaces are not allowed\./)
+})
+
 test("guest blacklist submissions stay singular per requester identity", async () => {
   const env = buildEnv()
 

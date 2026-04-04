@@ -194,7 +194,8 @@ function normalizeArtistStylesPageHtml(html) {
     .replaceAll("If an Iconoplasm image looks like your style, enter your name or @tag and send it.", "If an Iconoplasm image matches your style, send the artist tag exactly as shown on the site.")
     .replaceAll("Artist name or @tag", "Artist tag")
     .replaceAll("Loish or @loish", "@artist_(name)")
-    .replaceAll("Use the name or @tag from the style list.", "Use the exact tag from the emulsion or style list. Spaces are not allowed.")
+    .replaceAll("Use the name or @tag from the style list.", "Use the exact @tag as shown on the site. Spaces are not allowed.")
+    .replaceAll("Use the exact tag from the emulsion or style list. Spaces are not allowed.", "Use the exact @tag as shown on the site. Spaces are not allowed.")
     .replaceAll("Enter the artist name or @tag first.", "Enter the artist tag first. Example: @artist_(name)")
     .replace(
       "setStatus(data && data.duplicate ? 'That name was already submitted.' : 'Thanks. We got it.', 'ok');",
@@ -6109,7 +6110,7 @@ async function blacklistArtistStyle(
   const artistNameValue = artistNameNorm || null
   const actorNorm = normalizeUserId(actorId || "artist_style_blacklist")
   const reasonNorm =
-    sanitizeText(reason || "", 2000) || `Removed blacklisted artist style ${artistTagNorm}`
+    sanitizeText(reason || "", 2000) || `Removed blocklisted artist tag ${artistTagNorm}`
 
   if (!dryRun) {
     await env.ICONOPLASM_DB.prepare(
@@ -6386,30 +6387,47 @@ function buildGalleryUniquenessIndex(catalogBySymbol, essenceRows) {
   return out
 }
 
+function gallerySortablePositiveMetric(value) {
+  const metric = Number(value)
+  return Number.isFinite(metric) && metric > 0 ? metric : null
+}
+
 function sortGalleryItems(items, order, seed = null) {
   const sorted = Array.isArray(items) ? items.slice() : []
   sorted.sort((left, right) => {
     if (order === "heaviest") {
       return (
-        compareNullableNumberDescWithNullBottom(left.weight_kg, right.weight_kg) ||
+        compareNullableNumberDescWithNullBottom(
+          gallerySortablePositiveMetric(left.weight_kg),
+          gallerySortablePositiveMetric(right.weight_kg),
+        ) ||
         compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "lightest") {
       return (
-        compareNullableNumberAscWithNullBottom(left.weight_kg, right.weight_kg) ||
+        compareNullableNumberAscWithNullBottom(
+          gallerySortablePositiveMetric(left.weight_kg),
+          gallerySortablePositiveMetric(right.weight_kg),
+        ) ||
         compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "oldest") {
       return (
-        compareNullableNumberDescWithNullBottom(left.age_years, right.age_years) ||
+        compareNullableNumberDescWithNullBottom(
+          gallerySortablePositiveMetric(left.age_years),
+          gallerySortablePositiveMetric(right.age_years),
+        ) ||
         compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "youngest") {
       return (
-        compareNullableNumberAscWithNullBottom(left.age_years, right.age_years) ||
+        compareNullableNumberAscWithNullBottom(
+          gallerySortablePositiveMetric(left.age_years),
+          gallerySortablePositiveMetric(right.age_years),
+        ) ||
         compareGalleryPopularityFallback(left, right)
       )
     }
@@ -6780,36 +6798,42 @@ function galleryMetricSpec(order) {
       return {
         metricExpr: "ge.weight_kg",
         metricDirection: "DESC",
+        invalidMetricExpr: "ge.weight_kg IS NULL OR ge.weight_kg <= 0",
         uniquenessFromLeakage: false,
       }
     case "lightest":
       return {
         metricExpr: "ge.weight_kg",
         metricDirection: "ASC",
+        invalidMetricExpr: "ge.weight_kg IS NULL OR ge.weight_kg <= 0",
         uniquenessFromLeakage: false,
       }
     case "oldest":
       return {
         metricExpr: "ge.age_years",
         metricDirection: "DESC",
+        invalidMetricExpr: "ge.age_years IS NULL OR ge.age_years <= 0",
         uniquenessFromLeakage: false,
       }
     case "youngest":
       return {
         metricExpr: "ge.age_years",
         metricDirection: "ASC",
+        invalidMetricExpr: "ge.age_years IS NULL OR ge.age_years <= 0",
         uniquenessFromLeakage: false,
       }
     case "uniqueness":
       return {
         metricExpr: "ge.leakage_percent",
         metricDirection: "ASC",
+        invalidMetricExpr: "ge.leakage_percent IS NULL",
         uniquenessFromLeakage: true,
       }
     case "newest":
       return {
         metricExpr: "gr.live_created_at",
         metricDirection: "DESC",
+        invalidMetricExpr: "gr.live_created_at IS NULL",
         uniquenessFromLeakage: false,
       }
     default:
@@ -6840,10 +6864,14 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
     }
   }
 
-  const { metricExpr, metricDirection, uniquenessFromLeakage } = metricSpec
+  const { metricExpr, metricDirection, invalidMetricExpr, uniquenessFromLeakage } = metricSpec
+  // Keep impossible zero-valued demographics visible on the site if they exist,
+  // but never let them outrank real positive values in youngest/lightest/oldest/
+  // heaviest sorts. The cards can show the raw data; the ordering logic should
+  // treat non-positive age/weight as "unknown for sorting" and sink them.
   const orderByClause = `
-    CASE WHEN ${metricExpr} IS NULL THEN 1 ELSE 0 END ASC,
-    ${metricExpr} ${metricDirection},
+    CASE WHEN ${invalidMetricExpr} THEN 1 ELSE 0 END ASC,
+    CASE WHEN ${invalidMetricExpr} THEN NULL ELSE ${metricExpr} END ${metricDirection},
     COALESCE(gr.live_score, 0) DESC,
     COALESCE(gr.live_upvotes, 0) DESC,
     COALESCE(gr.live_created_at, '') DESC,
@@ -9187,14 +9215,23 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
-    if (path === "/artist-styles") {
+    if (path === "/artist-styles" || path === "/artist-styles/" || path === "/blocklist/") {
+      const redirectUrl = new URL("/blocklist", url)
+      redirectUrl.search = url.search
+      return done(
+        "blocklist_redirect",
+        Response.redirect(redirectUrl.toString(), 308),
+      )
+    }
+
+    if (path === "/blocklist") {
       const artistStylesHtml = normalizeArtistStylesPageHtml(
         renderIconoplasmArtistStylesHtml({
           turnstileSiteKey: sanitizeText(env.ICONOPLASM_TURNSTILE_SITE_KEY || "", 255) || "",
         }),
       )
       return done(
-        "artist_styles_page",
+        "blocklist_page",
         html(artistStylesHtml, 200, { "Cache-Control": "no-store" }),
       )
     }
@@ -9244,7 +9281,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       } catch (error) {
         return done(
           "artist_styles_remove_400",
-          json({ error: String(error?.message || error || "Artist style removal failed") }, 400),
+          json({ error: String(error?.message || error || "Artist tag blocklist update failed") }, 400),
         )
       }
     }

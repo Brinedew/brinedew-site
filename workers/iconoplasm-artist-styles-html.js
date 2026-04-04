@@ -273,7 +273,7 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
 
         <div class="actions">
           <button id="submit-btn" type="submit">Submit blocklist request</button>
-          <div class="help">Use the exact tag from the emulsion or style list. Spaces are not allowed.</div>
+          <div class="help">Use the exact @tag as shown on the site. Spaces are not allowed.</div>
         </div>
 
         <div id="status" class="status" data-tone="neutral">Nothing submitted yet.</div>

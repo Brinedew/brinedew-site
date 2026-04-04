@@ -2122,9 +2122,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                 '<strong>' + esc(vision.artist_name || vision.artist_tag || vision.vision_id || 'Selected artist') + '</strong>',
                 '<span class="small mono">' + esc(vision.artist_tag || vision.vision_id || '') + '</span>',
                 (asset && asset.gene_symbol ? '<span class="small">Current gene: ' + esc(asset.gene_symbol) + '</span>' : ''),
-                '<span class="small">Use the public artist-tag form to block this style across the site. Use gene review for one-off image cleanup.</span>'
+                '<span class="small">Use the public blocklist form to block this artist tag across the site. Use gene review for one-off image cleanup.</span>'
               ].filter(Boolean).join(' · ')
-            : 'Select an artist to inspect details. This tab is for style-level blocklisting. Use gene review when only one image is bad.';
+            : 'Select an artist to inspect details. This tab is for artist-tag blocklisting. Use gene review when only one image is bad.';
         }
         if (els.visionOpenCurrentGene) {
           els.visionOpenCurrentGene.disabled = !(asset && asset.gene_symbol);
@@ -2288,7 +2288,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             '<article class="list-row">',
             '<div>',
             '<strong>' + esc(row.artist_name_input || row.normalized_input || 'Unknown submission') + '</strong>',
-            '<div class="small mono">Artist tag request from /artist-styles</div>',
+            '<div class="small mono">Artist tag request from /blocklist</div>',
             '<div class="small">Queued by ' + esc(row.requested_by || 'unknown') + (row.source ? ' · ' + esc(row.source) : '') + '</div>',
             '</div>',
             '<div class="event-meta">' + esc(row.requested_at || '') + '</div>',
@@ -2298,7 +2298,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
         els.stylesPending.innerHTML = pendingRows.length
           ? pendingRows.join('')
-          : '<article class="list-row"><div><strong>No artist-tag requests waiting.</strong><div class="small">New requests from /artist-styles stay here until workstation sync applies them to the site blocklist.</div></div><div></div></article>';
+          : '<article class="list-row"><div><strong>No artist-tag requests waiting.</strong><div class="small">New requests from /blocklist stay here until workstation sync applies them to the site blocklist.</div></div><div></div></article>';
       }
 
       function renderStylesNotesList() {
@@ -2319,7 +2319,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
         els.stylesNotes.innerHTML = logRows.length
           ? logRows.join('')
-          : '<article class="list-row"><div><strong>No artist styles are blocklisted yet.</strong><div class="small">Once workstation sync applies a request from /artist-styles, the site blocklist entry will show up here.</div></div><div></div></article>';
+          : '<article class="list-row"><div><strong>No artist tags are blocklisted yet.</strong><div class="small">Once workstation sync applies a request from /blocklist, the site blocklist entry will show up here.</div></div><div></div></article>';
       }
 
       async function ensureVisibleVisionPreviews(rows) {
@@ -3193,9 +3193,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         renderVisionCleanupPanel();
         renderVisionQuickActions();
         if (els.stylesPending) {
-          els.stylesPending.innerHTML = '<article class="list-row"><div><strong>No artist-tag requests waiting.</strong><div class="small">Open the tab to load requests from /artist-styles.</div></div><div></div></article>';
+          els.stylesPending.innerHTML = '<article class="list-row"><div><strong>No artist-tag requests waiting.</strong><div class="small">Open the tab to load requests from /blocklist.</div></div><div></div></article>';
         }
-        els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No artist styles are blocklisted yet.</strong><div class="small">Open the tab to load the current site blocklist.</div></div><div></div></article>';
+        els.stylesNotes.innerHTML = '<article class="list-row"><div><strong>No artist tags are blocklisted yet.</strong><div class="small">Open the tab to load the current site blocklist.</div></div><div></div></article>';
         syncVisibleBatchActions();
         els.refresh.addEventListener('click', function () {
           refreshAssets();

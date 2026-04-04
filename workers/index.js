@@ -600,6 +600,8 @@ export default {
           url.pathname.startsWith("/api/") ||
           url.pathname.startsWith("/portraits/") ||
           url.pathname === "/admin" ||
+          url.pathname === "/blocklist" ||
+          url.pathname === "/blocklist/" ||
           url.pathname === "/artist-styles" ||
           url.pathname === "/artist-styles/" ||
           url.pathname === "/health"

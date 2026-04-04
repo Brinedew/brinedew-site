@@ -44,15 +44,15 @@ draft: false
 
     That said, a later conversion to a human-made gallery is not out of the question.
 
-1. **One of the images looks like my art style. I want to remove my art style from the style pool.**
+1. **One of the images looks like my work. I want that artist tag blocked.**
 
-    You can use the [artist style blacklist form](https://iconoplasm.brinedew.bio/artist-styles).
+    You can use the [blocklist form](https://iconoplasm.brinedew.bio/blocklist).
 
-    Enter your name or your @name tag as it appears on the styles list: <https://thetacursed.github.io/Anima-Style-Explorer/>
+    Enter the exact @name tag as it appears in the tag explorer: <https://thetacursed.github.io/Anima-Style-Explorer/>
 
-    The site will queue the request and the local Iconoplasm workstation will blacklist it during Website Ops sync.
+    The site will queue the request and the local Iconoplasm workstation will apply it to the site blocklist during Website Ops sync.
 
-    If you don't want to use Discord site login, you can send a blacklist email request to <blacklist@brinedew.bio> from your business account. The first @name you send me will be blacklisted. Make sure to use the @ symbol in front of the name.
+    If you don't want to use Discord site login, you can send a blocklist email request to <blacklist@brinedew.bio> from your business account. The first @name you send me will be blocklisted. Make sure to use the @ symbol in front of the name.
 
 1. **I noticed a poor quality of the canonical image for some gene. What do I do?**
 
