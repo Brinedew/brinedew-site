@@ -882,7 +882,6 @@ void syncSharedIconoplasmSettings().catch(function () {
       '<p class="tagline">Mnemonics for genes - <a class="internal" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">read FAQ</a></p>' +
       '<span class="stat" id="icono-gene-count">...</span>' +
       "</div>" +
-      '<div class="icono-home-auth" id="icono-home-auth" hidden></div>' +
       '<div class="icono-gallery-toolbar">' +
       '<div class="icono-search icono-search--toolbar">' +
       '<div class="icono-search-wrapper">' +
@@ -897,6 +896,7 @@ void syncSharedIconoplasmSettings().catch(function () {
       galleryOptionsMarkup() +
       "</select>" +
       "</label>" +
+      '<div class="icono-gallery-auth" id="icono-gallery-auth" hidden></div>' +
       "</div>" +
       "</div>" +
       '<div class="icono-loading" id="icono-loading" hidden aria-live="polite"></div>' +
@@ -980,6 +980,7 @@ void syncSharedIconoplasmSettings().catch(function () {
 
   function iconoSidebarPanelMarkup() {
     var page = String((iconoSidebarState && iconoSidebarState.page) || "home")
+    if (page === "home") return ""
     var html =
       '<div class="brd-sidebar-section">' +
       '<div class="brd-sidebar-panel-title">Iconoplasm</div>' +
@@ -1008,38 +1009,38 @@ void syncSharedIconoplasmSettings().catch(function () {
       html += "</div></div>"
       return html
     }
-    html += iconoRowMarkup("Layout", iconoSidebarState.homeLayout || HOME_LAYOUT_DEFAULT)
-    html += iconoRowMarkup("Portraits", String(iconoSidebarState.publishedTotal || 0))
-    html += iconoRowMarkup("Genes", String(iconoSidebarState.total || 0))
-    html += "</div></div>"
-    return html
+    return ""
   }
 
   function renderIconoplasmSidebar() {
+    var iconoSidebarMarkup = iconoSidebarPanelMarkup()
+    var panels = [
+      {
+        id: "brd-shared-user-panel",
+        className: "brd-sidebar-panel--user",
+        markup: buildSharedUserPanelMarkup({
+          user: currentUser,
+          loginLabel: "Discord Login",
+        }),
+      },
+    ]
+    if (iconoSidebarMarkup) {
+      panels.push({
+        id: "icono-sidebar-panel",
+        className: "brd-sidebar-panel--iconoplasm",
+        markup: iconoSidebarMarkup,
+      })
+    }
     var stack = mountSidebarStack({
       stackId: "brd-sidebar-stack",
-      panels: [
-        {
-          id: "brd-shared-user-panel",
-          className: "brd-sidebar-panel--user",
-          markup: buildSharedUserPanelMarkup({
-            user: currentUser,
-            loginLabel: "Discord Login",
-          }),
-        },
-        {
-          id: "icono-sidebar-panel",
-          className: "brd-sidebar-panel--iconoplasm",
-          markup: iconoSidebarPanelMarkup(),
-        },
-      ],
+      panels: panels,
     })
     wireSharedUserPanel(stack, {
       onAuthChanged: function (user) {
         void updateSharedUserState(user)
       },
     })
-    renderHomeAuthRail()
+    renderHomeToolbarAuth()
   }
 
   function rerenderCurrentGeneRoute(options) {
@@ -1098,26 +1099,19 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
-  function buildHomeAuthRailMarkup() {
+  function buildHomeToolbarAuthMarkup() {
     if (!hasResolvedAuthState || currentUser) return ""
     return (
-      '<div class="icono-home-auth-card">' +
-      '<div class="icono-home-auth-copy">' +
-      '<div class="icono-home-auth-kicker">review access</div>' +
-      '<div class="icono-home-auth-title">Sign in to rate gene bricks</div>' +
-      '<div class="icono-home-auth-note">Swipe right for fit, left for misfit. Login is now reachable here instead of only at the bottom of the infinite gallery.</div>' +
-      "</div>" +
-      '<a class="icono-home-auth-link" href="' +
+      '<a class="icono-home-auth-link icono-toolbar-login" href="' +
       esc(voteLoginUrl()) +
-      '">Discord Login</a>' +
-      "</div>"
+      '" aria-label="Discord login to rate gene bricks">Discord Login</a>'
     )
   }
 
-  function renderHomeAuthRail() {
-    var slot = document.getElementById("icono-home-auth")
+  function renderHomeToolbarAuth() {
+    var slot = document.getElementById("icono-gallery-auth")
     if (!slot) return
-    var markup = buildHomeAuthRailMarkup()
+    var markup = buildHomeToolbarAuthMarkup()
     slot.hidden = !markup
     slot.innerHTML = markup
   }
@@ -2387,6 +2381,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (!hasExistingShell) {
       root.innerHTML = buildHomeShellMarkup(homeLayout)
     }
+    renderHomeToolbarAuth()
 
     var grid = document.getElementById("icono-grid")
     var loading = document.getElementById("icono-loading")
