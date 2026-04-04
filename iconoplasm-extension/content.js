@@ -1455,6 +1455,7 @@
   const discoveredPageSymbols = new Set()
   const guestDiscoverySymbols = new Set()
   let guestDiscoveryMergePromise = null
+  let discoveryBufferFlushScheduled = false
   let portraitLoadToken = 0
   const portraitDataUrlCache = new Map()
   const portraitDataUrlPromiseCache = new Map()
@@ -1642,6 +1643,15 @@
     return guestDiscoveryMergePromise
   }
 
+  function scheduleDiscoveryBufferFlush() {
+    if (discoveryBufferFlushScheduled) return
+    discoveryBufferFlushScheduled = true
+    window.setTimeout(() => {
+      discoveryBufferFlushScheduled = false
+      mergeGuestDiscoveriesIfSignedIn().catch(() => null)
+    }, 0)
+  }
+
   function clearPendingDiscovery(symbol = activeSymbol) {
     const normalizedSymbol = String(symbol || "")
       .trim()
@@ -1702,19 +1712,21 @@
           "with HTTP",
           response.status,
         )
+        await rememberGuestDiscovery(normalizedSymbol)
         return
       }
       const payload = await response.json().catch(() => null)
       if (payload && payload.authenticated && payload.recorded) {
         discoveredPageSymbols.add(normalizedSymbol)
         if (guestDiscoverySymbols.size > 0) {
-          mergeGuestDiscoveriesIfSignedIn().catch(() => null)
+          scheduleDiscoveryBufferFlush()
         }
       } else if (payload && payload.authenticated === false) {
         await rememberGuestDiscovery(normalizedSymbol)
       }
     } catch (err) {
       console.error("[Iconoplasm] discovery encounter write error:", err)
+      await rememberGuestDiscovery(normalizedSymbol)
     } finally {
       discoveryInFlightSymbols.delete(normalizedSymbol)
     }
@@ -2352,13 +2364,19 @@
     createAuthToast()
     scanPage(document.body)
     refreshHighlightStyles()
-    mergeGuestDiscoveriesIfSignedIn().catch(() => null)
+    scheduleDiscoveryBufferFlush()
     scheduleWarmVisibleGeneDetails()
     scheduleWarmVisiblePortraits()
     if (!ensureVisibilityObserver()) {
       window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
       window.addEventListener("resize", scheduleViewportWarm, { passive: true })
     }
+    window.addEventListener("focus", scheduleDiscoveryBufferFlush)
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        scheduleDiscoveryBufferFlush()
+      }
+    })
     observeMutations()
   }
 

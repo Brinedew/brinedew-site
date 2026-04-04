@@ -1015,6 +1015,94 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 /* ───────── Loading / empty states ───────── */
+.icono-collection-shell {
+  display: grid;
+  gap: 1rem;
+  margin: 0 0 1rem;
+}
+
+.icono-collection-summary-host[hidden],
+.icono-empty[hidden] {
+  display: none !important;
+}
+
+.icono-collection-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) repeat(2, minmax(0, 0.8fr));
+  gap: 0.85rem;
+}
+
+.icono-collection-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem 1rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-lg);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--light) 97%, #efe6d7 3%) 0%,
+    color-mix(in srgb, var(--light) 99%, #f5ede0 1%) 100%
+  );
+  box-shadow: 0 10px 24px rgba(27, 18, 11, 0.04);
+}
+
+.icono-collection-card--progress {
+  gap: 0.6rem;
+}
+
+.icono-collection-label,
+.icono-empty-kicker {
+  font-family: var(--codeFont, monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-collection-value {
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  line-height: 0.92;
+  font-weight: 460;
+  letter-spacing: -0.05em;
+  color: color-mix(in oklch, var(--dark) 94%, var(--accent) 6%);
+}
+
+.icono-collection-stat {
+  font-size: 1.55rem;
+  line-height: 1;
+  font-weight: 520;
+  letter-spacing: -0.04em;
+  color: var(--dark);
+}
+
+.icono-collection-note,
+.icono-collection-progress-caption,
+.icono-empty-support {
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--secondary, var(--darkgray));
+  text-wrap: pretty;
+}
+
+.icono-collection-progress-track {
+  position: relative;
+  overflow: hidden;
+  height: 9px;
+  border-radius: var(--icono-radius-pill);
+  background: color-mix(in srgb, var(--ui-border) 76%, white 24%);
+}
+
+.icono-collection-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 58%, #c9a16a 42%) 0%,
+    color-mix(in srgb, var(--accent) 74%, #f0dcc0 26%) 100%
+  );
+}
+
 .icono-loading[hidden] {
   display: none !important;
 }
@@ -1031,17 +1119,76 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   padding: 3rem 1rem;
 }
 
+.icono-empty--collection {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1.15rem 1.1rem 1rem;
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-lg);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--light) 97%, #efe6d7 3%) 0%,
+    color-mix(in srgb, var(--light) 99%, #f5ede0 1%) 100%
+  );
+  box-shadow: 0 10px 24px rgba(27, 18, 11, 0.04);
+}
+
 .icono-empty h2 {
   margin: 0 0 0.5rem;
   color: var(--dark);
+}
+
+.icono-empty--collection h2 {
+  margin: 0;
 }
 
 .icono-empty p {
   color: var(--secondary, var(--darkgray));
 }
 
+.icono-empty--collection p {
+  margin: 0;
+}
+
+.icono-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.2rem;
+}
+
+.icono-empty-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--icono-radius-pill);
+  text-decoration: none;
+}
+
+.icono-empty-link--subtle {
+  padding-left: 0;
+  padding-right: 0;
+  min-height: auto;
+  border-radius: 0;
+  color: var(--accent);
+}
+
+.icono-empty-link--subtle:hover {
+  text-decoration: underline;
+}
+
 .icono-empty a {
   color: var(--accent);
+}
+
+@media (max-width: 760px) {
+  .icono-collection-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ───────── Gene detail page ───────── */

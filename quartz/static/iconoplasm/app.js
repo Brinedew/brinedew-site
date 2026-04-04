@@ -28,9 +28,16 @@ void syncSharedIconoplasmSettings().catch(function () {
   var GALLERY_PAGE_SIZE = 30
   var GALLERY_INITIAL_PAGE_SIZE = 4
   var GALLERY_DEFAULT_ORDER = "votes"
+  var HOME_COLLECTION_PAGE_SIZE = 24
+  var HOME_COLLECTION_INITIAL_PAGE_SIZE = 12
+  var HOME_COLLECTION_DEFAULT_ORDER = "recent"
   var HOME_LAYOUT_DEFAULT = "bricks"
   var CARD_VARIANT_DEFAULT = "simple"
   var HOME_SKELETON_CARD_COUNT = 4
+  var HOME_COLLECTION_ORDERS = [
+    { value: "recent", label: "Recently discovered" },
+    { value: "symbol", label: "A–Z" },
+  ]
   var GALLERY_ORDERS = [
     { value: "votes", label: "Votes" },
     { value: "uniqueness", label: "Uniqueness" },
@@ -106,6 +113,13 @@ void syncSharedIconoplasmSettings().catch(function () {
     })
   }
 
+  function fetchAuthedJSON(path, init) {
+    var requestInit = Object.assign({}, init || {}, {
+      credentials: "include",
+    })
+    return fetchJSON(path, requestInit)
+  }
+
   function fetchIconoplasmAdminState() {
     return fetch(API + "/api/iconoplasm/admin/me", {
       credentials: "include",
@@ -118,6 +132,44 @@ void syncSharedIconoplasmSettings().catch(function () {
       })
       .catch(function () {
         return { authenticated: false, is_admin: false, user: null }
+      })
+  }
+
+  function fetchDiscoveryState() {
+    return fetchAuthedJSON("/api/iconoplasm/discoveries/me")
+  }
+
+  function fetchHomeCollectionCounts() {
+    var bootstrapPromise = consumeBootstrapGallery(
+      GALLERY_DEFAULT_ORDER,
+      GALLERY_INITIAL_PAGE_SIZE,
+      0,
+    )
+    if (bootstrapPromise) {
+      return bootstrapPromise
+        .then(function (data) {
+          return {
+            total: Number((data && data.total) || 0),
+            publishedTotal: Number((data && data.published_total) || 0),
+          }
+        })
+        .catch(function () {
+          return { total: 0, publishedTotal: 0 }
+        })
+    }
+    return fetchJSON(
+      "/api/public/v1/gallery?order=" +
+        encodeURIComponent(GALLERY_DEFAULT_ORDER) +
+        "&limit=1&offset=0",
+    )
+      .then(function (data) {
+        return {
+          total: Number((data && data.total) || 0),
+          publishedTotal: Number((data && data.published_total) || 0),
+        }
+      })
+      .catch(function () {
+        return { total: 0, publishedTotal: 0 }
       })
   }
 
@@ -805,20 +857,183 @@ void syncSharedIconoplasmSettings().catch(function () {
     return null
   }
 
-  function galleryOptionsMarkup() {
+  function normalizeHomeCollectionOrder(value) {
+    var candidate = String(value || "")
+      .trim()
+      .toLowerCase()
+    for (var i = 0; i < HOME_COLLECTION_ORDERS.length; i++) {
+      if (HOME_COLLECTION_ORDERS[i].value === candidate) return candidate
+    }
+    return HOME_COLLECTION_DEFAULT_ORDER
+  }
+
+  function homeCollectionOptionsMarkup() {
     var html = ""
-    for (var i = 0; i < GALLERY_ORDERS.length; i++) {
-      var option = GALLERY_ORDERS[i]
+    for (var i = 0; i < HOME_COLLECTION_ORDERS.length; i++) {
+      var option = HOME_COLLECTION_ORDERS[i]
       html +=
         '<option value="' +
         esc(option.value) +
         '"' +
-        (option.value === GALLERY_DEFAULT_ORDER ? " selected" : "") +
+        (option.value === HOME_COLLECTION_DEFAULT_ORDER ? " selected" : "") +
         ">" +
         esc(option.label) +
         "</option>"
     }
     return html
+  }
+
+  function parseIsoTimestamp(value) {
+    var parsed = Date.parse(String(value || ""))
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  function normalizeDiscoveryEntries(entries) {
+    var source = Array.isArray(entries) ? entries : []
+    var uniqueSymbols = Object.create(null)
+    var normalized = []
+    for (var i = 0; i < source.length; i++) {
+      var raw = source[i]
+      var symbol = normalizedSymbol(raw && (raw.gene_symbol || raw.symbol))
+      if (!symbol || uniqueSymbols[symbol]) continue
+      uniqueSymbols[symbol] = true
+      normalized.push({
+        gene_symbol: symbol,
+        first_discovered_at: String((raw && raw.first_discovered_at) || "").trim(),
+        last_encountered_at: String((raw && raw.last_encountered_at) || "").trim(),
+        encounter_count: Math.max(0, Number((raw && raw.encounter_count) || 0) || 0),
+      })
+    }
+    return normalized
+  }
+
+  function sortDiscoveryEntries(entries, order) {
+    var sorted = (Array.isArray(entries) ? entries : []).slice()
+    var resolvedOrder = normalizeHomeCollectionOrder(order)
+    sorted.sort(function (a, b) {
+      if (resolvedOrder === "symbol") {
+        return String(a.gene_symbol || "").localeCompare(String(b.gene_symbol || ""))
+      }
+      var aTime = parseIsoTimestamp(a.last_encountered_at || a.first_discovered_at)
+      var bTime = parseIsoTimestamp(b.last_encountered_at || b.first_discovered_at)
+      if (aTime !== bTime) return bTime - aTime
+      return String(a.gene_symbol || "").localeCompare(String(b.gene_symbol || ""))
+    })
+    return sorted
+  }
+
+  function fallbackDiscoveredGene(entry) {
+    var symbol = normalizedSymbol(entry && entry.gene_symbol)
+    return {
+      symbol: symbol,
+      full_name: symbol || "Unknown gene",
+      color: "#857565",
+      portrait: { status: "pending" },
+      portrait_candidates: [],
+    }
+  }
+
+  function loadDiscoveredGeneCardData(entry) {
+    var symbol = normalizedSymbol(entry && entry.gene_symbol)
+    if (!symbol) return Promise.resolve(null)
+    return fetchGeneDetail(symbol).then(function (detail) {
+      return detail || fallbackDiscoveredGene(entry)
+    })
+  }
+
+  function buildCollectionSummaryMarkup(collectionState) {
+    var discoveredCount = Number(collectionState && collectionState.discoveryEntries.length) || 0
+    var totalCount = Math.max(0, Number((collectionState && collectionState.total) || 0) || 0)
+    var publishedTotal = Math.max(
+      0,
+      Number((collectionState && collectionState.publishedTotal) || 0) || 0,
+    )
+    var remainingCount = totalCount > 0 ? Math.max(0, totalCount - discoveredCount) : 0
+    var progressPct = totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
+    var progressWidth = Math.max(progressPct, discoveredCount > 0 ? 2 : 0)
+    var primaryNote = discoveredCount
+      ? collectionState && collectionState.authenticated
+        ? "Every confirmed hover lands here automatically, newest encounters first."
+        : "You can browse the catalog signed out, but synced discoveries need a login."
+      : collectionState && collectionState.authenticated
+        ? "Your first confirmed hover will start the shelf. Search above while you wait."
+        : "Sign in to keep discoveries synced between the extension and the website."
+    var progressCopy = totalCount > 0
+      ? discoveredCount.toLocaleString() +
+        " of " +
+        totalCount.toLocaleString() +
+        " genes unlocked"
+      : discoveredCount.toLocaleString() + " discovered so far"
+    return (
+      '<section class="icono-collection-summary" aria-label="Collection progress">' +
+      '<article class="icono-collection-card icono-collection-card--progress">' +
+      '<div class="icono-collection-label">collection</div>' +
+      '<div class="icono-collection-value">' +
+      esc(discoveredCount.toLocaleString()) +
+      '</div>' +
+      '<div class="icono-collection-note">' +
+      esc(primaryNote) +
+      '</div>' +
+      '<div class="icono-collection-progress-track" aria-hidden="true">' +
+      '<span class="icono-collection-progress-fill" style="width:' +
+      esc(progressWidth.toFixed(1)) +
+      '%"></span>' +
+      '</div>' +
+      '<div class="icono-collection-progress-caption">' +
+      esc(progressCopy) +
+      '</div>' +
+      '</article>' +
+      '<article class="icono-collection-card">' +
+      '<div class="icono-collection-label">remaining</div>' +
+      '<div class="icono-collection-stat">' +
+      esc(remainingCount.toLocaleString()) +
+      '</div>' +
+      '<div class="icono-collection-note">Still hiding in the catalog.</div>' +
+      '</article>' +
+      '<article class="icono-collection-card">' +
+      '<div class="icono-collection-label">portraits live</div>' +
+      '<div class="icono-collection-stat">' +
+      esc(publishedTotal.toLocaleString()) +
+      '</div>' +
+      '<div class="icono-collection-note">Genes with a published mnemonic portrait right now.</div>' +
+      '</article>' +
+      '</section>'
+    )
+  }
+
+  function buildCollectionEmptyMarkup(collectionState) {
+    var isAuthenticated = !!(collectionState && collectionState.authenticated)
+    var title = isAuthenticated ? "No genes discovered yet" : "Your collection starts after login"
+    var body = isAuthenticated
+      ? "Hover a gene in the extension for about a second, then come back here. Your shelf will fill itself in."
+      : "Signed-out browsing can search the catalog, but portable discoveries only sync once you sign in."
+    var support = isAuthenticated
+      ? "You can still search any symbol above while the first discoveries come in."
+      : "That keeps guest browsing light, and it prevents your unlocks from evaporating the moment a tab disappears."
+    var actions =
+      '<div class="icono-empty-actions">' +
+      (isAuthenticated
+        ? ""
+        : '<a class="icono-home-auth-link icono-empty-link" href="' +
+          esc(voteLoginUrl()) +
+          '">Discord Login</a>') +
+      '<a class="icono-empty-link icono-empty-link--subtle" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">Read FAQ</a>' +
+      '</div>'
+    return (
+      '<section class="icono-empty icono-empty--collection">' +
+      '<div class="icono-empty-kicker">collection pending</div>' +
+      '<h2>' +
+      esc(title) +
+      '</h2>' +
+      '<p>' +
+      esc(body) +
+      '</p>' +
+      '<p class="icono-empty-support">' +
+      esc(support) +
+      '</p>' +
+      actions +
+      '</section>'
+    )
   }
 
   function buildBrickSkeletonCardMarkup() {
@@ -891,14 +1106,18 @@ void syncSharedIconoplasmSettings().catch(function () {
       "</div>" +
       '<div class="icono-gallery-actions">' +
       '<label class="icono-gallery-order" for="icono-order">' +
-      "<span>Order by</span>" +
+      "<span>Sort</span>" +
       '<select id="icono-order">' +
-      galleryOptionsMarkup() +
+      homeCollectionOptionsMarkup() +
       "</select>" +
       "</label>" +
       '<div class="icono-gallery-auth" id="icono-gallery-auth" hidden></div>' +
       "</div>" +
       "</div>" +
+      '<div class="icono-collection-shell" id="icono-collection-shell">' +
+      '<div class="icono-collection-summary-host" id="icono-collection-summary" hidden></div>' +
+      '<div class="icono-empty" id="icono-empty" hidden></div>' +
+      '</div>' +
       '<div class="icono-loading" id="icono-loading" hidden aria-live="polite"></div>' +
       '<div class="icono-grid" id="icono-grid" data-layout="' +
       esc(resolvedLayout) +
@@ -2386,21 +2605,28 @@ void syncSharedIconoplasmSettings().catch(function () {
     var grid = document.getElementById("icono-grid")
     var loading = document.getElementById("icono-loading")
     var countEl = document.getElementById("icono-gene-count")
+    var summaryEl = document.getElementById("icono-collection-summary")
+    var emptyEl = document.getElementById("icono-empty")
     var sentinelEl = document.getElementById("icono-load-sentinel")
     var input = document.getElementById("icono-q")
     var resultsEl = document.getElementById("icono-results")
     var orderEl = document.getElementById("icono-order")
     var activeGalleryRequest = 0
     var galleryState = {
-      order: GALLERY_DEFAULT_ORDER,
+      order: HOME_COLLECTION_DEFAULT_ORDER,
       offset: 0,
       total: 0,
       publishedTotal: 0,
       loading: false,
-      hasMore: true,
+      hasMore: false,
       seed: "",
       items: [],
-      prefillTarget: GALLERY_PAGE_SIZE,
+      prefillTarget: HOME_COLLECTION_PAGE_SIZE,
+      ready: false,
+      readyPromise: null,
+      authenticated: false,
+      discoveryEntries: [],
+      sortedDiscoveries: [],
     }
     var sentinelObserver = null
     var backgroundPrefillTimer = null
@@ -2418,11 +2644,11 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
 
     function currentGalleryLimit() {
-      if (galleryState.offset === 0) return GALLERY_INITIAL_PAGE_SIZE
+      if (galleryState.offset === 0) return HOME_COLLECTION_INITIAL_PAGE_SIZE
       if (galleryState.offset < galleryState.prefillTarget) {
         return Math.max(1, galleryState.prefillTarget - galleryState.offset)
       }
-      return GALLERY_PAGE_SIZE
+      return HOME_COLLECTION_PAGE_SIZE
     }
 
     function setLoadingState(message, show) {
@@ -2433,16 +2659,83 @@ void syncSharedIconoplasmSettings().catch(function () {
 
     function syncHeroCount() {
       if (!countEl) return
+      if (!galleryState.ready) {
+        countEl.textContent = "Loading your collection..."
+        return
+      }
+      var discoveredCount = Number(galleryState.discoveryEntries.length || 0)
       var publishedCount = Number(galleryState.publishedTotal || 0)
       var totalCount = Number(galleryState.total || 0)
-      iconoSidebarState.total = totalCount
-      iconoSidebarState.publishedTotal = publishedCount
+      iconoSidebarState.total = discoveredCount
+      iconoSidebarState.publishedTotal = totalCount
       renderIconoplasmSidebar()
-      countEl.textContent =
-        totalCount.toLocaleString() +
-        " human genes, " +
-        publishedCount.toLocaleString() +
-        " AI images"
+      if (totalCount > 0) {
+        countEl.textContent =
+          discoveredCount.toLocaleString() +
+          " discovered of " +
+          totalCount.toLocaleString() +
+          " human genes"
+        return
+      }
+      if (discoveredCount > 0) {
+        countEl.textContent = discoveredCount.toLocaleString() + " discovered genes"
+        return
+      }
+      countEl.textContent = galleryState.authenticated
+        ? "No discovered genes yet"
+        : "Sign in to keep a synced collection"
+    }
+
+    function renderCollectionChrome() {
+      if (summaryEl) {
+        if (!galleryState.ready) {
+          summaryEl.hidden = true
+          summaryEl.innerHTML = ""
+        } else {
+          summaryEl.hidden = false
+          summaryEl.innerHTML = buildCollectionSummaryMarkup(galleryState)
+        }
+      }
+      var hasItems = !!galleryState.sortedDiscoveries.length
+      if (emptyEl) {
+        if (!galleryState.ready || hasItems) {
+          emptyEl.hidden = true
+          emptyEl.innerHTML = ""
+        } else {
+          emptyEl.hidden = false
+          emptyEl.innerHTML = buildCollectionEmptyMarkup(galleryState)
+        }
+      }
+      if (grid) grid.hidden = galleryState.ready && !hasItems
+      if (sentinelEl) sentinelEl.hidden = !galleryState.hasMore
+      if (orderEl) orderEl.disabled = !galleryState.ready || galleryState.sortedDiscoveries.length < 2
+    }
+
+    function ensureCollectionReady() {
+      if (galleryState.ready) return Promise.resolve()
+      if (galleryState.readyPromise) return galleryState.readyPromise
+      galleryState.readyPromise = Promise.all([fetchDiscoveryState(), fetchHomeCollectionCounts()])
+        .then(function (results) {
+          var discoveryData = results[0] || {}
+          var countData = results[1] || {}
+          galleryState.authenticated = !!discoveryData.authenticated
+          galleryState.discoveryEntries = normalizeDiscoveryEntries(discoveryData.discoveries)
+          galleryState.total = Math.max(0, Number(countData.total || 0) || 0)
+          galleryState.publishedTotal = Math.max(0, Number(countData.publishedTotal || 0) || 0)
+          galleryState.sortedDiscoveries = sortDiscoveryEntries(
+            galleryState.discoveryEntries,
+            galleryState.order,
+          )
+          galleryState.hasMore = galleryState.sortedDiscoveries.length > 0
+          galleryState.ready = true
+          syncHeroCount()
+          renderCollectionChrome()
+          updateSentinelObserver()
+        })
+        .finally(function () {
+          galleryState.readyPromise = null
+        })
+      return galleryState.readyPromise
     }
 
     function updateSentinelObserver() {
@@ -2514,30 +2807,38 @@ void syncSharedIconoplasmSettings().catch(function () {
       scrollRestored = !restoreConfig
       galleryState.order = resolvedOrder
       galleryState.offset = 0
-      galleryState.total = 0
-      galleryState.publishedTotal = 0
       galleryState.loading = false
-      galleryState.hasMore = true
-      galleryState.seed =
-        restoreConfig && restoreConfig.seed
-          ? restoreConfig.seed
-          : galleryState.order === "random"
-            ? newRandomSeed()
-            : ""
+      galleryState.hasMore = galleryState.ready ? galleryState.discoveryEntries.length > 0 : false
+      galleryState.seed = ""
       galleryState.items = []
       galleryState.prefillTarget = Math.max(
-        GALLERY_PAGE_SIZE,
+        HOME_COLLECTION_PAGE_SIZE,
         Number((restoreConfig && restoreConfig.loadedCount) || 0) || 0,
       )
+      galleryState.sortedDiscoveries = galleryState.ready
+        ? sortDiscoveryEntries(galleryState.discoveryEntries, galleryState.order)
+        : []
       clearBackgroundPrefill()
       grid.setAttribute("data-layout", homeLayout)
       grid.setAttribute("aria-busy", "true")
+      grid.hidden = false
       grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout)
       destroyHomeMasonry()
       if (typeof grid._iconoPrefetchCleanup === "function") {
         grid._iconoPrefetchCleanup()
       }
+      if (summaryEl) {
+        summaryEl.hidden = true
+        summaryEl.innerHTML = ""
+      }
+      if (emptyEl) {
+        emptyEl.hidden = true
+        emptyEl.innerHTML = ""
+      }
+      if (orderEl) orderEl.value = normalizeHomeCollectionOrder(resolvedOrder)
       setLoadingState("", false)
+      syncHeroCount()
+      renderCollectionChrome()
       updateSentinelObserver()
       if (!restoreConfig) {
         window.scrollTo(0, 0)
@@ -2547,90 +2848,92 @@ void syncSharedIconoplasmSettings().catch(function () {
     }
 
     function loadNextGalleryPage() {
-      if (galleryState.loading || !galleryState.hasMore) return
+      if (galleryState.loading || (galleryState.ready && !galleryState.hasMore)) return
       galleryState.loading = true
       setLoadingState("", false)
       var pageLimit = currentGalleryLimit()
 
       var requestId = ++activeGalleryRequest
-      var path =
-        "/api/public/v1/gallery?order=" +
-        encodeURIComponent(galleryState.order) +
-        "&limit=" +
-        encodeURIComponent(String(pageLimit)) +
-        "&offset=" +
-        encodeURIComponent(String(galleryState.offset))
-      if (galleryState.seed) {
-        path += "&seed=" + encodeURIComponent(galleryState.seed)
-      }
-
-      var requestPromise = consumeBootstrapGallery(
-        galleryState.order,
-        pageLimit,
-        galleryState.offset,
-      )
-      if (!requestPromise) {
-        requestPromise = fetchJSON(path)
-      }
-
-      requestPromise
-        .then(function (data) {
+      ensureCollectionReady()
+        .then(function () {
           if (requestId !== activeGalleryRequest) return
-          var items = Array.isArray(data && data.items) ? data.items : []
-          var isFirstPage = galleryState.offset === 0
-          galleryState.order = String((data && data.order) || galleryState.order)
-          galleryState.seed = String((data && data.seed) || galleryState.seed || "")
-          galleryState.total = Number((data && data.total) || galleryState.total || 0)
-          galleryState.publishedTotal = Number(
-            (data && data.published_total) || galleryState.publishedTotal || 0,
+          var pageEntries = galleryState.sortedDiscoveries.slice(
+            galleryState.offset,
+            galleryState.offset + pageLimit,
           )
-          galleryState.hasMore = Boolean(data && data.has_more)
-          if (isFirstPage) {
-            grid.innerHTML = ""
-            grid.setAttribute("data-layout", homeLayout)
-            grid.setAttribute("aria-busy", "false")
+          var isFirstPage = galleryState.offset === 0
+          galleryState.hasMore =
+            galleryState.offset + pageEntries.length < galleryState.sortedDiscoveries.length
+          if (!pageEntries.length) {
+            if (isFirstPage) {
+              grid.innerHTML = ""
+              grid.setAttribute("aria-busy", "false")
+            }
+            renderCollectionChrome()
+            syncHeroCount()
+            updateSentinelObserver()
+            setLoadingState("", false)
+            syncHomeHistoryState(false)
+            maybeRestoreHomeScroll()
+            return
           }
-          if (items.length) {
-            var newCards = appendGrid(grid, items, galleryState.items.length, homeLayout)
-            galleryState.items = galleryState.items.concat(items)
-            galleryState.offset += items.length
-            if (homeLayout === "masonry") {
-              applyHomeMasonry(grid, newCards)
-              setupOrderedPortraitPrefetch(grid, galleryState.items)
+          return Promise.all(
+            pageEntries.map(function (entry) {
+              return loadDiscoveredGeneCardData(entry)
+            }),
+          ).then(function (items) {
+            if (requestId !== activeGalleryRequest) return
+            var resolvedItems = (Array.isArray(items) ? items : []).filter(Boolean)
+            if (isFirstPage) {
+              grid.innerHTML = ""
+              grid.setAttribute("data-layout", homeLayout)
+              grid.setAttribute("aria-busy", "false")
+            }
+            if (resolvedItems.length) {
+              var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
+              galleryState.items = galleryState.items.concat(resolvedItems)
+              galleryState.offset += pageEntries.length
+              if (homeLayout === "masonry") {
+                applyHomeMasonry(grid, newCards)
+                setupOrderedPortraitPrefetch(grid, galleryState.items)
+              } else {
+                destroyHomeMasonry()
+                warmBrickCardImages(resolvedItems)
+                wireBrickVoteBoxes(newCards)
+                wireMobileLabelCards(newCards)
+                refreshPortraitLightbox()
+                void hydrateBrickCards(newCards)
+              }
+              if (
+                isFirstPage &&
+                galleryState.offset < galleryState.prefillTarget &&
+                galleryState.hasMore
+              ) {
+                clearBackgroundPrefill()
+                backgroundPrefillTimer = window.setTimeout(function () {
+                  backgroundPrefillTimer = null
+                  loadNextGalleryPage()
+                }, 140)
+              }
             } else {
-              destroyHomeMasonry()
-              warmBrickCardImages(items)
-              wireBrickVoteBoxes(newCards)
-              wireMobileLabelCards(newCards)
-              refreshPortraitLightbox()
-              void hydrateBrickCards(newCards)
+              galleryState.offset += pageEntries.length
             }
-            if (
-              isFirstPage &&
-              galleryState.offset < galleryState.prefillTarget &&
-              galleryState.hasMore
-            ) {
-              clearBackgroundPrefill()
-              backgroundPrefillTimer = window.setTimeout(function () {
-                backgroundPrefillTimer = null
-                loadNextGalleryPage()
-              }, 140)
+            renderCollectionChrome()
+            syncHeroCount()
+            updateSentinelObserver()
+            setLoadingState("", false)
+            syncHomeHistoryState(false)
+            maybeRestoreHomeScroll()
+            if (orderEl && orderEl.value !== galleryState.order) {
+              orderEl.value = galleryState.order
             }
-          }
-          syncHeroCount()
-          updateSentinelObserver()
-          setLoadingState("", false)
-          syncHomeHistoryState(false)
-          maybeRestoreHomeScroll()
-          if (orderEl && orderEl.value !== galleryState.order) {
-            orderEl.value = galleryState.order
-          }
+          })
         })
         .catch(function (err) {
           if (requestId !== activeGalleryRequest) return
           grid.setAttribute("aria-busy", "false")
-          setLoadingState("Failed to load portraits.", true)
-          console.error("[Iconoplasm] gallery load error:", err)
+          setLoadingState("Failed to load your collection.", true)
+          console.error("[Iconoplasm] collection load error:", err)
         })
         .finally(function () {
           if (requestId === activeGalleryRequest) {
@@ -2641,7 +2944,7 @@ void syncSharedIconoplasmSettings().catch(function () {
 
     if (orderEl) {
       orderEl.addEventListener("change", function () {
-        resetGallery(orderEl.value || GALLERY_DEFAULT_ORDER)
+        resetGallery(normalizeHomeCollectionOrder(orderEl.value || HOME_COLLECTION_DEFAULT_ORDER))
       })
     }
 
@@ -2659,7 +2962,9 @@ void syncSharedIconoplasmSettings().catch(function () {
       window.removeEventListener("scroll", handleHomeScroll)
     }
 
-    resetGallery(pendingRestoreState ? pendingRestoreState.order : GALLERY_DEFAULT_ORDER)
+    resetGallery(
+      pendingRestoreState ? pendingRestoreState.order : HOME_COLLECTION_DEFAULT_ORDER,
+    )
 
     // Search with debounce
     var timer = null
@@ -3225,7 +3530,7 @@ void syncSharedIconoplasmSettings().catch(function () {
     if (!state || state.iconoplasmPage !== "home") return null
     var home = state.iconoplasmHome
     if (!home || typeof home !== "object") return null
-    var order = String(home.order || GALLERY_DEFAULT_ORDER).trim() || GALLERY_DEFAULT_ORDER
+    var order = normalizeHomeCollectionOrder(home.order || HOME_COLLECTION_DEFAULT_ORDER)
     var loadedCount = Number(home.loadedCount || 0)
     var scrollY = Number(home.scrollY || 0)
     if (!(loadedCount > 0 || scrollY > 0)) return null
