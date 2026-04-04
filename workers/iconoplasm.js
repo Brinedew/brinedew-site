@@ -40,7 +40,9 @@ const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
 const DISCOVERY_SOURCE_EXTENSION_HOVER = "extension_hover"
+const DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE = "extension_guest_merge"
 const DISCOVERY_TRIGGER_HOVER_DWELL = "hover_dwell"
+const DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE = "guest_buffer_merge"
 
 const catalogCache = {
   hash: null,
@@ -154,6 +156,7 @@ function normalizeDiscoverySource(raw) {
     .trim()
     .toLowerCase()
   if (v === DISCOVERY_SOURCE_EXTENSION_HOVER) return v
+  if (v === DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE) return v
   return null
 }
 
@@ -162,6 +165,7 @@ function normalizeDiscoveryTrigger(raw) {
     .trim()
     .toLowerCase()
   if (v === DISCOVERY_TRIGGER_HOVER_DWELL) return v
+  if (v === DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE) return v
   return null
 }
 
@@ -956,6 +960,60 @@ async function recordGeneDiscoveryEncounter(
     ok: true,
     created: !existing,
     discovery: mapGeneDiscoveryRow(row || {}),
+  }
+}
+
+async function listUserGeneDiscoveries(env, { userId, limit = 5000 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const userIdNorm = normalizeUserId(userId || "")
+  if (!userIdNorm || isGuestUserId(userIdNorm)) return []
+  const cleanedLimit = Math.max(1, Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000))
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_gene_discoveries
+     WHERE user_id = ?
+     ORDER BY first_discovered_at ASC, upper(gene_symbol) ASC
+     LIMIT ?`,
+  )
+    .bind(userIdNorm, cleanedLimit)
+    .all()
+  return (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow)
+}
+
+async function mergeGuestGeneDiscoveries(
+  env,
+  {
+    userId,
+    symbols = [],
+  } = {},
+) {
+  const userIdNorm = normalizeUserId(userId || "")
+  if (!userIdNorm || isGuestUserId(userIdNorm)) {
+    return { ok: false, error: "Authentication required" }
+  }
+  const requestedSymbols = normalizeRequestedSymbols(symbols, 2000)
+  if (!requestedSymbols.length) {
+    return {
+      ok: true,
+      merged_count: 0,
+      discoveries: await listUserGeneDiscoveries(env, { userId: userIdNorm }),
+    }
+  }
+  let mergedCount = 0
+  for (const symbol of requestedSymbols) {
+    const result = await recordGeneDiscoveryEncounter(env, {
+      userId: userIdNorm,
+      geneSymbol: symbol,
+      source: DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE,
+      trigger: DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE,
+      dwellMs: null,
+    })
+    if (result.ok) mergedCount += 1
+  }
+  return {
+    ok: true,
+    merged_count: mergedCount,
+    discoveries: await listUserGeneDiscoveries(env, { userId: userIdNorm }),
   }
 }
 
@@ -8245,6 +8303,101 @@ export async function handleIconoplasmRequest(request, env, ctx) {
             created: Boolean(result.created),
             symbol,
             discovery: result.discovery,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/discoveries/me" && request.method === "GET") {
+      if (!env.ICONOPLASM_DB) {
+        return done(
+          "discoveries_me_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "discoveries_me_guest",
+          json(
+            {
+              ok: true,
+              authenticated: false,
+              user: null,
+              discoveries: [],
+              discovered_symbols: [],
+              discovered_count: 0,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      const userId = normalizeUserId(sessionUser.user_id)
+      const discoveries = await listUserGeneDiscoveries(env, { userId })
+      return done(
+        "discoveries_me",
+        json(
+          {
+            ok: true,
+            authenticated: true,
+            user: {
+              id: userId,
+              username: sessionUser.username || null,
+            },
+            discoveries,
+            discovered_symbols: discoveries.map((row) => row.gene_symbol).filter(Boolean),
+            discovered_count: discoveries.length,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/discoveries/merge" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB) {
+        return done(
+          "discoveries_merge_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "discoveries_merge_401",
+          json(
+            { ok: false, code: "AUTH_REQUIRED", error: "Please log in first to merge guest discoveries." },
+            401,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      const payload = await parseJsonBody(request)
+      const result = await mergeGuestGeneDiscoveries(env, {
+        userId: sessionUser.user_id,
+        symbols: Array.isArray(payload?.symbols) ? payload.symbols : [],
+      })
+      if (!result.ok) {
+        return done(
+          "discoveries_merge_400",
+          json({ ok: false, error: String(result.error || "Could not merge guest discoveries") }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      return done(
+        "discoveries_merge",
+        json(
+          {
+            ok: true,
+            authenticated: true,
+            merged_count: result.merged_count,
+            discoveries: result.discoveries,
+            discovered_symbols: result.discoveries.map((row) => row.gene_symbol).filter(Boolean),
+            discovered_count: result.discoveries.length,
           },
           200,
           { "Cache-Control": "no-store" },

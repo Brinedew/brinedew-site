@@ -39,6 +39,12 @@ class FakeDiscoveryStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_gene_discoveries")) {
+      const [userId] = this.args
+      return {
+        results: this.db.listDiscoveries(userId),
+      }
+    }
     throw new Error(`Unexpected SQL in fake discovery DB all(): ${this.sql}`)
   }
 }
@@ -66,6 +72,16 @@ class FakeDiscoveryDb {
   getDiscovery(userId, geneSymbol) {
     const row = this.rows.get(this.key(userId, geneSymbol))
     return row ? { ...row } : null
+  }
+
+  listDiscoveries(userId) {
+    return Array.from(this.rows.values())
+      .filter((row) => row.user_id === String(userId))
+      .sort((left, right) => {
+        return String(left.first_discovered_at || "").localeCompare(String(right.first_discovered_at || "")) ||
+          String(left.gene_symbol || "").localeCompare(String(right.gene_symbol || ""))
+      })
+      .map((row) => ({ ...row }))
   }
 
   insertDiscovery(args) {
@@ -224,4 +240,63 @@ test("discovery encounter increments count instead of duplicating the row", asyn
   assert.equal(stored?.encounter_count, 2)
   assert.equal(stored?.first_discovered_at, firstPayload?.discovery?.first_discovered_at)
   assert.equal(stored?.last_dwell_ms, 1200)
+})
+
+test("discoveries me returns the signed-in user's discovered symbols", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "alex" },
+    },
+  })
+  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
+      method: "GET",
+      headers: { Cookie: "session=abc" },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.authenticated, true)
+  assert.deepEqual(payload?.discovered_symbols, ["TP53", "BRCA1"])
+  assert.equal(payload?.discovered_count, 2)
+})
+
+test("discoveries merge upserts guest-local symbols into the signed-in account", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "alex" },
+    },
+  })
+  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
+      method: "POST",
+      headers: {
+        Cookie: "session=abc",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ symbols: ["BRCA1", "TP53", "BRCA1", "EGFR"] }),
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.authenticated, true)
+  assert.equal(payload?.merged_count, 3)
+  assert.deepEqual(payload?.discovered_symbols, ["TP53", "BRCA1", "EGFR"])
+  assert.equal(payload?.discovered_count, 3)
+
+  const stored = env.ICONOPLASM_DB.listDiscoveries("user-123")
+  assert.equal(stored.length, 3)
 })

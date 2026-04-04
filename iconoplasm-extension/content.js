@@ -24,10 +24,13 @@
   const HIGHLIGHT_MODE_KEY = "iconoplasm_highlight_mode"
   const TOOLTIP_THEME_KEY = "iconoplasm_tooltip_theme"
   const CARD_VARIANT_KEY = "iconoplasm_card_variant"
+  const GUEST_DISCOVERIES_STORAGE_KEY = "iconoplasm_guest_discoveries_v1"
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase("https://iconoplasm.brinedew.bio")
   const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
   const ICONOPLASM_DISCOVERY_ENCOUNTER_URL =
     ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/encounter"
+  const ICONOPLASM_DISCOVERY_STATE_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/me"
+  const ICONOPLASM_DISCOVERY_MERGE_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/merge"
   const LIT_ARCHIVAL_FRAME_URL = chrome.runtime.getURL("lit-archival-frame.html")
   const LIT_ARCHIVAL_FRAME_ORIGIN = new URL(LIT_ARCHIVAL_FRAME_URL).origin
   const LIT_ARCHIVAL_FRAME_SOURCE = "iconoplasm-lit-archival-frame"
@@ -39,6 +42,7 @@
   const DEFAULT_PORTRAIT_DIMENSIONS = Object.freeze({ width: 768, height: 1024 })
   const DISCOVERY_HOVER_DWELL_MS = 900
   const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
+  const GUEST_DISCOVERY_SYMBOL_MAX = 2000
   const escapeHtml = IconoCardShared.escapeHtml
   let roughEllipseSerial = 0
 
@@ -1449,6 +1453,8 @@
   const discoveryCooldownUntilBySymbol = new Map()
   const discoveryInFlightSymbols = new Set()
   const discoveredPageSymbols = new Set()
+  const guestDiscoverySymbols = new Set()
+  let guestDiscoveryMergePromise = null
   let portraitLoadToken = 0
   const portraitDataUrlCache = new Map()
   const portraitDataUrlPromiseCache = new Map()
@@ -1516,6 +1522,126 @@
     }, delayMs)
   }
 
+  function normalizeDiscoverySymbolList(rawSymbols) {
+    const out = []
+    const seen = new Set()
+    const values = Array.isArray(rawSymbols) ? rawSymbols : []
+    for (const rawSymbol of values) {
+      const symbol = String(rawSymbol || "")
+        .trim()
+        .toUpperCase()
+      if (!symbol || seen.has(symbol)) continue
+      if (!/^[A-Z0-9][A-Z0-9-]{0,63}$/.test(symbol)) continue
+      seen.add(symbol)
+      out.push(symbol)
+      if (out.length >= GUEST_DISCOVERY_SYMBOL_MAX) break
+    }
+    return out
+  }
+
+  async function persistGuestDiscoverySymbols() {
+    try {
+      await chrome.storage.local.set({
+        [GUEST_DISCOVERIES_STORAGE_KEY]: Array.from(guestDiscoverySymbols),
+      })
+    } catch (err) {
+      console.error("[Iconoplasm] guest discovery storage write failed:", err)
+    }
+  }
+
+  async function loadGuestDiscoverySymbols() {
+    try {
+      const result = await chrome.storage.local.get([GUEST_DISCOVERIES_STORAGE_KEY])
+      const symbols = normalizeDiscoverySymbolList(result[GUEST_DISCOVERIES_STORAGE_KEY])
+      guestDiscoverySymbols.clear()
+      for (const symbol of symbols) {
+        guestDiscoverySymbols.add(symbol)
+        discoveredPageSymbols.add(symbol)
+      }
+    } catch (err) {
+      console.error("[Iconoplasm] guest discovery storage read failed:", err)
+    }
+  }
+
+  async function rememberGuestDiscovery(symbol) {
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return
+    if (guestDiscoverySymbols.has(normalizedSymbol)) {
+      discoveredPageSymbols.add(normalizedSymbol)
+      return
+    }
+    guestDiscoverySymbols.add(normalizedSymbol)
+    while (guestDiscoverySymbols.size > GUEST_DISCOVERY_SYMBOL_MAX) {
+      const oldest = guestDiscoverySymbols.values().next().value
+      if (!oldest) break
+      guestDiscoverySymbols.delete(oldest)
+    }
+    discoveredPageSymbols.add(normalizedSymbol)
+    await persistGuestDiscoverySymbols()
+  }
+
+  async function removeMergedGuestDiscoveries(symbols) {
+    let changed = false
+    for (const symbol of normalizeDiscoverySymbolList(symbols)) {
+      if (!guestDiscoverySymbols.has(symbol)) continue
+      guestDiscoverySymbols.delete(symbol)
+      changed = true
+    }
+    if (!changed) return
+    await persistGuestDiscoverySymbols()
+  }
+
+  async function fetchDiscoveryState() {
+    try {
+      const response = await extensionApiFetch(ICONOPLASM_DISCOVERY_STATE_URL, {
+        method: "GET",
+        credentials: "include",
+      })
+      if (!response.ok) return null
+      return await response.json().catch(() => null)
+    } catch (err) {
+      console.error("[Iconoplasm] discovery state fetch error:", err)
+      return null
+    }
+  }
+
+  async function mergeGuestDiscoveriesIfSignedIn() {
+    if (guestDiscoveryMergePromise) return guestDiscoveryMergePromise
+    const pendingSymbols = Array.from(guestDiscoverySymbols)
+    if (!pendingSymbols.length) return null
+    guestDiscoveryMergePromise = (async () => {
+      const state = await fetchDiscoveryState()
+      if (!state || !state.authenticated) return null
+      const knownSymbols = normalizeDiscoverySymbolList(state.discovered_symbols)
+      for (const symbol of knownSymbols) discoveredPageSymbols.add(symbol)
+      const mergeResponse = await extensionApiFetch(ICONOPLASM_DISCOVERY_MERGE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols: pendingSymbols }),
+        credentials: "include",
+      })
+      if (!mergeResponse.ok) {
+        console.warn("[Iconoplasm] guest discovery merge failed with HTTP", mergeResponse.status)
+        return null
+      }
+      const payload = await mergeResponse.json().catch(() => null)
+      const mergedSymbols = normalizeDiscoverySymbolList((payload && payload.discovered_symbols) || pendingSymbols)
+      for (const symbol of mergedSymbols) discoveredPageSymbols.add(symbol)
+      await removeMergedGuestDiscoveries(pendingSymbols)
+      return payload
+    })()
+      .catch((err) => {
+        console.error("[Iconoplasm] guest discovery merge error:", err)
+        return null
+      })
+      .finally(() => {
+        guestDiscoveryMergePromise = null
+      })
+    return guestDiscoveryMergePromise
+  }
+
   function clearPendingDiscovery(symbol = activeSymbol) {
     const normalizedSymbol = String(symbol || "")
       .trim()
@@ -1581,6 +1707,11 @@
       const payload = await response.json().catch(() => null)
       if (payload && payload.authenticated && payload.recorded) {
         discoveredPageSymbols.add(normalizedSymbol)
+        if (guestDiscoverySymbols.size > 0) {
+          mergeGuestDiscoveriesIfSignedIn().catch(() => null)
+        }
+      } else if (payload && payload.authenticated === false) {
+        await rememberGuestDiscovery(normalizedSymbol)
       }
     } catch (err) {
       console.error("[Iconoplasm] discovery encounter write error:", err)
@@ -2184,7 +2315,12 @@
     // colors natively, and the extension just adds redundant underlines.
     if (window.location.hostname === "iconoplasm.brinedew.bio") return
 
-    await Promise.all([loadHighlightMode(), loadTooltipTheme(), loadCardVariant()])
+    await Promise.all([
+      loadHighlightMode(),
+      loadTooltipTheme(),
+      loadCardVariant(),
+      loadGuestDiscoverySymbols(),
+    ])
 
     const payload = await new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }, resolve)
@@ -2216,6 +2352,7 @@
     createAuthToast()
     scanPage(document.body)
     refreshHighlightStyles()
+    mergeGuestDiscoveriesIfSignedIn().catch(() => null)
     scheduleWarmVisibleGeneDetails()
     scheduleWarmVisiblePortraits()
     if (!ensureVisibilityObserver()) {
