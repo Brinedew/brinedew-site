@@ -5,6 +5,7 @@ var THEME_COOKIE_KEY = "brinedew_theme"
 var READER_MODE_COOKIE_KEY = "brinedew_reader_mode"
 var ICONOPLASM_LAYOUT_COOKIE_KEY = "brinedew_icono_layout"
 var ICONOPLASM_CARD_VARIANT_COOKIE_KEY = "brinedew_icono_card_variant"
+var ICONOPLASM_SHOW_ALL_GENES_COOKIE_KEY = "brinedew_icono_show_all_genes"
 var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
 var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
 var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
@@ -522,6 +523,16 @@ function rememberIconoplasmSettings(settings, source) {
   return sharedIconoplasmSettingsCache
 }
 
+function syncIconoplasmSettingsFromSharedHints(source) {
+  var hintedSettings = buildIconoplasmSettings(readIconoplasmSettings())
+  if (iconoplasmSettingsSignature(sharedIconoplasmSettingsCache) === iconoplasmSettingsSignature(hintedSettings)) {
+    return hintedSettings
+  }
+  rememberIconoplasmSettings(hintedSettings, source || "shared-hint")
+  writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, hintedSettings)
+  return hintedSettings
+}
+
 export function readIconoplasmSettings() {
   var cached =
     sharedIconoplasmSettingsCache && typeof sharedIconoplasmSettingsCache === "object"
@@ -532,6 +543,10 @@ export function readIconoplasmSettings() {
   if (rawSharedLayout) settings.homeLayout = normalizeHomeLayout(rawSharedLayout)
   var rawSharedCardVariant = readCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY)
   if (rawSharedCardVariant) settings.cardVariant = normalizeCardVariant(rawSharedCardVariant)
+  var rawSharedShowAllGenes = readCookieValue(ICONOPLASM_SHOW_ALL_GENES_COOKIE_KEY)
+  if (rawSharedShowAllGenes !== "") {
+    settings.showAllGenes = normalizeBooleanSetting(rawSharedShowAllGenes)
+  }
   return settings
 }
 
@@ -541,6 +556,7 @@ export function writeIconoplasmSettings(settings) {
   if (!writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, nextSettings)) return false
   if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, nextSettings.homeLayout)) return false
   if (!writeCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY, nextSettings.cardVariant)) return false
+  if (!writeCookieValue(ICONOPLASM_SHOW_ALL_GENES_COOKIE_KEY, nextSettings.showAllGenes ? "1" : "0")) return false
   if (shouldUseSharedSettingsBridge()) {
     void requestSharedIconoplasmSettings("writeIconoplasmSettings", nextSettings)
       .then(function (sharedSettings) {
@@ -558,6 +574,7 @@ export function resetIconoplasmSettings() {
   if (!removeStorageKey(ICONOPLASM_SETTINGS_STORAGE_KEY)) return false
   if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, "")) return false
   if (!writeCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY, "")) return false
+  if (!writeCookieValue(ICONOPLASM_SHOW_ALL_GENES_COOKIE_KEY, "0")) return false
   if (shouldUseSharedSettingsBridge()) {
     void requestSharedIconoplasmSettings("resetIconoplasmSettings")
       .then(function (sharedSettings) {
@@ -621,16 +638,24 @@ export function startSharedIconoplasmSettingsAutoSync() {
   }
   sharedIconoplasmSettingsSyncStarted = true
   window.addEventListener("focus", function () {
+    syncIconoplasmSettingsFromSharedHints("focus-cookie")
     queueSharedIconoplasmSettingsRefresh("focus")
   })
   window.addEventListener("pageshow", function () {
+    syncIconoplasmSettingsFromSharedHints("pageshow-cookie")
     queueSharedIconoplasmSettingsRefresh("pageshow")
   })
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
+      syncIconoplasmSettingsFromSharedHints("visibility-cookie")
       queueSharedIconoplasmSettingsRefresh("visibility")
     }
   })
+  window.setInterval(function () {
+    if (document.visibilityState === "visible") {
+      syncIconoplasmSettingsFromSharedHints("visible-poll")
+    }
+  }, 1000)
 }
 
 export function siteSettingsUrl() {
