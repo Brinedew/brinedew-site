@@ -1969,7 +1969,7 @@ function publicRichRouteDeniedPayload(url, routeKey) {
         ? "High-fanout batch reads are reserved for the Iconoplasm website UI and browser extension"
         : "Rich per-gene detail is reserved for the Iconoplasm website UI",
     code: "FIRST_PARTY_ONLY",
-    faq_url: `${url.origin}/posts/Iconoplasm-FAQ.html`,
+    faq_url: "https://brinedew.bio/posts/Iconoplasm-FAQ.html",
     recommended_public_api: {
       metadata: publicUrl(url, "/metadata"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
