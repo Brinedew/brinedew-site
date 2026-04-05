@@ -995,7 +995,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var title = isAuthenticated ? "No genes discovered yet" : "Your collection starts after login"
     var body = isAuthenticated
       ? "Hover a gene in the extension for about a second, then come back here. Your shelf will fill itself in."
-      : "Signed-out browsing can search the catalog, but portable discoveries only sync once you sign in."
+      : "Signed-out browsing can search the starter trio, but portable discoveries only sync once you sign in."
     var support = isAuthenticated
       ? "You can still search any symbol above while the first discoveries come in."
       : "That keeps guest browsing light, and it prevents your unlocks from evaporating the moment a tab disappears."
@@ -3180,6 +3180,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       pendingRestoreState ? pendingRestoreState.order : activeDefaultOrder(),
     )
 
+    function activeSearchScope() {
+      return useClassicGallery ? "catalog" : "discoveries"
+    }
+
+    function fetchScopedSearchResults(query) {
+      var path =
+        "/api/public/v1/genes/search?q=" +
+        encodeURIComponent(query) +
+        "&limit=12&scope=" +
+        encodeURIComponent(activeSearchScope())
+      return fetchAuthedJSON(path)
+    }
+
     // Search with debounce
     var timer = null
     var activeIndex = -1
@@ -3190,16 +3203,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       clearTimeout(timer)
       activeIndex = -1
       if (!q) {
+        currentResults = []
         resultsEl.innerHTML = ""
         return
       }
       timer = setTimeout(function () {
-        fetchJSON("/api/public/v1/genes/search?q=" + encodeURIComponent(q) + "&limit=12")
+        fetchScopedSearchResults(q)
           .then(function (data) {
             currentResults = data.genes || []
             renderSearchResults(resultsEl, currentResults)
           })
           .catch(function () {
+            currentResults = []
             resultsEl.innerHTML = ""
           })
       }, DEBOUNCE_MS)
@@ -3209,10 +3224,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     input.addEventListener("keydown", function (e) {
       var items = resultsEl.querySelectorAll(".icono-search-result")
       if (!items.length) {
-        if (e.key === "Enter") {
-          var v = input.value.trim().toUpperCase()
-          if (v) navigateTo("/gene/" + encodeURIComponent(v))
-        }
         return
       }
       if (e.key === "ArrowDown") {
@@ -3227,9 +3238,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         e.preventDefault()
         if (activeIndex >= 0 && currentResults[activeIndex]) {
           navigateTo("/gene/" + encodeURIComponent(currentResults[activeIndex].symbol))
-        } else {
-          var v2 = input.value.trim().toUpperCase()
-          if (v2) navigateTo("/gene/" + encodeURIComponent(v2))
+        } else if (currentResults[0]) {
+          navigateTo("/gene/" + encodeURIComponent(currentResults[0].symbol))
         }
       } else if (e.key === "Escape") {
         resultsEl.innerHTML = ""

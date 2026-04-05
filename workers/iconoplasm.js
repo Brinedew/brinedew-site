@@ -7526,6 +7526,83 @@ function normalizeRequestedSymbols(rawSymbols, maxCount = PUBLIC_MAX_GENE_BATCH_
   )
 }
 
+function normalizePublicGeneSearchScope(raw) {
+  const value = String(raw || "")
+    .trim()
+    .toLowerCase()
+  if (value === "discoveries") return "discoveries"
+  if (value === "starter") return "starter"
+  return "catalog"
+}
+
+function normalizeSearchNeedle(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+function scorePublicGeneSearchValue(queryUpper, queryLower, rawValue, category) {
+  const value = normalizeSearchNeedle(rawValue)
+  if (!value) return null
+  const valueUpper = value.toUpperCase()
+  const valueLower = value.toLowerCase()
+  let baseRank = 100
+  if (category === "symbol") baseRank = 0
+  else if (category === "full_name") baseRank = 10
+  else if (category === "alias") baseRank = 20
+
+  if (valueUpper === queryUpper) {
+    return { rank: baseRank, matched_by: category, matched_value: value }
+  }
+  if (valueUpper.startsWith(queryUpper)) {
+    return { rank: baseRank + 1, matched_by: category, matched_value: value }
+  }
+  if (valueLower.includes(queryLower)) {
+    return { rank: baseRank + 2, matched_by: category, matched_value: value }
+  }
+  return null
+}
+
+function scorePublicGeneSearchMatch(queryUpper, queryLower, symbol, gene) {
+  const candidates = []
+  const symbolMatch = scorePublicGeneSearchValue(queryUpper, queryLower, symbol, "symbol")
+  if (symbolMatch) candidates.push(symbolMatch)
+
+  const fullName = normalizeSearchNeedle(gene?.n || symbol)
+  const fullNameMatch = scorePublicGeneSearchValue(queryUpper, queryLower, fullName, "full_name")
+  if (fullNameMatch) candidates.push(fullNameMatch)
+
+  for (const alias of normalizeCatalogAliases(gene?.a || [])) {
+    const aliasMatch = scorePublicGeneSearchValue(queryUpper, queryLower, alias, "alias")
+    if (aliasMatch) candidates.push(aliasMatch)
+  }
+
+  if (!candidates.length) return null
+  candidates.sort((left, right) => {
+    return (
+      Number(left.rank || 0) - Number(right.rank || 0) ||
+      String(left.matched_value || "").length - String(right.matched_value || "").length ||
+      compareNullableTextAsc(left.matched_value, right.matched_value)
+    )
+  })
+  return candidates[0]
+}
+
+function publicGeneSearchEntry(url, env, symbol, gene, match) {
+  const base = portraitBase(url, env)
+  const entry = {
+    symbol,
+    color: gene?.c || "#888",
+    full_name: gene?.n || symbol,
+    matched_by: match?.matched_by || null,
+    matched_value: match?.matched_value || null,
+    match_rank: Number(match?.rank ?? 999),
+  }
+  if (gene?.pt) entry.pt = joinUrl(base, gene.pt)
+  if (gene?.ph) entry.ph = joinUrl(base, gene.ph)
+  return entry
+}
+
 async function parseJsonBody(request) {
   try {
     const body = await request.json()
@@ -7853,30 +7930,95 @@ async function handlePublicMedia(request, env, symbol) {
   })
 }
 
+async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const userIdNorm = normalizeUserId(userId || "")
+  if (!userIdNorm || isGuestUserId(userIdNorm)) return []
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(10000, Number.parseInt(String(limit || "10000"), 10) || 10000),
+  )
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT d.gene_symbol
+       FROM icono_gene_discoveries d
+      WHERE d.user_id = ?
+      ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
+      LIMIT ?`,
+  )
+    .bind(userIdNorm, cleanedLimit)
+    .all()
+  return Array.from(
+    new Set(
+      (Array.isArray(rows?.results) ? rows.results : [])
+        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
+        .filter(Boolean),
+    ),
+  )
+}
+
 async function handlePublicGeneSearch(request, env) {
   const url = new URL(request.url)
-  const q = (url.searchParams.get("q") || "").trim().toUpperCase()
-  if (!q) return json({ genes: [], query: "" }, 200, { "Cache-Control": "public, max-age=30" })
+  const requestedScope = normalizePublicGeneSearchScope(url.searchParams.get("scope"))
+  const rawQuery = normalizeSearchNeedle(url.searchParams.get("q") || "")
+  const qUpper = rawQuery.toUpperCase()
+  const qLower = rawQuery.toLowerCase()
+  if (!rawQuery)
+    return json(
+      { genes: [], query: "", scope_applied: requestedScope },
+      200,
+      {
+        "Cache-Control":
+          requestedScope === "catalog" ? "public, max-age=30" : "no-store",
+      },
+    )
   await warmCatalogCache(env)
   const limit = Math.max(
     1,
     Math.min(100, Number.parseInt(url.searchParams.get("limit") || "20", 10)),
   )
-  const prefixMatches = []
-  const nameMatches = []
-  const base = portraitBase(url, env)
-  for (const [symbol, gene] of catalogCache.bySymbol) {
-    const entry = { symbol, color: gene?.c || "#888", full_name: gene?.n || symbol }
-    if (gene?.pt) entry.pt = joinUrl(base, gene.pt)
-    if (gene?.ph) entry.ph = joinUrl(base, gene.ph)
-    if (symbol.startsWith(q)) {
-      prefixMatches.push(entry)
-    } else if (gene?.n && gene.n.toUpperCase().includes(q)) {
-      nameMatches.push(entry)
+  let appliedScope = requestedScope
+  let candidateSymbols = []
+  if (requestedScope === "discoveries") {
+    const sessionUser = await iconoplasmSessionUser(request, env)
+    if (sessionUser?.user_id) {
+      candidateSymbols = await listUserDiscoveredGeneSymbols(env, { userId: sessionUser.user_id })
+      if (!candidateSymbols.length) {
+        await ensureStarterGeneDiscoveries(env, { userId: sessionUser.user_id })
+        candidateSymbols = await listUserDiscoveredGeneSymbols(env, { userId: sessionUser.user_id })
+      }
+    } else {
+      appliedScope = "starter"
+      candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
     }
+  } else if (requestedScope === "starter") {
+    candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
+  } else {
+    candidateSymbols = Array.from(catalogCache.bySymbol.keys())
   }
-  const genes = prefixMatches.concat(nameMatches).slice(0, limit)
-  return json({ genes, query: q }, 200, { "Cache-Control": "public, max-age=30" })
+
+  const matches = []
+  for (const symbol of candidateSymbols) {
+    const gene = catalogCache.bySymbol.get(symbol)
+    if (!gene) continue
+    const match = scorePublicGeneSearchMatch(qUpper, qLower, symbol, gene)
+    if (!match) continue
+    matches.push(publicGeneSearchEntry(url, env, symbol, gene, match))
+  }
+
+  matches.sort((left, right) => {
+    return (
+      Number(left.match_rank || 0) - Number(right.match_rank || 0) ||
+      compareNullableTextAsc(left.symbol, right.symbol)
+    )
+  })
+
+  const genes = matches.slice(0, limit)
+  const cacheControl = requestedScope === "catalog" ? "public, max-age=30" : "no-store"
+  return json(
+    { genes, query: qUpper, scope_applied: appliedScope },
+    200,
+    { "Cache-Control": cacheControl },
+  )
 }
 
 async function handlePublicGallery(request, env, ctx) {

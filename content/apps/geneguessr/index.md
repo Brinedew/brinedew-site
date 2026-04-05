@@ -62,6 +62,9 @@ tags:
       <span class="pg-section-label">Tissue specificity:</span> <span class="pg-section-entry"><a href="https://www.proteinatlas.org/">Human Protein Atlas</a> RNA expression (tau metric)</span>
     </div>
     <div class="pg-section">
+      <span class="pg-section-label">Cancer-role labeling:</span> <span class="pg-section-entry"><a href="https://www.oncokb.org/cancer-genes">OncoKB cancer gene list</a> (OncoKB geneType mapped to oncogene / tumor suppressor / both, with all other values treated as neither)</span>
+    </div>
+    <div class="pg-section">
       <span class="pg-section-label">3D structures:</span> <span class="pg-section-entry"><a href="https://www.rcsb.org/">RCSB PDB</a>, <a href="https://alphafold.ebi.ac.uk/">AlphaFold DB</a>, <a href="https://swissmodel.expasy.org/">SWISS-MODEL</a></span>
     </div>
     <div class="pg-section">
