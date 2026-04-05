@@ -976,17 +976,20 @@ async function listUserGeneDiscoveries(env, { userId, limit = 5000 } = {}) {
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
   const cleanedLimit = Math.max(1, Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000))
+  // These runtime tables already store canonical gene_symbol primary keys.
+  // Keep the joins/order on the raw key so SQLite can use the indexes instead
+  // of scanning and temp-sorting the whole shelf query.
   const rows = await env.ICONOPLASM_DB.prepare(
     `SELECT
        d.*,
        COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name
      FROM icono_gene_discoveries d
      LEFT JOIN icono_gene_essence ge
-       ON upper(ge.gene_symbol) = upper(d.gene_symbol)
+       ON ge.gene_symbol = d.gene_symbol
      LEFT JOIN icono_gene_catalog gc
-       ON upper(gc.gene_symbol) = upper(d.gene_symbol)
+       ON gc.gene_symbol = d.gene_symbol
      WHERE d.user_id = ?
-     ORDER BY d.first_discovered_at ASC, upper(d.gene_symbol) ASC
+     ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
      LIMIT ?`,
   )
     .bind(userIdNorm, cleanedLimit)
@@ -999,6 +1002,9 @@ async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
   const cleanedLimit = Math.max(1, Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000))
+  // The admin show-all shelf sits on the homepage critical path. Wrapping these
+  // key joins in upper(...) forced full scans and a temp B-tree sort in prod,
+  // which is why Pokedex mode got stuck on "Loading your collection...".
   const rows = await env.ICONOPLASM_DB.prepare(
     `SELECT
        gc.gene_symbol,
@@ -1014,11 +1020,11 @@ async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000
        d.last_dwell_ms
      FROM icono_gene_catalog gc
      LEFT JOIN icono_gene_essence ge
-       ON upper(ge.gene_symbol) = upper(gc.gene_symbol)
+       ON ge.gene_symbol = gc.gene_symbol
      LEFT JOIN icono_gene_discoveries d
        ON d.user_id = ?
-      AND upper(d.gene_symbol) = upper(gc.gene_symbol)
-     ORDER BY upper(gc.gene_symbol) ASC
+      AND d.gene_symbol = gc.gene_symbol
+     ORDER BY gc.gene_symbol ASC
      LIMIT ?`,
   )
     .bind(userIdNorm, cleanedLimit)
