@@ -1273,10 +1273,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .then(function (sessionState) {
         currentUserIsIconoAdmin = !!(sessionState && sessionState.is_admin)
         renderIconoplasmSidebar()
-        if (
-          getRoute().page === "home" &&
-          (previousHadUser !== !!currentUser || previousAdmin !== !!currentUserIsIconoAdmin)
-        ) {
+        if (getRoute().page === "home") {
           render()
         }
         if (
@@ -1290,7 +1287,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .catch(function () {
         currentUserIsIconoAdmin = false
         renderIconoplasmSidebar()
-        if (getRoute().page === "home" && (previousHadUser !== !!currentUser || previousAdmin)) {
+        if (getRoute().page === "home") {
           render()
         }
         if (getRoute().page === "gene" && (previousHadUser !== !!currentUser || previousAdmin)) {
