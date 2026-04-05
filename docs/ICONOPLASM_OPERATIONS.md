@@ -2,6 +2,8 @@
 
 This is the cheat sheet for answering Iconoplasm data questions from the website/runtime repo.
 
+If you are new to Iconoplasm, read `docs/ICONOPLASM_ONBOARDING.md` first. This file is for live-data operations, not for explaining the product split from scratch.
+
 The short version: if the question is about what the live site knows right now, query the remote D1 database from `d:\Coding\Website` and write the query against the runtime tables here. Do not guess from frontend state, and do not assume the sibling workstation repo has already pushed what you need.
 
 ## where to run queries
@@ -40,6 +42,8 @@ If you skip `--remote`, you are not looking at the live data.
    - If the user wants “shortest names first”, do `ORDER BY LENGTH(TRIM(full_name)) ASC, ...` in the query.
 5. When you need a top list, add `LIMIT` directly in SQL.
 6. If the output is large, prefer JSON aggregation so one row contains the result set cleanly.
+
+Exception: do **not** JSON-aggregate giant full-catalog payloads just because it looks tidy. For large admin/catalog questions, page or limit the result instead. Giant aggregates can hit D1 size limits and tell you less than you think.
 
 ## canonical example: shortest male full names
 
@@ -80,16 +84,35 @@ SELECT
   d.encounter_count
 FROM icono_gene_discoveries d
 LEFT JOIN icono_gene_essence ge
-  ON upper(ge.gene_symbol) = upper(d.gene_symbol)
+  ON ge.gene_symbol = d.gene_symbol
 LEFT JOIN icono_gene_catalog gc
-  ON upper(gc.gene_symbol) = upper(d.gene_symbol)
+  ON gc.gene_symbol = d.gene_symbol
 WHERE d.user_id = ?
-ORDER BY d.first_discovered_at ASC, upper(d.gene_symbol) ASC;
+ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC;
 ```
+
+Why this shape matters:
+
+- these runtime tables already store canonical uppercase `gene_symbol` keys
+- joining on the raw key lets SQLite use the indexes
+- wrapping both sides in `upper(...)` looks safe but can turn a fast shelf query into a scan and temp sort
+
+## shelf contract
+
+Two rules matter here:
+
+1. Signed-in personal shelf mode comes from `icono_gene_discoveries` through `/api/iconoplasm/discoveries/me`.
+2. Signed-in users should never have a real zero-state shelf. The starter trio (`INS`, `LEP`, `GCG`) is part of the contract.
+
+So if an authenticated user appears to have zero discoveries, do not assume the UI is allowed to show that. Check whether the worker failed to seed or return the starter rows.
+
+Admin classic gallery mode is different. That mode should use the classic public gallery path, not a giant fake discoveries payload.
 
 ## sanity checks
 
 - If a result looks wrong, confirm you used `--remote`.
+- If an authenticated homepage shows `0 discovered`, treat that as a bug, not a harmless edge case.
+- If admin classic gallery mode is involved, confirm the page is using the classic gallery route before debugging the shelf API.
 - If names look stale or absent, compare `icono_gene_essence` and `icono_gene_catalog` instead of trusting one blindly.
 - If published portraits look wrong, that is usually `icono_publish_state` plus `icono_portrait_assets`, not `icono_gene_essence`.
 

@@ -15,6 +15,8 @@ Source for my personal site. Wet lab biologist, interested in aging and cancer, 
 
 For Iconoplasm specifically, this repo is the website/runtime side, not the local authoring workstation. If published catalog data, alias export, or Website Ops payloads look wrong, start in `d:\Coding\Datasets\iconoplasm` first. That sibling repo is the control plane that publishes what this website and the browser extension consume.
 
+If you are onboarding or debugging the homepage, read `docs/ICONOPLASM_ONBOARDING.md` before touching code. It spells out the mode split, starter-gene contract, route map, and the operational mistakes that are easy to make if you only look at one layer.
+
 If you need to answer a data question from the live Iconoplasm database, do not re-derive the retrieval steps from scratch. Start with `docs/ICONOPLASM_OPERATIONS.md`, which has the remote D1 query workflow, the tables that matter, and a canned example for shortest-name lookups.
 
 ## how it works
@@ -43,12 +45,17 @@ The `?gg_api=<url>` override is for local dev only. It persists in localStorage;
 
 ## deployment
 
-Production deploys through one path only: the `Deploy Production (Cloudflare Pages + Worker)` GitHub Actions workflow.
+Production usually deploys through the `Deploy Production (Cloudflare Pages + Worker)` GitHub Actions workflow.
 
 - Normal release: push `main`
 - Manual re-run of the same path: `powershell -File scripts/deploy-cloudflare-prod.ps1`
 
-Direct local `wrangler pages deploy` / `wrangler deploy` production releases are intentionally not part of the supported flow.
+For Iconoplasm worker-only hotfixes and live debugging, there is also a verified direct worker path from `d:\Coding\Website`:
+
+- `npx wrangler deploy`
+- or the VS Code task `Deploy iconoplasm worker now`
+
+If you use the worker-only hotfix path, still commit and push immediately so production and Git do not drift.
 
 ## license
 
