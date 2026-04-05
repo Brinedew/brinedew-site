@@ -2613,6 +2613,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var resultsEl = document.getElementById("icono-results")
     var orderEl = document.getElementById("icono-order")
     var activeGalleryRequest = 0
+    var renderDisposed = false
     var galleryState = {
       order: useClassicGallery ? GALLERY_DEFAULT_ORDER : HOME_COLLECTION_DEFAULT_ORDER,
       offset: 0,
@@ -2780,6 +2781,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
 
     function ensureCollectionReady() {
+      if (renderDisposed) return Promise.resolve()
       if (useClassicGallery) {
         galleryState.ready = true
         galleryState.authenticated = !!currentUser
@@ -2797,6 +2799,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         fetchHomeCollectionCounts(),
       ])
         .then(function (results) {
+          if (renderDisposed) return { discoveryData: {}, countData: {} }
           var countData = results[1] || {}
           return fetchDiscoveryState(galleryState.order, galleryState.seed).then(function (discoveryData) {
             return {
@@ -2806,6 +2809,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           })
         })
         .then(function (results) {
+          if (renderDisposed) return
           var discoveryData = results.discoveryData || {}
           var countData = results.countData || {}
           galleryState.authenticated = !!discoveryData.authenticated
@@ -2967,6 +2971,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
 
     function loadNextGalleryPage() {
+      if (renderDisposed) return
       if (galleryState.loading || (galleryState.ready && !galleryState.hasMore)) return
       galleryState.loading = true
       setLoadingState("", false)
@@ -2996,7 +3001,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
         requestPromise
           .then(function (data) {
-            if (requestId !== activeGalleryRequest) return
+            if (renderDisposed || requestId !== activeGalleryRequest) return
             var items = Array.isArray(data && data.items) ? data.items : []
             var isFirstPage = galleryState.offset === 0
             galleryState.order = String((data && data.order) || galleryState.order)
@@ -3050,13 +3055,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             }
           })
           .catch(function (err) {
-            if (requestId !== activeGalleryRequest) return
+            if (renderDisposed || requestId !== activeGalleryRequest) return
             grid.setAttribute("aria-busy", "false")
             setLoadingState("Failed to load portraits.", true)
             console.error("[Iconoplasm] gallery load error:", err)
           })
           .finally(function () {
-            if (requestId === activeGalleryRequest) {
+            if (!renderDisposed && requestId === activeGalleryRequest) {
               galleryState.loading = false
             }
           })
@@ -3064,7 +3069,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
       ensureCollectionReady()
         .then(function () {
-          if (requestId !== activeGalleryRequest) return
+          if (renderDisposed || requestId !== activeGalleryRequest) return
           var pageEntries = galleryState.sortedDiscoveries.slice(
             galleryState.offset,
             galleryState.offset + pageLimit,
@@ -3090,7 +3095,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               return loadDiscoveredGeneCardData(entry)
             }),
           ).then(function (items) {
-            if (requestId !== activeGalleryRequest) return
+            if (renderDisposed || requestId !== activeGalleryRequest) return
             var resolvedItems = (Array.isArray(items) ? items : []).filter(Boolean)
             if (isFirstPage) {
               grid.innerHTML = ""
@@ -3138,13 +3143,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           })
         })
         .catch(function (err) {
-          if (requestId !== activeGalleryRequest) return
+          if (renderDisposed || requestId !== activeGalleryRequest) return
           grid.setAttribute("aria-busy", "false")
           setLoadingState("Failed to load your collection.", true)
           console.error("[Iconoplasm] collection load error:", err)
         })
         .finally(function () {
-          if (requestId === activeGalleryRequest) {
+          if (!renderDisposed && requestId === activeGalleryRequest) {
             galleryState.loading = false
           }
         })
@@ -3162,6 +3167,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
     window.addEventListener("scroll", handleHomeScroll, { passive: true })
     activeHomeRenderCleanup = function () {
+      renderDisposed = true
+      activeGalleryRequest += 1
+      galleryState.loading = false
+      galleryState.readyPromise = null
       if (sentinelObserver) {
         sentinelObserver.disconnect()
         sentinelObserver = null
