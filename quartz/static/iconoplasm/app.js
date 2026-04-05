@@ -48,12 +48,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       last_encountered_at: "2026-01-03T00:00:00.000Z",
     },
     {
-      gene_symbol: "LEP",
+      gene_symbol: "RHO",
       first_discovered_at: "2026-01-02T00:00:00.000Z",
       last_encountered_at: "2026-01-02T00:00:00.000Z",
     },
     {
-      gene_symbol: "GCG",
+      gene_symbol: "PRL",
       first_discovered_at: "2026-01-01T00:00:00.000Z",
       last_encountered_at: "2026-01-01T00:00:00.000Z",
     },
@@ -943,7 +943,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       : discoveredCount
         ? collectionState && collectionState.authenticated
         ? "Every confirmed hover lands here automatically, newest encounters first."
-        : "Guests start with insulin, leptin, and glucagon. Sign in to keep collecting."
+          : "Guests start with insulin, rhodopsin, and prolactin. Sign in to keep collecting."
         : collectionState && collectionState.authenticated
           ? "Your first confirmed hover will start the shelf. Search above while you wait."
           : "Sign in to keep discoveries synced between the extension and the website."

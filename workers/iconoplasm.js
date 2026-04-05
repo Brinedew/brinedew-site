@@ -46,7 +46,7 @@ const DISCOVERY_SOURCE_STARTER_SEED = "starter_seed"
 const DISCOVERY_TRIGGER_HOVER_DWELL = "hover_dwell"
 const DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE = "guest_buffer_merge"
 const DISCOVERY_TRIGGER_STARTER_SEED = "starter_seed"
-const ICONOPLASM_STARTER_GENE_SYMBOLS = ["INS", "LEP", "GCG"]
+const ICONOPLASM_STARTER_GENE_SYMBOLS = ["INS", "RHO", "PRL"]
 
 const catalogCache = {
   hash: null,

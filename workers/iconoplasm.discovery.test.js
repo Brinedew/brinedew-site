@@ -66,8 +66,8 @@ class FakeDiscoveryDb {
     this.tick = 0
     this.geneNames = new Map([
       ["INS", "Insulin"],
-      ["LEP", "Leptin"],
-      ["GCG", "Glucagon"],
+      ["RHO", "Rhodopsin"],
+      ["PRL", "Prolactin"],
       ["TP53", "Tumor protein p53"],
       ["BRCA1", "BRCA1 DNA repair associated"],
       ["EGFR", "Epidermal growth factor receptor"],
@@ -76,8 +76,8 @@ class FakeDiscoveryDb {
     ])
     this.geneMetrics = new Map([
       ["INS", { weight_kg: 5.1, age_years: 2.4, uniqueness_rank: 7, image_upvotes: 2, image_downvotes: 0, image_score: 2, published_at: "2025-04-01T00:00:01Z", asset_created_at: "2025-04-01T00:00:01Z" }],
-      ["LEP", { weight_kg: 6.3, age_years: 3.8, uniqueness_rank: 4, image_upvotes: 8, image_downvotes: 1, image_score: 7, published_at: "2025-04-01T00:00:02Z", asset_created_at: "2025-04-01T00:00:02Z" }],
-      ["GCG", { weight_kg: 4.4, age_years: 1.9, uniqueness_rank: 10, image_upvotes: 1, image_downvotes: 0, image_score: 1, published_at: "2025-04-01T00:00:03Z", asset_created_at: "2025-04-01T00:00:03Z" }],
+      ["RHO", { weight_kg: 6.3, age_years: 3.8, uniqueness_rank: 4, image_upvotes: 8, image_downvotes: 1, image_score: 7, published_at: "2025-04-01T00:00:02Z", asset_created_at: "2025-04-01T00:00:02Z" }],
+      ["PRL", { weight_kg: 4.4, age_years: 1.9, uniqueness_rank: 10, image_upvotes: 1, image_downvotes: 0, image_score: 1, published_at: "2025-04-01T00:00:03Z", asset_created_at: "2025-04-01T00:00:03Z" }],
       ["TP53", { weight_kg: 9.9, age_years: 12.2, uniqueness_rank: 2, image_upvotes: 20, image_downvotes: 2, image_score: 18, published_at: "2025-04-01T00:00:04Z", asset_created_at: "2025-04-01T00:00:04Z" }],
       ["BRCA1", { weight_kg: 7.7, age_years: 8.1, uniqueness_rank: 5, image_upvotes: 14, image_downvotes: 3, image_score: 11, published_at: "2025-04-01T00:00:05Z", asset_created_at: "2025-04-01T00:00:05Z" }],
       ["EGFR", { weight_kg: 3.6, age_years: 6.5, uniqueness_rank: 8, image_upvotes: 4, image_downvotes: 1, image_score: 3, published_at: "2025-04-01T00:00:06Z", asset_created_at: "2025-04-01T00:00:06Z" }],
@@ -267,8 +267,8 @@ test("discovery encounter inserts the first authenticated gene discovery", async
   assert.equal(stored?.first_dwell_ms, 900)
   assert.equal(env.ICONOPLASM_DB.rows.size, 4)
   assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "INS"))
-  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "LEP"))
-  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "GCG"))
+  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "RHO"))
+  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "PRL"))
 })
 
 test("discovery encounter increments count instead of duplicating the row", async () => {
@@ -331,7 +331,7 @@ test("discoveries me returns the signed-in user's discovered symbols", async () 
   assert.equal(payload?.ok, true)
   assert.equal(payload?.authenticated, true)
   assert.equal(payload?.order, "newest")
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["BRCA1", "GCG", "INS", "LEP", "TP53"])
+  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["BRCA1", "INS", "PRL", "RHO", "TP53"])
   assert.equal(payload?.discovered_count, 5)
   assert.equal(
     payload?.discoveries?.find((row) => row.gene_symbol === "TP53")?.full_name,
@@ -364,7 +364,7 @@ test("discoveries me honors gallery-style sort orders on the shelf", async () =>
   assert.equal(payload?.order, "heaviest")
   assert.deepEqual(
     payload?.discoveries?.map((row) => row.gene_symbol),
-    ["TP53", "BRCA1", "LEP", "INS", "GCG", "EGFR"],
+    ["TP53", "BRCA1", "RHO", "INS", "PRL", "EGFR"],
   )
 })
 
@@ -388,7 +388,7 @@ test("discoveries me seeds the starter trio for an empty signed-in shelf", async
   assert.equal(response.status, 200)
   assert.equal(payload?.authenticated, true)
   assert.equal(payload?.discovered_count, 3)
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["GCG", "INS", "LEP"])
+  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["INS", "PRL", "RHO"])
   assert.ok(payload?.discoveries?.every((row) => row.first_source === "starter_seed"))
   assert.ok(payload?.discoveries?.every((row) => row.first_trigger === "starter_seed"))
 })
@@ -414,7 +414,7 @@ test("discoveries me ignores show-all requests from non-admin users", async () =
   assert.equal(response.status, 200)
   assert.equal(payload?.show_all_requested, true)
   assert.equal(payload?.show_all_applied, false)
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["GCG", "INS", "LEP", "TP53"])
+  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["INS", "PRL", "RHO", "TP53"])
 })
 
 test("discoveries me lets admins override their shelf with the full catalog", async () => {
@@ -476,7 +476,7 @@ test("discoveries merge upserts guest-local symbols into the signed-in account",
   assert.equal(payload?.ok, true)
   assert.equal(payload?.authenticated, true)
   assert.equal(payload?.merged_count, 3)
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["BRCA1", "EGFR", "GCG", "INS", "LEP", "TP53"])
+  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["BRCA1", "EGFR", "INS", "PRL", "RHO", "TP53"])
   assert.equal(payload?.discovered_count, 6)
 
   const stored = env.ICONOPLASM_DB.listDiscoveries("user-123")
