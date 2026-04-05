@@ -210,9 +210,9 @@ function sharedBridgeUrl() {
   return canonicalSettingsOrigin() + ICONOPLASM_SHARED_BRIDGE_PATH
 }
 
-function sharedBridgeWindowReady(iframe) {
+function sharedBridgeFrameLoaded(iframe) {
   if (!iframe || iframe.getAttribute("src") !== sharedBridgeUrl()) return false
-  if (iframe.getAttribute("data-ready") !== "true" || !iframe.contentWindow) return false
+  if (!iframe.contentWindow) return false
   try {
     var loadedOrigin = String(
       (iframe.contentWindow.location && iframe.contentWindow.location.origin) || "",
@@ -222,6 +222,11 @@ function sharedBridgeWindowReady(iframe) {
     return true
   }
   return true
+}
+
+function sharedBridgeWindowReady(iframe) {
+  if (iframe.getAttribute("data-ready") !== "true") return false
+  return sharedBridgeFrameLoaded(iframe)
 }
 
 function markBridgeReady() {
@@ -328,7 +333,10 @@ function sharedBridgeReady() {
     }
 
     function handleLoad() {
-      if (!sharedBridgeWindowReady(iframe)) {
+      // Do not gate the initial load event on data-ready. This handler is what
+      // flips the bridge into the ready state, so requiring the flag first
+      // wedges the promise forever and the homepage never requests discoveries.
+      if (!sharedBridgeFrameLoaded(iframe)) {
         if (iframe.getAttribute("src") !== url) {
           navigateSharedBridgeIframe(iframe)
         }
@@ -353,8 +361,9 @@ function sharedBridgeReady() {
     }
     attachSharedBridgeIframe(iframe)
 
-    if (sharedBridgeWindowReady(iframe)) {
+    if (sharedBridgeFrameLoaded(iframe)) {
       cleanup()
+      markBridgeReady()
       sharedBridgePromise = null
       resolve(iframe.contentWindow)
     }

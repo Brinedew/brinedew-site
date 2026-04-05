@@ -229,9 +229,9 @@ function sharedAuthBridgeUrl() {
   return canonicalAuthOrigin() + AUTH_BRIDGE_PATH
 }
 
-function authBridgeWindowReady(iframe) {
+function authBridgeFrameLoaded(iframe) {
   if (!iframe || iframe.getAttribute("src") !== sharedAuthBridgeUrl()) return false
-  if (iframe.getAttribute("data-ready") !== "true" || !iframe.contentWindow) return false
+  if (!iframe.contentWindow) return false
   try {
     var loadedOrigin = String(
       (iframe.contentWindow.location && iframe.contentWindow.location.origin) || "",
@@ -241,6 +241,11 @@ function authBridgeWindowReady(iframe) {
     return true
   }
   return true
+}
+
+function authBridgeWindowReady(iframe) {
+  if (iframe.getAttribute("data-ready") !== "true") return false
+  return authBridgeFrameLoaded(iframe)
 }
 
 function ensureAuthBridgeIframe() {
@@ -303,7 +308,10 @@ function resolveAuthBridge() {
     }
 
     function onLoad() {
-      if (!authBridgeWindowReady(iframe)) {
+      // Same trap as the settings bridge: the load handler is responsible for
+      // setting data-ready, so checking that flag before resolving deadlocks
+      // the iframe handshake on the first successful load.
+      if (!authBridgeFrameLoaded(iframe)) {
         if (iframe.getAttribute("src") !== sharedAuthBridgeUrl()) {
           navigateAuthBridgeIframe(iframe)
         }
@@ -329,8 +337,9 @@ function resolveAuthBridge() {
     }
     attachAuthBridgeIframe(iframe)
 
-    if (authBridgeWindowReady(iframe)) {
+    if (authBridgeFrameLoaded(iframe)) {
       cleanup()
+      iframe.setAttribute("data-ready", "true")
       authBridgePromise = null
       resolve(iframe)
     }
