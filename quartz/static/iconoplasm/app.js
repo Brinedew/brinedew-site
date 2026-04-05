@@ -17,7 +17,7 @@ import {
 } from "../shared/sidebar-shell.js?v=20260310d"
 import "./generated/lit-archival-card.js?v=20260402a"
 
-void syncSharedIconoplasmSettings().catch(function () {
+var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function () {
   return null
 })
 ;(function () {
@@ -2703,10 +2703,26 @@ void syncSharedIconoplasmSettings().catch(function () {
     function ensureCollectionReady() {
       if (galleryState.ready) return Promise.resolve()
       if (galleryState.readyPromise) return galleryState.readyPromise
-      galleryState.readyPromise = Promise.all([fetchDiscoveryState(), fetchHomeCollectionCounts()])
+      // The shared settings bridge populates iconoplasm.brinedew.bio from the canonical
+      // settings host on brinedew.bio. Wait for that first sync before the initial
+      // discoveries request, otherwise a fresh load can race ahead with stale defaults
+      // and silently drop admin-only flags like show_all=1.
+      galleryState.readyPromise = Promise.all([
+        initialSharedSettingsPromise,
+        fetchHomeCollectionCounts(),
+      ])
         .then(function (results) {
-          var discoveryData = results[0] || {}
           var countData = results[1] || {}
+          return fetchDiscoveryState().then(function (discoveryData) {
+            return {
+              discoveryData: discoveryData || {},
+              countData: countData,
+            }
+          })
+        })
+        .then(function (results) {
+          var discoveryData = results.discoveryData || {}
+          var countData = results.countData || {}
           galleryState.authenticated = !!discoveryData.authenticated
           galleryState.showAllGenes = !!discoveryData.show_all_applied
           galleryState.discoveryEntries = galleryState.authenticated
