@@ -264,8 +264,8 @@ import {
           '<input id="site-settings-show-all-genes" type="checkbox"' +
           (snapshot.iconoplasm.showAllGenes ? " checked" : "") +
           ">" +
-          '<span><span class="site-settings-toggle-title">Show all genes</span>' +
-          '<span class="site-settings-toggle-note">Override your personal discovery shelf in this browser and treat the whole catalog as unlocked until you turn this back off.</span></span>' +
+          '<span><span class="site-settings-toggle-title">Use classic full gallery</span>' +
+          '<span class="site-settings-toggle-note">Admins can switch this browser between the personal Pokedex shelf and the old full-catalog gallery.</span></span>' +
           "</label>"
         : "") +
       "</div>" +
