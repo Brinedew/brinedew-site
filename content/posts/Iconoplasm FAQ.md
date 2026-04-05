@@ -87,6 +87,26 @@ draft: false
     - Same goes for any non-humanoid objects (for example, object-heads), however helmets are OK.
     - Monstrous humanlike faces (for example, ogres, nekomimi) are OK if they pass more as human than as animal. Monster-human hybrids are OK if the top part is human (centaurs, nagas, driders).
 
+1. **Why did some API routes stop being openly scriptable?**
+
+    Because the rich per-gene routes are the easiest way to turn Iconoplasm into an accidental bulk mirror and run up Cloudflare costs for no scientific benefit.
+
+    Normal use is still supported:
+
+    - the website UI still works
+    - the browser extension still works
+    - lightweight public metadata and catalog sync routes still work
+
+    If you want to mirror or analyze the data programmatically, use the public bulk-friendly contract instead of one-gene-at-a-time scraping:
+
+    - `/api/public/v1/metadata`
+    - `/api/public/v1/catalog/manifest`
+    - the immutable catalog artifact and JSONL dump listed in that manifest
+    - `/api/public/v1/changes`
+    - `/api/public/v1/resolve`
+
+    That is the supported way to keep a local copy up to date. It is cheaper, cacheable, and much less likely to melt the budget just because someone decided to enumerate the whole catalog through the most expensive route possible.
+
 1. **Why aren't you featuring artists names in style descriptions by default?**
 
     Artists don't want their names under some AI generated content. I'm not so sure I would want my name near some of their content either.

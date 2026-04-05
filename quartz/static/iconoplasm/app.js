@@ -555,7 +555,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!options.forceFresh && portraitDetailCache[key]) return Promise.resolve(portraitDetailCache[key])
     if (!options.forceFresh && portraitDetailPromiseCache[key]) return portraitDetailPromiseCache[key]
 
-    var detailPath = "/api/public/v1/genes/" + encodeURIComponent(key)
+    // Rich per-gene detail is intentionally first-party only now. Bulk consumers
+    // should sync from catalog snapshots + changes instead of crawling one gene at a time.
+    var detailPath = "/api/iconoplasm/site/genes/" + encodeURIComponent(key)
     var requestInit = undefined
     if (options.forceFresh) {
       detailPath += "?fresh=" + encodeURIComponent(String(Date.now()))
@@ -3529,7 +3531,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var contentEl = document.getElementById("icono-gene-content")
     var loadingEl = document.getElementById("icono-gene-loading")
 
-    var detailPath = "/api/public/v1/genes/" + encodeURIComponent(symbol)
+    var detailPath = "/api/iconoplasm/site/genes/" + encodeURIComponent(symbol)
     var detailRequestInit = undefined
     if (opts.forceFresh) {
       detailPath += "?fresh=" + encodeURIComponent(String(Date.now()))

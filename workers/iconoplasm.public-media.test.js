@@ -103,6 +103,23 @@ test("public gene payload includes published portrait dimensions", async () => {
   )
   const payload = await response.json()
 
+  assert.equal(response.status, 403)
+  assert.equal(payload?.code, "FIRST_PARTY_ONLY")
+  assert.match(String(payload?.error || ""), /website ui/i)
+})
+
+test("site gene payload includes published portrait dimensions for first-party browser requests", async () => {
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: {
+        Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
+      },
+    }),
+    buildEnv(),
+    {},
+  )
+  const payload = await response.json()
+
   assert.equal(response.status, 200)
   assert.equal(payload?.portrait?.status, "published")
   assert.equal(payload?.portrait?.width, 384)
@@ -120,4 +137,36 @@ test("public media payload includes published portrait dimensions", async () => 
   assert.equal(response.status, 200)
   assert.equal(payload?.media?.width, 384)
   assert.equal(payload?.media?.height, 512)
+})
+
+test("public gene batch is limited to first-party clients and extension traffic", async () => {
+  const deniedResponse = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: ["A1BG"] }),
+    }),
+    buildEnv(),
+    {},
+  )
+  const deniedPayload = await deniedResponse.json()
+  assert.equal(deniedResponse.status, 403)
+  assert.equal(deniedPayload?.code, "FIRST_PARTY_ONLY")
+
+  const extensionResponse = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Iconoplasm-Extension-Version": "0.3.0",
+      },
+      body: JSON.stringify({ symbols: ["A1BG"] }),
+    }),
+    buildEnv(),
+    {},
+  )
+  const extensionPayload = await extensionResponse.json()
+  assert.equal(extensionResponse.status, 200)
+  assert.equal(Array.isArray(extensionPayload?.genes), true)
+  assert.equal(extensionPayload?.genes?.[0]?.symbol, "A1BG")
 })

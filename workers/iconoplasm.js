@@ -31,6 +31,7 @@ const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const API_SCHEMA_VERSION = 3
 const PUBLIC_API_VERSION = "v1"
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
+const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
 const MIN_EXTENSION_VERSION = "0.3.0"
 
 const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
@@ -97,6 +98,14 @@ const RL_WINDOW_MS = 60 * 1000
 const RANDOM_ARTIST_METAVISION_RE = /^artist-random-[a-z0-9-]+$/i
 const LEGACY_ARTIST_VISION_RE = /^artist-(?!random-)[a-z0-9()_-]+$/i
 const CANONICAL_RANDOM_ARTIST_VARIANT_RE = /^[a-z0-9-]+-v\d+-\d+$/i
+const TRUSTED_ICONOPLASM_CLIENT_HOSTS = new Set([
+  "iconoplasm.brinedew.bio",
+  "brinedew.bio",
+  "www.brinedew.bio",
+  "staging.brinedew.bio",
+  "localhost",
+  "127.0.0.1",
+])
 
 export function isIconoplasmRequest(host) {
   return host === ICONOPLASM_HOST || host.startsWith("iconoplasm.")
@@ -1929,6 +1938,51 @@ function rateLimit(request, routeKey, maxPerMin) {
       "X-RateLimit-Reset": String(resetSeconds),
     },
   }
+}
+
+function requestHeaderHost(request, headerName) {
+  const raw = String(request.headers.get(headerName) || "").trim()
+  if (!raw) return ""
+  try {
+    return new URL(raw).host.toLowerCase()
+  } catch {
+    return ""
+  }
+}
+
+function hasTrustedIconoplasmBrowserOrigin(request) {
+  const originHost = requestHeaderHost(request, "Origin")
+  const refererHost = requestHeaderHost(request, "Referer")
+  if (originHost && TRUSTED_ICONOPLASM_CLIENT_HOSTS.has(originHost)) return true
+  if (refererHost && TRUSTED_ICONOPLASM_CLIENT_HOSTS.has(refererHost)) return true
+  return false
+}
+
+function hasExtensionClientHeader(request) {
+  return Boolean(String(extVersion(request) || "").trim())
+}
+
+function publicRichRouteDeniedPayload(url, routeKey) {
+  return {
+    error:
+      routeKey === "gene_batch"
+        ? "High-fanout batch reads are reserved for the Iconoplasm website UI and browser extension"
+        : "Rich per-gene detail is reserved for the Iconoplasm website UI",
+    code: "FIRST_PARTY_ONLY",
+    faq_url: `${url.origin}/posts/Iconoplasm-FAQ.html`,
+    recommended_public_api: {
+      metadata: publicUrl(url, "/metadata"),
+      catalog_manifest: publicUrl(url, "/catalog/manifest"),
+      changes: publicUrl(url, "/changes"),
+      resolve: publicUrl(url, "/resolve"),
+    },
+  }
+}
+
+function canAccessRichBatchRoute(request, env) {
+  if (hasAdminToken(request, env)) return true
+  if (hasExtensionClientHeader(request)) return true
+  return hasTrustedIconoplasmBrowserOrigin(request)
 }
 
 function normalizeArtistBlacklistSubmissionInput(raw) {
@@ -7930,6 +7984,33 @@ async function handlePublicMedia(request, env, symbol) {
   })
 }
 
+async function handleSiteGeneDetail(request, env, path) {
+  const url = new URL(request.url)
+  const rawId = path.slice(`${SITE_GENE_API_PREFIX}/`.length)
+  const resolved = await resolveGene(env, rawId)
+  if (!resolved) return json({ error: "Gene not found" }, 404)
+  const canonicalPath = `${SITE_GENE_API_PREFIX}/${encodeURIComponent(resolved.symbol)}`
+  if (path !== canonicalPath) {
+    return Response.redirect(`${url.origin}${canonicalPath}`, 302)
+  }
+  const payload = projectGeneRecord(
+    await geneRecord(env, url, resolved.symbol),
+    url.searchParams.get("fields"),
+  )
+  const etag = await etagFor(payload)
+  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ...corsHeaders(),
+        ETag: etag,
+        "Cache-Control": "private, max-age=120",
+      },
+    })
+  }
+  return json(payload, 200, { ETag: etag, "Cache-Control": "private, max-age=120" })
+}
+
 async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
@@ -8388,6 +8469,13 @@ export async function handleIconoplasmRequest(request, env, ctx) {
     }
 
     if (path === publicApiPath("/genes/batch")) {
+      if (!canAccessRichBatchRoute(request, env)) {
+        return done(
+          "public_gene_batch_denied",
+          json(publicRichRouteDeniedPayload(url, "gene_batch"), 403),
+          API_SCHEMA_VERSION,
+        )
+      }
       const rl = rateLimit(request, "public_gene_batch", 60)
       if (rl.retryAfterSeconds) {
         return done(
@@ -8480,11 +8568,18 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
-    if (path.startsWith(publicApiPath("/genes/"))) {
-      const rl = rateLimit(request, "public_gene", 240)
+    if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
+      if (!hasTrustedIconoplasmBrowserOrigin(request) && !hasAdminToken(request, env)) {
+        return done(
+          "site_gene_denied",
+          json(publicRichRouteDeniedPayload(url, "gene_detail"), 403),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const rl = rateLimit(request, "site_gene", 120)
       if (rl.retryAfterSeconds) {
         return done(
-          "public_gene_rl",
+          "site_gene_rl",
           json(
             { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
             429,
@@ -8493,39 +8588,20 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const rawId = path.slice(publicApiPath("/genes/").length)
-      const resolved = await resolveGene(env, rawId)
-      if (!resolved)
-        return done("public_gene_404", json({ error: "Gene not found" }, 404), API_SCHEMA_VERSION)
-      const canonicalPath = publicApiPath(`/genes/${encodeURIComponent(resolved.symbol)}`)
-      if (path !== canonicalPath) {
-        return done(
-          "public_gene_redirect",
-          Response.redirect(`${url.origin}${canonicalPath}`, 302),
-          API_SCHEMA_VERSION,
-        )
-      }
-      const payload = projectGeneRecord(
-        await geneRecord(env, url, resolved.symbol),
-        url.searchParams.get("fields"),
-      )
-      const etag = await etagFor(payload)
-      if (etagMatches(request.headers.get("If-None-Match"), etag)) {
-        const headers = {
-          ...corsHeaders(),
-          ...rl.headers,
-          ETag: etag,
-          "Cache-Control": "public, max-age=120",
-        }
-        return done(
-          "public_gene_304",
-          new Response(null, { status: 304, headers }),
-          API_SCHEMA_VERSION,
-        )
-      }
+      const response = await handleSiteGeneDetail(request, env, path)
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
-        "public_gene",
-        json(payload, 200, { ...rl.headers, ETag: etag, "Cache-Control": "public, max-age=120" }),
+        "site_gene",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
+    }
+
+    if (path.startsWith(publicApiPath("/genes/"))) {
+      return done(
+        "public_gene_denied",
+        json(publicRichRouteDeniedPayload(url, "gene_detail"), 403),
         API_SCHEMA_VERSION,
       )
     }
