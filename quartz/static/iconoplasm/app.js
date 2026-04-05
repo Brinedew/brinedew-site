@@ -1,5 +1,6 @@
 import {
   readIconoplasmSettings,
+  startSharedIconoplasmSettingsAutoSync,
   syncSharedIconoplasmSettings,
 } from "../site-preferences.js?v=20260309e"
 import {
@@ -3847,12 +3848,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     render()
   })
 
+  document.addEventListener("iconoplasmsettingschange", function () {
+    var route = getRoute()
+    if (route.page === "home") {
+      syncHomeHistoryState(true)
+      render()
+      return
+    }
+    if (route.page === "gene") {
+      render()
+    }
+  })
+
   /* ─── Init ─── */
 
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
     startMobileLabelBreakpointObserver()
+    startSharedIconoplasmSettingsAutoSync()
     replaceHistoryStatePatch({})
     render()
     void refreshSharedUserState()

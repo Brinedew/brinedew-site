@@ -8,6 +8,7 @@ var ICONOPLASM_CARD_VARIANT_COOKIE_KEY = "brinedew_icono_card_variant"
 var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
 var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
 var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
+var ICONOPLASM_SETTINGS_CHANGE_EVENT = "iconoplasmsettingschange"
 var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
   homeLayout: "bricks",
@@ -23,6 +24,8 @@ var sharedBridgePromise = null
 var sharedBridgeIframe = null
 var sharedBridgeRequestId = 0
 var sharedBridgePending = Object.create(null)
+var sharedIconoplasmSettingsSyncStarted = false
+var queuedSharedIconoplasmSettingsRefresh = null
 
 function normalizeHomeLayout(layout) {
   var value = String(layout || "")
@@ -491,8 +494,31 @@ export function buildIconoplasmSettings(raw) {
   }
 }
 
-function rememberIconoplasmSettings(settings) {
+function iconoplasmSettingsSignature(settings) {
+  return JSON.stringify(buildIconoplasmSettings(settings || ICONOPLASM_DEFAULT_SETTINGS))
+}
+
+function dispatchIconoplasmSettingsChange(settings, source) {
+  if (typeof document === "undefined" || !document.dispatchEvent || typeof CustomEvent !== "function") {
+    return
+  }
+  document.dispatchEvent(
+    new CustomEvent(ICONOPLASM_SETTINGS_CHANGE_EVENT, {
+      detail: {
+        settings: buildIconoplasmSettings(settings || ICONOPLASM_DEFAULT_SETTINGS),
+        source: String(source || "unknown"),
+      },
+    }),
+  )
+}
+
+function rememberIconoplasmSettings(settings, source) {
+  var previousSignature = iconoplasmSettingsSignature(sharedIconoplasmSettingsCache)
   sharedIconoplasmSettingsCache = buildIconoplasmSettings(settings || ICONOPLASM_DEFAULT_SETTINGS)
+  var nextSignature = iconoplasmSettingsSignature(sharedIconoplasmSettingsCache)
+  if (previousSignature !== nextSignature) {
+    dispatchIconoplasmSettingsChange(sharedIconoplasmSettingsCache, source)
+  }
   return sharedIconoplasmSettingsCache
 }
 
@@ -511,14 +537,14 @@ export function readIconoplasmSettings() {
 
 export function writeIconoplasmSettings(settings) {
   var nextSettings = buildIconoplasmSettings(settings || ICONOPLASM_DEFAULT_SETTINGS)
-  rememberIconoplasmSettings(nextSettings)
+  rememberIconoplasmSettings(nextSettings, "local-write")
   if (!writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, nextSettings)) return false
   if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, nextSettings.homeLayout)) return false
   if (!writeCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY, nextSettings.cardVariant)) return false
   if (shouldUseSharedSettingsBridge()) {
     void requestSharedIconoplasmSettings("writeIconoplasmSettings", nextSettings)
       .then(function (sharedSettings) {
-        if (sharedSettings) rememberIconoplasmSettings(sharedSettings)
+        if (sharedSettings) rememberIconoplasmSettings(sharedSettings, "bridge-write")
       })
       .catch(function () {
         return null
@@ -535,7 +561,7 @@ export function resetIconoplasmSettings() {
   if (shouldUseSharedSettingsBridge()) {
     void requestSharedIconoplasmSettings("resetIconoplasmSettings")
       .then(function (sharedSettings) {
-        if (sharedSettings) rememberIconoplasmSettings(sharedSettings)
+        if (sharedSettings) rememberIconoplasmSettings(sharedSettings, "bridge-reset")
       })
       .catch(function () {
         return null
@@ -551,18 +577,60 @@ export function iconoplasmSettingsDefaults() {
 export function syncSharedIconoplasmSettings() {
   if (!shouldUseSharedSettingsBridge()) {
     return Promise.resolve(
-      rememberIconoplasmSettings(readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}),
+      rememberIconoplasmSettings(readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}, "local-read"),
     )
   }
   return requestSharedIconoplasmSettings("readIconoplasmSettings")
     .then(function (sharedSettings) {
-      var nextSettings = rememberIconoplasmSettings(sharedSettings || ICONOPLASM_DEFAULT_SETTINGS)
+      var nextSettings = rememberIconoplasmSettings(
+        sharedSettings || ICONOPLASM_DEFAULT_SETTINGS,
+        "bridge-read",
+      )
       writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, nextSettings)
       return readIconoplasmSettings()
     })
     .catch(function () {
       return readIconoplasmSettings()
     })
+}
+
+function queueSharedIconoplasmSettingsRefresh(reason) {
+  if (!shouldUseSharedSettingsBridge() || typeof window === "undefined") return
+  if (queuedSharedIconoplasmSettingsRefresh) return
+  var flush = function () {
+    queuedSharedIconoplasmSettingsRefresh = null
+    void syncSharedIconoplasmSettings().catch(function () {
+      return readIconoplasmSettings()
+    })
+  }
+  if (typeof window.requestAnimationFrame === "function") {
+    queuedSharedIconoplasmSettingsRefresh = window.requestAnimationFrame(flush)
+    return
+  }
+  queuedSharedIconoplasmSettingsRefresh = window.setTimeout(flush, 0)
+}
+
+export function startSharedIconoplasmSettingsAutoSync() {
+  if (
+    sharedIconoplasmSettingsSyncStarted ||
+    !shouldUseSharedSettingsBridge() ||
+    typeof window === "undefined" ||
+    !window.addEventListener
+  ) {
+    return
+  }
+  sharedIconoplasmSettingsSyncStarted = true
+  window.addEventListener("focus", function () {
+    queueSharedIconoplasmSettingsRefresh("focus")
+  })
+  window.addEventListener("pageshow", function () {
+    queueSharedIconoplasmSettingsRefresh("pageshow")
+  })
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") {
+      queueSharedIconoplasmSettingsRefresh("visibility")
+    }
+  })
 }
 
 export function siteSettingsUrl() {
