@@ -709,20 +709,6 @@ export const normalizeGraphicsSettings = (payload) => {
   return normalized
 }
 
-const LEGACY_OWNER_DISCORD_USERNAME = "brinedew"
-
-function normalizeIdentityString(value) {
-  if (typeof value !== "string") {
-    return ""
-  }
-  return value.trim().toLowerCase()
-}
-
-function isLegacyOwnerDiscordSession(session) {
-  const username = normalizeIdentityString(session?.username)
-  return username === LEGACY_OWNER_DISCORD_USERNAME
-}
-
 export async function isAdmin(request, env) {
   try {
     const cookies = parseCookies(request.headers.get("Cookie") || "")
@@ -747,15 +733,10 @@ export async function isAdmin(request, env) {
       typeof env.ADMIN_DISCORD_USER_ID === "string" && env.ADMIN_DISCORD_USER_ID.trim()
         ? env.ADMIN_DISCORD_USER_ID.trim()
         : null
-    if (allowedDiscordId && String(session.user_id) === allowedDiscordId) {
-      return true
+    if (!allowedDiscordId) {
+      return false
     }
-
-    // Keep the single-owner site recoverable if the configured Discord snowflake
-    // drifts. We still require a real Discord-authenticated session here; this is
-    // a fallback for the known owner account, not a replacement for the primary
-    // ADMIN_DISCORD_USER_ID check.
-    return isLegacyOwnerDiscordSession(session)
+    return String(session.user_id) === allowedDiscordId
   } catch {
     return false
   }

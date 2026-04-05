@@ -585,6 +585,17 @@ export default {
         })
       }
 
+      // The live settings page runs on brinedew.bio and probes Iconoplasm admin state via
+      // same-origin /api/iconoplasm/* requests. Route those to the Iconoplasm worker no matter
+      // which Brinedew host receives them, otherwise apex settings fetches fall through to the
+      // generic 404 despite the endpoint existing in iconoplasm.js.
+      if (
+        (url.pathname === "/api/iconoplasm" || url.pathname.startsWith("/api/iconoplasm/")) &&
+        request.method !== "OPTIONS"
+      ) {
+        return handleIconoplasmRequest(request, env, ctx)
+      }
+
       // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
       // delegate API/portrait/admin to the iconoplasm handler.
       if (isIconoplasmRequest(url.hostname)) {
