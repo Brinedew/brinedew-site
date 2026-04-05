@@ -37,6 +37,11 @@ const MIN_EXTENSION_VERSION = "0.3.0"
 const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
 const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
 const KV_GALLERY_VERSION = "iconoplasm:gallery-version"
+const KV_PUBLISHED_PORTRAIT_REFS_PREFIX = "iconoplasm:published-portrait-refs:"
+const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-fingerprint:"
+const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
+const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
+const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
 const PUBLIC_DUMP_PREFIX = "public-dumps"
 const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
@@ -73,6 +78,36 @@ const galleryVersionCache = {
   loadedAt: 0,
 }
 const GALLERY_VERSION_CACHE_TTL_MS = 5 * 1000
+// Cost barrier: local worker memory is not a billing barrier. Cloudflare can run
+// many isolates at once, so any O(N) snapshot that lives only in module memory can
+// multiply globally and burn D1 even when each isolate "looks cached" locally.
+// Expensive public-read snapshots therefore need two layers:
+//   1) fast in-isolate memory for repeat hits on the same isolate, and
+//   2) a versioned shared KV snapshot so fresh isolates do not go back to D1.
+//
+// If you add a new full-table public read, do not rely on a plain JS object TTL.
+// Put it behind the shared versioned cache pattern below and add a regression test
+// that simulates a fresh isolate.
+const publishedPortraitRefsCache = {
+  version: null,
+  value: null,
+}
+const publishedPortraitFingerprintCache = {
+  version: null,
+  value: null,
+}
+const galleryPublishedRowsCache = {
+  version: null,
+  value: null,
+}
+const galleryUniquenessRowsCache = {
+  version: null,
+  value: null,
+}
+const hydratedCatalogArtifactCache = {
+  key: null,
+  value: null,
+}
 const ADMIN_DASHBOARD_SUMMARY_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS = "symbols"
@@ -398,6 +433,9 @@ export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
 }
 
 export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortraits) {
+  // Cost barrier: this touches the whole catalog artifact. That is acceptable at
+  // publish time or behind a shared versioned cache. It is not acceptable as an
+  // unguarded hot-path operation for every request or every cold isolate.
   if (!artifact || typeof artifact !== "object") return artifact
   const genes = Array.isArray(artifact.genes) ? artifact.genes : null
   if (!genes || !Array.isArray(publishedPortraits) || publishedPortraits.length === 0)
@@ -439,7 +477,7 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
   return { ...artifact, genes: nextGenes }
 }
 
-async function publishedPortraitFingerprint(env) {
+async function queryPublishedPortraitFingerprint(env) {
   if (!env.ICONOPLASM_DB) return null
   try {
     const row = await env.ICONOPLASM_DB.prepare(
@@ -455,20 +493,43 @@ async function publishedPortraitFingerprint(env) {
   }
 }
 
-async function publishedPortraitRefs(env) {
+async function publishedPortraitFingerprint(env, { fresh = false } = {}) {
+  if (!env.ICONOPLASM_DB) return null
+  if (fresh) return queryPublishedPortraitFingerprint(env)
+  const version = await currentGalleryVersion(env)
+  if (publishedPortraitFingerprintCache.version === version) {
+    return publishedPortraitFingerprintCache.value || null
+  }
+  const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX, version)
+  if (cached && typeof cached === "object") {
+    publishedPortraitFingerprintCache.version = version
+    publishedPortraitFingerprintCache.value = cached
+    return cached
+  }
+  const row = await queryPublishedPortraitFingerprint(env)
+  publishedPortraitFingerprintCache.version = version
+  publishedPortraitFingerprintCache.value = row || null
+  if (row) {
+    await writeVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX, version, row)
+  }
+  return row || null
+}
+
+async function queryPublishedPortraitRefs(env) {
   if (!env.ICONOPLASM_DB) return []
   try {
-    // Keep artifact hydration O(1) SQL-wise. One join here is much cheaper than
-    // per-gene API lookups or N+1 D1 queries when the extension refreshes.
+    // Cost barrier: this is a full published-inventory read. Keep the SQL itself
+    // index-friendly, then keep almost all callers on the shared versioned KV
+    // snapshot so fresh isolates do not repeat it.
     const rows = await env.ICONOPLASM_DB.prepare(
       `SELECT
-         upper(ps.gene_symbol) AS symbol,
+         ps.gene_symbol AS symbol,
          pa.r2_key_full,
          pa.r2_key_medium,
          pa.r2_key_thumb
        FROM icono_publish_state ps
        LEFT JOIN icono_portrait_assets pa
-         ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+         ON pa.gene_symbol = ps.gene_symbol
         AND pa.asset_sha256 = ps.current_asset_sha256
        WHERE ps.current_asset_sha256 IS NOT NULL`,
     ).all()
@@ -476,6 +537,26 @@ async function publishedPortraitRefs(env) {
   } catch {
     return []
   }
+}
+
+async function publishedPortraitRefs(env, { fresh = false } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  if (fresh) return queryPublishedPortraitRefs(env)
+  const version = await currentGalleryVersion(env)
+  if (publishedPortraitRefsCache.version === version && Array.isArray(publishedPortraitRefsCache.value)) {
+    return publishedPortraitRefsCache.value
+  }
+  const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
+  if (Array.isArray(cached)) {
+    publishedPortraitRefsCache.version = version
+    publishedPortraitRefsCache.value = cached
+    return cached
+  }
+  const rows = await queryPublishedPortraitRefs(env)
+  publishedPortraitRefsCache.version = version
+  publishedPortraitRefsCache.value = rows
+  await writeVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version, rows)
+  return rows
 }
 
 // Canonical R2 key for a portrait rendition.
@@ -715,7 +796,7 @@ async function listOpenGenerationRequests(
   const whereParts = ["gr.status = 'open'"]
   const params = []
   if (symbolNorm) {
-    whereParts.push("upper(gr.gene_symbol) = ?")
+    whereParts.push("gr.gene_symbol = ?")
     params.push(symbolNorm)
   }
   if (requesterNorm && !isGuestUserId(requesterNorm)) {
@@ -723,12 +804,15 @@ async function listOpenGenerationRequests(
     params.push(requesterNorm)
   }
   const resp = await env.ICONOPLASM_DB.prepare(
+    // D1 cost fence: gene symbols are normalized before they hit this queue.
+    // Keep equality raw so the request panel stays on the index path instead of
+    // forcing expression scans with upper(...).
     `SELECT
        gr.*, 
        COALESCE(gc.full_name, '') AS full_name
      FROM icono_generation_requests gr
      LEFT JOIN icono_gene_catalog gc
-       ON upper(gc.gene_symbol) = upper(gr.gene_symbol)
+       ON gc.gene_symbol = gr.gene_symbol
      WHERE ${whereParts.join(" AND ")}
      ORDER BY gr.created_at ASC, gr.id ASC
      LIMIT ?`,
@@ -785,7 +869,7 @@ async function createGenerationRequest(
         `SELECT gr.*, COALESCE(gc.full_name, '') AS full_name
          FROM icono_generation_requests gr
          LEFT JOIN icono_gene_catalog gc
-           ON upper(gc.gene_symbol) = upper(gr.gene_symbol)
+           ON gc.gene_symbol = gr.gene_symbol
          WHERE gr.id = ?
          LIMIT 1`,
       )
@@ -933,11 +1017,16 @@ async function recordGeneDiscoveryEncounter(
   }
 
   async function readDiscoveryRow() {
+    // D1 cost fence: extension hover dwell is one of the highest-frequency public
+    // write paths in Iconoplasm. `icono_gene_discoveries` already stores
+    // canonical uppercase symbols and uses PRIMARY KEY (user_id, gene_symbol), so
+    // this predicate must stay raw. Wrapping gene_symbol in upper(...) turns a
+    // single hover into a scan over that user's discovery shelf.
     return env.ICONOPLASM_DB.prepare(
       `SELECT *
        FROM icono_gene_discoveries
        WHERE user_id = ?
-         AND upper(gene_symbol) = ?
+         AND gene_symbol = ?
        LIMIT 1`,
     )
       .bind(userIdNorm, geneSymbolNorm)
@@ -955,7 +1044,7 @@ async function recordGeneDiscoveryEncounter(
            last_trigger = ?,
            last_dwell_ms = ?
        WHERE user_id = ?
-         AND upper(gene_symbol) = ?`,
+         AND gene_symbol = ?`,
     )
       .bind(sourceNorm, triggerNorm, dwellMsNorm, userIdNorm, geneSymbolNorm)
       .run()
@@ -1001,14 +1090,19 @@ async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
     return { ok: false, error: "Authentication required" }
   }
   const createdSymbols = []
-  // Starter genes are part of the signed-in shelf contract. Backfill them lazily so
-  // legacy accounts and brand-new logins both stop showing a literal zero-state shelf.
+  // Starter genes are part of the signed-in shelf contract. Backfill them lazily on
+  // shelf/bootstrap endpoints so legacy accounts and brand-new logins stop showing a
+  // literal zero-state shelf.
+  //
+  // Cost fence: do not call this from extension hover dwell writes. Even with raw
+  // key predicates, three existence probes on every hover would still multiply into
+  // absurd D1 traffic.
   for (const geneSymbol of ICONOPLASM_STARTER_GENE_SYMBOLS) {
     const existing = await env.ICONOPLASM_DB.prepare(
       `SELECT 1
        FROM icono_gene_discoveries
        WHERE user_id = ?
-         AND upper(gene_symbol) = ?
+         AND gene_symbol = ?
        LIMIT 1`,
     )
       .bind(userIdNorm, geneSymbol)
@@ -2080,6 +2174,9 @@ async function catalogManifestObj(env) {
 async function extensionManifestObj(url, env) {
   const manifest = await catalogManifestObj(env)
   if (!manifest) return null
+  // Cost barrier: the public manifest is the extension's "what changed?" probe.
+  // If this starts doing raw D1 work per request, extension traffic can amplify
+  // the mistake globally. Keep it on the shared fingerprint cache.
   return {
     ...manifest,
     current_hash: buildPortraitAwareManifestHash(
@@ -2289,15 +2386,11 @@ async function warmCatalogCache(env) {
     return
   }
 
-  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${manifest.current_hash}`)
-  if (!raw) return
-  let artifact
-  try {
-    artifact = JSON.parse(raw)
-  } catch {
-    return
-  }
-  artifact = mergePublishedPortraitRefsIntoArtifact(artifact, await publishedPortraitRefs(env))
+  // Cost barrier: search/resolve/gallery warm-up runs on hot public routes. Do
+  // not rebuild the hydrated catalog from scratch here on every cold isolate.
+  // Load the shared versioned hydrated artifact instead.
+  const artifact = await hydratedCatalogArtifact(env, manifest.current_hash)
+  if (!artifact) return
 
   const bySymbol = new Map()
   const symbolByUniprot = new Map()
@@ -2514,12 +2607,14 @@ async function portraitState(env, symbol, base) {
     }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
+      // D1 cost fence: gene_symbol is the lookup key on both tables. Leave it
+      // unwrapped so public media/gene detail stays O(1).
       `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.width, pa.height, pa.vision_id, pa.candidate_image_id
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
-           ON upper(pa.gene_symbol) = upper(ps.gene_symbol)
+           ON pa.gene_symbol = ps.gene_symbol
           AND pa.asset_sha256 = ps.current_asset_sha256
-         WHERE upper(ps.gene_symbol) = ?
+         WHERE ps.gene_symbol = ?
          LIMIT 1`,
     )
       .bind(symbol)
@@ -2573,6 +2668,8 @@ async function essenceState(env, symbol) {
   if (!env.ICONOPLASM_DB) return { exists: false, essence: {} }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
+      // D1 cost fence: icono_gene_essence is keyed by normalized gene_symbol.
+      // Do not wrap the primary key in upper() on the site detail path.
       `SELECT
            full_name,
            weight_kg,
@@ -2595,7 +2692,7 @@ async function essenceState(env, symbol) {
            manifestation,
            updated_at
          FROM icono_gene_essence
-         WHERE upper(gene_symbol) = ?
+         WHERE gene_symbol = ?
          LIMIT 1`,
     )
       .bind(symbol)
@@ -2887,14 +2984,18 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
     }
   }
 
+  // D1 cost fence: public card paint and public vote writes both hit this lookup.
+  // The vote ledger has an asset index on (gene_symbol, asset_sha256) plus the
+  // asset+user unique guard. Keep those predicates raw or every vote refresh turns
+  // back into a scan.
   const imageAgg = await env.ICONOPLASM_DB.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
        COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
        COALESCE(SUM(vote_value), 0) AS score
      FROM icono_image_votes
-     WHERE upper(gene_symbol) = ?
-       AND lower(asset_sha256) = ?`,
+     WHERE gene_symbol = ?
+       AND asset_sha256 = ?`,
   )
     .bind(symbolNorm, assetShaNorm)
     .first()
@@ -2902,8 +3003,8 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
   const userVoteRow = await env.ICONOPLASM_DB.prepare(
     `SELECT vote_value
      FROM icono_image_votes
-     WHERE upper(gene_symbol) = ?
-       AND lower(asset_sha256) = ?
+     WHERE gene_symbol = ?
+       AND asset_sha256 = ?
        AND user_id = ?
      LIMIT 1`,
   )
@@ -3168,7 +3269,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   const currentRow = await env.ICONOPLASM_DB.prepare(
     `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
      FROM icono_publish_state
-     WHERE upper(gene_symbol) = ?
+     WHERE gene_symbol = ?
      LIMIT 1`,
   )
     .bind(symbolNorm)
@@ -3189,17 +3290,21 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   // may carry legacy `candidate_ref` values like `c:2704`, so canon selection
   // cannot depend on candidate_ref-shaped joins if the rest of the site already
   // treats `(gene_symbol, asset_sha256)` as the durable image identity.
+  // D1 cost fence: the community vote route can call this immediately after a
+  // public thumbs-up/down. The hot asset-key predicates therefore have to stay on
+  // the canonical `(gene_symbol, asset_sha256)` columns with raw equality so the
+  // vote index can do its job.
   const topRow = await env.ICONOPLASM_DB.prepare(
     `WITH vote_agg AS (
        SELECT
-         upper(gene_symbol) AS gene_symbol,
-         lower(asset_sha256) AS asset_sha256,
+         gene_symbol,
+         asset_sha256,
          SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
          SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
          SUM(vote_value) AS score
        FROM icono_image_votes
-       WHERE upper(gene_symbol) = ?
-       GROUP BY upper(gene_symbol), lower(asset_sha256)
+       WHERE gene_symbol = ?
+       GROUP BY gene_symbol, asset_sha256
      )
      SELECT
        pa.asset_sha256,
@@ -3209,14 +3314,14 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
        COALESCE(vs.score, 0) AS image_score,
        pa.created_at,
        CASE
-         WHEN lower(pa.asset_sha256) = ? THEN 1
+         WHEN pa.asset_sha256 = ? THEN 1
          ELSE 0
        END AS is_current
      FROM icono_portrait_assets pa
      LEFT JOIN vote_agg vs
-       ON vs.gene_symbol = upper(pa.gene_symbol)
-      AND vs.asset_sha256 = lower(pa.asset_sha256)
-     WHERE upper(pa.gene_symbol) = ?
+       ON vs.gene_symbol = pa.gene_symbol
+      AND vs.asset_sha256 = pa.asset_sha256
+     WHERE pa.gene_symbol = ?
        AND COALESCE(pa.autopick_eligible, 1) = 1
        AND COALESCE(pa.status, '') <> 'rejected'
        AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
@@ -3228,11 +3333,11 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
        END DESC,
        COALESCE(vs.upvotes, 0) DESC,
        CASE
-         WHEN lower(pa.asset_sha256) = ? THEN 1
+         WHEN pa.asset_sha256 = ? THEN 1
          ELSE 0
        END DESC,
        pa.created_at DESC,
-       lower(pa.asset_sha256) ASC
+       pa.asset_sha256 ASC
      LIMIT 1`,
   )
     .bind(symbolNorm, currentAssetSha || "", symbolNorm, currentAssetSha || "")
@@ -3265,8 +3370,8 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   await env.ICONOPLASM_DB.prepare(
     `UPDATE icono_portrait_assets
      SET status = 'approved'
-     WHERE upper(gene_symbol) = ?
-       AND lower(asset_sha256) = ?`,
+     WHERE gene_symbol = ?
+       AND asset_sha256 = ?`,
   )
     .bind(symbolNorm, topAssetSha)
     .run()
@@ -6698,6 +6803,95 @@ function clearGallerySnapshotCache() {
   gallerySnapshotCache.sorted = new Map()
 }
 
+function clearSharedD1CostCaches() {
+  publishedPortraitRefsCache.version = null
+  publishedPortraitRefsCache.value = null
+  publishedPortraitFingerprintCache.version = null
+  publishedPortraitFingerprintCache.value = null
+  galleryPublishedRowsCache.version = null
+  galleryPublishedRowsCache.value = null
+  galleryUniquenessRowsCache.version = null
+  galleryUniquenessRowsCache.value = null
+  hydratedCatalogArtifactCache.key = null
+  hydratedCatalogArtifactCache.value = null
+}
+
+// Test-only reset hook. The cost-barrier regression tests use this to simulate a
+// fresh isolate so they can prove the shared KV snapshots, not just module memory,
+// are what keep public traffic off D1.
+export function resetIconoplasmRuntimeCachesForTest() {
+  catalogCache.hash = null
+  catalogCache.bySymbol = new Map()
+  catalogCache.symbolByUniprot = new Map()
+  catalogCache.symbolByAlias = new Map()
+  catalogCache.loadedAt = 0
+  clearGallerySnapshotCache()
+  clearSharedD1CostCaches()
+  galleryVersionCache.value = "0"
+  galleryVersionCache.loadedAt = 0
+}
+
+async function readVersionedSharedJson(env, prefix, version) {
+  if (!env?.KV || !version) return null
+  try {
+    const raw = await env.KV.get(`${prefix}${version}`)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+async function writeVersionedSharedJson(env, prefix, version, value) {
+  if (!env?.KV || !version) return
+  try {
+    await env.KV.put(`${prefix}${version}`, JSON.stringify(value))
+  } catch {
+    // Shared-cache writes are an optimization barrier, not the source of truth.
+    // If KV write-through fails we can still fall back to the raw D1 result.
+  }
+}
+
+async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
+  if (!env?.KV || !hash) return null
+  const version = await currentGalleryVersion(env)
+  const cacheKey = `${hash}:${version}`
+  if (!fresh && hydratedCatalogArtifactCache.key === cacheKey && hydratedCatalogArtifactCache.value) {
+    return hydratedCatalogArtifactCache.value
+  }
+  if (!fresh) {
+    const cached = await readVersionedSharedJson(env, KV_HYDRATED_CATALOG_ARTIFACT_PREFIX, cacheKey)
+    if (cached && typeof cached === "object") {
+      hydratedCatalogArtifactCache.key = cacheKey
+      hydratedCatalogArtifactCache.value = cached
+      return cached
+    }
+  }
+
+  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${hash}`)
+  if (!raw) return null
+  let artifact
+  try {
+    artifact = JSON.parse(raw)
+  } catch {
+    return null
+  }
+
+  // Cost barrier: this is the last whole-artifact hydration seam. Keep it behind
+  // the shared versioned cache so a fresh isolate does not reparse + rehydrate
+  // ~20k genes on its own just because it has never seen traffic before.
+  const hydrated = mergePublishedPortraitRefsIntoArtifact(
+    artifact,
+    await publishedPortraitRefs(env, fresh ? { fresh: true } : undefined),
+  )
+  hydratedCatalogArtifactCache.key = cacheKey
+  hydratedCatalogArtifactCache.value = hydrated
+  if (!fresh) {
+    await writeVersionedSharedJson(env, KV_HYDRATED_CATALOG_ARTIFACT_PREFIX, cacheKey, hydrated)
+  }
+  return hydrated
+}
+
 function gallerySnapshotMaxAgeMs(order) {
   return order === "votes" ? GALLERY_VOTES_SNAPSHOT_TTL_MS : GALLERY_SNAPSHOT_TTL_MS
 }
@@ -6736,6 +6930,7 @@ async function bumpGalleryVersion(env) {
 
 async function invalidateGalleryCache(env) {
   clearGallerySnapshotCache()
+  clearSharedD1CostCaches()
   await bumpGalleryVersion(env)
 }
 
@@ -6943,6 +7138,98 @@ function sortGalleryItems(items, order, seed = null) {
   return sorted
 }
 
+function publishedGalleryItems(snapshot) {
+  const items = Array.isArray(snapshot?.items) ? snapshot.items : []
+  return items.filter((item) => {
+    if (!item || item.portrait?.status !== "published") return false
+    return Boolean(item.portrait?.medium_url || item.portrait?.thumb_url || item.portrait?.hero_url)
+  })
+}
+
+async function queryGalleryPublishedRows(env) {
+  if (!env.ICONOPLASM_DB) return []
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       ps.gene_symbol AS symbol,
+       ps.updated_at AS published_at,
+       pa.created_at AS asset_created_at,
+       ge.weight_kg,
+       ge.age_years,
+       pa.asset_sha256,
+       pa.candidate_image_id,
+       pa.vision_id,
+       pa.r2_key_full,
+       pa.r2_key_medium,
+       pa.r2_key_thumb,
+       pa.width,
+       pa.height,
+       COALESCE(vs.upvotes, 0) AS image_upvotes,
+       COALESCE(vs.downvotes, 0) AS image_downvotes,
+       COALESCE(vs.score, 0) AS image_score
+     FROM icono_publish_state ps
+     JOIN icono_portrait_assets pa
+       ON pa.gene_symbol = ps.gene_symbol
+      AND pa.asset_sha256 = ps.current_asset_sha256
+     LEFT JOIN icono_gene_essence ge
+       ON ge.gene_symbol = ps.gene_symbol
+     LEFT JOIN icono_vote_asset_summary vs
+       ON vs.gene_symbol = ps.gene_symbol
+      AND vs.asset_sha256 = pa.asset_sha256
+     WHERE ps.current_asset_sha256 IS NOT NULL
+       AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''`,
+  ).all()
+  return Array.isArray(rows?.results) ? rows.results : []
+}
+
+async function galleryPublishedRows(env, { fresh = false } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  if (fresh) return queryGalleryPublishedRows(env)
+  const version = await currentGalleryVersion(env)
+  if (galleryPublishedRowsCache.version === version && Array.isArray(galleryPublishedRowsCache.value)) {
+    return galleryPublishedRowsCache.value
+  }
+  const cached = await readVersionedSharedJson(env, KV_GALLERY_PUBLISHED_ROWS_PREFIX, version)
+  if (Array.isArray(cached)) {
+    galleryPublishedRowsCache.version = version
+    galleryPublishedRowsCache.value = cached
+    return cached
+  }
+  const rows = await queryGalleryPublishedRows(env)
+  galleryPublishedRowsCache.version = version
+  galleryPublishedRowsCache.value = rows
+  await writeVersionedSharedJson(env, KV_GALLERY_PUBLISHED_ROWS_PREFIX, version, rows)
+  return rows
+}
+
+async function queryGalleryUniquenessRows(env) {
+  if (!env.ICONOPLASM_DB) return []
+  const uniquenessRowsRaw = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, aesthetics_origin_json
+       FROM icono_gene_essence`,
+  ).all()
+  return Array.isArray(uniquenessRowsRaw?.results) ? uniquenessRowsRaw.results : []
+}
+
+async function galleryUniquenessRows(env, { fresh = false } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  if (fresh) return queryGalleryUniquenessRows(env)
+  const version = await currentGalleryVersion(env)
+  if (galleryUniquenessRowsCache.version === version && Array.isArray(galleryUniquenessRowsCache.value)) {
+    return galleryUniquenessRowsCache.value
+  }
+  const cached = await readVersionedSharedJson(env, KV_GALLERY_UNIQUENESS_ROWS_PREFIX, version)
+  if (Array.isArray(cached)) {
+    galleryUniquenessRowsCache.version = version
+    galleryUniquenessRowsCache.value = cached
+    return cached
+  }
+  const rows = await queryGalleryUniquenessRows(env)
+  galleryUniquenessRowsCache.version = version
+  galleryUniquenessRowsCache.value = rows
+  await writeVersionedSharedJson(env, KV_GALLERY_UNIQUENESS_ROWS_PREFIX, version, rows)
+  return rows
+}
+
 async function gallerySnapshot(env, url, { order = "votes" } = {}) {
   await warmCatalogCache(env)
   const catalogTotal = catalogCache.bySymbol.size
@@ -6973,38 +7260,10 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
     }
   }
 
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       ps.gene_symbol AS symbol,
-       ps.updated_at AS published_at,
-       pa.created_at AS asset_created_at,
-       ge.weight_kg,
-       ge.age_years,
-       pa.asset_sha256,
-       pa.candidate_image_id,
-      pa.vision_id,
-       pa.r2_key_full,
-       pa.r2_key_medium,
-       pa.r2_key_thumb,
-       pa.width,
-       pa.height,
-       COALESCE(vs.upvotes, 0) AS image_upvotes,
-       COALESCE(vs.downvotes, 0) AS image_downvotes,
-       COALESCE(vs.score, 0) AS image_score
-     FROM icono_publish_state ps
-     JOIN icono_portrait_assets pa
-       ON pa.gene_symbol = ps.gene_symbol
-      AND pa.asset_sha256 = ps.current_asset_sha256
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = ps.gene_symbol
-     LEFT JOIN icono_vote_asset_summary vs
-       ON vs.gene_symbol = ps.gene_symbol
-      AND vs.asset_sha256 = pa.asset_sha256
-     WHERE ps.current_asset_sha256 IS NOT NULL
-       AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''`,
-  ).all()
-
-  const publishedRows = Array.isArray(rows?.results) ? rows.results : []
+  // Cost barrier: this snapshot is allowed to read the full published gallery
+  // inventory exactly once per shared gallery version. Fresh isolates must load
+  // the shared snapshot from KV instead of repeating the D1 scan.
+  const publishedRows = await galleryPublishedRows(env)
   const publishedMap = new Map()
   for (const row of publishedRows) {
     const symbol = normalizeSymbol(row?.symbol || "") || ""
@@ -7054,13 +7313,7 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
     // Source of truth note: uniqueness must stay based on the synced NiceGUI
     // mapping/demographics pipeline. aesthetics_origin_json is the stored clan list.
     // Do not invent a separate website-only clan resolver here.
-    const uniquenessRowsRaw = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, aesthetics_origin_json
-         FROM icono_gene_essence`,
-    ).all()
-    const uniquenessRows = Array.isArray(uniquenessRowsRaw?.results)
-      ? uniquenessRowsRaw.results
-      : []
+    const uniquenessRows = await galleryUniquenessRows(env)
     uniquenessBySymbol = buildGalleryUniquenessIndex(catalogCache.bySymbol, uniquenessRows)
   }
 
@@ -7109,149 +7362,22 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
 async function galleryVotesFeed(env, url, rawLimit, rawOffset) {
   const limit = normalizeGalleryLimit(rawLimit)
   const offset = normalizeGalleryOffset(rawOffset)
-  const base = portraitBase(url, env)
-  const manifest = await catalogManifestObj(env)
-  const catalogTotal = Number(manifest?.gene_count || 0)
-
-  if (!env.ICONOPLASM_DB) {
-    return {
-      order: "votes",
-      total: 0,
-      published_total: 0,
-      offset,
-      limit,
-      has_more: false,
-      catalog_total: catalogTotal,
-      items: [],
-    }
-  }
-
-  const [publishedCountRow, rows] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT with_live AS published_total
-         FROM icono_admin_dashboard_summary
-        WHERE summary_key = ?
-        LIMIT 1`,
-    )
-      .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
-      .first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         gr.gene_symbol AS symbol,
-         gr.full_name,
-         gr.live_created_at AS published_at,
-         gr.live_created_at AS asset_created_at,
-         gr.current_asset_sha256 AS asset_sha256,
-         0 AS candidate_image_id,
-         gr.live_vision_id AS vision_id,
-         gr.live_r2_key_full AS r2_key_full,
-         gr.live_r2_key_medium AS r2_key_medium,
-         gr.live_r2_key_thumb AS r2_key_thumb,
-         NULL AS width,
-         NULL AS height,
-         COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-         COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-         COALESCE(gr.live_score, 0) AS image_score
-       FROM icono_admin_gene_rollup gr
-       WHERE COALESCE(gr.current_asset_sha256, '') <> ''
-         AND COALESCE(gr.current_asset_missing, 0) = 0
-         AND COALESCE(gr.live_r2_key_medium, gr.live_r2_key_thumb, gr.live_r2_key_full, '') <> ''
-       ORDER BY
-         COALESCE(gr.live_score, 0) DESC,
-         COALESCE(gr.live_upvotes, 0) DESC,
-         COALESCE(gr.live_created_at, '') DESC,
-         gr.gene_symbol ASC
-       LIMIT ? OFFSET ?`,
-    )
-      .bind(limit, offset)
-      .all(),
-  ])
-
-  const publishedTotal = Number(publishedCountRow?.published_total || 0)
-  const results = Array.isArray(rows?.results) ? rows.results : []
-  const symbols = results.map((row) => normalizeSymbol(row?.symbol || "")).filter(Boolean)
-  const metadataBySymbol = new Map()
-
-  if (symbols.length) {
-    const metadataRows = await env.ICONOPLASM_DB.prepare(
-      `WITH incoming AS (
-         SELECT upper(value) AS gene_symbol
-         FROM json_each(?)
-       )
-       SELECT
-         incoming.gene_symbol AS symbol,
-         gc.color_hex,
-         ge.weight_kg,
-         ge.age_years
-       FROM incoming
-       LEFT JOIN icono_gene_catalog gc
-         ON upper(gc.gene_symbol) = incoming.gene_symbol
-       LEFT JOIN icono_gene_essence ge
-         ON upper(ge.gene_symbol) = incoming.gene_symbol`,
-    )
-      .bind(JSON.stringify(symbols))
-      .all()
-    for (const row of Array.isArray(metadataRows?.results) ? metadataRows.results : []) {
-      const symbol = normalizeSymbol(row?.symbol || "")
-      if (!symbol) continue
-      metadataBySymbol.set(symbol, row)
-    }
-  }
-
-  const items = results
-    .map((row) => {
-      const symbol = normalizeSymbol(row?.symbol || "")
-      if (!symbol) return null
-      const metadata = metadataBySymbol.get(symbol) || null
-      const width = optionalInt(row?.width)
-      const height = optionalInt(row?.height)
-      return {
-        symbol,
-        color: normalizeHexColor(metadata?.color_hex || "") || "#888",
-        full_name: sanitizeText(row?.full_name || "", 255) || symbol,
-        uniqueness_rank: null,
-        width,
-        height,
-        weight_kg:
-          Number.isFinite(Number(metadata?.weight_kg)) && Number(metadata.weight_kg) > 0
-            ? Number(metadata.weight_kg)
-            : null,
-        age_years:
-          Number.isFinite(Number(metadata?.age_years)) && Number(metadata.age_years) >= 0
-            ? Number(metadata.age_years)
-            : null,
-        popularity_score: wikiPageviewsForSymbol(symbol),
-        image_upvotes: Number(row?.image_upvotes || 0),
-        image_downvotes: Number(row?.image_downvotes || 0),
-        image_score: Number(row?.image_score || 0),
-        published_at: row?.published_at ? String(row.published_at) : null,
-        asset_created_at: row?.asset_created_at ? String(row.asset_created_at) : null,
-        ph: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
-        pt: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
-        portrait: {
-          status: "published",
-          hero_url: row?.r2_key_full ? joinUrl(base, row.r2_key_full) : null,
-          medium_url: row?.r2_key_medium ? joinUrl(base, row.r2_key_medium) : null,
-          thumb_url: row?.r2_key_thumb ? joinUrl(base, row.r2_key_thumb) : null,
-          asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
-          candidate_image_id: optionalInt(row?.candidate_image_id),
-          vision_id: String(row?.vision_id || "").trim() || null,
-          artist_id: publicArtistIdForRow(row) || null,
-          ...(width != null ? { width } : {}),
-          ...(height != null ? { height } : {}),
-        },
-      }
-    })
-    .filter(Boolean)
+  // Cost fence: the public gallery defaults to vote order. If this path goes
+  // back to live D1 sorting, every anonymous home pageview becomes an avoidable
+  // read-model scan and the billing graph starts screaming again.
+  const snapshot = await gallerySnapshot(env, url, { order: "votes" })
+  const publishedItems = publishedGalleryItems(snapshot)
+  const sorted = sortGalleryItems(publishedItems, "votes")
+  const items = sorted.slice(offset, offset + limit)
 
   return {
     order: "votes",
-    total: catalogTotal,
-    published_total: publishedTotal,
+    total: snapshot.catalog_total,
+    published_total: snapshot.published_total,
     offset,
     limit,
-    has_more: offset + items.length < publishedTotal,
-    catalog_total: catalogTotal,
+    has_more: offset + items.length < publishedItems.length,
+    catalog_total: snapshot.catalog_total,
     items,
   }
 }
@@ -7501,6 +7627,9 @@ async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
 async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = null) {
   if (!env.ICONOPLASM_DB) return []
   const rows = await env.ICONOPLASM_DB.prepare(
+    // D1 cost fence: this query runs on gene pages. gene_symbol + asset_sha256
+    // are already normalized primary keys, so raw equality is the cheap path.
+    // upper()/lower() here turns a single gene-page read into a scan.
     `SELECT
        pa.asset_sha256,
        pa.r2_key_full,
@@ -7518,9 +7647,9 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        COALESCE(vs.score, 0) AS image_score
      FROM icono_portrait_assets pa
      LEFT JOIN icono_vote_asset_summary vs
-       ON vs.gene_symbol = upper(pa.gene_symbol)
-      AND vs.asset_sha256 = lower(pa.asset_sha256)
-     WHERE upper(pa.gene_symbol) = ?
+       ON vs.gene_symbol = pa.gene_symbol
+      AND vs.asset_sha256 = pa.asset_sha256
+     WHERE pa.gene_symbol = ?
        AND COALESCE(pa.status, '') <> 'rejected'
        AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
      ORDER BY pa.created_at DESC`,
@@ -8158,19 +8287,12 @@ async function handleCatalogArtifact(env, path) {
   if (!m) return json({ error: "Invalid artifact path" }, 400)
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const hash = String(m[1] || "").split("-")[0]
-  const body = await env.KV.get(`${KV_CATALOG_PREFIX}${hash}`)
-  if (!body) return json({ error: "Artifact not found" }, 404)
-  let responseBody = body
-  try {
-    const artifact = JSON.parse(body)
-    const hydrated = mergePublishedPortraitRefsIntoArtifact(
-      artifact,
-      await publishedPortraitRefs(env),
-    )
-    responseBody = JSON.stringify(hydrated)
-  } catch {
-    responseBody = body
-  }
+  // Cost barrier: this route is public and cacheable, so it must never do an ad
+  // hoc whole-artifact hydration per cold isolate. Use the shared hydrated
+  // artifact snapshot keyed by catalog hash + gallery version.
+  const hydrated = await hydratedCatalogArtifact(env, hash)
+  if (!hydrated) return json({ error: "Artifact not found" }, 404)
+  const responseBody = JSON.stringify(hydrated)
   return new Response(responseBody, {
     headers: {
       ...corsHeaders(),
@@ -8230,9 +8352,12 @@ async function publishCatalogArtifact(env) {
     gene_count: genes.length,
     genes,
   }
+  // Publish-time is the one place where we intentionally rebuild the hydrated
+  // artifact from source-of-truth rows. Every hot path should consume the
+  // versioned shared result produced from here instead of re-doing this work.
   const hydrated = mergePublishedPortraitRefsIntoArtifact(
     artifact,
-    await publishedPortraitRefs(env),
+    await publishedPortraitRefs(env, { fresh: true }),
   )
   const artifactJson = JSON.stringify(hydrated)
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(artifactJson))
@@ -8719,7 +8844,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const userId = normalizeUserId(sessionUser.user_id)
-      await ensureStarterGeneDiscoveries(env, { userId })
+      // Cost fence: this hover-dwell route can fire at browser-hover cadence.
+      // Starter seeding belongs on shelf/bootstrap endpoints like discoveries/me,
+      // not here.
 
       const result = await recordGeneDiscoveryEncounter(env, {
         userId,
@@ -8908,10 +9035,10 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (!symbol) return done("gene_requests_400", json({ error: "Invalid symbol" }, 400))
       const sessionUser = await iconoplasmSessionUser(request, env)
       const userId = normalizeUserId(sessionUser?.user_id || "")
-      const [requestRows, requestOptions] = await Promise.all([
-        listOpenGenerationRequests(env, { limit: 500, geneSymbol: symbol }),
-        listGenerationRequestVisionOptions(env),
-      ])
+      const requestRows = await listOpenGenerationRequests(env, { limit: 500, geneSymbol: symbol })
+      // Cost fence: logged-out visitors only need the queue summary + login CTA.
+      // Do not burn a vision-rollup read for users who cannot submit a request yet.
+      const requestOptions = sessionUser?.user_id ? await listGenerationRequestVisionOptions(env) : []
       const myRows = sessionUser?.user_id
         ? requestRows.filter((row) => row.requester_user_id === userId)
         : []
@@ -9083,6 +9210,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       }
 
       const userId = normalizeUserId(sessionUser.user_id)
+      // D1 cost fence: this is a hot public vote write. The asset+user unique
+      // index is on raw canonical keys, so keep these predicates raw too.
       // Chesterton's fence: callers may still send legacy `c:<id>` refs, but a
       // user's durable vote identity is `(gene_symbol, asset_sha256, user_id)`.
       // Reads, writes, and canon ranking all need that same identity so one old
@@ -9090,8 +9219,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const existing = await env.ICONOPLASM_DB.prepare(
         `SELECT vote_value
          FROM icono_image_votes
-         WHERE upper(gene_symbol) = ?
-           AND lower(asset_sha256) = ?
+         WHERE gene_symbol = ?
+           AND asset_sha256 = ?
            AND user_id = ?
          LIMIT 1`,
       )
@@ -9102,8 +9231,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       if (requested === 0 || current === requested) {
         await env.ICONOPLASM_DB.prepare(
           `DELETE FROM icono_image_votes
-           WHERE upper(gene_symbol) = ?
-             AND lower(asset_sha256) = ?
+           WHERE gene_symbol = ?
+             AND asset_sha256 = ?
              AND user_id = ?`,
         )
           .bind(symbol, assetSha, userId)
@@ -9111,8 +9240,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       } else {
         await env.ICONOPLASM_DB.prepare(
           `DELETE FROM icono_image_votes
-           WHERE upper(gene_symbol) = ?
-             AND lower(asset_sha256) = ?
+           WHERE gene_symbol = ?
+             AND asset_sha256 = ?
              AND user_id = ?`,
         )
           .bind(symbol, assetSha, userId)

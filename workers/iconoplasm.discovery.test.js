@@ -265,10 +265,15 @@ test("discovery encounter inserts the first authenticated gene discovery", async
   assert.equal(stored?.first_source, "extension_hover")
   assert.equal(stored?.first_trigger, "hover_dwell")
   assert.equal(stored?.first_dwell_ms, 900)
-  assert.equal(env.ICONOPLASM_DB.rows.size, 4)
-  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "INS"))
-  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "RHO"))
-  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "PRL"))
+  assert.equal(env.ICONOPLASM_DB.rows.size, 1)
+  assert.ok(!env.ICONOPLASM_DB.getDiscovery("user-123", "INS"))
+  assert.ok(!env.ICONOPLASM_DB.getDiscovery("user-123", "RHO"))
+  assert.ok(!env.ICONOPLASM_DB.getDiscovery("user-123", "PRL"))
+  const discoveryWriteCalls = env.ICONOPLASM_DB.calls.filter(
+    (call) => call.sql.includes("FROM icono_gene_discoveries") || call.sql.includes("UPDATE icono_gene_discoveries"),
+  )
+  assert.ok(discoveryWriteCalls.length > 0)
+  assert.ok(discoveryWriteCalls.every((call) => !call.sql.includes("upper(gene_symbol) = ?")))
 })
 
 test("discovery encounter increments count instead of duplicating the row", async () => {

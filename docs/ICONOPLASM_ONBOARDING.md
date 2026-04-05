@@ -187,6 +187,89 @@ ON upper(ge.gene_symbol) = upper(d.gene_symbol)
 
 Wrapping both sides in `upper(...)` looks harmless, but it can blow away index use and make the homepage feel hung.
 
+### the D1 cost barrier is sacred
+
+This is the most important runtime barrier in Iconoplasm.
+
+The site has roughly 20k genes. That means one "small" full-table read is not small anymore, and one full-table read hidden behind a per-isolate cache can multiply into a catastrophic Cloudflare bill.
+
+The failure mode to remember is this:
+
+- a helper looks cached in JavaScript memory
+- but Cloudflare spins up many isolates across colos
+- each isolate misses independently
+- each miss rereads the same 20k-row snapshot from D1
+- the bill explodes while every individual request still looks "pretty fast"
+
+So the rule is:
+
+**If a public or first-party route needs an O(N) snapshot of portraits, gallery rows, or other whole-inventory state, it must use a versioned shared cache in KV (or another truly shared store), not only a module-level JS object.**
+
+In `workers/iconoplasm.js`, treat these functions as the cost barrier:
+
+- `publishedPortraitRefs(...)`
+- `publishedPortraitFingerprint(...)`
+- `galleryPublishedRows(...)`
+- `galleryUniquenessRows(...)`
+- `warmCatalogCache(...)`
+- `gallerySnapshot(...)`
+
+If you change them, you are touching the thing that keeps the site from quietly burning money.
+
+Non-negotiable rules:
+
+1. **Per-isolate memory is a speed hint, not a billing guard.**
+   - local JS caches are fine as a first layer
+   - they are not enough on their own
+
+2. **Versioned shared caches come first for full-table public reads.**
+   - use `KV_GALLERY_VERSION`-keyed snapshots
+   - on invalidate, bump the version and let old snapshots die
+
+3. **Hot-path primary keys stay raw.**
+   - if `gene_symbol` is already canonical, do not wrap it in `upper(...)`
+   - if `asset_sha256` is already normalized, do not wrap it in `lower(...)`
+
+4. **Do not rehydrate immutable public artifacts from D1 on hot paths unless there is a shared cache barrier in front of that read.**
+
+5. **Regression tests are mandatory.**
+   - the worker exports `resetIconoplasmRuntimeCachesForTest()` specifically so tests can simulate a fresh isolate
+   - if you touch the cost barrier, run the cost tests and make them stricter, not weaker
+
+### do not delete the alarms
+
+Some files exist specifically to annoy the future editor before they can repeat the billing incident.
+
+Treat these as protected alarms, not cleanup fodder:
+
+- `workers/iconoplasm.d1-cost-barrier.test.js`
+- `workers/iconoplasm.d1-hot-query-guard.test.js`
+- `workers/iconoplasm.do-not-delete-cost-guards.test.js`
+- `.github/hooks/iconoplasm-d1-guardrails.json`
+- `.github/hooks/iconoplasm-d1-guardrails.ps1`
+- `AGENTS.md`
+- `.github/agents/opus.agent.md`
+- `.github/instructions/iconoplasm-d1-cost-barrier.instructions.md`
+
+If one of those tests fails, your first assumption should be that code drifted into a dangerous shape.
+
+Do **not** do any of these:
+
+- delete the test because it is inconvenient
+- rename the test so nobody notices what it was guarding
+- remove the warning comments from `workers/iconoplasm.js`
+- strip the docs/instruction text because it feels repetitive
+
+If you genuinely need to replace one of these guards, the replacement has to land in the same change, be stricter or clearer, and say in comments why the old guard was no longer the right one.
+
+Verified test command:
+
+```text
+npm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.gallery-votes-cache.test.js workers/iconoplasm.gene-requests.test.js workers/iconoplasm.public-media.test.js workers/iconoplasm.gallery-order.test.js
+```
+
+If that suite stops proving fresh-isolate reuse of shared snapshots, assume you are one edit away from another billing incident.
+
 ### do not build giant fake shelf payloads
 
 If you try to represent the full catalog as one huge discovered shelf response, you can hit size problems like `SQLITE_TOOBIG` or just make the route painfully slow.
