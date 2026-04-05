@@ -243,6 +243,10 @@ test("discovery encounter inserts the first authenticated gene discovery", async
   assert.equal(stored?.first_source, "extension_hover")
   assert.equal(stored?.first_trigger, "hover_dwell")
   assert.equal(stored?.first_dwell_ms, 900)
+  assert.equal(env.ICONOPLASM_DB.rows.size, 4)
+  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "INS"))
+  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "LEP"))
+  assert.ok(env.ICONOPLASM_DB.getDiscovery("user-123", "GCG"))
 })
 
 test("discovery encounter increments count instead of duplicating the row", async () => {
@@ -304,10 +308,35 @@ test("discoveries me returns the signed-in user's discovered symbols", async () 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
   assert.equal(payload?.authenticated, true)
-  assert.deepEqual(payload?.discovered_symbols, ["TP53", "BRCA1"])
-  assert.equal(payload?.discovered_count, 2)
-  assert.equal(payload?.discoveries?.[0]?.full_name, "Tumor protein p53")
+  assert.deepEqual(payload?.discovered_symbols, ["INS", "LEP", "GCG", "TP53", "BRCA1"])
+  assert.equal(payload?.discovered_count, 5)
+  assert.equal(payload?.discoveries?.[3]?.full_name, "Tumor protein p53")
   assert.equal(payload?.show_all_applied, false)
+})
+
+test("discoveries me seeds the starter trio for an empty signed-in shelf", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "alex" },
+    },
+  })
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
+      method: "GET",
+      headers: { Cookie: "session=abc" },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.authenticated, true)
+  assert.equal(payload?.discovered_count, 3)
+  assert.deepEqual(payload?.discovered_symbols, ["INS", "LEP", "GCG"])
+  assert.equal(payload?.discoveries?.[0]?.first_source, "starter_seed")
+  assert.equal(payload?.discoveries?.[0]?.first_trigger, "starter_seed")
 })
 
 test("discoveries me ignores show-all requests from non-admin users", async () => {
@@ -331,7 +360,7 @@ test("discoveries me ignores show-all requests from non-admin users", async () =
   assert.equal(response.status, 200)
   assert.equal(payload?.show_all_requested, true)
   assert.equal(payload?.show_all_applied, false)
-  assert.deepEqual(payload?.discovered_symbols, ["TP53"])
+  assert.deepEqual(payload?.discovered_symbols, ["INS", "LEP", "GCG", "TP53"])
 })
 
 test("discoveries me lets admins override their shelf with the full catalog", async () => {
@@ -392,9 +421,9 @@ test("discoveries merge upserts guest-local symbols into the signed-in account",
   assert.equal(payload?.ok, true)
   assert.equal(payload?.authenticated, true)
   assert.equal(payload?.merged_count, 3)
-  assert.deepEqual(payload?.discovered_symbols, ["TP53", "BRCA1", "EGFR"])
-  assert.equal(payload?.discovered_count, 3)
+  assert.deepEqual(payload?.discovered_symbols, ["INS", "LEP", "GCG", "TP53", "BRCA1", "EGFR"])
+  assert.equal(payload?.discovered_count, 6)
 
   const stored = env.ICONOPLASM_DB.listDiscoveries("user-123")
-  assert.equal(stored.length, 3)
+  assert.equal(stored.length, 6)
 })

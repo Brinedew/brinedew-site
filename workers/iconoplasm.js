@@ -41,8 +41,11 @@ const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
 const DISCOVERY_SOURCE_EXTENSION_HOVER = "extension_hover"
 const DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE = "extension_guest_merge"
+const DISCOVERY_SOURCE_STARTER_SEED = "starter_seed"
 const DISCOVERY_TRIGGER_HOVER_DWELL = "hover_dwell"
 const DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE = "guest_buffer_merge"
+const DISCOVERY_TRIGGER_STARTER_SEED = "starter_seed"
+const ICONOPLASM_STARTER_GENE_SYMBOLS = ["INS", "LEP", "GCG"]
 
 const catalogCache = {
   hash: null,
@@ -157,6 +160,7 @@ function normalizeDiscoverySource(raw) {
     .toLowerCase()
   if (v === DISCOVERY_SOURCE_EXTENSION_HOVER) return v
   if (v === DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE) return v
+  if (v === DISCOVERY_SOURCE_STARTER_SEED) return v
   return null
 }
 
@@ -166,6 +170,7 @@ function normalizeDiscoveryTrigger(raw) {
     .toLowerCase()
   if (v === DISCOVERY_TRIGGER_HOVER_DWELL) return v
   if (v === DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE) return v
+  if (v === DISCOVERY_TRIGGER_STARTER_SEED) return v
   return null
 }
 
@@ -905,15 +910,19 @@ async function recordGeneDiscoveryEncounter(
     return { ok: false, error: "hover_dwell discovery events must include dwell_ms" }
   }
 
-  const existing = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
-     FROM icono_gene_discoveries
-     WHERE user_id = ?
-       AND upper(gene_symbol) = ?
-     LIMIT 1`,
-  )
-    .bind(userIdNorm, geneSymbolNorm)
-    .first()
+  async function readDiscoveryRow() {
+    return env.ICONOPLASM_DB.prepare(
+      `SELECT *
+       FROM icono_gene_discoveries
+       WHERE user_id = ?
+         AND upper(gene_symbol) = ?
+       LIMIT 1`,
+    )
+      .bind(userIdNorm, geneSymbolNorm)
+      .first()
+  }
+
+  const existing = await readDiscoveryRow()
 
   if (existing) {
     await env.ICONOPLASM_DB.prepare(
@@ -954,20 +963,48 @@ async function recordGeneDiscoveryEncounter(
       .run()
   }
 
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
-     FROM icono_gene_discoveries
-     WHERE user_id = ?
-       AND upper(gene_symbol) = ?
-     LIMIT 1`,
-  )
-    .bind(userIdNorm, geneSymbolNorm)
-    .first()
+  const row = await readDiscoveryRow()
 
   return {
     ok: true,
     created: !existing,
     discovery: mapGeneDiscoveryRow(row || {}),
+  }
+}
+
+async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
+  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  const userIdNorm = normalizeUserId(userId || "")
+  if (!userIdNorm || isGuestUserId(userIdNorm)) {
+    return { ok: false, error: "Authentication required" }
+  }
+  const createdSymbols = []
+  // Starter genes are part of the signed-in shelf contract. Backfill them lazily so
+  // legacy accounts and brand-new logins both stop showing a literal zero-state shelf.
+  for (const geneSymbol of ICONOPLASM_STARTER_GENE_SYMBOLS) {
+    const existing = await env.ICONOPLASM_DB.prepare(
+      `SELECT 1
+       FROM icono_gene_discoveries
+       WHERE user_id = ?
+         AND upper(gene_symbol) = ?
+       LIMIT 1`,
+    )
+      .bind(userIdNorm, geneSymbol)
+      .first()
+    if (existing) continue
+    const result = await recordGeneDiscoveryEncounter(env, {
+      userId: userIdNorm,
+      geneSymbol,
+      source: DISCOVERY_SOURCE_STARTER_SEED,
+      trigger: DISCOVERY_TRIGGER_STARTER_SEED,
+      dwellMs: null,
+    })
+    if (result.ok && result.created) createdSymbols.push(geneSymbol)
+  }
+  return {
+    ok: true,
+    created: createdSymbols.length,
+    symbols: createdSymbols,
   }
 }
 
@@ -1043,6 +1080,7 @@ async function mergeGuestGeneDiscoveries(
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
     return { ok: false, error: "Authentication required" }
   }
+  await ensureStarterGeneDiscoveries(env, { userId: userIdNorm })
   const requestedSymbols = normalizeRequestedSymbols(symbols, 2000)
   if (!requestedSymbols.length) {
     return {
@@ -8329,8 +8367,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
       }
 
+      const userId = normalizeUserId(sessionUser.user_id)
+      await ensureStarterGeneDiscoveries(env, { userId })
+
       const result = await recordGeneDiscoveryEncounter(env, {
-        userId: sessionUser.user_id,
+        userId,
         geneSymbol: symbol,
         source,
         trigger,
@@ -8390,6 +8431,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       const userId = normalizeUserId(sessionUser.user_id)
       const showAllRequested = normalizeBooleanQueryFlag(url.searchParams.get("show_all"))
       const showAllApplied = showAllRequested && (await isIconoplasmAdmin(request, env))
+      if (!showAllApplied) {
+        await ensureStarterGeneDiscoveries(env, { userId })
+      }
       const discoveries = showAllApplied
         ? await listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit: 10000 })
         : await listUserGeneDiscoveries(env, { userId })
