@@ -4,6 +4,7 @@ import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
+import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 // Public API cutover note:
@@ -630,6 +631,9 @@ function mapGenerationRequestRow(row) {
 }
 
 function mapGeneDiscoveryRow(row) {
+  const weightKg = Number(row?.weight_kg)
+  const ageYears = Number(row?.age_years)
+  const uniquenessRank = Number(row?.uniqueness_rank)
   return {
     gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
     full_name: sanitizeText(row?.full_name || "", 255) || "",
@@ -642,6 +646,15 @@ function mapGeneDiscoveryRow(row) {
     last_trigger: sanitizeText(row?.last_trigger || "", 64) || "",
     first_dwell_ms: optionalInt(row?.first_dwell_ms),
     last_dwell_ms: optionalInt(row?.last_dwell_ms),
+    weight_kg: Number.isFinite(weightKg) && weightKg > 0 ? weightKg : null,
+    age_years: Number.isFinite(ageYears) && ageYears >= 0 ? ageYears : null,
+    uniqueness_rank: Number.isFinite(uniquenessRank) && uniquenessRank >= 0 ? uniquenessRank : null,
+    popularity_score: wikiPageviewsForSymbol(row?.gene_symbol || ""),
+    image_upvotes: Math.max(0, Number(row?.image_upvotes || 0) || 0),
+    image_downvotes: Math.max(0, Number(row?.image_downvotes || 0) || 0),
+    image_score: Number(row?.image_score || 0) || 0,
+    published_at: sanitizeText(row?.published_at || "", 64) || "",
+    asset_created_at: sanitizeText(row?.asset_created_at || "", 64) || "",
   }
 }
 
@@ -1008,7 +1021,7 @@ async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
   }
 }
 
-async function listUserGeneDiscoveries(env, { userId, limit = 5000 } = {}) {
+async function listUserGeneDiscoveries(env, { userId, limit = 5000, order = "newest", seed = null } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
@@ -1019,22 +1032,36 @@ async function listUserGeneDiscoveries(env, { userId, limit = 5000 } = {}) {
   const rows = await env.ICONOPLASM_DB.prepare(
     `SELECT
        d.*,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name
+       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name,
+       ge.weight_kg,
+       ge.age_years,
+       ge.leakage_percent AS uniqueness_rank,
+       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
+       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
+       COALESCE(gr.live_score, 0) AS image_score,
+       gr.live_created_at AS published_at,
+       gr.live_created_at AS asset_created_at
      FROM icono_gene_discoveries d
      LEFT JOIN icono_gene_essence ge
        ON ge.gene_symbol = d.gene_symbol
      LEFT JOIN icono_gene_catalog gc
        ON gc.gene_symbol = d.gene_symbol
+     LEFT JOIN icono_admin_gene_rollup gr
+       ON gr.gene_symbol = d.gene_symbol
      WHERE d.user_id = ?
      ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
      LIMIT ?`,
   )
     .bind(userIdNorm, cleanedLimit)
     .all()
-  return (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow)
+  return sortDiscoveryRowsForOrder(
+    (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow),
+    normalizeIconoplasmHomeOrder(order, "newest"),
+    seed,
+  )
 }
 
-async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000 } = {}) {
+async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000, order = "newest", seed = null } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
@@ -1054,19 +1081,33 @@ async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000
        COALESCE(d.first_trigger, '') AS first_trigger,
        COALESCE(d.last_trigger, '') AS last_trigger,
        d.first_dwell_ms,
-       d.last_dwell_ms
+       d.last_dwell_ms,
+       ge.weight_kg,
+       ge.age_years,
+       ge.leakage_percent AS uniqueness_rank,
+       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
+       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
+       COALESCE(gr.live_score, 0) AS image_score,
+       gr.live_created_at AS published_at,
+       gr.live_created_at AS asset_created_at
      FROM icono_gene_catalog gc
      LEFT JOIN icono_gene_essence ge
        ON ge.gene_symbol = gc.gene_symbol
      LEFT JOIN icono_gene_discoveries d
        ON d.user_id = ?
       AND d.gene_symbol = gc.gene_symbol
+     LEFT JOIN icono_admin_gene_rollup gr
+       ON gr.gene_symbol = gc.gene_symbol
      ORDER BY gc.gene_symbol ASC
      LIMIT ?`,
   )
     .bind(userIdNorm, cleanedLimit)
     .all()
-  return (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow)
+  return sortDiscoveryRowsForOrder(
+    (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow),
+    normalizeIconoplasmHomeOrder(order, "newest"),
+    seed,
+  )
 }
 
 async function mergeGuestGeneDiscoveries(
@@ -6427,25 +6468,7 @@ async function blacklistArtistStyle(
 }
 
 function normalizeGalleryOrder(raw) {
-  const value = String(raw || "")
-    .trim()
-    .toLowerCase()
-  if (value === "popular") return "popularity"
-  if (
-    [
-      "votes",
-      "uniqueness",
-      "popularity",
-      "heaviest",
-      "lightest",
-      "oldest",
-      "youngest",
-      "newest",
-      "random",
-    ].includes(value)
-  )
-    return value
-  return "votes"
+  return normalizeIconoplasmHomeOrder(raw, "votes")
 }
 
 function normalizeGalleryLimit(raw) {
@@ -6511,6 +6534,104 @@ function compareGalleryPopularityFallback(left, right) {
     ) ||
     compareNullableTextAsc(left.symbol, right.symbol)
   )
+}
+
+function compareDiscoveryNewestFallback(left, right) {
+  return (
+    compareNullableTextDesc(
+      left.last_encountered_at || left.first_discovered_at,
+      right.last_encountered_at || right.first_discovered_at,
+    ) || compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
+  )
+}
+
+function compareDiscoveryPopularityFallback(left, right) {
+  return (
+    Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
+    Number(right.image_score || 0) - Number(left.image_score || 0) ||
+    Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
+    compareNullableTextDesc(
+      left.published_at || left.asset_created_at,
+      right.published_at || right.asset_created_at,
+    ) ||
+    compareDiscoveryNewestFallback(left, right)
+  )
+}
+
+function discoveryRandomRank(seed, symbol) {
+  const input = `${seed || "iconoplasm"}|${normalizeSymbol(symbol) || ""}`
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function sortDiscoveryRowsForOrder(rows, order, seed = null) {
+  const sorted = Array.isArray(rows) ? rows.slice() : []
+  sorted.sort((left, right) => {
+    if (order === "votes") {
+      return (
+        Number(right.image_score || 0) - Number(left.image_score || 0) ||
+        Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
+        compareDiscoveryPopularityFallback(left, right)
+      )
+    }
+    if (order === "uniqueness") {
+      return (
+        compareNullableNumberAscWithNullBottom(left.uniqueness_rank, right.uniqueness_rank) ||
+        compareDiscoveryPopularityFallback(left, right)
+      )
+    }
+    if (order === "popularity") {
+      return compareDiscoveryPopularityFallback(left, right)
+    }
+    if (order === "heaviest") {
+      return (
+        compareNullableNumberDescWithNullBottom(left.weight_kg, right.weight_kg) ||
+        compareDiscoveryPopularityFallback(left, right)
+      )
+    }
+    if (order === "lightest") {
+      return (
+        compareNullableNumberAscWithNullBottom(left.weight_kg, right.weight_kg) ||
+        compareDiscoveryPopularityFallback(left, right)
+      )
+    }
+    if (order === "oldest") {
+      return (
+        compareNullableNumberDescWithNullBottom(left.age_years, right.age_years) ||
+        compareDiscoveryPopularityFallback(left, right)
+      )
+    }
+    if (order === "youngest") {
+      return (
+        compareNullableNumberAscWithNullBottom(left.age_years, right.age_years) ||
+        compareDiscoveryPopularityFallback(left, right)
+      )
+    }
+    if (order === "symbol") {
+      return compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
+    }
+    if (order === "shortest") {
+      const leftName = String(left.full_name || left.gene_symbol || "").trim()
+      const rightName = String(right.full_name || right.gene_symbol || "").trim()
+      return (
+        leftName.length - rightName.length ||
+        compareNullableTextAsc(leftName, rightName) ||
+        compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
+      )
+    }
+    if (order === "random") {
+      return (
+        discoveryRandomRank(seed, left.gene_symbol) - discoveryRandomRank(seed, right.gene_symbol) ||
+        compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
+      )
+    }
+    return compareDiscoveryNewestFallback(left, right)
+  })
+  return sorted
 }
 
 function clearGallerySnapshotCache() {
@@ -6672,6 +6793,18 @@ function gallerySortablePositiveMetric(value) {
 function sortGalleryItems(items, order, seed = null) {
   const sorted = Array.isArray(items) ? items.slice() : []
   sorted.sort((left, right) => {
+    if (order === "symbol") {
+      return compareNullableTextAsc(left.symbol, right.symbol)
+    }
+    if (order === "shortest") {
+      const leftName = String(left.full_name || left.symbol || "").trim()
+      const rightName = String(right.full_name || right.symbol || "").trim()
+      return (
+        leftName.length - rightName.length ||
+        compareNullableTextAsc(leftName, rightName) ||
+        compareNullableTextAsc(left.symbol, right.symbol)
+      )
+    }
     if (order === "heaviest") {
       return (
         compareNullableNumberDescWithNullBottom(
@@ -8410,6 +8543,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
       }
+      const requestedOrder = normalizeIconoplasmHomeOrder(url.searchParams.get("order"), "newest")
+      const requestedSeed =
+        requestedOrder === "random"
+          ? normalizeGallerySeed(url.searchParams.get("seed")) || crypto.randomUUID().slice(0, 12)
+          : null
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
@@ -8419,6 +8557,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               ok: true,
               authenticated: false,
               user: null,
+              order: requestedOrder,
+              ...(requestedSeed ? { seed: requestedSeed } : {}),
               discoveries: [],
               discovered_symbols: [],
               discovered_count: 0,
@@ -8435,8 +8575,17 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         await ensureStarterGeneDiscoveries(env, { userId })
       }
       const discoveries = showAllApplied
-        ? await listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit: 10000 })
-        : await listUserGeneDiscoveries(env, { userId })
+        ? await listAllCatalogGeneDiscoveriesForAdmin(env, {
+            userId,
+            limit: 10000,
+            order: requestedOrder,
+            seed: requestedSeed,
+          })
+        : await listUserGeneDiscoveries(env, {
+            userId,
+            order: requestedOrder,
+            seed: requestedSeed,
+          })
       return done(
         "discoveries_me",
         json(
@@ -8447,6 +8596,8 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               id: userId,
               username: sessionUser.username || null,
             },
+            order: requestedOrder,
+            ...(requestedSeed ? { seed: requestedSeed } : {}),
             discoveries,
             show_all_requested: showAllRequested,
             show_all_applied: showAllApplied,

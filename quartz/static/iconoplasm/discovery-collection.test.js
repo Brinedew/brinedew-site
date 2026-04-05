@@ -10,7 +10,9 @@ import {
 
 test("home collection orders include shortest-name sorting", () => {
   assert.ok(HOME_COLLECTION_ORDERS.some((option) => option.value === "shortest"))
+  assert.ok(HOME_COLLECTION_ORDERS.some((option) => option.value === "votes"))
   assert.equal(normalizeHomeCollectionOrder("shortest"), "shortest")
+  assert.equal(normalizeHomeCollectionOrder("recent"), "newest")
 })
 
 test("normalize discovery entries keeps full names and de-duplicates by symbol", () => {
@@ -19,15 +21,12 @@ test("normalize discovery entries keeps full names and de-duplicates by symbol",
     { gene_symbol: "FURIN", full_name: "ignored duplicate", encounter_count: 99 },
   ])
 
-  assert.deepEqual(entries, [
-    {
-      gene_symbol: "FURIN",
-      full_name: "Furin",
-      first_discovered_at: "",
-      last_encountered_at: "",
-      encounter_count: 1,
-    },
-  ])
+  assert.equal(entries.length, 1)
+  assert.equal(entries[0]?.gene_symbol, "FURIN")
+  assert.equal(entries[0]?.full_name, "Furin")
+  assert.equal(entries[0]?.encounter_count, 1)
+  assert.equal(entries[0]?.weight_kg, null)
+  assert.equal(entries[0]?.image_score, 0)
 })
 
 test("shortest-name sorting uses full-name length then stable tie-breaks", () => {

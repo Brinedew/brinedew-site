@@ -6,8 +6,11 @@ import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
   normalizeHomeCollectionOrder,
-  sortDiscoveryEntries,
 } from "./discovery-collection.js"
+import {
+  ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
+  ICONOPLASM_GALLERY_DEFAULT_ORDER,
+} from "./home-orders.js"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -33,10 +36,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var DEBOUNCE_MS = 200
   var GALLERY_PAGE_SIZE = 30
   var GALLERY_INITIAL_PAGE_SIZE = 4
-  var GALLERY_DEFAULT_ORDER = "votes"
+  var GALLERY_DEFAULT_ORDER = ICONOPLASM_GALLERY_DEFAULT_ORDER
   var HOME_COLLECTION_PAGE_SIZE = 24
   var HOME_COLLECTION_INITIAL_PAGE_SIZE = 12
-  var HOME_COLLECTION_DEFAULT_ORDER = "recent"
+  var HOME_COLLECTION_DEFAULT_ORDER = ICONOPLASM_DISCOVERY_DEFAULT_ORDER
   var GUEST_STARTER_GENES = [
     {
       gene_symbol: "INS",
@@ -57,17 +60,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var HOME_LAYOUT_DEFAULT = "bricks"
   var CARD_VARIANT_DEFAULT = "simple"
   var HOME_SKELETON_CARD_COUNT = 4
-  var GALLERY_ORDERS = [
-    { value: "votes", label: "Votes" },
-    { value: "uniqueness", label: "Uniqueness" },
-    { value: "popularity", label: "Popularity" },
-    { value: "heaviest", label: "Heaviest first" },
-    { value: "lightest", label: "Lightest first" },
-    { value: "oldest", label: "Oldest first" },
-    { value: "youngest", label: "Youngest first" },
-    { value: "newest", label: "Newest" },
-    { value: "random", label: "Random" },
-  ]
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
   var PREFETCH_DETAIL_CONCURRENCY = 4
@@ -154,8 +146,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
   }
 
-  function fetchDiscoveryState() {
-    return fetchAuthedJSON("/api/iconoplasm/discoveries/me")
+  function fetchDiscoveryState(order, seed) {
+    var resolvedOrder = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
+    var path = "/api/iconoplasm/discoveries/me?order=" + encodeURIComponent(resolvedOrder)
+    if (resolvedOrder === "random" && seed) {
+      path += "&seed=" + encodeURIComponent(String(seed))
+    }
+    return fetchAuthedJSON(path)
   }
 
   function fetchHomeCollectionCounts() {
@@ -876,23 +873,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return null
   }
 
-  function galleryOptionsMarkup() {
-    var html = ""
-    for (var i = 0; i < GALLERY_ORDERS.length; i++) {
-      var option = GALLERY_ORDERS[i]
-      html +=
-        '<option value="' +
-        esc(option.value) +
-        '"' +
-        (option.value === GALLERY_DEFAULT_ORDER ? " selected" : "") +
-        ">" +
-        esc(option.label) +
-        "</option>"
-    }
-    return html
-  }
-
-  function homeCollectionOptionsMarkup() {
+  function sharedOrderOptionsMarkup(defaultValue) {
     var html = ""
     for (var i = 0; i < HOME_COLLECTION_ORDERS.length; i++) {
       var option = HOME_COLLECTION_ORDERS[i]
@@ -900,12 +881,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<option value="' +
         esc(option.value) +
         '"' +
-        (option.value === HOME_COLLECTION_DEFAULT_ORDER ? " selected" : "") +
+        (option.value === defaultValue ? " selected" : "") +
         ">" +
         esc(option.label) +
         "</option>"
     }
     return html
+  }
+
+  function galleryOptionsMarkup() {
+    return sharedOrderOptionsMarkup(GALLERY_DEFAULT_ORDER)
+  }
+
+  function homeCollectionOptionsMarkup() {
+    return sharedOrderOptionsMarkup(HOME_COLLECTION_DEFAULT_ORDER)
   }
 
   function guestStarterDiscoveryEntries() {
@@ -2664,12 +2653,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
 
     function syncHomeModeChrome() {
-      if (orderLabelEl) orderLabelEl.textContent = useClassicGallery ? "Order by" : "Sort"
+      if (orderLabelEl) orderLabelEl.textContent = "Sort"
       if (!orderEl) return
       var previousValue = String(orderEl.value || "").trim()
       orderEl.innerHTML = activeOrderMarkup()
       var nextValue = useClassicGallery
-        ? previousValue || GALLERY_DEFAULT_ORDER
+        ? normalizeHomeCollectionOrder(previousValue || GALLERY_DEFAULT_ORDER, GALLERY_DEFAULT_ORDER)
         : normalizeHomeCollectionOrder(previousValue || HOME_COLLECTION_DEFAULT_ORDER)
       var hasValue = false
       for (var i = 0; i < orderEl.options.length; i++) {
@@ -2808,7 +2797,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ])
         .then(function (results) {
           var countData = results[1] || {}
-          return fetchDiscoveryState().then(function (discoveryData) {
+          return fetchDiscoveryState(galleryState.order, galleryState.seed).then(function (discoveryData) {
             return {
               discoveryData: discoveryData || {},
               countData: countData,
@@ -2820,15 +2809,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           var countData = results.countData || {}
           galleryState.authenticated = !!discoveryData.authenticated
           galleryState.showAllGenes = !!discoveryData.show_all_applied
-          galleryState.discoveryEntries = galleryState.authenticated
-            ? normalizeDiscoveryEntries(discoveryData.discoveries)
-            : guestStarterDiscoveryEntries()
-          galleryState.total = Math.max(0, Number(countData.total || 0) || 0)
-          galleryState.publishedTotal = Math.max(0, Number(countData.publishedTotal || 0) || 0)
-          galleryState.sortedDiscoveries = sortDiscoveryEntries(
-            galleryState.discoveryEntries,
+          galleryState.order = normalizeHomeCollectionOrder(
+            discoveryData.order || galleryState.order,
             galleryState.order,
           )
+          galleryState.seed =
+            galleryState.order === "random"
+              ? String(discoveryData.seed || galleryState.seed || "").trim()
+              : ""
+          galleryState.discoveryEntries = normalizeDiscoveryEntries(
+            galleryState.authenticated ? discoveryData.discoveries : guestStarterDiscoveryEntries(),
+          )
+          galleryState.total = Math.max(0, Number(countData.total || 0) || 0)
+          galleryState.publishedTotal = Math.max(0, Number(countData.publishedTotal || 0) || 0)
+          galleryState.sortedDiscoveries = galleryState.discoveryEntries.slice()
           galleryState.hasMore = galleryState.sortedDiscoveries.length > 0
           galleryState.ready = true
           syncHeroCount()
@@ -2932,7 +2926,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           : galleryState.order === "random"
             ? newRandomSeed()
             : ""
-        : ""
+        : galleryState.order === "random"
+          ? restoreConfig && restoreConfig.seed
+            ? restoreConfig.seed
+            : newRandomSeed()
+          : ""
       galleryState.items = []
       galleryState.prefillTarget = Math.max(
         useClassicGallery ? GALLERY_PAGE_SIZE : HOME_COLLECTION_PAGE_SIZE,
