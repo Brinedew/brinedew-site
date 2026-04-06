@@ -275,7 +275,30 @@ async function generatePromos(ctx) {
 
   const hovercardUri = toDataUri("screenshot-2-hovercard.png");
 
+  // ---------------------------------------------------------------
+  // Pixel math (source: 628 x 907, ratio 0.69 portrait):
+  //
+  // SMALL TILE (440 x 280):
+  //   Content area after padding: 384 x 232.
+  //   Text column: 170px. Gap: 20px. Preview: 194 x 232.
+  //   Preview ratio: 0.84. Source ratio: 0.69.
+  //   cover scales to fill HEIGHT: 232/907*628 = 161px wide.
+  //   That's narrower than 194px, so it actually scales to fill WIDTH:
+  //   194/628*907 = 280px tall. Crop = 280-232 = 48px (17%).
+  //   Acceptable. Center vertically (object-position: center center).
+  //
+  // MARQUEE (1400 x 560):
+  //   Content area after padding: 1256 x 464.
+  //   Forcing a landscape cover crop on a portrait image loses 61%.
+  //   Instead: show the image UNCROPPED at full content height.
+  //   Height: 464px. Width at native ratio: 464 * 0.6924 = 321px.
+  //   Position: right-aligned within the banner, text left-aligned.
+  //   Dark negative space between text and image is deliberate.
+  // ---------------------------------------------------------------
+
   // -- Small promo tile: 440 x 280 --
+  // The 0.84 preview ratio vs 0.69 source means only ~17% vertical
+  // crop with cover. Acceptable — it shows the table + most of the card.
   const promoSmallPage = await ctx.newPage();
   await promoSmallPage.setViewportSize({ width: 440, height: 280 });
   await promoSmallPage.setContent(`<!DOCTYPE html>
@@ -285,12 +308,12 @@ async function generatePromos(ctx) {
     width: 440px; height: 280px; overflow: hidden;
     background: #1a1a1a;
     font-family: system-ui, -apple-system, sans-serif;
-    display: flex; align-items: center; justify-content: center;
-    gap: 24px; padding: 24px 28px;
+    display: flex; align-items: center;
+    gap: 20px; padding: 24px 28px;
   }
   .text-side {
-    flex: 0 0 180px; color: #f5f0e8; display: flex;
-    flex-direction: column; gap: 8px; z-index: 1;
+    flex: 0 0 170px; color: #f5f0e8; display: flex;
+    flex-direction: column; gap: 8px;
   }
   .text-side h1 {
     font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
@@ -298,7 +321,6 @@ async function generatePromos(ctx) {
   }
   .text-side p {
     font-size: 11.5px; line-height: 1.45; color: #a8a29e;
-    font-weight: 400;
   }
   .badge {
     display: inline-block; background: #c06030; color: #fff;
@@ -313,7 +335,7 @@ async function generatePromos(ctx) {
   }
   .preview img {
     width: 100%; height: 100%; object-fit: cover;
-    object-position: center 40%;
+    object-position: center center;
   }
 </style></head><body>
   <div class="text-side">
@@ -335,7 +357,9 @@ async function generatePromos(ctx) {
   await promoSmallPage.close();
 
   // -- Large marquee: 1400 x 560 --
-  // Single hero screenshot, no second panel (the popup crop was unreadable).
+  // Portrait image in a landscape banner: show UNCROPPED at full height,
+  // natural aspect ratio, right-aligned. Dark negative space is deliberate.
+  // Image: 464px tall * 0.6924 = 321px wide. No crop. Every pixel visible.
   const promoLargePage = await ctx.newPage();
   await promoLargePage.setViewportSize({ width: 1400, height: 560 });
   await promoLargePage.setContent(`<!DOCTYPE html>
@@ -345,8 +369,8 @@ async function generatePromos(ctx) {
     width: 1400px; height: 560px; overflow: hidden;
     background: #1a1a1a;
     font-family: system-ui, -apple-system, sans-serif;
-    display: flex; align-items: center;
-    padding: 48px 72px; gap: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 48px 72px;
   }
   .text-col {
     flex: 0 0 380px; color: #f5f0e8;
@@ -365,13 +389,14 @@ async function generatePromos(ctx) {
     text-transform: uppercase; font-weight: 500;
   }
   .preview {
-    flex: 1; height: 100%;
+    flex: 0 0 auto; height: 100%;
     border-radius: 10px; overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    box-shadow:
+      0 0 0 0.5px rgba(255,255,255,0.06),
+      0 8px 32px rgba(0,0,0,0.5);
   }
   .preview img {
-    display: block; width: 100%; height: 100%;
-    object-fit: cover; object-position: center 40%;
+    display: block; height: 100%; width: auto;
   }
 </style></head><body>
   <div class="text-col">
