@@ -33,6 +33,18 @@ Current output:
 - staged runtime payload: `iconoplasm-extension/dist/package/`
 - zip for upload/manual distribution: `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
 
+For AMO's first upload screen, select:
+
+- `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
+
+If AMO asks for a source code package during review, create it with:
+
+- `npm run package:iconoplasm-firefox-source`
+
+That writes:
+
+- `iconoplasm-extension/dist/iconoplasm-firefox-source-v<version>.zip`
+
 ## Firefox publishing
 
 This repo now owns the Firefox publish path too.
@@ -59,3 +71,7 @@ Notes:
 - `manifest.json` now carries the Gecko ID `iconoplasm@brinedew.bio`, which Firefox signing requires
 - the workflow is manual on purpose so a website push does not accidentally submit a store build
 - before this workflow existed, there was no Firefox store automation in this repo at all
+
+AMO-specific listing copy lives in:
+
+- `iconoplasm-extension/store-assets/AMO-LISTING-COPY.md`
