@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Iconoplasm",
-  "version": "0.3.1",
-  "description": "Every human gene has a unique color. Iconoplasm highlights gene names on any webpage and reveals their color identity.",
+  "version": "0.4.0",
+  "description": "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.",
   "permissions": ["storage"],
   "host_permissions": ["https://iconoplasm.brinedew.bio/*"],
   "background": {
@@ -15,6 +15,7 @@
       "js": [
         "generated/rough.js",
         "generated/shared-card-runtime.js",
+        "blocklist-defaults.js",
         "content-matcher.js",
         "content-visibility-scheduler.js",
         "content.js"
@@ -33,9 +34,7 @@
         "fonts/IBMPlexMono-Medium.woff2",
         "fonts/LeagueSpartan-800.woff2",
         "fonts/SpecialElite-Regular.woff2",
-        "fonts/Caveat-400.woff2",
-        "portrait-placeholder.png",
-        "portrait-placeholder@2x.png"
+        "fonts/Caveat-400.woff2"
       ],
       "matches": ["<all_urls>"]
     }
@@ -44,13 +43,17 @@
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
     }
   },
   "icons": {
     "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
-    "128": "icons/icon-128.png"
+    "128": "icons/icon-128.png",
+    "256": "icons/icon-256.png",
+    "512": "icons/icon-512.png"
   }
 }

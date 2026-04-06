@@ -215,3 +215,238 @@ input {
   border-color: color-mix(in srgb, var(--accent) 34%, var(--ui-border));
   background: color-mix(in srgb, var(--light) 88%, white 12%);
 }
+
+/* ---- Tabs ---- */
+
+.popup-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 62%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--light) 60%, white 40%);
+}
+
+.popup-tab {
+  flex: 1 1 0;
+  padding: 0.48rem 0.6rem;
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: transparent;
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.72rem;
+  font-weight: 450;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.popup-tab:hover {
+  background: color-mix(in srgb, var(--light) 85%, white 15%);
+  color: var(--dark);
+}
+
+.popup-tab--active {
+  background: color-mix(in srgb, var(--light) 96%, white 4%);
+  color: var(--dark);
+  font-weight: 550;
+  box-shadow:
+    0 1px 3px rgba(33, 21, 12, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--ui-border) 48%, transparent);
+}
+
+/* ---- Panels ---- */
+
+.popup-panel--hidden {
+  display: none;
+}
+
+/* ---- Blocklist ---- */
+
+.popup-blocklist-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.popup-text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: color-mix(in srgb, var(--light) 70%, white 30%);
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  color: var(--dark);
+  text-transform: uppercase;
+}
+
+.popup-text-input::placeholder {
+  color: color-mix(in srgb, var(--secondary) 50%, transparent);
+  text-transform: none;
+}
+
+.popup-text-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.popup-btn {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.86rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: color-mix(in srgb, var(--light) 82%, white 18%);
+  font-family: "Crimson Pro", serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--dark);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.popup-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--ui-border));
+  background: color-mix(in srgb, var(--light) 92%, white 8%);
+}
+
+.popup-btn--primary {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--light));
+  color: color-mix(in srgb, var(--dark) 85%, var(--accent) 15%);
+}
+
+.popup-btn--primary:hover {
+  background: color-mix(in srgb, var(--accent) 18%, var(--light));
+}
+
+.popup-btn--full {
+  display: block;
+  width: 100%;
+  text-align: center;
+  text-decoration: none;
+}
+
+.popup-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--secondary);
+}
+
+.popup-btn--ghost:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--dark);
+}
+
+.popup-btn--hidden {
+  display: none;
+}
+
+.popup-blocklist-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.15rem 0;
+}
+
+.popup-blocklist-count {
+  font-size: 0.78rem;
+  color: var(--secondary);
+  font-family: "Monaspace Xenon Web", monospace;
+  letter-spacing: 0.02em;
+}
+
+.popup-blocklist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.popup-blocklist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 56%, transparent);
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: color-mix(in srgb, var(--light) 88%, white 12%);
+}
+
+.popup-blocklist-left {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.popup-blocklist-badge {
+  font-size: 0.62rem;
+  font-family: "Monaspace Xenon Web", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--secondary);
+  background: color-mix(in srgb, var(--ui-border) 36%, transparent);
+  padding: 0.1rem 0.34rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.popup-blocklist-symbol {
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--dark);
+}
+
+.popup-blocklist-remove {
+  padding: 0.18rem 0.44rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.7rem;
+  color: var(--secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.popup-blocklist-remove:hover {
+  background: color-mix(in srgb, oklch(60% 0.18 25) 12%, transparent);
+  color: oklch(45% 0.16 25);
+}
+
+.popup-blocklist-empty {
+  margin: 0;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+  color: var(--secondary);
+  line-height: 1.4;
+}
+
+.popup-blocklist-empty--hidden {
+  display: none;
+}
+
+/* ---- Account ---- */
+
+.popup-account-status {
+  padding: 0.5rem 0 0;
+}
+
+.popup-account-status-text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--secondary);
+  line-height: 1.4;
+}

@@ -585,6 +585,38 @@ export default {
         })
       }
 
+      // Shared platform route: auth is a site-wide concern (cookie domain = .brinedew.bio),
+      // not a feature of any single subdomain. Handle it before host-based dispatch so every
+      // Brinedew app can initiate and complete the Discord OAuth flow through one code path.
+      if (url.pathname.startsWith("/api/auth/")) {
+        if (url.pathname === "/api/auth/login" && request.method === "GET") {
+          return handleLogin(request, env)
+        }
+        if (url.pathname === "/api/auth/config" && request.method === "GET") {
+          if (!(await isAdmin(request, env))) {
+            return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
+          }
+          return Response.json(getDiscordAuthConfigStatus(env), { headers: corsHeaders })
+        }
+        if (url.pathname === "/api/auth/callback" && request.method === "GET") {
+          return handleCallback(request, env)
+        }
+        if (url.pathname === "/api/auth/me" && request.method === "GET") {
+          const response = await handleMe(request, env)
+          return new Response(response.body, {
+            status: response.status,
+            headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+          })
+        }
+        if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+          const response = await handleLogout(request, env)
+          return new Response(response.body, {
+            status: response.status,
+            headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+          })
+        }
+      }
+
       // The live settings page runs on brinedew.bio and probes Iconoplasm admin state via
       // same-origin /api/iconoplasm/* requests. Route those to the Iconoplasm worker no matter
       // which Brinedew host receives them, otherwise apex settings fetches fall through to the
@@ -664,6 +696,41 @@ export default {
             statusText: assetResp.statusText,
             headers: assetResp.headers,
           })
+        }
+
+        // Privacy policy: serve the actual Hugo page, not the SPA shell.
+        // CWS requires a privacy policy URL; this serves content/apps/iconoplasm/privacy.md.
+        if (request.method === "GET" || request.method === "HEAD") {
+          if (url.pathname === "/apps/iconoplasm/privacy/" || url.pathname === "/privacy/") {
+            return Response.redirect(`https://${ICONOPLASM_HOST}/apps/iconoplasm/privacy`, 301)
+          }
+          if (url.pathname === "/privacy") {
+            // Friendly short path — redirect to canonical
+            return Response.redirect(`https://${ICONOPLASM_HOST}/apps/iconoplasm/privacy`, 301)
+          }
+          if (url.pathname === "/apps/iconoplasm/privacy") {
+            const privacyUrl = buildStaticSiteUrl(url, "/apps/iconoplasm/privacy")
+            const privacyResp = await fetch(privacyUrl.toString(), {
+              method: request.method,
+              headers: request.headers,
+            })
+            if (privacyResp.headers.get("content-type")?.includes("text/html")) {
+              const html = await privacyResp.text()
+              if (isDraftHtmlDocument(html) && !(await isAdmin(request, env))) {
+                return draftNotFoundResponse(request.method)
+              }
+              return new Response(request.method === "HEAD" ? null : html, {
+                status: privacyResp.status,
+                statusText: privacyResp.statusText,
+                headers: privacyResp.headers,
+              })
+            }
+            return new Response(request.method === "HEAD" ? null : privacyResp.body, {
+              status: privacyResp.status,
+              statusText: privacyResp.statusText,
+              headers: privacyResp.headers,
+            })
+          }
         }
 
         // All non-API, non-static routes serve the same Quartz HTML shell (client-side app handles routing).
@@ -958,40 +1025,6 @@ export default {
           headers: {
             Location: `${url.origin}/apps/geneguessr/`,
           },
-        })
-      }
-
-      // Auth endpoints
-      if (url.pathname === "/api/auth/login" && request.method === "GET") {
-        return handleLogin(request, env)
-      }
-
-      if (url.pathname === "/api/auth/config" && request.method === "GET") {
-        if (!(await isAdmin(request, env))) {
-          return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
-        }
-        return Response.json(getDiscordAuthConfigStatus(env), {
-          headers: corsHeaders,
-        })
-      }
-
-      if (url.pathname === "/api/auth/callback" && request.method === "GET") {
-        return handleCallback(request, env)
-      }
-
-      if (url.pathname === "/api/auth/me" && request.method === "GET") {
-        const response = await handleMe(request, env)
-        return new Response(response.body, {
-          status: response.status,
-          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-        })
-      }
-
-      if (url.pathname === "/api/auth/logout" && request.method === "POST") {
-        const response = await handleLogout(request, env)
-        return new Response(response.body, {
-          status: response.status,
-          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
         })
       }
 

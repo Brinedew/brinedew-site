@@ -266,6 +266,8 @@
   function filterCandidates(candidates, options) {
     const opts = options && typeof options === "object" ? options : {}
     const geneMap = opts.geneMap && typeof opts.geneMap === "object" ? opts.geneMap : null
+    // Single blocklist Set — the caller (content.js) merges defaults + user choices
+    // into one set, so the matcher just blocks whatever it's told to block.
     const blocklist =
       opts.blocklist instanceof Set
         ? opts.blocklist
@@ -276,12 +278,9 @@
       const symbol = normalizeSymbol(candidate && candidate.symbol)
       if (!symbol) continue
       if (geneMap && !geneMap[symbol]) continue
-      // Fence: keep the blocklist as a short-token ambiguity filter only. Candidate generation now
-      // comes from the trie, so future precision work can replace this scorer without rewriting the
-      // lexical matcher itself.
       const candidateText = String(candidate.text || symbol)
       const candidateKey = normalizeSymbol(candidateText)
-      if (candidateKey.length <= 4 && blocklist.has(candidateKey)) continue
+      if (blocklist.has(candidateKey) || blocklist.has(symbol)) continue
       accepted.push({
         symbol,
         index: Number(candidate.index || 0),

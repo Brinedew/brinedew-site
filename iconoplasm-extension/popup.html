@@ -16,69 +16,113 @@
             <h1>Iconoplasm</h1>
           </div>
         </div>
-        <div class="popup-version" id="version-text">v0.3.0</div>
+        <div class="popup-version" id="version-text">v0.4.0</div>
       </header>
 
-      <section class="popup-section" aria-labelledby="popup-appearance-title">
-        <div class="popup-section-head">
-          <p class="popup-section-kicker">Appearance</p>
-          <h2 id="popup-appearance-title">On-page display</h2>
-          <p class="popup-section-note">Choose how highlights and hover cards look while you browse.</p>
+      <!-- Tab bar -->
+      <nav class="popup-tabs" role="tablist" aria-label="Settings">
+        <button class="popup-tab popup-tab--active" role="tab" aria-selected="true" aria-controls="panel-appearance" id="tab-appearance">Appearance</button>
+        <button class="popup-tab" role="tab" aria-selected="false" aria-controls="panel-blocklist" id="tab-blocklist">Blocklist</button>
+        <button class="popup-tab" role="tab" aria-selected="false" aria-controls="panel-account" id="tab-account">Account</button>
+      </nav>
+
+      <!-- Appearance tab -->
+      <section class="popup-panel" id="panel-appearance" role="tabpanel" aria-labelledby="tab-appearance">
+        <div class="popup-section">
+          <div class="popup-section-head">
+            <h2>On-page display</h2>
+            <p class="popup-section-note">How highlights and hover cards look while you browse.</p>
+          </div>
+          <div class="popup-field-list">
+            <fieldset class="popup-field">
+              <legend>Gene highlight</legend>
+              <div class="popup-segmented" id="highlight-mode" role="radiogroup" aria-label="Gene highlight">
+                <label class="popup-segment">
+                  <input type="radio" name="highlight-mode" value="underline" class="popup-radio" />
+                  <span class="popup-segment-label">Underline</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="highlight-mode" value="pill" class="popup-radio" />
+                  <span class="popup-segment-label">Color pills</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="highlight-mode" value="ellipse" class="popup-radio" />
+                  <span class="popup-segment-label">Rough ellipse</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="popup-field">
+              <legend>Tooltip theme</legend>
+              <div class="popup-segmented popup-segmented--compact" id="tooltip-theme" role="radiogroup" aria-label="Tooltip theme">
+                <label class="popup-segment">
+                  <input type="radio" name="tooltip-theme" value="light" class="popup-radio" />
+                  <span class="popup-segment-label">Light</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="tooltip-theme" value="dark" class="popup-radio" />
+                  <span class="popup-segment-label">Dark</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="popup-field">
+              <legend>Card style</legend>
+              <div class="popup-segmented" id="card-variant" role="radiogroup" aria-label="Card style">
+                <label class="popup-segment">
+                  <input type="radio" name="card-variant" value="simple" class="popup-radio" />
+                  <span class="popup-segment-label">Simple</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="card-variant" value="lit-archival" class="popup-radio" />
+                  <span class="popup-segment-label">Vintage lab label</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="card-variant" value="image-only" class="popup-radio" />
+                  <span class="popup-segment-label">Image only</span>
+                </label>
+              </div>
+            </fieldset>
+          </div>
         </div>
-        <div class="popup-field-list">
-          <fieldset class="popup-field">
-            <legend>Gene highlight</legend>
-            <div class="popup-segmented" id="highlight-mode" role="radiogroup" aria-label="Gene highlight">
-              <label class="popup-segment">
-                <input type="radio" name="highlight-mode" value="underline" class="popup-radio" />
-                <span class="popup-segment-label">Underline</span>
-              </label>
-              <label class="popup-segment">
-                <input type="radio" name="highlight-mode" value="pill" class="popup-radio" />
-                <span class="popup-segment-label">Color pills</span>
-              </label>
-              <label class="popup-segment">
-                <input type="radio" name="highlight-mode" value="ellipse" class="popup-radio" />
-                <span class="popup-segment-label">Rough ellipse</span>
-              </label>
-            </div>
-          </fieldset>
+      </section>
 
-          <fieldset class="popup-field">
-            <legend>Tooltip theme</legend>
-            <div class="popup-segmented popup-segmented--compact" id="tooltip-theme" role="radiogroup" aria-label="Tooltip theme">
-              <label class="popup-segment">
-                <input type="radio" name="tooltip-theme" value="light" class="popup-radio" />
-                <span class="popup-segment-label">Light</span>
-              </label>
-              <label class="popup-segment">
-                <input type="radio" name="tooltip-theme" value="dark" class="popup-radio" />
-                <span class="popup-segment-label">Dark</span>
-              </label>
-            </div>
-          </fieldset>
+      <!-- Blocklist tab -->
+      <section class="popup-panel popup-panel--hidden" id="panel-blocklist" role="tabpanel" aria-labelledby="tab-blocklist">
+        <div class="popup-section">
+          <div class="popup-section-head">
+            <h2>Ignored symbols</h2>
+            <p class="popup-section-note">Symbols listed here won't be highlighted. Defaults ship with the extension; remove any you actually want to see.</p>
+          </div>
+          <div class="popup-blocklist-input-row">
+            <input type="text" id="blocklist-input" class="popup-text-input" placeholder="e.g. HR" autocomplete="off" spellcheck="false" />
+            <button id="blocklist-add-btn" class="popup-btn popup-btn--primary">Add</button>
+          </div>
+          <div class="popup-blocklist-bar">
+            <span class="popup-blocklist-count" id="blocklist-count"></span>
+            <button id="blocklist-restore-btn" class="popup-btn popup-btn--ghost popup-btn--hidden">Restore defaults</button>
+          </div>
+          <ul id="blocklist-items" class="popup-blocklist-list" aria-label="Blocked symbols"></ul>
+          <p class="popup-blocklist-empty popup-blocklist-empty--hidden" id="blocklist-empty">Nothing blocked. All gene symbols will be highlighted.</p>
+        </div>
+      </section>
 
-          <fieldset class="popup-field">
-            <legend>Card style</legend>
-            <div class="popup-segmented" id="card-variant" role="radiogroup" aria-label="Card style">
-              <label class="popup-segment">
-                <input type="radio" name="card-variant" value="simple" class="popup-radio" />
-                <span class="popup-segment-label">Simple</span>
-              </label>
-              <label class="popup-segment">
-                <input type="radio" name="card-variant" value="lit-archival" class="popup-radio" />
-                <span class="popup-segment-label">Vintage lab label</span>
-              </label>
-              <label class="popup-segment">
-                <input type="radio" name="card-variant" value="image-only" class="popup-radio" />
-                <span class="popup-segment-label">Image only</span>
-              </label>
-            </div>
-          </fieldset>
+      <!-- Account tab -->
+      <section class="popup-panel popup-panel--hidden" id="panel-account" role="tabpanel" aria-labelledby="tab-account">
+        <div class="popup-section">
+          <div class="popup-section-head">
+            <h2>Your account</h2>
+            <p class="popup-section-note">Sign in on the Iconoplasm site to vote on portraits and sync your discoveries across devices.</p>
+          </div>
+          <a href="https://iconoplasm.brinedew.bio/api/auth/login?return_to=https://iconoplasm.brinedew.bio/" target="_blank" rel="noopener" class="popup-btn popup-btn--primary popup-btn--full">Sign in with Discord</a>
+          <div class="popup-account-status" id="account-status">
+            <p class="popup-account-status-text" id="account-status-text">Checking...</p>
+          </div>
         </div>
       </section>
     </main>
 
+    <script src="blocklist-defaults.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

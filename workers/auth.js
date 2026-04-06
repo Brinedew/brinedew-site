@@ -134,23 +134,24 @@ function resolveDiscordRedirectUri(url, env) {
 
 function resolvePostAuthAppUrl(requestUrl, cookieDomain) {
   const host = String(requestUrl.hostname || "").toLowerCase()
-  const hasSharedCookieDomain = typeof cookieDomain === "string" && cookieDomain.trim().length > 0
 
-  // When cookies are shared across brinedew subdomains, keep the canonical app URL.
-  if (hasSharedCookieDomain) {
-    return "https://brinedew.bio/apps/geneguessr/"
-  }
-
-  // For staging/dev hosts without shared cookie domain, stay on the same origin so
-  // the session cookie remains visible after callback redirect.
+  // When no explicit return_to was given, send the user back to the origin
+  // they started from. The cookie domain covers all *.brinedew.bio subdomains,
+  // so any of them will see the session after redirect.
   if (
     host.endsWith(".workers.dev") ||
     host === "staging.brinedew.bio" ||
     host.endsWith(".pages.dev")
   ) {
-    return `${requestUrl.origin}/apps/geneguessr/`
+    return `${requestUrl.origin}/`
   }
 
+  // For production subdomains, stay on the same host.
+  // Callers from geneguessr go to /apps/geneguessr/, callers from iconoplasm go to /.
+  if (host === "geneguessr.brinedew.bio") return `${requestUrl.origin}/apps/geneguessr/`
+  if (host === "iconoplasm.brinedew.bio") return `${requestUrl.origin}/`
+
+  // Apex domain default — the main site app path.
   return `${requestUrl.origin}/apps/geneguessr/`
 }
 
