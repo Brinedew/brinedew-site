@@ -97,6 +97,7 @@ const publishedPortraitFingerprintCache = {
   value: null,
 }
 const PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS = 5 * 1000
+const PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION = "v2"
 const galleryPublishedRowsCache = {
   version: null,
   value: null,
@@ -427,10 +428,12 @@ export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
   if (!portraitFingerprint) return base
   const count = Number(portraitFingerprint.published_count ?? portraitFingerprint.count ?? 0)
   const latest = portraitHashToken(
-    portraitFingerprint.latest_updated_at ?? portraitFingerprint.latest ?? "",
+    portraitFingerprint.latest_updated_at ?? portraitFingerprint.latest ?? portraitFingerprint.content_hash ?? "",
   )
   if (!count && !latest) return base
-  return latest ? `${base}-${count}-${latest}` : `${base}-${count}`
+  return latest
+    ? `${base}-${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${count}-${latest}`
+    : `${base}-${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${count}`
 }
 
 function catalogBaseHash(rawHash) {
@@ -438,7 +441,7 @@ function catalogBaseHash(rawHash) {
 }
 
 function portraitSnapshotVersion(rawFingerprint) {
-  return portraitFingerprintVersion(rawFingerprint) || "none"
+  return `${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${portraitFingerprintVersion(rawFingerprint) || "none"}`
 }
 
 export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortraits) {
