@@ -944,7 +944,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var discoveredCount = Number(collectionState && collectionState.discoveryEntries.length) || 0
     var totalCount = Math.max(0, Number((collectionState && collectionState.total) || 0) || 0)
     var progressPct = totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
-    var progressWidth = Math.max(progressPct, discoveredCount > 0 ? 2 : 0)
+    var progressWidth = progressPct
     var totalCopy = totalCount > 0 ? totalCount.toLocaleString() : "the catalog"
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
