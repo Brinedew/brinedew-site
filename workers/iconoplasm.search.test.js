@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmRequest, resetIconoplasmRuntimeCachesForTest } from "./iconoplasm.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -10,6 +10,10 @@ class FakeKV {
 
   async get(key) {
     return this.entries.has(key) ? this.entries.get(key) : null
+  }
+
+  async put(key, value) {
+    this.entries.set(key, value)
   }
 }
 
@@ -26,6 +30,9 @@ class FakeSearchStatement {
   }
 
   async first() {
+    if (this.sql.includes("COUNT(*) AS published_count") && this.sql.includes("FROM icono_publish_state")) {
+      return this.db.getPublishedPortraitFingerprint()
+    }
     if (this.sql.includes("FROM icono_gene_discoveries") && this.sql.includes("LIMIT 1")) {
       const [userId, geneSymbol] = this.args
       return this.db.getDiscovery(userId, geneSymbol)
@@ -38,7 +45,7 @@ class FakeSearchStatement {
       this.sql.includes("FROM icono_publish_state ps") &&
       this.sql.includes("LEFT JOIN icono_portrait_assets pa")
     ) {
-      return { results: [] }
+      return { results: this.db.listPublishedPortraitRefs() }
     }
     if (this.sql.includes("SELECT d.gene_symbol") && this.sql.includes("FROM icono_gene_discoveries d")) {
       const [userId] = this.args
@@ -63,9 +70,11 @@ class FakeSearchStatement {
 }
 
 class FakeSearchDb {
-  constructor() {
+  constructor({ publishedPortraits = [] } = {}) {
     this.rows = new Map()
     this.tick = 0
+    this.publishedPortraits = new Map()
+    this.setPublishedPortraits(publishedPortraits)
   }
 
   prepare(sql) {
@@ -145,6 +154,47 @@ class FakeSearchDb {
       900,
     ])
   }
+
+  setPublishedPortraits(rows = []) {
+    this.publishedPortraits = new Map()
+    for (const row of rows) {
+      const symbol = String(row?.symbol || row?.gene_symbol || "").trim().toUpperCase()
+      if (!symbol) continue
+      this.publishedPortraits.set(symbol, {
+        symbol,
+        r2_key_full: row?.r2_key_full || null,
+        r2_key_medium: row?.r2_key_medium || null,
+        r2_key_thumb: row?.r2_key_thumb || null,
+        updated_at: row?.updated_at || null,
+      })
+    }
+  }
+
+  listPublishedPortraitRefs() {
+    return Array.from(this.publishedPortraits.values()).map((row) => ({
+      symbol: row.symbol,
+      r2_key_full: row.r2_key_full,
+      r2_key_medium: row.r2_key_medium,
+      r2_key_thumb: row.r2_key_thumb,
+    }))
+  }
+
+  getPublishedPortraitFingerprint() {
+    if (this.publishedPortraits.size === 0) {
+      return { published_count: 0, latest_updated_at: null }
+    }
+    let latestUpdatedAt = null
+    for (const row of this.publishedPortraits.values()) {
+      const updatedAt = String(row.updated_at || "")
+      if (updatedAt && (!latestUpdatedAt || updatedAt > latestUpdatedAt)) {
+        latestUpdatedAt = updatedAt
+      }
+    }
+    return {
+      published_count: this.publishedPortraits.size,
+      latest_updated_at: latestUpdatedAt,
+    }
+  }
 }
 
 class FakeGameSessions {
@@ -187,7 +237,7 @@ function buildCatalogArtifact() {
   }
 }
 
-function buildEnv({ sessions = {} } = {}) {
+function buildEnv({ sessions = {}, publishedPortraits = [] } = {}) {
   const hash = "searchfixture01"
   const artifact = buildCatalogArtifact()
   return {
@@ -202,7 +252,7 @@ function buildEnv({ sessions = {} } = {}) {
       }),
       [`iconoplasm:catalog:${hash}`]: JSON.stringify(artifact),
     }),
-    ICONOPLASM_DB: new FakeSearchDb(),
+    ICONOPLASM_DB: new FakeSearchDb({ publishedPortraits }),
     GAME_SESSIONS: new FakeGameSessions(sessions),
   }
 }
@@ -213,6 +263,62 @@ function buildRequest(path, { cookie = "" } = {}) {
     headers: cookie ? { Cookie: cookie } : undefined,
   })
 }
+
+test.beforeEach(() => {
+  resetIconoplasmRuntimeCachesForTest()
+})
+
+test.after(() => {
+  resetIconoplasmRuntimeCachesForTest()
+})
+
+test("catalog search refreshes canonical portraits even if gallery version does not bump", async () => {
+  const env = buildEnv({
+    publishedPortraits: [
+      {
+        symbol: "PRL",
+        r2_key_full: "portraits/v1/aa/old-prl/full.webp",
+        r2_key_medium: "portraits/v1/aa/old-prl/medium.webp",
+        r2_key_thumb: "portraits/v1/aa/old-prl/thumb.webp",
+        updated_at: "2026-04-05T00:00:01Z",
+      },
+    ],
+  })
+
+  const firstResponse = await handleIconoplasmRequest(
+    buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
+    env,
+    {},
+  )
+  const firstPayload = await firstResponse.json()
+
+  assert.equal(firstResponse.status, 200)
+  assert.match(firstPayload?.genes?.[0]?.pt || "", /old-prl\/medium\.webp$/)
+  assert.match(firstPayload?.genes?.[0]?.ph || "", /old-prl\/full\.webp$/)
+
+  env.ICONOPLASM_DB.setPublishedPortraits([
+    {
+      symbol: "PRL",
+      r2_key_full: "portraits/v1/bb/new-prl/full.webp",
+      r2_key_medium: "portraits/v1/bb/new-prl/medium.webp",
+      r2_key_thumb: "portraits/v1/bb/new-prl/thumb.webp",
+      updated_at: "2026-04-06T12:34:56Z",
+    },
+  ])
+
+  resetIconoplasmRuntimeCachesForTest()
+
+  const secondResponse = await handleIconoplasmRequest(
+    buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
+    env,
+    {},
+  )
+  const secondPayload = await secondResponse.json()
+
+  assert.equal(secondResponse.status, 200)
+  assert.match(secondPayload?.genes?.[0]?.pt || "", /new-prl\/medium\.webp$/)
+  assert.match(secondPayload?.genes?.[0]?.ph || "", /new-prl\/full\.webp$/)
+})
 
 test("catalog search ranks symbol matches before full names before aliases", async () => {
   const env = buildEnv()

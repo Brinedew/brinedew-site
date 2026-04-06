@@ -89,13 +89,14 @@ const GALLERY_VERSION_CACHE_TTL_MS = 5 * 1000
 // Put it behind the shared versioned cache pattern below and add a regression test
 // that simulates a fresh isolate.
 const publishedPortraitRefsCache = {
-  version: null,
+  key: null,
   value: null,
 }
 const publishedPortraitFingerprintCache = {
-  version: null,
+  loadedAt: 0,
   value: null,
 }
+const PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS = 5 * 1000
 const galleryPublishedRowsCache = {
   version: null,
   value: null,
@@ -432,6 +433,14 @@ export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
   return latest ? `${base}-${count}-${latest}` : `${base}-${count}`
 }
 
+function catalogBaseHash(rawHash) {
+  return String(rawHash || "").trim().split("-")[0] || null
+}
+
+function portraitSnapshotVersion(rawFingerprint) {
+  return portraitFingerprintVersion(rawFingerprint) || "none"
+}
+
 export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortraits) {
   // Cost barrier: this touches the whole catalog artifact. That is acceptable at
   // publish time or behind a shared versioned cache. It is not acceptable as an
@@ -496,22 +505,16 @@ async function queryPublishedPortraitFingerprint(env) {
 async function publishedPortraitFingerprint(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return null
   if (fresh) return queryPublishedPortraitFingerprint(env)
-  const version = await currentGalleryVersion(env)
-  if (publishedPortraitFingerprintCache.version === version) {
+  const now = Date.now()
+  if (
+    publishedPortraitFingerprintCache.loadedAt > 0 &&
+    now - publishedPortraitFingerprintCache.loadedAt < PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS
+  ) {
     return publishedPortraitFingerprintCache.value || null
   }
-  const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX, version)
-  if (cached && typeof cached === "object") {
-    publishedPortraitFingerprintCache.version = version
-    publishedPortraitFingerprintCache.value = cached
-    return cached
-  }
   const row = await queryPublishedPortraitFingerprint(env)
-  publishedPortraitFingerprintCache.version = version
+  publishedPortraitFingerprintCache.loadedAt = now
   publishedPortraitFingerprintCache.value = row || null
-  if (row) {
-    await writeVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX, version, row)
-  }
   return row || null
 }
 
@@ -542,18 +545,18 @@ async function queryPublishedPortraitRefs(env) {
 async function publishedPortraitRefs(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return []
   if (fresh) return queryPublishedPortraitRefs(env)
-  const version = await currentGalleryVersion(env)
-  if (publishedPortraitRefsCache.version === version && Array.isArray(publishedPortraitRefsCache.value)) {
+  const version = portraitSnapshotVersion(await publishedPortraitFingerprint(env))
+  if (publishedPortraitRefsCache.key === version && Array.isArray(publishedPortraitRefsCache.value)) {
     return publishedPortraitRefsCache.value
   }
   const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
   if (Array.isArray(cached)) {
-    publishedPortraitRefsCache.version = version
+    publishedPortraitRefsCache.key = version
     publishedPortraitRefsCache.value = cached
     return cached
   }
   const rows = await queryPublishedPortraitRefs(env)
-  publishedPortraitRefsCache.version = version
+  publishedPortraitRefsCache.key = version
   publishedPortraitRefsCache.value = rows
   await writeVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version, rows)
   return rows
@@ -2232,14 +2235,15 @@ async function publicMetadataObj(url, env) {
   if (!manifest) return null
   const portraitFingerprint = await publishedPortraitFingerprint(env)
   const portraitVersion = portraitFingerprintVersion(portraitFingerprint)
-  const catalogHash = String(manifest.current_hash || "").split("-")[0] || null
+  const buildHash = String(manifest.current_hash || "").trim() || null
+  const catalogHash = catalogBaseHash(buildHash)
   return {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
     catalog_hash: catalogHash,
     portrait_hash: portraitVersion,
-    build_version: manifest.current_hash || null,
+    build_version: buildHash,
     released_at: manifest.generated_at || null,
     gene_count: manifest.gene_count || null,
     artifact_schema_version: manifest.schema_version || 1,
@@ -2249,8 +2253,8 @@ async function publicMetadataObj(url, env) {
       metadata: publicUrl(url, "/metadata"),
       schema: publicUrl(url, "/schema"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
-      catalog_artifact: catalogHash
-        ? `${url.origin}${publicCatalogArtifactPath(catalogHash)}`
+      catalog_artifact: buildHash
+        ? `${url.origin}${publicCatalogArtifactPath(buildHash)}`
         : null,
       catalog_jsonl: catalogHash ? `${url.origin}${publicCatalogJsonlDumpPath(catalogHash)}` : null,
       changes: publicUrl(url, "/changes"),
@@ -2377,9 +2381,13 @@ function publicMediaEnvelope(url, symbol, portrait) {
 async function warmCatalogCache(env) {
   const manifest = await catalogManifestObj(env)
   if (!manifest?.current_hash || !env.KV) return
+  const baseHash = catalogBaseHash(manifest.current_hash)
+  if (!baseHash) return
+  const portraitAwareHash =
+    buildPortraitAwareManifestHash(baseHash, await publishedPortraitFingerprint(env)) || baseHash
   const now = Date.now()
   if (
-    catalogCache.hash === manifest.current_hash &&
+    catalogCache.hash === portraitAwareHash &&
     now - catalogCache.loadedAt < CATALOG_CACHE_TTL_MS &&
     catalogCache.bySymbol.size > 0
   ) {
@@ -2389,7 +2397,7 @@ async function warmCatalogCache(env) {
   // Cost barrier: search/resolve/gallery warm-up runs on hot public routes. Do
   // not rebuild the hydrated catalog from scratch here on every cold isolate.
   // Load the shared versioned hydrated artifact instead.
-  const artifact = await hydratedCatalogArtifact(env, manifest.current_hash)
+  const artifact = await hydratedCatalogArtifact(env, portraitAwareHash)
   if (!artifact) return
 
   const bySymbol = new Map()
@@ -2406,7 +2414,7 @@ async function warmCatalogCache(env) {
       if (key && !symbolByAlias.has(key)) symbolByAlias.set(key, s)
     }
   }
-  catalogCache.hash = manifest.current_hash
+  catalogCache.hash = portraitAwareHash
   catalogCache.loadedAt = now
   catalogCache.bySymbol = bySymbol
   catalogCache.symbolByUniprot = symbolByUniprot
@@ -6804,9 +6812,9 @@ function clearGallerySnapshotCache() {
 }
 
 function clearSharedD1CostCaches() {
-  publishedPortraitRefsCache.version = null
+  publishedPortraitRefsCache.key = null
   publishedPortraitRefsCache.value = null
-  publishedPortraitFingerprintCache.version = null
+  publishedPortraitFingerprintCache.loadedAt = 0
   publishedPortraitFingerprintCache.value = null
   galleryPublishedRowsCache.version = null
   galleryPublishedRowsCache.value = null
@@ -6854,8 +6862,15 @@ async function writeVersionedSharedJson(env, prefix, version, value) {
 
 async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
   if (!env?.KV || !hash) return null
-  const version = await currentGalleryVersion(env)
-  const cacheKey = `${hash}:${version}`
+  const requestedHash = String(hash || "").trim()
+  const baseHash = catalogBaseHash(requestedHash)
+  if (!baseHash) return null
+  const cacheKey = requestedHash.includes("-")
+    ? requestedHash
+    : buildPortraitAwareManifestHash(
+        baseHash,
+        await publishedPortraitFingerprint(env, fresh ? { fresh: true } : undefined),
+      ) || baseHash
   if (!fresh && hydratedCatalogArtifactCache.key === cacheKey && hydratedCatalogArtifactCache.value) {
     return hydratedCatalogArtifactCache.value
   }
@@ -6868,7 +6883,7 @@ async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
     }
   }
 
-  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${hash}`)
+  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${baseHash}`)
   if (!raw) return null
   let artifact
   try {
@@ -7865,19 +7880,20 @@ async function handlePublicCatalogManifest(request, env) {
     return json({ error: "Public catalog manifest not found — publish the catalog first" }, 404)
   }
   const portraitFingerprint = await publishedPortraitFingerprint(env)
-  const catalogHash = String(manifest.current_hash || "").split("-")[0] || null
+  const buildHash = String(manifest.current_hash || "").trim() || null
+  const catalogHash = catalogBaseHash(buildHash)
   const payload = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
     catalog_hash: catalogHash,
-    build_version: manifest.current_hash || null,
+    build_version: buildHash,
     portrait_hash: portraitFingerprintVersion(portraitFingerprint),
     released_at: manifest.generated_at || null,
     gene_count: manifest.gene_count || null,
     artifact_schema_version: manifest.schema_version || 1,
-    artifact_url: catalogHash
-      ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(catalogHash)}`)
+    artifact_url: buildHash
+      ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(buildHash)}`)
       : null,
     dump_urls: {
       catalog_jsonl: catalogHash
@@ -8286,10 +8302,11 @@ async function handleCatalogArtifact(env, path) {
   const m = path.match(/\/api\/catalog\/catalog\.([a-z0-9-]+)\.json$/i)
   if (!m) return json({ error: "Invalid artifact path" }, 400)
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
-  const hash = String(m[1] || "").split("-")[0]
+  const hash = String(m[1] || "").trim()
   // Cost barrier: this route is public and cacheable, so it must never do an ad
   // hoc whole-artifact hydration per cold isolate. Use the shared hydrated
-  // artifact snapshot keyed by catalog hash + gallery version.
+  // artifact snapshot keyed by the portrait-aware build hash so immutable URLs
+  // change whenever the canonical portrait changes.
   const hydrated = await hydratedCatalogArtifact(env, hash)
   if (!hydrated) return json({ error: "Artifact not found" }, 404)
   const responseBody = JSON.stringify(hydrated)
