@@ -945,35 +945,23 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var totalCount = Math.max(0, Number((collectionState && collectionState.total) || 0) || 0)
     var progressPct = totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = Math.max(progressPct, discoveredCount > 0 ? 2 : 0)
-    var primaryNote = collectionState && collectionState.showAllGenes
-      ? "Admin override: full catalog visible in this browser."
-      : discoveredCount
-        ? collectionState && collectionState.authenticated
-        ? "Confirmed hovers land here automatically."
-          : "Guests start with insulin, rhodopsin, and prolactin."
-        : collectionState && collectionState.authenticated
-          ? "Your first confirmed hover starts the shelf."
-          : "Sign in to sync discoveries."
-    var progressCopy = totalCount > 0
-      ? discoveredCount.toLocaleString() + " / " + totalCount.toLocaleString() + " unlocked"
-      : discoveredCount.toLocaleString() + " discovered"
+    var totalCopy = totalCount > 0 ? totalCount.toLocaleString() : "the catalog"
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
-      '<article class="icono-collection-card icono-collection-card--progress">' +
-      '<div class="icono-collection-label">collection</div>' +
+      '<article class="icono-collection-card icono-collection-card--archive">' +
+      '<div class="icono-collection-label icono-collection-label--archive">Archive</div>' +
       '<div class="icono-collection-value">' +
       esc(discoveredCount.toLocaleString()) +
       '</div>' +
-      '<div class="icono-collection-note">' +
-      esc(primaryNote) +
+      '<div class="icono-collection-copy">recorded out of ' +
+      esc(totalCopy) +
       '</div>' +
-      '<div class="icono-collection-progress-track" aria-hidden="true">' +
+      '<div class="icono-collection-progress-inline">' +
+      '<span class="icono-collection-progress-track" aria-hidden="true">' +
       '<span class="icono-collection-progress-fill" style="width:' +
       esc(progressWidth.toFixed(1)) +
       '%"></span>' +
-      '</div>' +
-      '<div class="icono-collection-progress-caption">' +
-      esc(progressCopy) +
+      '</span>' +
       '</div>' +
       '</article>' +
       '</section>'

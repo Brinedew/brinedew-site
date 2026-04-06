@@ -1286,6 +1286,35 @@ body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
   gap: 0.6rem;
 }
 
+.icono-collection-card--archive {
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+  gap: 0.32rem;
+  align-content: start;
+}
+
+.icono-collection-label--archive {
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-collection-copy {
+  font-size: 0.98rem;
+  line-height: 1.3;
+  color: var(--secondary, var(--darkgray));
+  text-wrap: pretty;
+}
+
+.icono-collection-progress-inline {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 0.12rem;
+}
+
+.icono-collection-progress-inline .icono-collection-progress-track {
+  width: 100%;
+}
+
 .icono-collection-label,
 .icono-empty-kicker {
   font-family: var(--codeFont, monospace);
