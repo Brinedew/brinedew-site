@@ -943,30 +943,22 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function buildCollectionSummaryMarkup(collectionState) {
     var discoveredCount = Number(collectionState && collectionState.discoveryEntries.length) || 0
     var totalCount = Math.max(0, Number((collectionState && collectionState.total) || 0) || 0)
-    var publishedTotal = Math.max(
-      0,
-      Number((collectionState && collectionState.publishedTotal) || 0) || 0,
-    )
-    var remainingCount = totalCount > 0 ? Math.max(0, totalCount - discoveredCount) : 0
     var progressPct = totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = Math.max(progressPct, discoveredCount > 0 ? 2 : 0)
     var primaryNote = collectionState && collectionState.showAllGenes
-      ? "Admin override is showing the full catalog in this browser. Turn it off in Settings to go back to your personal shelf."
+      ? "Admin override: full catalog visible in this browser."
       : discoveredCount
         ? collectionState && collectionState.authenticated
-        ? "Every confirmed hover lands here automatically, newest encounters first."
-          : "Guests start with insulin, rhodopsin, and prolactin. Sign in to keep collecting."
+        ? "Confirmed hovers land here automatically."
+          : "Guests start with insulin, rhodopsin, and prolactin."
         : collectionState && collectionState.authenticated
-          ? "Your first confirmed hover will start the shelf. Search above while you wait."
-          : "Sign in to keep discoveries synced between the extension and the website."
+          ? "Your first confirmed hover starts the shelf."
+          : "Sign in to sync discoveries."
     var progressCopy = totalCount > 0
-      ? discoveredCount.toLocaleString() +
-        " of " +
-        totalCount.toLocaleString() +
-        " genes unlocked"
-      : discoveredCount.toLocaleString() + " discovered so far"
+      ? discoveredCount.toLocaleString() + " / " + totalCount.toLocaleString() + " unlocked"
+      : discoveredCount.toLocaleString() + " discovered"
     return (
-      '<section class="icono-collection-summary" aria-label="Collection progress">' +
+      '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
       '<article class="icono-collection-card icono-collection-card--progress">' +
       '<div class="icono-collection-label">collection</div>' +
       '<div class="icono-collection-value">' +
@@ -983,20 +975,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-collection-progress-caption">' +
       esc(progressCopy) +
       '</div>' +
-      '</article>' +
-      '<article class="icono-collection-card">' +
-      '<div class="icono-collection-label">remaining</div>' +
-      '<div class="icono-collection-stat">' +
-      esc(remainingCount.toLocaleString()) +
-      '</div>' +
-      '<div class="icono-collection-note">Still hiding in the catalog.</div>' +
-      '</article>' +
-      '<article class="icono-collection-card">' +
-      '<div class="icono-collection-label">portraits live</div>' +
-      '<div class="icono-collection-stat">' +
-      esc(publishedTotal.toLocaleString()) +
-      '</div>' +
-      '<div class="icono-collection-note">Genes with a published mnemonic portrait right now.</div>' +
       '</article>' +
       '</section>'
     )
