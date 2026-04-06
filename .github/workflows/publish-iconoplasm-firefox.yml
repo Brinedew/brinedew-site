@@ -46,15 +46,15 @@ jobs:
         run: npm ci
 
       - name: Package extension payload
-        run: npm run package:iconoplasm-extension
+        run: node ./scripts/package-iconoplasm-extension.mjs --target=firefox
 
       - name: Lint Firefox package
-        run: npx web-ext lint --source-dir iconoplasm-extension/dist/package
+        run: npx web-ext lint --source-dir iconoplasm-extension/dist/firefox-package
 
       - name: Submit to Firefox Add-ons
         run: |
           npx web-ext sign `
-            --source-dir iconoplasm-extension/dist/package `
+            --source-dir iconoplasm-extension/dist/firefox-package `
             --artifacts-dir iconoplasm-extension/dist/firefox-signed `
             --channel ${{ inputs.channel }} `
             --api-key ${{ secrets.AMO_JWT_ISSUER }} `
@@ -64,7 +64,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: iconoplasm-firefox-source-bundle
-          path: iconoplasm-extension/dist/iconoplasm-extension-v*.zip
+          path: iconoplasm-extension/dist/iconoplasm-firefox-v*.zip
           if-no-files-found: error
 
       - name: Upload signed Firefox artifact

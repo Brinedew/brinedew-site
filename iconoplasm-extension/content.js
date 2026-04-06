@@ -168,10 +168,15 @@
     return cardVariant === "image-only"
   }
 
+  function isFirefoxExtensionRuntime() {
+    return /Firefox\//i.test(String((navigator && navigator.userAgent) || ""))
+  }
+
   // Fence: only Lit-owned variants go through the iframe. The simple tooltip stays native DOM so
   // fast hover metadata does not pay an iframe/runtime tax, while the printed layouts remain
   // isolated from arbitrary page CSS.
   function usesTooltipFrameRenderer() {
+    if (isFirefoxExtensionRuntime()) return false
     return cardVariant === "lit-archival" || cardVariant === "image-only"
   }
 
@@ -197,6 +202,273 @@
     )
   }
 
+  function buildHighlightRoughLoopSvgNode() {
+    const svgNs = "http://www.w3.org/2000/svg"
+    roughEllipseSerial += 1
+    const loopSeed = 9001 + roughEllipseSerial * 97
+    const svg = document.createElementNS(svgNs, "svg")
+    svg.setAttribute("class", "iconoplasm-gene-rough-loop")
+    svg.setAttribute("data-icono-rough-loop", "true")
+    svg.setAttribute("data-icono-rough-preset", "inline-gene")
+    svg.setAttribute("data-icono-rough-seed", String(loopSeed))
+    svg.setAttribute("viewBox", "0 0 132 34")
+    svg.setAttribute("preserveAspectRatio", "none")
+    svg.setAttribute("aria-hidden", "true")
+
+    const primaryPath = document.createElementNS(svgNs, "path")
+    primaryPath.setAttribute(
+      "d",
+      "M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18",
+    )
+    primaryPath.setAttribute("fill", "none")
+    primaryPath.setAttribute("stroke", "currentColor")
+    primaryPath.setAttribute("stroke-width", "1.9")
+    primaryPath.setAttribute("stroke-linecap", "round")
+    primaryPath.setAttribute("stroke-linejoin", "round")
+
+    const accentPath = document.createElementNS(svgNs, "path")
+    accentPath.setAttribute("d", "M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17")
+    accentPath.setAttribute("fill", "none")
+    accentPath.setAttribute("stroke", "currentColor")
+    accentPath.setAttribute("stroke-width", "1.05")
+    accentPath.setAttribute("stroke-linecap", "round")
+    accentPath.setAttribute("stroke-dasharray", "2.5 4")
+
+    svg.append(primaryPath, accentPath)
+    return svg
+  }
+
+  function buildVoteIconSvg(kind) {
+    const svgNs = "http://www.w3.org/2000/svg"
+    const svg = document.createElementNS(svgNs, "svg")
+    svg.setAttribute("viewBox", "0 0 20 20")
+    svg.setAttribute("fill", "none")
+    svg.setAttribute("aria-hidden", "true")
+
+    const path = document.createElementNS(svgNs, "path")
+    if (kind === "approve") {
+      path.setAttribute("d", "M5 10.5 8.25 13.75 15 7")
+      path.setAttribute("stroke-linejoin", "round")
+    } else {
+      path.setAttribute("d", "M6 6 14 14M14 6 6 14")
+    }
+    path.setAttribute("stroke", "currentColor")
+    path.setAttribute("stroke-width", "2")
+    path.setAttribute("stroke-linecap", "round")
+    svg.appendChild(path)
+    return svg
+  }
+
+  function createVoteBoxNode() {
+    const box = document.createElement("div")
+    box.className = "icono-vote-box icono-vote-box--brick"
+    box.setAttribute("data-icono-vote-box", "")
+
+    const approve = document.createElement("button")
+    approve.type = "button"
+    approve.className = "icono-vote-btn icono-vote-btn--approve"
+    approve.setAttribute("data-icono-vote-up", "")
+    approve.setAttribute("aria-label", "Approve portrait")
+    approve.title = "Approve portrait"
+    approve.appendChild(buildVoteIconSvg("approve"))
+
+    const reject = document.createElement("button")
+    reject.type = "button"
+    reject.className = "icono-vote-btn icono-vote-btn--reject"
+    reject.setAttribute("data-icono-vote-down", "")
+    reject.setAttribute("aria-label", "Reject portrait")
+    reject.title = "Reject portrait"
+    reject.appendChild(buildVoteIconSvg("reject"))
+
+    box.append(approve, reject)
+    return box
+  }
+
+  function applySupportedTooltipInlineMarkup(container, markup) {
+    const text = String(markup || "")
+    const skinDotMatch = text.match(
+      /^<span class="iconoplasm-tooltip-skin-dot" style="background:([^"]+)"><\/span>(.*)$/,
+    )
+    if (skinDotMatch) {
+      const dot = document.createElement("span")
+      dot.className = "iconoplasm-tooltip-skin-dot"
+      dot.style.background = skinDotMatch[1]
+      container.appendChild(dot)
+      if (skinDotMatch[2]) {
+        container.appendChild(document.createTextNode(skinDotMatch[2]))
+      }
+      return
+    }
+    container.textContent = text.replace(/<[^>]+>/g, "")
+  }
+
+  function createTooltipMetaValueNode(value, isHtml = false) {
+    const node = document.createElement("span")
+    node.className = "iconoplasm-tooltip-meta-value"
+    if (isHtml) {
+      applySupportedTooltipInlineMarkup(node, value)
+    } else {
+      node.textContent = String(value || "")
+    }
+    return node
+  }
+
+  function createTooltipMetaRowNode(character, molecular, options = {}) {
+    const row = document.createElement("div")
+    row.className = "iconoplasm-tooltip-meta-row"
+
+    const characterCell = document.createElement("div")
+    characterCell.className = "iconoplasm-tooltip-meta-cell"
+    characterCell.appendChild(
+      createTooltipMetaValueNode(character, Boolean(options.characterIsHtml)),
+    )
+
+    const molecularCell = document.createElement("div")
+    molecularCell.className = "iconoplasm-tooltip-meta-cell iconoplasm-tooltip-meta-cell--origin"
+    molecularCell.appendChild(
+      createTooltipMetaValueNode(molecular, Boolean(options.molecularIsHtml)),
+    )
+
+    row.append(characterCell, molecularCell)
+    return row
+  }
+
+  function renderTooltipMetaContent(metaEl, detail, loading) {
+    if (!metaEl) return
+    metaEl.replaceChildren()
+    metaEl.classList.toggle("iconoplasm-tooltip-meta--loading", Boolean(loading))
+    if (detail) {
+      const rows = IconoCardShared.collectTooltipMetaRows(detail, {
+        onMissingOrigins: (warnKey, payload) => {
+          if (warnedMissingTraitOrigins.has(warnKey)) return
+          warnedMissingTraitOrigins.add(warnKey)
+          console.error(
+            "[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:",
+            warnKey,
+            payload,
+          )
+        },
+      })
+      for (const row of rows) {
+        if (Array.isArray(row && row.pairs) && row.pairs.length) {
+          for (const pair of row.pairs) {
+            metaEl.appendChild(createTooltipMetaRowNode(pair.character, pair.molecular))
+          }
+          continue
+        }
+        metaEl.appendChild(
+          createTooltipMetaRowNode(row && row.character, row && row.molecular, {
+            characterIsHtml: row && row.characterIsHtml,
+            molecularIsHtml: row && row.molecularIsHtml,
+          }),
+        )
+      }
+      return
+    }
+    if (!loading) return
+    for (let index = 0; index < 4; index += 1) {
+      const row = document.createElement("div")
+      row.className = "iconoplasm-tooltip-meta-skeleton-row"
+      const primaryCell = document.createElement("div")
+      primaryCell.className = "iconoplasm-tooltip-meta-skeleton-cell"
+      const primaryLine = document.createElement("span")
+      primaryLine.className =
+        "iconoplasm-tooltip-skeleton-line" +
+        (index % 2 === 1 ? " iconoplasm-tooltip-skeleton-line--short" : "")
+      primaryCell.appendChild(primaryLine)
+
+      const secondaryCell = document.createElement("div")
+      secondaryCell.className =
+        "iconoplasm-tooltip-meta-skeleton-cell iconoplasm-tooltip-meta-skeleton-cell--origin"
+      const secondaryLine = document.createElement("span")
+      secondaryLine.className =
+        "iconoplasm-tooltip-skeleton-line" +
+        (index % 2 === 0 ? " iconoplasm-tooltip-skeleton-line--short" : "")
+      secondaryCell.appendChild(secondaryLine)
+
+      row.append(primaryCell, secondaryCell)
+      metaEl.appendChild(row)
+    }
+  }
+
+  function renderSimpleTooltipBody(body, summaryGene, geneDetail, loading) {
+    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
+    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
+      .trim()
+      .toUpperCase()
+    const fullName = String((detail && detail.full_name) || summary.n || symbol).trim()
+    const assetSha = String(((detail || {}).portrait || {}).asset_sha256 || "")
+      .trim()
+      .toLowerCase()
+
+    body.replaceChildren()
+
+    const header = document.createElement("div")
+    header.className = "iconoplasm-tooltip-header"
+    const headerRow = document.createElement("div")
+    headerRow.className = "icono-shared-card-header-row"
+    const headerCopy = document.createElement("div")
+    headerCopy.className = "icono-shared-card-header-copy"
+
+    const symbolEl = document.createElement("div")
+    symbolEl.className = "iconoplasm-tooltip-symbol"
+    symbolEl.textContent = symbol
+    const nameEl = document.createElement("div")
+    nameEl.className = "iconoplasm-tooltip-name"
+    nameEl.textContent = fullName || symbol
+    headerCopy.append(symbolEl, nameEl)
+
+    const voteSlot = document.createElement("div")
+    voteSlot.className = "iconoplasm-tooltip-vote-slot"
+    voteSlot.setAttribute("data-icono-tooltip-vote-slot", "")
+    if (assetSha) {
+      voteSlot.appendChild(createVoteBoxNode())
+    }
+
+    headerRow.append(headerCopy, voteSlot)
+    header.appendChild(headerRow)
+
+    const meta = document.createElement("div")
+    meta.className = "iconoplasm-tooltip-meta"
+    renderTooltipMetaContent(meta, detail, loading)
+
+    body.append(header, meta)
+  }
+
+  function resetSimpleTooltipPortrait(portrait) {
+    if (!portrait) {
+      return {
+        portraitImg: null,
+        portraitFallback: null,
+        portraitStatus: null,
+        portraitSymbol: null,
+        fade: null,
+      }
+    }
+
+    portrait.replaceChildren()
+
+    const portraitImg = document.createElement("img")
+    portraitImg.className = "iconoplasm-tooltip-portrait-img"
+    portraitImg.alt = ""
+
+    const portraitFallback = document.createElement("div")
+    portraitFallback.className = "iconoplasm-tooltip-portrait-fallback"
+    const portraitStatus = document.createElement("div")
+    portraitStatus.className = "iconoplasm-tooltip-portrait-status"
+    portraitStatus.textContent = "Portrait pending"
+    const portraitSymbol = document.createElement("div")
+    portraitSymbol.className = "iconoplasm-tooltip-portrait-symbol"
+    portraitFallback.append(portraitStatus, portraitSymbol)
+
+    const fade = document.createElement("div")
+    fade.className = "iconoplasm-tooltip-portrait-fade"
+
+    portrait.append(portraitImg, portraitFallback, fade)
+    return { portraitImg, portraitFallback, portraitStatus, portraitSymbol, fade }
+  }
+
   function ensureHighlightTextWrapper(el) {
     if (!el) return null
     let copy = el.querySelector(".iconoplasm-gene-copy")
@@ -220,7 +492,7 @@
       return
     }
     if (!existing) {
-      el.insertAdjacentHTML("beforeend", buildHighlightRoughLoopSvg())
+      el.appendChild(buildHighlightRoughLoopSvgNode())
     }
     if (IconoCardShared && typeof IconoCardShared.hydrateRoughLoops === "function") {
       IconoCardShared.hydrateRoughLoops(el, true)
@@ -1307,11 +1579,11 @@
     tooltip = document.createElement("div")
     tooltip.className = "iconoplasm-tooltip"
     tooltip.setAttribute("role", "tooltip")
-    tooltip.innerHTML =
-      '<div class="iconoplasm-tooltip-portrait">' +
-      buildTooltipPortraitInnerHtml(null, null) +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-body"></div>'
+    const portrait = document.createElement("div")
+    portrait.className = "iconoplasm-tooltip-portrait"
+    const body = document.createElement("div")
+    body.className = "iconoplasm-tooltip-body"
+    tooltip.append(portrait, body)
     document.body.appendChild(tooltip)
     applyTooltipTheme()
 
@@ -1353,61 +1625,6 @@
       )
     }
   })
-
-  function buildSimpleTooltipBodyHtml(summaryGene, geneDetail, loading) {
-    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
-    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
-    const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
-      .trim()
-      .toUpperCase()
-    const fullName = String((detail && detail.full_name) || summary.n || symbol).trim()
-    const assetSha = String(((detail || {}).portrait || {}).asset_sha256 || "")
-      .trim()
-      .toLowerCase()
-    const voteHtml = assetSha
-      ? IconoCardShared.voteBoxMarkup("", { variant: "brick", showScore: false })
-      : ""
-    let metaHtml = ""
-    if (detail) {
-      const rows = IconoCardShared.collectTooltipMetaRows(detail, {
-        onMissingOrigins: (warnKey, payload) => {
-          if (warnedMissingTraitOrigins.has(warnKey)) return
-          warnedMissingTraitOrigins.add(warnKey)
-          console.error(
-            "[Iconoplasm] Missing aesthetics/politics origin metadata for tooltip:",
-            warnKey,
-            payload,
-          )
-        },
-      })
-      metaHtml = rows.length ? IconoCardShared.renderTooltipMetaRowsHtml(rows) : ""
-    } else if (loading) {
-      metaHtml = IconoCardShared.renderTooltipMetaSkeletonHtml()
-    }
-
-    return (
-      '<div class="iconoplasm-tooltip-header">' +
-      '<div class="icono-shared-card-header-row">' +
-      '<div class="icono-shared-card-header-copy">' +
-      '<div class="iconoplasm-tooltip-symbol">' +
-      escapeHtml(symbol) +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-name">' +
-      escapeHtml(fullName || symbol) +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-vote-slot" data-icono-tooltip-vote-slot>' +
-      voteHtml +
-      "</div>" +
-      "</div>" +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-meta' +
-      (detail ? "" : " iconoplasm-tooltip-meta--loading") +
-      '">' +
-      metaHtml +
-      "</div>"
-    )
-  }
 
   function archivalTooltipGeneModel(summaryGene, geneDetail) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
@@ -1508,6 +1725,25 @@
     )
   }
 
+  function createLitArchivalTooltipFrameShell(summaryGene, geneDetail) {
+    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
+    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
+      .trim()
+      .toUpperCase()
+    const shell = document.createElement("div")
+    shell.className = "iconoplasm-tooltip-lit-frame-shell"
+    const iframe = document.createElement("iframe")
+    iframe.className = "iconoplasm-tooltip-lit-frame"
+    iframe.dataset.iconoFrameReady = "false"
+    iframe.src = LIT_ARCHIVAL_FRAME_URL
+    iframe.title = (symbol || "Gene") + " archival card"
+    iframe.scrolling = "no"
+    iframe.tabIndex = -1
+    shell.appendChild(iframe)
+    return shell
+  }
+
   function postLitArchivalFramePayload(iframe, payload) {
     if (!iframe || !iframe.isConnected || !iframe.contentWindow) return
     if (!iframe.dataset || iframe.dataset.iconoFrameReady !== "true") {
@@ -1594,33 +1830,6 @@
       .catch(() => null)
   }
 
-  function buildTooltipPortraitInnerHtml(summaryGene, geneDetail) {
-    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
-    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
-    const model = detail || {
-      symbol: summary.symbol || activeSymbol || "",
-      color: summary.c || PLACEHOLDER_COLOR,
-    }
-    if (isArchivalCardVariant()) {
-      return IconoCardShared.renderLabLabelSpecimenRailHtml(
-        '<img class="iconoplasm-tooltip-portrait-img" alt="" />' +
-          '<div class="iconoplasm-tooltip-portrait-fallback">' +
-          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-          '<div class="iconoplasm-tooltip-portrait-symbol"></div>' +
-          "</div>",
-        model,
-      )
-    }
-    return (
-      '<img class="iconoplasm-tooltip-portrait-img" alt="" />' +
-      '<div class="iconoplasm-tooltip-portrait-fallback">' +
-      '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-      '<div class="iconoplasm-tooltip-portrait-symbol"></div>' +
-      "</div>" +
-      '<div class="iconoplasm-tooltip-portrait-fade"></div>'
-    )
-  }
-
   function renderTooltipBody(summaryGene, geneDetail, loading) {
     if (!tooltip) return
     const body = tooltip.querySelector(".iconoplasm-tooltip-body")
@@ -1629,12 +1838,12 @@
       // Fence: all maintained rich layouts are Lit-owned now. The removed legacy non-Lit vintage
       // card must not come back as a third tooltip branch or we will reintroduce spec drift.
       if (!body.querySelector(".iconoplasm-tooltip-lit-frame")) {
-        body.innerHTML = buildLitArchivalTooltipFrameHtml(summaryGene, geneDetail)
+        body.replaceChildren(createLitArchivalTooltipFrameShell(summaryGene, geneDetail))
       }
       mountLitArchivalTooltipFrame(body, summaryGene, geneDetail)
       return
     }
-    body.innerHTML = buildSimpleTooltipBodyHtml(summaryGene, geneDetail, loading)
+    renderSimpleTooltipBody(body, summaryGene, geneDetail, loading)
   }
 
   function wireRenderedTooltipVoteBox(geneDetail) {
@@ -1716,22 +1925,12 @@
 
     // Fill tooltip content
     const portrait = tooltip.querySelector(".iconoplasm-tooltip-portrait")
-    if (portrait && !usesFrameRenderer) {
-      portrait.innerHTML = buildTooltipPortraitInnerHtml(activeGeneSummary, null)
-    }
-    const portraitImg = usesFrameRenderer
-      ? null
-      : tooltip.querySelector(".iconoplasm-tooltip-portrait-img")
-    const fade = usesFrameRenderer ? null : tooltip.querySelector(".iconoplasm-tooltip-portrait-fade")
-    const portraitFallback = usesFrameRenderer
-      ? null
-      : tooltip.querySelector(".iconoplasm-tooltip-portrait-fallback")
-    const portraitStatus = usesFrameRenderer
-      ? null
-      : tooltip.querySelector(".iconoplasm-tooltip-portrait-status")
-    const portraitSymbol = usesFrameRenderer
-      ? null
-      : tooltip.querySelector(".iconoplasm-tooltip-portrait-symbol")
+    const portraitRefs = usesFrameRenderer ? null : resetSimpleTooltipPortrait(portrait)
+    const portraitImg = portraitRefs ? portraitRefs.portraitImg : null
+    const fade = portraitRefs ? portraitRefs.fade : null
+    const portraitFallback = portraitRefs ? portraitRefs.portraitFallback : null
+    const portraitStatus = portraitRefs ? portraitRefs.portraitStatus : null
+    const portraitSymbol = portraitRefs ? portraitRefs.portraitSymbol : null
     if (!usesFrameRenderer) {
       const portraitSrc = resolvePortraitUrl(gene)
       loadTooltipPortrait({

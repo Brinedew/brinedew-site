@@ -7,6 +7,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs"
 import { join, resolve, relative } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -16,11 +17,38 @@ const __dirname = resolve(__filename, "..", "..")
 const repoRoot = __dirname
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
 const distRoot = resolve(extensionRoot, "dist")
-const stageRoot = resolve(distRoot, "package")
 const manifestPath = resolve(extensionRoot, "manifest.json")
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
 const packageVersion = String(manifest.version || "0.0.0").trim() || "0.0.0"
-const zipPath = resolve(distRoot, `iconoplasm-extension-v${packageVersion}.zip`)
+
+function resolveTarget(argv) {
+  for (const arg of argv) {
+    if (arg === "--firefox") return "firefox"
+    if (arg === "--generic") return "generic"
+    if (arg.startsWith("--target=")) {
+      const value = String(arg.slice("--target=".length) || "")
+        .trim()
+        .toLowerCase()
+      if (value === "firefox" || value === "generic") return value
+    }
+  }
+  return "generic"
+}
+
+const packageTarget = resolveTarget(process.argv.slice(2))
+const targetConfig =
+  packageTarget === "firefox"
+    ? {
+        stageDir: "firefox-package",
+        zipName: `iconoplasm-firefox-v${packageVersion}.zip`,
+      }
+    : {
+        stageDir: "package",
+        zipName: `iconoplasm-extension-v${packageVersion}.zip`,
+      }
+
+const stageRoot = resolve(distRoot, targetConfig.stageDir)
+const zipPath = resolve(distRoot, targetConfig.zipName)
 
 const runtimeFiles = [
   "manifest.json",
@@ -39,6 +67,7 @@ const runtimeFiles = [
 ]
 
 const runtimeDirs = ["fonts", "generated", "icons"]
+const removableRuntimeFiles = ["generated/lit-archival-card.js"]
 
 const forbiddenRootEntries = [
   "store-assets",
@@ -109,7 +138,7 @@ function checkForbiddenRootEntries() {
 }
 
 function copyRuntimePayload() {
-  rmSync(distRoot, { recursive: true, force: true })
+  rmSync(stageRoot, { recursive: true, force: true })
   mkdirSync(stageRoot, { recursive: true })
 
   for (const file of runtimeFiles) {
@@ -123,6 +152,38 @@ function copyRuntimePayload() {
     ensureExists(src, "runtime directory")
     cpSync(src, resolve(stageRoot, dir), { recursive: true })
   }
+}
+
+function stripUnusedRuntimeFiles() {
+  for (const relativePath of removableRuntimeFiles) {
+    rmSync(resolve(stageRoot, relativePath), { force: true })
+  }
+}
+
+function writeStagedManifest(stagedManifest) {
+  writeFileSync(resolve(stageRoot, "manifest.json"), JSON.stringify(stagedManifest, null, 2) + "\n", "utf8")
+}
+
+function applyTargetSpecificOverrides() {
+  stripUnusedRuntimeFiles()
+  if (packageTarget !== "firefox") return
+
+  const stagedManifest = JSON.parse(readFileSync(resolve(stageRoot, "manifest.json"), "utf8"))
+  stagedManifest.background = {
+    scripts: ["service-worker.js"],
+  }
+  stagedManifest.web_accessible_resources = (Array.isArray(stagedManifest.web_accessible_resources)
+    ? stagedManifest.web_accessible_resources
+    : []
+  ).map((entry) => {
+    const resources = Array.isArray(entry && entry.resources) ? entry.resources : []
+    return Object.assign({}, entry, {
+      resources: resources.filter((resource) => resource !== "lit-archival-frame.html"),
+    })
+  })
+  rmSync(resolve(stageRoot, "lit-archival-frame.html"), { force: true })
+  rmSync(resolve(stageRoot, "lit-archival-frame.js"), { force: true })
+  writeStagedManifest(stagedManifest)
 }
 
 function scanStagedPayload() {
@@ -172,10 +233,12 @@ function main() {
   ensureExists(manifestPath, "manifest")
   checkForbiddenRootEntries()
   copyRuntimePayload()
+  applyTargetSpecificOverrides()
   const stagedFiles = scanStagedPayload()
   zipPayload()
 
   console.log(`[package-iconoplasm-extension] Created ${relative(repoRoot, zipPath)}`)
+  console.log(`[package-iconoplasm-extension] Target: ${packageTarget}`)
   console.log("[package-iconoplasm-extension] Packaged runtime files:")
   for (const file of stagedFiles) {
     console.log(`  - ${file}`)

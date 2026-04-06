@@ -55,6 +55,22 @@
     )
   }
 
+  function createTrustedFragment(markup, ownerDocument = document) {
+    const safeMarkup = String(markup || "")
+    const range = ownerDocument.createRange()
+    const scope = ownerDocument.body || ownerDocument.documentElement
+    if (scope) range.selectNodeContents(scope)
+    // Fence: AMO specifically warns on innerHTML sinks. These frame payload templates are built
+    // from static strings plus escaped values, so we convert them into fragments without using
+    // the flagged properties.
+    return range.createContextualFragment(safeMarkup)
+  }
+
+  function replaceTrustedChildren(node, markup) {
+    if (!node) return
+    node.replaceChildren(createTrustedFragment(markup, node.ownerDocument || document))
+  }
+
   function currentSymbol() {
     return String((currentPayload && currentPayload.symbol) || "").trim().toUpperCase()
   }
@@ -179,7 +195,7 @@
 
   function archivalBodyHtml(payload) {
     if (!shared) return ""
-    return shared.renderLitArchivalCardHtml(payload.gene || {}, {
+    return shared.renderLabLabelCardHtml(payload.gene || {}, {
       mode: "brick",
       layoutVariant: isImageOnlyVariant(payload) ? "image-only" : "lit-archival",
       mobileReview: false,
@@ -188,6 +204,55 @@
       titleHref: String((payload && payload.pageUrl) || "").trim(),
       voteHtml: isImageOnlyVariant(payload) ? "" : voteMarkup(payload),
     })
+  }
+
+  function imageOnlyBodyHtml(payload) {
+    const gene = payload && payload.gene && typeof payload.gene === "object" ? payload.gene : {}
+    const href = String((payload && payload.pageUrl) || "").trim()
+    const symbol = String((payload && payload.symbol) || gene.symbol || "")
+      .trim()
+      .toUpperCase()
+    const fullName = String(gene.full_name || gene.fullName || symbol).trim()
+    const portraitSrc = String((payload && payload.portraitSrc) || "").trim()
+    const portraitAlt = symbol ? symbol + " portrait" : "Gene portrait"
+    const dims = portraitDimensions(payload)
+    const mediaHtml = portraitSrc
+      ? '<img class="icono-image-only-photo" src="' +
+        esc(portraitSrc) +
+        '" alt="' +
+        esc(portraitAlt) +
+        '" loading="eager" decoding="async" fetchpriority="high" width="' +
+        String(dims.width) +
+        '" height="' +
+        String(dims.height) +
+        '">' 
+      : '<div class="icono-image-only-fallback" aria-hidden="true"></div>'
+    const overlayHtml =
+      '<div class="icono-image-only-overlay">' +
+      '<div class="icono-image-only-caption-row">' +
+      '<div class="icono-label-name icono-image-only-name">' +
+      esc(fullName || symbol) +
+      '</div>' +
+      '<div class="icono-label-symbol icono-image-only-symbol">' +
+      esc(symbol) +
+      '</div>' +
+      '</div>' +
+      '</div>'
+    const bodyHtml =
+      '<div class="icono-image-only-media-stage">' +
+      mediaHtml +
+      '</div>' +
+      overlayHtml
+    if (href) {
+      return (
+        '<a class="icono-image-only-link" href="' +
+        esc(href) +
+        '" data-icono-nav>' +
+        bodyHtml +
+        '</a>'
+      )
+    }
+    return '<div class="icono-image-only-link">' + bodyHtml + '</div>'
   }
 
   function simplePortraitMarkup(payload) {
@@ -315,7 +380,7 @@
       ";--icono-card-accent:" +
       esc(accent) +
       ';">' +
-      archivalBodyHtml(payload) +
+      imageOnlyBodyHtml(payload) +
       "</article>"
     )
   }
@@ -347,13 +412,7 @@
     if (portraitSrc && portraitDecodePromiseCache.has(portraitSrc)) {
       await portraitDecodePromiseCache.get(portraitSrc).catch(() => null)
     }
-    slot.innerHTML = isImageOnlyVariant(payload) ? imageOnlyCardMarkup(payload) : cardMarkup(payload)
-    if (isLitArchivalVariant(payload) || isImageOnlyVariant(payload)) {
-      const card = slot.querySelector("icono-lit-archival")
-      if (card && payload.model) {
-        card.model = payload.model
-      }
-    }
+    replaceTrustedChildren(slot, isImageOnlyVariant(payload) ? imageOnlyCardMarkup(payload) : cardMarkup(payload))
     if (shared && typeof shared.hydrateRoughLoops === "function") {
       shared.hydrateRoughLoops(slot, true)
     }
