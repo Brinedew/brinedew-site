@@ -1646,15 +1646,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var panelHost = document.getElementById("icono-install-panel-host")
     if (!toggleHost || !panelHost) return
     var model = currentInstallExperience()
-    toggleHost.innerHTML = buildInstallToggleMarkup(model)
-    panelHost.hidden = !iconoInstallState.panelOpen
-    panelHost.innerHTML = iconoInstallState.panelOpen ? buildInstallPanelMarkup(model) : ""
-    var toggle = toggleHost.querySelector("[data-icono-install-toggle]")
-    if (toggle) {
-      toggle.addEventListener("click", function () {
-        iconoInstallState.panelOpen = !iconoInstallState.panelOpen
-        renderHomeInstallCta()
-      })
+    var showInstallCard = !iconoInstallState.installed
+    toggleHost.hidden = showInstallCard
+    toggleHost.innerHTML = showInstallCard ? "" : buildInstallToggleMarkup(model)
+    panelHost.hidden = showInstallCard ? false : !iconoInstallState.panelOpen
+    panelHost.innerHTML = showInstallCard || iconoInstallState.panelOpen ? buildInstallPanelMarkup(model) : ""
+    if (!showInstallCard) {
+      var toggle = toggleHost.querySelector("[data-icono-install-toggle]")
+      if (toggle) {
+        toggle.addEventListener("click", function () {
+          iconoInstallState.panelOpen = !iconoInstallState.panelOpen
+          renderHomeInstallCta()
+        })
+      }
     }
     var tabButtons = panelHost.querySelectorAll("[data-icono-install-tab]")
     for (var i = 0; i < tabButtons.length; i++) {
