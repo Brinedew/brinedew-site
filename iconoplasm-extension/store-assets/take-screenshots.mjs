@@ -313,7 +313,7 @@ async function generatePromos(ctx) {
   }
   .preview img {
     width: 100%; height: 100%; object-fit: cover;
-    object-position: left top;
+    object-position: center 40%;
   }
 </style></head><body>
   <div class="text-side">
@@ -371,7 +371,7 @@ async function generatePromos(ctx) {
   }
   .preview img {
     display: block; width: 100%; height: 100%;
-    object-fit: cover; object-position: left top;
+    object-fit: cover; object-position: center 40%;
   }
 </style></head><body>
   <div class="text-col">
