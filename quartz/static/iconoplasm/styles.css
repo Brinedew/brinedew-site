@@ -294,8 +294,149 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   align-items: center;
 }
 
+.icono-gallery-install {
+  display: inline-flex;
+  align-items: center;
+}
+
 .icono-gallery-auth[hidden] {
   display: none;
+}
+
+.icono-install-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.7rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
+  border-radius: var(--icono-radius-pill);
+  background: color-mix(in srgb, var(--light) 80%, white 20%);
+  color: var(--dark);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 0.16s var(--icono-ease-out),
+    background-color 0.16s var(--icono-ease-out),
+    color 0.16s var(--icono-ease-out);
+}
+
+.icono-install-toggle:hover,
+.icono-install-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--ui-border) 68%);
+  background: color-mix(in srgb, var(--light) 70%, white 30%);
+}
+
+.icono-install-toggle-label {
+  font-size: 0.92rem;
+  line-height: 1;
+  font-weight: 500;
+  color: var(--dark);
+}
+
+.icono-install-toggle-meta,
+.icono-install-toggle-caret {
+  font-size: 0.78rem;
+  line-height: 1;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-install-toggle-meta {
+  font-family: var(--codeFont, monospace);
+  letter-spacing: 0.01em;
+}
+
+.icono-install-toggle-caret {
+  white-space: nowrap;
+}
+
+.icono-install-toggle--installed {
+  border-color: color-mix(in srgb, #4a7a5b 30%, var(--ui-border) 70%);
+  background: color-mix(in srgb, #eef5ef 70%, white 30%);
+}
+
+.icono-install-panel-host[hidden] {
+  display: none !important;
+}
+
+.icono-install-panel {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--light) 96%, white 4%);
+}
+
+.icono-install-panel--installed {
+  border-color: color-mix(in srgb, #4a7a5b 26%, var(--ui-border) 74%);
+  background: color-mix(in srgb, #f2f6f2 76%, white 24%);
+}
+
+.icono-install-header {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.icono-install-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.18;
+  font-weight: 600;
+  color: var(--dark);
+  text-wrap: balance;
+}
+
+.icono-install-note,
+.icono-install-footnote {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.42;
+  color: var(--secondary, var(--darkgray));
+  text-wrap: pretty;
+}
+
+.icono-install-steps {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+  color: var(--dark);
+}
+
+.icono-install-steps li {
+  line-height: 1.38;
+}
+
+.icono-install-code {
+  padding: 0.08rem 0.38rem;
+  border-radius: var(--icono-radius-sm);
+  background: color-mix(in srgb, var(--ui-bg) 86%, white 14%);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 88%, transparent);
+  font-family: var(--codeFont, monospace);
+  font-size: 0.86rem;
+  color: var(--dark);
+}
+
+.icono-install-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.icono-install-link {
+  text-decoration: none;
+}
+
+.icono-install-link--subtle {
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: transparent;
 }
 
 .icono-gallery-intro {
@@ -1727,9 +1868,33 @@ html[data-theme="dark"] .icono-card--brick {
     flex: 1 1 100%;
   }
 
+  .icono-gallery-install {
+    flex: 1 1 100%;
+  }
+
   .icono-toolbar-login {
     width: 100%;
     justify-content: center;
+  }
+
+  .icono-install-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .icono-install-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .icono-install-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .icono-install-link--subtle {
+    width: auto;
+    text-align: left;
   }
 
   .icono-search--toolbar {
@@ -1744,6 +1909,21 @@ html[data-theme="dark"] .icono-card--brick {
     min-width: 9rem;
   }
 
+
+@media (max-width: 1180px) {
+  .icono-gallery-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .icono-gallery-actions {
+    justify-content: flex-start;
+  }
+
+  .icono-search--toolbar {
+    flex-basis: auto;
+  }
+}
   .icono-card--brick {
     grid-template-columns: 132px minmax(0, 1fr);
     align-items: start;

@@ -61,6 +61,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var HOME_LAYOUT_DEFAULT = "bricks"
   var CARD_VARIANT_DEFAULT = "simple"
   var HOME_SKELETON_CARD_COUNT = 4
+  var ICONO_EXTENSION_PRESENCE_EVENT = "iconoplasm-extension-presence"
+  var ICONO_EXTENSION_PRESENCE_PING_EVENT = "iconoplasm-extension-presence-ping"
+  var ICONO_EXTENSION_SOURCE_URL =
+    "https://github.com/Brinedew/brinedew-site/tree/main/iconoplasm-extension"
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
   var PREFETCH_DETAIL_CONCURRENCY = 4
@@ -87,6 +91,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     total: 0,
     publishedTotal: 0,
     gene: null,
+  }
+  var iconoInstallState = {
+    panelOpen: false,
+    installed: false,
+    version: "",
   }
 
   /* ─── API helpers ─── */
@@ -1103,8 +1112,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</select>" +
       "</label>" +
       '<div class="icono-gallery-auth" id="icono-gallery-auth" hidden></div>' +
+      '<div class="icono-gallery-install" id="icono-gallery-install"></div>' +
       "</div>" +
       "</div>" +
+      '<div class="icono-install-panel-host" id="icono-install-panel-host" hidden></div>' +
       '<div class="icono-collection-shell" id="icono-collection-shell">' +
       '<div class="icono-collection-summary-host" id="icono-collection-summary" hidden></div>' +
       '<div class="icono-empty" id="icono-empty" hidden></div>' +
@@ -1251,6 +1262,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       },
     })
     renderHomeToolbarAuth()
+    renderHomeInstallCta()
   }
 
   function rerenderCurrentGeneRoute(options) {
@@ -1313,6 +1325,261 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return buildLoginUrl({
       authBase: API,
     })
+  }
+
+  function detectInstallBrowser() {
+    var ua = String((window.navigator && window.navigator.userAgent) || "").toLowerCase()
+    var isMobile = /android|iphone|ipad|ipod|mobile/.test(ua)
+    if (ua.indexOf("firefox") !== -1) {
+      return {
+        family: "firefox",
+        label: isMobile ? "Firefox mobile" : "Firefox",
+        managerUrl: "about:addons",
+        isMobile: isMobile,
+      }
+    }
+    if (ua.indexOf("edg/") !== -1) {
+      return {
+        family: "chromium",
+        label: "Edge",
+        managerUrl: "edge://extensions",
+        isMobile: isMobile,
+      }
+    }
+    if (
+      ua.indexOf("chrome") !== -1 ||
+      ua.indexOf("chromium") !== -1 ||
+      ua.indexOf("brave") !== -1 ||
+      ua.indexOf("opr/") !== -1 ||
+      ua.indexOf("opera") !== -1
+    ) {
+      return {
+        family: "chromium",
+        label: isMobile ? "Chromium mobile" : "Chrome",
+        managerUrl: "chrome://extensions",
+        isMobile: isMobile,
+      }
+    }
+    if (ua.indexOf("safari") !== -1) {
+      return {
+        family: "unsupported",
+        label: isMobile ? "Safari mobile" : "Safari",
+        managerUrl: "",
+        isMobile: isMobile,
+      }
+    }
+    return {
+      family: "unknown",
+      label: isMobile ? "this mobile browser" : "this browser",
+      managerUrl: "",
+      isMobile: isMobile,
+    }
+  }
+
+  function syncInstallStateFromDomMarker() {
+    var root = document.documentElement
+    if (!root) return
+    if (String(root.getAttribute("data-iconoplasm-extension-installed") || "") !== "true") return
+    iconoInstallState.installed = true
+    iconoInstallState.version = String(root.getAttribute("data-iconoplasm-extension-version") || "")
+      .trim()
+  }
+
+  function handleIconoplasmExtensionPresence(event) {
+    var detail = (event && event.detail) || {}
+    iconoInstallState.installed = true
+    iconoInstallState.version = String(detail.version || iconoInstallState.version || "").trim()
+    syncInstallStateFromDomMarker()
+    renderHomeInstallCta()
+  }
+
+  function probeForIconoplasmExtensionPresence() {
+    syncInstallStateFromDomMarker()
+    if (iconoInstallState.installed) {
+      renderHomeInstallCta()
+      return
+    }
+    window.dispatchEvent(new CustomEvent(ICONO_EXTENSION_PRESENCE_PING_EVENT))
+    window.setTimeout(function () {
+      syncInstallStateFromDomMarker()
+      renderHomeInstallCta()
+    }, 120)
+  }
+
+  function currentInstallExperience() {
+    syncInstallStateFromDomMarker()
+    var browser = detectInstallBrowser()
+    var faqUrl = "https://brinedew.bio/posts/Iconoplasm-FAQ.html"
+    if (iconoInstallState.installed) {
+      return {
+        tone: "installed",
+        toggleLabel: "Installed",
+        toggleMeta: iconoInstallState.version ? "v" + iconoInstallState.version : "Ready",
+        title: "Already installed",
+        note: "The homepage stays quiet on purpose. The extension activates on other pages with gene symbols.",
+        steps: [
+          "Hover a gene symbol on another site to open the portrait card.",
+          "Use the popup if you want pills, underlines, or the archival card style.",
+        ],
+        actions: [
+          {
+            href: faqUrl,
+            label: "Read FAQ",
+            subtle: false,
+          },
+        ],
+      }
+    }
+    if (browser.family === "chromium") {
+      return {
+        tone: "manual",
+        toggleLabel: "Install",
+        toggleMeta: browser.label,
+        title: "Install in " + browser.label,
+        note: browser.label + " still needs Load unpacked for now.",
+        steps: [
+          "Open " + browser.managerUrl + " in " + browser.label + ".",
+          "Turn on Developer mode.",
+          "Choose Load unpacked, then select the iconoplasm-extension folder.",
+        ],
+        actions: [
+          {
+            href: ICONO_EXTENSION_SOURCE_URL,
+            label: "Source folder",
+            subtle: false,
+          },
+          {
+            href: faqUrl,
+            label: "Read FAQ",
+            subtle: true,
+          },
+        ],
+      }
+    }
+    if (browser.family === "firefox") {
+      return {
+        tone: "coming-soon",
+        toggleLabel: "Firefox",
+        toggleMeta: "Soon",
+        title: "Firefox build not live yet",
+        note: "The signed package is not published yet.",
+        steps: [
+          "Use Chrome or Edge for the current install path.",
+          "This button can point to the signed release once it exists.",
+        ],
+        actions: [
+          {
+            href: faqUrl,
+            label: "Read FAQ",
+            subtle: false,
+          },
+        ],
+      }
+    }
+    return {
+      tone: "info",
+      toggleLabel: "Status",
+      toggleMeta: browser.label,
+      title: "Desktop browsers first",
+      note: "The extension is built for desktop Chrome and Edge right now.",
+      steps: ["Use Chrome or Edge for the current install path."],
+      actions: [
+        {
+          href: faqUrl,
+          label: "Read FAQ",
+          subtle: false,
+        },
+      ],
+    }
+  }
+
+  function buildInstallToggleMarkup(model) {
+    var meta = String(model.toggleMeta || "").trim()
+    return (
+      '<button type="button" class="icono-install-toggle icono-install-toggle--' +
+      esc(model.tone || "info") +
+      '" data-icono-install-toggle aria-expanded="' +
+      (iconoInstallState.panelOpen ? "true" : "false") +
+      '" aria-controls="icono-install-panel">' +
+      '<span class="icono-install-toggle-label">' +
+      esc(model.toggleLabel) +
+      "</span>" +
+      (meta ? '<span class="icono-install-toggle-meta">' + esc(meta) + "</span>" : "") +
+      '<span class="icono-install-toggle-caret" aria-hidden="true">' +
+      (iconoInstallState.panelOpen ? "▴" : "▾") +
+      "</span>" +
+      "</button>"
+    )
+  }
+
+  function buildInstallPanelMarkup(model) {
+    var steps = Array.isArray(model.steps) ? model.steps : []
+    var actions = Array.isArray(model.actions) ? model.actions : []
+    var managerUrl = detectInstallBrowser().managerUrl
+    var stepsHtml = ""
+    for (var i = 0; i < steps.length; i++) {
+      var step = String(steps[i] || "").trim()
+      if (!step) continue
+      if (managerUrl && step.indexOf(managerUrl) !== -1) {
+        var escapedUrl = esc(managerUrl)
+        var escapedStep = esc(step)
+        stepsHtml +=
+          "<li>" +
+          escapedStep.replace(escapedUrl, '<code class="icono-install-code">' + escapedUrl + "</code>") +
+          "</li>"
+        continue
+      }
+      stepsHtml += "<li>" + esc(step) + "</li>"
+    }
+    var actionsHtml = ""
+    for (var j = 0; j < actions.length; j++) {
+      var action = actions[j]
+      if (!action || !action.href) continue
+      actionsHtml +=
+        '<a class="' +
+        (action.subtle
+          ? "icono-toolbar-link icono-install-link icono-install-link--subtle"
+          : "icono-home-auth-link icono-install-link") +
+        '" href="' +
+        esc(action.href) +
+        '" target="_blank" rel="noopener noreferrer">' +
+        esc(action.label || "Open") +
+        "</a>"
+    }
+    return (
+      '<section class="icono-install-panel icono-install-panel--' +
+      esc(model.tone || "info") +
+      '" id="icono-install-panel" aria-live="polite">' +
+      '<div class="icono-install-header">' +
+      "<h2>" +
+      esc(model.title || "Install Iconoplasm") +
+      "</h2>" +
+      (model.note ? '<p class="icono-install-note">' + esc(model.note) + "</p>" : "") +
+      "</div>" +
+      (stepsHtml ? '<ul class="icono-install-steps">' + stepsHtml + "</ul>" : "") +
+      (actionsHtml ? '<div class="icono-install-actions">' + actionsHtml + "</div>" : "") +
+      (model.footnote
+        ? '<p class="icono-install-footnote">' + esc(model.footnote) + "</p>"
+        : "") +
+      "</section>"
+    )
+  }
+
+  function renderHomeInstallCta() {
+    var toggleHost = document.getElementById("icono-gallery-install")
+    var panelHost = document.getElementById("icono-install-panel-host")
+    if (!toggleHost || !panelHost) return
+    var model = currentInstallExperience()
+    toggleHost.innerHTML = buildInstallToggleMarkup(model)
+    panelHost.hidden = !iconoInstallState.panelOpen
+    panelHost.innerHTML = iconoInstallState.panelOpen ? buildInstallPanelMarkup(model) : ""
+    var toggle = toggleHost.querySelector("[data-icono-install-toggle]")
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        iconoInstallState.panelOpen = !iconoInstallState.panelOpen
+        renderHomeInstallCta()
+      })
+    }
   }
 
   function buildHomeToolbarAuthMarkup() {
@@ -2600,6 +2867,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       root.innerHTML = buildHomeShellMarkup(homeLayout)
     }
     renderHomeToolbarAuth()
+    renderHomeInstallCta()
+    probeForIconoplasmExtensionPresence()
 
     var grid = document.getElementById("icono-grid")
     var loading = document.getElementById("icono-loading")
@@ -3865,6 +4134,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   window.addEventListener("popstate", function () {
     render()
   })
+
+  window.addEventListener(ICONO_EXTENSION_PRESENCE_EVENT, handleIconoplasmExtensionPresence)
 
   document.addEventListener("iconoplasmsettingschange", function () {
     var route = getRoute()
