@@ -273,27 +273,32 @@ async function generatePromos(ctx) {
   const toDataUri = (f) =>
     "data:image/png;base64," + readFileSync(resolve(outDir, f)).toString("base64");
 
-  const hovercardUri = toDataUri("screenshot-2-hovercard.png");
+  const hovercard1Uri = toDataUri("screenshot-1-hovercard.png");
+  const hovercard2Uri = toDataUri("screenshot-2-hovercard.png");
 
   // ---------------------------------------------------------------
-  // Pixel math (source: 628 x 907, ratio 0.69 portrait):
+  // Pixel math:
+  //   s1 (RHO/UCSC):   575 x 802, ratio 0.717
+  //   s2 (HOXB1/Wiki):  628 x 907, ratio 0.692
   //
   // SMALL TILE (440 x 280):
-  //   Content area after padding: 384 x 232.
-  //   Text column: 170px. Gap: 20px. Preview: 194 x 232.
-  //   Preview ratio: 0.84. Source ratio: 0.69.
-  //   cover scales to fill HEIGHT: 232/907*628 = 161px wide.
-  //   That's narrower than 194px, so it actually scales to fill WIDTH:
-  //   194/628*907 = 280px tall. Crop = 280-232 = 48px (17%).
-  //   Acceptable. Center vertically (object-position: center center).
+  //   Using s2 (denser pills, more visual). Preview ~194x232.
+  //   cover: 17% vertical crop centered. Acceptable.
   //
   // MARQUEE (1400 x 560):
-  //   Content area after padding: 1256 x 464.
-  //   Forcing a landscape cover crop on a portrait image loses 61%.
-  //   Instead: show the image UNCROPPED at full content height.
-  //   Height: 464px. Width at native ratio: 464 * 0.6924 = 321px.
-  //   Position: right-aligned within the banner, text left-aligned.
-  //   Dark negative space between text and image is deliberate.
+  //   Padding: 40px top/bottom, 64px left/right.
+  //   Content: 1272 x 480.
+  //   Text column: 320px. Gap: 48px. Preview area: 904 x 480.
+  //   Two images in standardized 3:4 frames (portrait device ratio).
+  //   Frame: 480 * 0.75 = 360px wide each. Gap: 24px.
+  //   Total: 360 + 24 + 360 = 744px. Remaining 160px in 904px.
+  //   Frames pushed right (flex-end) — space flows between text and frames.
+  //
+  //   s1 in 360x480 frame: cover scales width -> 360/575*802 = 502px tall.
+  //   Crop = 502-480 = 22px (4.4%). Minimal — essentially uncropped.
+  //
+  //   s2 in 360x480 frame: cover scales width -> 360/628*907 = 520px tall.
+  //   Crop = 520-480 = 40px (7.7%). Very mild — table header trimmed.
   // ---------------------------------------------------------------
 
   // -- Small promo tile: 440 x 280 --
@@ -345,7 +350,7 @@ async function generatePromos(ctx) {
     Hover any gene symbol for instant context.</p>
   </div>
   <div class="preview">
-    <img src="${hovercardUri}" />
+    <img src="${hovercard2Uri}" />
   </div>
 </body></html>`, { waitUntil: "load" });
   await sleep(500);
@@ -357,9 +362,8 @@ async function generatePromos(ctx) {
   await promoSmallPage.close();
 
   // -- Large marquee: 1400 x 560 --
-  // Portrait image in a landscape banner: show UNCROPPED at full height,
-  // natural aspect ratio, right-aligned. Dark negative space is deliberate.
-  // Image: 464px tall * 0.6924 = 321px wide. No crop. Every pixel visible.
+  // Two portrait screenshots in standardized 3:4 frames, side by side.
+  // Frames are 360x480 each. s1 loses 4.4% crop, s2 loses 7.7%. Both mild.
   const promoLargePage = await ctx.newPage();
   await promoLargePage.setViewportSize({ width: 1400, height: 560 });
   await promoLargePage.setContent(`<!DOCTYPE html>
@@ -369,44 +373,53 @@ async function generatePromos(ctx) {
     width: 1400px; height: 560px; overflow: hidden;
     background: #1a1a1a;
     font-family: system-ui, -apple-system, sans-serif;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 48px 72px;
+    display: flex; align-items: center;
+    padding: 40px 64px; gap: 48px;
   }
   .text-col {
-    flex: 0 0 380px; color: #f5f0e8;
-    display: flex; flex-direction: column; gap: 16px;
+    flex: 0 0 320px; color: #f5f0e8;
+    display: flex; flex-direction: column; gap: 14px;
   }
   .text-col h1 {
-    font-size: 48px; font-weight: 700; letter-spacing: -0.03em;
+    font-size: 44px; font-weight: 700; letter-spacing: -0.03em;
     line-height: 1.05; color: #fff;
   }
   .text-col p {
-    font-size: 17px; line-height: 1.5; color: #a8a29e;
-    max-width: 340px;
+    font-size: 16px; line-height: 1.5; color: #a8a29e;
+    max-width: 300px;
   }
   .stat {
-    font-size: 13px; color: #78716c; letter-spacing: 0.04em;
+    font-size: 12px; color: #78716c; letter-spacing: 0.05em;
     text-transform: uppercase; font-weight: 500;
   }
-  .preview {
-    flex: 0 0 auto; height: 100%;
+  .previews {
+    flex: 1; height: 100%;
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: 24px;
+  }
+  .frame {
+    width: 360px; height: 480px;
     border-radius: 10px; overflow: hidden;
     box-shadow:
       0 0 0 0.5px rgba(255,255,255,0.06),
       0 8px 32px rgba(0,0,0,0.5);
   }
-  .preview img {
-    display: block; height: 100%; width: auto;
+  .frame img {
+    display: block; width: 100%; height: 100%;
+    object-fit: cover;
   }
+  .frame.left img { object-position: center 8%; }
+  .frame.right img { object-position: center top; }
 </style></head><body>
   <div class="text-col">
     <p class="stat">19,000+ gene portraits</p>
     <h1>Iconoplasm</h1>
     <p>Every human gene gets a unique color and portrait.
-    Hover any gene symbol on any page for instant visual context.</p>
+    Hover any symbol on any page for instant context.</p>
   </div>
-  <div class="preview">
-    <img src="${hovercardUri}" />
+  <div class="previews">
+    <div class="frame left"><img src="${hovercard1Uri}" /></div>
+    <div class="frame right"><img src="${hovercard2Uri}" /></div>
   </div>
 </body></html>`, { waitUntil: "load" });
   await sleep(500);
