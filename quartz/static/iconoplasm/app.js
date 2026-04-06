@@ -96,6 +96,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     panelOpen: false,
     installed: false,
     version: "",
+    installTab: "",
   }
 
   /* ─── API helpers ─── */
@@ -1406,6 +1407,76 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }, 120)
   }
 
+  function resolveInstallTab(browser) {
+    var requested = String(iconoInstallState.installTab || "")
+      .trim()
+      .toLowerCase()
+    if (requested === "chrome" || requested === "firefox") return requested
+    return browser && browser.family === "firefox" ? "firefox" : "chrome"
+  }
+
+  function buildInstallBrowserPanels(browser, faqUrl) {
+    var chromeManagerUrl =
+      browser && browser.family === "chromium" && browser.managerUrl
+        ? browser.managerUrl
+        : "chrome://extensions"
+    var chromeNote =
+      browser && browser.label === "Edge"
+        ? "Works in Edge right now. Chrome uses the same path."
+        : "Works in Chrome and Edge right now."
+    return {
+      chrome: {
+        id: "chrome",
+        label: "Chrome",
+        tone: "manual",
+        title: "Chrome and Edge",
+        note: chromeNote,
+        managerUrl: chromeManagerUrl,
+        steps: [
+          "Open " + chromeManagerUrl + ".",
+          "Turn on Developer mode.",
+          "Choose Load unpacked, then select the iconoplasm-extension folder.",
+        ],
+        actions: [
+          {
+            href: ICONO_EXTENSION_SOURCE_URL,
+            label: "Source folder",
+            subtle: false,
+          },
+          {
+            href: faqUrl,
+            label: "Read FAQ",
+            subtle: true,
+          },
+        ],
+      },
+      firefox: {
+        id: "firefox",
+        label: "Firefox",
+        tone: "pending",
+        title: "Firefox",
+        note: "Store listing is not live yet.",
+        managerUrl: "",
+        steps: [
+          "Firefox needs the signed AMO release before the install link can go live.",
+          "Use Chrome or Edge for now.",
+        ],
+        actions: [
+          {
+            href: faqUrl,
+            label: "Read FAQ",
+            subtle: false,
+          },
+          {
+            href: ICONO_EXTENSION_SOURCE_URL,
+            label: "Track source",
+            subtle: true,
+          },
+        ],
+      },
+    }
+  }
+
   function currentInstallExperience() {
     syncInstallStateFromDomMarker()
     var browser = detectInstallBrowser()
@@ -1430,66 +1501,31 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         ],
       }
     }
-    if (browser.family === "chromium") {
-      return {
-        tone: "manual",
-        toggleLabel: "Install",
-        toggleMeta: browser.label,
-        title: "Install in " + browser.label,
-        note: browser.label + " still needs Load unpacked for now.",
-        steps: [
-          "Open " + browser.managerUrl + " in " + browser.label + ".",
-          "Turn on Developer mode.",
-          "Choose Load unpacked, then select the iconoplasm-extension folder.",
-        ],
-        actions: [
-          {
-            href: ICONO_EXTENSION_SOURCE_URL,
-            label: "Source folder",
-            subtle: false,
-          },
-          {
-            href: faqUrl,
-            label: "Read FAQ",
-            subtle: true,
-          },
-        ],
-      }
-    }
-    if (browser.family === "firefox") {
-      return {
-        tone: "coming-soon",
-        toggleLabel: "Firefox",
-        toggleMeta: "Soon",
-        title: "Firefox build not live yet",
-        note: "The signed package is not published yet.",
-        steps: [
-          "Use Chrome or Edge for the current install path.",
-          "This button can point to the signed release once it exists.",
-        ],
-        actions: [
-          {
-            href: faqUrl,
-            label: "Read FAQ",
-            subtle: false,
-          },
-        ],
-      }
-    }
+    var panels = buildInstallBrowserPanels(browser, faqUrl)
+    var activeTab = resolveInstallTab(browser)
+    var activePanel = panels[activeTab] || panels.chrome
     return {
-      tone: "info",
-      toggleLabel: "Status",
-      toggleMeta: browser.label,
-      title: "Desktop browsers first",
-      note: "The extension is built for desktop Chrome and Edge right now.",
-      steps: ["Use Chrome or Edge for the current install path."],
-      actions: [
+      tone: activePanel.tone || "manual",
+      toggleLabel: "Install",
+      toggleMeta: activePanel.label || "Chrome",
+      activeTab: activeTab,
+      tabs: [
         {
-          href: faqUrl,
-          label: "Read FAQ",
-          subtle: false,
+          id: "chrome",
+          label: "Chrome",
+          selected: activeTab === "chrome",
+        },
+        {
+          id: "firefox",
+          label: "Firefox",
+          selected: activeTab === "firefox",
         },
       ],
+      title: activePanel.title,
+      note: activePanel.note,
+      managerUrl: activePanel.managerUrl,
+      steps: activePanel.steps,
+      actions: activePanel.actions,
     }
   }
 
@@ -1512,10 +1548,38 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
+  function buildInstallTabsMarkup(model) {
+    var tabs = Array.isArray(model.tabs) ? model.tabs : []
+    if (!tabs.length) return ""
+    var html =
+      '<div class="icono-install-tablist" role="tablist" aria-label="Browser install instructions">'
+    for (var i = 0; i < tabs.length; i++) {
+      var tab = tabs[i]
+      if (!tab || !tab.id) continue
+      var tabId = String(tab.id || "").trim()
+      html +=
+        '<button type="button" class="icono-install-tab" id="icono-install-tab-' +
+        esc(tabId) +
+        '" role="tab" aria-selected="' +
+        (tab.selected ? "true" : "false") +
+        '" tabindex="' +
+        (tab.selected ? "0" : "-1") +
+        '" aria-controls="icono-install-tabpanel-' +
+        esc(tabId) +
+        '" data-icono-install-tab="' +
+        esc(tabId) +
+        '">' +
+        esc(tab.label || tabId) +
+        "</button>"
+    }
+    return html + "</div>"
+  }
+
   function buildInstallPanelMarkup(model) {
     var steps = Array.isArray(model.steps) ? model.steps : []
     var actions = Array.isArray(model.actions) ? model.actions : []
-    var managerUrl = detectInstallBrowser().managerUrl
+    var managerUrl = String(model.managerUrl || "").trim()
+    var activeTab = String(model.activeTab || "").trim()
     var stepsHtml = ""
     for (var i = 0; i < steps.length; i++) {
       var step = String(steps[i] || "").trim()
@@ -1546,10 +1610,21 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         esc(action.label || "Open") +
         "</a>"
     }
+    var panelBodyAttrs = activeTab
+      ? ' class="icono-install-panel-body" id="icono-install-tabpanel-' +
+        esc(activeTab) +
+        '" role="tabpanel" aria-labelledby="icono-install-tab-' +
+        esc(activeTab) +
+        '"'
+      : ' class="icono-install-panel-body"'
     return (
       '<section class="icono-install-panel icono-install-panel--' +
       esc(model.tone || "info") +
       '" id="icono-install-panel" aria-live="polite">' +
+      buildInstallTabsMarkup(model) +
+      '<div' +
+      panelBodyAttrs +
+      ">" +
       '<div class="icono-install-header">' +
       "<h2>" +
       esc(model.title || "Install Iconoplasm") +
@@ -1561,6 +1636,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       (model.footnote
         ? '<p class="icono-install-footnote">' + esc(model.footnote) + "</p>"
         : "") +
+      "</div>" +
       "</section>"
     )
   }
@@ -1579,6 +1655,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         iconoInstallState.panelOpen = !iconoInstallState.panelOpen
         renderHomeInstallCta()
       })
+    }
+    var tabButtons = panelHost.querySelectorAll("[data-icono-install-tab]")
+    for (var i = 0; i < tabButtons.length; i++) {
+      ;(function (button) {
+        button.addEventListener("click", function () {
+          var nextTab = String(button.getAttribute("data-icono-install-tab") || "")
+            .trim()
+            .toLowerCase()
+          if (!nextTab) return
+          iconoInstallState.installTab = nextTab
+          renderHomeInstallCta()
+        })
+      })(tabButtons[i])
     }
   }
 

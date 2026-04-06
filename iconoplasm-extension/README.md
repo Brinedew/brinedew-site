@@ -32,3 +32,30 @@ Current output:
 
 - staged runtime payload: `iconoplasm-extension/dist/package/`
 - zip for upload/manual distribution: `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
+
+## Firefox publishing
+
+This repo now owns the Firefox publish path too.
+
+Canonical path:
+
+- GitHub Actions workflow: `.github/workflows/publish-iconoplasm-firefox.yml`
+
+What it does:
+
+- installs website dependencies
+- builds the clean extension payload with `npm run package:iconoplasm-extension`
+- runs `web-ext lint` against the staged runtime folder
+- submits the extension to AMO for signing/review
+- uploads the signed Firefox artifact back to the workflow run
+
+Required GitHub repository secrets:
+
+- `AMO_JWT_ISSUER`
+- `AMO_JWT_SECRET`
+
+Notes:
+
+- `manifest.json` now carries the Gecko ID `iconoplasm@brinedew.bio`, which Firefox signing requires
+- the workflow is manual on purpose so a website push does not accidentally submit a store build
+- before this workflow existed, there was no Firefox store automation in this repo at all

@@ -1,0 +1,75 @@
+name: Publish Iconoplasm Firefox extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: AMO signing channel
+        required: true
+        default: listed
+        type: choice
+        options:
+          - listed
+          - unlisted
+
+permissions:
+  contents: read
+
+jobs:
+  publish-firefox:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: .
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Check AMO secrets
+        run: |
+          if (-not "${{ secrets.AMO_JWT_ISSUER }}") {
+            throw 'Missing GitHub secret AMO_JWT_ISSUER'
+          }
+          if (-not "${{ secrets.AMO_JWT_SECRET }}") {
+            throw 'Missing GitHub secret AMO_JWT_SECRET'
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package extension payload
+        run: npm run package:iconoplasm-extension
+
+      - name: Lint Firefox package
+        run: npx web-ext lint --source-dir iconoplasm-extension/dist/package
+
+      - name: Submit to Firefox Add-ons
+        run: |
+          npx web-ext sign `
+            --source-dir iconoplasm-extension/dist/package `
+            --artifacts-dir iconoplasm-extension/dist/firefox-signed `
+            --channel ${{ inputs.channel }} `
+            --api-key ${{ secrets.AMO_JWT_ISSUER }} `
+            --api-secret ${{ secrets.AMO_JWT_SECRET }}
+
+      - name: Upload unsigned zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: iconoplasm-firefox-source-bundle
+          path: iconoplasm-extension/dist/iconoplasm-extension-v*.zip
+          if-no-files-found: error
+
+      - name: Upload signed Firefox artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iconoplasm-firefox-signed
+          path: iconoplasm-extension/dist/firefox-signed/**/*
+          if-no-files-found: error

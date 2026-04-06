@@ -5,6 +5,11 @@
   "description": "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.",
   "permissions": ["storage"],
   "host_permissions": ["https://iconoplasm.brinedew.bio/*"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "iconoplasm@brinedew.bio"
+    }
+  },
   "background": {
     "service_worker": "service-worker.js"
   },

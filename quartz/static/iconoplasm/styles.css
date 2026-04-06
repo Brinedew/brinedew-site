@@ -357,23 +357,85 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background: color-mix(in srgb, #eef5ef 70%, white 30%);
 }
 
+.icono-install-toggle--pending {
+  border-color: color-mix(in srgb, #8b6846 28%, var(--ui-border) 72%);
+  background: color-mix(in srgb, #f5eee5 72%, white 28%);
+}
+
 .icono-install-panel-host[hidden] {
   display: none !important;
 }
 
 .icono-install-panel {
   display: grid;
-  gap: 0.7rem;
+  gap: 0;
   margin: 0 0 1rem;
-  padding: 0.9rem 1rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
   border-radius: var(--icono-radius-lg);
   background: color-mix(in srgb, var(--light) 96%, white 4%);
+  overflow: hidden;
 }
 
 .icono-install-panel--installed {
   border-color: color-mix(in srgb, #4a7a5b 26%, var(--ui-border) 74%);
   background: color-mix(in srgb, #f2f6f2 76%, white 24%);
+}
+
+.icono-install-panel--pending {
+  border-color: color-mix(in srgb, #8b6846 24%, var(--ui-border) 76%);
+  background: color-mix(in srgb, #f7f1e8 78%, white 22%);
+}
+
+.icono-install-tablist {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  padding: 0.5rem 0.55rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  background: color-mix(in srgb, var(--ui-bg) 76%, white 24%);
+}
+
+.icono-install-tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.58rem 0.82rem 0.62rem;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: var(--secondary, var(--darkgray));
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 0.16s var(--icono-ease-out),
+    background-color 0.16s var(--icono-ease-out),
+    border-color 0.16s var(--icono-ease-out);
+}
+
+.icono-install-tab:hover,
+.icono-install-tab:focus-visible {
+  color: var(--dark);
+}
+
+.icono-install-tab[aria-selected="true"] {
+  position: relative;
+  top: 1px;
+  color: var(--dark);
+  border-color: color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  background: color-mix(in srgb, var(--light) 98%, white 2%);
+}
+
+.icono-install-panel-body {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.95rem 1rem 1rem;
 }
 
 .icono-install-header {
@@ -1835,6 +1897,21 @@ html[data-theme="dark"] .icono-card--brick {
 }
 
 /* ───────── Responsive ───────── */
+@media (max-width: 1180px) {
+  .icono-gallery-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .icono-gallery-actions {
+    justify-content: flex-start;
+  }
+
+  .icono-search--toolbar {
+    flex-basis: auto;
+  }
+}
+
 @media (max-width: 600px) {
   .icono-grid-sizer,
   .icono-card--masonry {
@@ -1882,6 +1959,18 @@ html[data-theme="dark"] .icono-card--brick {
     justify-content: space-between;
   }
 
+  .icono-install-tablist {
+    gap: 0.25rem;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+
+  .icono-install-tab {
+    flex: 1 1 0;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
   .icono-install-actions {
     align-items: stretch;
     flex-direction: column;
@@ -1909,21 +1998,6 @@ html[data-theme="dark"] .icono-card--brick {
     min-width: 9rem;
   }
 
-
-@media (max-width: 1180px) {
-  .icono-gallery-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .icono-gallery-actions {
-    justify-content: flex-start;
-  }
-
-  .icono-search--toolbar {
-    flex-basis: auto;
-  }
-}
   .icono-card--brick {
     grid-template-columns: 132px minmax(0, 1fr);
     align-items: start;
