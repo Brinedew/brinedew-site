@@ -492,11 +492,23 @@ async function queryPublishedPortraitFingerprint(env) {
     const row = await env.ICONOPLASM_DB.prepare(
       `SELECT
          COUNT(*) AS published_count,
-         MAX(updated_at) AS latest_updated_at
-       FROM icono_publish_state
-       WHERE current_asset_sha256 IS NOT NULL`,
+         GROUP_CONCAT(symbol_asset, '|') AS published_pairs
+       FROM (
+         SELECT gene_symbol || ':' || current_asset_sha256 AS symbol_asset
+         FROM icono_publish_state
+         WHERE current_asset_sha256 IS NOT NULL
+         ORDER BY gene_symbol ASC
+       )`,
     ).first()
-    return row || null
+    if (!row) return null
+    const publishedCount = Number(row.published_count ?? 0)
+    if (!publishedCount) {
+      return { published_count: 0, latest: null }
+    }
+    return {
+      published_count: publishedCount,
+      latest: await sha256Hex(String(row.published_pairs || "")),
+    }
   } catch {
     return null
   }

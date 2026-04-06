@@ -30,7 +30,10 @@ class FakeSearchStatement {
   }
 
   async first() {
-    if (this.sql.includes("COUNT(*) AS published_count") && this.sql.includes("FROM icono_publish_state")) {
+    if (
+      this.sql.includes("COUNT(*) AS published_count") &&
+      this.sql.includes("GROUP_CONCAT(symbol_asset, '|')")
+    ) {
       return this.db.getPublishedPortraitFingerprint()
     }
     if (this.sql.includes("FROM icono_gene_discoveries") && this.sql.includes("LIMIT 1")) {
@@ -162,6 +165,7 @@ class FakeSearchDb {
       if (!symbol) continue
       this.publishedPortraits.set(symbol, {
         symbol,
+        asset_sha256: row?.asset_sha256 || null,
         r2_key_full: row?.r2_key_full || null,
         r2_key_medium: row?.r2_key_medium || null,
         r2_key_thumb: row?.r2_key_thumb || null,
@@ -181,18 +185,18 @@ class FakeSearchDb {
 
   getPublishedPortraitFingerprint() {
     if (this.publishedPortraits.size === 0) {
-      return { published_count: 0, latest_updated_at: null }
+      return { published_count: 0, published_pairs: "" }
     }
-    let latestUpdatedAt = null
-    for (const row of this.publishedPortraits.values()) {
-      const updatedAt = String(row.updated_at || "")
-      if (updatedAt && (!latestUpdatedAt || updatedAt > latestUpdatedAt)) {
-        latestUpdatedAt = updatedAt
-      }
-    }
+    const publishedPairs = Array.from(this.publishedPortraits.values())
+      .sort((left, right) => String(left.symbol || "").localeCompare(String(right.symbol || "")))
+      .map(
+        (row) =>
+          `${row.symbol}:${row.asset_sha256 || row.r2_key_full || row.r2_key_medium || row.r2_key_thumb || ""}`,
+      )
+      .join("|")
     return {
       published_count: this.publishedPortraits.size,
-      latest_updated_at: latestUpdatedAt,
+      published_pairs: publishedPairs,
     }
   }
 }
@@ -277,6 +281,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
     publishedPortraits: [
       {
         symbol: "PRL",
+        asset_sha256: "old-prl-asset",
         r2_key_full: "portraits/v1/aa/old-prl/full.webp",
         r2_key_medium: "portraits/v1/aa/old-prl/medium.webp",
         r2_key_thumb: "portraits/v1/aa/old-prl/thumb.webp",
@@ -299,10 +304,11 @@ test("catalog search refreshes canonical portraits even if gallery version does 
   env.ICONOPLASM_DB.setPublishedPortraits([
     {
       symbol: "PRL",
+      asset_sha256: "new-prl-asset",
       r2_key_full: "portraits/v1/bb/new-prl/full.webp",
       r2_key_medium: "portraits/v1/bb/new-prl/medium.webp",
       r2_key_thumb: "portraits/v1/bb/new-prl/thumb.webp",
-      updated_at: "2026-04-06T12:34:56Z",
+      updated_at: "2026-04-05T00:00:01Z",
     },
   ])
 
