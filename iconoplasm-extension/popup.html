@@ -12,7 +12,7 @@
         <div class="popup-brand">
           <img class="popup-brand-mark" src="icons/icon-48.png" alt="" width="40" height="40" />
           <div class="popup-brand-copy">
-            <p class="popup-kicker">Browser companion</p>
+            <p class="popup-kicker">Gene mnemonics</p>
             <h1>Iconoplasm</h1>
           </div>
         </div>
@@ -29,13 +29,9 @@
       <!-- Appearance tab -->
       <section class="popup-panel" id="panel-appearance" role="tabpanel" aria-labelledby="tab-appearance">
         <div class="popup-section">
-          <div class="popup-section-head">
-            <h2>On-page display</h2>
-            <p class="popup-section-note">How highlights and hover cards look while you browse.</p>
-          </div>
           <div class="popup-field-list">
             <fieldset class="popup-field">
-              <legend>Gene highlight</legend>
+              <legend>Highlight mode</legend>
               <div class="popup-segmented" id="highlight-mode" role="radiogroup" aria-label="Gene highlight">
                 <label class="popup-segment">
                   <input type="radio" name="highlight-mode" value="underline" class="popup-radio" />
@@ -90,12 +86,9 @@
       <!-- Blocklist tab -->
       <section class="popup-panel popup-panel--hidden" id="panel-blocklist" role="tabpanel" aria-labelledby="tab-blocklist">
         <div class="popup-section">
-          <div class="popup-section-head">
-            <h2>Ignored symbols</h2>
-            <p class="popup-section-note">Symbols listed here won't be highlighted. Defaults ship with the extension; remove any you actually want to see.</p>
-          </div>
+          <p class="popup-section-kicker">Ignored symbols</p>
           <div class="popup-blocklist-input-row">
-            <input type="text" id="blocklist-input" class="popup-text-input" placeholder="e.g. HR" autocomplete="off" spellcheck="false" />
+            <input type="text" id="blocklist-input" class="popup-text-input" placeholder="Add gene symbol..." autocomplete="off" spellcheck="false" />
             <button id="blocklist-add-btn" class="popup-btn popup-btn--primary">Add</button>
           </div>
           <div class="popup-blocklist-bar">
@@ -110,10 +103,7 @@
       <!-- Account tab -->
       <section class="popup-panel popup-panel--hidden" id="panel-account" role="tabpanel" aria-labelledby="tab-account">
         <div class="popup-section">
-          <div class="popup-section-head">
-            <h2>Your account</h2>
-            <p class="popup-section-note">Sign in on the Iconoplasm site to vote on portraits and sync your discoveries across devices.</p>
-          </div>
+          <p class="popup-section-kicker">Account</p>
           <a href="https://iconoplasm.brinedew.bio/api/auth/login?return_to=https://iconoplasm.brinedew.bio/" target="_blank" rel="noopener" class="popup-btn popup-btn--primary popup-btn--full">Sign in with Discord</a>
           <div class="popup-account-status" id="account-status">
             <p class="popup-account-status-text" id="account-status-text">Checking...</p>

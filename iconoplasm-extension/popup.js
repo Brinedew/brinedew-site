@@ -181,7 +181,7 @@ async function renderBlocklist() {
 
     const btn = document.createElement("button")
     btn.className = "popup-blocklist-remove"
-    btn.textContent = "remove"
+    btn.textContent = "\u00d7"
     btn.setAttribute("aria-label", "Remove " + entry.symbol)
     btn.addEventListener("click", async () => {
       if (entry.isDefault) {
