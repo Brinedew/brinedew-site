@@ -227,7 +227,15 @@ function buildCatalogArtifact() {
   const genes = [
     { s: "INS", n: "Insulin", c: "#d85c57", tmh: false, a: ["INSULIN"] },
     { s: "RHO", n: "Rhodopsin", c: "#4b5b7c", tmh: true, a: ["OPN2"] },
-    { s: "PRL", n: "Prolactin", c: "#7a5861", tmh: false, a: [] },
+    {
+      s: "PRL",
+      n: "Prolactin",
+      c: "#7a5861",
+      tmh: false,
+      a: [],
+      pt: "https://iconoplasm.brinedew.bio/portraits/v1/stale/stale-prl/medium.webp",
+      ph: "https://iconoplasm.brinedew.bio/portraits/v1/stale/stale-prl/full.webp",
+    },
     { s: "TP53", n: "Tumor protein p53", c: "#5f6e52", tmh: false, a: ["P53"] },
     { s: "GUARDIAN1", n: "Cell cycle regulator", c: "#856b47", tmh: false, a: [] },
     { s: "BAX", n: "Guardian pathway effector", c: "#556b2f", tmh: false, a: [] },
@@ -241,20 +249,20 @@ function buildCatalogArtifact() {
   }
 }
 
-function buildEnv({ sessions = {}, publishedPortraits = [] } = {}) {
+function buildEnv({ sessions = {}, publishedPortraits = [], artifact = null } = {}) {
   const hash = "searchfixture01"
-  const artifact = buildCatalogArtifact()
+  const catalogArtifact = artifact || buildCatalogArtifact()
   return {
     KV: new FakeKV({
       "iconoplasm:catalog-manifest": JSON.stringify({
         current_hash: hash,
         filename: `catalog.${hash}.json`,
-        generated_at: artifact.generated_at,
-        schema_version: artifact.schema_version,
+        generated_at: catalogArtifact.generated_at,
+        schema_version: catalogArtifact.schema_version,
         canonical_key: "symbol",
-        gene_count: artifact.gene_count,
+        gene_count: catalogArtifact.gene_count,
       }),
-      [`iconoplasm:catalog:${hash}`]: JSON.stringify(artifact),
+      [`iconoplasm:catalog:${hash}`]: JSON.stringify(catalogArtifact),
     }),
     ICONOPLASM_DB: new FakeSearchDb({ publishedPortraits }),
     GAME_SESSIONS: new FakeGameSessions(sessions),

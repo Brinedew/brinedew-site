@@ -469,12 +469,12 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
     if (!published) return gene
 
     let nextGene = gene
-    if (!gene.ph && published.ph) {
+    if (published.ph && gene.ph !== published.ph) {
       nextGene = nextGene === gene ? { ...gene } : nextGene
       nextGene.ph = published.ph
       changed = true
     }
-    if (!gene.pt && published.pt) {
+    if (published.pt && gene.pt !== published.pt) {
       nextGene = nextGene === gene ? { ...gene } : nextGene
       nextGene.pt = published.pt
       changed = true
