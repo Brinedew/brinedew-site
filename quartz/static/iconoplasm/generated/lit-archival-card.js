@@ -792,8 +792,10 @@ function sheetTemplate(model) {
               <span class="icono-label-mass-fill">
                 <span class="icono-label-hand-note icono-label-hand-note--mass-number">${model.handwrittenWeight}</span>
               </span>
-              <span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>
-              <span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>
+              <span class="icono-label-mass-unit-stack">
+                <span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>
+                <span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>
+              </span>
             </div>
           </div>
           <div class="icono-label-band-secondary"></div>

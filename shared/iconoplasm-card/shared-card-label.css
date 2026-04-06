@@ -931,6 +931,20 @@
   min-height: calc(28 / 1220 * 100cqw);
 }
 
+.icono-label-mass-unit-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(1 / 1220 * 100cqw);
+}
+
+/* Keep the handwritten correction physically attached to the crossed-out typed unit.
+   Without a shared stack, the generated site and extension copies can drift back to an
+   inline layout where kg sits beside kDa instead of underneath it. */
+.icono-label-mass-unit-stack .icono-label-hand-note--unit {
+  margin-left: calc(5 / 1220 * 100cqw);
+}
+
 .icono-label-mass-fill {
   position: relative;
   display: inline-flex;
