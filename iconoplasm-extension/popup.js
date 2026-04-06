@@ -116,17 +116,17 @@ function normalizeSymbol(s) {
 }
 
 // Build the effective list for rendering: { symbol, isDefault }
+// Always a single alphabetically-sorted list — no defaults-first grouping.
 function buildEffectiveList(removedDefaults, userAdded) {
   const removedSet = new Set(removedDefaults)
   const entries = []
-  // Active defaults first (sorted)
   for (const sym of ICONOPLASM_DEFAULT_BLOCKLIST) {
     if (!removedSet.has(sym)) entries.push({ symbol: sym, isDefault: true })
   }
-  // Then user-added entries (sorted, excluding any that duplicate a default)
-  for (const sym of [...userAdded].sort()) {
+  for (const sym of userAdded) {
     if (!defaultSet.has(sym)) entries.push({ symbol: sym, isDefault: false })
   }
+  entries.sort((a, b) => a.symbol.localeCompare(b.symbol))
   return entries
 }
 
