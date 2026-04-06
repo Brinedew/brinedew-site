@@ -5,19 +5,31 @@
  * Design decisions for store screenshots:
  * - Color pills (not underline): most visually striking highlight mode
  * - Image-only card (not simple): shows the portrait, maximum visual impact
- * - Tooltip appears FROM a hovered pill: shows the connection hover -> card
- * - Popup reflects these same settings so popup + page screenshots are coherent
+ * - Single hero screenshot shows pills + hovercard together (Wikipedia homeobox)
+ * - Popup screenshots show the same settings so store listing is coherent
+ *
+ * Usage:
+ *   node take-screenshots.mjs           # full run: extension + promos
+ *   node take-screenshots.mjs --promo   # only regenerate promo images from
+ *                                       # existing screenshots (no extension)
  */
 import { chromium } from "playwright";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+import { readFileSync } from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dir = dirname(__filename);
 const extDir = resolve(__dir, "..");
 const outDir = __dir;
+const promoOnly = process.argv.includes("--promo");
 
 async function main() {
+  if (promoOnly) {
+    console.log("Promo-only mode: compositing from existing screenshots...");
+    await generatePromos();
+    return;
+  }
   const ctx = await chromium.launchPersistentContext("", {
     headless: false,
     args: [
@@ -95,12 +107,11 @@ async function main() {
   const consoleMsgs = [];
   page.on("console", (msg) => consoleMsgs.push(`[${msg.type()}] ${msg.text()}`));
 
-  // NCBI Gene TP53 page: dense with gene symbols, automation-friendly
-  // Try multiple URLs in case of transient connection issues.
+  // Wikipedia homeobox genes: dense table of HOX gene pills, very visual.
+  // Fallback to NCBI if Wikipedia blocks automation.
   const genePages = [
+    "https://en.wikipedia.org/wiki/Homeobox",
     "https://www.ncbi.nlm.nih.gov/gene/7157",
-    "https://pubmed.ncbi.nlm.nih.gov/37474810/",
-    "https://www.genecards.org/cgi-bin/carddisp.pl?gene=TP53",
   ];
   let loaded = false;
   for (const url of genePages) {
@@ -143,16 +154,18 @@ async function main() {
   for (const m of iconoMsgs) console.log("  " + m);
 
   // ----------------------------------------------------------------
-  // Step 2: Screenshot 1 -- gene pills on the page (no tooltip)
+  // Step 2: Screenshot 2 -- pills on page + hovercard in one frame
+  //         (consolidated: no separate "pills-only" screenshot)
   // ----------------------------------------------------------------
-  // Scroll to the Summary section where TP53 and related genes appear densely
+  // Scroll to the "Human homeobox genes" section (dense HOX table).
+  // Fallback: find the densest cluster of gene highlights.
   await page.evaluate(() => {
-    const summaryHeader = [...document.querySelectorAll("th, dt, b, strong")].find(
-      (el) => el.textContent.trim() === "Summary",
+    const heading = [...document.querySelectorAll("h2, h3")].find((el) =>
+      el.textContent.includes("Human homeobox genes"),
     );
-    if (summaryHeader) {
-      summaryHeader.scrollIntoView({ block: "start" });
-      window.scrollBy(0, -60);
+    if (heading) {
+      heading.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -20);
     } else {
       const genes = [...document.querySelectorAll(".iconoplasm-gene")];
       if (genes.length > 0) {
@@ -163,39 +176,30 @@ async function main() {
   });
   await sleep(600);
 
-  await page.screenshot({
-    path: resolve(outDir, "screenshot-1-highlight.png"),
-    type: "png",
-  });
-  console.log("Saved screenshot-1-highlight.png (pills on page)");
-
-  // ----------------------------------------------------------------
-  // Step 3: Screenshot 2 -- hover a pill to show the image-only tooltip
-  // ----------------------------------------------------------------
+  // Hover a gene in the HOX table to trigger the portrait hovercard.
+  // Prefer HOXB1 for a visually rich portrait; fall back to any gene.
   const targetGene = await page.$(
-    '.iconoplasm-gene[data-gene-label="TP53"], .iconoplasm-gene',
+    '.iconoplasm-gene[data-gene-label="HOXB1"], ' +
+    '.iconoplasm-gene[data-gene-label="HOXA1"], ' +
+    '.iconoplasm-gene',
   );
   if (targetGene) {
-    // Scroll the gene into the upper-middle of the viewport so the tooltip
-    // appears below it, fully visible and nicely framed.
     await targetGene.evaluate((el) => {
       el.scrollIntoView({ block: "start" });
-      window.scrollBy(0, -120);
+      window.scrollBy(0, -80);
     });
     await sleep(400);
-
     await targetGene.hover();
-    // Wait for tooltip animation + API data + portrait load
-    await sleep(4000);
-
-    await page.screenshot({
-      path: resolve(outDir, "screenshot-2-hovercard.png"),
-      type: "png",
-    });
-    console.log("Saved screenshot-2-hovercard.png (pill hover -> image tooltip)");
+    await sleep(4000); // tooltip animation + API + portrait load
   } else {
-    console.log("WARN: No highlighted genes found for tooltip screenshot");
+    console.log("WARN: No highlighted genes found for hovercard");
   }
+
+  await page.screenshot({
+    path: resolve(outDir, "screenshot-2-hovercard.png"),
+    type: "png",
+  });
+  console.log("Saved screenshot-2-hovercard.png (pills + hovercard)");
 
   // ----------------------------------------------------------------
   // Step 4: Popup screenshots -- settings reflect the pill + image choices
@@ -243,17 +247,33 @@ async function main() {
   }
 
   // ----------------------------------------------------------------
-  // Step 5: Promo images -- compose real screenshots into CWS promos
+  // Step 5: Promo images
   // ----------------------------------------------------------------
-  // Use a fresh page (not the extension context) for HTML compositing.
-  // Read the screenshots we just saved as base64 data URIs.
-  const { readFileSync } = await import("fs");
+  await generatePromos(ctx);
+
+  await ctx.close();
+  console.log("Done");
+}
+
+/**
+ * Generate promo tiles from existing screenshots. Works with or without
+ * an extension browser context -- if none is passed, launches a plain
+ * headless Chromium just for compositing.
+ */
+async function generatePromos(ctx) {
+  const ownBrowser = !ctx;
+  if (ownBrowser) {
+    ctx = await chromium.launchPersistentContext("", {
+      headless: true,
+      args: ["--no-first-run"],
+      viewport: { width: 800, height: 600 },
+    });
+  }
+
   const toDataUri = (f) =>
     "data:image/png;base64," + readFileSync(resolve(outDir, f)).toString("base64");
 
-  const highlightUri = toDataUri("screenshot-1-highlight.png");
   const hovercardUri = toDataUri("screenshot-2-hovercard.png");
-  const popupUri = toDataUri("screenshot-3-popup.png");
 
   // -- Small promo tile: 440 x 280 --
   const promoSmallPage = await ctx.newPage();
@@ -315,6 +335,7 @@ async function main() {
   await promoSmallPage.close();
 
   // -- Large marquee: 1400 x 560 --
+  // Single hero screenshot, no second panel (the popup crop was unreadable).
   const promoLargePage = await ctx.newPage();
   await promoLargePage.setViewportSize({ width: 1400, height: 560 });
   await promoLargePage.setContent(`<!DOCTYPE html>
@@ -343,23 +364,15 @@ async function main() {
     font-size: 13px; color: #78716c; letter-spacing: 0.04em;
     text-transform: uppercase; font-weight: 500;
   }
-  .previews {
-    flex: 1; display: flex; gap: 20px; height: 100%;
-    align-items: center;
-  }
-  .prev-card {
+  .preview {
+    flex: 1; height: 100%;
     border-radius: 10px; overflow: hidden;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   }
-  .prev-card img { display: block; width: 100%; height: 100%; object-fit: cover; }
-  .prev-main {
-    flex: 1; height: 100%;
+  .preview img {
+    display: block; width: 100%; height: 100%;
+    object-fit: cover; object-position: left top;
   }
-  .prev-main img { object-position: left center; }
-  .prev-popup {
-    flex: 0 0 220px; height: 80%;
-  }
-  .prev-popup img { object-position: center top; }
 </style></head><body>
   <div class="text-col">
     <p class="stat">19,000+ gene portraits</p>
@@ -367,13 +380,8 @@ async function main() {
     <p>Every human gene gets a unique color and portrait.
     Hover any gene symbol on any page for instant visual context.</p>
   </div>
-  <div class="previews">
-    <div class="prev-card prev-main">
-      <img src="${hovercardUri}" />
-    </div>
-    <div class="prev-card prev-popup">
-      <img src="${popupUri}" />
-    </div>
+  <div class="preview">
+    <img src="${hovercardUri}" />
   </div>
 </body></html>`, { waitUntil: "load" });
   await sleep(500);
@@ -384,8 +392,7 @@ async function main() {
   console.log("Saved promo-marquee.png (1400x560)");
   await promoLargePage.close();
 
-  await ctx.close();
-  console.log("Done");
+  if (ownBrowser) await ctx.close();
 }
 
 function sleep(ms) {
