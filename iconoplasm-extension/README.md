@@ -10,3 +10,25 @@ Reason for the move:
 - keep the tooltip/frontpage design work close together
 - avoid losing track of the relevant files across two unrelated locations
 - keep a single source of truth for local Chrome testing and future store packaging
+
+## Packaging the extension safely
+
+Do not zip this whole folder by hand.
+
+That will drag in `store-assets/`, screenshots, promo files, and any local Playwright install under `store-assets/node_modules/`, which are dev-only and should not ship.
+
+Use the repo-level package command instead:
+
+- `npm run package:iconoplasm-extension`
+
+What it does:
+
+- copies only runtime files (`manifest.json`, JS/CSS/HTML, fonts, generated assets, icons)
+- excludes `store-assets/`, docs, and other non-runtime files
+- scans the staged payload for obvious secret patterns before zipping
+- writes the clean package to `iconoplasm-extension/dist/`
+
+Current output:
+
+- staged runtime payload: `iconoplasm-extension/dist/package/`
+- zip for upload/manual distribution: `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
