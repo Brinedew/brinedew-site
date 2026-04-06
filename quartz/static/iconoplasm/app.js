@@ -957,11 +957,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(totalCopy) +
       '</div>' +
       '<div class="icono-collection-progress-inline">' +
-      '<span class="icono-collection-progress-track" aria-hidden="true">' +
+      '<div class="icono-collection-progress-track" aria-hidden="true">' +
       '<span class="icono-collection-progress-fill" style="width:' +
       esc(progressWidth.toFixed(1)) +
       '%"></span>' +
-      '</span>' +
+      '</div>' +
       '</div>' +
       '</article>' +
       '</section>'
