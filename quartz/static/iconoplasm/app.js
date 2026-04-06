@@ -3634,18 +3634,30 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var html = ""
     for (var i = 0; i < genes.length; i++) {
       var g = genes[i]
+      var portraitUrl = publishedPortraitUrl(g, "thumb") || publishedPortraitUrl(g, "medium")
+      var mediaHtml = portraitUrl
+        ? '<span class="icono-search-result-media icono-search-result-media--portrait">' +
+          '<img class="icono-search-result-portrait" src="' +
+          esc(portraitUrl) +
+          '" alt="' +
+          esc(g.symbol) +
+          ' portrait" loading="eager" decoding="async">' +
+          '</span>'
+        : '<span class="icono-search-result-media icono-search-result-media--fallback" style="background:' +
+          esc(g.color) +
+          '"></span>'
       html +=
         '<a class="icono-search-result" href="/gene/' +
         esc(encodeURIComponent(g.symbol)) +
         '" target="_blank" rel="noopener noreferrer">' +
-        '<span class="icono-search-result-swatch" style="background:' +
-        esc(g.color) +
-        '"></span>' +
+        mediaHtml +
+        '<span class="icono-search-result-copy">' +
         '<span class="icono-search-result-symbol">' +
         esc(g.symbol) +
         "</span>" +
         '<span class="icono-search-result-name">' +
         esc(g.full_name) +
+        "</span>" +
         "</span>" +
         "</a>"
     }

@@ -246,12 +246,39 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   background: var(--ui-bg);
 }
 
-.icono-search-result-swatch {
+.icono-search-result-media {
+  width: 28px;
+  height: 36px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: color-mix(in srgb, var(--ui-bg) 86%, white 14%);
+}
+
+.icono-search-result-media--portrait {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.icono-search-result-media--fallback {
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  align-self: center;
+}
+
+.icono-search-result-portrait {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.icono-search-result-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
 
 .icono-search-result-symbol {
@@ -261,6 +288,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 .icono-search-result-name {
+  display: block;
   font-size: 0.85rem;
   color: var(--secondary, var(--darkgray));
   overflow: hidden;
