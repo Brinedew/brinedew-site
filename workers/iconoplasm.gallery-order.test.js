@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 
 if (!globalThis.caches) {
   globalThis.caches = {
@@ -109,9 +109,35 @@ class FakeIconoplasmDb {
   }
 }
 
-function buildEnv() {
-  return {
-    ICONOPLASM_DB: new FakeIconoplasmDb([
+class FakeOnlyAllowedGateway {
+  constructor(responseFactory) {
+    this.responseFactory = responseFactory
+    this.calls = []
+  }
+
+  async fetch(request) {
+    const cloned = request.clone()
+    this.calls.push({
+      url: cloned.url,
+      method: cloned.method,
+    })
+    return this.responseFactory(cloned)
+  }
+}
+
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = buildCtx()) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
+  }
+  return env
+}
+
+function buildEnv(overrides = {}, { bindGateway = true } = {}) {
+  const gatewayDb = overrides.ICONOPLASM_DB === undefined ? new FakeIconoplasmDb([
       {
         symbol: "ZEROAGE",
         full_name: "Zero Age",
@@ -180,9 +206,18 @@ function buildEnv() {
         r2_key_medium: "portraits/medium-older.webp",
         r2_key_thumb: "portraits/thumb-older.webp",
       },
-    ]),
+    ]) : overrides.ICONOPLASM_DB
+  const gatewayEnv = {
+    ICONOPLASM_DB: gatewayDb,
     KV: null,
+    ...overrides,
   }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 function buildCtx() {
@@ -223,4 +258,33 @@ test("lightest sort keeps zero-weight genes off the top while leaving them in th
     payload.items.findIndex((item) => item.symbol === "ZEROWEIGHT") >
       payload.items.findIndex((item) => item.symbol === "LIGHTEST"),
   )
+})
+
+test("public gallery hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
+  const gateway = new FakeOnlyAllowedGateway(async () =>
+    Response.json({
+      items: [{ symbol: "GATEWAY" }],
+      order: "votes",
+      limit: 10,
+      offset: 0,
+      total: 1,
+      has_more: false,
+    }),
+  )
+
+  const response = await handleIconoplasmRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
+    buildEnv({
+      ICONOPLASM_DB: null,
+      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+    }),
+    buildCtx(),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.items[0]?.symbol, "GATEWAY")
+  assert.equal(gateway.calls.length, 1)
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/gallery?order=votes&limit=10")
+  assert.equal(gateway.calls[0]?.method, "GET")
 })

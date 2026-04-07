@@ -56,6 +56,7 @@ const runtimeFiles = [
   "content-matcher.js",
   "content-visibility-scheduler.js",
   "content.css",
+  "highlight-runtime.js",
   "content.js",
   "lit-archival-frame.html",
   "lit-archival-frame.js",

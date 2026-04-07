@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import {
+  handleIconoplasmDbGatewayRequest,
+  handleIconoplasmRequest,
+  resetIconoplasmRuntimeCachesForTest,
+} from "./iconoplasm.js"
 
 class FakeVotesStatement {
   constructor(db, sql) {
@@ -89,10 +93,20 @@ class FakeKv {
   }
 }
 
-function buildEnv() {
-  const hash = `votes-cache-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  return {
-    ICONOPLASM_DB: new FakeVotesDb([
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
+  }
+  return env
+}
+
+function buildEnv({ bindGateway = true } = {}) {
+  const hash = "votescache01"
+  const gatewayDb = new FakeVotesDb([
       {
         symbol: "TP53",
         published_at: "2026-04-04T10:00:00Z",
@@ -129,7 +143,9 @@ function buildEnv() {
         image_downvotes: 0,
         image_score: 4,
       },
-    ]),
+    ])
+  const gatewayEnv = {
+    ICONOPLASM_DB: gatewayDb,
     KV: new FakeKv(hash, {
       genes: [
         { s: "A1BG", n: "alpha-1-B glycoprotein", c: "#dd8c9d" },
@@ -137,9 +153,16 @@ function buildEnv() {
       ],
     }),
   }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 test("vote-sorted gallery uses the cached snapshot instead of live rollup reads", async () => {
+  resetIconoplasmRuntimeCachesForTest()
   const env = buildEnv()
   const response = await handleIconoplasmRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
@@ -153,6 +176,6 @@ test("vote-sorted gallery uses the cached snapshot instead of live rollup reads"
     payload.items.map((item) => item.symbol),
     ["TP53", "A1BG"],
   )
-  assert.equal(env.ICONOPLASM_DB.rollupReads, 0)
-  assert.ok(env.ICONOPLASM_DB.snapshotReads >= 1)
+  assert.equal(env.gatewayDb.rollupReads, 0)
+  assert.ok(env.gatewayDb.snapshotReads >= 1)
 })

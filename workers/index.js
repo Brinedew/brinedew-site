@@ -160,7 +160,7 @@ import {
 import {
   isIconoplasmRequest,
   handleIconoplasmRequest,
-  repairCanonInvariants,
+  runIconoplasmCanonMaintenanceThroughGateway,
 } from "./iconoplasm.js"
 // Import Discord bot handlers
 import {
@@ -1452,7 +1452,7 @@ export default {
 
     if (cronExpr === "17 * * * *") {
       try {
-        const result = await repairCanonInvariants(env, {
+        const result = await runIconoplasmCanonMaintenanceThroughGateway(env, {
           limit: 250,
           actorId: "cron",
           reason: "scheduled_canon_invariant_repair",

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Iconoplasm",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.",
   "permissions": ["storage"],
   "host_permissions": ["https://iconoplasm.brinedew.bio/*"],
@@ -32,6 +32,7 @@
         "blocklist-defaults.js",
         "content-matcher.js",
         "content-visibility-scheduler.js",
+        "highlight-runtime.js",
         "content.js"
       ],
       "css": ["generated/shared-card-vote.css", "generated/shared-card-label.css", "content.css"],

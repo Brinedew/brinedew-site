@@ -270,6 +270,20 @@ npm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.galler
 
 If that suite stops proving fresh-isolate reuse of shared snapshots, assume you are one edit away from another billing incident.
 
+### the-only-allowed-db-gateway is intentionally a ridiculous name
+
+If you see `THE_ONLY_ALLOWED_DB_GATEWAY` in Wrangler or `the-only-allowed-db-gateway` in worker config, that is not a joke that got out of hand. It is part of the guardrail.
+
+The point is to make the safe path embarrassing to rename and hard to ignore:
+
+- the public hot-read worker should call the gateway service
+- the gateway service is the worker that is allowed to hold the D1 capability
+- if you are about to replace that binding with direct `ICONOPLASM_DB.prepare(...)` calls in a caller worker, you are walking back toward the billing incident on purpose
+- if you are about to put `binding = "ICONOPLASM_DB"` back into `Website/wrangler.toml`, you have not found a clever shortcut; you have undone B-415
+- if you are about to give `wrangler.the-only-allowed-db-gateway.toml` a public preview/workers.dev URL again, you are taking the one worker with the dangerous capability and making it easier to hit from outside
+
+Treat that name like a warning label on industrial equipment. Ugly is fine here. Quietly “cleaning it up” is not.
+
 ### do not build giant fake shelf payloads
 
 If you try to represent the full catalog as one huge discovered shelf response, you can hit size problems like `SQLITE_TOOBIG` or just make the route painfully slow.

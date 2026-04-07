@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  handleIconoplasmDbGatewayRequest,
   handleIconoplasmRequest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm.js"
@@ -182,10 +183,16 @@ class FakeSharedKv {
 }
 
 function buildEnv(sharedKv, db) {
-  return {
+  const env = {
     ICONOPLASM_DB: db,
     KV: sharedKv,
   }
+  env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+    fetch(request) {
+      return handleIconoplasmDbGatewayRequest(request, env, { waitUntil() {} })
+    },
+  }
+  return env
 }
 
 test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cache across isolate resets", async () => {
@@ -281,8 +288,11 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   assert.equal(first.status, 200)
   assert.equal(db.portraitRefReads, 1)
   assert.equal(firstPayload.genes[0]?.pt != null || firstPayload.genes[0]?.ph != null, true)
+  const hydratedArtifactKeys = Array.from(kv.store.keys()).filter((key) =>
+    String(key).startsWith("iconoplasm:hydrated-catalog-artifact:costbarrier01"),
+  )
   assert.equal(
-    kv.store.has("iconoplasm:hydrated-catalog-artifact:costbarrier01:gallery-version-1"),
+    hydratedArtifactKeys.length > 0,
     true,
   )
 

@@ -611,7 +611,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
 
   function labLabelEmulsionNumber(portrait) {
     var safePortrait = portrait && typeof portrait === "object" ? portrait : {}
-    var explicitArtistId = String(safePortrait.artist_id || safePortrait.emulsion_id || "").trim()
+    var explicitArtistId = String(safePortrait.emulsion_id || safePortrait.artist_id || "").trim()
     if (explicitArtistId) return explicitArtistId
     var visionArtistId = labLabelArtistIdFromVision(safePortrait.vision_id)
     if (visionArtistId) return visionArtistId

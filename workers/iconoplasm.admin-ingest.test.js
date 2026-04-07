@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 
 class FakeStatement {
   constructor(sql) {
@@ -44,12 +44,30 @@ class FakePortraitBucket {
   }
 }
 
-function buildEnv() {
-  return {
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
+  }
+  return env
+}
+
+function buildEnv({ bindGateway = true } = {}) {
+  const gatewayDb = new FakeIconoplasmDb()
+  const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-    ICONOPLASM_DB: new FakeIconoplasmDb(),
+    ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_PORTRAITS: new FakePortraitBucket(),
   }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 test("admin ingest dry-run accepts a normal sync payload without crashing", async () => {
@@ -66,6 +84,8 @@ test("admin ingest dry-run accepts a normal sync payload without crashing", asyn
         {
           symbol: "ABCA1",
           asset_sha256: "bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6",
+          vision_id: "anima-v1-42",
+          workflow_path: "d:/Coding/Datasets/iconoplasm/data/comfyui/workflows/anima-preview.api.json",
         },
       ],
     }),
@@ -80,6 +100,7 @@ test("admin ingest dry-run accepts a normal sync payload without crashing", asyn
   assert.equal(payload?.failed, 0)
   assert.equal(payload?.results?.[0]?.ok, true)
   assert.equal(payload?.results?.[0]?.symbol, "ABCA1")
+  assert.equal(payload?.results?.[0]?.emulsion_id, "A1-42")
   assert.equal(payload?.results?.[0]?.blacklisted, false)
   assert.equal(payload?.results?.[0]?.blacklist_reason, null)
 })

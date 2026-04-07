@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 
 class FakeStatement {
   constructor(db, sql) {
@@ -41,11 +41,29 @@ class FakeIconoplasmDb {
   }
 }
 
-function buildEnv() {
-  return {
-    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-    ICONOPLASM_DB: new FakeIconoplasmDb(),
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
   }
+  return env
+}
+
+function buildEnv({ bindGateway = true } = {}) {
+  const gatewayDb = new FakeIconoplasmDb()
+  const gatewayEnv = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: gatewayDb,
+  }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 test("admin read-model sync with invalidate_gallery still honors skip flags", async () => {
@@ -80,7 +98,7 @@ test("admin read-model sync with invalidate_gallery still honors skip flags", as
   // 1,000-item Website sync into smaller durable phases. If the invalidate-
   // gallery wrapper drops those flags, the worker quietly does the expensive
   // vote summary / gene rollup work anyway and can tip the sync into a 500.
-  const writeSql = env.ICONOPLASM_DB.calls
+  const writeSql = env.gatewayDb.calls
     .filter((call) => call.method === "run")
     .map((call) => call.sql)
     .join("\n")

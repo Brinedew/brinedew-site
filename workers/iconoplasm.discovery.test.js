@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 
 function sortSymbols(values) {
   return (Array.isArray(values) ? values : []).slice().sort()
@@ -203,12 +203,30 @@ class FakeGameSessions {
   }
 }
 
-function buildEnv({ sessions } = {}) {
-  return {
-    ICONOPLASM_DB: new FakeDiscoveryDb(),
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
+  }
+  return env
+}
+
+function buildEnv({ sessions } = {}, { bindGateway = true } = {}) {
+  const gatewayDb = new FakeDiscoveryDb()
+  const gatewayEnv = {
+    ICONOPLASM_DB: gatewayDb,
     GAME_SESSIONS: new FakeGameSessions(sessions),
     ICONOPLASM_ADMIN_TOKEN: "admin-token",
   }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 function buildEncounterRequest({ cookie = "", symbol = "TP53", dwellMs = 900 } = {}) {
@@ -236,7 +254,7 @@ test("discovery encounter quietly skips writes for signed-out visitors", async (
   assert.equal(payload?.ok, true)
   assert.equal(payload?.authenticated, false)
   assert.equal(payload?.recorded, false)
-  assert.equal(env.ICONOPLASM_DB.rows.size, 0)
+  assert.equal(env.gatewayDb.rows.size, 0)
 })
 
 test("discovery encounter inserts the first authenticated gene discovery", async () => {
@@ -260,16 +278,16 @@ test("discovery encounter inserts the first authenticated gene discovery", async
   assert.equal(payload?.discovery?.gene_symbol, "TP53")
   assert.equal(payload?.discovery?.encounter_count, 1)
 
-  const stored = env.ICONOPLASM_DB.getDiscovery("user-123", "TP53")
+  const stored = env.gatewayDb.getDiscovery("user-123", "TP53")
   assert.ok(stored)
   assert.equal(stored?.first_source, "extension_hover")
   assert.equal(stored?.first_trigger, "hover_dwell")
   assert.equal(stored?.first_dwell_ms, 900)
-  assert.equal(env.ICONOPLASM_DB.rows.size, 1)
-  assert.ok(!env.ICONOPLASM_DB.getDiscovery("user-123", "INS"))
-  assert.ok(!env.ICONOPLASM_DB.getDiscovery("user-123", "RHO"))
-  assert.ok(!env.ICONOPLASM_DB.getDiscovery("user-123", "PRL"))
-  const discoveryWriteCalls = env.ICONOPLASM_DB.calls.filter(
+  assert.equal(env.gatewayDb.rows.size, 1)
+  assert.ok(!env.gatewayDb.getDiscovery("user-123", "INS"))
+  assert.ok(!env.gatewayDb.getDiscovery("user-123", "RHO"))
+  assert.ok(!env.gatewayDb.getDiscovery("user-123", "PRL"))
+  const discoveryWriteCalls = env.gatewayDb.calls.filter(
     (call) => call.sql.includes("FROM icono_gene_discoveries") || call.sql.includes("UPDATE icono_gene_discoveries"),
   )
   assert.ok(discoveryWriteCalls.length > 0)
@@ -306,7 +324,7 @@ test("discovery encounter increments count instead of duplicating the row", asyn
   assert.equal(secondPayload?.discovery?.first_dwell_ms, 900)
   assert.equal(secondPayload?.discovery?.last_dwell_ms, 1200)
 
-  const stored = env.ICONOPLASM_DB.getDiscovery("user-123", "TP53")
+  const stored = env.gatewayDb.getDiscovery("user-123", "TP53")
   assert.ok(stored)
   assert.equal(stored?.encounter_count, 2)
   assert.equal(stored?.first_discovered_at, firstPayload?.discovery?.first_discovered_at)
@@ -484,6 +502,6 @@ test("discoveries merge upserts guest-local symbols into the signed-in account",
   assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["BRCA1", "EGFR", "INS", "PRL", "RHO", "TP53"])
   assert.equal(payload?.discovered_count, 6)
 
-  const stored = env.ICONOPLASM_DB.listDiscoveries("user-123")
+  const stored = env.gatewayDb.listDiscoveries("user-123")
   assert.equal(stored.length, 6)
 })

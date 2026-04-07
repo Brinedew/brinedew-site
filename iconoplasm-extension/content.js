@@ -7,6 +7,7 @@
 
   const IconoCardShared = globalThis.IconoplasmCardShared
   const IconoContentMatcher = globalThis.IconoplasmContentMatcher
+  const IconoHighlightRuntime = globalThis.IconoplasmHighlightRuntime
   const IconoVisibilityScheduler = globalThis.IconoplasmVisibilityScheduler
   if (!IconoCardShared) {
     console.error(
@@ -16,6 +17,10 @@
   }
   if (!IconoContentMatcher) {
     console.error("[Iconoplasm] content matcher missing: load content-matcher.js first")
+    return
+  }
+  if (!IconoHighlightRuntime || typeof IconoHighlightRuntime.createHighlightRuntime !== "function") {
+    console.error("[Iconoplasm] highlight runtime missing: load highlight-runtime.js first")
     return
   }
 
@@ -44,7 +49,6 @@
   const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
   const escapeHtml = IconoCardShared.escapeHtml
-  let roughEllipseSerial = 0
 
   function extensionApiFetch(input, init = {}) {
     const url = typeof input === "string" ? input : String((input && input.url) || "")
@@ -84,21 +88,75 @@
     })
   }
 
-  // -- Luminance + text color helpers --------------------------------
-  function hexLuminance(hex) {
-    const r = parseInt(hex.slice(1, 3), 16) / 255
-    const g = parseInt(hex.slice(3, 5), 16) / 255
-    const b = parseInt(hex.slice(5, 7), 16) / 255
-    const lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
-    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  const DARK_TEXT_RGB = Object.freeze([24, 22, 20])
+  const LIGHT_TEXT_RGB = Object.freeze([249, 247, 242])
+  const APCA_DELTA_Y_MIN = 0.0005
+  const APCA_MIN_CONTRAST = 0.1
+  const APCA_CONTRAST_OFFSET = 0.027
+  const APCA_SCALE = 1.14
+  const APCA_BLACK_THRESHOLD = 0.022
+  const APCA_BLACK_CLAMP_EXP = 1.414
+  const WHITE_TEXT_MIN_APCA_TO_WIN = 70
+  const WHITE_TEXT_WIN_MARGIN_APCA = 8
+
+  // -- Perceptual text color helpers ---------------------------------
+  function parseHexRgb(hex) {
+    const raw = String(hex || "")
+      .trim()
+      .replace(/^#/, "")
+    if (!raw) return null
+    const normalized = raw.length === 3 ? raw.replace(/./g, (ch) => ch + ch) : raw
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return null
+    return [
+      parseInt(normalized.slice(0, 2), 16),
+      parseInt(normalized.slice(2, 4), 16),
+      parseInt(normalized.slice(4, 6), 16),
+    ]
   }
 
-  // Returns { primary, muted } text colors for a given hex background
+  function apcaRelativeLuminance(rgb) {
+    if (!Array.isArray(rgb) || rgb.length < 3) return 0
+    return (
+      0.2126729 * Math.pow(rgb[0] / 255, 2.4) +
+      0.7151522 * Math.pow(rgb[1] / 255, 2.4) +
+      0.072175 * Math.pow(rgb[2] / 255, 2.4)
+    )
+  }
+
+  function apcaClampBlack(relativeLuminance) {
+    if (relativeLuminance >= APCA_BLACK_THRESHOLD) return relativeLuminance
+    return relativeLuminance + Math.pow(APCA_BLACK_THRESHOLD - relativeLuminance, APCA_BLACK_CLAMP_EXP)
+  }
+
+  function apcaContrast(textRgb, backgroundRgb) {
+    const textY = apcaClampBlack(apcaRelativeLuminance(textRgb))
+    const backgroundY = apcaClampBlack(apcaRelativeLuminance(backgroundRgb))
+    if (Math.abs(backgroundY - textY) < APCA_DELTA_Y_MIN) return 0
+
+    const sapc =
+      backgroundY > textY
+        ? (Math.pow(backgroundY, 0.56) - Math.pow(textY, 0.57)) * APCA_SCALE
+        : (Math.pow(backgroundY, 0.65) - Math.pow(textY, 0.62)) * APCA_SCALE
+
+    if (Math.abs(sapc) < APCA_MIN_CONTRAST) return 0
+    return 100 * (sapc > 0 ? sapc - APCA_CONTRAST_OFFSET : sapc + APCA_CONTRAST_OFFSET)
+  }
+
+  // Returns { primary, muted } text colors for a given hex background.
+  // This stays APCA-style on purpose: simple luminance ratios are fine for coarse audits,
+  // but they regularly pick the wrong ink on saturated fills that human vision reads differently.
   function textColors(hex) {
-    const lum = hexLuminance(hex)
-    const darkContrast = (lum + 0.05) / 0.05
-    const lightContrast = 1.05 / (lum + 0.05)
-    if (darkContrast >= lightContrast) {
+    const backgroundRgb = parseHexRgb(hex) || parseHexRgb(PLACEHOLDER_COLOR) || [107, 107, 120]
+    const darkContrast = Math.abs(apcaContrast(DARK_TEXT_RGB, backgroundRgb))
+    const lightContrast = Math.abs(apcaContrast(LIGHT_TEXT_RGB, backgroundRgb))
+    // White ink is fragile on mid-tone chromatic fills: even when APCA barely prefers it,
+    // the perceived letterform clarity is often worse than dark ink. So white only wins if
+    // it clears a strong absolute contrast floor and still beats dark ink by a real margin.
+    const whiteWins =
+      lightContrast >= WHITE_TEXT_MIN_APCA_TO_WIN &&
+      lightContrast >= darkContrast + WHITE_TEXT_WIN_MARGIN_APCA
+
+    if (!whiteWins) {
       return {
         primary: "rgb(24, 22, 20)",
         muted: "rgba(24, 22, 20, 0.82)",
@@ -112,14 +170,22 @@
     }
   }
 
-  function normalizeHighlightMode(raw) {
-    const value = String(raw || "")
-      .trim()
-      .toLowerCase()
-    if (value === "pill") return "pill"
-    if (value === "ellipse") return "ellipse"
-    return "underline"
-  }
+  const highlightRuntime = IconoHighlightRuntime.createHighlightRuntime({
+    cardShared: IconoCardShared,
+    placeholderColor: PLACEHOLDER_COLOR,
+    textColors,
+    resolveColor(symbol) {
+      const gene = symbol ? geneMap && geneMap[symbol] : null
+      return gene && gene.c ? gene.c : PLACEHOLDER_COLOR
+    },
+  })
+  const HIGHLIGHT_RENDER_CONTRACT = IconoHighlightRuntime.HIGHLIGHT_RENDER_CONTRACT
+  const HIGHLIGHT_RENDERERS = highlightRuntime.renderers
+  const normalizeHighlightMode = highlightRuntime.normalizeHighlightMode
+  const ensureHighlightTextWrapper = highlightRuntime.ensureHighlightTextWrapper
+  const applyHighlightStyle = highlightRuntime.applyHighlightStyle
+  const refreshHighlightStyles = highlightRuntime.refreshHighlightStyles
+  const scheduleHighlightGeometryRefresh = highlightRuntime.scheduleHighlightGeometryRefresh
 
   function normalizeTooltipTheme(raw) {
     return String(raw || "")
@@ -136,9 +202,9 @@
   async function loadHighlightMode() {
     try {
       const result = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY])
-      highlightMode = normalizeHighlightMode(result[HIGHLIGHT_MODE_KEY])
+      highlightMode = highlightRuntime.setMode(result[HIGHLIGHT_MODE_KEY])
     } catch (_) {
-      highlightMode = "underline"
+      highlightMode = highlightRuntime.setMode("underline")
     }
   }
 
@@ -187,55 +253,6 @@
     tooltip.classList.toggle("iconoplasm-tooltip--variant-lab-label", isArchivalCardVariant())
     tooltip.classList.toggle("iconoplasm-tooltip--variant-image-only", isImageOnlyCardVariant())
     tooltip.classList.toggle("iconoplasm-tooltip--frame-card", usesTooltipFrameRenderer())
-  }
-
-  function buildHighlightRoughLoopSvg() {
-    roughEllipseSerial += 1
-    const loopSeed = 9001 + roughEllipseSerial * 97
-    return (
-      '<svg class="iconoplasm-gene-rough-loop" data-icono-rough-loop="true" data-icono-rough-preset="inline-gene" data-icono-rough-seed="' +
-      String(loopSeed) +
-      '" viewBox="0 0 132 34" preserveAspectRatio="none" aria-hidden="true">' +
-      '<path d="M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '<path d="M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17" fill="none" stroke="currentColor" stroke-width="1.05" stroke-linecap="round" stroke-dasharray="2.5 4"/>' +
-      "</svg>"
-    )
-  }
-
-  function buildHighlightRoughLoopSvgNode() {
-    const svgNs = "http://www.w3.org/2000/svg"
-    roughEllipseSerial += 1
-    const loopSeed = 9001 + roughEllipseSerial * 97
-    const svg = document.createElementNS(svgNs, "svg")
-    svg.setAttribute("class", "iconoplasm-gene-rough-loop")
-    svg.setAttribute("data-icono-rough-loop", "true")
-    svg.setAttribute("data-icono-rough-preset", "inline-gene")
-    svg.setAttribute("data-icono-rough-seed", String(loopSeed))
-    svg.setAttribute("viewBox", "0 0 132 34")
-    svg.setAttribute("preserveAspectRatio", "none")
-    svg.setAttribute("aria-hidden", "true")
-
-    const primaryPath = document.createElementNS(svgNs, "path")
-    primaryPath.setAttribute(
-      "d",
-      "M 8 18 C 8 10, 21 5, 65 5 C 108 5, 124 10, 124 17 C 124 24, 108 29, 66 29 C 22 29, 8 24, 8 18",
-    )
-    primaryPath.setAttribute("fill", "none")
-    primaryPath.setAttribute("stroke", "currentColor")
-    primaryPath.setAttribute("stroke-width", "1.9")
-    primaryPath.setAttribute("stroke-linecap", "round")
-    primaryPath.setAttribute("stroke-linejoin", "round")
-
-    const accentPath = document.createElementNS(svgNs, "path")
-    accentPath.setAttribute("d", "M 12 21 C 15 13, 29 10, 66 10 C 101 10, 114 12, 119 17")
-    accentPath.setAttribute("fill", "none")
-    accentPath.setAttribute("stroke", "currentColor")
-    accentPath.setAttribute("stroke-width", "1.05")
-    accentPath.setAttribute("stroke-linecap", "round")
-    accentPath.setAttribute("stroke-dasharray", "2.5 4")
-
-    svg.append(primaryPath, accentPath)
-    return svg
   }
 
   function buildVoteIconSvg(kind) {
@@ -469,61 +486,6 @@
     return { portraitImg, portraitFallback, portraitStatus, portraitSymbol, fade }
   }
 
-  function ensureHighlightTextWrapper(el) {
-    if (!el) return null
-    let copy = el.querySelector(".iconoplasm-gene-copy")
-    if (copy) return copy
-    const text = String((el.dataset && el.dataset.geneLabel) || el.textContent || "")
-    el.textContent = ""
-    copy = document.createElement("span")
-    copy.className = "iconoplasm-gene-copy"
-    copy.setAttribute("data-icono-rough-copy", "true")
-    copy.textContent = text
-    el.appendChild(copy)
-    return copy
-  }
-
-  function syncEllipseLoop(el, enabled) {
-    if (!el) return
-    ensureHighlightTextWrapper(el)
-    const existing = el.querySelector(".iconoplasm-gene-rough-loop")
-    if (!enabled) {
-      if (existing) existing.remove()
-      return
-    }
-    if (!existing) {
-      el.appendChild(buildHighlightRoughLoopSvgNode())
-    }
-    if (IconoCardShared && typeof IconoCardShared.hydrateRoughLoops === "function") {
-      IconoCardShared.hydrateRoughLoops(el, true)
-    }
-  }
-
-  function applyHighlightStyle(el, symbol, color) {
-    if (!el) return
-    const tc = textColors(color || PLACEHOLDER_COLOR)
-    ensureHighlightTextWrapper(el)
-    el.dataset.gene = symbol
-    el.style.setProperty("--iconoplasm-gene-color", color || PLACEHOLDER_COLOR)
-    el.style.setProperty("--iconoplasm-gene-fg", tc.primary)
-    el.style.setProperty("--iconoplasm-gene-muted-separator", tc.separator)
-    el.classList.toggle("iconoplasm-gene--pill", highlightMode === "pill")
-    el.classList.toggle("iconoplasm-gene--ellipse", highlightMode === "ellipse")
-    el.classList.toggle("iconoplasm-gene--underline", highlightMode === "underline")
-    syncEllipseLoop(el, highlightMode === "ellipse")
-  }
-
-  function refreshHighlightStyles(root = document) {
-    const scope = root && root.querySelectorAll ? root : document
-    const genes = scope.querySelectorAll(".iconoplasm-gene")
-    for (const el of genes) {
-      const symbol = el.dataset ? el.dataset.gene : ""
-      const gene = symbol ? geneMap && geneMap[symbol] : null
-      const color = gene && gene.c ? gene.c : PLACEHOLDER_COLOR
-      applyHighlightStyle(el, symbol, color)
-    }
-  }
-
   // -- Disambiguation blocklist --------------------------------------
   // Defaults live in blocklist-defaults.js (shared with popup.js).
   // Users can remove defaults via the popup; those removals are stored
@@ -567,7 +529,7 @@
   let visibilityScheduler = null
   const mutationScanRoots = new Set()
   let mutationScanScheduled = false
-  let highlightMode = "underline"
+  let highlightMode = highlightRuntime.getMode()
   let tooltipTheme = "light"
   let cardVariant = "simple"
   let activeGeneSummary = null
@@ -903,6 +865,7 @@
         }
       }
       if (didWrapGenes) {
+        scheduleHighlightGeometryRefresh()
         scheduleWarmVisiblePortraits()
         scheduleWarmVisibleGeneDetails()
       }
@@ -1486,6 +1449,7 @@
       window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
       window.addEventListener("resize", scheduleViewportWarm, { passive: true })
     }
+    window.addEventListener("resize", scheduleHighlightGeometryRefresh, { passive: true })
     window.addEventListener("focus", scheduleDiscoveryBufferFlush)
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
@@ -1608,7 +1572,7 @@
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return
     if (changes[HIGHLIGHT_MODE_KEY]) {
-      highlightMode = normalizeHighlightMode(changes[HIGHLIGHT_MODE_KEY].newValue)
+      highlightMode = highlightRuntime.setMode(changes[HIGHLIGHT_MODE_KEY].newValue)
       refreshHighlightStyles()
     }
     if (changes[TOOLTIP_THEME_KEY]) {

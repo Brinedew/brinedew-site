@@ -64,3 +64,40 @@ test("DO NOT DELETE: the loud test files still say why deleting them would be re
   assert.match(hotQuery, /DO NOT DELETE THIS FILE\./, "hot-query guard test should announce itself loudly")
   assert.match(hotQuery, /expensive mistake|real money/i, "hot-query guard should explain why the tripwire exists")
 })
+
+test("DO NOT DELETE: the only allowed db gateway name stays loud across code, docs, and config", () => {
+  const worker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm.js")
+  const onboarding = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../docs/ICONOPLASM_ONBOARDING.md")
+  const wrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.toml")
+
+  assert.match(worker, /THE_ONLY_ALLOWED_DB_GATEWAY/, "worker should use the loud gateway binding name")
+  assert.match(onboarding, /THE_ONLY_ALLOWED_DB_GATEWAY|the-only-allowed-db-gateway/, "docs should explain why the loud gateway name exists")
+  assert.match(wrangler, /THE_ONLY_ALLOWED_DB_GATEWAY/, "wrangler should bind the caller worker to the loud gateway name")
+})
+
+test("DO NOT DELETE: Website/wrangler.toml must not quietly regain ICONOPLASM_DB because that would make the caller worker D1-capable again", () => {
+  const callerWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.toml")
+
+  assert.doesNotMatch(
+    callerWrangler,
+    /binding = "ICONOPLASM_DB"/,
+    "the caller worker must not bind ICONOPLASM_DB again; that would undo the gateway boundary instead of merely refactoring it",
+  )
+})
+
+test("DO NOT DELETE: the-only-allowed-db-gateway should stay non-public even in staging because making the D1-capable worker public again would be a terrible idea", () => {
+  const gatewayWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.the-only-allowed-db-gateway.toml")
+
+  assert.match(gatewayWrangler, /^workers_dev = false$/m, "prod gateway should not expose a workers.dev URL")
+  assert.match(gatewayWrangler, /^preview_urls = false$/m, "prod gateway should not expose preview URLs")
+  assert.match(
+    gatewayWrangler,
+    /\[env\.staging\][\s\S]*?workers_dev = false/,
+    "staging gateway should also stay off workers.dev so the D1-capable worker remains an internal service",
+  )
+  assert.match(
+    gatewayWrangler,
+    /\[env\.staging\][\s\S]*?preview_urls = false/,
+    "staging gateway should also stay off preview URLs so we do not publish the internal DB gateway by accident",
+  )
+})

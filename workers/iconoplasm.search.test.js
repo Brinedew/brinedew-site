@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest, resetIconoplasmRuntimeCachesForTest } from "./iconoplasm.js"
+import {
+  handleIconoplasmDbGatewayRequest,
+  handleIconoplasmRequest,
+  resetIconoplasmRuntimeCachesForTest,
+} from "./iconoplasm.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -223,6 +227,34 @@ class FakeGameSessions {
   }
 }
 
+class FakeOnlyAllowedGateway {
+  constructor(responseFactory) {
+    this.responseFactory = responseFactory
+    this.calls = []
+  }
+
+  async fetch(request) {
+    const cloned = request.clone()
+    this.calls.push({
+      url: cloned.url,
+      method: cloned.method,
+      headers: Object.fromEntries(cloned.headers.entries()),
+    })
+    return this.responseFactory(cloned)
+  }
+}
+
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
+  }
+  return env
+}
+
 function buildCatalogArtifact() {
   const genes = [
     { s: "INS", n: "Insulin", c: "#d85c57", tmh: false, a: ["INSULIN"] },
@@ -249,10 +281,13 @@ function buildCatalogArtifact() {
   }
 }
 
-function buildEnv({ sessions = {}, publishedPortraits = [], artifact = null } = {}) {
+function buildEnv({ sessions = {}, publishedPortraits = [], artifact = null, overrides = {} } = {}) {
   const hash = "searchfixture01"
   const catalogArtifact = artifact || buildCatalogArtifact()
-  return {
+  const gatewayDb = overrides.ICONOPLASM_DB === undefined
+    ? new FakeSearchDb({ publishedPortraits })
+    : overrides.ICONOPLASM_DB
+  const gatewayEnv = {
     KV: new FakeKV({
       "iconoplasm:catalog-manifest": JSON.stringify({
         current_hash: hash,
@@ -264,9 +299,16 @@ function buildEnv({ sessions = {}, publishedPortraits = [], artifact = null } = 
       }),
       [`iconoplasm:catalog:${hash}`]: JSON.stringify(catalogArtifact),
     }),
-    ICONOPLASM_DB: new FakeSearchDb({ publishedPortraits }),
+    ICONOPLASM_DB: gatewayDb,
     GAME_SESSIONS: new FakeGameSessions(sessions),
+    ...overrides,
   }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindOnlyAllowedGateway(env, gatewayEnv)
 }
 
 function buildRequest(path, { cookie = "" } = {}) {
@@ -309,7 +351,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
   assert.match(firstPayload?.genes?.[0]?.pt || "", /old-prl\/medium\.webp$/)
   assert.match(firstPayload?.genes?.[0]?.ph || "", /old-prl\/full\.webp$/)
 
-  env.ICONOPLASM_DB.setPublishedPortraits([
+  env.gatewayDb.setPublishedPortraits([
     {
       symbol: "PRL",
       asset_sha256: "new-prl-asset",
@@ -407,11 +449,11 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
     ["RHO"],
   )
   assert.deepEqual(
-    env.ICONOPLASM_DB.listDiscoverySymbols("user-123").map((row) => row.gene_symbol),
+    env.gatewayDb.listDiscoverySymbols("user-123").map((row) => row.gene_symbol),
     ["INS", "RHO", "PRL"],
   )
 
-  env.ICONOPLASM_DB.seedDiscovery("user-123", "TP53")
+  env.gatewayDb.seedDiscovery("user-123", "TP53")
 
   const discoveredResponse = await handleIconoplasmRequest(
     buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", {
@@ -440,4 +482,62 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
   assert.equal(hiddenResponse.status, 200)
   assert.deepEqual(hiddenPayload?.genes, [])
   assert.equal(hiddenResponse.headers.get("Cache-Control"), "no-store")
+})
+
+test("catalog search uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
+  const gateway = new FakeOnlyAllowedGateway(async () =>
+    Response.json({
+      genes: [{ symbol: "PRL", matched_by: "symbol" }],
+      query: "PRL",
+      scope_applied: "catalog",
+    }),
+  )
+  const env = buildEnv({
+    overrides: {
+      ICONOPLASM_DB: null,
+      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+    },
+  })
+
+  const response = await handleIconoplasmRequest(
+    buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.genes?.[0]?.symbol, "PRL")
+  assert.equal(gateway.calls.length, 1)
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/genes/search?q=prl&scope=catalog&limit=5")
+  assert.equal(gateway.calls[0]?.method, "GET")
+})
+
+test("public catalog artifact uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
+  const gateway = new FakeOnlyAllowedGateway(async () =>
+    Response.json({
+      schema_version: 4,
+      gene_count: 1,
+      genes: [{ s: "PRL", n: "Gateway Prolactin" }],
+    }),
+  )
+  const env = buildEnv({
+    overrides: {
+      ICONOPLASM_DB: null,
+      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+    },
+  })
+
+  const response = await handleIconoplasmRequest(
+    buildRequest("/api/public/v1/catalog/catalog.searchfixture01.json"),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.genes?.[0]?.s, "PRL")
+  assert.equal(gateway.calls.length, 1)
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/catalog/catalog.searchfixture01.json")
+  assert.equal(gateway.calls[0]?.method, "GET")
 })

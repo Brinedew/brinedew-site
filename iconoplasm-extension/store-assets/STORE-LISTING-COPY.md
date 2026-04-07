@@ -16,7 +16,7 @@ WHERE IT WORKS
 Gene symbols appear on PubMed, UniProt, Wikipedia, Ensembl, journal articles, lab wikis, and countless other sites. Iconoplasm works on all of them automatically.
 
 CUSTOMIZABLE
-- Highlight styles: underline, color pills, or rough hand-drawn ellipses
+- Highlight styles: underline, color pills, pill outlines, or rough hand-drawn ellipses
 - Tooltip themes: light or dark
 - Card styles: simple inline tooltip, vintage lab label, or image-only portrait
 - Smart blocklist filters out common English words that happen to be gene symbols (like SET, REST, CAT)

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 
 class FakeStatement {
   constructor(db, sql) {
@@ -75,12 +75,30 @@ class FakeIconoplasmDb {
   }
 }
 
-function buildEnv() {
-  return {
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
+  }
+  return env
+}
+
+function buildEnv({ bindGateway = true } = {}) {
+  const gatewayDb = new FakeIconoplasmDb()
+  const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_TURNSTILE_SECRET_KEY: "",
-    ICONOPLASM_DB: new FakeIconoplasmDb(),
+    ICONOPLASM_DB: gatewayDb,
   }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 function buildSubmissionRequest({ artistTag, ip, admin = false }) {
@@ -149,7 +167,7 @@ test("guest blacklist submissions stay singular per requester identity", async (
   assert.equal(secondJson.queued, false)
   assert.equal(secondJson.accepted, false)
   assert.equal(secondJson.requesterLocked, true)
-  assert.equal(env.ICONOPLASM_DB.submissions.length, 1)
+  assert.equal(env.gatewayDb.submissions.length, 1)
 })
 
 test("admin blacklist submissions can queue multiple tags from the same account", async () => {
@@ -176,9 +194,9 @@ test("admin blacklist submissions can queue multiple tags from the same account"
   assert.equal(secondJson.queued, true)
   assert.equal(secondJson.accepted, true)
   assert.equal(secondJson.requesterLocked, false)
-  assert.equal(env.ICONOPLASM_DB.submissions.length, 2)
+  assert.equal(env.gatewayDb.submissions.length, 2)
   assert.deepEqual(
-    env.ICONOPLASM_DB.submissions.map((row) => row.source),
+    env.gatewayDb.submissions.map((row) => row.source),
     ["admin_form", "admin_form"],
   )
 })

@@ -96,6 +96,10 @@ const publishedPortraitFingerprintCache = {
   loadedAt: 0,
   value: null,
 }
+const sharedPublishedPortraitFingerprintCache = {
+  loadedAt: 0,
+  value: null,
+}
 const PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS = 5 * 1000
 const PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION = "v2"
 const galleryPublishedRowsCache = {
@@ -135,6 +139,7 @@ const RL_WINDOW_MS = 60 * 1000
 const RANDOM_ARTIST_METAVISION_RE = /^artist-random-[a-z0-9-]+$/i
 const LEGACY_ARTIST_VISION_RE = /^artist-(?!random-)[a-z0-9()_-]+$/i
 const CANONICAL_RANDOM_ARTIST_VARIANT_RE = /^[a-z0-9-]+-v\d+-\d+$/i
+const WORKFLOW_SUFFIX_RE = /\.(api|ui)$/i
 const TRUSTED_ICONOPLASM_CLIENT_HOSTS = new Set([
   "iconoplasm.brinedew.bio",
   "brinedew.bio",
@@ -316,6 +321,75 @@ function deriveAdminArtistId(raw) {
   const match = visionId.match(/-(\d+)$/)
   if (!match) return ""
   return String(Number.parseInt(match[1], 10) || "")
+}
+
+function workflowStem(raw) {
+  const value = String(raw || "").trim()
+  if (!value) return ""
+  const filename = value.split(/[\\/]/).pop() || value
+  return filename.replace(/\.json$/i, "").replace(WORKFLOW_SUFFIX_RE, "").trim()
+}
+
+function workflowLabelFromPath(raw) {
+  const stem = workflowStem(raw)
+  if (!stem) return ""
+  const parts = stem
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+  if (!parts.length) return ""
+  return parts
+    .map(function (part) {
+      if (part.length <= 4 && part[0] && part[0] === part[0].toLowerCase()) return part
+      return part.slice(0, 1).toUpperCase() + part.slice(1).toLowerCase()
+    })
+    .join(" ")
+}
+
+function workflowIdentityFromPath(raw) {
+  const stem = workflowStem(raw)
+  if (!stem) return ""
+  const match = stem.match(/[A-Za-z0-9]+/)
+  if (!match || !match[0]) return ""
+  return match[0].slice(0, 1).toUpperCase()
+}
+
+function promptVersionFromVisionId(raw) {
+  const visionId = normalizeVisionId(raw).toLowerCase()
+  if (!visionId) return ""
+  const match = visionId.match(/-v(\d+)(?:-\d+)?$/)
+  if (!match) return ""
+  return String(Number.parseInt(match[1], 10) || "")
+}
+
+function variantSlotFromVisionId(raw) {
+  const visionId = normalizeVisionId(raw).toLowerCase()
+  if (!visionId) return ""
+  const match = visionId.match(/-(\d+)$/)
+  if (!match) return ""
+  return String(Number.parseInt(match[1], 10) || "")
+}
+
+function publicEmulsionIdForRow(row) {
+  const explicitId = sanitizeText(row?.requested_emulsion_id || row?.emulsion_id || "", 64) || ""
+  if (explicitId) return explicitId
+  const workflowId =
+    sanitizeText(row?.requested_workflow_id || row?.workflow_id || "", 32) ||
+    workflowIdentityFromPath(
+      row?.requested_workflow_path ||
+        row?.workflow_path ||
+        row?.requested_workflow_label ||
+        row?.workflow_label ||
+        "",
+    )
+  const promptVersion =
+    sanitizeText(row?.requested_prompt_version || row?.prompt_version || "", 16) ||
+    promptVersionFromVisionId(row?.requested_vision_id || row?.vision_id || "")
+  const variantSlot =
+    sanitizeText(row?.requested_variant_slot || row?.variant_slot || "", 32) ||
+    variantSlotFromVisionId(row?.requested_vision_id || row?.vision_id || "")
+  if (workflowId && promptVersion && variantSlot) return `${workflowId}${promptVersion}-${variantSlot}`
+  return ""
 }
 
 function publicArtistIdForRow(row) {
@@ -533,6 +607,56 @@ async function publishedPortraitFingerprint(env, { fresh = false } = {}) {
   return row || null
 }
 
+async function sharedPublishedPortraitFingerprint(env, { fresh = false } = {}) {
+  if (!env.ICONOPLASM_DB) return null
+  if (fresh) return queryPublishedPortraitFingerprint(env)
+  const now = Date.now()
+  if (
+    sharedPublishedPortraitFingerprintCache.loadedAt > 0 &&
+    now - sharedPublishedPortraitFingerprintCache.loadedAt < PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS
+  ) {
+    return sharedPublishedPortraitFingerprintCache.value || null
+  }
+  if (env?.KV) {
+    try {
+      const raw = await env.KV.get(
+        `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
+      )
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const cachedAt = Number(parsed?.cached_at || 0)
+        if (
+          parsed?.fingerprint &&
+          typeof parsed.fingerprint === "object" &&
+          cachedAt > 0 &&
+          now - cachedAt < PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS
+        ) {
+          sharedPublishedPortraitFingerprintCache.loadedAt = now
+          sharedPublishedPortraitFingerprintCache.value = parsed.fingerprint
+          return parsed.fingerprint
+        }
+      }
+    } catch {
+      // Shared fingerprint cache is a billing barrier, not the source of truth.
+      // If it fails we fall back to the direct D1 probe below.
+    }
+  }
+  const row = await queryPublishedPortraitFingerprint(env)
+  sharedPublishedPortraitFingerprintCache.loadedAt = now
+  sharedPublishedPortraitFingerprintCache.value = row || null
+  if (row && env?.KV) {
+    try {
+      await env.KV.put(
+        `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
+        JSON.stringify({ cached_at: now, fingerprint: row }),
+      )
+    } catch {
+      // Same story: KV write-through failing should not break the live request.
+    }
+  }
+  return row || null
+}
+
 async function queryPublishedPortraitRefs(env) {
   if (!env.ICONOPLASM_DB) return []
   try {
@@ -695,13 +819,8 @@ function buildGenerationRequestLaneKey({ geneSymbol, requestMode, requestedVisio
 }
 
 function generationRequestVisionLabel(row) {
-  // Public website copy must never expose artist names or tags. The local GUI owns
-  // artist-to-emulsion mapping; the site only gets the stable public emulsion number.
-  const artistId = publicArtistIdForRow({
-    artist_id: row?.requested_artist_id || row?.artist_id || "",
-    vision_id: row?.requested_vision_id || row?.vision_id || "",
-  })
-  if (artistId) return `Emulsion ${artistId}`
+  const emulsionId = publicEmulsionIdForRow(row)
+  if (emulsionId) return emulsionId
   return sanitizeVoteVisionId(row?.requested_vision_id || row?.vision_id || "")
     ? "Specific emulsion"
     : ""
@@ -720,6 +839,8 @@ function mapGenerationRequestRow(row) {
     requester_username: sanitizeText(row?.requester_username || "", 255) || "",
     request_mode: requestMode,
     requested_vision_id: requestedVisionId,
+    requested_emulsion_id:
+      requestMode === "specific" ? publicEmulsionIdForRow(row) : "",
     requested_emulsion_label:
       requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
     status: sanitizeText(row?.status || "", 64) || "open",
@@ -786,6 +907,7 @@ function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
       full_name: row.full_name,
       request_mode: row.request_mode,
       requested_vision_id: row.requested_vision_id,
+      requested_emulsion_id: row.requested_emulsion_id,
       requested_emulsion_label: row.requested_emulsion_label,
       request_count: 1,
       my_request_count: requesterMatches ? 1 : 0,
@@ -827,10 +949,17 @@ async function listOpenGenerationRequests(
     // forcing expression scans with upper(...).
     `SELECT
        gr.*, 
-       COALESCE(gc.full_name, '') AS full_name
+       COALESCE(gc.full_name, '') AS full_name,
+       COALESCE(avr.emulsion_id, '') AS requested_emulsion_id,
+       COALESCE(avr.workflow_id, '') AS requested_workflow_id,
+       COALESCE(avr.workflow_label, '') AS requested_workflow_label,
+       COALESCE(avr.prompt_version, '') AS requested_prompt_version,
+       COALESCE(avr.variant_slot, '') AS requested_variant_slot
      FROM icono_generation_requests gr
      LEFT JOIN icono_gene_catalog gc
        ON gc.gene_symbol = gr.gene_symbol
+     LEFT JOIN icono_admin_vision_rollup avr
+       ON avr.vision_id = gr.requested_vision_id
      WHERE ${whereParts.join(" AND ")}
      ORDER BY gr.created_at ASC, gr.id ASC
      LIMIT ?`,
@@ -885,9 +1014,16 @@ async function createGenerationRequest(
   const created = requestId
     ? await env.ICONOPLASM_DB.prepare(
         `SELECT gr.*, COALESCE(gc.full_name, '') AS full_name
+         , COALESCE(avr.emulsion_id, '') AS requested_emulsion_id
+         , COALESCE(avr.workflow_id, '') AS requested_workflow_id
+         , COALESCE(avr.workflow_label, '') AS requested_workflow_label
+         , COALESCE(avr.prompt_version, '') AS requested_prompt_version
+         , COALESCE(avr.variant_slot, '') AS requested_variant_slot
          FROM icono_generation_requests gr
          LEFT JOIN icono_gene_catalog gc
            ON gc.gene_symbol = gr.gene_symbol
+         LEFT JOIN icono_admin_vision_rollup avr
+           ON avr.vision_id = gr.requested_vision_id
          WHERE gr.id = ?
          LIMIT 1`,
       )
@@ -904,7 +1040,7 @@ async function createGenerationRequest(
 async function listGenerationRequestVisionOptions(env) {
   if (!env.ICONOPLASM_DB) return []
   const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT vision_id, image_count, live_count
+    `SELECT vision_id, emulsion_id, workflow_id, workflow_label, prompt_version, variant_slot, image_count, live_count
      FROM icono_admin_vision_rollup
      WHERE COALESCE(vision_id, '') <> ''
      ORDER BY live_count DESC, image_count DESC, vision_id ASC
@@ -915,11 +1051,13 @@ async function listGenerationRequestVisionOptions(env) {
     .map((row) => {
       const visionId = sanitizeVoteVisionId(row?.vision_id || "")
       if (!visionId) return null
+      const emulsionId = publicEmulsionIdForRow(row)
       const artistId = publicArtistIdForRow(row)
-      const label = artistId ? `Emulsion ${artistId}` : "Specific emulsion"
+      const label = emulsionId || "Specific emulsion"
       return {
         vision_id: visionId,
         label,
+        emulsion_id: emulsionId,
         artist_id: artistId,
         image_count: Number(row?.image_count || 0),
         live_count: Number(row?.live_count || 0),
@@ -2199,7 +2337,7 @@ async function extensionManifestObj(url, env) {
     ...manifest,
     current_hash: buildPortraitAwareManifestHash(
       manifest.current_hash,
-      await publishedPortraitFingerprint(env),
+      await sharedPublishedPortraitFingerprint(env),
     ),
     portrait_base_url: portraitBase(url, env),
   }
@@ -2215,6 +2353,113 @@ function publicApiPath(suffix = "") {
 
 function publicUrl(url, suffix = "") {
   return `${url.origin}${publicApiPath(suffix)}`
+}
+
+function isPublicCatalogArtifactPath(path) {
+  return path.startsWith(publicApiPath("/catalog/catalog.")) && path.endsWith(".json")
+}
+
+const ICONOPLASM_GATEWAY_INTERNAL_HEADER = "x-iconoplasm-db-gateway-internal"
+const ICONOPLASM_GATEWAY_CANON_REPAIR_PATH = "/__internal/iconoplasm/repair-canon-invariants"
+
+function isIconoplasmGatewayInternalRequest(request) {
+  return String(request?.headers?.get(ICONOPLASM_GATEWAY_INTERNAL_HEADER) || "") === "1"
+}
+
+function isIconoplasmGatewayCanonRepairRequest(path, method = "GET") {
+  return path === ICONOPLASM_GATEWAY_CANON_REPAIR_PATH && String(method || "GET").toUpperCase() === "POST"
+}
+
+function iconoplasmGatewayEligiblePath(path, method = "GET") {
+  const requestMethod = String(method || "GET").toUpperCase()
+  if (!["GET", "HEAD", "POST"].includes(requestMethod)) return false
+  if (path === publicApiPath("/metadata")) return true
+  if (path === publicApiPath("/catalog/manifest")) return true
+  if (isPublicCatalogArtifactPath(path)) return true
+  if (path === publicApiPath("/gallery")) return true
+  if (path === publicApiPath("/genes/search")) return true
+  if (path === publicApiPath("/genes/batch")) return requestMethod === "POST"
+  if (path === publicApiPath("/resolve")) return true
+  if (path === publicApiPath("/changes")) return true
+  if (path.startsWith(publicApiPath("/media/"))) return true
+  if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
+  if (path.startsWith("/api/iconoplasm/")) {
+    if (path === "/api/iconoplasm/admin/me") return false
+    if (path === "/api/iconoplasm/votes/me") return false
+    return true
+  }
+  return false
+}
+
+function missingOnlyAllowedGatewayResponse() {
+  return json(
+    {
+      error: "THE_ONLY_ALLOWED_DB_GATEWAY binding missing for a fail-closed public route",
+      code: "DB_GATEWAY_REQUIRED",
+    },
+    503,
+    { "Cache-Control": "no-store" },
+  )
+}
+
+async function proxyIconoplasmRequestToDbGateway(request, env) {
+  // BILLING / CAPABILITY BARRIER: gateway-eligible Iconoplasm routes must go
+  // through THE_ONLY_ALLOWED_DB_GATEWAY. If you are tempted to point these
+  // paths back at raw ICONOPLASM_DB.prepare(...), stop and read the
+  // cost-barrier tests first.
+  const gateway = env?.THE_ONLY_ALLOWED_DB_GATEWAY
+  const url = new URL(request.url)
+  if (!iconoplasmGatewayEligiblePath(url.pathname, request.method)) return null
+  if (!gateway || typeof gateway.fetch !== "function") return missingOnlyAllowedGatewayResponse()
+  const upstreamRequest = new Request(`https://the-only-allowed-db-gateway${url.pathname}${url.search}`, {
+    method: request.method,
+    headers: request.headers,
+    body:
+      request.method === "GET" || request.method === "HEAD"
+        ? undefined
+        : await request.clone().text(),
+  })
+  try {
+    return await gateway.fetch(upstreamRequest)
+  } catch {
+    return json(
+      {
+        error: "THE_ONLY_ALLOWED_DB_GATEWAY request failed",
+        code: "DB_GATEWAY_UNAVAILABLE",
+      },
+      503,
+      { "Cache-Control": "no-store" },
+    )
+  }
+}
+
+export async function runIconoplasmCanonMaintenanceThroughGateway(
+  env,
+  { limit = 250, actorId = "system", reason = "" } = {},
+) {
+  const gateway = env?.THE_ONLY_ALLOWED_DB_GATEWAY
+  if (!gateway || typeof gateway.fetch !== "function") {
+    throw new Error("THE_ONLY_ALLOWED_DB_GATEWAY binding missing for canon maintenance")
+  }
+  const response = await gateway.fetch(
+    new Request(`https://the-only-allowed-db-gateway${ICONOPLASM_GATEWAY_CANON_REPAIR_PATH}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ limit, actorId, reason }),
+    }),
+  )
+  if (!response.ok) {
+    let detail = ""
+    try {
+      detail = await response.text()
+    } catch {}
+    throw new Error(
+      `THE_ONLY_ALLOWED_DB_GATEWAY canon maintenance failed (${response.status})${detail ? `: ${detail}` : ""}`,
+    )
+  }
+  return response.json()
 }
 
 function publicCatalogArtifactFilename(hash) {
@@ -2248,7 +2493,7 @@ function portraitFingerprintVersion(rawFingerprint) {
 async function publicMetadataObj(url, env) {
   const manifest = await extensionManifestObj(url, env)
   if (!manifest) return null
-  const portraitFingerprint = await publishedPortraitFingerprint(env)
+  const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
   const portraitVersion = portraitFingerprintVersion(portraitFingerprint)
   const buildHash = String(manifest.current_hash || "").trim() || null
   const catalogHash = catalogBaseHash(buildHash)
@@ -2632,7 +2877,7 @@ async function portraitState(env, symbol, base) {
     const row = await env.ICONOPLASM_DB.prepare(
       // D1 cost fence: gene_symbol is the lookup key on both tables. Leave it
       // unwrapped so public media/gene detail stays O(1).
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.width, pa.height, pa.vision_id, pa.candidate_image_id
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.r2_key_full, pa.r2_key_medium, pa.r2_key_thumb, pa.width, pa.height, pa.vision_id, pa.candidate_image_id, pa.emulsion_id
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
            ON pa.gene_symbol = ps.gene_symbol
@@ -2665,6 +2910,7 @@ async function portraitState(env, symbol, base) {
       asset_sha256: row.asset_sha256,
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
+      emulsion_id: publicEmulsionIdForRow(row) || null,
       emulsion_label: generationRequestVisionLabel(row) || null,
       // Public cards and gene pages should show the same one-number-per-artist
       // emulsion ID as admin. candidate_image_id is per image, so derive from the
@@ -3472,6 +3718,12 @@ async function iconoExistingAssetsBatch(env, rawItems) {
          pa.r2_key_medium,
          pa.r2_key_thumb,
          pa.vision_id,
+         pa.emulsion_id,
+         pa.workflow_id,
+         pa.workflow_label,
+         pa.workflow_path,
+         pa.prompt_version,
+         pa.variant_slot,
          pa.artist_tag,
          pa.artist_name
        FROM icono_portrait_assets pa
@@ -3871,6 +4123,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        live_is_legacy,
        live_autopick_eligible,
        live_vision_id,
+      live_emulsion_id,
        live_artist_tag,
        live_artist_name,
        live_upvotes,
@@ -3882,6 +4135,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        live_r2_key_thumb,
        leader_asset_sha256,
        leader_vision_id,
+      leader_emulsion_id,
        leader_artist_tag,
        leader_artist_name,
        leader_upvotes,
@@ -3920,6 +4174,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
          COALESCE(pa.is_stale, 0) AS is_stale,
          COALESCE(pa.is_legacy, 0) AS is_legacy,
          COALESCE(pa.vision_id, '') AS vision_id,
+         COALESCE(pa.emulsion_id, '') AS emulsion_id,
          COALESCE(pa.artist_tag, '') AS artist_tag,
          COALESCE(pa.artist_name, '') AS artist_name,
          COALESCE(pa.created_at, '') AS created_at,
@@ -3962,6 +4217,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
          ab.is_legacy,
          ab.autopick_eligible,
          ab.vision_id,
+         ab.emulsion_id,
          ab.artist_tag,
          ab.artist_name,
          ab.upvotes,
@@ -3981,6 +4237,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
          ab.gene_symbol,
          ab.asset_sha256,
          ab.vision_id,
+         ab.emulsion_id,
          ab.artist_tag,
          ab.artist_name,
          ab.upvotes,
@@ -4038,6 +4295,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        COALESCE(ca.is_legacy, 0) AS live_is_legacy,
        COALESCE(ca.autopick_eligible, 0) AS live_autopick_eligible,
        COALESCE(ca.vision_id, '') AS live_vision_id,
+      COALESCE(ca.emulsion_id, '') AS live_emulsion_id,
        COALESCE(ca.artist_tag, '') AS live_artist_tag,
        COALESCE(ca.artist_name, '') AS live_artist_name,
        COALESCE(ca.upvotes, 0) AS live_upvotes,
@@ -4049,6 +4307,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        COALESCE(ca.r2_key_thumb, '') AS live_r2_key_thumb,
        la.asset_sha256 AS leader_asset_sha256,
        COALESCE(la.vision_id, '') AS leader_vision_id,
+      COALESCE(la.emulsion_id, '') AS leader_emulsion_id,
        COALESCE(la.artist_tag, '') AS leader_artist_tag,
        COALESCE(la.artist_name, '') AS leader_artist_name,
        COALESCE(la.upvotes, 0) AS leader_upvotes,
@@ -4102,6 +4361,11 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
      )
      INSERT INTO icono_admin_vision_rollup (
        vision_id,
+       emulsion_id,
+       workflow_id,
+       workflow_label,
+       prompt_version,
+       variant_slot,
        artist_tag,
        artist_name,
        image_count,
@@ -4119,6 +4383,11 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
      )
      SELECT
        pa.vision_id,
+       MAX(NULLIF(pa.emulsion_id, '')) AS emulsion_id,
+       MAX(NULLIF(pa.workflow_id, '')) AS workflow_id,
+       MAX(NULLIF(pa.workflow_label, '')) AS workflow_label,
+       MAX(NULLIF(pa.prompt_version, '')) AS prompt_version,
+       MAX(NULLIF(pa.variant_slot, '')) AS variant_slot,
        MAX(NULLIF(pa.artist_tag, '')) AS artist_tag,
        MAX(NULLIF(pa.artist_name, '')) AS artist_name,
        COUNT(*) AS image_count,
@@ -4280,6 +4549,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        COALESCE(pa.is_stale, 0) AS is_stale,
        COALESCE(pa.is_legacy, 0) AS is_legacy,
        pa.vision_id,
+      pa.emulsion_id,
        pa.artist_tag,
        pa.artist_name,
        pa.created_at,
@@ -4305,6 +4575,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
     is_stale: Number(row?.is_stale || 0) > 0,
     is_legacy: Number(row?.is_legacy || 0) > 0,
     vision_id: validAdminRollupVisionId(row?.vision_id || ""),
+    emulsion_id: sanitizeText(row?.emulsion_id || "", 64) || "",
     artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
     artist_name: sanitizeText(row?.artist_name || "", 255) || "",
     created_at: sanitizeText(row?.created_at || "", 64) || "",
@@ -4359,6 +4630,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        live_is_legacy,
        live_autopick_eligible,
        live_vision_id,
+      live_emulsion_id,
        live_artist_tag,
        live_artist_name,
        live_upvotes,
@@ -4370,6 +4642,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        live_r2_key_thumb,
        leader_asset_sha256,
        leader_vision_id,
+      leader_emulsion_id,
        leader_artist_tag,
        leader_artist_name,
        leader_upvotes,
@@ -4399,6 +4672,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        live_is_legacy = excluded.live_is_legacy,
        live_autopick_eligible = excluded.live_autopick_eligible,
        live_vision_id = excluded.live_vision_id,
+      live_emulsion_id = excluded.live_emulsion_id,
        live_artist_tag = excluded.live_artist_tag,
        live_artist_name = excluded.live_artist_name,
        live_upvotes = excluded.live_upvotes,
@@ -4410,6 +4684,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        live_r2_key_thumb = excluded.live_r2_key_thumb,
        leader_asset_sha256 = excluded.leader_asset_sha256,
        leader_vision_id = excluded.leader_vision_id,
+      leader_emulsion_id = excluded.leader_emulsion_id,
        leader_artist_tag = excluded.leader_artist_tag,
        leader_artist_name = excluded.leader_artist_name,
        leader_upvotes = excluded.leader_upvotes,
@@ -4440,6 +4715,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
       currentAsset?.is_legacy ? 1 : 0,
       currentAsset?.autopick_eligible ? 1 : 0,
       currentAsset?.vision_id || "",
+      currentAsset?.emulsion_id || "",
       currentAsset?.artist_tag || "",
       currentAsset?.artist_name || "",
       Number(currentAsset?.upvotes || 0),
@@ -4451,6 +4727,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
       currentAsset?.r2_key_thumb || "",
       leaderAsset?.asset_sha256 || null,
       leaderAsset?.vision_id || "",
+      leaderAsset?.emulsion_id || "",
       leaderAsset?.artist_tag || "",
       leaderAsset?.artist_name || "",
       Number(leaderAsset?.upvotes || 0),
@@ -4568,6 +4845,11 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
     const row = await env.ICONOPLASM_DB.prepare(
       `SELECT
          pa.vision_id,
+        MAX(NULLIF(pa.emulsion_id, '')) AS emulsion_id,
+        MAX(NULLIF(pa.workflow_id, '')) AS workflow_id,
+        MAX(NULLIF(pa.workflow_label, '')) AS workflow_label,
+        MAX(NULLIF(pa.prompt_version, '')) AS prompt_version,
+        MAX(NULLIF(pa.variant_slot, '')) AS variant_slot,
          MAX(NULLIF(pa.artist_tag, '')) AS artist_tag,
          MAX(NULLIF(pa.artist_name, '')) AS artist_name,
          COUNT(*) AS image_count,
@@ -4615,6 +4897,11 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
     await env.ICONOPLASM_DB.prepare(
       `INSERT INTO icono_admin_vision_rollup (
          vision_id,
+        emulsion_id,
+        workflow_id,
+        workflow_label,
+        prompt_version,
+        variant_slot,
          artist_tag,
          artist_name,
          image_count,
@@ -4631,6 +4918,11 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
          updated_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(vision_id) DO UPDATE SET
+         emulsion_id = excluded.emulsion_id,
+         workflow_id = excluded.workflow_id,
+         workflow_label = excluded.workflow_label,
+         prompt_version = excluded.prompt_version,
+         variant_slot = excluded.variant_slot,
          artist_tag = excluded.artist_tag,
          artist_name = excluded.artist_name,
          image_count = excluded.image_count,
@@ -4648,6 +4940,11 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
     )
       .bind(
         visionId,
+        sanitizeText(row?.emulsion_id || "", 64) || "",
+        sanitizeText(row?.workflow_id || "", 32) || "",
+        sanitizeText(row?.workflow_label || "", 255) || "",
+        sanitizeText(row?.prompt_version || "", 16) || "",
+        sanitizeText(row?.variant_slot || "", 32) || "",
         sanitizeText(row?.artist_tag || "", 255) || "",
         sanitizeText(row?.artist_name || "", 255) || "",
         Number(row?.image_count || 0),
@@ -4724,6 +5021,7 @@ async function bulkRebuildAdminReadModels(env) {
        live_is_legacy,
        live_autopick_eligible,
        live_vision_id,
+      live_emulsion_id,
        live_artist_tag,
        live_artist_name,
        live_upvotes,
@@ -4735,6 +5033,7 @@ async function bulkRebuildAdminReadModels(env) {
        live_r2_key_thumb,
        leader_asset_sha256,
        leader_vision_id,
+      leader_emulsion_id,
        leader_artist_tag,
        leader_artist_name,
        leader_upvotes,
@@ -4780,6 +5079,7 @@ async function bulkRebuildAdminReadModels(env) {
          COALESCE(pa.is_stale, 0) AS is_stale,
          COALESCE(pa.is_legacy, 0) AS is_legacy,
          COALESCE(pa.vision_id, '') AS vision_id,
+         COALESCE(pa.emulsion_id, '') AS emulsion_id,
          COALESCE(pa.artist_tag, '') AS artist_tag,
          COALESCE(pa.artist_name, '') AS artist_name,
          COALESCE(pa.created_at, '') AS created_at,
@@ -4820,6 +5120,7 @@ async function bulkRebuildAdminReadModels(env) {
          ab.is_legacy,
          ab.autopick_eligible,
          ab.vision_id,
+         ab.emulsion_id,
          ab.artist_tag,
          ab.artist_name,
          ab.upvotes,
@@ -4839,6 +5140,7 @@ async function bulkRebuildAdminReadModels(env) {
          ab.gene_symbol,
          ab.asset_sha256,
          ab.vision_id,
+         ab.emulsion_id,
          ab.artist_tag,
          ab.artist_name,
          ab.upvotes,
@@ -4896,6 +5198,7 @@ async function bulkRebuildAdminReadModels(env) {
        COALESCE(ca.is_legacy, 0) AS live_is_legacy,
        COALESCE(ca.autopick_eligible, 0) AS live_autopick_eligible,
        COALESCE(ca.vision_id, '') AS live_vision_id,
+      COALESCE(ca.emulsion_id, '') AS live_emulsion_id,
        COALESCE(ca.artist_tag, '') AS live_artist_tag,
        COALESCE(ca.artist_name, '') AS live_artist_name,
        COALESCE(ca.upvotes, 0) AS live_upvotes,
@@ -4907,6 +5210,7 @@ async function bulkRebuildAdminReadModels(env) {
        COALESCE(ca.r2_key_thumb, '') AS live_r2_key_thumb,
        la.asset_sha256 AS leader_asset_sha256,
        COALESCE(la.vision_id, '') AS leader_vision_id,
+      COALESCE(la.emulsion_id, '') AS leader_emulsion_id,
        COALESCE(la.artist_tag, '') AS leader_artist_tag,
        COALESCE(la.artist_name, '') AS leader_artist_name,
        COALESCE(la.upvotes, 0) AS leader_upvotes,
@@ -4933,6 +5237,11 @@ async function bulkRebuildAdminReadModels(env) {
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_admin_vision_rollup (
        vision_id,
+       emulsion_id,
+       workflow_id,
+       workflow_label,
+       prompt_version,
+       variant_slot,
        artist_tag,
        artist_name,
        image_count,
@@ -4950,6 +5259,11 @@ async function bulkRebuildAdminReadModels(env) {
      )
      SELECT
        pa.vision_id,
+       MAX(NULLIF(pa.emulsion_id, '')) AS emulsion_id,
+       MAX(NULLIF(pa.workflow_id, '')) AS workflow_id,
+       MAX(NULLIF(pa.workflow_label, '')) AS workflow_label,
+       MAX(NULLIF(pa.prompt_version, '')) AS prompt_version,
+       MAX(NULLIF(pa.variant_slot, '')) AS variant_slot,
        MAX(NULLIF(pa.artist_tag, '')) AS artist_tag,
        MAX(NULLIF(pa.artist_name, '')) AS artist_name,
        COUNT(*) AS image_count,
@@ -6116,6 +6430,7 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
 function mapAdminVisionStatsRows(rows) {
   return (Array.isArray(rows) ? rows : []).map((row) => ({
     vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+    emulsion_id: publicEmulsionIdForRow(row) || "",
     // The user-facing artist/emulsion ID is the stable resolved variant ordinal
     // encoded in vision_id (for example anima-v1-42 -> 42). Do not use
     // candidate_image_id here; that is per image and gives different numbers for
@@ -6146,6 +6461,7 @@ function mapAdminVisionAssetRow(base, row) {
   const voteCount = Number(row?.vote_count || 0)
   return {
     vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+    emulsion_id: publicEmulsionIdForRow(row) || "",
     artist_id: sanitizeText(row?.artist_id || "", 64) || deriveAdminArtistId(row?.vision_id || ""),
     gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
     asset_sha256: assetSha,
@@ -6831,6 +7147,8 @@ function clearSharedD1CostCaches() {
   publishedPortraitRefsCache.value = null
   publishedPortraitFingerprintCache.loadedAt = 0
   publishedPortraitFingerprintCache.value = null
+  sharedPublishedPortraitFingerprintCache.loadedAt = 0
+  sharedPublishedPortraitFingerprintCache.value = null
   galleryPublishedRowsCache.version = null
   galleryPublishedRowsCache.value = null
   galleryUniquenessRowsCache.version = null
@@ -6884,7 +7202,7 @@ async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
     ? requestedHash
     : buildPortraitAwareManifestHash(
         baseHash,
-        await publishedPortraitFingerprint(env, fresh ? { fresh: true } : undefined),
+        await sharedPublishedPortraitFingerprint(env, fresh ? { fresh: true } : undefined),
       ) || baseHash
   if (!fresh && hydratedCatalogArtifactCache.key === cacheKey && hydratedCatalogArtifactCache.value) {
     return hydratedCatalogArtifactCache.value
@@ -7188,6 +7506,7 @@ async function queryGalleryPublishedRows(env) {
        pa.asset_sha256,
        pa.candidate_image_id,
        pa.vision_id,
+      pa.emulsion_id,
        pa.r2_key_full,
        pa.r2_key_medium,
        pa.r2_key_thumb,
@@ -7326,6 +7645,7 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
         asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
         candidate_image_id: optionalInt(row?.candidate_image_id),
         vision_id: String(row?.vision_id || "").trim() || null,
+        emulsion_id: publicEmulsionIdForRow(row) || null,
         artist_id: publicArtistIdForRow(row) || null,
         ...(width != null ? { width } : {}),
         ...(height != null ? { height } : {}),
@@ -7515,6 +7835,7 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
          gr.current_asset_sha256 AS asset_sha256,
          0 AS candidate_image_id,
          gr.live_vision_id AS vision_id,
+         gr.live_emulsion_id AS emulsion_id,
          gr.live_r2_key_full AS r2_key_full,
          gr.live_r2_key_medium AS r2_key_medium,
          gr.live_r2_key_thumb AS r2_key_thumb,
@@ -7587,6 +7908,7 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
           asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
           candidate_image_id: optionalInt(row?.candidate_image_id),
           vision_id: String(row?.vision_id || "").trim() || null,
+          emulsion_id: publicEmulsionIdForRow(row) || null,
           artist_id: publicArtistIdForRow(row) || null,
           ...(width != null ? { width } : {}),
           ...(height != null ? { height } : {}),
@@ -7672,6 +7994,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.created_at,
        pa.candidate_image_id,
        pa.vision_id,
+      pa.emulsion_id,
        COALESCE(vs.upvotes, 0) AS image_upvotes,
        COALESCE(vs.downvotes, 0) AS image_downvotes,
        COALESCE(vs.score, 0) AS image_score
@@ -7700,6 +8023,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       is_current: !!(assetSha && currentSha && assetSha === currentSha),
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
+      emulsion_id: publicEmulsionIdForRow(row) || null,
       emulsion_label: generationRequestVisionLabel(row) || null,
       artist_id: publicArtistIdForRow(row) || null,
       image_upvotes: Number(row?.image_upvotes || 0),
@@ -7894,7 +8218,7 @@ async function handlePublicCatalogManifest(request, env) {
   if (!manifest) {
     return json({ error: "Public catalog manifest not found — publish the catalog first" }, 404)
   }
-  const portraitFingerprint = await publishedPortraitFingerprint(env)
+  const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
   const buildHash = String(manifest.current_hash || "").trim() || null
   const catalogHash = catalogBaseHash(buildHash)
   const payload = {
@@ -8289,6 +8613,70 @@ async function handlePublicGallery(request, env, ctx) {
   return response
 }
 
+export async function handleIconoplasmDbGatewayRequest(request, env, ctx = { waitUntil() {} }) {
+  const url = new URL(request.url)
+  const path = url.pathname
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders() })
+  }
+  if (isIconoplasmGatewayCanonRepairRequest(path, request.method)) {
+    const payload = await parseJsonBody(request)
+    return json(
+      await repairCanonInvariants(env, {
+        limit: payload?.limit,
+        actorId: payload?.actorId,
+        reason: payload?.reason,
+      }),
+      200,
+      { "Cache-Control": "no-store" },
+    )
+  }
+  if (!iconoplasmGatewayEligiblePath(path, request.method)) {
+    return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
+  }
+
+  if (path === publicApiPath("/metadata")) {
+    return handlePublicMetadata(request, env)
+  }
+  if (path === publicApiPath("/catalog/manifest")) {
+    return handlePublicCatalogManifest(request, env)
+  }
+  if (isPublicCatalogArtifactPath(path)) {
+    return handlePublicCatalogArtifact(env, path)
+  }
+  if (path === publicApiPath("/gallery")) {
+    return handlePublicGallery(request, env, ctx)
+  }
+  if (path === publicApiPath("/genes/search")) {
+    return handlePublicGeneSearch(request, env)
+  }
+  if (path === publicApiPath("/genes/batch")) {
+    return handlePublicGeneBatch(request, env)
+  }
+  if (path === publicApiPath("/resolve")) {
+    return handlePublicResolve(request, env)
+  }
+  if (path === publicApiPath("/changes")) {
+    return handlePublicChanges(request, env)
+  }
+  if (path.startsWith(publicApiPath("/media/"))) {
+    const rawSymbol = path.slice(publicApiPath("/media/").length)
+    return handlePublicMedia(request, env, rawSymbol)
+  }
+  if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
+    return handleSiteGeneDetail(request, env, path)
+  }
+  if (path.startsWith("/api/iconoplasm/")) {
+    const headers = new Headers(request.headers)
+    headers.set(ICONOPLASM_GATEWAY_INTERNAL_HEADER, "1")
+    const internalRequest = new Request(request, { headers })
+    return handleIconoplasmRequest(internalRequest, env, ctx)
+  }
+
+  return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
+}
+
 async function handleCatalogManifest(request, env) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const url = new URL(request.url)
@@ -8445,6 +8833,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
   const started = Date.now()
   const url = new URL(request.url)
   const path = url.pathname
+  const internalGatewayRequest = isIconoplasmGatewayInternalRequest(request)
   const done = async (route, res, schema = null) => {
     const out = asHead(request, res)
     await logReq(route, request, out.status, started, schema)
@@ -8464,6 +8853,18 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
+    if (
+      path.startsWith("/api/iconoplasm/") &&
+      !internalGatewayRequest &&
+      iconoplasmGatewayEligiblePath(path, request.method)
+    ) {
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      return done(
+        "iconoplasm_api_gateway",
+        new Response(response.body, { status: response.status, headers: response.headers }),
+      )
+    }
+
     if (path === publicApiPath("/metadata")) {
       const rl = rateLimit(request, "public_metadata", 60)
       if (rl.retryAfterSeconds) {
@@ -8477,7 +8878,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicMetadata(request, env)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8523,7 +8924,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicCatalogManifest(request, env)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8533,7 +8934,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
       )
     }
 
-    if (path.startsWith(publicApiPath("/catalog/catalog.")) && path.endsWith(".json")) {
+    if (isPublicCatalogArtifactPath(path)) {
       const rl = rateLimit(request, "public_catalog_artifact", 120)
       if (rl.retryAfterSeconds) {
         return done(
@@ -8546,7 +8947,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicCatalogArtifact(env, path)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8592,7 +8993,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicGallery(request, env, ctx)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8615,7 +9016,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicGeneSearch(request, env)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8645,7 +9046,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicGeneBatch(request, env)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8668,7 +9069,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicResolve(request, env)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8691,7 +9092,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handlePublicChanges(request, env)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8715,7 +9116,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
         )
       }
       const rawSymbol = path.slice(publicApiPath("/media/").length)
-      const response = await handlePublicMedia(request, env, rawSymbol)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -8745,7 +9146,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await handleSiteGeneDetail(request, env, path)
+      const response = await proxyIconoplasmRequestToDbGateway(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -10937,6 +11338,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
            pa.asset_sha256,
            pa.candidate_image_id,
            pa.vision_id,
+           pa.emulsion_id,
            pa.artist_tag,
            pa.artist_name,
            pa.status,
@@ -10963,6 +11365,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
           candidate_image_id: optionalInt(row?.candidate_image_id),
           vision_id: sanitizeText(row?.vision_id || "", 255) || "",
+          emulsion_id: sanitizeText(row?.emulsion_id || "", 64) || "",
+          workflow_id: sanitizeText(row?.workflow_id || "", 32) || "",
+          workflow_label: sanitizeText(row?.workflow_label || "", 255) || "",
+          workflow_path: sanitizeText(row?.workflow_path || "", 512) || "",
+          prompt_version: sanitizeText(row?.prompt_version || "", 16) || "",
+          variant_slot: sanitizeText(row?.variant_slot || "", 32) || "",
           artist_tag: normalizeArtistTag(row?.artist_tag || "") || "",
           artist_name: sanitizeText(row?.artist_name || "", 255) || "",
           status: normalizeAssetStatus(row?.status || "", "draft"),
@@ -11521,6 +11929,45 @@ export async function handleIconoplasmRequest(request, env, ctx) {
           const visionId =
             sanitizeText(item?.vision_id || item?.vision || existingAsset?.vision_id || "", 255) ||
             null
+          const workflowPath =
+            sanitizeText(item?.workflow_path || existingAsset?.workflow_path || "", 512) || null
+          const workflowLabel =
+            sanitizeText(
+              item?.workflow_label ||
+                existingAsset?.workflow_label ||
+                workflowLabelFromPath(workflowPath || ""),
+              255,
+            ) || null
+          const workflowId =
+            sanitizeText(
+              item?.workflow_id ||
+                existingAsset?.workflow_id ||
+                workflowIdentityFromPath(workflowPath || workflowLabel || ""),
+              32,
+            ) || null
+          const promptVersion =
+            sanitizeText(
+              item?.prompt_version ||
+                existingAsset?.prompt_version ||
+                promptVersionFromVisionId(visionId || ""),
+              16,
+            ) || null
+          const variantSlot =
+            sanitizeText(
+              item?.variant_slot ||
+                existingAsset?.variant_slot ||
+                variantSlotFromVisionId(visionId || ""),
+              32,
+            ) || null
+          const emulsionId =
+            sanitizeText(
+              item?.emulsion_id ||
+                existingAsset?.emulsion_id ||
+                (workflowId && promptVersion && variantSlot
+                  ? `${workflowId}${promptVersion}-${variantSlot}`
+                  : ""),
+              64,
+            ) || null
           const candidateImageId =
             optionalInt(
               item?.candidate_image_id ?? item?.emulsion_id ?? existingAsset?.candidate_image_id,
@@ -11563,8 +12010,9 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               `INSERT INTO icono_portrait_assets (
                  gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
                  mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
-                 vision_id, candidate_image_id, artist_tag, artist_name, created_by, created_at
-               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 vision_id, emulsion_id, workflow_id, workflow_label, workflow_path, prompt_version, variant_slot,
+                 candidate_image_id, artist_tag, artist_name, created_by, created_at
+               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
                  r2_key_full=excluded.r2_key_full,
                  r2_key_medium=excluded.r2_key_medium,
@@ -11578,6 +12026,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  is_stale=excluded.is_stale,
                  is_legacy=0,
                  vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
+                 emulsion_id=COALESCE(excluded.emulsion_id, icono_portrait_assets.emulsion_id),
+                 workflow_id=COALESCE(excluded.workflow_id, icono_portrait_assets.workflow_id),
+                 workflow_label=COALESCE(excluded.workflow_label, icono_portrait_assets.workflow_label),
+                 workflow_path=COALESCE(excluded.workflow_path, icono_portrait_assets.workflow_path),
+                 prompt_version=COALESCE(excluded.prompt_version, icono_portrait_assets.prompt_version),
+                 variant_slot=COALESCE(excluded.variant_slot, icono_portrait_assets.variant_slot),
                  candidate_image_id=COALESCE(excluded.candidate_image_id, icono_portrait_assets.candidate_image_id),
                   artist_tag=NULL,
                   artist_name=NULL,
@@ -11596,6 +12050,12 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                 persistedAutopickEligible ? 1 : 0,
                 persistedIsStale ? 1 : 0,
                 visionId,
+                emulsionId,
+                workflowId,
+                workflowLabel,
+                workflowPath,
+                promptVersion,
+                variantSlot,
                 candidateImageId,
                 artistTag,
                 artistName,
@@ -11638,6 +12098,11 @@ export async function handleIconoplasmRequest(request, env, ctx) {
               asset_sha256: assetSha,
               dry_run: dryRun,
               vision_id: visionId,
+              emulsion_id: emulsionId,
+              workflow_id: workflowId,
+              workflow_label: workflowLabel,
+              prompt_version: promptVersion,
+              variant_slot: variantSlot,
               artist_tag: artistTag,
               artist_name: artistName,
               status: finalStatus,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 
 class FakeStatement {
   constructor(db, sql) {
@@ -56,11 +56,29 @@ class FakeIconoplasmDb {
   }
 }
 
-function buildEnv({ existingAssets } = {}) {
-  return {
-    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-    ICONOPLASM_DB: new FakeIconoplasmDb({ existingAssets }),
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
   }
+  return env
+}
+
+function buildEnv({ existingAssets } = {}, { bindGateway = true } = {}) {
+  const gatewayDb = new FakeIconoplasmDb({ existingAssets })
+  const gatewayEnv = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: gatewayDb,
+  }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 test("admin reconcile restores rejected legacy assets instead of leaving them hidden", async () => {
@@ -101,7 +119,7 @@ test("admin reconcile restores rejected legacy assets instead of leaving them hi
   assert.equal(payload?.legacy_marked, 1)
   assert.equal(payload?.rejected, 0)
 
-  const legacyUpdate = env.ICONOPLASM_DB.calls.find(
+  const legacyUpdate = env.gatewayDb.calls.find(
     (call) =>
       call.method === "run" &&
       call.sql.includes(
@@ -152,7 +170,7 @@ test("admin reconcile restores rejected keep-assets so sync repairs become publi
   assert.equal(payload?.restored_keep, 1)
   assert.equal(payload?.rejected, 0)
 
-  const keepRestoreUpdate = env.ICONOPLASM_DB.calls.find(
+  const keepRestoreUpdate = env.gatewayDb.calls.find(
     (call) =>
       call.method === "run" &&
       call.sql.includes(

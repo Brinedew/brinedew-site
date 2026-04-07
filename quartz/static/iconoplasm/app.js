@@ -241,12 +241,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function emulsionDisplayInfo(item) {
     var source = item || {}
+    var emulsionId = String(source.emulsion_id || '').trim()
     var artistId = String(source.artist_id || "").trim()
     var label = String(source.emulsion_label || "").trim()
-    // Keep the public gene page on numeric emulsion IDs only. Artist-name mapping
-    // lives in the local workstation GUI and should not leak onto the website.
-    var primary = label || (artistId ? "Emulsion " + artistId : "")
+    var primary = emulsionId || label || (artistId ? 'Emulsion ' + artistId : '')
     return {
+      emulsionId: emulsionId,
       artistId: artistId,
       label: label,
       primary: primary,

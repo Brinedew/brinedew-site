@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
 
 class FakeRequestStatement {
   constructor(db, sql) {
@@ -77,11 +77,29 @@ class FakeRequestDb {
   }
 }
 
-function buildEnv() {
-  return {
-    ICONOPLASM_DB: new FakeRequestDb(),
+function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
+  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
+    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+      fetch(request) {
+        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      },
+    }
+  }
+  return env
+}
+
+function buildEnv({ bindGateway = true } = {}) {
+  const gatewayDb = new FakeRequestDb()
+  const gatewayEnv = {
+    ICONOPLASM_DB: gatewayDb,
     GAME_SESSIONS: null,
   }
+  const env = {
+    ...gatewayEnv,
+    ICONOPLASM_DB: null,
+    gatewayDb,
+  }
+  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
 test("anonymous gene request state skips the vision-options rollup", async () => {
@@ -96,7 +114,7 @@ test("anonymous gene request state skips the vision-options rollup", async () =>
   assert.equal(response.status, 200)
   assert.equal(payload.authenticated, false)
   assert.deepEqual(payload.request_options, [])
-  assert.equal(env.ICONOPLASM_DB.requestReads, 1)
-  assert.equal(env.ICONOPLASM_DB.visionRollupReads, 0)
+  assert.equal(env.gatewayDb.requestReads, 1)
+  assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(payload.gene_lane_summary[0]?.request_count, 1)
 })

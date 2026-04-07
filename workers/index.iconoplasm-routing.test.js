@@ -17,3 +17,32 @@ test("apex settings host routes iconoplasm admin me through the iconoplasm worke
   assert.equal(payload?.authenticated, false)
   assert.equal(payload?.is_admin, false)
 })
+
+test("scheduled iconoplasm canon maintenance goes through THE_ONLY_ALLOWED_DB_GATEWAY", async () => {
+  const calls = []
+  const env = {
+    THE_ONLY_ALLOWED_DB_GATEWAY: {
+      async fetch(request) {
+        const cloned = request.clone()
+        calls.push({
+          url: cloned.url,
+          method: cloned.method,
+          body: await cloned.text(),
+          headers: Object.fromEntries(cloned.headers.entries()),
+        })
+        return Response.json({ ok: true, scanned: 3, changed: 2, unresolved: 1 })
+      },
+    },
+  }
+
+  await worker.scheduled({ cron: "17 * * * *" }, env, { waitUntil() {} })
+
+  assert.equal(calls.length, 1)
+  assert.equal(
+    calls[0]?.url,
+    "https://the-only-allowed-db-gateway/__internal/iconoplasm/repair-canon-invariants",
+  )
+  assert.equal(calls[0]?.method, "POST")
+  assert.match(String(calls[0]?.body || ""), /"actorId":"cron"/)
+  assert.match(String(calls[0]?.body || ""), /"reason":"scheduled_canon_invariant_repair"/)
+})

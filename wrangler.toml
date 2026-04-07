@@ -77,11 +77,13 @@ script_name = "geneguessr-api"
 tag = "v1"
 new_sqlite_classes = ["GameSession"]
 
-[[d1_databases]]
-binding = "ICONOPLASM_DB"
-database_name = "iconoplasm"
-database_id = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff"
-migrations_dir = "migrations-iconoplasm"
+# B-415 hard boundary: this caller worker is allowed to talk to
+# THE_ONLY_ALLOWED_DB_GATEWAY, but it is not allowed to regain the Iconoplasm D1
+# capability directly. If you add ICONOPLASM_DB back to this file, you are
+# undoing the whole point of the gateway ceremony.
+[[services]]
+binding = "THE_ONLY_ALLOWED_DB_GATEWAY"
+service = "the-only-allowed-db-gateway"
 
 [[r2_buckets]]
 binding = "STRUCTURES_BUCKET"
@@ -138,11 +140,12 @@ class_name = "GameSession"
 tag = "v1"
 new_sqlite_classes = ["GameSession"]
 
-[[env.staging.d1_databases]]
-binding = "ICONOPLASM_DB"
-database_name = "iconoplasm-staging"
-database_id = "3d1c101a-f1e7-47bc-a1c6-c60c147191ec"
-migrations_dir = "migrations-iconoplasm"
+# Same rule in staging: the caller worker gets the service binding, not the
+# Iconoplasm D1 binding. Do not use staging as the place where the old direct-DB
+# architecture quietly comes back.
+[[env.staging.services]]
+binding = "THE_ONLY_ALLOWED_DB_GATEWAY"
+service = "the-only-allowed-db-gateway-staging"
 
 # Separate R2 bucket so staging caching does not touch prod objects.
 [[env.staging.r2_buckets]]

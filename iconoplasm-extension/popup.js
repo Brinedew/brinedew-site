@@ -43,7 +43,9 @@ function normalizeCardVariant(value) {
 }
 
 function normalizeHighlightMode(value) {
-  return value === "pill" || value === "ellipse" ? value : "underline"
+  return value === "pill" || value === "pill-outline" || value === "ellipse"
+    ? value
+    : "underline"
 }
 
 function setCheckedValue(groupName, value) {
