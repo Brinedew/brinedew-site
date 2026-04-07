@@ -150,8 +150,7 @@ draft: false
     - When the pro-Growth side wins, the cell replicates. Sometimes, the characters benefit (germline, regeneration). Other times, they die (oncogenesis).
     - When the pro-Control side wins, the cell enters quiescence. Sometimes, the characters benefit (morphogenesis). Other times, they die (apoptosis, aging).
 
-Inspiration: SOLSTICE-5 by Paul Chadeisson
-https://www.youtube.com/watch?v=cntb3wcZdTw
+Inspiration: SOLSTICE-5 by Paul Chadeisson https://www.youtube.com/watch?v=cntb3wcZdTw
 
 1. **Any ideas for scenarios to explore from inside the cell?**
 My favourite scenarios are the ones where cell makes a decision to self-sacrifice or hamper itself in some way for some vague and unseen "common good".
