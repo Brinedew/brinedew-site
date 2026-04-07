@@ -96,8 +96,7 @@
   const APCA_SCALE = 1.14
   const APCA_BLACK_THRESHOLD = 0.022
   const APCA_BLACK_CLAMP_EXP = 1.414
-  const WHITE_TEXT_MIN_APCA_TO_WIN = 70
-  const WHITE_TEXT_WIN_MARGIN_APCA = 8
+  const WHITE_TEXT_WIN_MARGIN_APCA = 15
 
   // -- Perceptual text color helpers ---------------------------------
   function parseHexRgb(hex) {
@@ -149,12 +148,9 @@
     const backgroundRgb = parseHexRgb(hex) || parseHexRgb(PLACEHOLDER_COLOR) || [107, 107, 120]
     const darkContrast = Math.abs(apcaContrast(DARK_TEXT_RGB, backgroundRgb))
     const lightContrast = Math.abs(apcaContrast(LIGHT_TEXT_RGB, backgroundRgb))
-    // White ink is fragile on mid-tone chromatic fills: even when APCA barely prefers it,
-    // the perceived letterform clarity is often worse than dark ink. So white only wins if
-    // it clears a strong absolute contrast floor and still beats dark ink by a real margin.
-    const whiteWins =
-      lightContrast >= WHITE_TEXT_MIN_APCA_TO_WIN &&
-      lightContrast >= darkContrast + WHITE_TEXT_WIN_MARGIN_APCA
+    // Keep the APCA math, but do not let white ink win every near-tie. It has to beat
+    // dark ink by a noticeable margin before we trust it on a filled pill.
+    const whiteWins = lightContrast >= darkContrast + WHITE_TEXT_WIN_MARGIN_APCA
 
     if (!whiteWins) {
       return {

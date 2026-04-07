@@ -1,0 +1,80 @@
+name = "the-only-allowed-db-gateway"
+main = "workers/the-only-allowed-db-gateway.js"
+compatibility_date = "2025-11-12"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
+[[d1_databases]]
+binding = "DB"
+database_name = "geneguessr"
+database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
+
+[[d1_databases]]
+binding = "ICONOPLASM_DB"
+database_name = "iconoplasm"
+database_id = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff"
+migrations_dir = "migrations-iconoplasm"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "7d59f063885e415ab3df5301393a114d"
+
+[[r2_buckets]]
+binding = "ICONOPLASM_PORTRAITS"
+bucket_name = "iconoplasm-portraits"
+
+[[durable_objects.bindings]]
+name = "GAME_SESSIONS"
+class_name = "GameSession"
+script_name = "geneguessr-api"
+
+[env.staging]
+name = "the-only-allowed-db-gateway-staging"
+# This worker is an internal organ, not a staging toy URL.
+# If you turn workers.dev / preview URLs back on here, you are taking the one
+# worker that is allowed to hold Iconoplasm D1 and making it easier to poke from
+# the outside again. That is exactly the bad idea B-415 is trying to prevent.
+workers_dev = false
+preview_urls = false
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "geneguessr"
+database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
+
+[[env.staging.d1_databases]]
+binding = "ICONOPLASM_DB"
+database_name = "iconoplasm-staging"
+database_id = "3d1c101a-f1e7-47bc-a1c6-c60c147191ec"
+migrations_dir = "migrations-iconoplasm"
+
+[[env.staging.kv_namespaces]]
+binding = "KV"
+id = "b0394946bccf4cd3afd9e1ff6de2bedc"
+preview_id = "b0394946bccf4cd3afd9e1ff6de2bedc"
+
+[[env.staging.r2_buckets]]
+binding = "ICONOPLASM_PORTRAITS"
+bucket_name = "iconoplasm-portraits-staging"
+preview_bucket_name = "iconoplasm-portraits-staging"
+
+[[env.staging.durable_objects.bindings]]
+name = "GAME_SESSIONS"
+class_name = "GameSession"
+script_name = "geneguessr-api-staging"
