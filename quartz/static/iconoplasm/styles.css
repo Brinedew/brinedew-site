@@ -459,8 +459,9 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-option-thumb {
   flex: 0 0 auto;
-  width: 84px;
-  height: 112px;
+  /* Keep picker examples as a straight 2x reuse of the main search portrait tile. */
+  width: 96px;
+  height: 128px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--icono-ring-image) 74%, transparent);
@@ -479,12 +480,9 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   display: block;
   width: 100%;
   height: 100%;
+  margin: 0;
   object-fit: cover;
   object-position: center center;
-}
-
-.icono-request-option-thumb-image {
-  object-position: center 58%;
 }
 
 .icono-request-option-thumb img {

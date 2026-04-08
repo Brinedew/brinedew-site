@@ -11,24 +11,18 @@ function expectCenteredCover(selector) {
   assert.match(css, rule, `${selector} should keep thumbnail crops centered`)
 }
 
-function expectPortraitBiasedCover(selector) {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const rule = new RegExp(`${escaped}\\s*\\{[^}]*object-position:\\s*center\\s+58%;`, "m")
-  assert.match(css, rule, `${selector} should bias request previews away from empty top-space`)
-}
-
-test("Iconoplasm thumbnail viewports keep request previews portrait-sized and subject-biased", () => {
+test("Iconoplasm thumbnail viewports reuse the centered search portrait behavior", () => {
   expectCenteredCover(".icono-thumbnail-viewport-image")
   assert.match(app, /icono-search-result-portrait icono-thumbnail-viewport-image/, "search results should use the shared thumbnail viewport class")
   assert.match(
     app,
-    /icono-thumbnail-viewport-image icono-request-option-thumb-image\" src=/,
-    "request option thumbnails should opt into the dedicated request-preview viewport class",
+    /icono-thumbnail-viewport-image\" src=/,
+    "request option thumbnails should reuse the shared thumbnail viewport class directly",
   )
-  expectPortraitBiasedCover(".icono-request-option-thumb-image")
+  assert.doesNotMatch(css, /\.icono-request-option-thumb-image\s*\{/m, "request option thumbnails should not carry a picker-only crop override")
   assert.match(
     css,
-    /\.icono-request-option-thumb\s*\{[^}]*width:\s*84px;[^}]*height:\s*112px;/m,
-    "request option previews should keep a doubled portrait viewport",
+    /\.icono-request-option-thumb\s*\{[^}]*width:\s*96px;[^}]*height:\s*128px;/m,
+    "request option previews should keep a true 2x portrait viewport",
   )
 })

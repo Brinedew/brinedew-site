@@ -2797,7 +2797,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<span class="icono-request-option-thumb' +
         (asset.is_current ? " is-current" : "") +
         '">' +
-        '<img class="icono-thumbnail-viewport-image icono-request-option-thumb-image" src="' +
+        '<img class="icono-thumbnail-viewport-image" src="' +
         esc(url) +
         '" alt="' +
         esc(String(asset.gene_symbol || "Example") + " example portrait") +
