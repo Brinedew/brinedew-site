@@ -40,6 +40,9 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
   )
   assert.match(voteSnapshotFn, /WHERE gene_symbol = \?[\s\S]*AND asset_sha256 = \?/, "vote snapshot should use the asset index")
   assert.doesNotMatch(voteSnapshotFn, /upper\(gene_symbol\)|lower\(asset_sha256\)/, "vote snapshot must not wrap canonical asset keys")
+  assert.match(voteSnapshotFn, /FROM icono_vote_asset_summary/, "vote snapshot should read the per-asset summary")
+  assert.match(voteSnapshotFn, /FROM icono_admin_vision_rollup/, "vote snapshot should read the per-vision rollup")
+  assert.doesNotMatch(voteSnapshotFn, /SUM\(CASE WHEN vote_value/, "vote snapshot must not aggregate the raw vote ledger on the hot path")
 
   const autoPromoteFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function autoPromoteTopVotedPortrait",
@@ -47,6 +50,8 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
   )
   assert.match(autoPromoteFn, /WHERE gene_symbol = \?/, "auto-promote should filter by raw gene symbol")
   assert.doesNotMatch(autoPromoteFn, /upper\(gene_symbol\)|lower\(asset_sha256\)/, "auto-promote must stay on raw asset-key predicates")
+  assert.match(autoPromoteFn, /LEFT JOIN icono_vote_asset_summary/, "auto-promote should rank from the vote summary read model")
+  assert.doesNotMatch(autoPromoteFn, /WITH vote_agg AS|SUM\(CASE WHEN vote_value/, "auto-promote must not rebuild vote aggregates from the raw ledger")
 
   const voteSetRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     'if (path === "/api/iconoplasm/votes/set" && request.method === "POST")',
@@ -54,4 +59,7 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
   )
   assert.match(voteSetRoute, /WHERE gene_symbol = \?[\s\S]*AND asset_sha256 = \?[\s\S]*AND user_id = \?/, "vote writes should use the asset+user unique guard")
   assert.doesNotMatch(voteSetRoute, /upper\(gene_symbol\)|lower\(asset_sha256\)/, "vote writes must not wrap canonical asset keys")
+  assert.match(voteSetRoute, /applyVoteDeltaToAssetSummary\(/, "single-vote writes should update the summary incrementally")
+  assert.match(voteSetRoute, /refreshVoteReadModelsAfterHotWrite\(/, "single-vote writes should refresh only the narrow post-vote read models")
+  assert.doesNotMatch(voteSetRoute, /syncVoteReadModelsAndInvalidateGallery\(|syncAdminReadModelsAndInvalidateGallery\(/, "single-vote writes must not call the bulk summary rebuild paths")
 })

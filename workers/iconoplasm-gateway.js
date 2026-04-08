@@ -3219,6 +3219,108 @@ async function iconoplasmSessionUser(request, env) {
   }
 }
 
+function voteDeltaFromTransition(currentVoteValue, nextVoteValue) {
+  const current = Number(currentVoteValue || 0)
+  const next = Number(nextVoteValue || 0)
+  return {
+    upvotes: Number(next === 1) - Number(current === 1),
+    downvotes: Number(next === -1) - Number(current === -1),
+    score: next - current,
+    vote_count: Number(next !== 0) - Number(current !== 0),
+  }
+}
+
+async function ensureVoteAssetSummaryRow(
+  env,
+  { symbol, assetSha256, visionId = "", candidateImageId = null } = {},
+) {
+  if (!env.ICONOPLASM_DB) return false
+  const symbolNorm = normalizeSymbol(symbol)
+  const assetShaNorm = normalizeSha256(assetSha256)
+  if (!symbolNorm || !assetShaNorm) return false
+  const candidateRef = voteAssetIdentity(symbolNorm, assetShaNorm)
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_vote_asset_summary (
+       gene_symbol,
+       asset_sha256,
+       candidate_ref,
+       vision_id,
+       candidate_image_id,
+       upvotes,
+       downvotes,
+       score,
+       vote_count,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, CURRENT_TIMESTAMP)
+     ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+       candidate_ref = excluded.candidate_ref,
+       vision_id = CASE
+         WHEN excluded.vision_id <> '' THEN excluded.vision_id
+         ELSE icono_vote_asset_summary.vision_id
+       END,
+       candidate_image_id = COALESCE(
+         excluded.candidate_image_id,
+         icono_vote_asset_summary.candidate_image_id
+       ),
+       updated_at = CURRENT_TIMESTAMP`,
+  )
+    .bind(
+      symbolNorm,
+      assetShaNorm,
+      candidateRef,
+      sanitizeVoteVisionId(visionId),
+      optionalInt(candidateImageId),
+    )
+    .run()
+  return true
+}
+
+async function applyVoteDeltaToAssetSummary(
+  env,
+  {
+    symbol,
+    assetSha256,
+    visionId = "",
+    candidateImageId = null,
+    upvotes = 0,
+    downvotes = 0,
+    score = 0,
+    voteCount = 0,
+  } = {},
+) {
+  if (!env.ICONOPLASM_DB) return false
+  const symbolNorm = normalizeSymbol(symbol)
+  const assetShaNorm = normalizeSha256(assetSha256)
+  if (!symbolNorm || !assetShaNorm) return false
+  await ensureVoteAssetSummaryRow(env, {
+    symbol: symbolNorm,
+    assetSha256: assetShaNorm,
+    visionId,
+    candidateImageId,
+  })
+  if (!upvotes && !downvotes && !score && !voteCount) return true
+  await env.ICONOPLASM_DB.prepare(
+    `UPDATE icono_vote_asset_summary
+     SET upvotes = MAX(0, upvotes + ?),
+         downvotes = MAX(0, downvotes + ?),
+         score = score + ?,
+         vote_count = MAX(0, vote_count + ?),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE gene_symbol = ?
+       AND asset_sha256 = ?`,
+  )
+    .bind(
+      Number(upvotes || 0),
+      Number(downvotes || 0),
+      Number(score || 0),
+      Number(voteCount || 0),
+      symbolNorm,
+      assetShaNorm,
+    )
+    .run()
+  return true
+}
+
 async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visionId, userId }) {
   if (!env.ICONOPLASM_DB) {
     return {
@@ -3255,15 +3357,12 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
   }
 
   // D1 cost fence: public card paint and public vote writes both hit this lookup.
-  // The vote ledger has an asset index on (gene_symbol, asset_sha256) plus the
-  // asset+user unique guard. Keep those predicates raw or every vote refresh turns
-  // back into a scan.
+  // The hot path should read the narrow summary row, not re-aggregate the whole
+  // vote ledger on every paint. Keep the asset-key predicates raw so the summary
+  // table and the asset+user unique guard both stay index-friendly.
   const imageAgg = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-       COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-       COALESCE(SUM(vote_value), 0) AS score
-     FROM icono_image_votes
+    `SELECT upvotes, downvotes, score, vision_id
+     FROM icono_vote_asset_summary
      WHERE gene_symbol = ?
        AND asset_sha256 = ?`,
   )
@@ -3281,17 +3380,15 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
     .bind(symbolNorm, assetShaNorm, userNorm)
     .first()
 
+  const resolvedVisionId = sanitizeVoteVisionId(visionNorm || imageAgg?.vision_id || "")
   let visionAgg = null
-  if (visionNorm) {
+  if (resolvedVisionId) {
     visionAgg = await env.ICONOPLASM_DB.prepare(
-      `SELECT
-         COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-         COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-         COALESCE(SUM(vote_value), 0) AS score
-       FROM icono_image_votes
+      `SELECT upvotes, downvotes, score
+       FROM icono_admin_vision_rollup
        WHERE vision_id = ?`,
     )
-      .bind(visionNorm)
+      .bind(resolvedVisionId)
       .first()
   }
 
@@ -3304,7 +3401,7 @@ async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visio
     vision_downvotes: Number(visionAgg?.downvotes || 0),
     vision_score: Number(visionAgg?.score || 0),
     candidate_ref: assetCandidateRef || candidateRefNorm,
-    vision_id: visionNorm,
+    vision_id: resolvedVisionId,
   }
 }
 
@@ -3319,212 +3416,84 @@ async function iconoVoteSnapshotsBatch(env, { items, userId }) {
   const chunkSize = 5000
   for (let start = 0; start < normalizedItems.length; start += chunkSize) {
     const chunk = normalizedItems.slice(start, start + chunkSize)
-    try {
-      const chunkJson = JSON.stringify(
-        chunk.map((item) => ({
-          symbol: normalizeSymbol(item?.symbol || ""),
-          asset_sha256: normalizeSha256(item?.asset_sha256 || ""),
-          candidate_ref: voteAssetIdentity(
-            normalizeSymbol(item?.symbol || ""),
-            normalizeSha256(item?.asset_sha256 || ""),
-          ),
-          vision_id: sanitizeVoteVisionId(item?.vision_id || ""),
-        })),
-      )
-      const resp = await env.ICONOPLASM_DB.prepare(
-        `WITH input AS (
-           SELECT
-             CAST(json_each.key AS INTEGER) AS idx,
-             json_extract(json_each.value, '$.candidate_ref') AS candidate_ref,
-             json_extract(json_each.value, '$.symbol') AS symbol,
-             json_extract(json_each.value, '$.asset_sha256') AS asset_sha256,
-             json_extract(json_each.value, '$.vision_id') AS vision_id
-           FROM json_each(?)
-         ),
-         image_agg AS (
-           SELECT
-             upper(iv.gene_symbol) AS gene_symbol,
-             lower(iv.asset_sha256) AS asset_sha256,
-             COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-             COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-             COALESCE(SUM(iv.vote_value), 0) AS score
-           FROM icono_image_votes iv
-           WHERE EXISTS (
+    const chunkJson = JSON.stringify(
+      chunk.map((item) => ({
+        symbol: normalizeSymbol(item?.symbol || ""),
+        asset_sha256: normalizeSha256(item?.asset_sha256 || ""),
+        candidate_ref: voteAssetIdentity(
+          normalizeSymbol(item?.symbol || ""),
+          normalizeSha256(item?.asset_sha256 || ""),
+        ),
+        vision_id: sanitizeVoteVisionId(item?.vision_id || ""),
+      })),
+    )
+    const resp = await env.ICONOPLASM_DB.prepare(
+      `WITH input AS (
+         SELECT
+           CAST(json_each.key AS INTEGER) AS idx,
+           json_extract(json_each.value, '$.candidate_ref') AS candidate_ref,
+           json_extract(json_each.value, '$.symbol') AS symbol,
+           json_extract(json_each.value, '$.asset_sha256') AS asset_sha256,
+           json_extract(json_each.value, '$.vision_id') AS vision_id
+         FROM json_each(?)
+       ),
+       user_votes AS (
+         SELECT iv.gene_symbol AS gene_symbol, iv.asset_sha256 AS asset_sha256, iv.vote_value
+         FROM icono_image_votes iv
+         WHERE iv.user_id = ?
+           AND EXISTS (
              SELECT 1
              FROM input
-             WHERE input.symbol = upper(iv.gene_symbol)
-               AND input.asset_sha256 = lower(iv.asset_sha256)
+             WHERE input.symbol = iv.gene_symbol
+               AND input.asset_sha256 = iv.asset_sha256
            )
-           GROUP BY upper(iv.gene_symbol), lower(iv.asset_sha256)
-         ),
-         user_votes AS (
-           SELECT upper(iv.gene_symbol) AS gene_symbol, lower(iv.asset_sha256) AS asset_sha256, iv.vote_value
-           FROM icono_image_votes iv
-           WHERE iv.user_id = ?
-             AND EXISTS (
-               SELECT 1
-               FROM input
-               WHERE input.symbol = upper(iv.gene_symbol)
-                 AND input.asset_sha256 = lower(iv.asset_sha256)
-             )
-         ),
-         vision_agg AS (
-           SELECT
-             iv.vision_id,
-             COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-             COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-             COALESCE(SUM(iv.vote_value), 0) AS score
-           FROM icono_image_votes iv
-           WHERE COALESCE(iv.vision_id, '') <> ''
-             AND iv.vision_id IN (SELECT DISTINCT vision_id FROM input WHERE COALESCE(vision_id, '') <> '')
-           GROUP BY iv.vision_id
-         )
-         SELECT
-           input.idx,
-           input.candidate_ref,
-           input.symbol,
-           input.asset_sha256,
-           input.vision_id,
-           COALESCE(image_agg.upvotes, 0) AS image_upvotes,
-           COALESCE(image_agg.downvotes, 0) AS image_downvotes,
-           COALESCE(image_agg.score, 0) AS image_score,
-           COALESCE(user_votes.vote_value, 0) AS user_vote,
-           COALESCE(vision_agg.upvotes, 0) AS vision_upvotes,
-           COALESCE(vision_agg.downvotes, 0) AS vision_downvotes,
-           COALESCE(vision_agg.score, 0) AS vision_score
-         FROM input
-         LEFT JOIN image_agg
-           ON image_agg.gene_symbol = input.symbol
-          AND image_agg.asset_sha256 = input.asset_sha256
-         LEFT JOIN user_votes
-           ON user_votes.gene_symbol = input.symbol
-          AND user_votes.asset_sha256 = input.asset_sha256
-         LEFT JOIN vision_agg
-           ON vision_agg.vision_id = input.vision_id
-         ORDER BY input.idx ASC`,
-      )
-        .bind(chunkJson, userNorm)
-        .all()
-      for (const row of Array.isArray(resp?.results) ? resp.results : []) {
-        const candidateRef = String(row?.candidate_ref || "").trim()
-        const visionId = sanitizeVoteVisionId(row?.vision_id || "")
-        snapshots.push({
+       )
+       SELECT
+         input.idx,
+         input.candidate_ref,
+         input.symbol,
+         input.asset_sha256,
+         COALESCE(NULLIF(input.vision_id, ''), COALESCE(vs.vision_id, '')) AS vision_id,
+         COALESCE(vs.upvotes, 0) AS image_upvotes,
+         COALESCE(vs.downvotes, 0) AS image_downvotes,
+         COALESCE(vs.score, 0) AS image_score,
+         COALESCE(user_votes.vote_value, 0) AS user_vote,
+         COALESCE(vr.upvotes, 0) AS vision_upvotes,
+         COALESCE(vr.downvotes, 0) AS vision_downvotes,
+         COALESCE(vr.score, 0) AS vision_score
+       FROM input
+       LEFT JOIN icono_vote_asset_summary vs
+         ON vs.gene_symbol = input.symbol
+        AND vs.asset_sha256 = input.asset_sha256
+       LEFT JOIN user_votes
+         ON user_votes.gene_symbol = input.symbol
+        AND user_votes.asset_sha256 = input.asset_sha256
+       LEFT JOIN icono_admin_vision_rollup vr
+         ON vr.vision_id = COALESCE(NULLIF(input.vision_id, ''), COALESCE(vs.vision_id, ''))
+       ORDER BY input.idx ASC`,
+    )
+      .bind(chunkJson, userNorm)
+      .all()
+    for (const row of Array.isArray(resp?.results) ? resp.results : []) {
+      const candidateRef = String(row?.candidate_ref || "").trim()
+      const visionId = sanitizeVoteVisionId(row?.vision_id || "")
+      snapshots.push({
+        candidate_ref: candidateRef,
+        symbol: normalizeSymbol(row?.symbol || ""),
+        asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
+        vision_id: visionId,
+        snapshot: {
+          image_upvotes: Number(row?.image_upvotes || 0),
+          image_downvotes: Number(row?.image_downvotes || 0),
+          image_score: Number(row?.image_score || 0),
+          user_vote: Number(row?.user_vote || 0),
+          vision_upvotes: Number(row?.vision_upvotes || 0),
+          vision_downvotes: Number(row?.vision_downvotes || 0),
+          vision_score: Number(row?.vision_score || 0),
           candidate_ref: candidateRef,
-          symbol: normalizeSymbol(row?.symbol || ""),
-          asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
           vision_id: visionId,
-          snapshot: {
-            image_upvotes: Number(row?.image_upvotes || 0),
-            image_downvotes: Number(row?.image_downvotes || 0),
-            image_score: Number(row?.image_score || 0),
-            user_vote: Number(row?.user_vote || 0),
-            vision_upvotes: Number(row?.vision_upvotes || 0),
-            vision_downvotes: Number(row?.vision_downvotes || 0),
-            vision_score: Number(row?.vision_score || 0),
-            candidate_ref: candidateRef,
-            vision_id: visionId,
-          },
-        })
-      }
-    } catch (error) {
-      const candidateRefs = chunk
-        .map((item) => String(item.candidate_ref || "").trim())
-        .filter(Boolean)
-      const visionIds = [
-        ...new Set(chunk.map((item) => sanitizeVoteVisionId(item.vision_id || "")).filter(Boolean)),
-      ]
-      const imageAggByRef = new Map()
-      const userVoteByRef = new Map()
-      const visionAggById = new Map()
-      const imageAggPromise = candidateRefs.length
-        ? env.ICONOPLASM_DB.prepare(
-            `SELECT
-               candidate_ref,
-               COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-               COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-               COALESCE(SUM(vote_value), 0) AS score
-             FROM icono_image_votes
-             WHERE candidate_ref IN (${candidateRefs.map(() => "?").join(",")})
-             GROUP BY candidate_ref`,
-          )
-            .bind(...candidateRefs)
-            .all()
-        : Promise.resolve({ results: [] })
-      const userVotePromise = candidateRefs.length
-        ? env.ICONOPLASM_DB.prepare(
-            `SELECT candidate_ref, vote_value
-             FROM icono_image_votes
-             WHERE user_id = ?
-               AND candidate_ref IN (${candidateRefs.map(() => "?").join(",")})`,
-          )
-            .bind(userNorm, ...candidateRefs)
-            .all()
-        : Promise.resolve({ results: [] })
-      const visionAggPromise = visionIds.length
-        ? env.ICONOPLASM_DB.prepare(
-            `SELECT
-               vision_id,
-               COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-               COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-               COALESCE(SUM(vote_value), 0) AS score
-             FROM icono_image_votes
-             WHERE vision_id IN (${visionIds.map(() => "?").join(",")})
-             GROUP BY vision_id`,
-          )
-            .bind(...visionIds)
-            .all()
-        : Promise.resolve({ results: [] })
-      const [imageAggRows, userVoteRows, visionAggRows] = await Promise.all([
-        imageAggPromise,
-        userVotePromise,
-        visionAggPromise,
-      ])
-      for (const row of Array.isArray(imageAggRows?.results) ? imageAggRows.results : []) {
-        const candidateRef = String(row?.candidate_ref || "").trim()
-        if (!candidateRef) continue
-        imageAggByRef.set(candidateRef, {
-          upvotes: Number(row?.upvotes || 0),
-          downvotes: Number(row?.downvotes || 0),
-          score: Number(row?.score || 0),
-        })
-      }
-      for (const row of Array.isArray(userVoteRows?.results) ? userVoteRows.results : []) {
-        const candidateRef = String(row?.candidate_ref || "").trim()
-        if (!candidateRef || userVoteByRef.has(candidateRef)) continue
-        userVoteByRef.set(candidateRef, Number(row?.vote_value || 0))
-      }
-      for (const row of Array.isArray(visionAggRows?.results) ? visionAggRows.results : []) {
-        const visionId = sanitizeVoteVisionId(row?.vision_id || "")
-        if (!visionId) continue
-        visionAggById.set(visionId, {
-          upvotes: Number(row?.upvotes || 0),
-          downvotes: Number(row?.downvotes || 0),
-          score: Number(row?.score || 0),
-        })
-      }
-      for (const item of chunk) {
-        const candidateRef = String(item?.candidate_ref || "").trim()
-        const visionId = sanitizeVoteVisionId(item?.vision_id || "")
-        const imageAgg = imageAggByRef.get(candidateRef) || { upvotes: 0, downvotes: 0, score: 0 }
-        const visionAgg = visionAggById.get(visionId) || { upvotes: 0, downvotes: 0, score: 0 }
-        snapshots.push({
-          candidate_ref: candidateRef,
-          symbol: normalizeSymbol(item?.symbol || ""),
-          asset_sha256: normalizeSha256(item?.asset_sha256 || ""),
-          vision_id: visionId,
-          snapshot: {
-            image_upvotes: Number(imageAgg.upvotes || 0),
-            image_downvotes: Number(imageAgg.downvotes || 0),
-            image_score: Number(imageAgg.score || 0),
-            user_vote: Number(userVoteByRef.get(candidateRef) || 0),
-            vision_upvotes: Number(visionAgg.upvotes || 0),
-            vision_downvotes: Number(visionAgg.downvotes || 0),
-            vision_score: Number(visionAgg.score || 0),
-            candidate_ref: candidateRef,
-            vision_id: visionId,
-          },
-        })
-      }
+        },
+      })
     }
   }
 
@@ -3565,18 +3534,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   // the canonical `(gene_symbol, asset_sha256)` columns with raw equality so the
   // vote index can do its job.
   const topRow = await env.ICONOPLASM_DB.prepare(
-    `WITH vote_agg AS (
-       SELECT
-         gene_symbol,
-         asset_sha256,
-         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
-         SUM(vote_value) AS score
-       FROM icono_image_votes
-       WHERE gene_symbol = ?
-       GROUP BY gene_symbol, asset_sha256
-     )
-     SELECT
+    `SELECT
        pa.asset_sha256,
        COALESCE(pa.is_legacy, 0) AS is_legacy,
        COALESCE(vs.upvotes, 0) AS image_upvotes,
@@ -3588,7 +3546,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
          ELSE 0
        END AS is_current
      FROM icono_portrait_assets pa
-     LEFT JOIN vote_agg vs
+     LEFT JOIN icono_vote_asset_summary vs
        ON vs.gene_symbol = pa.gene_symbol
       AND vs.asset_sha256 = pa.asset_sha256
      WHERE pa.gene_symbol = ?
@@ -3610,7 +3568,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
        pa.asset_sha256 ASC
      LIMIT 1`,
   )
-    .bind(symbolNorm, currentAssetSha || "", symbolNorm, currentAssetSha || "")
+    .bind(currentAssetSha || "", symbolNorm, currentAssetSha || "")
     .first()
 
   const topAssetSha = normalizeSha256(topRow?.asset_sha256 || "")
@@ -5404,6 +5362,28 @@ async function syncVoteReadModelsAndInvalidateGallery(env, { symbols = [], visio
   adminReadModelState.ready = true
   await invalidateGalleryCache(env)
   return { symbols: symbolList.length, visions: finalVisionIds.length }
+}
+
+async function refreshVoteReadModelsAfterHotWrite(env, { symbol, visionIds = [] } = {}) {
+  if (!env.ICONOPLASM_DB) return { symbols: 0, visions: 0 }
+  const symbolNorm = normalizeSymbol(symbol)
+  if (!symbolNorm) return { symbols: 0, visions: 0 }
+
+  await rebuildGeneRollupForSymbol(env, symbolNorm)
+
+  const inferredVisionIds = await collectVisionIdsForSymbols(env, [symbolNorm])
+  const finalVisionIds = Array.from(
+    new Set([
+      ...inferredVisionIds,
+      ...visionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean),
+    ]),
+  )
+  if (finalVisionIds.length) {
+    await rebuildVisionRollupsBatch(env, finalVisionIds)
+  }
+  adminReadModelState.ready = true
+  await invalidateGalleryCache(env)
+  return { symbols: 1, visions: finalVisionIds.length }
 }
 
 function normalizeAdminReadModelBootstrapSteps(raw) {
@@ -9693,6 +9673,17 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           .run()
       }
       const finalVoteValue = requested === 0 || current === requested ? 0 : requested
+      const voteDelta = voteDeltaFromTransition(current, finalVoteValue)
+      await applyVoteDeltaToAssetSummary(env, {
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        candidateImageId,
+        upvotes: voteDelta.upvotes,
+        downvotes: voteDelta.downvotes,
+        score: voteDelta.score,
+        voteCount: voteDelta.vote_count,
+      })
       await appendVoteEvent(env, {
         symbol,
         assetSha256: assetSha,
@@ -9709,6 +9700,10 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
         reason: "vote_auto_promote",
       })
 
+      // Public/community votes update the narrow vote read models only. The big admin
+      // read-model refresh is reserved for operator workflows like ingest/reconcile/sync,
+      // where we are already paying the cost to reshape the published catalog.
+      await refreshVoteReadModelsAfterHotWrite(env, { symbol, visionIds: [visionId] })
       const snapshot = await iconoVoteSnapshot(env, {
         candidateRef: assetCandidateRef,
         symbol,
@@ -9716,14 +9711,6 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
         visionId,
         userId,
       })
-      // Public/community votes update the narrow vote read models only. The big admin
-      // read-model refresh is reserved for operator workflows like ingest/reconcile/sync,
-      // where we are already paying the cost to reshape the published catalog.
-      if (autoPromote?.changed) {
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
-      } else {
-        await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
-      }
       return done(
         "votes_set",
         json(
@@ -9841,15 +9828,37 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           continue
         }
         touchedSymbols.add(symbol)
+        const existing = await env.ICONOPLASM_DB.prepare(
+          `SELECT vote_value
+           FROM icono_image_votes
+           WHERE gene_symbol = ?
+             AND asset_sha256 = ?
+             AND user_id = ?
+           LIMIT 1`,
+        )
+          .bind(symbol, assetSha, userId)
+          .first()
+        const current = Number(existing?.vote_value || 0)
         if (voteValue === 0) {
           await env.ICONOPLASM_DB.prepare(
             `DELETE FROM icono_image_votes
-             WHERE upper(gene_symbol) = ?
-               AND lower(asset_sha256) = ?
+             WHERE gene_symbol = ?
+               AND asset_sha256 = ?
                AND user_id = ?`,
           )
             .bind(symbol, assetSha, userId)
             .run()
+          const voteDelta = voteDeltaFromTransition(current, 0)
+          await applyVoteDeltaToAssetSummary(env, {
+            symbol,
+            assetSha256: assetSha,
+            visionId,
+            candidateImageId,
+            upvotes: voteDelta.upvotes,
+            downvotes: voteDelta.downvotes,
+            score: voteDelta.score,
+            voteCount: voteDelta.vote_count,
+          })
           deleted += 1
           await appendVoteEvent(env, {
             symbol,
@@ -9864,8 +9873,8 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
         }
         await env.ICONOPLASM_DB.prepare(
           `DELETE FROM icono_image_votes
-           WHERE upper(gene_symbol) = ?
-             AND lower(asset_sha256) = ?
+           WHERE gene_symbol = ?
+             AND asset_sha256 = ?
              AND user_id = ?`,
         )
           .bind(symbol, assetSha, userId)
@@ -9877,6 +9886,17 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
         )
           .bind(assetCandidateRef, symbol, assetSha, visionId, candidateImageId, userId, voteValue)
           .run()
+        const voteDelta = voteDeltaFromTransition(current, voteValue)
+        await applyVoteDeltaToAssetSummary(env, {
+          symbol,
+          assetSha256: assetSha,
+          visionId,
+          candidateImageId,
+          upvotes: voteDelta.upvotes,
+          downvotes: voteDelta.downvotes,
+          score: voteDelta.score,
+          voteCount: voteDelta.vote_count,
+        })
         await appendVoteEvent(env, {
           symbol,
           assetSha256: assetSha,
@@ -9974,8 +9994,8 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
       const existing = await env.ICONOPLASM_DB.prepare(
         `SELECT vote_value
          FROM icono_image_votes
-         WHERE upper(gene_symbol) = ?
-           AND lower(asset_sha256) = ?
+         WHERE gene_symbol = ?
+           AND asset_sha256 = ?
            AND user_id = ?
          LIMIT 1`,
       )
@@ -9986,8 +10006,8 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
       if (requested === 0 || current === requested) {
         await env.ICONOPLASM_DB.prepare(
           `DELETE FROM icono_image_votes
-           WHERE upper(gene_symbol) = ?
-             AND lower(asset_sha256) = ?
+           WHERE gene_symbol = ?
+             AND asset_sha256 = ?
              AND user_id = ?`,
         )
           .bind(symbol, assetSha, userId)
@@ -9995,8 +10015,8 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
       } else {
         await env.ICONOPLASM_DB.prepare(
           `DELETE FROM icono_image_votes
-           WHERE upper(gene_symbol) = ?
-             AND lower(asset_sha256) = ?
+           WHERE gene_symbol = ?
+             AND asset_sha256 = ?
              AND user_id = ?`,
         )
           .bind(symbol, assetSha, userId)
@@ -10010,6 +10030,17 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           .run()
       }
       const finalVoteValue = requested === 0 || current === requested ? 0 : requested
+      const voteDelta = voteDeltaFromTransition(current, finalVoteValue)
+      await applyVoteDeltaToAssetSummary(env, {
+        symbol,
+        assetSha256: assetSha,
+        visionId,
+        candidateImageId,
+        upvotes: voteDelta.upvotes,
+        downvotes: voteDelta.downvotes,
+        score: voteDelta.score,
+        voteCount: voteDelta.vote_count,
+      })
       await appendVoteEvent(env, {
         symbol,
         assetSha256: assetSha,
@@ -10026,6 +10057,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
         reason: "admin_vote_auto_promote",
       })
 
+      await refreshVoteReadModelsAfterHotWrite(env, { symbol, visionIds: [visionId] })
       const snapshot = await iconoVoteSnapshot(env, {
         candidateRef: assetCandidateRef,
         symbol,
@@ -10033,11 +10065,6 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
         visionId,
         userId,
       })
-      if (autoPromote?.changed) {
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
-      } else {
-        await syncVoteReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
-      }
       return done(
         "admin_votes_set",
         json(
