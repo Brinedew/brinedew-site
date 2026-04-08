@@ -77,9 +77,15 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: wrangler d1 migrations apply iconoplasm-staging --remote --env staging
+        run: wrangler d1 migrations apply iconoplasm-staging --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --env staging
 
-      - name: Deploy Worker (staging)
+      - name: Deploy the only allowed internal stateful worker (staging)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --env staging
+
+      - name: Deploy public edge worker (staging)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

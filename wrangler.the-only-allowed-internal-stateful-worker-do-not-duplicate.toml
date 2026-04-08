@@ -1,5 +1,13 @@
-name = "the-only-allowed-db-gateway"
-main = "workers/the-only-allowed-db-gateway.js"
+# This is the only worker in the repo that is allowed to hold dangerous state
+# bindings. Public workers must call it through an absurdly explicit service
+# binding instead of regaining D1/KV/R2/session power themselves.
+#
+# The Cloudflare script name intentionally stays `geneguessr-api` so the existing
+# secret set and GameSession durable object ownership remain attached during the
+# cutover. The file name and binding names carry the loud safety annotation.
+
+name = "geneguessr-api"
+main = "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 compatibility_date = "2025-11-12"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
@@ -35,10 +43,6 @@ migrations_dir = "migrations-iconoplasm"
 binding = "KV"
 id = "7d59f063885e415ab3df5301393a114d"
 
-[[r2_buckets]]
-binding = "ICONOPLASM_PORTRAITS"
-bucket_name = "iconoplasm-portraits"
-
 [[durable_objects.bindings]]
 name = "GAME_SESSIONS"
 class_name = "GameSession"
@@ -50,14 +54,21 @@ class_name = "IconoplasmVoteCoordinator"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["IconoplasmVoteCoordinator"]
+new_sqlite_classes = ["GameSession", "IconoplasmVoteCoordinator"]
+
+[[r2_buckets]]
+binding = "STRUCTURES_BUCKET"
+bucket_name = "geneguessr-structures"
+
+[[r2_buckets]]
+binding = "ICONOPLASM_PORTRAITS"
+bucket_name = "iconoplasm-portraits"
+
+[triggers]
+crons = ["17 * * * *", "55 23 * * *", "3 0 * * *"]
 
 [env.staging]
-name = "the-only-allowed-db-gateway-staging"
-# This worker is an internal organ, not a staging toy URL.
-# If you turn workers.dev / preview URLs back on here, you are taking the one
-# worker that is allowed to hold Iconoplasm D1 and making it easier to poke from
-# the outside again. That is exactly the bad idea B-415 is trying to prevent.
+name = "geneguessr-api-staging"
 workers_dev = false
 preview_urls = false
 
@@ -77,15 +88,14 @@ binding = "KV"
 id = "b0394946bccf4cd3afd9e1ff6de2bedc"
 preview_id = "b0394946bccf4cd3afd9e1ff6de2bedc"
 
-[[env.staging.r2_buckets]]
-binding = "ICONOPLASM_PORTRAITS"
-bucket_name = "iconoplasm-portraits-staging"
-preview_bucket_name = "iconoplasm-portraits-staging"
+[[env.staging.kv_namespaces]]
+binding = "PROD_KV"
+id = "7d59f063885e415ab3df5301393a114d"
+preview_id = "7d59f063885e415ab3df5301393a114d"
 
 [[env.staging.durable_objects.bindings]]
 name = "GAME_SESSIONS"
 class_name = "GameSession"
-script_name = "geneguessr-api-staging"
 
 [[env.staging.durable_objects.bindings]]
 name = "ICONOPLASM_VOTE_COORDINATORS"
@@ -93,4 +103,17 @@ class_name = "IconoplasmVoteCoordinator"
 
 [[env.staging.migrations]]
 tag = "v1"
-new_sqlite_classes = ["IconoplasmVoteCoordinator"]
+new_sqlite_classes = ["GameSession", "IconoplasmVoteCoordinator"]
+
+[[env.staging.r2_buckets]]
+binding = "STRUCTURES_BUCKET"
+bucket_name = "geneguessr-structures-staging"
+preview_bucket_name = "geneguessr-structures-staging"
+
+[[env.staging.r2_buckets]]
+binding = "ICONOPLASM_PORTRAITS"
+bucket_name = "iconoplasm-portraits-staging"
+preview_bucket_name = "iconoplasm-portraits-staging"
+
+[env.staging.triggers]
+crons = []

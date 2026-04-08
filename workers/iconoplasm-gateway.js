@@ -3353,6 +3353,10 @@ export class IconoplasmVoteCoordinator {
   constructor(state, env) {
     this.state = state
     this.env = env
+    // The coordinator is the live vote authority. The old design treated D1's
+    // compatibility ledger as the live source of truth and re-counted historical
+    // rows in request paths. That was an expensive design mistake because each
+    // new vote got slower and more expensive as old votes accumulated.
     this.state.blockConcurrencyWhile(async () => {
       this.state.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS meta (
@@ -4055,6 +4059,10 @@ function voteDeltaFromTransition(currentVoteValue, nextVoteValue) {
 }
 
 async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visionId, userId }) {
+  // Read the hot snapshot from the coordinator first. If the coordinator has no
+  // state yet, return the zero snapshot instead of falling back to a raw D1 vote
+  // ledger aggregation. The previous "just count the ledger" shape is exactly
+  // what turns a harmless click into a history-sized database bill.
   const coordinatorSnapshot = await iconoplasmVoteCoordinatorSnapshot(env, {
     candidateRef,
     symbol,
@@ -5934,6 +5942,10 @@ async function projectVoteCoordinatorLedgerRow(
   env,
   { symbol, assetSha256, visionId, candidateImageId, userId, voteValue } = {},
 ) {
+  // This D1 table is now a projection for compatibility, audit, and imports.
+  // Never turn it back into the live authority with a read-before-write tally.
+  // The old pattern paid historical vote cost on every click, which is the dumb
+  // part we are fencing against here.
   if (!env.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
   const safeAssetSha = normalizeSha256(assetSha256)
@@ -10459,6 +10471,12 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
       if (!coordinatorWrite?.ok) {
         return done("votes_set_502", json({ error: "Vote coordinator write failed" }, 502))
       }
+      // Order matters:
+      // 1. write the live vote to the per-symbol coordinator,
+      // 2. project that settled state into D1 compatibility tables,
+      // 3. refresh read models from coordinator summaries.
+      // Do not reintroduce a "look at all historical vote rows, then decide"
+      // step here. That old design made one public vote pay for the entire past.
       await projectVoteCoordinatorLedgerRow(env, {
         symbol,
         assetSha256: assetSha,
@@ -10764,6 +10782,9 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
       if (!coordinatorWrite?.ok) {
         return done("admin_votes_set_502", json({ error: "Vote coordinator write failed" }, 502))
       }
+      // Keep admin writes on the same architecture as public writes. If the
+      // admin route starts reading the raw vote ledger inline again, somebody
+      // will eventually cargo-cult that pattern back into public traffic.
       await projectVoteCoordinatorLedgerRow(env, {
         symbol,
         assetSha256: assetSha,

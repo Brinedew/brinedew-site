@@ -27,7 +27,7 @@ jobs:
         run: |
           echo "Applying D1 migrations..."
           set +e
-          OUTPUT=$(wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/wrangler.toml 2>&1)
+          OUTPUT=$(wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/the-only-allowed-benchmark-migrations-do-not-deploy.toml 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -40,11 +40,18 @@ jobs:
             fi
           fi
 
-      - name: Deploy Benchmark Worker
+      - name: Deploy the only allowed internal stateful worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "Deploying geneguessr-benchmark..."
+          echo "Deploying the only allowed internal stateful worker..."
+          wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      - name: Deploy public benchmark edge worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "Deploying public benchmark edge worker..."
           wrangler deploy --config workers/benchmark/wrangler.toml
 
       - name: Smoke test health endpoint

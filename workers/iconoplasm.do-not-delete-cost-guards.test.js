@@ -65,103 +65,130 @@ test("DO NOT DELETE: the loud test files still say why deleting them would be re
   assert.match(hotQuery, /expensive mistake|real money/i, "hot-query guard should explain why the tripwire exists")
 })
 
-test("DO NOT DELETE: the only allowed db gateway name stays loud across code, docs, and config", () => {
-  const worker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-gateway.js")
+test("DO NOT DELETE: the only allowed stateful worker name stays loud across code, docs, and config", () => {
+  const worker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-public-edge-worker-that-must-not-touch-state.js")
   const onboarding = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../docs/ICONOPLASM_ONBOARDING.md")
   const wrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.toml")
 
-  assert.match(worker, /THE_ONLY_ALLOWED_DB_GATEWAY/, "worker should use the loud gateway binding name")
-  assert.match(onboarding, /THE_ONLY_ALLOWED_DB_GATEWAY|the-only-allowed-db-gateway/, "docs should explain why the loud gateway name exists")
-  assert.match(wrangler, /THE_ONLY_ALLOWED_DB_GATEWAY/, "wrangler should bind the caller worker to the loud gateway name")
+  assert.match(
+    worker,
+    /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE/,
+    "worker should use the loud stateful-worker binding name",
+  )
+  assert.match(
+    onboarding,
+    /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE|the-only-allowed-internal-stateful-worker-do-not-duplicate/i,
+    "docs should explain why the loud stateful-worker name exists",
+  )
+  assert.match(
+    wrangler,
+    /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE/,
+    "wrangler should bind the public worker to the loud stateful-worker name",
+  )
 })
 
-test("DO NOT DELETE: Website/wrangler.toml must not quietly regain ICONOPLASM_DB because that would make the caller worker D1-capable again", () => {
-  const callerWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.toml")
+test("DO NOT DELETE: Website/wrangler.toml must not quietly regain direct state bindings", () => {
+  const publicWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.toml")
 
   assert.doesNotMatch(
-    callerWrangler,
+    publicWrangler,
     /binding = "ICONOPLASM_DB"/,
-    "the caller worker must not bind ICONOPLASM_DB again; that would undo the gateway boundary instead of merely refactoring it",
+    "the public edge worker must not bind ICONOPLASM_DB again",
+  )
+  assert.doesNotMatch(
+    publicWrangler,
+    /binding = "DB"/,
+    "the public edge worker must not bind the general game DB either; one internal worker means one internal worker",
+  )
+  assert.doesNotMatch(
+    publicWrangler,
+    /binding = "KV"/,
+    "the public edge worker must not quietly regain KV authority",
+  )
+  assert.doesNotMatch(
+    publicWrangler,
+    /binding = "STRUCTURES_BUCKET"|binding = "ICONOPLASM_PORTRAITS"/,
+    "the public edge worker must not quietly regain R2 state authority",
   )
 })
 
-test("DO NOT DELETE: the caller worker should route through a caller-only boundary module instead of importing the D1-heavy Iconoplasm runtime directly", () => {
-  const indexWorker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./index.js")
-  const callerBoundary = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-caller.js")
-  const gatewayEntry = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-db-gateway.js")
-  const gatewayWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.the-only-allowed-db-gateway.toml")
+test("DO NOT DELETE: public workers must proxy to the one allowed internal stateful worker", () => {
+  const publicIndexShim = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./index.js")
+  const publicEdge = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-public-edge-worker-that-must-not-touch-state.js")
+  const benchmarkEdge = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./benchmark/the-only-allowed-public-benchmark-edge-worker-that-must-not-touch-state.js")
+  const internalRuntime = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js")
+  const internalWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml")
 
-  assert.match(indexWorker, /from "\.\/iconoplasm-caller\.js"/, "index worker should import the caller-only Iconoplasm boundary")
-  assert.doesNotMatch(
-    indexWorker,
-    /from "\.\/iconoplasm-gateway\.js"/,
-    "index worker should not import the D1-capable Iconoplasm gateway runtime directly",
+  assert.match(
+    publicIndexShim,
+    /the-only-allowed-public-edge-worker-that-must-not-touch-state/,
+    "generic index shim should point at the explicitly named public edge worker",
   )
   assert.match(
-    gatewayEntry,
-    /from "\.\/iconoplasm-gateway\.js"/,
-    "the gateway entrypoint should import the explicit Iconoplasm gateway runtime",
-  )
-  assert.doesNotMatch(
-    gatewayEntry,
-    /from "\.\/iconoplasm-caller\.js"/,
-    "the gateway entrypoint should not import the caller-only boundary",
-  )
-  assert.doesNotMatch(
-    callerBoundary,
-    /ICONOPLASM_DB/,
-    "caller-only boundary should stay free of direct Iconoplasm D1 references",
+    publicEdge,
+    /handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate/,
+    "public edge worker should expose an absurdly explicit proxy function name",
   )
   assert.match(
-    gatewayEntry,
-    /export \{[\s\S]*IconoplasmVoteCoordinator[\s\S]*\}/,
-    "gateway entrypoint should export the Iconoplasm vote coordinator Durable Object class",
+    benchmarkEdge,
+    /handleBenchmarkRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate/,
+    "benchmark edge worker should also proxy through the one allowed stateful worker",
+  )
+  assert.doesNotMatch(
+    publicEdge,
+    /ICONOPLASM_DB|env\.DB|GAME_SESSIONS|STRUCTURES_BUCKET|ICONOPLASM_PORTRAITS/,
+    "public edge worker should stay free of direct state bindings in runtime code",
   )
   assert.match(
-    gatewayWrangler,
+    internalRuntime,
+    /export \{ IconoplasmVoteCoordinator \}/,
+    "internal stateful worker runtime should explicitly export the Iconoplasm vote coordinator durable object class",
+  )
+  assert.match(
+    internalWrangler,
     /name = "ICONOPLASM_VOTE_COORDINATORS"[\s\S]*class_name = "IconoplasmVoteCoordinator"/,
-    "gateway wrangler should bind the per-gene vote coordinator Durable Object",
+    "internal stateful worker should bind the per-gene vote coordinator durable object",
   )
   assert.match(
-    gatewayWrangler,
-    /\[\[migrations\]\][\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\]/,
-    "gateway wrangler should migrate the vote coordinator Durable Object explicitly",
+    internalWrangler,
+    /\[\[migrations\]\][\s\S]*new_sqlite_classes = \["GameSession", "IconoplasmVoteCoordinator"\]/,
+    "internal stateful worker should migrate the stateful durable objects explicitly",
   )
 })
 
-test("DO NOT DELETE: the-only-allowed-db-gateway should stay non-public even in staging because making the D1-capable worker public again would be a terrible idea", () => {
-  const gatewayWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.the-only-allowed-db-gateway.toml")
+test("DO NOT DELETE: the only allowed internal stateful worker should stay non-public even in staging", () => {
+  const internalWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml")
 
-  assert.match(gatewayWrangler, /^workers_dev = false$/m, "prod gateway should not expose a workers.dev URL")
-  assert.match(gatewayWrangler, /^preview_urls = false$/m, "prod gateway should not expose preview URLs")
+  assert.match(internalWrangler, /^workers_dev = false$/m, "prod internal worker should not expose a workers.dev URL")
+  assert.match(internalWrangler, /^preview_urls = false$/m, "prod internal worker should not expose preview URLs")
   assert.match(
-    gatewayWrangler,
+    internalWrangler,
     /\[env\.staging\][\s\S]*?workers_dev = false/,
-    "staging gateway should also stay off workers.dev so the D1-capable worker remains an internal service",
+    "staging internal worker should also stay off workers.dev so the stateful worker remains internal",
   )
   assert.match(
-    gatewayWrangler,
+    internalWrangler,
     /\[env\.staging\][\s\S]*?preview_urls = false/,
-    "staging gateway should also stay off preview URLs so we do not publish the internal DB gateway by accident",
+    "staging internal worker should also stay off preview URLs so we do not publish the internal state worker by accident",
   )
 })
 
-test("DO NOT DELETE: production deploy wiring must use the gateway config for Iconoplasm migrations and deploy the gateway worker explicitly", () => {
+test("DO NOT DELETE: production deploy wiring must use the internal stateful worker config before the public edge deploy", () => {
   const workflow = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../.github/workflows/deploy-quartz.yml")
 
   assert.match(
     workflow,
-    /wrangler d1 migrations apply iconoplasm --remote --config wrangler\.the-only-allowed-db-gateway\.toml/,
-    "production migrations must run through the gateway wrangler config because the caller worker no longer has the D1 binding",
+    /wrangler d1 migrations apply iconoplasm --remote --config wrangler\.the-only-allowed-internal-stateful-worker-do-not-duplicate\.toml/,
+    "production migrations must run through the internal stateful worker config because the public edge worker no longer has the D1 binding",
   )
   assert.match(
     workflow,
-    /Deploy Iconoplasm DB gateway worker \(production\)[\s\S]*?wrangler deploy --config wrangler\.the-only-allowed-db-gateway\.toml/,
-    "production workflow should deploy the explicit gateway worker instead of assuming wrangler deploy covers both runtimes",
+    /Deploy the only allowed internal stateful worker \(production\)[\s\S]*?wrangler deploy --config wrangler\.the-only-allowed-internal-stateful-worker-do-not-duplicate\.toml/,
+    "production workflow should deploy the internal stateful worker explicitly before the public edge worker",
   )
   assert.match(
     workflow,
-    /Deploy Cloudflare Worker \(production\)[\s\S]*?run: wrangler deploy/m,
-    "production workflow should still deploy the public caller worker after the gateway deploy",
+    /Deploy public edge worker \(production\)[\s\S]*?run: wrangler deploy/m,
+    "production workflow should still deploy the public edge worker after the internal worker deploy",
   )
 })

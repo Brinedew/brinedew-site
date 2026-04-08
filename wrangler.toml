@@ -25,8 +25,8 @@
 # Other:
 #   DAILY_TARGET_SALT        - Salt for deterministic daily protein selection
 
-name = "geneguessr-api"
-main = "workers/index.js"
+name = "the-only-allowed-public-edge-worker-that-must-not-touch-state"
+main = "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js"
 compatibility_date = "2025-11-12"
 compatibility_flags = ["nodejs_compat"]
 
@@ -59,49 +59,16 @@ enabled = false
 persist = true
 head_sampling_rate = 1
 
-[[d1_databases]]
-binding = "DB"
-database_name = "geneguessr"
-database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
-
-[[kv_namespaces]]
-binding = "KV"
-id = "7d59f063885e415ab3df5301393a114d"
-
-[[durable_objects.bindings]]
-name = "GAME_SESSIONS"
-class_name = "GameSession"
-script_name = "geneguessr-api"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["GameSession"]
-
-# B-415 hard boundary: this caller worker is allowed to talk to
-# THE_ONLY_ALLOWED_DB_GATEWAY, but it is not allowed to regain the Iconoplasm D1
-# capability directly. If you add ICONOPLASM_DB back to this file, you are
-# undoing the whole point of the gateway ceremony.
+# Repo-wide hard boundary:
+# this routed public worker is not allowed to hold D1, KV, R2, or session
+# bindings at all. It must stay a dumb edge shell and forward everything to the
+# one internal worker that is allowed to touch state.
 [[services]]
-binding = "THE_ONLY_ALLOWED_DB_GATEWAY"
-service = "the-only-allowed-db-gateway"
-
-[[r2_buckets]]
-binding = "STRUCTURES_BUCKET"
-bucket_name = "geneguessr-structures"
-
-[[r2_buckets]]
-binding = "ICONOPLASM_PORTRAITS"
-bucket_name = "iconoplasm-portraits"
-
-# Cron jobs:
-# - 17 minutes past every hour UTC: repair non-overridden Iconoplasm canon drift
-# - 23:55 UTC pre-warm next day's target structure
-# - 00:03 UTC post Discord recap (image + text) directly from Worker
-[triggers]
-crons = ["17 * * * *", "55 23 * * *", "3 0 * * *"]
+binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
+service = "geneguessr-api"
 
 [env.staging]
-name = "geneguessr-api-staging"
+name = "the-only-allowed-public-edge-worker-that-must-not-touch-state-staging"
 
 # Staging should be reachable without DNS work.
 workers_dev = true
@@ -109,54 +76,8 @@ preview_urls = true
 
 # Do not claim the prod custom-domain route in staging, but do provide same-origin
 # API routing for the staging site.
-routes = [
-  { pattern = "staging.brinedew.bio/api/*", zone_name = "brinedew.bio" }
-]
+routes = [{ pattern = "staging.brinedew.bio/*", zone_name = "brinedew.bio" }]
 
-# Reuse prod D1 for now (read-heavy; avoids duplicating the dataset).
-[[env.staging.d1_databases]]
-binding = "DB"
-database_name = "geneguessr"
-database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
-
-# Separate KV namespace so staging does not pollute prod caches/flags.
-[[env.staging.kv_namespaces]]
-binding = "KV"
-id = "b0394946bccf4cd3afd9e1ff6de2bedc"
-preview_id = "b0394946bccf4cd3afd9e1ff6de2bedc"
-
-# Read-only access to prod overrides so staging can mirror the live daily puzzle.
-[[env.staging.kv_namespaces]]
-binding = "PROD_KV"
-id = "7d59f063885e415ab3df5301393a114d"
-preview_id = "7d59f063885e415ab3df5301393a114d"
-
-# Separate DO storage (keyed by worker name) so staging sessions do not touch prod.
-[[env.staging.durable_objects.bindings]]
-name = "GAME_SESSIONS"
-class_name = "GameSession"
-
-[[env.staging.migrations]]
-tag = "v1"
-new_sqlite_classes = ["GameSession"]
-
-# Same rule in staging: the caller worker gets the service binding, not the
-# Iconoplasm D1 binding. Do not use staging as the place where the old direct-DB
-# architecture quietly comes back.
 [[env.staging.services]]
-binding = "THE_ONLY_ALLOWED_DB_GATEWAY"
-service = "the-only-allowed-db-gateway-staging"
-
-# Separate R2 bucket so staging caching does not touch prod objects.
-[[env.staging.r2_buckets]]
-binding = "STRUCTURES_BUCKET"
-bucket_name = "geneguessr-structures-staging"
-preview_bucket_name = "geneguessr-structures-staging"
-
-[[env.staging.r2_buckets]]
-binding = "ICONOPLASM_PORTRAITS"
-bucket_name = "iconoplasm-portraits-staging"
-preview_bucket_name = "iconoplasm-portraits-staging"
-
-[env.staging.triggers]
-crons = []
+binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
+service = "geneguessr-api-staging"

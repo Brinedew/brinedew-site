@@ -297,6 +297,10 @@ function missingOnlyAllowedGatewayResponse() {
 }
 
 async function proxyIconoplasmRequestToDbGateway(request, env) {
+  // This proxy is the public safety fence. Do not "simplify" by handling these
+  // routes directly in the caller worker. The previous arrangement left the D1
+  // implementation close enough to public routes that one config mistake could
+  // put raw database access back on hot traffic.
   const gateway = env?.THE_ONLY_ALLOWED_DB_GATEWAY
   const url = new URL(request.url)
   if (!isGatewayEligibleCallerPath(url.pathname, request.method)) return null

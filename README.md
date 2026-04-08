@@ -52,7 +52,7 @@ Production usually deploys through the `Deploy Production (Cloudflare Pages + Wo
 
 For Iconoplasm worker-only hotfixes and live debugging, there is also a verified direct worker path from `d:\Coding\Website`:
 
-- `npx wrangler deploy --config wrangler.the-only-allowed-db-gateway.toml`
+- `npx wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml`
 - `npx wrangler deploy`
 - or the VS Code task `Deploy iconoplasm worker now`
 
