@@ -2752,6 +2752,146 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return html
   }
 
+  function requestOptionPrimaryLabel(option) {
+    var item = option || {}
+    return (
+      String(item.primary_label || "").trim() ||
+      String(item.label || "").trim() ||
+      String(item.emulsion_id || "").trim() ||
+      String(item.artist_tag || "").trim() ||
+      String(item.artist_name || "").trim() ||
+      String(item.vision_id || "").trim() ||
+      "Specific emulsion"
+    )
+  }
+
+  function requestOptionSecondaryLabel(option) {
+    var item = option || {}
+    return (
+      String(item.secondary_label || "").trim() ||
+      [item.artist_tag, item.artist_name, item.vision_id]
+        .map(function (value) {
+          return String(value || "").trim()
+        })
+        .filter(Boolean)
+        .join(" · ")
+    )
+  }
+
+  function requestOptionMetaParts(option) {
+    var item = option || {}
+    var parts = []
+    var liveCount = Number(item.live_count || 0) || 0
+    var imageCount = Number(item.image_count || 0) || 0
+    if (liveCount > 0) parts.push(liveCount + " live")
+    if (imageCount > 0) parts.push(imageCount + " images")
+    return parts
+  }
+
+  function requestOptionPreviewUrl(asset) {
+    var item = asset || {}
+    return String(item.thumb_url || item.medium_url || "").trim()
+  }
+
+  function renderRequestOptionPreviewStripMarkup(option) {
+    var previews = Array.isArray(option && option.preview_assets) ? option.preview_assets : []
+    if (!previews.length) {
+      return '<span class="icono-request-option-strip icono-request-option-strip--empty"><span class="icono-request-option-empty">No examples yet</span></span>'
+    }
+    var html = '<span class="icono-request-option-strip">'
+    for (var i = 0; i < previews.length && i < 3; i++) {
+      var asset = previews[i] || {}
+      var url = requestOptionPreviewUrl(asset)
+      if (!url) continue
+      html +=
+        '<span class="icono-request-option-thumb' +
+        (asset.is_current ? " is-current" : "") +
+        '">' +
+        '<img src="' +
+        esc(url) +
+        '" alt="' +
+        esc(String(asset.gene_symbol || "Example") + " example portrait") +
+        '" loading="lazy" decoding="async">' +
+        "</span>"
+    }
+    html += "</span>"
+    return html
+  }
+
+  function renderRequestOptionButtonMarkup(option, selectedVisionId, isRandom) {
+    var item = option || {}
+    var optionVisionId = isRandom ? "" : String(item.vision_id || "").trim()
+    var isSelected = String(selectedVisionId || "").trim() === optionVisionId
+    var primary = isRandom ? "Random default" : requestOptionPrimaryLabel(item)
+    var secondary = isRandom
+      ? "Let the workstation choose the best fresh lane for this gene."
+      : requestOptionSecondaryLabel(item)
+    var meta = isRandom ? ["No emulsion lock"] : requestOptionMetaParts(item)
+    return (
+      '<button type="button" class="icono-request-option' +
+      (isSelected ? " is-selected" : "") +
+      (isRandom ? " is-random" : "") +
+      '" data-icono-request-option="' +
+      esc(optionVisionId) +
+      '">' +
+      '<span class="icono-request-option-copy">' +
+      '<span class="icono-request-option-kicker">' +
+      esc(isRandom ? "default lane" : "specific emulsion") +
+      "</span>" +
+      '<span class="icono-request-option-title-row">' +
+      '<span class="icono-request-option-title">' +
+      esc(primary) +
+      "</span>" +
+      (meta.length
+        ? '<span class="icono-request-option-badge">' + esc(meta[0]) + "</span>"
+        : "") +
+      "</span>" +
+      (secondary
+        ? '<span class="icono-request-option-secondary">' + esc(secondary) + "</span>"
+        : "") +
+      (meta.length > 1
+        ? '<span class="icono-request-option-meta">' + esc(meta.slice(1).join(" · ")) + "</span>"
+        : "") +
+      "</span>" +
+      renderRequestOptionPreviewStripMarkup(item) +
+      "</button>"
+    )
+  }
+
+  function renderRequestSelectionSummaryMarkup(option) {
+    if (!option) {
+      return (
+        '<div class="icono-request-picker-summary icono-request-picker-summary--random">' +
+        '<div class="icono-request-picker-summary-copy">' +
+        '<div class="icono-request-picker-summary-kicker">current request target</div>' +
+        '<div class="icono-request-picker-summary-title">Random default</div>' +
+        '<div class="icono-request-picker-summary-note">The workstation can pick the freshest lane instead of locking this gene to one emulsion.</div>' +
+        "</div>" +
+        "</div>"
+      )
+    }
+    var meta = requestOptionMetaParts(option)
+    return (
+      '<div class="icono-request-picker-summary">' +
+      '<div class="icono-request-picker-summary-copy">' +
+      '<div class="icono-request-picker-summary-kicker">current request target</div>' +
+      '<div class="icono-request-picker-summary-title">' +
+      esc(requestOptionPrimaryLabel(option)) +
+      "</div>" +
+      (requestOptionSecondaryLabel(option)
+        ? '<div class="icono-request-picker-summary-note">' +
+          esc(requestOptionSecondaryLabel(option)) +
+          "</div>"
+        : "") +
+      (meta.length
+        ? '<div class="icono-request-picker-summary-meta">' + esc(meta.join(" · ")) + "</div>"
+        : "") +
+      "</div>" +
+      renderRequestOptionPreviewStripMarkup(option) +
+      "</div>"
+    )
+  }
+
   function wireGeneRequestPanel(container, genePayload) {
     if (!container || !genePayload) return
     var panel = container.querySelector("[data-icono-request-panel]")
@@ -2791,55 +2931,217 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return
       }
 
-      var selectOptions =
-        '<option value="">Random default</option>' +
-        requestOptions
-          .map(function (option) {
-            var label = String(option.label || option.vision_id || "").trim()
-            var meta = []
-            var imageCount = Number(option.image_count || 0) || 0
-            if (imageCount > 0) meta.push(imageCount + " images")
-            var liveCount = Number(option.live_count || 0) || 0
-            if (liveCount > 0) meta.push(liveCount + " live")
-            return (
-              '<option value="' +
-              esc(String(option.vision_id || "")) +
-              '">' +
-              esc(label + (meta.length ? ' - ' + meta.join(', ') : '')) +
-              '</option>'
-            )
-          })
-          .join("")
-
       body.innerHTML =
+        '<div class="icono-request-shell">' +
         '<div class="icono-home-auth-copy">' +
         '<div class="icono-home-auth-kicker">request new candidates</div>' +
         '<div class="icono-home-auth-title">Request more portraits for ' +
         esc(symbol) +
         '</div>' +
-        '<div class="icono-home-auth-note">Same gene plus different emulsions stay separate; random requests clear when a request-run upload lands for this gene.</div>' +
+        '<div class="icono-home-auth-note">Search by emulsion code, artist tag, or vision ID, then preview example portraits before you queue work.</div>' +
         '</div>' +
-        '<div style="display:grid;gap:12px;">' +
-        '<form data-icono-request-form style="display:grid;gap:10px;">' +
-        '<label style="display:grid;gap:6px;">' +
-        '<span style="font-size:0.9rem;opacity:0.78;">Emulsion</span>' +
-        '<select data-icono-request-vision style="padding:10px 12px;border-radius:12px;border:1px solid rgba(15,23,42,0.12);background:#fff;">' +
-        selectOptions +
-        '</select>' +
-        '</label>' +
-        '<button type="submit" class="icono-home-auth-link" style="border:none;cursor:pointer;">request new candidates (free)</button>' +
+        '<div class="icono-request-actions">' +
+        '<form data-icono-request-form class="icono-request-form">' +
+        '<div class="icono-request-picker">' +
+        '<label class="icono-request-picker-label" for="icono-request-query-' +
+        esc(symbol) +
+        '">Emulsion lane</label>' +
+        '<div data-icono-request-current></div>' +
+        '<div class="icono-request-picker-search" data-icono-request-picker>' +
+        '<input id="icono-request-query-' +
+        esc(symbol) +
+        '" data-icono-request-query class="icono-request-picker-input" type="text" autocomplete="off" placeholder="Search emulsion code, artist tag, or vision ID" aria-expanded="false" aria-label="Search emulsion lane">' +
+        '<input type="hidden" data-icono-request-vision value="">' +
+        '<div class="icono-request-results" data-icono-request-results hidden></div>' +
+        '</div>' +
+        '<div class="icono-request-picker-helper">This chooser now mirrors the site search instead of hiding everything inside a native dropdown.</div>' +
+        '</div>' +
+        '<button type="submit" class="icono-home-auth-link icono-request-submit" style="border:none;cursor:pointer;">request new candidates (free)</button>' +
         '</form>' +
-        renderGeneRequestSummaryMarkup('Your open requests', myLaneSummary, 'my_request_count') +
-        renderGeneRequestSummaryMarkup('Open requests on this gene', geneLaneSummary, 'request_count') +
+        renderGeneRequestSummaryMarkup("Your open requests", myLaneSummary, "my_request_count") +
+        renderGeneRequestSummaryMarkup("Open requests on this gene", geneLaneSummary, "request_count") +
         '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
-        '</div>'
+        "</div>" +
+        "</div>"
 
       var form = body.querySelector("[data-icono-request-form]")
-      var select = body.querySelector("[data-icono-request-vision]")
-      if (!form || !select) return
+      var hiddenInput = body.querySelector("[data-icono-request-vision]")
+      var queryInput = body.querySelector("[data-icono-request-query]")
+      var current = body.querySelector("[data-icono-request-current]")
+      var results = body.querySelector("[data-icono-request-results]")
+      var picker = body.querySelector("[data-icono-request-picker]")
+      if (!form || !hiddenInput || !queryInput || !current || !results || !picker) return
+      var activeIndex = -1
+      var filteredOptions = []
+      var pickerOpen = false
+
+      function selectedOption() {
+        var selectedVisionId = String(hiddenInput.value || "").trim()
+        if (!selectedVisionId) return null
+        for (var i = 0; i < requestOptions.length; i++) {
+          if (String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === selectedVisionId) {
+            return requestOptions[i]
+          }
+        }
+        return null
+      }
+
+      function updateSummary() {
+        current.innerHTML = renderRequestSelectionSummaryMarkup(selectedOption())
+      }
+
+      function closeResults() {
+        pickerOpen = false
+        activeIndex = -1
+        results.hidden = true
+        queryInput.setAttribute("aria-expanded", "false")
+      }
+
+      function openResults() {
+        pickerOpen = true
+        results.hidden = false
+        queryInput.setAttribute("aria-expanded", "true")
+      }
+
+      function scoreRequestOption(option, query) {
+        var cleanedQuery = String(query || "").trim().toLowerCase()
+        if (!cleanedQuery) return 0
+        var primary = requestOptionPrimaryLabel(option).toLowerCase()
+        var secondary = requestOptionSecondaryLabel(option).toLowerCase()
+        var searchText = String((option && option.search_text) || "").toLowerCase()
+        if (primary === cleanedQuery) return 0
+        if (primary.indexOf(cleanedQuery) === 0) return 1
+        if (searchText.indexOf(cleanedQuery) === 0) return 2
+        if (secondary.indexOf(cleanedQuery) === 0) return 3
+        if (primary.indexOf(cleanedQuery) >= 0) return 4
+        if (searchText.indexOf(cleanedQuery) >= 0) return 5
+        if (secondary.indexOf(cleanedQuery) >= 0) return 6
+        return 99
+      }
+
+      function filterRequestOptions(query) {
+        var cleanedQuery = String(query || "").trim().toLowerCase()
+        var terms = cleanedQuery ? cleanedQuery.split(/\s+/g).filter(Boolean) : []
+        var matched = requestOptions.filter(function (option) {
+          if (!terms.length) return true
+          var haystack = [
+            requestOptionPrimaryLabel(option),
+            requestOptionSecondaryLabel(option),
+            String((option && option.search_text) || ""),
+          ]
+            .join(" ")
+            .toLowerCase()
+          for (var i = 0; i < terms.length; i++) {
+            if (haystack.indexOf(terms[i]) < 0) return false
+          }
+          return true
+        })
+        matched.sort(function (a, b) {
+          var scoreDiff = scoreRequestOption(a, cleanedQuery) - scoreRequestOption(b, cleanedQuery)
+          if (scoreDiff) return scoreDiff
+          return requestOptionPrimaryLabel(a).localeCompare(requestOptionPrimaryLabel(b))
+        })
+        return matched.slice(0, cleanedQuery ? 18 : 14)
+      }
+
+      function paintActiveOption() {
+        var items = results.querySelectorAll(".icono-request-option")
+        for (var i = 0; i < items.length; i++) {
+          items[i].classList.toggle("active", i === activeIndex)
+        }
+      }
+
+      function renderResultsList() {
+        filteredOptions = filterRequestOptions(queryInput.value)
+        var html = renderRequestOptionButtonMarkup(null, hiddenInput.value, true)
+        if (filteredOptions.length) {
+          html += filteredOptions
+            .map(function (option) {
+              return renderRequestOptionButtonMarkup(option, hiddenInput.value, false)
+            })
+            .join("")
+        } else {
+          html +=
+            '<div class="icono-request-results-empty">No emulsions match that search. Try a workflow code, artist tag, or full vision ID.</div>'
+        }
+        results.innerHTML = html
+        paintActiveOption()
+        if (!pickerOpen) openResults()
+      }
+
+      function setSelection(option) {
+        hiddenInput.value = option && option.vision_id ? String(option.vision_id) : ""
+        queryInput.value = option ? requestOptionPrimaryLabel(option) : ""
+        updateSummary()
+        renderResultsList()
+        closeResults()
+      }
+
+      queryInput.addEventListener("focus", function () {
+        renderResultsList()
+      })
+      queryInput.addEventListener("click", function () {
+        renderResultsList()
+      })
+      queryInput.addEventListener("input", function () {
+        activeIndex = -1
+        renderResultsList()
+      })
+      queryInput.addEventListener("keydown", function (event) {
+        var items = results.querySelectorAll(".icono-request-option")
+        if (event.key === "ArrowDown") {
+          event.preventDefault()
+          if (!pickerOpen) renderResultsList()
+          activeIndex = Math.min(activeIndex + 1, items.length - 1)
+          paintActiveOption()
+          return
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault()
+          if (!pickerOpen) renderResultsList()
+          activeIndex = Math.max(activeIndex - 1, 0)
+          paintActiveOption()
+          return
+        }
+        if (event.key === "Enter" && pickerOpen) {
+          event.preventDefault()
+          var activeItem = items[activeIndex >= 0 ? activeIndex : 0]
+          if (activeItem) activeItem.click()
+          return
+        }
+        if (event.key === "Escape") {
+          closeResults()
+        }
+      })
+      results.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-icono-request-option]")
+        if (!button) return
+        var visionId = String(button.getAttribute("data-icono-request-option") || "").trim()
+        if (!visionId) {
+          setSelection(null)
+          return
+        }
+        for (var i = 0; i < requestOptions.length; i++) {
+          if (String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === visionId) {
+            setSelection(requestOptions[i])
+            return
+          }
+        }
+      })
+      if (panel._iconoRequestOutsideClickHandler) {
+        document.removeEventListener("click", panel._iconoRequestOutsideClickHandler)
+      }
+      panel._iconoRequestOutsideClickHandler = function (event) {
+        if (!picker.contains(event.target)) closeResults()
+      }
+      document.addEventListener("click", panel._iconoRequestOutsideClickHandler)
+      updateSummary()
+      queryInput.value = ""
+      renderResultsList()
+      closeResults()
       form.addEventListener("submit", function (event) {
         event.preventDefault()
-        var requestedVisionId = String(select.value || "").trim()
+        var requestedVisionId = String(hiddenInput.value || "").trim()
         var payload = {
           symbol: symbol,
           request_mode: requestedVisionId ? "specific" : "random",

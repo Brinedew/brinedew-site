@@ -1242,9 +1242,13 @@ function buildGenerationRequestLaneKey({ geneSymbol, requestMode, requestedVisio
 function generationRequestVisionLabel(row) {
   const emulsionId = publicEmulsionIdForRow(row)
   if (emulsionId) return emulsionId
-  return sanitizeVoteVisionId(row?.requested_vision_id || row?.vision_id || "")
-    ? "Specific emulsion"
-    : ""
+  const artistTag =
+    sanitizeText(row?.requested_artist_tag || row?.artist_tag || "", 255) || ""
+  if (artistTag) return artistTag
+  const artistName =
+    sanitizeText(row?.requested_artist_name || row?.artist_name || "", 255) || ""
+  if (artistName) return artistName
+  return sanitizeVoteVisionId(row?.requested_vision_id || row?.vision_id || "") || ""
 }
 
 function mapGenerationRequestRow(row) {
@@ -1372,6 +1376,8 @@ async function listOpenGenerationRequests(
        gr.*, 
        COALESCE(gc.full_name, '') AS full_name,
        COALESCE(avr.emulsion_id, '') AS requested_emulsion_id,
+       COALESCE(avr.artist_tag, '') AS requested_artist_tag,
+       COALESCE(avr.artist_name, '') AS requested_artist_name,
        COALESCE(avr.workflow_id, '') AS requested_workflow_id,
        COALESCE(avr.workflow_label, '') AS requested_workflow_label,
        COALESCE(avr.prompt_version, '') AS requested_prompt_version,
@@ -1436,6 +1442,8 @@ async function createGenerationRequest(
     ? await env.ICONOPLASM_DB.prepare(
         `SELECT gr.*, COALESCE(gc.full_name, '') AS full_name
          , COALESCE(avr.emulsion_id, '') AS requested_emulsion_id
+         , COALESCE(avr.artist_tag, '') AS requested_artist_tag
+         , COALESCE(avr.artist_name, '') AS requested_artist_name
          , COALESCE(avr.workflow_id, '') AS requested_workflow_id
          , COALESCE(avr.workflow_label, '') AS requested_workflow_label
          , COALESCE(avr.prompt_version, '') AS requested_prompt_version
@@ -1458,33 +1466,173 @@ async function createGenerationRequest(
   }
 }
 
-async function listGenerationRequestVisionOptions(env) {
+function generationRequestVisionOptionLabels(row) {
+  const emulsionId = publicEmulsionIdForRow(row)
+  const artistId = publicArtistIdForRow(row)
+  const artistTag = sanitizeText(row?.artist_tag || "", 255) || ""
+  const artistName = sanitizeText(row?.artist_name || "", 255) || ""
+  const visionId = sanitizeVoteVisionId(row?.vision_id || "")
+  const workflowLabel = sanitizeText(row?.workflow_label || "", 255) || ""
+  const primaryLabel = emulsionId || artistTag || artistName || artistId || visionId
+  const secondaryParts = []
+  if (artistTag && artistTag !== primaryLabel) secondaryParts.push(artistTag)
+  if (artistName && artistName !== primaryLabel && artistName !== artistTag) secondaryParts.push(artistName)
+  if (artistId && artistId !== primaryLabel && artistId !== artistTag) secondaryParts.push(`artist ${artistId}`)
+  if (workflowLabel && workflowLabel !== primaryLabel) secondaryParts.push(workflowLabel)
+  if (visionId && visionId !== primaryLabel) secondaryParts.push(visionId)
+  return {
+    emulsionId,
+    artistId,
+    artistTag,
+    artistName,
+    visionId,
+    primaryLabel: primaryLabel || "Specific emulsion",
+    secondaryLabel: secondaryParts.join(" · "),
+    searchText: [emulsionId, artistId, artistTag, artistName, workflowLabel, visionId]
+      .filter(Boolean)
+      .join(" "),
+  }
+}
+
+async function listGenerationRequestVisionPreviewAssets(
+  env,
+  url,
+  visionIds,
+  { perVisionLimit = 3 } = {},
+) {
+  if (!env.ICONOPLASM_DB) return new Map()
+  const safeVisionIds = Array.from(
+    new Set(
+      (Array.isArray(visionIds) ? visionIds : [])
+        .map((value) => sanitizeVoteVisionId(value || ""))
+        .filter(Boolean),
+    ),
+  ).slice(0, 120)
+  if (!safeVisionIds.length) return new Map()
+  const previewLimit = Math.max(
+    1,
+    Math.min(4, Number.parseInt(String(perVisionLimit || "3"), 10) || 3),
+  )
+  const placeholders = safeVisionIds.map(() => "?").join(", ")
+  const resp = await env.ICONOPLASM_DB.prepare(
+    `WITH ranked_previews AS (
+       SELECT
+         pa.vision_id,
+         pa.gene_symbol,
+         lower(pa.asset_sha256) AS asset_sha256,
+         pa.r2_key_medium,
+         pa.r2_key_thumb,
+         pa.r2_key_full,
+         CASE
+           WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+           ELSE 0
+         END AS is_current,
+         ROW_NUMBER() OVER (
+           PARTITION BY pa.vision_id
+           ORDER BY
+             CASE
+               WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+               ELSE 0
+             END DESC,
+             pa.created_at DESC,
+             lower(pa.asset_sha256) ASC
+         ) AS preview_rank
+       FROM icono_portrait_assets pa
+       LEFT JOIN icono_publish_state ps
+         ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
+       WHERE pa.vision_id IN (${placeholders})
+         AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+     )
+     SELECT
+       vision_id,
+       gene_symbol,
+       asset_sha256,
+       r2_key_medium,
+       r2_key_thumb,
+       r2_key_full,
+       is_current,
+       preview_rank
+     FROM ranked_previews
+     WHERE preview_rank <= ?
+     ORDER BY vision_id ASC, preview_rank ASC`,
+  )
+    .bind(...safeVisionIds, previewLimit)
+    .all()
+  const base = portraitBase(url, env)
+  const previewsByVision = new Map()
+  for (const row of Array.isArray(resp?.results) ? resp.results : []) {
+    const visionId = sanitizeVoteVisionId(row?.vision_id || "")
+    if (!visionId) continue
+    const asset = {
+      gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+      asset_sha256: normalizeSha256(row?.asset_sha256 || "") || "",
+      is_current: Number(row?.is_current || 0) > 0,
+      preview_rank: Number(row?.preview_rank || 0) || 0,
+      medium_url:
+        row?.r2_key_medium || row?.r2_key_full
+          ? joinUrl(base, row?.r2_key_medium || row?.r2_key_full)
+          : adminPortraitUrl(base, row?.asset_sha256 || "", "medium"),
+      thumb_url:
+        row?.r2_key_thumb || row?.r2_key_medium
+          ? joinUrl(base, row?.r2_key_thumb || row?.r2_key_medium)
+          : adminPortraitUrl(base, row?.asset_sha256 || "", "thumb"),
+    }
+    if (!previewsByVision.has(visionId)) previewsByVision.set(visionId, [])
+    previewsByVision.get(visionId).push(asset)
+  }
+  return previewsByVision
+}
+
+async function listGenerationRequestVisionOptions(env, url) {
   if (!env.ICONOPLASM_DB) return []
   const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT vision_id, emulsion_id, workflow_id, workflow_label, prompt_version, variant_slot, image_count, live_count
+    `SELECT
+       vision_id,
+       artist_tag,
+       artist_name,
+       emulsion_id,
+       workflow_id,
+       workflow_label,
+       prompt_version,
+       variant_slot,
+       image_count,
+       live_count,
+       score
      FROM icono_admin_vision_rollup
      WHERE COALESCE(vision_id, '') <> ''
-     ORDER BY live_count DESC, image_count DESC, vision_id ASC
-     LIMIT 64`,
+     ORDER BY live_count DESC, image_count DESC, score DESC, vision_id ASC
+     LIMIT 120`,
   ).all()
   const rows = Array.isArray(resp?.results) ? resp.results : []
-  return (Array.isArray(rows) ? rows : [])
+  const mapped = (Array.isArray(rows) ? rows : [])
     .map((row) => {
-      const visionId = sanitizeVoteVisionId(row?.vision_id || "")
-      if (!visionId) return null
-      const emulsionId = publicEmulsionIdForRow(row)
-      const artistId = publicArtistIdForRow(row)
-      const label = emulsionId || "Specific emulsion"
+      const labels = generationRequestVisionOptionLabels(row)
+      if (!labels.visionId) return null
       return {
-        vision_id: visionId,
-        label,
-        emulsion_id: emulsionId,
-        artist_id: artistId,
+        vision_id: labels.visionId,
+        label: labels.primaryLabel,
+        primary_label: labels.primaryLabel,
+        secondary_label: labels.secondaryLabel,
+        search_text: labels.searchText,
+        emulsion_id: labels.emulsionId,
+        artist_id: labels.artistId,
+        artist_tag: labels.artistTag,
+        artist_name: labels.artistName,
         image_count: Number(row?.image_count || 0),
         live_count: Number(row?.live_count || 0),
       }
     })
     .filter(Boolean)
+  const previewsByVision = await listGenerationRequestVisionPreviewAssets(
+    env,
+    url,
+    mapped.map((row) => row.vision_id),
+    { perVisionLimit: 3 },
+  )
+  return mapped.map((row) => ({
+    ...row,
+    preview_assets: previewsByVision.get(row.vision_id) || [],
+  }))
 }
 
 async function fulfillGenerationRequests(
@@ -11088,7 +11236,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const requestRows = await listOpenGenerationRequests(env, { limit: 500, geneSymbol: symbol })
       // Cost fence: logged-out visitors only need the queue summary + login CTA.
       // Do not burn a vision-rollup read for users who cannot submit a request yet.
-      const requestOptions = sessionUser?.user_id ? await listGenerationRequestVisionOptions(env) : []
+      const requestOptions = sessionUser?.user_id
+        ? await listGenerationRequestVisionOptions(env, url)
+        : []
       const myRows = sessionUser?.user_id
         ? requestRows.filter((row) => row.requester_user_id === userId)
         : []
