@@ -2780,7 +2780,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function requestOptionPreviewUrl(asset) {
     var item = asset || {}
-    return String(item.thumb_url || item.medium_url || "").trim()
+    return String(item.medium_url || item.thumb_url || "").trim()
   }
 
   function renderRequestOptionPreviewStripMarkup(option) {

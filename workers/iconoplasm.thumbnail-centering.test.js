@@ -28,7 +28,7 @@ test("Iconoplasm thumbnail viewports keep request previews portrait-sized and su
   expectPortraitBiasedCover(".icono-request-option-thumb-image")
   assert.match(
     css,
-    /\.icono-request-option-thumb\s*\{[^}]*width:\s*42px;[^}]*height:\s*56px;/m,
-    "request option previews should keep a larger portrait viewport",
+    /\.icono-request-option-thumb\s*\{[^}]*width:\s*84px;[^}]*height:\s*112px;/m,
+    "request option previews should keep a doubled portrait viewport",
   )
 })

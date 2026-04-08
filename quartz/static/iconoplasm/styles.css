@@ -450,7 +450,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   gap: 0.45rem;
   width: 100%;
   overflow: hidden;
-  min-height: 3.6rem;
+  min-height: 7rem;
 }
 
 .icono-request-option-strip--empty {
@@ -459,8 +459,8 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-option-thumb {
   flex: 0 0 auto;
-  width: 42px;
-  height: 56px;
+  width: 84px;
+  height: 112px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--icono-ring-image) 74%, transparent);
@@ -2299,8 +2299,8 @@ html[data-theme="dark"] .icono-card--brick {
   }
 
   .icono-request-option-thumb {
-    width: 38px;
-    height: 50px;
+    width: 72px;
+    height: 96px;
   }
 
   .icono-request-submit {
