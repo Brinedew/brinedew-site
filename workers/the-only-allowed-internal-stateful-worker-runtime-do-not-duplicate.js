@@ -822,7 +822,9 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       // consistent security headers for the static site.
       if (
         (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
-        !url.pathname.startsWith("/api/")
+        !url.pathname.startsWith("/api/") &&
+        url.pathname !== "/admin" &&
+        url.pathname !== "/admin-v2"
       ) {
         if (
           (request.method === "GET" || request.method === "HEAD") &&
