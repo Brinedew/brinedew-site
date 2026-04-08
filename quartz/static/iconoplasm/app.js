@@ -1067,7 +1067,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-gallery-toolbar">' +
       '<div class="icono-search icono-search--toolbar">' +
       '<div class="icono-search-wrapper">' +
-      '<input type="text" id="icono-q" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
+      '<input type="text" id="icono-q" class="icono-search-input" placeholder="Search by gene symbol or name..." autocomplete="off" />' +
       '<div class="icono-search-results" id="icono-results"></div>' +
       "</div>" +
       "</div>" +
@@ -2797,7 +2797,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<span class="icono-request-option-thumb' +
         (asset.is_current ? " is-current" : "") +
         '">' +
-        '<img src="' +
+        '<img class="icono-thumbnail-viewport-image" src="' +
         esc(url) +
         '" alt="' +
         esc(String(asset.gene_symbol || "Example") + " example portrait") +
@@ -2812,11 +2812,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var item = option || {}
     var optionVisionId = isRandom ? "" : String(item.vision_id || "").trim()
     var isSelected = String(selectedVisionId || "").trim() === optionVisionId
-    var primary = isRandom ? "Random default" : requestOptionPrimaryLabel(item)
+    var primary = isRandom ? "Random emulsion" : requestOptionPrimaryLabel(item)
+    var optionId = "icono-request-option-" + escAttr(optionVisionId || "random")
     return (
       '<button type="button" class="icono-request-option' +
       (isSelected ? " is-selected" : "") +
       (isRandom ? " is-random" : "") +
+      '" id="' +
+      optionId +
+      '" role="option" aria-selected="' +
+      (isSelected ? "true" : "false") +
       '" data-icono-request-option="' +
       esc(optionVisionId) +
       '">' +
@@ -2931,9 +2936,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
         '<input id="icono-request-query-' +
         esc(symbol) +
-        '" data-icono-request-query class="icono-request-picker-input" type="text" autocomplete="off" placeholder="Search emulsion code or vision ID. Leave blank for random." aria-expanded="false" aria-label="Search emulsion lane">' +
+        '" data-icono-request-query class="icono-search-input icono-request-picker-input" type="text" autocomplete="off" placeholder="Search emulsion code or vision ID. Leave blank for random." role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="icono-request-results-' +
+        esc(symbol) +
+        '" aria-label="Search emulsion lane">' +
         '<input type="hidden" data-icono-request-vision value="">' +
-        '<div class="icono-search-results icono-request-results" data-icono-request-results hidden></div>' +
+        '<div class="icono-search-results icono-request-results" id="icono-request-results-' +
+        esc(symbol) +
+        '" role="listbox" data-icono-request-results hidden></div>' +
         '</div>' +
         '</div>' +
         '<button type="submit" class="icono-home-auth-link icono-request-submit" style="border:none;cursor:pointer;">request new candidates (free)</button>' +
@@ -2954,22 +2963,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var filteredOptions = []
       var pickerOpen = false
 
-      function selectedOption() {
-        var selectedVisionId = String(hiddenInput.value || "").trim()
-        if (!selectedVisionId) return null
-        for (var i = 0; i < requestOptions.length; i++) {
-          if (String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === selectedVisionId) {
-            return requestOptions[i]
-          }
-        }
-        return null
-      }
-
       function closeResults() {
         pickerOpen = false
         activeIndex = -1
         results.hidden = true
         queryInput.setAttribute("aria-expanded", "false")
+        queryInput.removeAttribute("aria-activedescendant")
       }
 
       function openResults() {
@@ -3023,6 +3022,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var items = results.querySelectorAll(".icono-request-option")
         for (var i = 0; i < items.length; i++) {
           items[i].classList.toggle("active", i === activeIndex)
+        }
+        var activeItem = items[activeIndex] || null
+        if (activeItem && activeItem.id) {
+          queryInput.setAttribute("aria-activedescendant", activeItem.id)
+        } else {
+          queryInput.removeAttribute("aria-activedescendant")
         }
       }
 
@@ -3890,7 +3895,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var portraitUrl = publishedPortraitUrl(g, "thumb") || publishedPortraitUrl(g, "medium")
       var mediaHtml = portraitUrl
         ? '<span class="icono-search-result-media icono-search-result-media--portrait">' +
-          '<img class="icono-search-result-portrait" src="' +
+          '<img class="icono-search-result-portrait icono-thumbnail-viewport-image" src="' +
           esc(portraitUrl) +
           '" alt="' +
           esc(g.symbol) +
@@ -4214,7 +4219,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
     html += renderPublishedEmulsionNotice(g)
     html +=
-      '<section class="icono-home-auth-card icono-gene-request-panel" data-icono-request-panel="' +
+      '<section class="icono-gene-request-surface icono-gene-request-panel" data-icono-request-panel="' +
       esc(g.symbol) +
       '">' +
       '<div data-icono-request-body>' +
