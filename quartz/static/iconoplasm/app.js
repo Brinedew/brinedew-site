@@ -2927,12 +2927,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<div class="icono-request-shell">' +
         '<div class="icono-request-actions">' +
         '<form data-icono-request-form class="icono-request-form">' +
+        '<div class="icono-search icono-search--toolbar icono-request-search">' +
         '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
         '<input id="icono-request-query-' +
         esc(symbol) +
         '" data-icono-request-query class="icono-request-picker-input" type="text" autocomplete="off" placeholder="Search emulsion code or vision ID. Leave blank for random." aria-expanded="false" aria-label="Search emulsion lane">' +
         '<input type="hidden" data-icono-request-vision value="">' +
         '<div class="icono-search-results icono-request-results" data-icono-request-results hidden></div>' +
+        '</div>' +
         '</div>' +
         '<button type="submit" class="icono-home-auth-link icono-request-submit" style="border:none;cursor:pointer;">request new candidates (free)</button>' +
         '</form>' +
@@ -3026,7 +3028,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
       function renderResultsList() {
         filteredOptions = filterRequestOptions(queryInput.value)
-        var html = ""
+        var html = renderRequestOptionButtonMarkup(null, hiddenInput.value, true)
         if (filteredOptions.length) {
           html += filteredOptions
             .map(function (option) {
@@ -3089,6 +3091,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var button = event.target.closest("[data-icono-request-option]")
         if (!button) return
         var visionId = String(button.getAttribute("data-icono-request-option") || "").trim()
+        if (!visionId) {
+          setSelection(null)
+          return
+        }
         for (var i = 0; i < requestOptions.length; i++) {
           if (String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === visionId) {
             setSelection(requestOptions[i])
