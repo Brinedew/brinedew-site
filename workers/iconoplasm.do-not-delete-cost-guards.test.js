@@ -129,3 +129,23 @@ test("DO NOT DELETE: the-only-allowed-db-gateway should stay non-public even in 
     "staging gateway should also stay off preview URLs so we do not publish the internal DB gateway by accident",
   )
 })
+
+test("DO NOT DELETE: production deploy wiring must use the gateway config for Iconoplasm migrations and deploy the gateway worker explicitly", () => {
+  const workflow = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../.github/workflows/deploy-quartz.yml")
+
+  assert.match(
+    workflow,
+    /wrangler d1 migrations apply iconoplasm --remote --config wrangler\.the-only-allowed-db-gateway\.toml/,
+    "production migrations must run through the gateway wrangler config because the caller worker no longer has the D1 binding",
+  )
+  assert.match(
+    workflow,
+    /Deploy Iconoplasm DB gateway worker \(production\)[\s\S]*?wrangler deploy --config wrangler\.the-only-allowed-db-gateway\.toml/,
+    "production workflow should deploy the explicit gateway worker instead of assuming wrangler deploy covers both runtimes",
+  )
+  assert.match(
+    workflow,
+    /Deploy Cloudflare Worker \(production\)[\s\S]*?run: wrangler deploy/m,
+    "production workflow should still deploy the public caller worker after the gateway deploy",
+  )
+})

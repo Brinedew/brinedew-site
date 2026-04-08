@@ -311,7 +311,8 @@ Do not quietly switch users to some other mode and call it done.
 
 There is also a verified manual worker path from this repo:
 
-- from `d:\Coding\Website`, run `npx wrangler deploy`
+- from `d:\Coding\Website`, run `npx wrangler deploy --config wrangler.the-only-allowed-db-gateway.toml`
+- then run `npx wrangler deploy`
 - or use the VS Code task `Deploy iconoplasm worker now`
 
 If you do that, still commit and push right away so Git and production do not drift apart.

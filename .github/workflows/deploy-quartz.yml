@@ -108,7 +108,10 @@ jobs:
         run: wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
       - name: Apply Iconoplasm D1 migrations (production)
-        run: wrangler d1 migrations apply iconoplasm --remote
+        run: wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-db-gateway.toml
+
+      - name: Deploy Iconoplasm DB gateway worker (production)
+        run: wrangler deploy --config wrangler.the-only-allowed-db-gateway.toml
 
       - name: Deploy Cloudflare Worker (production)
         run: wrangler deploy
