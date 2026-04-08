@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
-import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
+import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeStatement {
   constructor(db, sql) {
@@ -108,10 +108,10 @@ class FakeOnlyAllowedGateway {
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
-  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
-    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
+    env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
       fetch(request) {
-        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
       },
     }
   }
@@ -134,7 +134,7 @@ function buildEnv(overrides = {}, { bindGateway = true } = {}) {
 }
 
 test("public gene payload includes published portrait dimensions", async () => {
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/A1BG"),
     buildEnv(),
     {},
@@ -151,7 +151,7 @@ test("public gene payload includes published portrait dimensions", async () => {
 })
 
 test("site gene payload includes published portrait dimensions for first-party browser requests", async () => {
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
       headers: {
         Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
@@ -169,7 +169,7 @@ test("site gene payload includes published portrait dimensions for first-party b
 })
 
 test("public media payload includes published portrait dimensions", async () => {
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
     buildEnv(),
     {},
@@ -183,21 +183,21 @@ test("public media payload includes published portrait dimensions", async () => 
   assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
 })
 
-test("public media fails closed when THE_ONLY_ALLOWED_DB_GATEWAY is missing", async () => {
-  const response = await handleIconoplasmCallerRequest(
+test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
-    buildEnv({ THE_ONLY_ALLOWED_DB_GATEWAY: null }, { bindGateway: false }),
+    buildEnv({ THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: null }, { bindGateway: false }),
     {},
   )
   const payload = await response.json()
 
   assert.equal(response.status, 503)
-  assert.equal(payload?.code, "DB_GATEWAY_REQUIRED")
-  assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_DB_GATEWAY/i)
+  assert.equal(payload?.code, "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED")
+  assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE/i)
 })
 
 test("public gene batch is limited to first-party clients and extension traffic", async () => {
-  const deniedResponse = await handleIconoplasmCallerRequest(
+  const deniedResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -210,7 +210,7 @@ test("public gene batch is limited to first-party clients and extension traffic"
   assert.equal(deniedResponse.status, 403)
   assert.equal(deniedPayload?.code, "FIRST_PARTY_ONLY")
 
-  const extensionResponse = await handleIconoplasmCallerRequest(
+  const extensionResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
       headers: {
@@ -228,7 +228,7 @@ test("public gene batch is limited to first-party clients and extension traffic"
   assert.equal(extensionPayload?.genes?.[0]?.symbol, "A1BG")
 })
 
-test("public media hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
+test("public media hot path uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({
       media: {
@@ -239,11 +239,11 @@ test("public media hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async 
     }),
   )
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
     buildEnv({
       ICONOPLASM_DB: null,
-      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
     }),
     {},
   )
@@ -252,18 +252,18 @@ test("public media hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async 
   assert.equal(response.status, 200)
   assert.equal(payload?.media?.width, 999)
   assert.equal(gateway.calls.length, 1)
-  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/media/A1BG")
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/media/A1BG")
   assert.equal(gateway.calls[0]?.method, "GET")
 })
 
-test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_DB_GATEWAY", async () => {
+test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({
       genes: [{ symbol: "A1BG" }],
     }),
   )
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
       headers: {
@@ -274,7 +274,7 @@ test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_DB_GATEWAY
     }),
     buildEnv({
       ICONOPLASM_DB: null,
-      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
     }),
     {},
   )
@@ -283,7 +283,7 @@ test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_DB_GATEWAY
   assert.equal(response.status, 200)
   assert.equal(payload?.genes?.[0]?.symbol, "A1BG")
   assert.equal(gateway.calls.length, 1)
-  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/genes/batch")
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/genes/batch")
   assert.equal(gateway.calls[0]?.method, "POST")
   assert.deepEqual(JSON.parse(gateway.calls[0]?.body || "null"), { symbols: ["A1BG", "TP53"] })
   assert.equal(gateway.calls[0]?.headers?.["x-iconoplasm-extension-version"], "0.3.0")

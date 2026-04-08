@@ -160,9 +160,9 @@ import {
 // Import Iconoplasm stateful handlers
 import {
   isIconoplasmRequest,
-  handleIconoplasmDbGatewayRequest,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   IconoplasmVoteCoordinator,
-} from "./iconoplasm-gateway.js"
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
@@ -636,7 +636,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         (url.pathname === "/api/iconoplasm" || url.pathname.startsWith("/api/iconoplasm/")) &&
         request.method !== "OPTIONS"
       ) {
-        return handleIconoplasmDbGatewayRequest(request, env, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx)
       }
 
       // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
@@ -661,7 +661,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           url.pathname === "/health"
 
         if (isApiOrWorker) {
-          return handleIconoplasmDbGatewayRequest(request, env, ctx)
+          return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx)
         }
 
         // Versioned iconoplasm static assets: extend cache aggressively
@@ -1468,7 +1468,7 @@ export default {
 
     if (cronExpr === "17 * * * *") {
       try {
-        const maintenanceResponse = await handleIconoplasmDbGatewayRequest(
+        const maintenanceResponse = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
           new Request("https://geneguessr-api/__internal/iconoplasm/repair-canon-invariants", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

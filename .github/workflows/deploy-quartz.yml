@@ -113,8 +113,18 @@ jobs:
       - name: Deploy the only allowed internal stateful worker (production)
         run: wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
-      - name: Deploy public edge worker (production)
-        run: wrangler deploy
+      - name: Upload public edge worker script without routes (production)
+        run: wrangler deploy --config wrangler.the-only-allowed-public-edge-worker-upload-only.toml
+
+      - name: Reassign production routes to the public edge worker
+        run: |
+          node scripts/reassign-cloudflare-worker-routes.mjs \
+            brinedew.bio \
+            the-only-allowed-public-edge-worker-that-must-not-touch-state \
+            "brinedew.bio/*" \
+            "brinedew.bio/api/*" \
+            "geneguessr.brinedew.bio/*" \
+            "iconoplasm.brinedew.bio/*"
 
       - name: Smoke test Discord OAuth bootstrap (production)
         run: |

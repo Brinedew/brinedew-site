@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
-import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
+import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 if (!globalThis.caches) {
   globalThis.caches = {
@@ -127,10 +127,10 @@ class FakeOnlyAllowedGateway {
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = buildCtx()) {
-  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
-    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
+    env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
       fetch(request) {
-        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
       },
     }
   }
@@ -228,7 +228,7 @@ function buildCtx() {
 }
 
 test("youngest sort keeps zero-age genes off the top while leaving them in the results", async () => {
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=youngest&limit=10"),
     buildEnv(),
     buildCtx(),
@@ -245,7 +245,7 @@ test("youngest sort keeps zero-age genes off the top while leaving them in the r
 })
 
 test("lightest sort keeps zero-weight genes off the top while leaving them in the results", async () => {
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=lightest&limit=10"),
     buildEnv(),
     buildCtx(),
@@ -261,7 +261,7 @@ test("lightest sort keeps zero-weight genes off the top while leaving them in th
   )
 })
 
-test("public gallery hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
+test("public gallery hot path uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({
       items: [{ symbol: "GATEWAY" }],
@@ -273,11 +273,11 @@ test("public gallery hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", asyn
     }),
   )
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     buildEnv({
       ICONOPLASM_DB: null,
-      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
     }),
     buildCtx(),
   )
@@ -286,6 +286,6 @@ test("public gallery hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", asyn
   assert.equal(response.status, 200)
   assert.equal(payload.items[0]?.symbol, "GATEWAY")
   assert.equal(gateway.calls.length, 1)
-  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/gallery?order=votes&limit=10")
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/gallery?order=votes&limit=10")
   assert.equal(gateway.calls[0]?.method, "GET")
 })

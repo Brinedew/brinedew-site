@@ -33,8 +33,8 @@ This repo is the public runtime.
 It owns things like:
 
 - the public Iconoplasm homepage and gene pages
-- the caller-side Cloudflare Worker boundary in `workers/iconoplasm-caller.js`
-- the D1-capable gateway runtime in `workers/iconoplasm-gateway.js`
+- the caller-side Cloudflare Worker boundary in `workers/iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js`
+- the only-allowed internal stateful runtime in `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
 - the production D1 runtime tables
 - the shared settings/auth bridge that connects `brinedew.bio` and `iconoplasm.brinedew.bio`
 
@@ -206,7 +206,7 @@ So the rule is:
 
 **If a public or first-party route needs an O(N) snapshot of portraits, gallery rows, or other whole-inventory state, it must use a versioned shared cache in KV (or another truly shared store), not only a module-level JS object.**
 
-In `workers/iconoplasm-gateway.js`, treat these functions as the cost barrier:
+In `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`, treat these functions as the cost barrier:
 
 - `publishedPortraitRefs(...)`
 - `publishedPortraitFingerprint(...)`
@@ -258,7 +258,7 @@ Do **not** do any of these:
 
 - delete the test because it is inconvenient
 - rename the test so nobody notices what it was guarding
-- remove the warning comments from `workers/iconoplasm-gateway.js`
+- remove the warning comments from `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
 - strip the docs/instruction text because it feels repetitive
 
 If you genuinely need to replace one of these guards, the replacement has to land in the same change, be stricter or clearer, and say in comments why the old guard was no longer the right one.

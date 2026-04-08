@@ -2,10 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
-  handleIconoplasmDbGatewayRequest,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmGatewayRequest,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm-gateway.js"
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 // DO NOT DELETE THIS FILE.
 //
@@ -187,9 +187,9 @@ function buildEnv(sharedKv, db) {
     ICONOPLASM_DB: db,
     KV: sharedKv,
   }
-  env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
     fetch(request) {
-      return handleIconoplasmDbGatewayRequest(request, env, { waitUntil() {} })
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, { waitUntil() {} })
     },
   }
   return env

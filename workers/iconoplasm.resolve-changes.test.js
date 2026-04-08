@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
-  handleIconoplasmDbGatewayRequest,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm-gateway.js"
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -160,9 +160,9 @@ class FakeOnlyAllowedGateway {
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
-  env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
     fetch(request) {
-      return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
     },
   }
   return env
@@ -228,8 +228,8 @@ test.after(() => {
   resetIconoplasmRuntimeCachesForTest()
 })
 
-test("public resolve route works through THE_ONLY_ALLOWED_DB_GATEWAY", async () => {
-  const response = await handleIconoplasmCallerRequest(
+test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -250,8 +250,8 @@ test("public resolve route works through THE_ONLY_ALLOWED_DB_GATEWAY", async () 
   )
 })
 
-test("public changes route works through THE_ONLY_ALLOWED_DB_GATEWAY", async () => {
-  const response = await handleIconoplasmCallerRequest(
+test("public changes route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10"),
     buildEnv(),
     {},
@@ -265,20 +265,20 @@ test("public changes route works through THE_ONLY_ALLOWED_DB_GATEWAY", async () 
   assert.equal(payload?.changes?.[0]?.current_asset_sha256, "a".repeat(64))
 })
 
-test("public resolve uses THE_ONLY_ALLOWED_DB_GATEWAY when explicitly bound", async () => {
+test("public resolve uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when explicitly bound", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({
       results: [{ requested: "P53", canonical_symbol: "TP53", matched_by: "alias", found: true }],
     }),
   )
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifiers: ["P53"] }),
     }),
-    buildEnv({ THE_ONLY_ALLOWED_DB_GATEWAY: gateway }, { bindGateway: false }),
+    buildEnv({ THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway }, { bindGateway: false }),
     {},
   )
   const payload = await response.json()
@@ -286,21 +286,21 @@ test("public resolve uses THE_ONLY_ALLOWED_DB_GATEWAY when explicitly bound", as
   assert.equal(response.status, 200)
   assert.equal(payload?.results?.[0]?.canonical_symbol, "TP53")
   assert.equal(gateway.calls.length, 1)
-  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/resolve")
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/resolve")
   assert.equal(gateway.calls[0]?.method, "POST")
   assert.deepEqual(JSON.parse(gateway.calls[0]?.body || "null"), { identifiers: ["P53"] })
 })
 
-test("public changes fails closed when THE_ONLY_ALLOWED_DB_GATEWAY is missing", async () => {
-  const response = await handleIconoplasmCallerRequest(
+test("public changes fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10"),
-    buildEnv({ THE_ONLY_ALLOWED_DB_GATEWAY: null }, { bindGateway: false }),
+    buildEnv({ THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: null }, { bindGateway: false }),
     {},
   )
   const payload = await response.json()
 
   assert.equal(response.status, 503)
-  assert.equal(payload?.code, "DB_GATEWAY_REQUIRED")
-  assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_DB_GATEWAY/i)
+  assert.equal(payload?.code, "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED")
+  assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE/i)
 })
 

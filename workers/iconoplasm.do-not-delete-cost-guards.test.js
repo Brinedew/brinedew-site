@@ -188,7 +188,12 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
   )
   assert.match(
     workflow,
-    /Deploy public edge worker \(production\)[\s\S]*?run: wrangler deploy/m,
-    "production workflow should still deploy the public edge worker after the internal worker deploy",
+    /Upload public edge worker script without routes \(production\)[\s\S]*?wrangler deploy --config wrangler\.the-only-allowed-public-edge-worker-upload-only\.toml/,
+    "production workflow should upload the public edge worker script without reusing old routes on geneguessr-api",
+  )
+  assert.match(
+    workflow,
+    /Reassign production routes to the public edge worker[\s\S]*?node scripts\/reassign-cloudflare-worker-routes\.mjs[\s\S]*?the-only-allowed-public-edge-worker-that-must-not-touch-state/,
+    "production workflow should explicitly reassign the zone routes away from the legacy geneguessr-api script",
   )
 })

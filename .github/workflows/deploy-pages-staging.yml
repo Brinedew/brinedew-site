@@ -85,11 +85,21 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --env staging
 
-      - name: Deploy public edge worker (staging)
+      - name: Upload public edge worker script without routes (staging)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: wrangler deploy --env staging
+        run: wrangler deploy --config wrangler.the-only-allowed-public-edge-worker-upload-only.toml --env staging
+
+      - name: Reassign staging route to the public edge worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/reassign-cloudflare-worker-routes.mjs \
+            brinedew.bio \
+            the-only-allowed-public-edge-worker-that-must-not-touch-state-staging \
+            "staging.brinedew.bio/*"
 
       - name: Smoke test Discord OAuth bootstrap (staging)
         run: |

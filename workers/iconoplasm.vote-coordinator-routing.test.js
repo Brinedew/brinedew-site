@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
+import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class RecordingStatement {
   constructor(db, sql) {
@@ -140,8 +140,8 @@ test("public vote set is routed through the vote coordinator instead of reading 
       }),
   })
   const db = new RecordingDb()
-  const response = await handleIconoplasmDbGatewayRequest(
-    new Request("https://the-only-allowed-db-gateway/api/iconoplasm/votes/set", {
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/votes/set", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -204,8 +204,8 @@ test("public vote snapshot can run from the vote coordinator without a D1 bindin
       }),
   })
 
-  const response = await handleIconoplasmDbGatewayRequest(
-    new Request("https://the-only-allowed-db-gateway/api/iconoplasm/votes/snapshot", {
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/votes/snapshot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -269,8 +269,8 @@ test("admin vote import is routed through the vote coordinator batch endpoint", 
   })
   const db = new RecordingDb()
 
-  const response = await handleIconoplasmDbGatewayRequest(
-    new Request("https://the-only-allowed-db-gateway/api/iconoplasm/admin/votes/import", {
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/votes/import", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

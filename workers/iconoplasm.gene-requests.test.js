@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
-import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
+import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeRequestStatement {
   constructor(db, sql) {
@@ -79,10 +79,10 @@ class FakeRequestDb {
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
-  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
-    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
+    env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
       fetch(request) {
-        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
       },
     }
   }
@@ -105,7 +105,7 @@ function buildEnv({ bindGateway = true } = {}) {
 
 test("anonymous gene request state skips the vision-options rollup", async () => {
   const env = buildEnv()
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG"),
     env,
     {},

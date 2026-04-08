@@ -1,0 +1,34 @@
+name = "the-only-allowed-public-edge-worker-that-must-not-touch-state"
+main = "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js"
+compatibility_date = "2025-11-12"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
+[[services]]
+binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
+service = "geneguessr-api"
+
+[env.staging]
+name = "the-only-allowed-public-edge-worker-that-must-not-touch-state-staging"
+workers_dev = true
+preview_urls = true
+
+[[env.staging.services]]
+binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
+service = "geneguessr-api-staging"

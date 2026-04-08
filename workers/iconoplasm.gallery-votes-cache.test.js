@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
-  handleIconoplasmDbGatewayRequest,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm-gateway.js"
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeVotesStatement {
   constructor(db, sql) {
@@ -94,10 +94,10 @@ class FakeKv {
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
-  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
-    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
+    env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
       fetch(request) {
-        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
       },
     }
   }
@@ -164,7 +164,7 @@ function buildEnv({ bindGateway = true } = {}) {
 test("vote-sorted gallery uses the cached snapshot instead of live rollup reads", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const env = buildEnv()
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     env,
     { waitUntil() {} },

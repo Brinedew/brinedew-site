@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
-  handleIconoplasmDbGatewayRequest,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm-gateway.js"
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -245,10 +245,10 @@ class FakeOnlyAllowedGateway {
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
-  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
-    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
+    env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
       fetch(request) {
-        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
       },
     }
   }
@@ -340,7 +340,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
     ],
   })
 
-  const firstResponse = await handleIconoplasmCallerRequest(
+  const firstResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
     env,
     {},
@@ -364,7 +364,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
 
   resetIconoplasmRuntimeCachesForTest()
 
-  const secondResponse = await handleIconoplasmCallerRequest(
+  const secondResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
     env,
     {},
@@ -378,7 +378,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
 
 test("catalog search ranks symbol matches before full names before aliases", async () => {
   const env = buildEnv()
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=guardian&scope=catalog&limit=10"),
     env,
     {},
@@ -400,7 +400,7 @@ test("catalog search ranks symbol matches before full names before aliases", asy
 test("guest discovery search falls back to the starter trio instead of the full catalog", async () => {
   const env = buildEnv()
 
-  const starterResponse = await handleIconoplasmCallerRequest(
+  const starterResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10"),
     env,
     {},
@@ -415,7 +415,7 @@ test("guest discovery search falls back to the starter trio instead of the full 
   )
   assert.equal(starterResponse.headers.get("Cache-Control"), "no-store")
 
-  const hiddenResponse = await handleIconoplasmCallerRequest(
+  const hiddenResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10"),
     env,
     {},
@@ -433,7 +433,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
     },
   })
 
-  const starterResponse = await handleIconoplasmCallerRequest(
+  const starterResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10", {
       cookie: "session=abc",
     }),
@@ -455,7 +455,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
 
   env.gatewayDb.seedDiscovery("user-123", "TP53")
 
-  const discoveredResponse = await handleIconoplasmCallerRequest(
+  const discoveredResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", {
       cookie: "session=abc",
     }),
@@ -470,7 +470,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
     ["TP53"],
   )
 
-  const hiddenResponse = await handleIconoplasmCallerRequest(
+  const hiddenResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=guardian&scope=discoveries&limit=10", {
       cookie: "session=abc",
     }),
@@ -484,7 +484,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
   assert.equal(hiddenResponse.headers.get("Cache-Control"), "no-store")
 })
 
-test("catalog search uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
+test("catalog search uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({
       genes: [{ symbol: "PRL", matched_by: "symbol" }],
@@ -495,11 +495,11 @@ test("catalog search uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
   const env = buildEnv({
     overrides: {
       ICONOPLASM_DB: null,
-      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
     },
   })
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
     env,
     {},
@@ -509,11 +509,11 @@ test("catalog search uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
   assert.equal(response.status, 200)
   assert.equal(payload?.genes?.[0]?.symbol, "PRL")
   assert.equal(gateway.calls.length, 1)
-  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/genes/search?q=prl&scope=catalog&limit=5")
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/genes/search?q=prl&scope=catalog&limit=5")
   assert.equal(gateway.calls[0]?.method, "GET")
 })
 
-test("public catalog artifact uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
+test("public catalog artifact uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({
       schema_version: 4,
@@ -524,11 +524,11 @@ test("public catalog artifact uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", asyn
   const env = buildEnv({
     overrides: {
       ICONOPLASM_DB: null,
-      THE_ONLY_ALLOWED_DB_GATEWAY: gateway,
+      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
     },
   })
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildRequest("/api/public/v1/catalog/catalog.searchfixture01.json"),
     env,
     {},
@@ -538,7 +538,7 @@ test("public catalog artifact uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", asyn
   assert.equal(response.status, 200)
   assert.equal(payload?.genes?.[0]?.s, "PRL")
   assert.equal(gateway.calls.length, 1)
-  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/catalog/catalog.searchfixture01.json")
+  assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/catalog/catalog.searchfixture01.json")
   assert.equal(gateway.calls[0]?.method, "GET")
 })
 

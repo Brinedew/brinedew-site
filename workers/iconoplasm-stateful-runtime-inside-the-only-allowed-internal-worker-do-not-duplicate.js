@@ -2359,18 +2359,27 @@ function isPublicCatalogArtifactPath(path) {
   return path.startsWith(publicApiPath("/catalog/catalog.")) && path.endsWith(".json")
 }
 
-const ICONOPLASM_GATEWAY_INTERNAL_HEADER = "x-iconoplasm-db-gateway-internal"
-const ICONOPLASM_GATEWAY_CANON_REPAIR_PATH = "/__internal/iconoplasm/repair-canon-invariants"
+const ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE =
+  "x-iconoplasm-only-allowed-stateful-worker-internal"
+const ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
+  "/__internal/iconoplasm/repair-canon-invariants"
 
-function isIconoplasmGatewayInternalRequest(request) {
-  return String(request?.headers?.get(ICONOPLASM_GATEWAY_INTERNAL_HEADER) || "") === "1"
+function isInternalRequestForTheOnlyAllowedStatefulWorker(request) {
+  return (
+    String(
+      request?.headers?.get(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE) || "",
+    ) === "1"
+  )
 }
 
-function isIconoplasmGatewayCanonRepairRequest(path, method = "GET") {
-  return path === ICONOPLASM_GATEWAY_CANON_REPAIR_PATH && String(method || "GET").toUpperCase() === "POST"
+function isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, method = "GET") {
+  return (
+    path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
+    String(method || "GET").toUpperCase() === "POST"
+  )
 }
 
-function iconoplasmGatewayEligiblePath(path, method = "GET") {
+function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method = "GET") {
   const requestMethod = String(method || "GET").toUpperCase()
   if (!["GET", "HEAD", "POST"].includes(requestMethod)) return false
   if (path === publicApiPath("/metadata")) return true
@@ -2392,41 +2401,46 @@ function iconoplasmGatewayEligiblePath(path, method = "GET") {
   return false
 }
 
-function missingOnlyAllowedGatewayResponse() {
+function missingTheOnlyAllowedStatefulWorkerResponse() {
   return json(
     {
-      error: "THE_ONLY_ALLOWED_DB_GATEWAY binding missing for a fail-closed public route",
-      code: "DB_GATEWAY_REQUIRED",
+      error: "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for a fail-closed public route",
+      code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED",
     },
     503,
     { "Cache-Control": "no-store" },
   )
 }
 
-async function proxyIconoplasmRequestToDbGateway(request, env) {
-  // BILLING / CAPABILITY BARRIER: gateway-eligible Iconoplasm routes must go
-  // through THE_ONLY_ALLOWED_DB_GATEWAY. If you are tempted to point these
+async function proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env) {
+  // BILLING / CAPABILITY BARRIER: these Iconoplasm routes must go
+  // through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE. If you are tempted to point these
   // paths back at raw ICONOPLASM_DB.prepare(...), stop and read the
   // cost-barrier tests first.
-  const gateway = env?.THE_ONLY_ALLOWED_DB_GATEWAY
+  const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
   const url = new URL(request.url)
-  if (!iconoplasmGatewayEligiblePath(url.pathname, request.method)) return null
-  if (!gateway || typeof gateway.fetch !== "function") return missingOnlyAllowedGatewayResponse()
-  const upstreamRequest = new Request(`https://the-only-allowed-db-gateway${url.pathname}${url.search}`, {
-    method: request.method,
-    headers: request.headers,
-    body:
-      request.method === "GET" || request.method === "HEAD"
-        ? undefined
-        : await request.clone().text(),
-  })
+  if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(url.pathname, request.method)) return null
+  if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
+    return missingTheOnlyAllowedStatefulWorkerResponse()
+  }
+  const upstreamRequest = new Request(
+    `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${url.pathname}${url.search}`,
+    {
+      method: request.method,
+      headers: request.headers,
+      body:
+        request.method === "GET" || request.method === "HEAD"
+          ? undefined
+          : await request.clone().text(),
+    },
+  )
   try {
-    return await gateway.fetch(upstreamRequest)
+    return await theOnlyAllowedStatefulWorker.fetch(upstreamRequest)
   } catch {
     return json(
       {
-        error: "THE_ONLY_ALLOWED_DB_GATEWAY request failed",
-        code: "DB_GATEWAY_UNAVAILABLE",
+        error: "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE request failed",
+        code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_UNAVAILABLE",
       },
       503,
       { "Cache-Control": "no-store" },
@@ -2434,22 +2448,25 @@ async function proxyIconoplasmRequestToDbGateway(request, env) {
   }
 }
 
-export async function runIconoplasmCanonMaintenanceThroughGateway(
+export async function runIconoplasmCanonMaintenanceThroughTheOnlyAllowedStatefulWorkerDoNotDuplicate(
   env,
   { limit = 250, actorId = "system", reason = "" } = {},
 ) {
-  const gateway = env?.THE_ONLY_ALLOWED_DB_GATEWAY
-  if (!gateway || typeof gateway.fetch !== "function") {
-    throw new Error("THE_ONLY_ALLOWED_DB_GATEWAY binding missing for canon maintenance")
+  const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
+  if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
+    throw new Error("THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for canon maintenance")
   }
-  const response = await gateway.fetch(
-    new Request(`https://the-only-allowed-db-gateway${ICONOPLASM_GATEWAY_CANON_REPAIR_PATH}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  const response = await theOnlyAllowedStatefulWorker.fetch(
+    new Request(
+      `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ limit, actorId, reason }),
       },
-      body: JSON.stringify({ limit, actorId, reason }),
-    }),
+    ),
   )
   if (!response.ok) {
     let detail = ""
@@ -2457,7 +2474,7 @@ export async function runIconoplasmCanonMaintenanceThroughGateway(
       detail = await response.text()
     } catch {}
     throw new Error(
-      `THE_ONLY_ALLOWED_DB_GATEWAY canon maintenance failed (${response.status})${detail ? `: ${detail}` : ""}`,
+      `THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE canon maintenance failed (${response.status})${detail ? `: ${detail}` : ""}`,
     )
   }
   return response.json()
@@ -9421,14 +9438,14 @@ async function handlePublicGallery(request, env, ctx) {
   return response
 }
 
-export async function handleIconoplasmDbGatewayRequest(request, env, ctx = { waitUntil() {} }) {
+export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx = { waitUntil() {} }) {
   const url = new URL(request.url)
   const path = url.pathname
 
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders() })
   }
-  if (isIconoplasmGatewayCanonRepairRequest(path, request.method)) {
+  if (isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
     const payload = await parseJsonBody(request)
     return json(
       await repairCanonInvariants(env, {
@@ -9440,7 +9457,7 @@ export async function handleIconoplasmDbGatewayRequest(request, env, ctx = { wai
       { "Cache-Control": "no-store" },
     )
   }
-  if (!iconoplasmGatewayEligiblePath(path, request.method)) {
+  if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)) {
     return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
   }
 
@@ -9481,9 +9498,13 @@ export async function handleIconoplasmDbGatewayRequest(request, env, ctx = { wai
   }
   if (path.startsWith("/api/iconoplasm/")) {
     const headers = new Headers(request.headers)
-    headers.set(ICONOPLASM_GATEWAY_INTERNAL_HEADER, "1")
+    headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
     const internalRequest = new Request(request, { headers })
-    return handleIconoplasmGatewayRequest(internalRequest, env, ctx)
+    return handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      internalRequest,
+      env,
+      ctx,
+    )
   }
 
   return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
@@ -9641,11 +9662,15 @@ async function publishCatalogArtifact(env) {
   }
 }
 
-export async function handleIconoplasmGatewayRequest(request, env, ctx) {
+export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+  request,
+  env,
+  ctx,
+) {
   const started = Date.now()
   const url = new URL(request.url)
   const path = url.pathname
-  const internalGatewayRequest = isIconoplasmGatewayInternalRequest(request)
+  const internalGatewayRequest = isInternalRequestForTheOnlyAllowedStatefulWorker(request)
   const done = async (route, res, schema = null) => {
     const out = asHead(request, res)
     await logReq(route, request, out.status, started, schema)
@@ -9668,11 +9693,11 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
     if (
       path.startsWith("/api/iconoplasm/") &&
       !internalGatewayRequest &&
-      iconoplasmGatewayEligiblePath(path, request.method)
+      isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)
     ) {
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       return done(
-        "iconoplasm_api_gateway",
+        "iconoplasm_api_only_allowed_stateful_worker",
         new Response(response.body, { status: response.status, headers: response.headers }),
       )
     }
@@ -9690,7 +9715,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9736,7 +9761,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9759,7 +9784,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9805,7 +9830,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9828,7 +9853,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9858,7 +9883,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9881,7 +9906,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9904,7 +9929,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9928,7 +9953,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
         )
       }
       const rawSymbol = path.slice(publicApiPath("/media/").length)
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -9958,7 +9983,7 @@ export async function handleIconoplasmGatewayRequest(request, env, ctx) {
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToDbGateway(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(

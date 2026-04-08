@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
-import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
+import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function sortSymbols(values) {
   return (Array.isArray(values) ? values : []).slice().sort()
@@ -205,10 +205,10 @@ class FakeGameSessions {
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
-  if (!env.THE_ONLY_ALLOWED_DB_GATEWAY) {
-    env.THE_ONLY_ALLOWED_DB_GATEWAY = {
+  if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
+    env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
       fetch(request) {
-        return handleIconoplasmDbGatewayRequest(request, gatewayEnv, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
       },
     }
   }
@@ -248,7 +248,7 @@ function buildEncounterRequest({ cookie = "", symbol = "TP53", dwellMs = 900 } =
 
 test("discovery encounter quietly skips writes for signed-out visitors", async () => {
   const env = buildEnv()
-  const response = await handleIconoplasmCallerRequest(buildEncounterRequest(), env, {})
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest(), env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -264,7 +264,7 @@ test("discovery encounter inserts the first authenticated gene discovery", async
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildEncounterRequest({ cookie: "session=abc" }),
     env,
     {},
@@ -302,14 +302,14 @@ test("discovery encounter increments count instead of duplicating the row", asyn
     },
   })
 
-  const firstResponse = await handleIconoplasmCallerRequest(
+  const firstResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildEncounterRequest({ cookie: "session=abc", dwellMs: 900 }),
     env,
     {},
   )
   const firstPayload = await firstResponse.json()
 
-  const secondResponse = await handleIconoplasmCallerRequest(
+  const secondResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     buildEncounterRequest({ cookie: "session=abc", dwellMs: 1200 }),
     env,
     {},
@@ -338,10 +338,10 @@ test("discoveries me returns the signed-in user's discovered symbols", async () 
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -370,11 +370,11 @@ test("discoveries me honors gallery-style sort orders on the shelf", async () =>
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "EGFR" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "EGFR" }), env, {})
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?order=heaviest", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -399,7 +399,7 @@ test("discoveries me seeds the starter trio for an empty signed-in shelf", async
     },
   })
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -423,9 +423,9 @@ test("discoveries me ignores show-all requests from non-admin users", async () =
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -447,9 +447,9 @@ test("discoveries me lets admins override their shelf with the full catalog", as
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
       method: "GET",
       headers: {
@@ -480,9 +480,9 @@ test("discoveries merge upserts guest-local symbols into the signed-in account",
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
 
-  const response = await handleIconoplasmCallerRequest(
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
       method: "POST",
       headers: {
