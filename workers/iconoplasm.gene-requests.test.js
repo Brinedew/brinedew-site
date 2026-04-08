@@ -23,6 +23,7 @@ class FakeRequestStatement {
   async all() {
     if (this.sql.includes("FROM icono_generation_request_vision_option_rollup")) {
       this.db.optionRollupReads += 1
+      this.db.lastOptionRollupSql = this.sql
       if (this.db.failOptionRollupRead) {
         throw new Error("D1_ERROR: request picker rollup missing or unreadable")
       }
@@ -53,6 +54,7 @@ class FakeRequestStatement {
               image_count: 10 - (index % 3),
               live_count: 5,
               score: 7 - (index % 2),
+              vote_h_index: 5 - (index % 4),
               preview_assets_json: JSON.stringify(previewAssets),
             }
           }),
@@ -71,6 +73,7 @@ class FakeRequestStatement {
             image_count: 10,
             live_count: 5,
             score: 7,
+            vote_h_index: 4,
             preview_assets_json: JSON.stringify(
               Array.from({ length: 6 }, function (_unused, previewIndex) {
                 const sha = ("a".repeat(60) + String(previewIndex).padStart(4, "0")).slice(0, 64)
@@ -133,6 +136,7 @@ class FakeRequestStatement {
               image_count: 10 - (index % 3),
               live_count: 5,
               score: 7 - (index % 2),
+              vote_h_index: 5 - (index % 4),
             }
           }),
         }
@@ -149,6 +153,7 @@ class FakeRequestStatement {
             image_count: 10,
             live_count: 5,
             score: 7,
+            vote_h_index: 4,
           },
         ],
       }
@@ -314,6 +319,7 @@ test("authenticated request options return rich emulsion rows from the dedicated
   assert.equal(payload.request_options.length, 1)
   assert.equal(payload.request_options[0]?.label, "A1-93-19")
   assert.equal(payload.request_options[0]?.artist_tag, "anima")
+  assert.equal(payload.request_options[0]?.vote_h_index, 4)
   assert.equal(payload.request_options[0]?.preview_assets.length, 6)
   assert.equal(payload.request_options[0]?.preview_assets[0]?.gene_symbol, "INS")
   assert.match(
@@ -321,6 +327,10 @@ test("authenticated request options return rich emulsion rows from the dedicated
     /\/portraits\/v1\/aa\/a{60}0000\/thumb\.webp$/,
   )
   assert.equal(env.gatewayDb.optionRollupReads, 1)
+  assert.match(
+    String(env.gatewayDb.lastOptionRollupSql || ""),
+    /ORDER BY vote_h_index DESC,\s*live_count DESC,\s*score DESC,\s*image_count DESC,\s*vision_id ASC/,
+  )
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
 })
@@ -344,6 +354,7 @@ test("authenticated request options infer emulsion code from vision id when roll
               image_count: 8,
               live_count: 7,
               score: 5,
+              vote_h_index: 3,
               preview_assets_json: JSON.stringify([
                 {
                   gene_symbol: "A1BG",

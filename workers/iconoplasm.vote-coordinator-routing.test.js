@@ -138,6 +138,23 @@ test("public vote set is routed through the vote coordinator instead of reading 
           },
         ],
       }),
+    "/state": () =>
+      Response.json({
+        ok: true,
+        symbol: "TP53",
+        asset_summaries: [
+          {
+            asset_sha256: assetSha,
+            candidate_ref: `a:TP53|${assetSha}`,
+            vision_id: "anima-v1-1",
+            candidate_image_id: 41,
+            upvotes: 1,
+            downvotes: 0,
+            score: 1,
+            vote_count: 1,
+          },
+        ],
+      }),
   })
   const db = new RecordingDb()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -168,8 +185,9 @@ test("public vote set is routed through the vote coordinator instead of reading 
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
-  assert.equal(coordinator.calls.length, 1)
+  assert.equal(coordinator.calls.length, 2)
   assert.equal(coordinator.calls[0]?.pathname, "/vote/set")
+  assert.equal(coordinator.calls[1]?.pathname, "/state")
   assert.equal(
     db.calls.some(
       (call) =>
@@ -266,6 +284,23 @@ test("admin vote import is routed through the vote coordinator batch endpoint", 
           },
         ],
       }),
+    "/state": () =>
+      Response.json({
+        ok: true,
+        symbol: "A1BG",
+        asset_summaries: [
+          {
+            asset_sha256: assetSha,
+            candidate_ref: `a:A1BG|${assetSha}`,
+            vision_id: "anima-v1-3",
+            candidate_image_id: 7,
+            upvotes: 1,
+            downvotes: 0,
+            score: 1,
+            vote_count: 1,
+          },
+        ],
+      }),
   })
   const db = new RecordingDb()
 
@@ -302,8 +337,9 @@ test("admin vote import is routed through the vote coordinator batch endpoint", 
 
   assert.equal(response.status, 200)
   assert.equal(payload?.upserted, 1)
-  assert.equal(coordinator.calls.length, 1)
+  assert.equal(coordinator.calls.length, 2)
   assert.equal(coordinator.calls[0]?.pathname, "/vote/import")
+  assert.equal(coordinator.calls[1]?.pathname, "/state")
   assert.equal(
     db.calls.some(
       (call) =>

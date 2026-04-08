@@ -2789,7 +2789,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       return '<span class="icono-request-option-strip icono-request-option-strip--empty"><span class="icono-request-option-empty">No examples yet</span></span>'
     }
     var html = '<span class="icono-request-option-strip">'
-    for (var i = 0; i < previews.length && i < 6; i++) {
+    for (var i = 0; i < previews.length && i < 5; i++) {
       var asset = previews[i] || {}
       var url = requestOptionPreviewUrl(asset)
       if (!url) continue
@@ -2797,7 +2797,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<span class="icono-request-option-thumb' +
         (asset.is_current ? " is-current" : "") +
         '">' +
-        '<img class="icono-thumbnail-viewport-image" src="' +
+        '<img class="icono-thumbnail-viewport-image icono-request-option-thumb-image" src="' +
         esc(url) +
         '" alt="' +
         esc(String(asset.gene_symbol || "Example") + " example portrait") +
@@ -2898,9 +2898,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var config = options || {}
     var disabledAttr = config.disabled ? ' disabled aria-disabled="true"' : ""
     var submitLabel = String(config.submitLabel || "submit (free)").trim() || "submit (free)"
-    var placeholder =
-      String(config.placeholder || "Search emulsion code or vision ID. Leave blank for random.").trim() ||
-      "Search emulsion code or vision ID. Leave blank for random."
+    var placeholder = String(config.placeholder || "pick an emulsion").trim() || "pick an emulsion"
     return (
       '<form data-icono-request-form class="icono-request-form">' +
       '<div class="icono-search icono-search--toolbar icono-request-search">' +
@@ -2915,7 +2913,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       disabledAttr +
       ">" +
       '<input type="hidden" data-icono-request-vision value="">' +
-      '<button type="submit" class="icono-request-inline-submit"' +
+      '<button type="submit" class="icono-request-inline-submit" data-default-label="' +
+      esc(submitLabel) +
+      '"' +
       disabledAttr +
       ">" +
       esc(submitLabel) +
@@ -3044,6 +3044,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return 99
       }
 
+      function compareRequestOptionStrength(left, right) {
+        var hIndexDiff = Number((right && right.vote_h_index) || 0) - Number((left && left.vote_h_index) || 0)
+        if (hIndexDiff) return hIndexDiff
+        var liveDiff = Number((right && right.live_count) || 0) - Number((left && left.live_count) || 0)
+        if (liveDiff) return liveDiff
+        var scoreDiff = Number((right && right.score) || 0) - Number((left && left.score) || 0)
+        if (scoreDiff) return scoreDiff
+        var imageDiff = Number((right && right.image_count) || 0) - Number((left && left.image_count) || 0)
+        if (imageDiff) return imageDiff
+        return String((left && left.vision_id) || "").localeCompare(String((right && right.vision_id) || ""))
+      }
+
       function filterRequestOptions(query) {
         var cleanedQuery = String(query || "").trim().toLowerCase()
         var terms = cleanedQuery ? cleanedQuery.split(/\s+/g).filter(Boolean) : []
@@ -3064,7 +3076,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         matched.sort(function (a, b) {
           var scoreDiff = scoreRequestOption(a, cleanedQuery) - scoreRequestOption(b, cleanedQuery)
           if (scoreDiff) return scoreDiff
-          return requestOptionPrimaryLabel(a).localeCompare(requestOptionPrimaryLabel(b))
+          return compareRequestOptionStrength(a, b)
         })
         return matched.slice(0, cleanedQuery ? 10 : 6)
       }
@@ -3206,7 +3218,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           .finally(function () {
             if (button) {
               button.disabled = false
-              button.textContent = "submit (free)"
+              button.textContent = String(button.getAttribute("data-default-label") || "submit (free)")
             }
           })
       })

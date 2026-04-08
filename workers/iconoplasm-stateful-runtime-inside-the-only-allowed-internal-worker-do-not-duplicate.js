@@ -296,6 +296,8 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
     return "admin_gene_request_diagnostics"
   if (path === "/api/iconoplasm/admin/cost/usage") return "admin_cost_usage"
   if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER) return "internal_repair"
+  if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
+    return "internal_vote_projection_refresh"
   if (path.startsWith("/api/iconoplasm/admin/")) {
     throw new IconoplasmUnclassifiedHandledRouteError(path)
   }
@@ -316,6 +318,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "artist_styles_search") return "public_read"
   if (family === "artist_blacklist_submission") return "public_submission"
   if (family === "internal_repair") return "internal_maintenance"
+  if (family === "internal_vote_projection_refresh") return "internal_maintenance"
   if (family === "admin_overview" || family === "admin_coverage" || family === "admin_cost_usage" || family === "admin_me")
     return "admin_dashboard"
   if (
@@ -1637,6 +1640,19 @@ function serializeGenerationRequestPreviewAssetsJson(previewRows) {
   return JSON.stringify(normalized)
 }
 
+function computeGenerationRequestVoteHIndex(upvoteCounts) {
+  const counts = (Array.isArray(upvoteCounts) ? upvoteCounts : [])
+    .map((value) => Math.max(0, Number(value || 0) || 0))
+    .sort((left, right) => right - left)
+  let hIndex = 0
+  for (let index = 0; index < counts.length; index += 1) {
+    const threshold = index + 1
+    if (counts[index] < threshold) break
+    hIndex = threshold
+  }
+  return hIndex
+}
+
 function parseGenerationRequestPreviewAssetsJson(raw) {
   if (!raw) return []
   try {
@@ -1705,6 +1721,8 @@ async function fetchGenerationRequestVisionPreviewRowsForRollup(
                WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
                ELSE 0
              END DESC,
+             COALESCE(vs.upvotes, 0) DESC,
+             COALESCE(vs.score, 0) DESC,
              COALESCE(pa.created_at, '') DESC,
              lower(pa.asset_sha256) ASC
          ) AS preview_rank
@@ -1713,6 +1731,9 @@ async function fetchGenerationRequestVisionPreviewRowsForRollup(
          ON i.vision_id = pa.vision_id
        LEFT JOIN icono_publish_state ps
          ON ps.gene_symbol = pa.gene_symbol
+       LEFT JOIN icono_vote_asset_summary vs
+         ON vs.gene_symbol = upper(pa.gene_symbol)
+        AND vs.asset_sha256 = lower(pa.asset_sha256)
        WHERE COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
      )
      SELECT
@@ -1733,6 +1754,54 @@ async function fetchGenerationRequestVisionPreviewRowsForRollup(
   return (Array.isArray(response?.results) ? response.results : [])
     .map(normalizeGenerationRequestPreviewAssetRow)
     .filter(Boolean)
+}
+
+async function fetchGenerationRequestVisionVoteHIndexMap(env, { visionIds = [] } = {}) {
+  if (!env.ICONOPLASM_DB) return new Map()
+  const cleanedVisionIds = Array.from(
+    new Set(
+      (Array.isArray(visionIds) ? visionIds : [])
+        .map((value) => validAdminRollupVisionId(value))
+        .filter(Boolean),
+    ),
+  )
+  if (!cleanedVisionIds.length) return new Map()
+  const response = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming AS (
+       SELECT value AS vision_id
+       FROM json_each(?)
+     )
+     SELECT
+       pa.vision_id,
+       COALESCE(vs.upvotes, 0) AS upvotes
+     FROM icono_portrait_assets pa
+     JOIN incoming i
+       ON i.vision_id = pa.vision_id
+     LEFT JOIN icono_vote_asset_summary vs
+       ON vs.gene_symbol = upper(pa.gene_symbol)
+      AND vs.asset_sha256 = lower(pa.asset_sha256)
+     WHERE COALESCE(pa.vision_id, '') <> ''
+     ORDER BY pa.vision_id ASC, COALESCE(vs.upvotes, 0) DESC, lower(pa.asset_sha256) ASC`,
+  )
+    .bind(JSON.stringify(cleanedVisionIds))
+    .all()
+  const rows = Array.isArray(response?.results) ? response.results : []
+  const upvoteMap = new Map()
+  for (const row of rows) {
+    const visionId = validAdminRollupVisionId(row?.vision_id || "")
+    if (!visionId) continue
+    const existing = upvoteMap.get(visionId) || []
+    existing.push(Math.max(0, Number(row?.upvotes || 0) || 0))
+    upvoteMap.set(visionId, existing)
+  }
+  const hIndexMap = new Map()
+  for (const [visionId, counts] of upvoteMap.entries()) {
+    hIndexMap.set(visionId, computeGenerationRequestVoteHIndex(counts))
+  }
+  for (const visionId of cleanedVisionIds) {
+    if (!hIndexMap.has(visionId)) hIndexMap.set(visionId, 0)
+  }
+  return hIndexMap
 }
 
 async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds = []) {
@@ -1775,10 +1844,15 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
   const summaryRows = Array.isArray(summaryResp?.results) ? summaryResp.results : []
   if (!summaryRows.length) return 0
 
-  const previewRows = await fetchGenerationRequestVisionPreviewRowsForRollup(env, {
-    visionIds: cleanedVisionIds,
-    perVisionLimit: 6,
-  })
+  const [previewRows, voteHIndexMap] = await Promise.all([
+    fetchGenerationRequestVisionPreviewRowsForRollup(env, {
+      visionIds: cleanedVisionIds,
+      perVisionLimit: 5,
+    }),
+    fetchGenerationRequestVisionVoteHIndexMap(env, {
+      visionIds: cleanedVisionIds,
+    }),
+  ])
   const previewMap = new Map()
   for (const previewRow of previewRows) {
     const visionId = sanitizeVoteVisionId(previewRow?.vision_id || "")
@@ -1805,9 +1879,10 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          image_count,
          live_count,
          score,
+         vote_h_index,
          preview_assets_json,
          updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(vision_id) DO UPDATE SET
          emulsion_id = excluded.emulsion_id,
          workflow_id = excluded.workflow_id,
@@ -1819,6 +1894,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          image_count = excluded.image_count,
          live_count = excluded.live_count,
          score = excluded.score,
+         vote_h_index = excluded.vote_h_index,
          preview_assets_json = excluded.preview_assets_json,
          updated_at = CURRENT_TIMESTAMP`,
     )
@@ -1834,6 +1910,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
         Math.max(0, Number(row?.image_count || 0) || 0),
         Math.max(0, Number(row?.live_count || 0) || 0),
         Number(row?.score || 0) || 0,
+        Math.max(0, Number(voteHIndexMap.get(visionId) || 0) || 0),
         serializeGenerationRequestPreviewAssetsJson(previewMap.get(visionId) || []),
       )
       .run()
@@ -1857,10 +1934,11 @@ async function listGenerationRequestVisionOptions(env, url) {
        image_count,
        live_count,
        score,
+       vote_h_index,
        preview_assets_json
      FROM icono_generation_request_vision_option_rollup
      WHERE COALESCE(vision_id, '') <> ''
-     ORDER BY live_count DESC, image_count DESC, score DESC, vision_id ASC
+     ORDER BY vote_h_index DESC, live_count DESC, score DESC, image_count DESC, vision_id ASC
      LIMIT 120`,
   ).all()
   const rows = Array.isArray(resp?.results) ? resp.results : []
@@ -1880,6 +1958,8 @@ async function listGenerationRequestVisionOptions(env, url) {
         artist_name: labels.artistName,
         image_count: Number(row?.image_count || 0),
         live_count: Number(row?.live_count || 0),
+        score: Number(row?.score || 0),
+        vote_h_index: Math.max(0, Number(row?.vote_h_index || 0) || 0),
         preview_assets: materializeGenerationRequestPreviewAssetsForPublic(
           url,
           env,
@@ -3289,6 +3369,8 @@ const ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE =
   "x-iconoplasm-only-allowed-stateful-worker-internal"
 const ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/repair-canon-invariants"
+const ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
+  "/__internal/iconoplasm/process-vote-projection-refresh"
 
 function isInternalRequestForTheOnlyAllowedStatefulWorker(request) {
   return (
@@ -3301,6 +3383,16 @@ function isInternalRequestForTheOnlyAllowedStatefulWorker(request) {
 function isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, method = "GET") {
   return (
     path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
+    String(method || "GET").toUpperCase() === "POST"
+  )
+}
+
+function isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(
+  path,
+  method = "GET",
+) {
+  return (
+    path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
     String(method || "GET").toUpperCase() === "POST"
   )
 }
@@ -3348,6 +3440,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/votes/ledger") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/votes/events") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/votes/vision-detail") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
+    return requestMethod === "POST"
   if (path === "/api/iconoplasm/artist-styles/search") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/artist-blacklist-submissions") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/artist-styles/remove") return requestMethod === "POST"
@@ -3427,6 +3521,10 @@ async function proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicat
       { "Cache-Control": "no-store" },
     )
   }
+}
+
+export async function handleIconoplasmGatewayRequest(request, env) {
+  return proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
 }
 
 export async function runIconoplasmCanonMaintenanceThroughTheOnlyAllowedStatefulWorkerDoNotDuplicate(
@@ -4330,6 +4428,16 @@ async function iconoplasmVoteCoordinatorImportVotes(env, { symbol, items = [] } 
   return iconoplasmVoteCoordinatorJson(stub, "/vote/import", {
     symbol: safeSymbol,
     items: Array.isArray(items) ? items : [],
+  })
+}
+
+async function iconoplasmVoteCoordinatorState(env, { symbol } = {}) {
+  const safeSymbol = normalizeSymbol(symbol)
+  if (!safeSymbol) return null
+  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
+  if (!stub) return null
+  return iconoplasmVoteCoordinatorJson(stub, "/state", {
+    symbol: safeSymbol,
   })
 }
 
@@ -7395,6 +7503,262 @@ async function refreshProjectedVoteReadModelsFromCoordinatorState(
   adminReadModelState.ready = true
   await invalidateGalleryCache(env)
   return { symbols: 1, visions: visionIds.length }
+}
+
+function voteProjectionRefreshJobReason(rawReason, fallback = "vote_projection_refresh") {
+  return sanitizeText(rawReason || "", 2000) || fallback
+}
+
+async function ensureVoteProjectionRefreshJobsTable(env) {
+  if (!env?.ICONOPLASM_DB) return false
+  await env.ICONOPLASM_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS icono_vote_projection_refresh_jobs (
+       gene_symbol TEXT PRIMARY KEY,
+       actor_id TEXT,
+       reason TEXT NOT NULL DEFAULT '',
+       requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       last_attempt_at TEXT,
+       next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       attempts INTEGER NOT NULL DEFAULT 0,
+       last_error TEXT NOT NULL DEFAULT ''
+     )`,
+  ).run()
+  await env.ICONOPLASM_DB.prepare(
+    `CREATE INDEX IF NOT EXISTS idx_icono_vote_projection_refresh_jobs_next_attempt
+     ON icono_vote_projection_refresh_jobs (next_attempt_at, requested_at)`,
+  ).run()
+  return true
+}
+
+async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } = {}) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB" }
+  const safeSymbol = normalizeSymbol(symbol)
+  if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL" }
+  await ensureVoteProjectionRefreshJobsTable(env)
+  const nowIso = new Date().toISOString()
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_vote_projection_refresh_jobs (
+       gene_symbol,
+       actor_id,
+       reason,
+       requested_at,
+       last_attempt_at,
+       next_attempt_at,
+       attempts,
+       last_error
+     ) VALUES (?, ?, ?, ?, NULL, ?, 0, '')
+     ON CONFLICT(gene_symbol) DO UPDATE SET
+       actor_id = excluded.actor_id,
+       reason = excluded.reason,
+       requested_at = excluded.requested_at,
+       next_attempt_at = excluded.next_attempt_at,
+       attempts = 0,
+       last_error = ''`,
+  )
+    .bind(
+      safeSymbol,
+      normalizeUserId(actorId || "vote_projection"),
+      voteProjectionRefreshJobReason(reason),
+      nowIso,
+      nowIso,
+    )
+    .run()
+  return { ok: true, symbol: safeSymbol }
+}
+
+async function clearVoteProjectionRefreshJob(env, symbol) {
+  if (!env?.ICONOPLASM_DB) return false
+  const safeSymbol = normalizeSymbol(symbol)
+  if (!safeSymbol) return false
+  await env.ICONOPLASM_DB.prepare(
+    `DELETE FROM icono_vote_projection_refresh_jobs
+     WHERE gene_symbol = ?`,
+  )
+    .bind(safeSymbol)
+    .run()
+  return true
+}
+
+async function recordVoteProjectionRefreshFailure(
+  env,
+  { symbol, actorId, reason, error, attemptCount = 0 } = {},
+) {
+  if (!env?.ICONOPLASM_DB) return false
+  const safeSymbol = normalizeSymbol(symbol)
+  if (!safeSymbol) return false
+  await ensureVoteProjectionRefreshJobsTable(env)
+  const delayMinutes = Math.max(1, Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))))
+  const nextAttemptAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_vote_projection_refresh_jobs (
+       gene_symbol,
+       actor_id,
+       reason,
+       requested_at,
+       last_attempt_at,
+       next_attempt_at,
+       attempts,
+       last_error
+     ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 1, ?)
+     ON CONFLICT(gene_symbol) DO UPDATE SET
+       actor_id = excluded.actor_id,
+       reason = excluded.reason,
+       last_attempt_at = CURRENT_TIMESTAMP,
+       next_attempt_at = excluded.next_attempt_at,
+       attempts = icono_vote_projection_refresh_jobs.attempts + 1,
+       last_error = excluded.last_error`,
+  )
+    .bind(
+      safeSymbol,
+      normalizeUserId(actorId || "vote_projection"),
+      voteProjectionRefreshJobReason(reason),
+      nextAttemptAt,
+      sanitizeText(String(error?.message || error || "vote projection refresh failed"), 2000) ||
+        "vote projection refresh failed",
+    )
+    .run()
+  return true
+}
+
+async function processVoteProjectionRefreshForSymbol(
+  env,
+  { symbol, actorId = "vote_projection", reason = "vote_projection_refresh" } = {},
+) {
+  const safeSymbol = normalizeSymbol(symbol)
+  if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL" }
+  const coordinatorState = await iconoplasmVoteCoordinatorState(env, { symbol: safeSymbol })
+  const assetSummaries = Array.isArray(coordinatorState?.asset_summaries)
+    ? coordinatorState.asset_summaries
+    : []
+  const autoPromote = await autoPromoteTopVotedPortraitFromCoordinatorState(env, {
+    symbol: safeSymbol,
+    actorId: normalizeUserId(actorId || "vote_projection"),
+    reason: voteProjectionRefreshJobReason(reason),
+    assetSummaries,
+  })
+  const readModels = await refreshProjectedVoteReadModelsFromCoordinatorState(env, {
+    symbol: safeSymbol,
+    assetSummaries,
+  })
+  await clearVoteProjectionRefreshJob(env, safeSymbol)
+  return {
+    ok: true,
+    symbol: safeSymbol,
+    asset_count: assetSummaries.length,
+    auto_promote: autoPromote,
+    read_models: readModels,
+  }
+}
+
+async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB", processed: 0, failed: 0, remaining: 0 }
+  await ensureVoteProjectionRefreshJobsTable(env)
+  const safeLimit = Math.max(1, Math.min(500, Number.parseInt(String(limit || 100), 10) || 100))
+  const nowIso = new Date().toISOString()
+  const queued = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, actor_id, reason, attempts
+     FROM icono_vote_projection_refresh_jobs
+     WHERE next_attempt_at <= ?
+     ORDER BY requested_at ASC
+     LIMIT ?`,
+  )
+    .bind(nowIso, safeLimit)
+    .all()
+  const rows = Array.isArray(queued?.results) ? queued.results : []
+  const results = []
+  let processed = 0
+  let failed = 0
+  for (const row of rows) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    try {
+      results.push(
+        await processVoteProjectionRefreshForSymbol(env, {
+          symbol,
+          actorId: row?.actor_id || "vote_projection",
+          reason: row?.reason || "vote_projection_refresh",
+        }),
+      )
+      processed += 1
+    } catch (error) {
+      failed += 1
+      await recordVoteProjectionRefreshFailure(env, {
+        symbol,
+        actorId: row?.actor_id || "vote_projection",
+        reason: row?.reason || "vote_projection_refresh",
+        error,
+        attemptCount: Number(row?.attempts || 0),
+      })
+      results.push({
+        ok: false,
+        symbol,
+        error: sanitizeText(String(error?.message || error || "vote projection refresh failed"), 2000) ||
+          "vote projection refresh failed",
+      })
+    }
+  }
+  const remainingRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT COUNT(*) AS count
+     FROM icono_vote_projection_refresh_jobs
+     WHERE next_attempt_at <= ?`,
+  )
+    .bind(nowIso)
+    .first()
+  return {
+    ok: true,
+    processed,
+    failed,
+    remaining: Number(remainingRow?.count || 0),
+    results,
+  }
+}
+
+async function scheduleVoteProjectionRefresh(
+  env,
+  ctx,
+  { symbol, actorId = "vote_projection", reason = "vote_projection_refresh" } = {},
+) {
+  const safeSymbol = normalizeSymbol(symbol)
+  if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL", queued: false }
+  const safeActorId = normalizeUserId(actorId || "vote_projection")
+  const safeReason = voteProjectionRefreshJobReason(reason)
+
+  let queued = false
+  try {
+    const job = await enqueueVoteProjectionRefreshJob(env, {
+      symbol: safeSymbol,
+      actorId: safeActorId,
+      reason: safeReason,
+    })
+    queued = Boolean(job?.ok)
+  } catch (error) {
+    queued = false
+    console.error("[Iconoplasm] vote projection queue enqueue failed:", error)
+  }
+
+  const task = processVoteProjectionRefreshForSymbol(env, {
+    symbol: safeSymbol,
+    actorId: safeActorId,
+    reason: safeReason,
+  }).catch(async (error) => {
+    console.error("[Iconoplasm] vote projection refresh failed:", error)
+    if (queued) {
+      await recordVoteProjectionRefreshFailure(env, {
+        symbol: safeSymbol,
+        actorId: safeActorId,
+        reason: safeReason,
+        error,
+      })
+    }
+  })
+  if (ctx?.waitUntil) ctx.waitUntil(task)
+  else void task
+  return {
+    ok: true,
+    queued,
+    mode: queued ? "durable" : "best_effort",
+    symbol: safeSymbol,
+  }
 }
 
 async function listAutopromoteCandidateAssetsForSymbol(env, rawSymbol) {
@@ -10807,6 +11171,17 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       )
     }
 
+    if (isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
+      const payload = await parseJsonBody(request)
+      return json(
+        await processPendingVoteProjectionRefreshJobs(env, {
+          limit: payload?.limit,
+        }),
+        200,
+        { "Cache-Control": "no-store" },
+      )
+    }
+
     if (path === publicApiPath("/metadata")) {
       return handlePublicMetadata(request, env)
     }
@@ -11909,16 +12284,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         userId,
         voteValue: coordinatorWrite.final_vote_value,
       })
-      const assetSummaries = Array.isArray(coordinatorWrite?.asset_summaries)
-        ? coordinatorWrite.asset_summaries
-        : []
-      const autoPromote = await autoPromoteTopVotedPortraitFromCoordinatorState(env, {
+      const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
         symbol,
         actorId: userId,
         reason: "vote_auto_promote",
-        assetSummaries,
       })
-      await refreshProjectedVoteReadModelsFromCoordinatorState(env, { symbol, assetSummaries })
       const snapshot =
         coordinatorWrite.snapshot ||
         (await iconoVoteSnapshot(env, {
@@ -11939,7 +12309,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             candidate_image_id: coordinatorWrite.candidate_image_id,
             user_id: userId,
             snapshot,
-            auto_promote: autoPromote,
+            auto_promote: {
+              deferred: true,
+              queued: Boolean(projectionRefresh?.queued),
+              mode: projectionRefresh?.mode || "best_effort",
+            },
+            projection_refresh: projectionRefresh,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -12065,7 +12440,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       let upserted = 0
       let deleted = 0
-      let autoPromoted = 0
+      let projectionRefreshQueued = 0
       for (const [symbol, groupItems] of groups.entries()) {
         const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, {
           symbol,
@@ -12099,20 +12474,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             voteValue: row?.final_vote_value,
           })
         }
-        const assetSummaries = Array.isArray(coordinatorImport?.asset_summaries)
-          ? coordinatorImport.asset_summaries
-          : []
-        const result = await autoPromoteTopVotedPortraitFromCoordinatorState(env, {
+        const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
           symbol,
           actorId: "admin_import",
           reason: "vote_import_auto_promote",
-          assetSummaries,
         })
-        if (result?.changed) autoPromoted += 1
-        await refreshProjectedVoteReadModelsFromCoordinatorState(env, {
-          symbol,
-          assetSummaries,
-        })
+        if (projectionRefresh?.queued) projectionRefreshQueued += 1
       }
       return done(
         "admin_votes_import",
@@ -12123,7 +12490,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             upserted,
             deleted,
             invalid,
-            auto_promoted: autoPromoted,
+            auto_promoted: null,
+            projection_refresh_queued: projectionRefreshQueued,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -12217,16 +12585,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         userId,
         voteValue: coordinatorWrite.final_vote_value,
       })
-      const assetSummaries = Array.isArray(coordinatorWrite?.asset_summaries)
-        ? coordinatorWrite.asset_summaries
-        : []
-      const autoPromote = await autoPromoteTopVotedPortraitFromCoordinatorState(env, {
+      const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
         symbol,
         actorId: userId,
         reason: "admin_vote_auto_promote",
-        assetSummaries,
       })
-      await refreshProjectedVoteReadModelsFromCoordinatorState(env, { symbol, assetSummaries })
       const snapshot =
         coordinatorWrite.snapshot ||
         (await iconoVoteSnapshot(env, {
@@ -12247,7 +12610,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             candidate_image_id: coordinatorWrite.candidate_image_id,
             user_id: userId,
             snapshot,
-            auto_promote: autoPromote,
+            auto_promote: {
+              deferred: true,
+              queued: Boolean(projectionRefresh?.queued),
+              mode: projectionRefresh?.mode || "best_effort",
+            },
+            projection_refresh: projectionRefresh,
           },
           200,
           { "Cache-Control": "no-store" },

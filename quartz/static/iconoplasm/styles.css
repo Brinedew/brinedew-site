@@ -336,6 +336,22 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-picker-search {
   position: relative;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  border-radius: var(--icono-radius-lg);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--light) 96%, #efe6d7 4%) 0%,
+    color-mix(in srgb, var(--light) 99%, white 1%) 100%
+  );
+  box-shadow: 0 10px 24px rgba(27, 18, 11, 0.04);
+  overflow: visible;
+}
+
+.icono-request-picker-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--ui-border) 66%);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 12px 26px rgba(27, 18, 11, 0.08);
 }
 
 .icono-request-search {
@@ -344,12 +360,21 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-picker-input {
   width: 100%;
-  padding-right: 8.8rem;
+  min-height: 3.15rem;
+  padding-right: 9.6rem;
+  border-color: transparent;
+  background: transparent;
+}
+
+.icono-request-picker-input:focus {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .icono-request-results {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 0.35rem);
   left: 0;
   right: 0;
   z-index: 120;
@@ -358,19 +383,18 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   max-height: 320px;
   padding: 0;
   overflow-y: auto;
-  border-radius: 0 0 var(--icono-radius-sm) var(--icono-radius-sm);
-  border: 1px solid var(--ui-border);
-  border-top: none;
-  background: var(--light);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-radius: var(--icono-radius-lg);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  background: color-mix(in srgb, var(--light) 98%, white 2%);
+  box-shadow: 0 18px 34px rgba(27, 18, 11, 0.1);
 }
 
 .icono-request-option {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.32rem;
+  gap: 0.45rem;
   width: 100%;
-  padding: 0.5rem 0.9rem;
+  padding: 0.7rem 0.85rem 0.8rem;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -378,6 +402,10 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   text-align: left;
   cursor: pointer;
   transition: background 0.12s ease;
+}
+
+.icono-request-option + .icono-request-option {
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
 }
 
 .icono-request-option:hover,
@@ -400,7 +428,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 .icono-request-option-title {
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1.2;
   font-weight: 600;
   color: var(--dark);
@@ -419,10 +447,10 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0.28rem;
+  gap: 0.45rem;
   width: 100%;
   overflow: hidden;
-  min-height: 2.4rem;
+  min-height: 3.6rem;
 }
 
 .icono-request-option-strip--empty {
@@ -431,13 +459,15 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-option-thumb {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 42px;
+  height: 56px;
+  border-radius: 12px;
   overflow: hidden;
-  border: 1px solid rgba(43, 29, 16, 0.08);
-  background: color-mix(in srgb, var(--ui-bg) 86%, white 14%);
-  box-shadow: 0 2px 5px rgba(43, 29, 16, 0.07);
+  border: 1px solid color-mix(in srgb, var(--icono-ring-image) 74%, transparent);
+  background: color-mix(in srgb, var(--ui-bg) 84%, white 16%);
+  box-shadow:
+    0 2px 5px rgba(43, 29, 16, 0.07),
+    inset 0 0 0 1px color-mix(in srgb, var(--icono-ring-image) 62%, transparent);
 }
 
 .icono-request-option-thumb.is-current {
@@ -453,6 +483,10 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   object-position: center center;
 }
 
+.icono-request-option-thumb-image {
+  object-position: center 58%;
+}
+
 .icono-request-option-thumb img {
   display: block;
 }
@@ -460,19 +494,29 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 .icono-request-inline-submit {
   position: absolute;
   top: 50%;
-  right: 0.35rem;
+  right: 0.4rem;
   transform: translateY(-50%);
   z-index: 2;
-  min-height: calc(100% - 0.7rem);
-  padding: 0.35rem 0.85rem;
-  border: none;
-  border-radius: var(--icono-radius-sm);
-  background: color-mix(in srgb, var(--accent) 86%, white 14%);
-  color: white;
-  font-family: var(--codeFont, monospace);
-  font-size: 0.82rem;
+  min-height: calc(100% - 0.8rem);
+  padding: 0.5rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
+  border-radius: var(--icono-radius-pill);
+  background: color-mix(in srgb, var(--light) 82%, white 18%);
+  color: var(--dark);
+  font: inherit;
+  font-size: 0.92rem;
   line-height: 1;
   cursor: pointer;
+  transition:
+    border-color 0.16s var(--icono-ease-out),
+    background-color 0.16s var(--icono-ease-out),
+    color 0.16s var(--icono-ease-out);
+}
+
+.icono-request-inline-submit:hover,
+.icono-request-inline-submit:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--ui-border) 68%);
+  background: color-mix(in srgb, var(--light) 72%, white 28%);
 }
 
 .icono-request-inline-submit:disabled {
@@ -2252,6 +2296,11 @@ html[data-theme="dark"] .icono-card--brick {
 
   .icono-request-option-strip {
     justify-content: flex-start;
+  }
+
+  .icono-request-option-thumb {
+    width: 38px;
+    height: 50px;
   }
 
   .icono-request-submit {

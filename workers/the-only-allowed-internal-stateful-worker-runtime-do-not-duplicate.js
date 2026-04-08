@@ -1507,6 +1507,24 @@ export default {
 
     if (cronExpr === "17 * * * *") {
       try {
+        const voteProjectionResponse =
+          await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+            new Request(
+              "https://geneguessr-api/__internal/iconoplasm/process-vote-projection-refresh",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  limit: 250,
+                }),
+              },
+            ),
+            env,
+            ctx,
+          )
+        const voteProjectionResult = await voteProjectionResponse.json()
+        console.log("[CRON] Iconoplasm vote projection refresh result:", voteProjectionResult)
+
         const maintenanceResponse = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
           new Request("https://geneguessr-api/__internal/iconoplasm/repair-canon-invariants", {
             method: "POST",
