@@ -207,6 +207,7 @@ import {
 // Import admin HTML
 import { ADMIN_HTML } from "./admin-html.js"
 import { ADMIN_V2_HTML } from "./admin-v2-html.js"
+import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import {
   DEFAULT_HINT_COST,
   HINT_REWARD_ON_INCORRECT,
@@ -644,12 +645,8 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
       // delegate API/portrait/admin to the iconoplasm handler.
       if (isIconoplasmRequest(url.hostname)) {
-        // Clean cutover: old admin path is removed.
         if (url.pathname === "/admin/iconoplasm" || url.pathname === "/admin/iconoplasm/") {
-          return new Response("Not found", {
-            status: 404,
-            headers: { "Cache-Control": "no-store" },
-          })
+          return Response.redirect("https://brinedew.bio/admin/iconoplasm#costs", 302)
         }
 
         const isApiOrWorker =
@@ -824,6 +821,8 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
         !url.pathname.startsWith("/api/") &&
         url.pathname !== "/admin" &&
+        url.pathname !== "/admin/iconoplasm" &&
+        url.pathname !== "/admin/iconoplasm/" &&
         url.pathname !== "/admin-v2"
       ) {
         if (
@@ -1109,6 +1108,22 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         return new Response(ADMIN_HTML, {
           headers: {
             "Content-Type": "text/html;charset=UTF-8",
+          },
+        })
+      }
+
+      // Keep Iconoplasm operations on an apex-hosted admin route so the real GUI
+      // uses the same working site-admin session and does not depend on subdomain
+      // cookie quirks. This is intentionally separate from the general admin page:
+      // cost graphs and image triage should not be entangled with unrelated controls.
+      if ((url.pathname === "/admin/iconoplasm" || url.pathname === "/admin/iconoplasm/") && request.method === "GET") {
+        if (!(await isAdmin(request, env))) {
+          return new Response("Unauthorized", { status: 403 })
+        }
+        return new Response(ICONOPLASM_ADMIN_HTML, {
+          headers: {
+            "Content-Type": "text/html;charset=UTF-8",
+            "Cache-Control": "no-store",
           },
         })
       }

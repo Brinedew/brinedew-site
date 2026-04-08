@@ -1326,58 +1326,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     <div class="section" id="iconoplasm-cost-section">
       <div class="iconoplasm-cost-toolbar">
         <div>
-          <h2>Iconoplasm Cost Control</h2>
+          <h2>Iconoplasm Ops</h2>
           <p class="helper-text helper-text--title" style="margin: 0.25rem 0 0;">
-            This turns the raw meter into something explorable: trend over the billing cycle, headroom against the monthly hard stop, who is spending it, and which route families are hottest today.
+            Iconoplasm gets its own admin surface now. Open the dedicated page for the interactive cost graphs, gallery triage, vision review, and activity log instead of mixing that into the GeneGuessr admin tab.
           </p>
         </div>
         <div class="iconoplasm-cost-actions">
-          <button type="button" id="iconoplasm-cost-refresh">Refresh meter</button>
-          <a class="iconoplasm-cost-link" href="https://iconoplasm.brinedew.bio/admin#costs" target="_blank" rel="noreferrer">Open full Iconoplasm ops</a>
-        </div>
-      </div>
-      <div class="iconoplasm-cost-updated" id="iconoplasm-cost-updated">Not loaded yet.</div>
-      <div class="iconoplasm-cost-metrics" id="iconoplasm-cost-metrics">
-        <p class="helper-text">Loading meter...</p>
-      </div>
-      <div class="iconoplasm-cost-grid" style="margin-bottom: 1rem;">
-        <div class="iconoplasm-cost-card">
-          <div class="iconoplasm-cost-card-head">
-            <div>
-              <h3 style="margin-bottom: 0.2rem;">Billing-cycle trend</h3>
-              <p id="iconoplasm-cost-trend-meta">Waiting for cycle history…</p>
-            </div>
-          </div>
-          <div class="iconoplasm-cost-chart" id="iconoplasm-cost-trend"></div>
-        </div>
-        <div class="iconoplasm-cost-card">
-          <div class="iconoplasm-cost-card-head">
-            <div>
-              <h3 style="margin-bottom: 0.2rem;">Budget headroom</h3>
-              <p>Monthly caps stay hard. Daily room expands or tightens depending on how much of the month is still unspent.</p>
-            </div>
-          </div>
-          <div class="iconoplasm-cost-budget" id="iconoplasm-cost-budget"></div>
-        </div>
-      </div>
-      <div class="iconoplasm-cost-grid">
-        <div class="iconoplasm-cost-card">
-          <div class="iconoplasm-cost-card-head">
-            <div>
-              <h3 style="margin-bottom: 0.2rem;">Cycle spend by source</h3>
-              <p>Which class of traffic is consuming rows across the current billing cycle.</p>
-            </div>
-          </div>
-          <div class="iconoplasm-cost-bars" id="iconoplasm-cost-sources"></div>
-        </div>
-        <div class="iconoplasm-cost-card">
-          <div class="iconoplasm-cost-card-head">
-            <div>
-              <h3 style="margin-bottom: 0.2rem;">Top route families</h3>
-              <p>The heaviest route groups in the current cycle.</p>
-            </div>
-          </div>
-          <div id="iconoplasm-cost-routes"></div>
+          <a class="iconoplasm-cost-link" href="/admin/iconoplasm#costs">Open Iconoplasm ops</a>
         </div>
       </div>
     </div>
@@ -2011,7 +1966,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     bindForms();
     setupProteinSelector();
     loadStatus();
-    initIconoplasmCostUsage();
     setupSchedule();
     initializePreview();
 

@@ -334,6 +334,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       gap: 10px;
     }
     .cost-chart {
+      position: relative;
       width: 100%;
       min-height: 280px;
       border-radius: 14px;
@@ -346,6 +347,43 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .cost-chart svg {
       width: 100%;
       height: 100%;
+      display: block;
+    }
+    .cost-chart-tooltip {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 3;
+      display: none;
+      min-width: 160px;
+      max-width: 220px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #ddcfc2;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 10px 30px rgba(55, 37, 21, 0.16);
+      color: var(--text);
+      font-size: 12px;
+      pointer-events: none;
+    }
+    .cost-chart-tooltip.is-visible {
+      display: grid;
+      gap: 4px;
+    }
+    .cost-chart-tooltip strong {
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    .cost-chart-hover-line {
+      position: absolute;
+      top: 10px;
+      bottom: 10px;
+      width: 1px;
+      background: rgba(79, 127, 109, 0.45);
+      display: none;
+      pointer-events: none;
+    }
+    .cost-chart-hover-line.is-visible {
       display: block;
     }
     .cost-legend {
@@ -2215,6 +2253,86 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return (Math.round(pct * 10) / 10).toFixed(pct >= 10 ? 0 : 1).replace(/\.0$/, '') + '%';
       }
 
+      function ensureCostTrendHoverChrome() {
+        if (!els.costReadTrend) return null;
+        var tooltip = els.costReadTrend.querySelector('[data-cost-trend-tooltip]');
+        if (!tooltip) {
+          tooltip = document.createElement('div');
+          tooltip.className = 'cost-chart-tooltip';
+          tooltip.setAttribute('data-cost-trend-tooltip', 'true');
+          tooltip.setAttribute('aria-hidden', 'true');
+          els.costReadTrend.appendChild(tooltip);
+        }
+        var hoverLine = els.costReadTrend.querySelector('[data-cost-trend-hover-line]');
+        if (!hoverLine) {
+          hoverLine = document.createElement('div');
+          hoverLine.className = 'cost-chart-hover-line';
+          hoverLine.setAttribute('data-cost-trend-hover-line', 'true');
+          els.costReadTrend.appendChild(hoverLine);
+        }
+        return { tooltip: tooltip, hoverLine: hoverLine };
+      }
+
+      function hideCostTrendTooltip() {
+        var chrome = ensureCostTrendHoverChrome();
+        if (!chrome) return;
+        chrome.tooltip.classList.remove('is-visible');
+        chrome.tooltip.setAttribute('aria-hidden', 'true');
+        chrome.hoverLine.classList.remove('is-visible');
+      }
+
+      function positionCostTrendTooltip(event) {
+        var chrome = ensureCostTrendHoverChrome();
+        if (!chrome || !els.costReadTrend) return;
+        var point = event && event.currentTarget;
+        if (!point) return;
+        var chartRect = els.costReadTrend.getBoundingClientRect();
+        var pointRect = point.getBoundingClientRect();
+        var x = pointRect.left - chartRect.left + (pointRect.width / 2);
+        var y = pointRect.top - chartRect.top + (pointRect.height / 2);
+        var tooltipWidth = chrome.tooltip.offsetWidth || 180;
+        var tooltipHeight = chrome.tooltip.offsetHeight || 70;
+        var left = Math.max(8, Math.min(chartRect.width - tooltipWidth - 8, x + 12));
+        var top = Math.max(8, Math.min(chartRect.height - tooltipHeight - 8, y - tooltipHeight - 12));
+        if (left + tooltipWidth > chartRect.width - 8) {
+          left = Math.max(8, x - tooltipWidth - 12);
+        }
+        chrome.tooltip.style.left = Math.round(left) + 'px';
+        chrome.tooltip.style.top = Math.round(top) + 'px';
+        chrome.hoverLine.style.left = Math.round(x) + 'px';
+      }
+
+      function showCostTrendTooltip(event) {
+        var chrome = ensureCostTrendHoverChrome();
+        if (!chrome) return;
+        var point = event && event.currentTarget;
+        if (!point) return;
+        var day = String(point.getAttribute('data-day') || '');
+        var reads = safeNum(point.getAttribute('data-reads'));
+        var limit = safeNum(point.getAttribute('data-limit'));
+        chrome.tooltip.innerHTML = [
+          '<strong>' + esc(day || 'Unknown day') + '</strong>',
+          '<div>' + esc(formatCompactNumber(reads)) + ' rows read</div>',
+          '<div class="cost-subtle">Smart allowance: ' + esc(compactMetricNumber(limit)) + '</div>'
+        ].join('');
+        chrome.tooltip.classList.add('is-visible');
+        chrome.tooltip.setAttribute('aria-hidden', 'false');
+        chrome.hoverLine.classList.add('is-visible');
+        positionCostTrendTooltip(event);
+      }
+
+      function bindCostTrendHover() {
+        if (!els.costReadTrend) return;
+        ensureCostTrendHoverChrome();
+        els.costReadTrend.querySelectorAll('[data-cost-trend-point="true"]').forEach(function (point) {
+          point.addEventListener('mouseenter', showCostTrendTooltip);
+          point.addEventListener('mousemove', positionCostTrendTooltip);
+          point.addEventListener('focus', showCostTrendTooltip);
+          point.addEventListener('blur', hideCostTrendTooltip);
+          point.addEventListener('mouseleave', hideCostTrendTooltip);
+        });
+      }
+
       function costLabel(value) {
         return String(value || 'unknown')
           .replaceAll('_', ' ')
@@ -2296,7 +2414,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var x = xAt(index);
           var y = yAt(value);
           var dateLabel = String(row && row.day_key || '');
-          return '<circle cx="' + x + '" cy="' + y + '" r="3.5" fill="#b84a26"><title>' + esc(dateLabel + ': ' + formatCompactNumber(value) + ' rows read') + '</title></circle>';
+          return '<circle cx="' + x + '" cy="' + y + '" r="5" fill="#b84a26" stroke="#fff9f3" stroke-width="2" tabindex="0" role="button" data-cost-trend-point="true" data-day="' + esc(dateLabel) + '" data-reads="' + esc(String(value)) + '" data-limit="' + esc(String(dailyLimit)) + '"><title>' + esc(dateLabel + ': ' + formatCompactNumber(value) + ' rows read') + '</title></circle>';
         }).join('');
         var firstLabel = String(rows[0] && rows[0].day_key || '');
         var lastLabel = String(rows[rows.length - 1] && rows[rows.length - 1].day_key || '');
@@ -2449,6 +2567,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         if (els.costReadTrend) {
           els.costReadTrend.innerHTML = buildCostTrendSvg(cycleDays, snapshot);
+          bindCostTrendHover();
         }
         renderCostBudgetHeadroom(snapshot);
         renderCostBars(els.costCycleSourceBars, sourceTotals, {

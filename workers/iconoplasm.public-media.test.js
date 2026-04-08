@@ -196,6 +196,31 @@ test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUP
   assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE/i)
 })
 
+test("portrait asset requests still reach the only allowed stateful worker when the public edge has no direct bucket binding", async () => {
+  const gateway = new FakeOnlyAllowedGateway(() =>
+    new Response("image-bytes", {
+      status: 200,
+      headers: {
+        "Content-Type": "image/webp",
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    }),
+  )
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://iconoplasm.brinedew.bio/portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/medium.webp",
+    ),
+    {
+      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
+    },
+    {},
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("content-type"), "image/webp")
+  assert.equal(gateway.calls.length, 1)
+})
+
 test("public gene batch is limited to first-party clients and extension traffic", async () => {
   const deniedResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {

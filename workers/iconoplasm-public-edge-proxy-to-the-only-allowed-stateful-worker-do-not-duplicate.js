@@ -281,6 +281,7 @@ function isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotD
   if (path === publicApiPath("/resolve")) return true
   if (path === publicApiPath("/changes")) return true
   if (path.startsWith(publicApiPath("/media/"))) return true
+  if (path.startsWith("/portraits/")) return true
   if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
   if (path.startsWith("/api/iconoplasm/")) {
     if (path === "/api/iconoplasm/admin/me") return false
@@ -465,11 +466,30 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
 
     if (path.startsWith("/portraits/")) {
       if (!env.ICONOPLASM_PORTRAITS) {
+        const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+        if (response) {
+          return done(
+            request,
+            new Response(response.body, { status: response.status, headers: response.headers }),
+          )
+        }
         return done(request, json({ error: "Portrait bucket not configured" }, 404))
       }
       const key = path.replace(/^\/+/, "")
       const obj = await env.ICONOPLASM_PORTRAITS.get(key)
-      if (!obj) return done(request, json({ error: "Portrait not found" }, 404))
+      if (!obj) {
+        const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+          request,
+          env,
+        )
+        if (response && response.status !== 404) {
+          return done(
+            request,
+            new Response(response.body, { status: response.status, headers: response.headers }),
+          )
+        }
+        return done(request, json({ error: "Portrait not found" }, 404))
+      }
       return done(
         request,
         new Response(obj.body, {
