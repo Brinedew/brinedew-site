@@ -2778,16 +2778,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function requestOptionMetaParts(option) {
-    var item = option || {}
-    var parts = []
-    var liveCount = Number(item.live_count || 0) || 0
-    var imageCount = Number(item.image_count || 0) || 0
-    if (liveCount > 0) parts.push(liveCount + " live")
-    if (imageCount > 0) parts.push(imageCount + " images")
-    return parts
-  }
-
   function requestOptionPreviewUrl(asset) {
     var item = asset || {}
     return String(item.thumb_url || item.medium_url || "").trim()
@@ -2839,40 +2829,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</span>" +
       renderRequestOptionPreviewStripMarkup(item) +
       "</button>"
-    )
-  }
-
-  function renderRequestSelectionSummaryMarkup(option) {
-    if (!option) {
-      return (
-        '<div class="icono-request-picker-summary icono-request-picker-summary--random">' +
-        '<div class="icono-request-picker-summary-copy">' +
-        '<div class="icono-request-picker-summary-kicker">current request target</div>' +
-        '<div class="icono-request-picker-summary-title">Random default</div>' +
-        '<div class="icono-request-picker-summary-note">The workstation can pick the freshest lane instead of locking this gene to one emulsion.</div>' +
-        "</div>" +
-        "</div>"
-      )
-    }
-    var meta = requestOptionMetaParts(option)
-    return (
-      '<div class="icono-request-picker-summary">' +
-      '<div class="icono-request-picker-summary-copy">' +
-      '<div class="icono-request-picker-summary-kicker">current request target</div>' +
-      '<div class="icono-request-picker-summary-title">' +
-      esc(requestOptionPrimaryLabel(option)) +
-      "</div>" +
-      (requestOptionSecondaryLabel(option)
-        ? '<div class="icono-request-picker-summary-note">' +
-          esc(requestOptionSecondaryLabel(option)) +
-          "</div>"
-        : "") +
-      (meta.length
-        ? '<div class="icono-request-picker-summary-meta">' + esc(meta.join(" · ")) + "</div>"
-        : "") +
-      "</div>" +
-      renderRequestOptionPreviewStripMarkup(option) +
-      "</div>"
     )
   }
 
@@ -2969,28 +2925,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
       body.innerHTML =
         '<div class="icono-request-shell">' +
-        '<div class="icono-home-auth-copy">' +
-        '<div class="icono-home-auth-kicker">request new candidates</div>' +
-        '<div class="icono-home-auth-title">Request more portraits for ' +
-        esc(symbol) +
-        '</div>' +
-        '<div class="icono-home-auth-note">Search an emulsion code or vision ID, then pick from the thumbnail lane.</div>' +
-        '</div>' +
         '<div class="icono-request-actions">' +
         '<form data-icono-request-form class="icono-request-form">' +
-        '<div class="icono-request-picker">' +
-        '<label class="icono-request-picker-label" for="icono-request-query-' +
-        esc(symbol) +
-        '">Emulsion lane</label>' +
-        '<div data-icono-request-current></div>' +
-        '<div class="icono-request-picker-search" data-icono-request-picker>' +
+        '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
         '<input id="icono-request-query-' +
         esc(symbol) +
-        '" data-icono-request-query class="icono-request-picker-input" type="text" autocomplete="off" placeholder="Search emulsion code, artist tag, or vision ID" aria-expanded="false" aria-label="Search emulsion lane">' +
+        '" data-icono-request-query class="icono-request-picker-input" type="text" autocomplete="off" placeholder="Search emulsion code or vision ID. Leave blank for random." aria-expanded="false" aria-label="Search emulsion lane">' +
         '<input type="hidden" data-icono-request-vision value="">' +
-        '<div class="icono-request-results" data-icono-request-results hidden></div>' +
-        '</div>' +
-        '<div class="icono-request-picker-helper">This chooser now mirrors the site search instead of hiding everything inside a native dropdown.</div>' +
+        '<div class="icono-search-results icono-request-results" data-icono-request-results hidden></div>' +
         '</div>' +
         '<button type="submit" class="icono-home-auth-link icono-request-submit" style="border:none;cursor:pointer;">request new candidates (free)</button>' +
         '</form>' +
@@ -3003,10 +2945,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var form = body.querySelector("[data-icono-request-form]")
       var hiddenInput = body.querySelector("[data-icono-request-vision]")
       var queryInput = body.querySelector("[data-icono-request-query]")
-      var current = body.querySelector("[data-icono-request-current]")
       var results = body.querySelector("[data-icono-request-results]")
       var picker = body.querySelector("[data-icono-request-picker]")
-      if (!form || !hiddenInput || !queryInput || !current || !results || !picker) return
+      if (!form || !hiddenInput || !queryInput || !results || !picker) return
       var activeIndex = -1
       var filteredOptions = []
       var pickerOpen = false
@@ -3020,10 +2961,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           }
         }
         return null
-      }
-
-      function updateSummary() {
-        current.innerHTML = renderRequestSelectionSummaryMarkup(selectedOption())
       }
 
       function closeResults() {
@@ -3089,7 +3026,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
       function renderResultsList() {
         filteredOptions = filterRequestOptions(queryInput.value)
-        var html = renderRequestOptionButtonMarkup(null, hiddenInput.value, true)
+        var html = ""
         if (filteredOptions.length) {
           html += filteredOptions
             .map(function (option) {
@@ -3108,8 +3045,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       function setSelection(option) {
         hiddenInput.value = option && option.vision_id ? String(option.vision_id) : ""
         queryInput.value = option ? requestOptionPrimaryLabel(option) : ""
-        updateSummary()
-        renderResultsList()
         closeResults()
       }
 
@@ -3120,6 +3055,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         renderResultsList()
       })
       queryInput.addEventListener("input", function () {
+        hiddenInput.value = ""
         activeIndex = -1
         renderResultsList()
       })
@@ -3153,10 +3089,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var button = event.target.closest("[data-icono-request-option]")
         if (!button) return
         var visionId = String(button.getAttribute("data-icono-request-option") || "").trim()
-        if (!visionId) {
-          setSelection(null)
-          return
-        }
         for (var i = 0; i < requestOptions.length; i++) {
           if (String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === visionId) {
             setSelection(requestOptions[i])
@@ -3171,9 +3103,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         if (!picker.contains(event.target)) closeResults()
       }
       document.addEventListener("click", panel._iconoRequestOutsideClickHandler)
-      updateSummary()
       queryInput.value = ""
-      renderResultsList()
       closeResults()
       form.addEventListener("submit", function (event) {
         event.preventDefault()
