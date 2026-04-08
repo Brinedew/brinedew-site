@@ -54,7 +54,11 @@ class_name = "IconoplasmVoteCoordinator"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["GameSession", "IconoplasmVoteCoordinator"]
+new_sqlite_classes = ["GameSession"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["IconoplasmVoteCoordinator"]
 
 [[r2_buckets]]
 binding = "STRUCTURES_BUCKET"
@@ -103,7 +107,11 @@ class_name = "IconoplasmVoteCoordinator"
 
 [[env.staging.migrations]]
 tag = "v1"
-new_sqlite_classes = ["GameSession", "IconoplasmVoteCoordinator"]
+new_sqlite_classes = ["GameSession"]
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["IconoplasmVoteCoordinator"]
 
 [[env.staging.r2_buckets]]
 binding = "STRUCTURES_BUCKET"

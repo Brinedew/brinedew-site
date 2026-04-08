@@ -151,8 +151,8 @@ test("DO NOT DELETE: public workers must proxy to the one allowed internal state
   )
   assert.match(
     internalWrangler,
-    /\[\[migrations\]\][\s\S]*new_sqlite_classes = \["GameSession", "IconoplasmVoteCoordinator"\]/,
-    "internal stateful worker should migrate the stateful durable objects explicitly",
+    /\[\[migrations\]\][\s\S]*tag = "v1"[\s\S]*new_sqlite_classes = \["GameSession"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v2"[\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\]/,
+    "internal stateful worker should keep the old GameSession migration and add the vote coordinator as a new migration tag",
   )
 })
 
