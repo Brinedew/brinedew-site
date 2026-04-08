@@ -44,6 +44,14 @@ name = "GAME_SESSIONS"
 class_name = "GameSession"
 script_name = "geneguessr-api"
 
+[[durable_objects.bindings]]
+name = "ICONOPLASM_VOTE_COORDINATORS"
+class_name = "IconoplasmVoteCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["IconoplasmVoteCoordinator"]
+
 [env.staging]
 name = "the-only-allowed-db-gateway-staging"
 # This worker is an internal organ, not a staging toy URL.
@@ -78,3 +86,11 @@ preview_bucket_name = "iconoplasm-portraits-staging"
 name = "GAME_SESSIONS"
 class_name = "GameSession"
 script_name = "geneguessr-api-staging"
+
+[[env.staging.durable_objects.bindings]]
+name = "ICONOPLASM_VOTE_COORDINATORS"
+class_name = "IconoplasmVoteCoordinator"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["IconoplasmVoteCoordinator"]

@@ -89,6 +89,7 @@ test("DO NOT DELETE: the caller worker should route through a caller-only bounda
   const indexWorker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./index.js")
   const callerBoundary = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-caller.js")
   const gatewayEntry = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-db-gateway.js")
+  const gatewayWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.the-only-allowed-db-gateway.toml")
 
   assert.match(indexWorker, /from "\.\/iconoplasm-caller\.js"/, "index worker should import the caller-only Iconoplasm boundary")
   assert.doesNotMatch(
@@ -110,6 +111,21 @@ test("DO NOT DELETE: the caller worker should route through a caller-only bounda
     callerBoundary,
     /ICONOPLASM_DB/,
     "caller-only boundary should stay free of direct Iconoplasm D1 references",
+  )
+  assert.match(
+    gatewayEntry,
+    /export \{[\s\S]*IconoplasmVoteCoordinator[\s\S]*\}/,
+    "gateway entrypoint should export the Iconoplasm vote coordinator Durable Object class",
+  )
+  assert.match(
+    gatewayWrangler,
+    /name = "ICONOPLASM_VOTE_COORDINATORS"[\s\S]*class_name = "IconoplasmVoteCoordinator"/,
+    "gateway wrangler should bind the per-gene vote coordinator Durable Object",
+  )
+  assert.match(
+    gatewayWrangler,
+    /\[\[migrations\]\][\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\]/,
+    "gateway wrangler should migrate the vote coordinator Durable Object explicitly",
   )
 })
 

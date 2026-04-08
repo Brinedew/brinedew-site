@@ -1,4 +1,9 @@
-import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
+import {
+  handleIconoplasmDbGatewayRequest,
+  IconoplasmVoteCoordinator,
+} from "./iconoplasm-gateway.js"
+
+export { IconoplasmVoteCoordinator }
 
 export default {
   async fetch(request, env, ctx) {

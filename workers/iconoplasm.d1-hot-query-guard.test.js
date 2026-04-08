@@ -38,28 +38,25 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
     "async function iconoVoteSnapshot",
     "async function iconoVoteSnapshotsBatch",
   )
-  assert.match(voteSnapshotFn, /WHERE gene_symbol = \?[\s\S]*AND asset_sha256 = \?/, "vote snapshot should use the asset index")
-  assert.doesNotMatch(voteSnapshotFn, /upper\(gene_symbol\)|lower\(asset_sha256\)/, "vote snapshot must not wrap canonical asset keys")
-  assert.match(voteSnapshotFn, /FROM icono_vote_asset_summary/, "vote snapshot should read the per-asset summary")
-  assert.match(voteSnapshotFn, /FROM icono_admin_vision_rollup/, "vote snapshot should read the per-vision rollup")
+  assert.match(voteSnapshotFn, /iconoplasmVoteCoordinatorSnapshot\(/, "vote snapshot should ask the per-gene coordinator first")
   assert.doesNotMatch(voteSnapshotFn, /SUM\(CASE WHEN vote_value/, "vote snapshot must not aggregate the raw vote ledger on the hot path")
 
-  const autoPromoteFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "async function autoPromoteTopVotedPortrait",
-    "async function getArtistStyleBlacklistRow",
+  const coordinatorClass = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "export class IconoplasmVoteCoordinator",
+    "function voteDeltaFromTransition",
   )
-  assert.match(autoPromoteFn, /WHERE gene_symbol = \?/, "auto-promote should filter by raw gene symbol")
-  assert.doesNotMatch(autoPromoteFn, /upper\(gene_symbol\)|lower\(asset_sha256\)/, "auto-promote must stay on raw asset-key predicates")
-  assert.match(autoPromoteFn, /LEFT JOIN icono_vote_asset_summary/, "auto-promote should rank from the vote summary read model")
-  assert.doesNotMatch(autoPromoteFn, /WITH vote_agg AS|SUM\(CASE WHEN vote_value/, "auto-promote must not rebuild vote aggregates from the raw ledger")
+  assert.match(coordinatorClass, /CREATE TABLE IF NOT EXISTS vote_by_user_asset/, "vote coordinator should own the per-user vote state")
+  assert.match(coordinatorClass, /CREATE TABLE IF NOT EXISTS asset_summary/, "vote coordinator should own the per-asset summary state")
+  assert.match(coordinatorClass, /CREATE TABLE IF NOT EXISTS vision_summary/, "vote coordinator should own the per-vision summary state")
 
   const voteSetRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     'if (path === "/api/iconoplasm/votes/set" && request.method === "POST")',
     'if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST")',
   )
-  assert.match(voteSetRoute, /WHERE gene_symbol = \?[\s\S]*AND asset_sha256 = \?[\s\S]*AND user_id = \?/, "vote writes should use the asset+user unique guard")
-  assert.doesNotMatch(voteSetRoute, /upper\(gene_symbol\)|lower\(asset_sha256\)/, "vote writes must not wrap canonical asset keys")
-  assert.match(voteSetRoute, /applyVoteDeltaToAssetSummary\(/, "single-vote writes should update the summary incrementally")
-  assert.match(voteSetRoute, /refreshVoteReadModelsAfterHotWrite\(/, "single-vote writes should refresh only the narrow post-vote read models")
+  assert.match(voteSetRoute, /iconoplasmVoteCoordinatorSetVote\(/, "single-vote writes should go through the per-gene coordinator")
+  assert.match(voteSetRoute, /projectVoteCoordinatorLedgerRow\(/, "single-vote writes should project the compatibility ledger from coordinator state")
+  assert.match(voteSetRoute, /refreshProjectedVoteReadModelsFromCoordinatorState\(/, "single-vote writes should rebuild read models from coordinator state")
+  assert.match(voteSetRoute, /autoPromoteTopVotedPortraitFromCoordinatorState\(/, "single-vote writes should rank canon from coordinator state")
+  assert.doesNotMatch(voteSetRoute, /SELECT vote_value[\s\S]*FROM icono_image_votes/, "single-vote writes must not read the raw D1 vote ledger on the hot path")
   assert.doesNotMatch(voteSetRoute, /syncVoteReadModelsAndInvalidateGallery\(|syncAdminReadModelsAndInvalidateGallery\(/, "single-vote writes must not call the bulk summary rebuild paths")
 })
