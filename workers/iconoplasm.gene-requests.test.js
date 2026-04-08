@@ -21,6 +21,75 @@ class FakeRequestStatement {
   }
 
   async all() {
+    if (this.sql.includes("FROM icono_generation_request_vision_option_rollup")) {
+      this.db.optionRollupReads += 1
+      if (this.db.failOptionRollupRead) {
+        throw new Error("D1_ERROR: request picker rollup missing or unreadable")
+      }
+      if (this.db.manyVisionOptions) {
+        return {
+          results: Array.from({ length: 65 }, function (_unused, index) {
+            const previewAssets = Array.from({ length: 6 }, function (__unused, previewIndex) {
+              const suffix = String(index).padStart(2, "0") + String(previewIndex).padStart(2, "0")
+              const sha = ("a".repeat(60) + suffix).slice(0, 64)
+              return {
+                gene_symbol: previewIndex % 2 === 0 ? "INS" : "A1BG",
+                asset_sha256: sha,
+                r2_key_medium: `portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
+                r2_key_thumb: `portraits/v1/${sha.slice(0, 2)}/${sha}/thumb.webp`,
+                r2_key_full: "",
+                is_current: previewIndex === 0,
+                preview_rank: previewIndex + 1,
+              }
+            })
+            return {
+              vision_id: "anima-v1-" + String(3001 + index),
+              emulsion_id: `A1-${3001 + index}`,
+              artist_tag: "anima",
+              artist_name: "Anima Archive",
+              workflow_id: "A1-",
+              prompt_version: String(93 + (index % 3)),
+              variant_slot: String(19 + index),
+              image_count: 10 - (index % 3),
+              live_count: 5,
+              score: 7 - (index % 2),
+              preview_assets_json: JSON.stringify(previewAssets),
+            }
+          }),
+        }
+      }
+      return {
+        results: [
+          {
+            vision_id: "anima-v1-3001",
+            emulsion_id: "A1-93-19",
+            artist_tag: "anima",
+            artist_name: "Anima Archive",
+            workflow_id: "A1-",
+            prompt_version: "93",
+            variant_slot: "19",
+            image_count: 10,
+            live_count: 5,
+            score: 7,
+            preview_assets_json: JSON.stringify(
+              Array.from({ length: 6 }, function (_unused, previewIndex) {
+                const sha = ("a".repeat(60) + String(previewIndex).padStart(4, "0")).slice(0, 64)
+                return {
+                  gene_symbol: previewIndex % 2 === 0 ? "INS" : "A1BG",
+                  asset_sha256: sha,
+                  r2_key_medium: `portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
+                  r2_key_thumb: `portraits/v1/${sha.slice(0, 2)}/${sha}/thumb.webp`,
+                  r2_key_full: "",
+                  is_current: previewIndex === 0,
+                  preview_rank: previewIndex + 1,
+                }
+              }),
+            ),
+          },
+        ],
+      }
+    }
+
     if (this.sql.includes("WITH ranked_previews AS")) {
       this.db.previewReads += 1
       if (this.db.failPreviewHydration) {
@@ -122,9 +191,11 @@ class FakeRequestDb {
   constructor(options = {}) {
     this.requestReads = 0
     this.visionRollupReads = 0
+    this.optionRollupReads = 0
     this.previewReads = 0
     this.manyVisionOptions = !!options.manyVisionOptions
     this.failPreviewHydration = !!options.failPreviewHydration
+    this.failOptionRollupRead = !!options.failOptionRollupRead
   }
 
   prepare(sql) {
@@ -230,8 +301,9 @@ test("authenticated gene request state returns rich emulsion options with previe
     String(payload.request_options[0]?.preview_assets[0]?.thumb_url || ""),
     /\/portraits\/v1\/aa\/a{60}0000\/thumb\.webp$/,
   )
-  assert.equal(env.gatewayDb.visionRollupReads, 1)
-  assert.equal(env.gatewayDb.previewReads, 1)
+  assert.equal(env.gatewayDb.optionRollupReads, 1)
+  assert.equal(env.gatewayDb.visionRollupReads, 0)
+  assert.equal(env.gatewayDb.previewReads, 0)
 })
 
 test("authenticated gene request state infers emulsion code from vision id when rollup row omits workflow fields", async () => {
@@ -239,26 +311,12 @@ test("authenticated gene request state infers emulsion code from vision id when 
   env.gatewayDb.prepare = function (sql) {
     const statement = new FakeRequestStatement(this, sql)
     statement.all = async () => {
-      if (String(sql).includes("WITH ranked_previews AS")) {
+      if (String(sql).includes("FROM icono_generation_request_vision_option_rollup")) {
         return {
           results: [
             {
               vision_id: "anima-v1-3696",
-              gene_symbol: "A1BG",
-              asset_sha256: "b".repeat(64),
-              r2_key_medium: `portraits/v1/bb/${"b".repeat(64)}/medium.webp`,
-              r2_key_thumb: `portraits/v1/bb/${"b".repeat(64)}/thumb.webp`,
-              is_current: 1,
-              preview_rank: 1,
-            },
-          ],
-        }
-      }
-      if (String(sql).includes("FROM icono_admin_vision_rollup")) {
-        return {
-          results: [
-            {
-              vision_id: "anima-v1-3696",
+              emulsion_id: "",
               artist_tag: "",
               artist_name: "",
               workflow_id: "",
@@ -267,6 +325,17 @@ test("authenticated gene request state infers emulsion code from vision id when 
               image_count: 8,
               live_count: 7,
               score: 5,
+              preview_assets_json: JSON.stringify([
+                {
+                  gene_symbol: "A1BG",
+                  asset_sha256: "b".repeat(64),
+                  r2_key_medium: `portraits/v1/bb/${"b".repeat(64)}/medium.webp`,
+                  r2_key_thumb: `portraits/v1/bb/${"b".repeat(64)}/thumb.webp`,
+                  r2_key_full: "",
+                  is_current: true,
+                  preview_rank: 1,
+                },
+              ]),
             },
           ],
         }
@@ -339,11 +408,12 @@ test("authenticated gene request state chunks preview hydration instead of faili
   assert.equal(response.status, 200)
   assert.equal(payload.authenticated, true)
   assert.equal(payload.request_options.length, 65)
-  assert.equal(env.gatewayDb.previewReads, 3)
+  assert.equal(env.gatewayDb.optionRollupReads, 1)
+  assert.equal(env.gatewayDb.previewReads, 0)
 })
 
 test("admin diagnostics returns request-option failure details instead of another opaque 500", async () => {
-  const env = buildEnv({ dbOptions: { failPreviewHydration: true } })
+  const env = buildEnv({ dbOptions: { failOptionRollupRead: true } })
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/requests/gene/A1BG/diagnostics", {
       headers: {
@@ -362,7 +432,7 @@ test("admin diagnostics returns request-option failure details instead of anothe
   assert.equal(response.status, 200)
   assert.equal(payload.gene_symbol, "A1BG")
   assert.equal(payload.request_options.ok, false)
-  assert.match(String(payload.request_options.error || ""), /too many SQL variables/i)
+  assert.match(String(payload.request_options.error || ""), /rollup missing or unreadable/i)
 })
 
 test("gene request summary stays cheap and skips vision-rollup reads", async () => {
@@ -377,6 +447,7 @@ test("gene request summary stays cheap and skips vision-rollup reads", async () 
   assert.equal(response.status, 200)
   assert.equal(payload.authenticated, false)
   assert.equal(env.gatewayDb.requestReads, 1)
+  assert.equal(env.gatewayDb.optionRollupReads, 0)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
   assert.equal(payload.gene_lane_summary[0]?.request_count, 1)
@@ -413,7 +484,8 @@ test("request options load through the dedicated options endpoint only for authe
   assert.equal(payload.authenticated, true)
   assert.equal(payload.request_options.length, 1)
   assert.equal(payload.request_options[0]?.label, "A1-93-19")
-  assert.equal(env.gatewayDb.visionRollupReads, 1)
-  assert.equal(env.gatewayDb.previewReads, 1)
+  assert.equal(env.gatewayDb.optionRollupReads, 1)
+  assert.equal(env.gatewayDb.visionRollupReads, 0)
+  assert.equal(env.gatewayDb.previewReads, 0)
 })
 

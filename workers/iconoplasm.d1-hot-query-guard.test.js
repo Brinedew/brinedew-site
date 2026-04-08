@@ -60,3 +60,30 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
   assert.doesNotMatch(voteSetRoute, /SELECT vote_value[\s\S]*FROM icono_image_votes/, "single-vote writes must not read the raw D1 vote ledger on the hot path")
   assert.doesNotMatch(voteSetRoute, /syncVoteReadModelsAndInvalidateGallery\(|syncAdminReadModelsAndInvalidateGallery\(/, "single-vote writes must not call the bulk summary rebuild paths")
 })
+
+test("DO NOT DELETE: request picker hot path must stay on a precomputed rollup instead of live portrait scans", () => {
+  const requestOptionsFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "async function listGenerationRequestVisionOptions",
+    "async function generationRequestSummaryPayload",
+  )
+  assert.match(
+    requestOptionsFn,
+    /FROM icono_generation_request_vision_option_rollup/,
+    "request picker options should read from the dedicated rollup table",
+  )
+  assert.doesNotMatch(
+    requestOptionsFn,
+    /FROM icono_admin_vision_rollup|WITH ranked_previews AS|FROM icono_portrait_assets/,
+    "request picker options must not hydrate previews from raw vision or portrait tables on the hot path",
+  )
+
+  const geneRequestRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    'const geneRequestMatch = path.match(/^\\/api\\/iconoplasm\\/requests\\/gene\\/([^/]+)$/)',
+    'if (path === "/api/iconoplasm/requests" && request.method === "POST")',
+  )
+  assert.match(
+    geneRequestRoute,
+    /listGenerationRequestVisionOptions\(/,
+    "legacy request-state route should still source options through the dedicated rollup reader until it is deleted",
+  )
+})

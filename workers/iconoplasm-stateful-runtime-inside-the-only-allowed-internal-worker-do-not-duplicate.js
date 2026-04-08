@@ -252,10 +252,17 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/discoveries/encounter") return "discoveries_encounter"
   if (path === "/api/iconoplasm/discoveries/me") return "discoveries_me"
   if (path === "/api/iconoplasm/discoveries/merge") return "discoveries_merge"
+  if (path === "/api/iconoplasm/requests") return "gene_request_submit"
+  if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
+  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path)) return "gene_request_summary"
+  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state"
   if (path === "/api/iconoplasm/votes/set") return "votes_set"
   if (path === "/api/iconoplasm/votes/snapshot") return "votes_snapshot"
+  if (path === "/api/iconoplasm/admin/me") return "admin_me"
   if (path === "/api/iconoplasm/admin/ingest") return "admin_ingest"
   if (path === "/api/iconoplasm/admin/reconcile") return "admin_reconcile"
+  if (path === "/api/iconoplasm/admin/overview") return "admin_overview"
+  if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
   if (path.startsWith("/api/iconoplasm/admin/catalog/")) return "admin_catalog"
   if (path.startsWith("/api/iconoplasm/admin/essence/")) return "admin_essence"
   if (path.startsWith("/api/iconoplasm/admin/read-models/")) return "admin_read_models"
@@ -263,6 +270,10 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/assets/summary") return "admin_assets_summary"
   if (path.startsWith("/api/iconoplasm/admin/assets")) return "admin_assets"
   if (path === "/api/iconoplasm/admin/gallery") return "admin_gallery"
+  if (path === "/api/iconoplasm/admin/requests/open") return "admin_requests_open"
+  if (path === "/api/iconoplasm/admin/requests/fulfill") return "admin_requests_fulfill"
+  if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
+    return "admin_gene_request_diagnostics"
   if (path === "/api/iconoplasm/admin/cost/usage") return "admin_cost_usage"
   if (path.startsWith("/api/iconoplasm/admin/")) return "admin_other"
   if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER) return "internal_repair"
@@ -1503,100 +1514,236 @@ function generationRequestVisionOptionLabels(row) {
   }
 }
 
-async function listGenerationRequestVisionPreviewAssets(
+function normalizeGenerationRequestPreviewAssetRow(row) {
+  const assetSha = normalizeSha256(row?.asset_sha256 || "") || ""
+  if (!assetSha) return null
+  return {
+    gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+    asset_sha256: assetSha,
+    r2_key_medium: sanitizeText(row?.r2_key_medium || "", 512) || "",
+    r2_key_thumb: sanitizeText(row?.r2_key_thumb || "", 512) || "",
+    r2_key_full: sanitizeText(row?.r2_key_full || "", 512) || "",
+    is_current: Number(row?.is_current || 0) > 0,
+    preview_rank: Math.max(0, Number(row?.preview_rank || 0) || 0),
+  }
+}
+
+function serializeGenerationRequestPreviewAssetsJson(previewRows) {
+  const normalized = (Array.isArray(previewRows) ? previewRows : [])
+    .map(normalizeGenerationRequestPreviewAssetRow)
+    .filter(Boolean)
+    .sort((left, right) => {
+      return (
+        Number(left.preview_rank || 0) - Number(right.preview_rank || 0) ||
+        compareNullableTextAsc(left.asset_sha256, right.asset_sha256)
+      )
+    })
+  return JSON.stringify(normalized)
+}
+
+function parseGenerationRequestPreviewAssetsJson(raw) {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(String(raw))
+    return (Array.isArray(parsed) ? parsed : [])
+      .map(normalizeGenerationRequestPreviewAssetRow)
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function materializeGenerationRequestPreviewAssetsForPublic(url, env, rawPreviewRows) {
+  const base = portraitBase(url, env)
+  return parseGenerationRequestPreviewAssetsJson(rawPreviewRows).map((row) => ({
+    gene_symbol: row.gene_symbol,
+    asset_sha256: row.asset_sha256,
+    is_current: Boolean(row.is_current),
+    preview_rank: Number(row.preview_rank || 0) || 0,
+    medium_url:
+      row.r2_key_medium || row.r2_key_full
+        ? joinUrl(base, row.r2_key_medium || row.r2_key_full)
+        : adminPortraitUrl(base, row.asset_sha256 || "", "medium"),
+    thumb_url:
+      row.r2_key_thumb || row.r2_key_medium
+        ? joinUrl(base, row.r2_key_thumb || row.r2_key_medium)
+        : adminPortraitUrl(base, row.asset_sha256 || "", "thumb"),
+  }))
+}
+
+async function fetchGenerationRequestVisionPreviewRowsForRollup(
   env,
-  url,
-  visionIds,
-  { perVisionLimit = 3 } = {},
+  { visionIds = [], perVisionLimit = 6 } = {},
 ) {
-  if (!env.ICONOPLASM_DB) return new Map()
-  const safeVisionIds = Array.from(
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedVisionIds = Array.from(
     new Set(
       (Array.isArray(visionIds) ? visionIds : [])
-        .map((value) => sanitizeVoteVisionId(value || ""))
+        .map((value) => validAdminRollupVisionId(value))
         .filter(Boolean),
     ),
-  ).slice(0, 120)
-  if (!safeVisionIds.length) return new Map()
-  const previewLimit = Math.max(
-    1,
-    Math.min(6, Number.parseInt(String(perVisionLimit || "6"), 10) || 6),
   )
-  const base = portraitBase(url, env)
-  const previewsByVision = new Map()
-  // D1 on Cloudflare rejects very wide IN (...) bind lists. Chunk the preview
-  // hydration query so the public request picker can still show many emulsions
-  // without turning one page load into a 500 for logged-in users.
-  const chunkSize = 32
-  for (let offset = 0; offset < safeVisionIds.length; offset += chunkSize) {
-    const chunk = safeVisionIds.slice(offset, offset + chunkSize)
-    const placeholders = chunk.map(() => "?").join(", ")
-    const resp = await env.ICONOPLASM_DB.prepare(
-      `WITH ranked_previews AS (
-         SELECT
-           pa.vision_id,
-           pa.gene_symbol,
-           lower(pa.asset_sha256) AS asset_sha256,
-           pa.r2_key_medium,
-           pa.r2_key_thumb,
-           pa.r2_key_full,
-           CASE
-             WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
-             ELSE 0
-           END AS is_current,
-           ROW_NUMBER() OVER (
-             PARTITION BY pa.vision_id
-             ORDER BY
-               CASE
-                 WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
-                 ELSE 0
-               END DESC,
-               pa.created_at DESC,
-               lower(pa.asset_sha256) ASC
-           ) AS preview_rank
-         FROM icono_portrait_assets pa
-         LEFT JOIN icono_publish_state ps
-           ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
-         WHERE pa.vision_id IN (${placeholders})
-           AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
-       )
+  if (!cleanedVisionIds.length) return []
+  const cleanedLimit = normalizeAdminVisionAssetLimit(perVisionLimit, 6, 12)
+  const response = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming AS (
+       SELECT value AS vision_id
+       FROM json_each(?)
+     ),
+     ranked_previews AS (
        SELECT
-         vision_id,
-         gene_symbol,
-         asset_sha256,
-         r2_key_medium,
-         r2_key_thumb,
-         r2_key_full,
-         is_current,
-         preview_rank
-       FROM ranked_previews
-       WHERE preview_rank <= ?
-       ORDER BY vision_id ASC, preview_rank ASC`,
-    )
-      .bind(...chunk, previewLimit)
-      .all()
-    for (const row of Array.isArray(resp?.results) ? resp.results : []) {
-      const visionId = sanitizeVoteVisionId(row?.vision_id || "")
-      if (!visionId) continue
-      const asset = {
-        gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
-        asset_sha256: normalizeSha256(row?.asset_sha256 || "") || "",
-        is_current: Number(row?.is_current || 0) > 0,
-        preview_rank: Number(row?.preview_rank || 0) || 0,
-        medium_url:
-          row?.r2_key_medium || row?.r2_key_full
-            ? joinUrl(base, row?.r2_key_medium || row?.r2_key_full)
-            : adminPortraitUrl(base, row?.asset_sha256 || "", "medium"),
-        thumb_url:
-          row?.r2_key_thumb || row?.r2_key_medium
-            ? joinUrl(base, row?.r2_key_thumb || row?.r2_key_medium)
-            : adminPortraitUrl(base, row?.asset_sha256 || "", "thumb"),
-      }
-      if (!previewsByVision.has(visionId)) previewsByVision.set(visionId, [])
-      previewsByVision.get(visionId).push(asset)
-    }
+         pa.vision_id,
+         upper(pa.gene_symbol) AS gene_symbol,
+         lower(pa.asset_sha256) AS asset_sha256,
+         COALESCE(pa.r2_key_medium, '') AS r2_key_medium,
+         COALESCE(pa.r2_key_thumb, '') AS r2_key_thumb,
+         COALESCE(pa.r2_key_full, '') AS r2_key_full,
+         CASE
+           WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+           ELSE 0
+         END AS is_current,
+         ROW_NUMBER() OVER (
+           PARTITION BY pa.vision_id
+           ORDER BY
+             CASE
+               WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+               ELSE 0
+             END DESC,
+             COALESCE(pa.created_at, '') DESC,
+             lower(pa.asset_sha256) ASC
+         ) AS preview_rank
+       FROM icono_portrait_assets pa
+       JOIN incoming i
+         ON i.vision_id = pa.vision_id
+       LEFT JOIN icono_publish_state ps
+         ON ps.gene_symbol = pa.gene_symbol
+       WHERE COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+     )
+     SELECT
+       vision_id,
+       gene_symbol,
+       asset_sha256,
+       r2_key_medium,
+       r2_key_thumb,
+       r2_key_full,
+       is_current,
+       preview_rank
+     FROM ranked_previews
+     WHERE preview_rank <= ?
+     ORDER BY vision_id ASC, preview_rank ASC`,
+  )
+    .bind(JSON.stringify(cleanedVisionIds), cleanedLimit)
+    .all()
+  return (Array.isArray(response?.results) ? response.results : [])
+    .map(normalizeGenerationRequestPreviewAssetRow)
+    .filter(Boolean)
+}
+
+async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds = []) {
+  if (!env.ICONOPLASM_DB) return 0
+  const cleanedVisionIds = Array.from(
+    new Set(
+      (Array.isArray(visionIds) ? visionIds : [])
+        .map((value) => validAdminRollupVisionId(value))
+        .filter(Boolean),
+    ),
+  )
+  if (!cleanedVisionIds.length) return 0
+
+  const placeholders = cleanedVisionIds.map(() => "?").join(", ")
+  await env.ICONOPLASM_DB.prepare(
+    `DELETE FROM icono_generation_request_vision_option_rollup
+     WHERE vision_id IN (${placeholders})`,
+  )
+    .bind(...cleanedVisionIds)
+    .run()
+
+  const summaryResp = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       vision_id,
+       emulsion_id,
+       workflow_id,
+       workflow_label,
+       prompt_version,
+       variant_slot,
+       artist_tag,
+       artist_name,
+       image_count,
+       live_count,
+       score
+     FROM icono_admin_vision_rollup
+     WHERE vision_id IN (${placeholders})`,
+  )
+    .bind(...cleanedVisionIds)
+    .all()
+  const summaryRows = Array.isArray(summaryResp?.results) ? summaryResp.results : []
+  if (!summaryRows.length) return 0
+
+  const previewRows = await fetchGenerationRequestVisionPreviewRowsForRollup(env, {
+    visionIds: cleanedVisionIds,
+    perVisionLimit: 6,
+  })
+  const previewMap = new Map()
+  for (const previewRow of previewRows) {
+    const visionId = sanitizeVoteVisionId(previewRow?.vision_id || "")
+    if (!visionId) continue
+    const existing = previewMap.get(visionId) || []
+    existing.push(previewRow)
+    previewMap.set(visionId, existing)
   }
-  return previewsByVision
+
+  let written = 0
+  for (const row of summaryRows) {
+    const visionId = validAdminRollupVisionId(row?.vision_id || "")
+    if (!visionId) continue
+    await env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_generation_request_vision_option_rollup (
+         vision_id,
+         emulsion_id,
+         workflow_id,
+         workflow_label,
+         prompt_version,
+         variant_slot,
+         artist_tag,
+         artist_name,
+         image_count,
+         live_count,
+         score,
+         preview_assets_json,
+         updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(vision_id) DO UPDATE SET
+         emulsion_id = excluded.emulsion_id,
+         workflow_id = excluded.workflow_id,
+         workflow_label = excluded.workflow_label,
+         prompt_version = excluded.prompt_version,
+         variant_slot = excluded.variant_slot,
+         artist_tag = excluded.artist_tag,
+         artist_name = excluded.artist_name,
+         image_count = excluded.image_count,
+         live_count = excluded.live_count,
+         score = excluded.score,
+         preview_assets_json = excluded.preview_assets_json,
+         updated_at = CURRENT_TIMESTAMP`,
+    )
+      .bind(
+        visionId,
+        sanitizeText(row?.emulsion_id || "", 64) || "",
+        sanitizeText(row?.workflow_id || "", 32) || "",
+        sanitizeText(row?.workflow_label || "", 255) || "",
+        sanitizeText(row?.prompt_version || "", 16) || "",
+        sanitizeText(row?.variant_slot || "", 32) || "",
+        sanitizeText(row?.artist_tag || "", 255) || "",
+        sanitizeText(row?.artist_name || "", 255) || "",
+        Math.max(0, Number(row?.image_count || 0) || 0),
+        Math.max(0, Number(row?.live_count || 0) || 0),
+        Number(row?.score || 0) || 0,
+        serializeGenerationRequestPreviewAssetsJson(previewMap.get(visionId) || []),
+      )
+      .run()
+    written += 1
+  }
+  return written
 }
 
 async function listGenerationRequestVisionOptions(env, url) {
@@ -1604,17 +1751,18 @@ async function listGenerationRequestVisionOptions(env, url) {
   const resp = await env.ICONOPLASM_DB.prepare(
     `SELECT
        vision_id,
+       emulsion_id,
        artist_tag,
        artist_name,
-       emulsion_id,
        workflow_id,
        workflow_label,
        prompt_version,
        variant_slot,
        image_count,
        live_count,
-       score
-     FROM icono_admin_vision_rollup
+       score,
+       preview_assets_json
+     FROM icono_generation_request_vision_option_rollup
      WHERE COALESCE(vision_id, '') <> ''
      ORDER BY live_count DESC, image_count DESC, score DESC, vision_id ASC
      LIMIT 120`,
@@ -1636,19 +1784,62 @@ async function listGenerationRequestVisionOptions(env, url) {
         artist_name: labels.artistName,
         image_count: Number(row?.image_count || 0),
         live_count: Number(row?.live_count || 0),
+        preview_assets: materializeGenerationRequestPreviewAssetsForPublic(
+          url,
+          env,
+          row?.preview_assets_json || "[]",
+        ),
       }
     })
     .filter(Boolean)
-  const previewsByVision = await listGenerationRequestVisionPreviewAssets(
-    env,
-    url,
-    mapped.map((row) => row.vision_id),
-    { perVisionLimit: 6 },
-  )
-  return mapped.map((row) => ({
-    ...row,
-    preview_assets: previewsByVision.get(row.vision_id) || [],
-  }))
+  return mapped
+}
+
+async function generationRequestSummaryPayload(env, request, symbol) {
+  const normalized = normalizeSymbol(symbol || "")
+  if (!normalized) return { ok: false, error: "Invalid symbol" }
+  const sessionUser = await iconoplasmSessionUser(request, env)
+  const userId = normalizeUserId(sessionUser?.user_id || "")
+  const requestRows = await listOpenGenerationRequests(env, { limit: 500, geneSymbol: normalized })
+  const myRows = sessionUser?.user_id
+    ? requestRows.filter((row) => row.requester_user_id === userId)
+    : []
+  return {
+    ok: true,
+    authenticated: Boolean(sessionUser?.user_id),
+    can_request: Boolean(sessionUser?.user_id),
+    user: sessionUser?.user_id
+      ? {
+          id: userId,
+          username: sessionUser.username || null,
+        }
+      : null,
+    gene_symbol: normalized,
+    my_lane_summary: summarizeGenerationRequestRows(myRows, { requesterUserId: userId }),
+    gene_lane_summary: summarizeGenerationRequestRows(requestRows, { requesterUserId: userId }),
+  }
+}
+
+async function generationRequestOptionsPayload(env, url, request) {
+  const sessionUser = await iconoplasmSessionUser(request, env)
+  if (!sessionUser?.user_id) {
+    return {
+      ok: false,
+      status: 401,
+      code: "AUTH_REQUIRED",
+      error: "Please log in first to request new candidates.",
+    }
+  }
+  return {
+    ok: true,
+    authenticated: true,
+    can_request: true,
+    user: {
+      id: normalizeUserId(sessionUser.user_id || "") || null,
+      username: sessionUser.username || null,
+    },
+    request_options: await listGenerationRequestVisionOptions(env, url),
+  }
 }
 
 async function generationRequestDiagnostics(env, url, request, symbol) {
@@ -6420,6 +6611,11 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
       await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_vision_rollup WHERE vision_id = ?`)
         .bind(visionId)
         .run()
+      await env.ICONOPLASM_DB.prepare(
+        `DELETE FROM icono_generation_request_vision_option_rollup WHERE vision_id = ?`,
+      )
+        .bind(visionId)
+        .run()
       continue
     }
 
@@ -6490,6 +6686,9 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
       )
       .run()
     rebuilt += 1
+  }
+  if (rebuilt > 0) {
+    await rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds)
   }
   return rebuilt
 }
@@ -6829,6 +7028,26 @@ async function bulkRebuildAdminReadModels(env) {
        AND lower(COALESCE(pa.vision_id, '')) NOT LIKE 'artist-random-%'
      GROUP BY pa.vision_id`,
   ).run()
+
+  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_generation_request_vision_option_rollup`).run()
+  const requestPickerVisionIdRows = await env.ICONOPLASM_DB.prepare(
+    `SELECT vision_id
+     FROM icono_admin_vision_rollup
+     WHERE COALESCE(vision_id, '') <> ''
+     ORDER BY vision_id ASC`,
+  ).all()
+  const requestPickerVisionIds = (Array.isArray(requestPickerVisionIdRows?.results)
+    ? requestPickerVisionIdRows.results
+    : []
+  )
+    .map((row) => validAdminRollupVisionId(row?.vision_id || ""))
+    .filter(Boolean)
+  const requestPickerBatchSize = 48
+  for (let start = 0; start < requestPickerVisionIds.length; start += requestPickerBatchSize) {
+    const visionChunk = requestPickerVisionIds.slice(start, start + requestPickerBatchSize)
+    if (!visionChunk.length) continue
+    await rebuildGenerationRequestVisionOptionRollupsBatch(env, visionChunk)
+  }
 
   const summary = await env.ICONOPLASM_DB.prepare(
     `SELECT COUNT(*) AS genes FROM icono_admin_gene_rollup`,
@@ -11282,6 +11501,40 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
+      )
+    }
+
+    const geneRequestSummaryMatch = path.match(/^\/api\/iconoplasm\/requests\/gene\/([^/]+)\/summary$/)
+    if (geneRequestSummaryMatch && request.method === "GET") {
+      if (!env.ICONOPLASM_DB)
+        return done("gene_request_summary_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const symbol = normalizeSymbol(geneRequestSummaryMatch[1])
+      if (!symbol) return done("gene_request_summary_400", json({ error: "Invalid symbol" }, 400))
+      return done(
+        "gene_request_summary",
+        json(await generationRequestSummaryPayload(env, request, symbol), 200, {
+          "Cache-Control": "no-store",
+        }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/requests/options" && request.method === "GET") {
+      if (!env.ICONOPLASM_DB)
+        return done("gene_request_options_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const payload = await generationRequestOptionsPayload(env, url, request)
+      if (!payload.ok) {
+        return done(
+          "gene_request_options_401",
+          json({ ok: false, code: payload.code || "AUTH_REQUIRED", error: payload.error || "Unauthorized" }, payload.status || 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      return done(
+        "gene_request_options",
+        json(payload, 200, {
+          "Cache-Control": "no-store",
+        }),
       )
     }
 
