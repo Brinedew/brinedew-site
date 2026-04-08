@@ -6,10 +6,12 @@ const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.me
 
 test("Iconoplasm request picker uses an explicit combobox/listbox contract", () => {
   assert.match(app, /class="icono-search-input icono-request-picker-input"/, "request picker should reuse the shared Iconoplasm search input styling")
+  assert.match(app, /class="icono-request-inline-submit"/, "request picker should keep the submit control inside the search bar")
   assert.match(app, /role="combobox"/, "request picker input should expose combobox semantics")
   assert.match(app, /aria-autocomplete="list"/, "request picker input should announce list autocomplete")
   assert.match(app, /aria-haspopup="listbox"/, "request picker input should announce a listbox popup")
   assert.match(app, /role="listbox"/, "request picker popup should expose listbox semantics")
   assert.match(app, /role="option" aria-selected="/, "request picker rows should expose option semantics")
   assert.match(app, /Random emulsion/, "request picker should present Random emulsion as the default first option")
+  assert.match(app, /Loading emulsion lanes\.\.\./, "request picker should render an immediate loading shell instead of a blank blocking state")
 })

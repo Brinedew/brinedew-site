@@ -2813,7 +2813,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var optionVisionId = isRandom ? "" : String(item.vision_id || "").trim()
     var isSelected = String(selectedVisionId || "").trim() === optionVisionId
     var primary = isRandom ? "Random emulsion" : requestOptionPrimaryLabel(item)
-    var optionId = "icono-request-option-" + escAttr(optionVisionId || "random")
+    var optionId =
+      "icono-request-option-" +
+      String(optionVisionId || "random")
+        .replace(/[^a-z0-9_-]+/gi, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase()
     return (
       '<button type="button" class="icono-request-option' +
       (isSelected ? " is-selected" : "") +
@@ -2889,6 +2894,41 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
+  function renderRequestFormMarkup(symbol, options) {
+    var config = options || {}
+    var disabledAttr = config.disabled ? ' disabled aria-disabled="true"' : ""
+    var submitLabel = String(config.submitLabel || "submit (free)").trim() || "submit (free)"
+    var placeholder =
+      String(config.placeholder || "Search emulsion code or vision ID. Leave blank for random.").trim() ||
+      "Search emulsion code or vision ID. Leave blank for random."
+    return (
+      '<form data-icono-request-form class="icono-request-form">' +
+      '<div class="icono-search icono-search--toolbar icono-request-search">' +
+      '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
+      '<input id="icono-request-query-' +
+      esc(symbol) +
+      '" data-icono-request-query class="icono-search-input icono-request-picker-input" type="text" autocomplete="off" placeholder="' +
+      esc(placeholder) +
+      '" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="icono-request-results-' +
+      esc(symbol) +
+      '" aria-label="Search emulsion lane"' +
+      disabledAttr +
+      ">" +
+      '<input type="hidden" data-icono-request-vision value="">' +
+      '<button type="submit" class="icono-request-inline-submit"' +
+      disabledAttr +
+      ">" +
+      esc(submitLabel) +
+      "</button>" +
+      '<div class="icono-search-results icono-request-results" id="icono-request-results-' +
+      esc(symbol) +
+      '" role="listbox" data-icono-request-results hidden></div>' +
+      "</div>" +
+      "</div>" +
+      "</form>"
+    )
+  }
+
   function wireGeneRequestPanel(container, genePayload) {
     if (!container || !genePayload) return
     var panel = container.querySelector("[data-icono-request-panel]")
@@ -2931,22 +2971,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       body.innerHTML =
         '<div class="icono-request-shell">' +
         '<div class="icono-request-actions">' +
-        '<form data-icono-request-form class="icono-request-form">' +
-        '<div class="icono-search icono-search--toolbar icono-request-search">' +
-        '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
-        '<input id="icono-request-query-' +
-        esc(symbol) +
-        '" data-icono-request-query class="icono-search-input icono-request-picker-input" type="text" autocomplete="off" placeholder="Search emulsion code or vision ID. Leave blank for random." role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="icono-request-results-' +
-        esc(symbol) +
-        '" aria-label="Search emulsion lane">' +
-        '<input type="hidden" data-icono-request-vision value="">' +
-        '<div class="icono-search-results icono-request-results" id="icono-request-results-' +
-        esc(symbol) +
-        '" role="listbox" data-icono-request-results hidden></div>' +
-        '</div>' +
-        '</div>' +
-        '<button type="submit" class="icono-home-auth-link icono-request-submit" style="border:none;cursor:pointer;">request new candidates (free)</button>' +
-        '</form>' +
+        renderRequestFormMarkup(symbol) +
         renderGeneRequestSummaryMarkup("Your open requests", myLaneSummary, "my_request_count") +
         renderGeneRequestSummaryMarkup("Open requests on this gene", geneLaneSummary, "request_count") +
         '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
@@ -3127,7 +3152,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var button = form.querySelector('button[type="submit"]')
         if (button) {
           button.disabled = true
-          button.textContent = "Requesting..."
+          button.textContent = "Submitting..."
         }
         setStatus("", "")
         fetchJSON("/api/iconoplasm/requests", {
@@ -3148,14 +3173,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           .finally(function () {
             if (button) {
               button.disabled = false
-              button.textContent = "request new candidates (free)"
+              button.textContent = "submit (free)"
             }
           })
       })
     }
 
     function loadState() {
-      body.innerHTML = '<div class="icono-home-auth-note">Loading request state...</div>'
+      body.innerHTML =
+        '<div class="icono-request-shell">' +
+        '<div class="icono-request-actions">' +
+        renderRequestFormMarkup(symbol, {
+          disabled: true,
+          submitLabel: "loading...",
+          placeholder: "Loading emulsion lanes...",
+        }) +
+        '<div class="icono-home-auth-note">Loading request tools...</div>' +
+        '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
+        "</div>" +
+        "</div>"
       return fetchJSON("/api/iconoplasm/requests/gene/" + encodeURIComponent(symbol), {
         credentials: "include",
       }).then(function (state) {

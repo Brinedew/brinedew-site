@@ -323,7 +323,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 1fr;
   align-items: start;
   gap: 0.9rem;
   width: 100%;
@@ -344,6 +344,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-picker-input {
   width: 100%;
+  padding-right: 8.8rem;
 }
 
 .icono-request-results {
@@ -456,8 +457,27 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   display: block;
 }
 
-.icono-request-submit {
-  justify-self: flex-start;
+.icono-request-inline-submit {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  transform: translateY(-50%);
+  z-index: 2;
+  min-height: calc(100% - 0.7rem);
+  padding: 0.35rem 0.85rem;
+  border: none;
+  border-radius: var(--icono-radius-sm);
+  background: color-mix(in srgb, var(--accent) 86%, white 14%);
+  color: white;
+  font-family: var(--codeFont, monospace);
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icono-request-inline-submit:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .icono-request-diagnostics {
@@ -2224,10 +2244,6 @@ html[data-theme="dark"] .icono-card--brick {
 
   .icono-gene-request-surface {
     padding: 0;
-  }
-
-  .icono-request-form {
-    grid-template-columns: 1fr;
   }
 
   .icono-request-option {
