@@ -242,6 +242,238 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .small { font-size: 12px; color: var(--muted); }
     .mono { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace; }
 
+    /* ── cost ops ── */
+    .cost-layout {
+      display: grid;
+      gap: 18px;
+    }
+    .cost-hero {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 12%, transparent), transparent 36%),
+        linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, var(--accent-light)) 0%, var(--surface) 100%);
+    }
+    .cost-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px 18px;
+    }
+    .cost-toolbar-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .cost-toolbar-note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .cost-metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .cost-metric {
+      display: grid;
+      gap: 6px;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--border) 75%, var(--accent));
+      background: rgba(255,255,255,0.72);
+    }
+    .cost-metric-label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--faint);
+    }
+    .cost-metric-value {
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .cost-metric-note {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .cost-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.95fr);
+      gap: 18px;
+    }
+    .cost-card {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .cost-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px 18px;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+    .cost-subtle {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .cost-chart-shell {
+      display: grid;
+      gap: 10px;
+    }
+    .cost-chart {
+      width: 100%;
+      min-height: 280px;
+      border-radius: 14px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent-light) 55%, transparent), transparent 35%),
+        #fbfaf8;
+      border: 1px solid #efe7df;
+      padding: 10px;
+    }
+    .cost-chart svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .cost-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+    }
+    .cost-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .cost-legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .cost-budget-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .cost-budget-row {
+      display: grid;
+      gap: 8px;
+    }
+    .cost-budget-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .cost-budget-bar {
+      height: 12px;
+      border-radius: 999px;
+      background: #efe8e1;
+      overflow: hidden;
+    }
+    .cost-budget-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #d07a3e, #b84a26);
+    }
+    .cost-budget-fill.cost-budget-fill--warn {
+      background: linear-gradient(90deg, #d4a938, #b87411);
+    }
+    .cost-budget-fill.cost-budget-fill--danger {
+      background: linear-gradient(90deg, #d06464, #bf3030);
+    }
+    .cost-bars {
+      display: grid;
+      gap: 10px;
+    }
+    .cost-bar-row {
+      display: grid;
+      gap: 6px;
+    }
+    .cost-bar-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+      font-size: 12px;
+    }
+    .cost-bar-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .cost-bar-track {
+      display: flex;
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #eee7e0;
+    }
+    .cost-bar-segment {
+      height: 100%;
+    }
+    .cost-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+    }
+    .cost-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .cost-table th,
+    .cost-table td {
+      padding: 10px 0;
+      border-bottom: 1px solid #f0ede8;
+      text-align: left;
+      font-size: 12px;
+      vertical-align: top;
+    }
+    .cost-table th {
+      color: var(--faint);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .cost-table td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .cost-table td strong {
+      font-size: 13px;
+    }
+    .cost-inline-code {
+      font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #f3eee9;
+      color: #6f6258;
+    }
+
     /* ── status / flag badges ── */
     .status {
       display: inline-block;
@@ -1176,6 +1408,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     @media (max-width: 900px) {
       .page { padding: 16px 16px 40px; }
       .split { grid-template-columns: 1fr; }
+      .cost-grid { grid-template-columns: 1fr; }
       .plot-frame { height: 260px; }
       .metric-grid { gap: 20px; }
     }
@@ -1190,6 +1423,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
     <nav id="admin-tabs">
       <button class="tab-btn active" data-tab="overview">Home</button>
+      <button class="tab-btn" data-tab="costs">Costs</button>
       <button class="tab-btn" data-tab="archive">Gallery</button>
       <button class="tab-btn" data-tab="styles">Visions</button>
       <button class="tab-btn" data-tab="activity">Log</button>
@@ -1219,6 +1453,86 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <p class="small">Recent publish and rollback activity.</p>
           </div>
           <div class="list" id="overview-events"></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-costs" style="display:none;">
+      <div class="cost-layout">
+        <section class="cost-hero">
+          <div class="cost-toolbar">
+            <div>
+              <div class="cost-kicker">Iconoplasm Cost Control</div>
+              <h2>Adaptive guardrails with daily burst room</h2>
+              <p class="small">Monthly budget is the real stop. Daily allowance expands or tightens depending on how much of the billing cycle is already spent.</p>
+            </div>
+            <div class="cost-toolbar-actions">
+              <button type="button" id="cost-refresh">Refresh meter</button>
+              <span class="cost-toolbar-note" id="cost-updated-at">Not loaded yet.</span>
+            </div>
+          </div>
+          <div class="cost-metric-grid" id="cost-metrics"></div>
+        </section>
+
+        <div class="cost-grid">
+          <section class="cost-card">
+            <div class="cost-card-head">
+              <div>
+                <h2>Billing-cycle read trend</h2>
+                <p class="small">Daily rows-read trend for the current billing cycle. This is the fastest way to notice viral spikes.</p>
+              </div>
+              <div class="cost-subtle" id="cost-trend-meta">Waiting for data…</div>
+            </div>
+            <div class="cost-chart-shell">
+              <div class="cost-chart" id="cost-read-trend"></div>
+              <div class="cost-legend">
+                <span class="cost-legend-item"><span class="cost-legend-swatch" style="background:#c26a32"></span>Daily rows read</span>
+                <span class="cost-legend-item"><span class="cost-legend-swatch" style="background:#4f7f6d"></span>Current smart daily allowance</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="cost-card">
+            <div class="cost-card-head">
+              <div>
+                <h2>Budget headroom</h2>
+                <p class="small">Monthly is hard. Daily is adaptive and stays under monthly remaining headroom.</p>
+              </div>
+            </div>
+            <div class="cost-budget-grid" id="cost-budget-headroom"></div>
+          </section>
+        </div>
+
+        <div class="cost-grid">
+          <section class="cost-card">
+            <div class="cost-card-head">
+              <div>
+                <h2>Cycle mix by source</h2>
+                <p class="small">Part-to-whole view of where the current billing cycle spend is coming from.</p>
+              </div>
+            </div>
+            <div class="cost-bars" id="cost-cycle-source-bars"></div>
+          </section>
+
+          <section class="cost-card">
+            <div class="cost-card-head">
+              <div>
+                <h2>Today by route family</h2>
+                <p class="small">Ranked bars for the routes spending the budget right now.</p>
+              </div>
+            </div>
+            <div class="cost-bars" id="cost-daily-route-bars"></div>
+          </section>
+        </div>
+
+        <section class="cost-card">
+          <div class="cost-card-head">
+            <div>
+              <h2>Top cycle spenders</h2>
+              <p class="small">Most expensive route and actor combinations in the current billing cycle.</p>
+            </div>
+          </div>
+          <div id="cost-top-routes"></div>
         </section>
       </div>
     </div>
@@ -1423,6 +1737,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         selectedCandidateSha: '',
         activeTab: 'overview',
         archiveLoaded: false,
+        costLoaded: false,
+        costReport: null,
         galleryMode: 'live',
         visionSort: { key: 'live', dir: 'desc' },
         activityActionFilter: 'all'
@@ -1432,10 +1748,20 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         tabs: document.getElementById('admin-tabs'),
         panels: {
           overview: document.getElementById('panel-overview'),
+          costs: document.getElementById('panel-costs'),
           archive: document.getElementById('panel-archive'),
           styles: document.getElementById('panel-styles'),
           activity: document.getElementById('panel-activity')
         },
+        costRefresh: document.getElementById('cost-refresh'),
+        costUpdatedAt: document.getElementById('cost-updated-at'),
+        costMetrics: document.getElementById('cost-metrics'),
+        costTrendMeta: document.getElementById('cost-trend-meta'),
+        costReadTrend: document.getElementById('cost-read-trend'),
+        costBudgetHeadroom: document.getElementById('cost-budget-headroom'),
+        costCycleSourceBars: document.getElementById('cost-cycle-source-bars'),
+        costDailyRouteBars: document.getElementById('cost-daily-route-bars'),
+        costTopRoutes: document.getElementById('cost-top-routes'),
         overviewMetrics: document.getElementById('overview-metrics'),
         overviewCoverage: document.getElementById('overview-coverage'),
         attentionList: document.getElementById('attention-list'),
@@ -1473,6 +1799,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function setActiveTab(tab) {
         state.activeTab = tab;
+        if (window.location.hash !== '#' + tab && typeof history !== 'undefined' && history.replaceState) {
+          history.replaceState(null, '', '#' + tab);
+        }
         Object.keys(els.panels).forEach(function (key) {
           var panel = els.panels[key];
           if (!panel) return;
@@ -1491,6 +1820,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         if (tab === 'archive' && !state.archiveLoaded) {
           refreshAssets();
+        }
+        if (tab === 'costs' && !state.costLoaded) {
+          refreshCostUsage();
         }
         if (tab === 'styles' && !state.visionStats.length) {
           refreshVisionStats();
@@ -1857,6 +2189,310 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var num = Number(value || 0);
         if (!Number.isFinite(num)) return '0';
         return num.toLocaleString('en-US');
+      }
+
+      function safeNum(value) {
+        var num = Number(value || 0);
+        return Number.isFinite(num) ? num : 0;
+      }
+
+      function compactMetricNumber(value) {
+        var num = safeNum(value);
+        try {
+          if (Math.abs(num) >= 1000) {
+            return new Intl.NumberFormat('en-US', {
+              notation: 'compact',
+              maximumFractionDigits: Math.abs(num) >= 1000000000 ? 1 : 0
+            }).format(num);
+          }
+        } catch {}
+        return formatCompactNumber(num);
+      }
+
+      function compactPercent(value) {
+        var pct = safeNum(value) * 100;
+        if (!Number.isFinite(pct)) return '0%';
+        return (Math.round(pct * 10) / 10).toFixed(pct >= 10 ? 0 : 1).replace(/\.0$/, '') + '%';
+      }
+
+      function costLabel(value) {
+        return String(value || 'unknown')
+          .replaceAll('_', ' ')
+          .replace(/\b\w/g, function (char) { return char.toUpperCase(); });
+      }
+
+      function costFillToneClass(used, limit) {
+        var safeLimit = safeNum(limit);
+        if (safeLimit <= 0) return '';
+        var ratio = safeNum(used) / safeLimit;
+        if (ratio >= 0.85) return ' cost-budget-fill--danger';
+        if (ratio >= 0.6) return ' cost-budget-fill--warn';
+        return '';
+      }
+
+      function aggregateCostRows(rows, key) {
+        var map = Object.create(null);
+        (Array.isArray(rows) ? rows : []).forEach(function (row) {
+          var group = String(row && row[key] || 'unknown');
+          if (!map[group]) {
+            map[group] = {
+              key: group,
+              rows_read: 0,
+              rows_written: 0,
+              query_count: 0,
+              request_count: 0
+            };
+          }
+          map[group].rows_read += safeNum(row && row.rows_read);
+          map[group].rows_written += safeNum(row && row.rows_written);
+          map[group].query_count += safeNum(row && row.query_count);
+          map[group].request_count += safeNum(row && row.request_count);
+        });
+        return Object.keys(map).map(function (group) {
+          return map[group];
+        }).sort(function (left, right) {
+          return safeNum(right.rows_read) - safeNum(left.rows_read);
+        });
+      }
+
+      function buildCostTrendSvg(days, snapshot) {
+        var rows = Array.isArray(days) ? days : [];
+        if (!rows.length) {
+          return inlineFailureMarkup('No cycle data yet', 'This billing cycle has not recorded D1 usage yet.');
+        }
+        var width = 720;
+        var height = 280;
+        var padLeft = 50;
+        var padRight = 18;
+        var padTop = 18;
+        var padBottom = 34;
+        var usableWidth = width - padLeft - padRight;
+        var usableHeight = height - padTop - padBottom;
+        var dailyLimit = safeNum(snapshot && snapshot.rows_read_daily_smart_limit);
+        var maxValue = rows.reduce(function (acc, row) {
+          return Math.max(acc, safeNum(row && row.rows_read));
+        }, dailyLimit);
+        maxValue = Math.max(maxValue, 1);
+        var xStep = rows.length <= 1 ? 0 : usableWidth / (rows.length - 1);
+        function xAt(index) { return padLeft + (xStep * index); }
+        function yAt(value) {
+          return padTop + usableHeight - ((safeNum(value) / maxValue) * usableHeight);
+        }
+        var area = '';
+        var line = '';
+        rows.forEach(function (row, index) {
+          var x = xAt(index);
+          var y = yAt(row && row.rows_read);
+          area += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+          line += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+        });
+        if (rows.length) {
+          area += 'L' + xAt(rows.length - 1) + ' ' + (padTop + usableHeight) + ' ';
+          area += 'L' + xAt(0) + ' ' + (padTop + usableHeight) + ' Z';
+        }
+        var limitY = yAt(dailyLimit);
+        var points = rows.map(function (row, index) {
+          var value = safeNum(row && row.rows_read);
+          var x = xAt(index);
+          var y = yAt(value);
+          var dateLabel = String(row && row.day_key || '');
+          return '<circle cx="' + x + '" cy="' + y + '" r="3.5" fill="#b84a26"><title>' + esc(dateLabel + ': ' + formatCompactNumber(value) + ' rows read') + '</title></circle>';
+        }).join('');
+        var firstLabel = String(rows[0] && rows[0].day_key || '');
+        var lastLabel = String(rows[rows.length - 1] && rows[rows.length - 1].day_key || '');
+        return [
+          '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Rows read by day across the current billing cycle">',
+          '<line x1="' + padLeft + '" y1="' + (padTop + usableHeight) + '" x2="' + (padLeft + usableWidth) + '" y2="' + (padTop + usableHeight) + '" stroke="#e5ddd5" stroke-width="1" />',
+          '<line x1="' + padLeft + '" y1="' + limitY + '" x2="' + (padLeft + usableWidth) + '" y2="' + limitY + '" stroke="#4f7f6d" stroke-width="2" stroke-dasharray="6 6" />',
+          '<path d="' + area + '" fill="rgba(184,74,38,0.12)" stroke="none"></path>',
+          '<path d="' + line + '" fill="none" stroke="#b84a26" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>',
+          points,
+          '<text x="' + padLeft + '" y="' + (height - 8) + '" font-size="11" fill="#7a6d61">' + esc(firstLabel) + '</text>',
+          '<text x="' + (padLeft + usableWidth) + '" y="' + (height - 8) + '" text-anchor="end" font-size="11" fill="#7a6d61">' + esc(lastLabel) + '</text>',
+          '<text x="' + (padLeft + 6) + '" y="' + Math.max(12, limitY - 8) + '" font-size="11" fill="#4f7f6d">Smart daily allowance ' + esc(compactMetricNumber(dailyLimit)) + '</text>',
+          '<text x="' + padLeft + '" y="' + (padTop + 12) + '" font-size="11" fill="#7a6d61">Peak ' + esc(compactMetricNumber(maxValue)) + ' rows</text>',
+          '</svg>'
+        ].join('');
+      }
+
+      function renderCostBars(target, rows, options) {
+        if (!target) return;
+        var list = Array.isArray(rows) ? rows.slice(0, Number(options && options.limit || 6) || 6) : [];
+        if (!list.length) {
+          target.innerHTML = inlineFailureMarkup(options && options.emptyTitle || 'No usage yet', options && options.emptyMessage || 'No attributed usage recorded.');
+          return;
+        }
+        var maxRowsRead = list.reduce(function (acc, row) {
+          return Math.max(acc, safeNum(row && row.rows_read));
+        }, 1);
+        target.innerHTML = list.map(function (row) {
+          var label = costLabel(row && row.key);
+          var width = Math.max(6, Math.round((safeNum(row && row.rows_read) / maxRowsRead) * 100));
+          return [
+            '<div class="cost-bar-row">',
+            '<div class="cost-bar-head">',
+            '<div class="cost-bar-label"><span class="cost-inline-code">' + esc(label) + '</span></div>',
+            '<div class="cost-subtle">' + esc(compactMetricNumber(row && row.rows_read)) + ' reads · ' + esc(compactMetricNumber(row && row.request_count)) + ' req</div>',
+            '</div>',
+            '<div class="cost-bar-track">',
+            '<div class="cost-bar-segment" style="width:' + width + '%; background:' + esc(options && options.color || '#b84a26') + ';"></div>',
+            '</div>',
+            '</div>'
+          ].join('');
+        }).join('');
+      }
+
+      function renderCostTable(target, rows) {
+        if (!target) return;
+        var list = Array.isArray(rows) ? rows.slice(0, 10) : [];
+        if (!list.length) {
+          target.innerHTML = inlineFailureMarkup('No top spenders yet', 'Once the meter records traffic, this table ranks the heaviest route families.');
+          return;
+        }
+        target.innerHTML = [
+          '<table class="cost-table">',
+          '<thead><tr><th>Route family</th><th class="num">Rows read</th><th class="num">Requests</th></tr></thead>',
+          '<tbody>',
+          list.map(function (row) {
+            return [
+              '<tr>',
+              '<td><strong>' + esc(costLabel(row && row.key)) + '</strong><br /><span class="cost-subtle">' + esc(compactMetricNumber(row && row.rows_written)) + ' writes</span></td>',
+              '<td class="num">' + esc(formatCompactNumber(row && row.rows_read)) + '</td>',
+              '<td class="num">' + esc(formatCompactNumber(row && row.request_count)) + '</td>',
+              '</tr>'
+            ].join('');
+          }).join(''),
+          '</tbody>',
+          '</table>'
+        ].join('');
+      }
+
+      function renderCostBudgetHeadroom(snapshot) {
+        if (!els.costBudgetHeadroom) return;
+        var rows = [
+          {
+            label: 'Rows read this billing cycle',
+            used: safeNum(snapshot && snapshot.cycle_rows_read),
+            limit: safeNum(snapshot && snapshot.rows_read_monthly_limit),
+            remaining: safeNum(snapshot && snapshot.rows_read_monthly_remaining)
+          },
+          {
+            label: 'Rows written this billing cycle',
+            used: safeNum(snapshot && snapshot.cycle_rows_written),
+            limit: safeNum(snapshot && snapshot.rows_written_monthly_limit),
+            remaining: safeNum(snapshot && snapshot.rows_written_monthly_remaining)
+          }
+        ];
+        els.costBudgetHeadroom.innerHTML = rows.map(function (row) {
+          var pct = row.limit > 0 ? Math.min(100, Math.round((row.used / row.limit) * 1000) / 10) : 0;
+          return [
+            '<div class="cost-budget-row">',
+            '<div class="cost-budget-meta">',
+            '<strong>' + esc(row.label) + '</strong>',
+            '<span>' + esc(compactMetricNumber(row.used)) + ' / ' + esc(compactMetricNumber(row.limit)) + ' · ' + esc(compactMetricNumber(row.remaining)) + ' left</span>',
+            '</div>',
+            '<div class="cost-budget-bar"><div class="cost-budget-fill' + costFillToneClass(row.used, row.limit) + '" style="width:' + pct + '%;"></div></div>',
+            '</div>'
+          ].join('');
+        }).join('');
+      }
+
+      function renderCostUsage(report) {
+        var snapshot = report && report.snapshot ? report.snapshot : {};
+        var cycleDays = Array.isArray(report && report.cycle_days) ? report.cycle_days : [];
+        var dailyAttribution = Array.isArray(report && report.daily_attribution) ? report.daily_attribution : [];
+        var cycleAttribution = Array.isArray(report && report.cycle_attribution) ? report.cycle_attribution : [];
+        var routeTotals = aggregateCostRows(cycleAttribution, 'route_family');
+        var sourceTotals = aggregateCostRows(cycleAttribution, 'source_class');
+        var todayRoutes = aggregateCostRows(dailyAttribution, 'route_family');
+        if (els.costMetrics) {
+          els.costMetrics.innerHTML = [
+            {
+              label: 'Monthly read headroom',
+              value: compactMetricNumber(snapshot.rows_read_monthly_remaining),
+              note: compactPercent(
+                safeNum(snapshot.rows_read_monthly_limit)
+                  ? safeNum(snapshot.rows_read_monthly_remaining) / safeNum(snapshot.rows_read_monthly_limit)
+                  : 0
+              ) + ' of the cycle budget still open.'
+            },
+            {
+              label: 'Today so far',
+              value: compactMetricNumber(snapshot.rows_read),
+              note: compactMetricNumber(snapshot.request_count) + ' metered requests today.'
+            },
+            {
+              label: 'Today smart allowance',
+              value: compactMetricNumber(snapshot.rows_read_daily_smart_limit),
+              note: compactMetricNumber(snapshot.rows_read_daily_remaining) + ' rows left before today tightens.'
+            },
+            {
+              label: 'Cycle requests',
+              value: compactMetricNumber(snapshot.cycle_request_count),
+              note: compactMetricNumber(snapshot.cycle_rows_written) + ' rows written so far this cycle.'
+            }
+          ].map(function (metric) {
+            return [
+              '<article class="cost-metric">',
+              '<div class="cost-metric-label">' + esc(metric.label) + '</div>',
+              '<div class="cost-metric-value">' + esc(metric.value) + '</div>',
+              '<div class="cost-metric-note">' + esc(metric.note) + '</div>',
+              '</article>'
+            ].join('');
+          }).join('');
+        }
+        if (els.costTrendMeta) {
+          els.costTrendMeta.textContent =
+            'Cycle ' + String(snapshot.cycle_key || 'unknown') +
+            ' · ' + String(snapshot.days_remaining_in_cycle || 0) +
+            ' day(s) left · hard stop only happens when the monthly budget or today\'s elastic allowance is actually exhausted.';
+        }
+        if (els.costReadTrend) {
+          els.costReadTrend.innerHTML = buildCostTrendSvg(cycleDays, snapshot);
+        }
+        renderCostBudgetHeadroom(snapshot);
+        renderCostBars(els.costCycleSourceBars, sourceTotals, {
+          limit: 6,
+          color: '#b84a26',
+          emptyTitle: 'No source split yet',
+          emptyMessage: 'Attribution will appear here once requests hit the metered D1 wrapper.'
+        });
+        renderCostBars(els.costDailyRouteBars, todayRoutes, {
+          limit: 8,
+          color: '#4f7f6d',
+          emptyTitle: 'No route activity today',
+          emptyMessage: 'This section ranks the route families spending rows today.'
+        });
+        renderCostTable(els.costTopRoutes, routeTotals);
+      }
+
+      async function refreshCostUsage() {
+        if (els.costRefresh) els.costRefresh.disabled = true;
+        if (els.costUpdatedAt) els.costUpdatedAt.textContent = 'Loading current budget report…';
+        try {
+          var report = await apiJson('/cost/usage', { method: 'GET' });
+          state.costLoaded = true;
+          state.costReport = report || null;
+          renderCostUsage(report || {});
+          if (els.costUpdatedAt) {
+            var updatedAt = report && report.snapshot ? report.snapshot.updated_at : '';
+            els.costUpdatedAt.textContent = updatedAt
+              ? ('Updated from meter at ' + updatedAt)
+              : 'Loaded current meter state.';
+          }
+        } catch (err) {
+          state.costLoaded = false;
+          if (els.costMetrics) els.costMetrics.innerHTML = inlineFailureMarkup('Cost report failed', requestErrorMessage(err, 'Cost report failed.'));
+          if (els.costReadTrend) els.costReadTrend.innerHTML = '';
+          if (els.costBudgetHeadroom) els.costBudgetHeadroom.innerHTML = '';
+          if (els.costCycleSourceBars) els.costCycleSourceBars.innerHTML = '';
+          if (els.costDailyRouteBars) els.costDailyRouteBars.innerHTML = '';
+          if (els.costTopRoutes) els.costTopRoutes.innerHTML = '';
+          if (els.costUpdatedAt) els.costUpdatedAt.textContent = requestErrorMessage(err, 'Cost report failed.');
+          setLog({ error: 'Cost report failed', details: err.response || requestErrorMessage(err, 'Cost report failed.') });
+        } finally {
+          if (els.costRefresh) els.costRefresh.disabled = false;
+        }
       }
 
       function isEditableTarget(target) {
@@ -3183,10 +3819,25 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             }
           });
         }
+
+        if (els.costRefresh) {
+          els.costRefresh.addEventListener('click', function () {
+            refreshCostUsage();
+          });
+        }
+
+        window.addEventListener('hashchange', function () {
+          var hashTab = String(window.location.hash || '').replace(/^#/, '').trim();
+          if (hashTab && els.panels[hashTab]) {
+            setActiveTab(hashTab);
+          }
+        });
       }
 
       function init() {
-        setActiveTab('overview');
+        var initialTab = String(window.location.hash || '').replace(/^#/, '').trim();
+        if (!initialTab || !els.panels[initialTab]) initialTab = 'overview';
+        setActiveTab(initialTab);
         syncGalleryModeButtons();
         els.visionStatsList.innerHTML = '<tr><td colspan="8">Open this tab to load the scorecard.</td></tr>';
         if (els.visionStatsMeta) els.visionStatsMeta.textContent = 'Open this tab to load the scorecard.';

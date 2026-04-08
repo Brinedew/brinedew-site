@@ -2813,6 +2813,12 @@ function isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, met
 function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method = "GET") {
   const requestMethod = String(method || "GET").toUpperCase()
   if (!["GET", "HEAD", "POST"].includes(requestMethod)) return false
+  if (path === "/health" || path === "/api/health") return true
+  if (path === "/admin") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/blocklist") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/blocklist/" || path === "/artist-styles" || path === "/artist-styles/") {
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  }
   if (path === publicApiPath("/metadata")) return true
   if (path === publicApiPath("/catalog/manifest")) return true
   if (isPublicCatalogArtifactPath(path)) return true
@@ -2825,8 +2831,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path.startsWith(publicApiPath("/media/"))) return true
   if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
   if (path.startsWith("/api/iconoplasm/")) {
-    if (path === "/api/iconoplasm/admin/me") return false
-    if (path === "/api/iconoplasm/votes/me") return false
     return true
   }
   return false
@@ -4611,6 +4615,25 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     return this.state.storage.sql.exec(sql, mode === "cycle" ? String(cycleKey || "") : String(dayKey || "")).toArray()
   }
 
+  cycleDayRows(cycleKey) {
+    return this.state.storage.sql
+      .exec(
+        `SELECT
+           day_key,
+           cycle_key,
+           rows_read,
+           rows_written,
+           query_count,
+           request_count,
+           updated_at
+         FROM daily_budget_usage
+         WHERE cycle_key = ?
+         ORDER BY day_key ASC`,
+        String(cycleKey || ""),
+      )
+      .toArray()
+  }
+
   snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle) {
     const row = this.usageRow(dayKey) || {}
     const cycleRow = this.cycleUsageRow(cycleKey) || {}
@@ -4774,6 +4797,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     if (url.pathname === "/report") {
       return Response.json({
         snapshot: this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle),
+        cycle_days: this.cycleDayRows(cycleKey),
         daily_attribution: this.attributionRows(dayKey, cycleKey, "daily"),
         cycle_attribution: this.attributionRows(dayKey, cycleKey, "cycle"),
       })
@@ -10172,6 +10196,22 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       path === "/api/iconoplasm/admin/cost/usage" && request.method === "GET"
     if (!isIconoplasmCostUsageReportRequest) {
       env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
+    }
+
+    if (
+      path === "/health" ||
+      path === "/api/health" ||
+      path === "/admin" ||
+      path === "/blocklist" ||
+      path === "/blocklist/" ||
+      path === "/artist-styles" ||
+      path === "/artist-styles/"
+    ) {
+      return handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+        ctx,
+      )
     }
 
     if (isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {

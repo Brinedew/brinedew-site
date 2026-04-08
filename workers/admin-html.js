@@ -1050,6 +1050,235 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       background: rgba(56,189,248,0.65);
       border-radius: 4px;
     }
+
+    .iconoplasm-cost-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .iconoplasm-cost-actions {
+      display: inline-flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .iconoplasm-cost-link {
+      color: #7dd3fc;
+      font-size: 0.875rem;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .iconoplasm-cost-link:hover {
+      color: #bae6fd;
+      text-decoration: underline;
+    }
+
+    .iconoplasm-cost-updated {
+      color: #94a3b8;
+      font-size: 0.8rem;
+    }
+
+    .iconoplasm-cost-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .iconoplasm-cost-metric {
+      background: linear-gradient(180deg, rgba(17, 27, 47, 0.92), rgba(15, 23, 42, 0.92));
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 0.9rem;
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .iconoplasm-cost-metric-label {
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .iconoplasm-cost-metric-value {
+      font-size: 1.7rem;
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .iconoplasm-cost-metric-note {
+      color: #cbd5e1;
+      font-size: 0.82rem;
+    }
+
+    .iconoplasm-cost-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
+      gap: 1rem;
+    }
+
+    .iconoplasm-cost-card {
+      background: #111b2f;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 1rem;
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .iconoplasm-cost-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+
+    .iconoplasm-cost-card-head p {
+      color: #94a3b8;
+      font-size: 0.8rem;
+    }
+
+    .iconoplasm-cost-chart {
+      min-height: 260px;
+      border-radius: 10px;
+      background: #0b1324;
+      border: 1px solid #1f2a3d;
+      padding: 0.5rem;
+    }
+
+    .iconoplasm-cost-chart svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .iconoplasm-cost-budget {
+      display: grid;
+      gap: 0.8rem;
+    }
+
+    .iconoplasm-cost-budget-row {
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    .iconoplasm-cost-budget-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+    }
+
+    .iconoplasm-cost-budget-track {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(148, 163, 184, 0.16);
+    }
+
+    .iconoplasm-cost-budget-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #38bdf8, #0ea5e9);
+    }
+
+    .iconoplasm-cost-budget-fill.warn {
+      background: linear-gradient(90deg, #f59e0b, #d97706);
+    }
+
+    .iconoplasm-cost-budget-fill.danger {
+      background: linear-gradient(90deg, #fb7185, #ef4444);
+    }
+
+    .iconoplasm-cost-bars {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .iconoplasm-cost-bar-row {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .iconoplasm-cost-bar-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: baseline;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+    }
+
+    .iconoplasm-cost-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.14);
+      color: #e2e8f0;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .iconoplasm-cost-bar-track {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(148, 163, 184, 0.14);
+    }
+
+    .iconoplasm-cost-bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #38bdf8, #1d4ed8);
+    }
+
+    .iconoplasm-cost-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .iconoplasm-cost-table th,
+    .iconoplasm-cost-table td {
+      padding: 0.65rem 0;
+      border-bottom: 1px solid #243249;
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.8rem;
+    }
+
+    .iconoplasm-cost-table th {
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
+    }
+
+    .iconoplasm-cost-table td.num {
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 980px) {
+      .iconoplasm-cost-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1091,6 +1320,65 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       <div class="guess-analytics-meta" id="guess-analytics-meta">Not loaded yet.</div>
       <div id="guess-analytics-root">
         <p class="helper-text">Pick a range to load top 50 guesses.</p>
+      </div>
+    </div>
+
+    <div class="section" id="iconoplasm-cost-section">
+      <div class="iconoplasm-cost-toolbar">
+        <div>
+          <h2>Iconoplasm Cost Control</h2>
+          <p class="helper-text helper-text--title" style="margin: 0.25rem 0 0;">
+            This turns the raw meter into something explorable: trend over the billing cycle, headroom against the monthly hard stop, who is spending it, and which route families are hottest today.
+          </p>
+        </div>
+        <div class="iconoplasm-cost-actions">
+          <button type="button" id="iconoplasm-cost-refresh">Refresh meter</button>
+          <a class="iconoplasm-cost-link" href="https://iconoplasm.brinedew.bio/admin#costs" target="_blank" rel="noreferrer">Open full Iconoplasm ops</a>
+        </div>
+      </div>
+      <div class="iconoplasm-cost-updated" id="iconoplasm-cost-updated">Not loaded yet.</div>
+      <div class="iconoplasm-cost-metrics" id="iconoplasm-cost-metrics">
+        <p class="helper-text">Loading meter...</p>
+      </div>
+      <div class="iconoplasm-cost-grid" style="margin-bottom: 1rem;">
+        <div class="iconoplasm-cost-card">
+          <div class="iconoplasm-cost-card-head">
+            <div>
+              <h3 style="margin-bottom: 0.2rem;">Billing-cycle trend</h3>
+              <p id="iconoplasm-cost-trend-meta">Waiting for cycle history…</p>
+            </div>
+          </div>
+          <div class="iconoplasm-cost-chart" id="iconoplasm-cost-trend"></div>
+        </div>
+        <div class="iconoplasm-cost-card">
+          <div class="iconoplasm-cost-card-head">
+            <div>
+              <h3 style="margin-bottom: 0.2rem;">Budget headroom</h3>
+              <p>Monthly caps stay hard. Daily room expands or tightens depending on how much of the month is still unspent.</p>
+            </div>
+          </div>
+          <div class="iconoplasm-cost-budget" id="iconoplasm-cost-budget"></div>
+        </div>
+      </div>
+      <div class="iconoplasm-cost-grid">
+        <div class="iconoplasm-cost-card">
+          <div class="iconoplasm-cost-card-head">
+            <div>
+              <h3 style="margin-bottom: 0.2rem;">Cycle spend by source</h3>
+              <p>Which class of traffic is consuming rows across the current billing cycle.</p>
+            </div>
+          </div>
+          <div class="iconoplasm-cost-bars" id="iconoplasm-cost-sources"></div>
+        </div>
+        <div class="iconoplasm-cost-card">
+          <div class="iconoplasm-cost-card-head">
+            <div>
+              <h3 style="margin-bottom: 0.2rem;">Top route families</h3>
+              <p>The heaviest route groups in the current cycle.</p>
+            </div>
+          </div>
+          <div id="iconoplasm-cost-routes"></div>
+        </div>
       </div>
     </div>
 
@@ -1723,6 +2011,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     bindForms();
     setupProteinSelector();
     loadStatus();
+    initIconoplasmCostUsage();
     setupSchedule();
     initializePreview();
 
@@ -2056,6 +2345,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
 
       let guessAnalyticsLoadToken = 0;
+      let iconoplasmCostLoadToken = 0;
 
     function getUtcDayString() {
       return new Date().toISOString().slice(0, 10);
@@ -2191,6 +2481,294 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           }
         });
       });
+    }
+
+    function iconoplasmCostSafeNum(value) {
+      const num = Number(value || 0);
+      return Number.isFinite(num) ? num : 0;
+    }
+
+    function iconoplasmCostFormatCompact(value) {
+      const num = iconoplasmCostSafeNum(value);
+      try {
+        if (Math.abs(num) >= 1000) {
+          return new Intl.NumberFormat('en-US', {
+            notation: 'compact',
+            maximumFractionDigits: Math.abs(num) >= 1000000000 ? 1 : 0
+          }).format(num);
+        }
+      } catch {}
+      return String(Math.round(num)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    function iconoplasmCostLabel(value) {
+      return String(value || 'unknown')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function iconoplasmCostAggregate(rows, key) {
+      const map = Object.create(null);
+      (Array.isArray(rows) ? rows : []).forEach((row) => {
+        const group = String(row?.[key] || 'unknown');
+        if (!map[group]) {
+          map[group] = { key: group, rows_read: 0, rows_written: 0, request_count: 0, query_count: 0 };
+        }
+        map[group].rows_read += iconoplasmCostSafeNum(row?.rows_read);
+        map[group].rows_written += iconoplasmCostSafeNum(row?.rows_written);
+        map[group].request_count += iconoplasmCostSafeNum(row?.request_count);
+        map[group].query_count += iconoplasmCostSafeNum(row?.query_count);
+      });
+      return Object.values(map).sort((a, b) => iconoplasmCostSafeNum(b.rows_read) - iconoplasmCostSafeNum(a.rows_read));
+    }
+
+    function iconoplasmCostFillTone(used, limit) {
+      const safeLimit = iconoplasmCostSafeNum(limit);
+      if (safeLimit <= 0) return '';
+      const ratio = iconoplasmCostSafeNum(used) / safeLimit;
+      if (ratio >= 0.85) return ' danger';
+      if (ratio >= 0.6) return ' warn';
+      return '';
+    }
+
+    function renderIconoplasmCostTrend(days, snapshot) {
+      const rows = Array.isArray(days) ? days : [];
+      const rootEl = document.getElementById('iconoplasm-cost-trend');
+      if (!rootEl) return;
+      if (!rows.length) {
+        rootEl.innerHTML = '<p class="helper-text">No cycle usage recorded yet.</p>';
+        return;
+      }
+      const width = 720;
+      const height = 260;
+      const padLeft = 46;
+      const padRight = 18;
+      const padTop = 18;
+      const padBottom = 32;
+      const usableWidth = width - padLeft - padRight;
+      const usableHeight = height - padTop - padBottom;
+      const smartLimit = iconoplasmCostSafeNum(snapshot?.rows_read_daily_smart_limit);
+      const maxValue = Math.max(
+        smartLimit,
+        ...rows.map((row) => iconoplasmCostSafeNum(row?.rows_read)),
+        1
+      );
+      const xStep = rows.length <= 1 ? 0 : (usableWidth / (rows.length - 1));
+      const xAt = (index) => padLeft + (xStep * index);
+      const yAt = (value) => padTop + usableHeight - ((iconoplasmCostSafeNum(value) / maxValue) * usableHeight);
+      let area = '';
+      let line = '';
+      rows.forEach((row, index) => {
+        const x = xAt(index);
+        const y = yAt(row?.rows_read);
+        area += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+        line += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+      });
+      area += 'L' + xAt(rows.length - 1) + ' ' + (padTop + usableHeight) + ' ';
+      area += 'L' + xAt(0) + ' ' + (padTop + usableHeight) + ' Z';
+      const limitY = yAt(smartLimit);
+      const dots = rows.map((row, index) => {
+        const value = iconoplasmCostSafeNum(row?.rows_read);
+        const label = String(row?.day_key || '');
+        return '<circle cx="' + xAt(index) + '" cy="' + yAt(value) + '" r="3.5" fill="#38bdf8"><title>' + escapeHtml(label + ': ' + iconoplasmCostFormatCompact(value) + ' rows read') + '</title></circle>';
+      }).join('');
+      rootEl.innerHTML = [
+        '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Iconoplasm rows read by day">',
+        '<line x1="' + padLeft + '" y1="' + (padTop + usableHeight) + '" x2="' + (padLeft + usableWidth) + '" y2="' + (padTop + usableHeight) + '" stroke="#334155" stroke-width="1" />',
+        '<line x1="' + padLeft + '" y1="' + limitY + '" x2="' + (padLeft + usableWidth) + '" y2="' + limitY + '" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 6" />',
+        '<path d="' + area + '" fill="rgba(56,189,248,0.14)"></path>',
+        '<path d="' + line + '" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>',
+        dots,
+        '<text x="' + padLeft + '" y="' + (height - 8) + '" font-size="11" fill="#94a3b8">' + escapeHtml(String(rows[0]?.day_key || '')) + '</text>',
+        '<text x="' + (padLeft + usableWidth) + '" y="' + (height - 8) + '" text-anchor="end" font-size="11" fill="#94a3b8">' + escapeHtml(String(rows[rows.length - 1]?.day_key || '')) + '</text>',
+        '<text x="' + (padLeft + 6) + '" y="' + Math.max(14, limitY - 8) + '" font-size="11" fill="#fbbf24">Smart daily allowance ' + escapeHtml(iconoplasmCostFormatCompact(smartLimit)) + '</text>',
+        '</svg>'
+      ].join('');
+    }
+
+    function renderIconoplasmCostBars(rootId, rows, accent) {
+      const rootEl = document.getElementById(rootId);
+      if (!rootEl) return;
+      const list = Array.isArray(rows) ? rows.slice(0, 8) : [];
+      if (!list.length) {
+        rootEl.innerHTML = '<p class="helper-text">No attributed usage recorded yet.</p>';
+        return;
+      }
+      const maxRead = Math.max(...list.map((row) => iconoplasmCostSafeNum(row.rows_read)), 1);
+      rootEl.innerHTML = list.map((row) => {
+        const width = Math.max(6, Math.round((iconoplasmCostSafeNum(row.rows_read) / maxRead) * 100));
+        return '' +
+          '<div class="iconoplasm-cost-bar-row">' +
+            '<div class="iconoplasm-cost-bar-head">' +
+              '<span class="iconoplasm-cost-badge">' + escapeHtml(iconoplasmCostLabel(row.key)) + '</span>' +
+              '<span>' + escapeHtml(iconoplasmCostFormatCompact(row.rows_read)) + ' reads · ' + escapeHtml(iconoplasmCostFormatCompact(row.request_count)) + ' req</span>' +
+            '</div>' +
+            '<div class="iconoplasm-cost-bar-track">' +
+              '<div class="iconoplasm-cost-bar-fill" style="width:' + width + '%; background:' + escapeHtml(accent) + ';"></div>' +
+            '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    function renderIconoplasmCostBudget(snapshot) {
+      const rootEl = document.getElementById('iconoplasm-cost-budget');
+      if (!rootEl) return;
+      const rows = [
+        {
+          label: 'Rows read this cycle',
+          used: iconoplasmCostSafeNum(snapshot?.cycle_rows_read),
+          limit: iconoplasmCostSafeNum(snapshot?.rows_read_monthly_limit),
+          remaining: iconoplasmCostSafeNum(snapshot?.rows_read_monthly_remaining)
+        },
+        {
+          label: 'Rows written this cycle',
+          used: iconoplasmCostSafeNum(snapshot?.cycle_rows_written),
+          limit: iconoplasmCostSafeNum(snapshot?.rows_written_monthly_limit),
+          remaining: iconoplasmCostSafeNum(snapshot?.rows_written_monthly_remaining)
+        }
+      ];
+      rootEl.innerHTML = rows.map((row) => {
+        const pct = row.limit > 0 ? Math.min(100, Math.round((row.used / row.limit) * 1000) / 10) : 0;
+        return '' +
+          '<div class="iconoplasm-cost-budget-row">' +
+            '<div class="iconoplasm-cost-budget-meta">' +
+              '<strong>' + escapeHtml(row.label) + '</strong>' +
+              '<span>' + escapeHtml(iconoplasmCostFormatCompact(row.used)) + ' / ' + escapeHtml(iconoplasmCostFormatCompact(row.limit)) + ' · ' + escapeHtml(iconoplasmCostFormatCompact(row.remaining)) + ' left</span>' +
+            '</div>' +
+            '<div class="iconoplasm-cost-budget-track">' +
+              '<div class="iconoplasm-cost-budget-fill' + iconoplasmCostFillTone(row.used, row.limit) + '" style="width:' + pct + '%;"></div>' +
+            '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    function renderIconoplasmCostRoutes(rows) {
+      const rootEl = document.getElementById('iconoplasm-cost-routes');
+      if (!rootEl) return;
+      const list = Array.isArray(rows) ? rows.slice(0, 10) : [];
+      if (!list.length) {
+        rootEl.innerHTML = '<p class="helper-text">No route data yet.</p>';
+        return;
+      }
+      rootEl.innerHTML = '' +
+        '<table class="iconoplasm-cost-table">' +
+          '<thead><tr><th>Route family</th><th class="num">Rows read</th><th class="num">Requests</th></tr></thead>' +
+          '<tbody>' +
+            list.map((row) => {
+              return '' +
+                '<tr>' +
+                  '<td><strong>' + escapeHtml(iconoplasmCostLabel(row.key)) + '</strong><div class="schedule-meta">' + escapeHtml(iconoplasmCostFormatCompact(row.rows_written)) + ' writes</div></td>' +
+                  '<td class="num">' + escapeHtml(iconoplasmCostFormatCompact(row.rows_read)) + '</td>' +
+                  '<td class="num">' + escapeHtml(iconoplasmCostFormatCompact(row.request_count)) + '</td>' +
+                '</tr>';
+            }).join('') +
+          '</tbody>' +
+        '</table>';
+    }
+
+    function renderIconoplasmCostMetrics(snapshot) {
+      const rootEl = document.getElementById('iconoplasm-cost-metrics');
+      if (!rootEl) return;
+      const monthlyReadLimit = iconoplasmCostSafeNum(snapshot?.rows_read_monthly_limit);
+      const monthlyReadRemaining = iconoplasmCostSafeNum(snapshot?.rows_read_monthly_remaining);
+      const monthlyShareLeft = monthlyReadLimit > 0 ? (monthlyReadRemaining / monthlyReadLimit) : 0;
+      const cards = [
+        {
+          label: 'Monthly read headroom',
+          value: iconoplasmCostFormatCompact(monthlyReadRemaining),
+          note: Math.round(monthlyShareLeft * 1000) / 10 + '% of the cycle budget still open.'
+        },
+        {
+          label: 'Today so far',
+          value: iconoplasmCostFormatCompact(snapshot?.rows_read),
+          note: iconoplasmCostFormatCompact(snapshot?.request_count) + ' metered requests today.'
+        },
+        {
+          label: 'Today smart allowance',
+          value: iconoplasmCostFormatCompact(snapshot?.rows_read_daily_smart_limit),
+          note: iconoplasmCostFormatCompact(snapshot?.rows_read_daily_remaining) + ' rows left before today closes.'
+        },
+        {
+          label: 'Cycle requests',
+          value: iconoplasmCostFormatCompact(snapshot?.cycle_request_count),
+          note: iconoplasmCostFormatCompact(snapshot?.cycle_rows_written) + ' rows written this cycle.'
+        }
+      ];
+      rootEl.innerHTML = cards.map((card) => {
+        return '' +
+          '<article class="iconoplasm-cost-metric">' +
+            '<div class="iconoplasm-cost-metric-label">' + escapeHtml(card.label) + '</div>' +
+            '<div class="iconoplasm-cost-metric-value">' + escapeHtml(card.value) + '</div>' +
+            '<div class="iconoplasm-cost-metric-note">' + escapeHtml(card.note) + '</div>' +
+          '</article>';
+      }).join('');
+    }
+
+    function renderIconoplasmCostUsage(report) {
+      const snapshot = report?.snapshot || {};
+      const cycleDays = Array.isArray(report?.cycle_days) ? report.cycle_days : [];
+      const cycleAttribution = Array.isArray(report?.cycle_attribution) ? report.cycle_attribution : [];
+      renderIconoplasmCostMetrics(snapshot);
+      renderIconoplasmCostTrend(cycleDays, snapshot);
+      renderIconoplasmCostBudget(snapshot);
+      renderIconoplasmCostBars('iconoplasm-cost-sources', iconoplasmCostAggregate(cycleAttribution, 'source_class'), 'linear-gradient(90deg, #38bdf8, #1d4ed8)');
+      renderIconoplasmCostRoutes(iconoplasmCostAggregate(cycleAttribution, 'route_family'));
+      const metaEl = document.getElementById('iconoplasm-cost-trend-meta');
+      if (metaEl) {
+        metaEl.textContent =
+          'Cycle ' + String(snapshot?.cycle_key || 'unknown') +
+          ' · ' + String(snapshot?.days_remaining_in_cycle || 0) +
+          ' day(s) left · daily room expands when the month is under-spent and tightens when the month gets hot.';
+      }
+      const updatedEl = document.getElementById('iconoplasm-cost-updated');
+      if (updatedEl) {
+        updatedEl.textContent = snapshot?.updated_at
+          ? ('Meter updated at ' + String(snapshot.updated_at))
+          : 'Loaded current meter state.';
+      }
+    }
+
+    async function loadIconoplasmCostUsage() {
+      const loadToken = ++iconoplasmCostLoadToken;
+      const updatedEl = document.getElementById('iconoplasm-cost-updated');
+      if (updatedEl) {
+        updatedEl.textContent = 'Loading current Iconoplasm meter...';
+      }
+      try {
+        const response = await fetch('/api/iconoplasm/admin/cost/usage', { credentials: 'include' });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.error || 'Failed to load Iconoplasm cost usage');
+        }
+        if (loadToken !== iconoplasmCostLoadToken) {
+          return;
+        }
+        renderIconoplasmCostUsage(data);
+      } catch (err) {
+        console.error('Error loading Iconoplasm cost usage:', err);
+        const metricsEl = document.getElementById('iconoplasm-cost-metrics');
+        if (metricsEl) {
+          metricsEl.innerHTML = '<p class="helper-text error-text">Failed to load Iconoplasm cost usage</p>';
+        }
+        const trendEl = document.getElementById('iconoplasm-cost-trend');
+        if (trendEl) {
+          trendEl.innerHTML = '<p class="helper-text error-text">Trend unavailable</p>';
+        }
+        const updatedEl2 = document.getElementById('iconoplasm-cost-updated');
+        if (updatedEl2) {
+          updatedEl2.textContent = err.message || 'Failed to load Iconoplasm cost usage';
+        }
+      }
+    }
+
+    function initIconoplasmCostUsage() {
+      const refreshBtn = document.getElementById('iconoplasm-cost-refresh');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+          loadIconoplasmCostUsage();
+        });
+      }
+      loadIconoplasmCostUsage();
     }
 
     function renderCardsPreview(rootEl, data) {
