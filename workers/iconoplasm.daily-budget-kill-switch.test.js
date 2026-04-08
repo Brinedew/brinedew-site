@@ -101,6 +101,7 @@ class FakeDailyBudgetNamespace {
               dayKey,
               cycleKey,
               String(payload.attribution.route_family || "unknown"),
+              String(payload.attribution.budget_class || "unknown"),
               String(payload.attribution.actor_class || "unknown"),
               String(payload.attribution.source_class || "unknown"),
             ].join("|")
@@ -108,6 +109,7 @@ class FakeDailyBudgetNamespace {
               day_key: dayKey,
               cycle_key: cycleKey,
               route_family: String(payload.attribution.route_family || "unknown"),
+              budget_class: String(payload.attribution.budget_class || "unknown"),
               actor_class: String(payload.attribution.actor_class || "unknown"),
               source_class: String(payload.attribution.source_class || "unknown"),
               rows_read: 0,
@@ -335,6 +337,7 @@ test("smart budget curiosity layer reports attributed daily usage", async () => 
     day_key: reportPayload.snapshot.day_key,
     cycle_key: reportPayload.snapshot.cycle_key,
     route_family: "admin_assets_summary",
+    budget_class: "admin_operational",
     actor_class: "admin_token",
     source_class: "admin_ui",
     rows_read: 3,

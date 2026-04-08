@@ -256,29 +256,104 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path)) return "gene_request_summary"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state_gone"
+  if (path === "/api/iconoplasm/votes/me") return "votes_me"
   if (path === "/api/iconoplasm/votes/set") return "votes_set"
   if (path === "/api/iconoplasm/votes/snapshot") return "votes_snapshot"
+  if (path === "/api/iconoplasm/artist-styles/search") return "artist_styles_search"
+  if (path === "/api/iconoplasm/artist-blacklist-submissions") return "artist_blacklist_submission"
   if (path === "/api/iconoplasm/admin/me") return "admin_me"
   if (path === "/api/iconoplasm/admin/ingest") return "admin_ingest"
   if (path === "/api/iconoplasm/admin/reconcile") return "admin_reconcile"
   if (path === "/api/iconoplasm/admin/overview") return "admin_overview"
   if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
+  if (path === "/api/iconoplasm/admin/canon-audit") return "admin_canon_audit"
+  if (path === "/api/iconoplasm/admin/read-models/bootstrap") return "admin_read_models_bootstrap"
   if (path.startsWith("/api/iconoplasm/admin/catalog/")) return "admin_catalog"
   if (path.startsWith("/api/iconoplasm/admin/essence/")) return "admin_essence"
   if (path.startsWith("/api/iconoplasm/admin/read-models/")) return "admin_read_models"
   if (path.startsWith("/api/iconoplasm/admin/votes/")) return "admin_votes"
   if (path === "/api/iconoplasm/admin/assets/summary") return "admin_assets_summary"
+  if (path === "/api/iconoplasm/admin/assets/state") return "admin_assets_state"
   if (path.startsWith("/api/iconoplasm/admin/assets")) return "admin_assets"
   if (path === "/api/iconoplasm/admin/gallery") return "admin_gallery"
+  if (/^\/api\/iconoplasm\/admin\/gene\/[^/]+$/.test(path)) return "admin_gene_detail"
+  if (path === "/api/iconoplasm/admin/local-removals/pending") return "admin_local_removals_pending"
+  if (path === "/api/iconoplasm/admin/local-removals/ack") return "admin_local_removals_ack"
+  if (path === "/api/iconoplasm/admin/artist-styles/remove") return "admin_artist_styles_remove"
+  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending")
+    return "admin_artist_blacklist_pending"
+  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack")
+    return "admin_artist_blacklist_ack"
+  if (path === "/api/iconoplasm/admin/catalog/state") return "admin_catalog_state"
+  if (path === "/api/iconoplasm/admin/catalog/upsert") return "admin_catalog_upsert"
+  if (path === "/api/iconoplasm/admin/catalog/reconcile") return "admin_catalog_reconcile"
+  if (path === "/api/iconoplasm/admin/catalog/publish") return "admin_catalog_publish"
+  if (path === "/api/iconoplasm/admin/essence/upsert") return "admin_essence_upsert"
+  if (path === "/api/iconoplasm/admin/essence/state") return "admin_essence_state"
   if (path === "/api/iconoplasm/admin/requests/open") return "admin_requests_open"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return "admin_requests_fulfill"
   if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
     return "admin_gene_request_diagnostics"
   if (path === "/api/iconoplasm/admin/cost/usage") return "admin_cost_usage"
-  if (path.startsWith("/api/iconoplasm/admin/")) return "admin_other"
   if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER) return "internal_repair"
-  if (path.startsWith("/api/iconoplasm/")) return "iconoplasm_other"
+  if (path.startsWith("/api/iconoplasm/admin/")) {
+    throw new IconoplasmUnclassifiedHandledRouteError(path)
+  }
+  if (path.startsWith("/api/iconoplasm/")) {
+    throw new IconoplasmUnclassifiedHandledRouteError(path)
+  }
   return "non_iconoplasm"
+}
+
+function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
+  const family = String(routeFamily || "").trim()
+  if (!family || family === "non_iconoplasm") return "non_iconoplasm"
+  if (family.startsWith("public_")) return "public_read"
+  if (family === "site_gene_detail") return "first_party_read"
+  if (family.startsWith("discoveries_")) return "first_party_write"
+  if (family.startsWith("gene_request_")) return "first_party_request"
+  if (family.startsWith("votes_")) return family === "votes_me" ? "first_party_read" : "first_party_write"
+  if (family === "artist_styles_search") return "public_read"
+  if (family === "artist_blacklist_submission") return "public_submission"
+  if (family === "internal_repair") return "internal_maintenance"
+  if (family === "admin_overview" || family === "admin_coverage" || family === "admin_cost_usage" || family === "admin_me")
+    return "admin_dashboard"
+  if (
+    family === "admin_ingest" ||
+    family === "admin_reconcile" ||
+    family === "admin_read_models" ||
+    family === "admin_read_models_bootstrap" ||
+    family === "admin_catalog" ||
+    family === "admin_catalog_state" ||
+    family === "admin_catalog_upsert" ||
+    family === "admin_catalog_reconcile" ||
+    family === "admin_catalog_publish" ||
+    family === "admin_essence"
+    || family === "admin_essence_upsert"
+    || family === "admin_essence_state"
+  ) {
+    return "admin_sync"
+  }
+  if (
+    family === "admin_votes" ||
+    family === "admin_gallery" ||
+    family === "admin_assets" ||
+    family === "admin_assets_summary" ||
+    family === "admin_assets_state" ||
+    family === "admin_gene_detail" ||
+    family === "admin_canon_audit" ||
+    family === "admin_requests_open" ||
+    family === "admin_requests_fulfill" ||
+    family === "admin_gene_request_diagnostics" ||
+    family === "admin_local_removals_pending" ||
+    family === "admin_local_removals_ack" ||
+    family === "admin_artist_styles_remove" ||
+    family === "admin_artist_blacklist_pending" ||
+    family === "admin_artist_blacklist_ack"
+  ) {
+    return "admin_operational"
+  }
+  throw new IconoplasmUnclassifiedHandledRouteError(`budget-class:${family}`)
 }
 
 function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
@@ -315,6 +390,7 @@ function iconoplasmD1BudgetAttributionFromRequest(request) {
   const routeFamily = iconoplasmBudgetRouteFamilyFromPath(path)
   return {
     route_family: routeFamily,
+    budget_class: iconoplasmBudgetClassFromRouteFamily(routeFamily),
     actor_class: iconoplasmBudgetActorClassFromRequest(request, path),
     source_class: iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily),
   }
@@ -342,6 +418,13 @@ class IconoplasmD1DailyBudgetConfigurationError extends Error {
   constructor(message) {
     super(message)
     this.name = "IconoplasmD1DailyBudgetConfigurationError"
+  }
+}
+
+class IconoplasmUnclassifiedHandledRouteError extends Error {
+  constructor(routePath) {
+    super(`Handled Iconoplasm route is missing classification: ${String(routePath || "")}`)
+    this.name = "IconoplasmUnclassifiedHandledRouteError"
   }
 }
 
@@ -3230,9 +3313,59 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path.startsWith(publicApiPath("/media/"))) return true
   if (path.startsWith("/portraits/")) return true
   if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
-  if (path.startsWith("/api/iconoplasm/")) {
-    return true
-  }
+  if (path === "/api/iconoplasm/votes/me") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/discoveries/encounter") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/discoveries/me") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/discoveries/merge") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/me") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/requests/options") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path))
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/requests") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/requests/open") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/requests/fulfill") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/votes/set") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/votes/snapshot") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/votes/import") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/votes/set") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/votes/snapshot") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/votes/snapshots") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/votes/ledger") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/votes/events") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/votes/vision-detail") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/artist-styles/search") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/artist-blacklist-submissions") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/artist-styles/remove") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/read-models/sync") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/read-models/bootstrap") return true
+  if (path === "/api/iconoplasm/admin/overview") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/cost/usage") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/coverage") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/gallery") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (/^\/api\/iconoplasm\/admin\/gene\/[^/]+$/.test(path))
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/canon-audit") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/assets") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/assets/summary") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/assets/state") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/local-removals/pending")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/local-removals/ack") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/catalog/state") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/catalog/upsert") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/catalog/reconcile") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/catalog/publish") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/essence/upsert") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/essence/state") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/ingest") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/reconcile") return requestMethod === "POST"
   return false
 }
 
@@ -5012,7 +5145,13 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
            FROM daily_budget_usage_attribution
            WHERE day_key = ?
            ORDER BY rows_read DESC, rows_written DESC, request_count DESC, route_family ASC`
-    return this.state.storage.sql.exec(sql, mode === "cycle" ? String(cycleKey || "") : String(dayKey || "")).toArray()
+    return this.state.storage.sql
+      .exec(sql, mode === "cycle" ? String(cycleKey || "") : String(dayKey || ""))
+      .toArray()
+      .map((row) => ({
+        ...row,
+        budget_class: iconoplasmBudgetClassFromRouteFamily(row?.route_family || ""),
+      }))
   }
 
   cycleDayRows(cycleKey) {
@@ -10712,6 +10851,18 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       return json(iconoplasmD1DailyBudgetConfigurationPayload(error.message), 500, {
         "Cache-Control": "no-store",
       })
+    }
+    if (error instanceof IconoplasmUnclassifiedHandledRouteError) {
+      return json(
+        {
+          error:
+            "A handled Iconoplasm route is missing a named cost classification. Fix the route contract before using this endpoint.",
+          code: "ICONOPLASM_ROUTE_CLASSIFICATION_MISSING",
+          detail: String(error.message || ""),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      )
     }
     throw error
   }

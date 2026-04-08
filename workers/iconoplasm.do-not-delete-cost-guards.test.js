@@ -235,4 +235,7 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
   assert.match(runtime, /return "admin_requests_open"/, "admin request queue should not disappear into admin_other")
   assert.match(runtime, /return "admin_requests_fulfill"/, "admin request fulfillment should not disappear into admin_other")
   assert.match(runtime, /LEGACY_GENE_REQUEST_ROUTE_REMOVED/, "deleted request-state route should fail loudly instead of silently lingering")
+  assert.doesNotMatch(runtime, /return "admin_other"|return "iconoplasm_other"/, "handled Iconoplasm routes must not disappear into miscellaneous buckets")
+  assert.match(runtime, /ICONOPLASM_ROUTE_CLASSIFICATION_MISSING/, "missing route classification should fail loudly instead of silently falling back")
+  assert.doesNotMatch(runtime, /if \(path\.startsWith\("\/api\/iconoplasm\/"\)\)\s*\{\s*return true\s*\}/, "route handling should not accept every /api/iconoplasm path implicitly")
 })

@@ -310,6 +310,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.95fr);
       gap: 18px;
     }
+    .cost-grid--triple {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
     .cost-card {
       display: grid;
       gap: 12px;
@@ -1541,12 +1544,22 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           </section>
         </div>
 
-        <div class="cost-grid">
+        <div class="cost-grid cost-grid--triple">
+          <section class="cost-card">
+            <div class="cost-card-head">
+              <div>
+                <h2>Cycle mix by budget class</h2>
+                <p class="small">Purpose buckets for the current billing cycle, so admin dashboard browsing stays distinct from sync jobs and public traffic.</p>
+              </div>
+            </div>
+            <div class="cost-bars" id="cost-cycle-budget-bars"></div>
+          </section>
+
           <section class="cost-card">
             <div class="cost-card-head">
               <div>
                 <h2>Cycle mix by source</h2>
-                <p class="small">Part-to-whole view of where the current billing cycle spend is coming from.</p>
+                <p class="small">Where the current billing-cycle spend is entering the system from.</p>
               </div>
             </div>
             <div class="cost-bars" id="cost-cycle-source-bars"></div>
@@ -1797,6 +1810,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         costTrendMeta: document.getElementById('cost-trend-meta'),
         costReadTrend: document.getElementById('cost-read-trend'),
         costBudgetHeadroom: document.getElementById('cost-budget-headroom'),
+        costCycleBudgetBars: document.getElementById('cost-cycle-budget-bars'),
         costCycleSourceBars: document.getElementById('cost-cycle-source-bars'),
         costDailyRouteBars: document.getElementById('cost-daily-route-bars'),
         costTopRoutes: document.getElementById('cost-top-routes'),
@@ -2104,7 +2118,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         ].join('');
       }
 
-      function renderOverview() {
+      function renderOverviewSummary() {
         var summary = state.overviewSummary || {};
         els.overviewMetrics.innerHTML = [
           metricMarkup('Canonical set', summary.with_live, 'Genes with a canonical portrait set.'),
@@ -2114,6 +2128,30 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           metricMarkup('Legacy', summary.legacy_assets, 'Leftovers from older sync generations.')
         ].join('');
 
+        var notes = (state.overviewAttention || []).map(function (item) {
+          if (!item || !item.symbol) return '';
+          if (item.kind === 'drift') {
+            return attentionMarkup(item.symbol + ' -- broken canonical', 'The canonical portrait points at a missing or broken asset.', 'Browse', item.symbol);
+          }
+          if (item.kind === 'missing') {
+            return attentionMarkup(item.symbol + ' -- no canonical portrait', 'No usable candidate exists yet, so the extension has nothing canonical to show.', 'Look', item.symbol);
+          }
+          if (item.kind === 'override') {
+            return attentionMarkup(item.symbol + ' -- manual override', 'Votes are not auto-picking the canonical portrait until you clear the override.', 'Look', item.symbol);
+          }
+          if (item.kind === 'stale') {
+            return attentionMarkup(item.symbol + ' -- stale images', String(item.stale_assets || 0) + ' old images hanging around.', 'Clean up', item.symbol);
+          }
+          return '';
+        }).filter(Boolean);
+        if (!notes.length) notes.push('<article class="list-row"><div><strong>Nothing needs attention.</strong><div class="small">Use Gallery or Log for a deeper look.</div></div><div></div></article>');
+        els.attentionList.innerHTML = notes.join('');
+
+        els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 12).map(overviewEventMarkup).join('') || '<article class="list-row"><div><strong>No recent activity.</strong></div><div></div></article>';
+        renderActivityFeed();
+      }
+
+      function renderOverviewCoverage() {
         var coverage = state.overviewCoverage || null;
         if (coverage) {
           var total = Math.max(1, Number(coverage.total || 0));
@@ -2146,54 +2184,42 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         } else {
           els.overviewCoverage.innerHTML = '<div class="small">Loading coverage…</div>';
         }
-
-        var notes = (state.overviewAttention || []).map(function (item) {
-          if (!item || !item.symbol) return '';
-          if (item.kind === 'drift') {
-            return attentionMarkup(item.symbol + ' -- broken canonical', 'The canonical portrait points at a missing or broken asset.', 'Browse', item.symbol);
-          }
-          if (item.kind === 'missing') {
-            return attentionMarkup(item.symbol + ' -- no canonical portrait', 'No usable candidate exists yet, so the extension has nothing canonical to show.', 'Look', item.symbol);
-          }
-          if (item.kind === 'override') {
-            return attentionMarkup(item.symbol + ' -- manual override', 'Votes are not auto-picking the canonical portrait until you clear the override.', 'Look', item.symbol);
-          }
-          if (item.kind === 'stale') {
-            return attentionMarkup(item.symbol + ' -- stale images', String(item.stale_assets || 0) + ' old images hanging around.', 'Clean up', item.symbol);
-          }
-          return '';
-        }).filter(Boolean);
-        if (!notes.length) notes.push('<article class="list-row"><div><strong>Nothing needs attention.</strong><div class="small">Use Gallery or Log for a deeper look.</div></div><div></div></article>');
-        els.attentionList.innerHTML = notes.join('');
-
-        els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 12).map(overviewEventMarkup).join('') || '<article class="list-row"><div><strong>No recent activity.</strong></div><div></div></article>';
-        renderActivityFeed();
       }
 
-      async function refreshOverview() {
+      function renderOverview() {
+        renderOverviewSummary();
+        renderOverviewCoverage();
+      }
+
+      async function refreshOverviewSummary() {
         try {
-          var results = await Promise.all([
-            apiJson('/overview?event_limit=80', { method: 'GET' }),
-            apiJson('/coverage', { method: 'GET' })
-          ]);
-          var data = results[0] || {};
+          var data = await apiJson('/overview?event_limit=80', { method: 'GET' });
           state.overviewSummary = data.summary || null;
-          state.overviewCoverage = results[1] || null;
           state.overviewAttention = Array.isArray(data.attention) ? data.attention : [];
           state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
-          renderOverview();
+          renderOverviewSummary();
         } catch (err) {
           var message = requestErrorMessage(err, 'Overview load failed.');
           els.overviewMetrics.innerHTML = inlineFailureMarkup('Overview failed fast', message);
-          els.overviewCoverage.innerHTML = inlineFailureMarkup('Coverage failed fast', message);
           els.attentionList.innerHTML = '<article class="list-row"><div><strong>Admin overview failed.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
           els.overviewEvents.innerHTML = '<article class="list-row"><div><strong>Recent activity unavailable.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
           setLog({ error: 'Overview load failed', details: err.response || message });
         }
       }
 
+      async function refreshOverviewCoverage() {
+        try {
+          state.overviewCoverage = await apiJson('/coverage', { method: 'GET' });
+          renderOverviewCoverage();
+        } catch (err) {
+          var message = requestErrorMessage(err, 'Coverage load failed.');
+          els.overviewCoverage.innerHTML = inlineFailureMarkup('Coverage failed fast', message);
+          setLog({ error: 'Coverage load failed', details: err.response || message });
+        }
+      }
+
       async function refreshDerivedAdminViews() {
-        await refreshOverview();
+        await Promise.all([refreshOverviewSummary(), refreshOverviewCoverage()]);
         if (state.visionStats.length) {
           await refreshVisionStats();
         }
@@ -2520,6 +2546,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var cycleDays = Array.isArray(report && report.cycle_days) ? report.cycle_days : [];
         var dailyAttribution = Array.isArray(report && report.daily_attribution) ? report.daily_attribution : [];
         var cycleAttribution = Array.isArray(report && report.cycle_attribution) ? report.cycle_attribution : [];
+        var budgetTotals = aggregateCostRows(cycleAttribution, 'budget_class');
         var routeTotals = aggregateCostRows(cycleAttribution, 'route_family');
         var sourceTotals = aggregateCostRows(cycleAttribution, 'source_class');
         var todayRoutes = aggregateCostRows(dailyAttribution, 'route_family');
@@ -2570,6 +2597,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           bindCostTrendHover();
         }
         renderCostBudgetHeadroom(snapshot);
+        renderCostBars(els.costCycleBudgetBars, budgetTotals, {
+          limit: 6,
+          color: '#8f4a7a',
+          emptyTitle: 'No purpose split yet',
+          emptyMessage: 'Every metered route should land in an explicit budget class.'
+        });
         renderCostBars(els.costCycleSourceBars, sourceTotals, {
           limit: 6,
           color: '#b84a26',
@@ -2604,6 +2637,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (els.costMetrics) els.costMetrics.innerHTML = inlineFailureMarkup('Cost report failed', requestErrorMessage(err, 'Cost report failed.'));
           if (els.costReadTrend) els.costReadTrend.innerHTML = '';
           if (els.costBudgetHeadroom) els.costBudgetHeadroom.innerHTML = '';
+          if (els.costCycleBudgetBars) els.costCycleBudgetBars.innerHTML = '';
           if (els.costCycleSourceBars) els.costCycleSourceBars.innerHTML = '';
           if (els.costDailyRouteBars) els.costDailyRouteBars.innerHTML = '';
           if (els.costTopRoutes) els.costTopRoutes.innerHTML = '';
