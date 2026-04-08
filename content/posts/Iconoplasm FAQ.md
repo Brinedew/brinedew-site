@@ -149,8 +149,9 @@ draft: false
     - What's the motivation to initiate the mitosis? There are factions that are pro-and anti-replication, with their own motivations and narratives. Sometimes, one side wins, sometimes, the other.
     - When the pro-Growth side wins, the cell replicates. Sometimes, the characters benefit (germline, regeneration). Other times, they die (oncogenesis).
     - When the pro-Control side wins, the cell enters quiescence. Sometimes, the characters benefit (morphogenesis). Other times, they die (apoptosis, aging).
+Worldbuilding inspiration: SOLSTICE-5 by Paul Chadeisson 
+https://www.youtube.com/watch?v=cntb3wcZdTw
 
-Inspiration: SOLSTICE-5 by Paul Chadeisson https://www.youtube.com/watch?v=cntb3wcZdTw
 
 1. **Any ideas for scenarios to explore from inside the cell?**
 My favourite scenarios are the ones where cell makes a decision to self-sacrifice or hamper itself in some way for some vague and unseen "common good".
