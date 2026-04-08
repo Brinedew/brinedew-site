@@ -775,6 +775,14 @@ function workflowIdentityFromPath(raw) {
   return match[0].slice(0, 1).toUpperCase()
 }
 
+function workflowIdentityFromVisionId(raw) {
+  const visionId = normalizeVisionId(raw).toLowerCase()
+  if (!visionId) return ""
+  const match = visionId.match(/^([a-z0-9]+)-v\d+(?:-\d+)?$/)
+  if (!match || !match[1]) return ""
+  return match[1].slice(0, 1).toUpperCase()
+}
+
 function promptVersionFromVisionId(raw) {
   const visionId = normalizeVisionId(raw).toLowerCase()
   if (!visionId) return ""
@@ -796,6 +804,7 @@ function publicEmulsionIdForRow(row) {
   if (explicitId) return explicitId
   const workflowId =
     sanitizeText(row?.requested_workflow_id || row?.workflow_id || "", 32) ||
+    workflowIdentityFromVisionId(row?.requested_vision_id || row?.vision_id || "") ||
     workflowIdentityFromPath(
       row?.requested_workflow_path ||
         row?.workflow_path ||
@@ -1511,7 +1520,7 @@ async function listGenerationRequestVisionPreviewAssets(
   if (!safeVisionIds.length) return new Map()
   const previewLimit = Math.max(
     1,
-    Math.min(4, Number.parseInt(String(perVisionLimit || "3"), 10) || 3),
+    Math.min(6, Number.parseInt(String(perVisionLimit || "6"), 10) || 6),
   )
   const base = portraitBase(url, env)
   const previewsByVision = new Map()
@@ -1634,7 +1643,7 @@ async function listGenerationRequestVisionOptions(env, url) {
     env,
     url,
     mapped.map((row) => row.vision_id),
-    { perVisionLimit: 3 },
+    { perVisionLimit: 6 },
   )
   return mapped.map((row) => ({
     ...row,

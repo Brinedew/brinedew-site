@@ -2823,7 +2823,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var optionVisionId = isRandom ? "" : String(item.vision_id || "").trim()
     var isSelected = String(selectedVisionId || "").trim() === optionVisionId
     var primary = isRandom ? "Random default" : requestOptionPrimaryLabel(item)
-    var meta = isRandom ? "" : requestOptionMetaParts(item).join(" · ")
     return (
       '<button type="button" class="icono-request-option' +
       (isSelected ? " is-selected" : "") +
@@ -2837,7 +2836,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(primary) +
       "</span>" +
       "</span>" +
-      (meta ? '<span class="icono-request-option-meta">' + esc(meta) + "</span>" : "") +
       "</span>" +
       renderRequestOptionPreviewStripMarkup(item) +
       "</button>"
@@ -2976,7 +2974,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<div class="icono-home-auth-title">Request more portraits for ' +
         esc(symbol) +
         '</div>' +
-        '<div class="icono-home-auth-note">Search by emulsion code, artist tag, or vision ID, then preview example portraits before you queue work.</div>' +
+        '<div class="icono-home-auth-note">Search an emulsion code or vision ID, then pick from the thumbnail lane.</div>' +
         '</div>' +
         '<div class="icono-request-actions">' +
         '<form data-icono-request-form class="icono-request-form">' +
@@ -3079,7 +3077,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           if (scoreDiff) return scoreDiff
           return requestOptionPrimaryLabel(a).localeCompare(requestOptionPrimaryLabel(b))
         })
-        return matched.slice(0, cleanedQuery ? 12 : 8)
+        return matched.slice(0, cleanedQuery ? 10 : 6)
       }
 
       function paintActiveOption() {

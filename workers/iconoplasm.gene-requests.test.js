@@ -31,15 +31,21 @@ class FakeRequestStatement {
         .map((value) => String(value || "").trim())
         .filter(Boolean)
       return {
-        results: requestedVisionIds.map((visionId, index) => ({
-          vision_id: visionId,
-          gene_symbol: index % 2 === 0 ? "INS" : "A1BG",
-          asset_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          r2_key_medium: "portraits/v1/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/medium.webp",
-          r2_key_thumb: "portraits/v1/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/thumb.webp",
-          is_current: 1,
-          preview_rank: 1,
-        })),
+        results: requestedVisionIds.flatMap((visionId, index) =>
+          Array.from({ length: 6 }, function (_unused, previewIndex) {
+            const suffix = String(index).padStart(2, "0") + String(previewIndex).padStart(2, "0")
+            const sha = ("a".repeat(60) + suffix).slice(0, 64)
+            return {
+              vision_id: visionId,
+              gene_symbol: previewIndex % 2 === 0 ? "INS" : "A1BG",
+              asset_sha256: sha,
+              r2_key_medium: `portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
+              r2_key_thumb: `portraits/v1/${sha.slice(0, 2)}/${sha}/thumb.webp`,
+              is_current: previewIndex === 0 ? 1 : 0,
+              preview_rank: previewIndex + 1,
+            }
+          }),
+        ),
       }
     }
 
@@ -218,13 +224,89 @@ test("authenticated gene request state returns rich emulsion options with previe
   assert.equal(payload.request_options.length, 1)
   assert.equal(payload.request_options[0]?.label, "A1-93-19")
   assert.equal(payload.request_options[0]?.artist_tag, "anima")
+  assert.equal(payload.request_options[0]?.preview_assets.length, 6)
   assert.equal(payload.request_options[0]?.preview_assets[0]?.gene_symbol, "INS")
   assert.match(
     String(payload.request_options[0]?.preview_assets[0]?.thumb_url || ""),
-    /\/portraits\/v1\/aa\/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\/thumb\.webp$/,
+    /\/portraits\/v1\/aa\/a{60}0000\/thumb\.webp$/,
   )
   assert.equal(env.gatewayDb.visionRollupReads, 1)
   assert.equal(env.gatewayDb.previewReads, 1)
+})
+
+test("authenticated gene request state infers emulsion code from vision id when rollup row omits workflow fields", async () => {
+  const env = buildEnv()
+  env.gatewayDb.prepare = function (sql) {
+    const statement = new FakeRequestStatement(this, sql)
+    statement.all = async () => {
+      if (String(sql).includes("WITH ranked_previews AS")) {
+        return {
+          results: [
+            {
+              vision_id: "anima-v1-3696",
+              gene_symbol: "A1BG",
+              asset_sha256: "b".repeat(64),
+              r2_key_medium: `portraits/v1/bb/${"b".repeat(64)}/medium.webp`,
+              r2_key_thumb: `portraits/v1/bb/${"b".repeat(64)}/thumb.webp`,
+              is_current: 1,
+              preview_rank: 1,
+            },
+          ],
+        }
+      }
+      if (String(sql).includes("FROM icono_admin_vision_rollup")) {
+        return {
+          results: [
+            {
+              vision_id: "anima-v1-3696",
+              artist_tag: "",
+              artist_name: "",
+              workflow_id: "",
+              prompt_version: "",
+              variant_slot: "",
+              image_count: 8,
+              live_count: 7,
+              score: 5,
+            },
+          ],
+        }
+      }
+      if (String(sql).includes("FROM icono_generation_requests gr")) {
+        return {
+          results: [],
+        }
+      }
+      return { results: [] }
+    }
+    return statement
+  }
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.request_options[0]?.label, "A1-3696")
 })
 
 test("authenticated gene request state chunks preview hydration instead of failing on long option lists", async () => {
