@@ -162,10 +162,12 @@ import {
   isIconoplasmRequest,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   IconoplasmVoteCoordinator,
+  IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
+export { IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate }
 // Import Discord bot handlers
 import {
   handleDailySummary,

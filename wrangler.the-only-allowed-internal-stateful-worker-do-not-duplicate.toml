@@ -52,6 +52,10 @@ script_name = "geneguessr-api"
 name = "ICONOPLASM_VOTE_COORDINATORS"
 class_name = "IconoplasmVoteCoordinator"
 
+[[durable_objects.bindings]]
+name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
+class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameSession"]
@@ -59,6 +63,17 @@ new_sqlite_classes = ["GameSession"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["IconoplasmVoteCoordinator"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
+
+[vars]
+# This is a hard stop, not an alert. Recent normal days sat around ~106M-115M
+# D1 rows read, while the bill came from multi-billion-row days. Keep the cap
+# comfortably above normal traffic and far below runaway query explosions.
+ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "300000000"
+ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
 
 [[r2_buckets]]
 binding = "STRUCTURES_BUCKET"
@@ -105,6 +120,10 @@ class_name = "GameSession"
 name = "ICONOPLASM_VOTE_COORDINATORS"
 class_name = "IconoplasmVoteCoordinator"
 
+[[env.staging.durable_objects.bindings]]
+name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
+class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
+
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameSession"]
@@ -112,6 +131,14 @@ new_sqlite_classes = ["GameSession"]
 [[env.staging.migrations]]
 tag = "v2"
 new_sqlite_classes = ["IconoplasmVoteCoordinator"]
+
+[[env.staging.migrations]]
+tag = "v3"
+new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
+
+[env.staging.vars]
+ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "50000000"
+ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "100000"
 
 [[env.staging.r2_buckets]]
 binding = "STRUCTURES_BUCKET"

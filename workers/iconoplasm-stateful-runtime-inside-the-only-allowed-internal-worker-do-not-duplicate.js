@@ -53,6 +53,20 @@ const DISCOVERY_TRIGGER_HOVER_DWELL = "hover_dwell"
 const DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE = "guest_buffer_merge"
 const DISCOVERY_TRIGGER_STARTER_SEED = "starter_seed"
 const ICONOPLASM_STARTER_GENE_SYMBOLS = ["INS", "RHO", "PRL"]
+const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_BINDING_DO_NOT_DUPLICATE =
+  "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
+const ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
+  "ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
+  "ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_ID_DO_NOT_DUPLICATE = "global"
+// Alerts did not solve the real failure mode here because the expensive query day
+// was already over by the time a human could notice and react. Keep the hard stop
+// loud in names and bindings so future edits do not quietly downgrade it to a
+// notification-only system.
+const RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE = Symbol(
+  "RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE",
+)
 
 const catalogCache = {
   hash: null,
@@ -151,6 +165,247 @@ const TRUSTED_ICONOPLASM_CLIENT_HOSTS = new Set([
 
 export function isIconoplasmRequest(host) {
   return host === ICONOPLASM_HOST || host.startsWith("iconoplasm.")
+}
+
+function positiveIntFromEnv(raw, fallback = 0) {
+  const value = Number.parseInt(String(raw ?? ""), 10)
+  if (!Number.isFinite(value) || value <= 0) return fallback
+  return value
+}
+
+function iconoplasmUtcDayKey(now = new Date()) {
+  return new Date(now).toISOString().slice(0, 10)
+}
+
+function iconoplasmD1DailyBudgetConfigFromEnv(env) {
+  const rowsReadLimit = positiveIntFromEnv(
+    env?.[ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
+    0,
+  )
+  const rowsWrittenLimit = positiveIntFromEnv(
+    env?.[ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
+    0,
+  )
+  if (rowsReadLimit <= 0 && rowsWrittenLimit <= 0) return null
+  return {
+    rowsReadLimit,
+    rowsWrittenLimit,
+  }
+}
+
+function iconoplasmD1BudgetRowsReadFromMeta(meta) {
+  const value = Number(meta?.rows_read ?? meta?.rowsRead ?? 0)
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0
+}
+
+function iconoplasmD1BudgetRowsWrittenFromMeta(meta) {
+  const value = Number(meta?.rows_written ?? meta?.rowsWritten ?? 0)
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0
+}
+
+class IconoplasmD1DailyBudgetExceededError extends Error {
+  constructor(snapshot) {
+    super("ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
+    this.name = "IconoplasmD1DailyBudgetExceededError"
+    this.snapshot = snapshot || null
+  }
+}
+
+class IconoplasmD1DailyBudgetConfigurationError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = "IconoplasmD1DailyBudgetConfigurationError"
+  }
+}
+
+function iconoplasmD1DailyBudgetExceededPayload(snapshot) {
+  return {
+    error:
+      "Iconoplasm D1 daily budget exhausted. The only allowed stateful worker is failing closed to stop further bill growth.",
+    code: "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED",
+    budget: snapshot || null,
+  }
+}
+
+function iconoplasmD1DailyBudgetConfigurationPayload(message) {
+  return {
+    error: String(message || "Iconoplasm D1 daily budget kill switch is misconfigured"),
+    code: "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_MISCONFIGURED",
+  }
+}
+
+function iconoplasmD1DailyBudgetKillSwitchStub(env) {
+  const namespace = env?.[ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_BINDING_DO_NOT_DUPLICATE]
+  if (!namespace || typeof namespace.idFromName !== "function" || typeof namespace.get !== "function") {
+    return null
+  }
+  return namespace.get(
+    namespace.idFromName(ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_ID_DO_NOT_DUPLICATE),
+  )
+}
+
+async function iconoplasmD1DailyBudgetKillSwitchJson(stub, path, payload) {
+  const response = await stub.fetch(
+    new Request(`https://iconoplasm-d1-daily-budget-kill-switch${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload || {}),
+    }),
+  )
+  if (!response.ok) {
+    const detail = await response.text().catch(function () {
+      return ""
+    })
+    throw new IconoplasmD1DailyBudgetConfigurationError(
+      `ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE failed (${response.status})${detail ? `: ${detail}` : ""}`,
+    )
+  }
+  return response.json()
+}
+
+async function iconoplasmD1DailyBudgetRecordUsage(state, { rowsRead = 0, rowsWritten = 0 } = {}) {
+  const safeRowsRead = Math.max(0, Number(rowsRead || 0) || 0)
+  const safeRowsWritten = Math.max(0, Number(rowsWritten || 0) || 0)
+  if (safeRowsRead <= 0 && safeRowsWritten <= 0) return state.lastSnapshot
+  const snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(state.stub, "/record", {
+    day_key: state.dayKey,
+    rows_read: safeRowsRead,
+    rows_written: safeRowsWritten,
+    budgets: state.budgets,
+  })
+  state.lastSnapshot = snapshot
+  state.exhausted = Boolean(snapshot?.exhausted)
+  return snapshot
+}
+
+async function assertIconoplasmD1DailyBudgetStillAvailable(state) {
+  if (state?.exhausted || state?.lastSnapshot?.exhausted) {
+    throw new IconoplasmD1DailyBudgetExceededError(state?.lastSnapshot || null)
+  }
+}
+
+function wrapIconoplasmD1PreparedStatementWithDailyBudgetKillSwitch(statement, state) {
+  return {
+    [RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE]: statement,
+    bind(...args) {
+      const bound = typeof statement.bind === "function" ? statement.bind(...args) : statement
+      return wrapIconoplasmD1PreparedStatementWithDailyBudgetKillSwitch(bound, state)
+    },
+    async first(columnName) {
+      // D1 accounting metadata is exposed on the full result object. If we call
+      // first() directly here, rows_read can bypass the hard daily budget and we
+      // are back to trusting alerts after the money is already gone.
+      await assertIconoplasmD1DailyBudgetStillAvailable(state)
+      const response = await statement.all()
+      await iconoplasmD1DailyBudgetRecordUsage(state, {
+        rowsRead: iconoplasmD1BudgetRowsReadFromMeta(response?.meta),
+        rowsWritten: iconoplasmD1BudgetRowsWrittenFromMeta(response?.meta),
+      })
+      const row = Array.isArray(response?.results) ? response.results[0] || null : null
+      if (columnName) return row ? row[columnName] ?? null : null
+      return row
+    },
+    async all() {
+      await assertIconoplasmD1DailyBudgetStillAvailable(state)
+      const response = await statement.all()
+      await iconoplasmD1DailyBudgetRecordUsage(state, {
+        rowsRead: iconoplasmD1BudgetRowsReadFromMeta(response?.meta),
+        rowsWritten: iconoplasmD1BudgetRowsWrittenFromMeta(response?.meta),
+      })
+      return response
+    },
+    async run() {
+      await assertIconoplasmD1DailyBudgetStillAvailable(state)
+      const response = await statement.run()
+      await iconoplasmD1DailyBudgetRecordUsage(state, {
+        rowsRead: iconoplasmD1BudgetRowsReadFromMeta(response?.meta),
+        rowsWritten: iconoplasmD1BudgetRowsWrittenFromMeta(response?.meta),
+      })
+      return response
+    },
+    async raw() {
+      throw new IconoplasmD1DailyBudgetConfigurationError(
+        "raw() is not allowed on metered Iconoplasm D1 paths until explicit budget accounting is added",
+      )
+    },
+  }
+}
+
+function wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(db, state) {
+  if (!db || typeof db.prepare !== "function") return db
+  return {
+    prepare(sql) {
+      return wrapIconoplasmD1PreparedStatementWithDailyBudgetKillSwitch(db.prepare(sql), state)
+    },
+    async batch(statements) {
+      await assertIconoplasmD1DailyBudgetStillAvailable(state)
+      const rawStatements = Array.isArray(statements)
+        ? statements.map(function (statement) {
+            return statement?.[RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE] || statement
+          })
+        : []
+      const results = await db.batch(rawStatements)
+      let rowsRead = 0
+      let rowsWritten = 0
+      for (const result of Array.isArray(results) ? results : []) {
+        rowsRead += iconoplasmD1BudgetRowsReadFromMeta(result?.meta)
+        rowsWritten += iconoplasmD1BudgetRowsWrittenFromMeta(result?.meta)
+      }
+      await iconoplasmD1DailyBudgetRecordUsage(state, { rowsRead, rowsWritten })
+      return results
+    },
+    async exec(query) {
+      await assertIconoplasmD1DailyBudgetStillAvailable(state)
+      const result = await db.exec(query)
+      if (Array.isArray(result)) {
+        let rowsRead = 0
+        let rowsWritten = 0
+        for (const item of result) {
+          rowsRead += iconoplasmD1BudgetRowsReadFromMeta(item?.meta)
+          rowsWritten += iconoplasmD1BudgetRowsWrittenFromMeta(item?.meta)
+        }
+        await iconoplasmD1DailyBudgetRecordUsage(state, { rowsRead, rowsWritten })
+      } else {
+        await iconoplasmD1DailyBudgetRecordUsage(state, {
+          rowsRead: iconoplasmD1BudgetRowsReadFromMeta(result?.meta),
+          rowsWritten: iconoplasmD1BudgetRowsWrittenFromMeta(result?.meta),
+        })
+      }
+      return result
+    },
+  }
+}
+
+async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env) {
+  const budgets = iconoplasmD1DailyBudgetConfigFromEnv(env)
+  if (!budgets) return env
+  const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
+  if (!stub) {
+    throw new IconoplasmD1DailyBudgetConfigurationError(
+      "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while hard daily budgets are enabled",
+    )
+  }
+  const dayKey = iconoplasmUtcDayKey()
+  const snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(stub, "/snapshot", {
+    day_key: dayKey,
+    budgets,
+  })
+  if (snapshot?.exhausted) {
+    throw new IconoplasmD1DailyBudgetExceededError(snapshot)
+  }
+  const state = {
+    stub,
+    budgets,
+    dayKey,
+    exhausted: false,
+    lastSnapshot: snapshot,
+  }
+  return {
+    ...env,
+    ICONOPLASM_DB: wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(env.ICONOPLASM_DB, state),
+  }
 }
 
 function corsHeaders() {
@@ -4061,6 +4316,113 @@ export class IconoplasmVoteCoordinator {
     }
 
     return new Response("Not found", { status: 404 })
+  }
+}
+
+export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
+  constructor(state) {
+    this.state = state
+    this.state.blockConcurrencyWhile(async () => {
+      // The budget ledger lives in a single durable object so all isolates spend
+      // from one shared counter. Module-memory counters were exactly the kind of
+      // fake safety that let the old model explode financially.
+      this.state.storage.sql.exec(`
+        CREATE TABLE IF NOT EXISTS daily_budget_usage (
+          day_key TEXT PRIMARY KEY,
+          rows_read INTEGER NOT NULL DEFAULT 0,
+          rows_written INTEGER NOT NULL DEFAULT 0,
+          query_count INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `)
+    })
+  }
+
+  usageRow(dayKey) {
+    return (
+      this.state.storage.sql
+        .exec(
+          `SELECT day_key, rows_read, rows_written, query_count, updated_at
+           FROM daily_budget_usage
+           WHERE day_key = ?`,
+          String(dayKey || ""),
+        )
+        .toArray()[0] || null
+    )
+  }
+
+  snapshot(dayKey, budgets) {
+    const row = this.usageRow(dayKey) || {}
+    const rowsRead = Math.max(0, Number(row?.rows_read || 0) || 0)
+    const rowsWritten = Math.max(0, Number(row?.rows_written || 0) || 0)
+    const rowsReadLimit = Math.max(0, Number(budgets?.rowsReadLimit || 0) || 0)
+    const rowsWrittenLimit = Math.max(0, Number(budgets?.rowsWrittenLimit || 0) || 0)
+    const rowsReadExceeded = rowsReadLimit > 0 && rowsRead >= rowsReadLimit
+    const rowsWrittenExceeded = rowsWrittenLimit > 0 && rowsWritten >= rowsWrittenLimit
+    return {
+      day_key: dayKey,
+      rows_read: rowsRead,
+      rows_written: rowsWritten,
+      query_count: Math.max(0, Number(row?.query_count || 0) || 0),
+      rows_read_limit: rowsReadLimit,
+      rows_written_limit: rowsWrittenLimit,
+      rows_read_remaining: rowsReadLimit > 0 ? Math.max(0, rowsReadLimit - rowsRead) : null,
+      rows_written_remaining: rowsWrittenLimit > 0 ? Math.max(0, rowsWrittenLimit - rowsWritten) : null,
+      exhausted: rowsReadExceeded || rowsWrittenExceeded,
+      exhausted_by: rowsReadExceeded
+        ? "rows_read"
+        : rowsWrittenExceeded
+          ? "rows_written"
+          : null,
+      updated_at: row?.updated_at || null,
+    }
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url)
+    if (request.method !== "POST") {
+      return Response.json({ error: "Method not allowed" }, { status: 405 })
+    }
+    let payload = {}
+    try {
+      payload = (await request.json()) || {}
+    } catch {}
+    const dayKeyRaw = String(payload?.day_key || "").trim()
+    const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(dayKeyRaw) ? dayKeyRaw : iconoplasmUtcDayKey()
+    const budgets = {
+      rowsReadLimit: positiveIntFromEnv(payload?.budgets?.rowsReadLimit, 0),
+      rowsWrittenLimit: positiveIntFromEnv(payload?.budgets?.rowsWrittenLimit, 0),
+    }
+
+    if (url.pathname === "/snapshot") {
+      return Response.json(this.snapshot(dayKey, budgets))
+    }
+
+    if (url.pathname === "/record") {
+      const rowsRead = Math.max(0, Number(payload?.rows_read || 0) || 0)
+      const rowsWritten = Math.max(0, Number(payload?.rows_written || 0) || 0)
+      this.state.storage.sql.exec(
+        `INSERT INTO daily_budget_usage (
+           day_key,
+           rows_read,
+           rows_written,
+           query_count,
+           updated_at
+         ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(day_key) DO UPDATE SET
+           rows_read = daily_budget_usage.rows_read + excluded.rows_read,
+           rows_written = daily_budget_usage.rows_written + excluded.rows_written,
+           query_count = daily_budget_usage.query_count + excluded.query_count,
+           updated_at = CURRENT_TIMESTAMP`,
+        dayKey,
+        rowsRead,
+        rowsWritten,
+        rowsRead > 0 || rowsWritten > 0 ? 1 : 0,
+      )
+      return Response.json(this.snapshot(dayKey, budgets))
+    }
+
+    return Response.json({ error: "Not found" }, { status: 404 })
   }
 }
 
@@ -9441,73 +9803,89 @@ async function handlePublicGallery(request, env, ctx) {
 export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx = { waitUntil() {} }) {
   const url = new URL(request.url)
   const path = url.pathname
+  try {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders() })
+    }
+    if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)) {
+      return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
+    }
 
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders() })
-  }
-  if (isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
-    const payload = await parseJsonBody(request)
-    return json(
-      await repairCanonInvariants(env, {
-        limit: payload?.limit,
-        actorId: payload?.actorId,
-        reason: payload?.reason,
-      }),
-      200,
-      { "Cache-Control": "no-store" },
-    )
-  }
-  if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)) {
+    env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env)
+
+    if (isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
+      const payload = await parseJsonBody(request)
+      return json(
+        await repairCanonInvariants(env, {
+          limit: payload?.limit,
+          actorId: payload?.actorId,
+          reason: payload?.reason,
+        }),
+        200,
+        { "Cache-Control": "no-store" },
+      )
+    }
+
+    if (path === publicApiPath("/metadata")) {
+      return handlePublicMetadata(request, env)
+    }
+    if (path === publicApiPath("/catalog/manifest")) {
+      return handlePublicCatalogManifest(request, env)
+    }
+    if (isPublicCatalogArtifactPath(path)) {
+      return handlePublicCatalogArtifact(env, path)
+    }
+    if (path === publicApiPath("/gallery")) {
+      return handlePublicGallery(request, env, ctx)
+    }
+    if (path === publicApiPath("/genes/search")) {
+      return handlePublicGeneSearch(request, env)
+    }
+    if (path === publicApiPath("/genes/batch")) {
+      return handlePublicGeneBatch(request, env)
+    }
+    if (path.startsWith(publicApiPath("/genes/"))) {
+      const url = new URL(request.url)
+      return json(publicRichRouteDeniedPayload(url, "gene_detail"), 403, { "Cache-Control": "no-store" })
+    }
+    if (path === publicApiPath("/resolve")) {
+      return handlePublicResolve(request, env)
+    }
+    if (path === publicApiPath("/changes")) {
+      return handlePublicChanges(request, env)
+    }
+    if (path.startsWith(publicApiPath("/media/"))) {
+      const rawSymbol = path.slice(publicApiPath("/media/").length)
+      return handlePublicMedia(request, env, rawSymbol)
+    }
+    if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
+      return handleSiteGeneDetail(request, env, path)
+    }
+    if (path.startsWith("/api/iconoplasm/")) {
+      const headers = new Headers(request.headers)
+      headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
+      const internalRequest = new Request(request, { headers })
+      return handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        internalRequest,
+        env,
+        ctx,
+      )
+    }
+
     return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
+  } catch (error) {
+    if (error instanceof IconoplasmD1DailyBudgetExceededError) {
+      return json(iconoplasmD1DailyBudgetExceededPayload(error.snapshot), 503, {
+        "Cache-Control": "no-store",
+      })
+    }
+    if (error instanceof IconoplasmD1DailyBudgetConfigurationError) {
+      return json(iconoplasmD1DailyBudgetConfigurationPayload(error.message), 500, {
+        "Cache-Control": "no-store",
+      })
+    }
+    throw error
   }
-
-  if (path === publicApiPath("/metadata")) {
-    return handlePublicMetadata(request, env)
-  }
-  if (path === publicApiPath("/catalog/manifest")) {
-    return handlePublicCatalogManifest(request, env)
-  }
-  if (isPublicCatalogArtifactPath(path)) {
-    return handlePublicCatalogArtifact(env, path)
-  }
-  if (path === publicApiPath("/gallery")) {
-    return handlePublicGallery(request, env, ctx)
-  }
-  if (path === publicApiPath("/genes/search")) {
-    return handlePublicGeneSearch(request, env)
-  }
-  if (path === publicApiPath("/genes/batch")) {
-    return handlePublicGeneBatch(request, env)
-  }
-  if (path.startsWith(publicApiPath("/genes/"))) {
-    const url = new URL(request.url)
-    return json(publicRichRouteDeniedPayload(url, "gene_detail"), 403, { "Cache-Control": "no-store" })
-  }
-  if (path === publicApiPath("/resolve")) {
-    return handlePublicResolve(request, env)
-  }
-  if (path === publicApiPath("/changes")) {
-    return handlePublicChanges(request, env)
-  }
-  if (path.startsWith(publicApiPath("/media/"))) {
-    const rawSymbol = path.slice(publicApiPath("/media/").length)
-    return handlePublicMedia(request, env, rawSymbol)
-  }
-  if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
-    return handleSiteGeneDetail(request, env, path)
-  }
-  if (path.startsWith("/api/iconoplasm/")) {
-    const headers = new Headers(request.headers)
-    headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
-    const internalRequest = new Request(request, { headers })
-    return handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      internalRequest,
-      env,
-      ctx,
-    )
-  }
-
-  return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
 }
 
 async function handleCatalogManifest(request, env) {

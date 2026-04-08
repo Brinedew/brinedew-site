@@ -151,8 +151,23 @@ test("DO NOT DELETE: public workers must proxy to the one allowed internal state
   )
   assert.match(
     internalWrangler,
-    /\[\[migrations\]\][\s\S]*tag = "v1"[\s\S]*new_sqlite_classes = \["GameSession"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v2"[\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\]/,
-    "internal stateful worker should keep the old GameSession migration and add the vote coordinator as a new migration tag",
+    /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"[\s\S]*class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"/,
+    "internal stateful worker should bind the hard daily budget durable object because alerts are not a kill switch",
+  )
+  assert.match(
+    internalWrangler,
+    /\[\[migrations\]\][\s\S]*tag = "v1"[\s\S]*new_sqlite_classes = \["GameSession"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v2"[\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v3"[\s\S]*new_sqlite_classes = \["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"\]/,
+    "internal stateful worker should preserve the old durable objects and add the hard daily budget kill switch as its own migration tag",
+  )
+  assert.match(
+    internalWrangler,
+    /ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "300000000"/,
+    "prod internal worker should define a real hard daily rows-read cap instead of relying on alerts",
+  )
+  assert.match(
+    internalWrangler,
+    /ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"/,
+    "prod internal worker should define a hard daily rows-written cap as a second stop",
   )
 })
 
