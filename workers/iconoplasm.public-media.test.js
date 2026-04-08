@@ -144,6 +144,10 @@ test("public gene payload includes published portrait dimensions", async () => {
   assert.equal(response.status, 403)
   assert.equal(payload?.code, "FIRST_PARTY_ONLY")
   assert.match(String(payload?.error || ""), /website ui/i)
+  assert.equal(
+    payload?.recommended_public_api?.metadata,
+    "https://iconoplasm.brinedew.bio/api/public/v1/metadata",
+  )
 })
 
 test("site gene payload includes published portrait dimensions for first-party browser requests", async () => {
@@ -175,6 +179,8 @@ test("public media payload includes published portrait dimensions", async () => 
   assert.equal(response.status, 200)
   assert.equal(payload?.media?.width, 384)
   assert.equal(payload?.media?.height, 512)
+  assert.match(String(payload?.media?.canonical_url || ""), /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//)
+  assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
 })
 
 test("public media fails closed when THE_ONLY_ALLOWED_DB_GATEWAY is missing", async () => {

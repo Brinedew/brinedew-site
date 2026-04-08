@@ -13,6 +13,7 @@ const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
 const ICONOPLASM_GATEWAY_CANON_REPAIR_PATH = "/__internal/iconoplasm/repair-canon-invariants"
+const ICONOPLASM_INTERNAL_GATEWAY_ORIGIN = "https://the-only-allowed-db-gateway"
 const rlBuckets = new Map()
 const RL_WINDOW_MS = 60 * 1000
 
@@ -309,7 +310,23 @@ async function proxyIconoplasmRequestToDbGateway(request, env) {
         : await request.clone().text(),
   })
   try {
-    return await gateway.fetch(upstreamRequest)
+    const response = await gateway.fetch(upstreamRequest)
+    if (request.method === "HEAD") return response
+    const contentType = String(response.headers.get("Content-Type") || "").toLowerCase()
+    const isTextual =
+      contentType.includes("application/json") ||
+      contentType.includes("application/problem+json") ||
+      contentType.startsWith("text/")
+    if (!isTextual) return response
+    const body = await response.clone().text()
+    if (!body.includes(ICONOPLASM_INTERNAL_GATEWAY_ORIGIN)) return response
+    const headers = new Headers(response.headers)
+    headers.delete("Content-Length")
+    return new Response(body.replaceAll(ICONOPLASM_INTERNAL_GATEWAY_ORIGIN, url.origin), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
   } catch {
     return json(
       {
