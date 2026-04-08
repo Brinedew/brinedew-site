@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
 
-const source = readFileSync(new URL("./iconoplasm.js", import.meta.url), "utf8")
+const source = readFileSync(new URL("./iconoplasm-gateway.js", import.meta.url), "utf8")
 
 // DO NOT DELETE THIS FILE.
 //

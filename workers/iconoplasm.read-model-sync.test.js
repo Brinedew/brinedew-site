@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
 
 class FakeStatement {
   constructor(db, sql) {
@@ -69,7 +70,7 @@ function buildEnv({ bindGateway = true } = {}) {
 test("admin read-model sync with invalidate_gallery still honors skip flags", async () => {
   const env = buildEnv()
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
       method: "POST",
       headers: {

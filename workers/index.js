@@ -156,12 +156,12 @@ import {
   handleMe,
   handleLogout,
 } from "./auth.js"
-// Import Iconoplasm handlers
+// Import Iconoplasm caller-side handlers
 import {
   isIconoplasmRequest,
-  handleIconoplasmRequest,
+  handleIconoplasmCallerRequest,
   runIconoplasmCanonMaintenanceThroughGateway,
-} from "./iconoplasm.js"
+} from "./iconoplasm-caller.js"
 // Import Discord bot handlers
 import {
   handleDailySummary,
@@ -618,14 +618,14 @@ export default {
       }
 
       // The live settings page runs on brinedew.bio and probes Iconoplasm admin state via
-      // same-origin /api/iconoplasm/* requests. Route those to the Iconoplasm worker no matter
-      // which Brinedew host receives them, otherwise apex settings fetches fall through to the
-      // generic 404 despite the endpoint existing in iconoplasm.js.
+      // same-origin /api/iconoplasm/* requests. Route those to the Iconoplasm caller worker no
+      // matter which Brinedew host receives them, otherwise apex settings fetches fall through
+      // to a generic 404 despite the endpoint existing in the caller boundary module.
       if (
         (url.pathname === "/api/iconoplasm" || url.pathname.startsWith("/api/iconoplasm/")) &&
         request.method !== "OPTIONS"
       ) {
-        return handleIconoplasmRequest(request, env, ctx)
+        return handleIconoplasmCallerRequest(request, env, ctx)
       }
 
       // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
@@ -650,7 +650,7 @@ export default {
           url.pathname === "/health"
 
         if (isApiOrWorker) {
-          return handleIconoplasmRequest(request, env, ctx)
+          return handleIconoplasmCallerRequest(request, env, ctx)
         }
 
         // Versioned iconoplasm static assets: extend cache aggressively

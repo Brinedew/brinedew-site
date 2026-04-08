@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
 
 class FakeStatement {
   constructor(db, sql) {
@@ -133,7 +134,7 @@ function buildEnv(overrides = {}, { bindGateway = true } = {}) {
 }
 
 test("public gene payload includes published portrait dimensions", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/A1BG"),
     buildEnv(),
     {},
@@ -146,7 +147,7 @@ test("public gene payload includes published portrait dimensions", async () => {
 })
 
 test("site gene payload includes published portrait dimensions for first-party browser requests", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
       headers: {
         Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
@@ -164,7 +165,7 @@ test("site gene payload includes published portrait dimensions for first-party b
 })
 
 test("public media payload includes published portrait dimensions", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
     buildEnv(),
     {},
@@ -177,7 +178,7 @@ test("public media payload includes published portrait dimensions", async () => 
 })
 
 test("public media fails closed when THE_ONLY_ALLOWED_DB_GATEWAY is missing", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
     buildEnv({ THE_ONLY_ALLOWED_DB_GATEWAY: null }, { bindGateway: false }),
     {},
@@ -190,7 +191,7 @@ test("public media fails closed when THE_ONLY_ALLOWED_DB_GATEWAY is missing", as
 })
 
 test("public gene batch is limited to first-party clients and extension traffic", async () => {
-  const deniedResponse = await handleIconoplasmRequest(
+  const deniedResponse = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -203,7 +204,7 @@ test("public gene batch is limited to first-party clients and extension traffic"
   assert.equal(deniedResponse.status, 403)
   assert.equal(deniedPayload?.code, "FIRST_PARTY_ONLY")
 
-  const extensionResponse = await handleIconoplasmRequest(
+  const extensionResponse = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
       headers: {
@@ -232,7 +233,7 @@ test("public media hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async 
     }),
   )
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
     buildEnv({
       ICONOPLASM_DB: null,
@@ -256,7 +257,7 @@ test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_DB_GATEWAY
     }),
   )
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
       headers: {
@@ -281,3 +282,4 @@ test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_DB_GATEWAY
   assert.deepEqual(JSON.parse(gateway.calls[0]?.body || "null"), { symbols: ["A1BG", "TP53"] })
   assert.equal(gateway.calls[0]?.headers?.["x-iconoplasm-extension-version"], "0.3.0")
 })
+

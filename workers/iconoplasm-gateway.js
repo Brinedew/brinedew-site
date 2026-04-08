@@ -2379,6 +2379,7 @@ function iconoplasmGatewayEligiblePath(path, method = "GET") {
   if (path === publicApiPath("/gallery")) return true
   if (path === publicApiPath("/genes/search")) return true
   if (path === publicApiPath("/genes/batch")) return requestMethod === "POST"
+  if (path.startsWith(publicApiPath("/genes/"))) return true
   if (path === publicApiPath("/resolve")) return true
   if (path === publicApiPath("/changes")) return true
   if (path.startsWith(publicApiPath("/media/"))) return true
@@ -8654,6 +8655,10 @@ export async function handleIconoplasmDbGatewayRequest(request, env, ctx = { wai
   if (path === publicApiPath("/genes/batch")) {
     return handlePublicGeneBatch(request, env)
   }
+  if (path.startsWith(publicApiPath("/genes/"))) {
+    const url = new URL(request.url)
+    return json(publicRichRouteDeniedPayload(url, "gene_detail"), 403, { "Cache-Control": "no-store" })
+  }
   if (path === publicApiPath("/resolve")) {
     return handlePublicResolve(request, env)
   }
@@ -8671,7 +8676,7 @@ export async function handleIconoplasmDbGatewayRequest(request, env, ctx = { wai
     const headers = new Headers(request.headers)
     headers.set(ICONOPLASM_GATEWAY_INTERNAL_HEADER, "1")
     const internalRequest = new Request(request, { headers })
-    return handleIconoplasmRequest(internalRequest, env, ctx)
+    return handleIconoplasmGatewayRequest(internalRequest, env, ctx)
   }
 
   return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
@@ -8829,7 +8834,7 @@ async function publishCatalogArtifact(env) {
   }
 }
 
-export async function handleIconoplasmRequest(request, env, ctx) {
+export async function handleIconoplasmGatewayRequest(request, env, ctx) {
   const started = Date.now()
   const url = new URL(request.url)
   const path = url.pathname
@@ -12012,7 +12017,7 @@ export async function handleIconoplasmRequest(request, env, ctx) {
                  mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
                  vision_id, emulsion_id, workflow_id, workflow_label, workflow_path, prompt_version, variant_slot,
                  candidate_image_id, artist_tag, artist_name, created_by, created_at
-               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
                  r2_key_full=excluded.r2_key_full,
                  r2_key_medium=excluded.r2_key_medium,

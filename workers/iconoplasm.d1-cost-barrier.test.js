@@ -3,9 +3,9 @@ import test from "node:test"
 
 import {
   handleIconoplasmDbGatewayRequest,
-  handleIconoplasmRequest,
+  handleIconoplasmGatewayRequest,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm.js"
+} from "./iconoplasm-gateway.js"
 
 // DO NOT DELETE THIS FILE.
 //
@@ -200,7 +200,7 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmRequest(
+  const first = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -209,7 +209,7 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
   assert.equal(db.fingerprintReads, 1)
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmRequest(
+  const second = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -223,7 +223,7 @@ test("DO NOT DELETE: search warm-up reuses shared portrait refs instead of resca
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmRequest(
+  const first = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -232,7 +232,7 @@ test("DO NOT DELETE: search warm-up reuses shared portrait refs instead of resca
   assert.equal(db.portraitRefReads, 1)
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmRequest(
+  const second = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -246,7 +246,7 @@ test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot a
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmRequest(
+  const first = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -260,7 +260,7 @@ test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot a
   assert.equal(db.galleryPublishedReads, 1)
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmRequest(
+  const second = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -279,7 +279,7 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmRequest(
+  const first = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.costbarrier01.json"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -297,7 +297,7 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   )
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmRequest(
+  const second = await handleIconoplasmGatewayRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.costbarrier01.json"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -307,3 +307,4 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   assert.equal(db.portraitRefReads, 1)
   assert.equal(secondPayload.genes[0]?.pt != null || secondPayload.genes[0]?.ph != null, true)
 })
+

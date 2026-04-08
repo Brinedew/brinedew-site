@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
 import {
   handleIconoplasmDbGatewayRequest,
-  handleIconoplasmRequest,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm.js"
+} from "./iconoplasm-gateway.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -340,7 +340,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
     ],
   })
 
-  const firstResponse = await handleIconoplasmRequest(
+  const firstResponse = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
     env,
     {},
@@ -364,7 +364,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
 
   resetIconoplasmRuntimeCachesForTest()
 
-  const secondResponse = await handleIconoplasmRequest(
+  const secondResponse = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
     env,
     {},
@@ -378,7 +378,7 @@ test("catalog search refreshes canonical portraits even if gallery version does 
 
 test("catalog search ranks symbol matches before full names before aliases", async () => {
   const env = buildEnv()
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=guardian&scope=catalog&limit=10"),
     env,
     {},
@@ -400,7 +400,7 @@ test("catalog search ranks symbol matches before full names before aliases", asy
 test("guest discovery search falls back to the starter trio instead of the full catalog", async () => {
   const env = buildEnv()
 
-  const starterResponse = await handleIconoplasmRequest(
+  const starterResponse = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10"),
     env,
     {},
@@ -415,7 +415,7 @@ test("guest discovery search falls back to the starter trio instead of the full 
   )
   assert.equal(starterResponse.headers.get("Cache-Control"), "no-store")
 
-  const hiddenResponse = await handleIconoplasmRequest(
+  const hiddenResponse = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10"),
     env,
     {},
@@ -433,7 +433,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
     },
   })
 
-  const starterResponse = await handleIconoplasmRequest(
+  const starterResponse = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10", {
       cookie: "session=abc",
     }),
@@ -455,7 +455,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
 
   env.gatewayDb.seedDiscovery("user-123", "TP53")
 
-  const discoveredResponse = await handleIconoplasmRequest(
+  const discoveredResponse = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", {
       cookie: "session=abc",
     }),
@@ -470,7 +470,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
     ["TP53"],
   )
 
-  const hiddenResponse = await handleIconoplasmRequest(
+  const hiddenResponse = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=guardian&scope=discoveries&limit=10", {
       cookie: "session=abc",
     }),
@@ -499,7 +499,7 @@ test("catalog search uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", async () => {
     },
   })
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
     env,
     {},
@@ -528,7 +528,7 @@ test("public catalog artifact uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", asyn
     },
   })
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     buildRequest("/api/public/v1/catalog/catalog.searchfixture01.json"),
     env,
     {},
@@ -541,3 +541,4 @@ test("public catalog artifact uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", asyn
   assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-db-gateway/api/public/v1/catalog/catalog.searchfixture01.json")
   assert.equal(gateway.calls[0]?.method, "GET")
 })
+

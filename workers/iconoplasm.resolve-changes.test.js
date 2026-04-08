@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
 import {
   handleIconoplasmDbGatewayRequest,
-  handleIconoplasmRequest,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm.js"
+} from "./iconoplasm-gateway.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -229,7 +229,7 @@ test.after(() => {
 })
 
 test("public resolve route works through THE_ONLY_ALLOWED_DB_GATEWAY", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -251,7 +251,7 @@ test("public resolve route works through THE_ONLY_ALLOWED_DB_GATEWAY", async () 
 })
 
 test("public changes route works through THE_ONLY_ALLOWED_DB_GATEWAY", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10"),
     buildEnv(),
     {},
@@ -272,7 +272,7 @@ test("public resolve uses THE_ONLY_ALLOWED_DB_GATEWAY when explicitly bound", as
     }),
   )
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -292,7 +292,7 @@ test("public resolve uses THE_ONLY_ALLOWED_DB_GATEWAY when explicitly bound", as
 })
 
 test("public changes fails closed when THE_ONLY_ALLOWED_DB_GATEWAY is missing", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10"),
     buildEnv({ THE_ONLY_ALLOWED_DB_GATEWAY: null }, { bindGateway: false }),
     {},
@@ -303,3 +303,4 @@ test("public changes fails closed when THE_ONLY_ALLOWED_DB_GATEWAY is missing", 
   assert.equal(payload?.code, "DB_GATEWAY_REQUIRED")
   assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_DB_GATEWAY/i)
 })
+

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
 
 if (!globalThis.caches) {
   globalThis.caches = {
@@ -227,7 +228,7 @@ function buildCtx() {
 }
 
 test("youngest sort keeps zero-age genes off the top while leaving them in the results", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=youngest&limit=10"),
     buildEnv(),
     buildCtx(),
@@ -244,7 +245,7 @@ test("youngest sort keeps zero-age genes off the top while leaving them in the r
 })
 
 test("lightest sort keeps zero-weight genes off the top while leaving them in the results", async () => {
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=lightest&limit=10"),
     buildEnv(),
     buildCtx(),
@@ -272,7 +273,7 @@ test("public gallery hot path uses THE_ONLY_ALLOWED_DB_GATEWAY when bound", asyn
     }),
   )
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     buildEnv({
       ICONOPLASM_DB: null,

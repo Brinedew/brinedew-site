@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
 
 class FakeRequestStatement {
   constructor(db, sql) {
@@ -104,7 +105,7 @@ function buildEnv({ bindGateway = true } = {}) {
 
 test("anonymous gene request state skips the vision-options rollup", async () => {
   const env = buildEnv()
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG"),
     env,
     {},
@@ -118,3 +119,4 @@ test("anonymous gene request state skips the vision-options rollup", async () =>
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(payload.gene_lane_summary[0]?.request_count, 1)
 })
+

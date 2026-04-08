@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
 
 class FakeStatement {
   constructor(db, sql) {
@@ -94,7 +95,7 @@ test("admin reconcile restores rejected legacy assets instead of leaving them hi
     ],
   })
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
       method: "POST",
       headers: {
@@ -145,7 +146,7 @@ test("admin reconcile restores rejected keep-assets so sync repairs become publi
     ],
   })
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
       method: "POST",
       headers: {
@@ -183,3 +184,4 @@ test("admin reconcile restores rejected keep-assets so sync repairs become publi
   assert.ok(keepRestoreUpdate)
   assert.deepEqual(keepRestoreUpdate.args, ["TP53", "c".repeat(64)])
 })
+

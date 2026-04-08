@@ -66,7 +66,7 @@ test("DO NOT DELETE: the loud test files still say why deleting them would be re
 })
 
 test("DO NOT DELETE: the only allowed db gateway name stays loud across code, docs, and config", () => {
-  const worker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm.js")
+  const worker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-gateway.js")
   const onboarding = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../docs/ICONOPLASM_ONBOARDING.md")
   const wrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.toml")
 
@@ -82,6 +82,34 @@ test("DO NOT DELETE: Website/wrangler.toml must not quietly regain ICONOPLASM_DB
     callerWrangler,
     /binding = "ICONOPLASM_DB"/,
     "the caller worker must not bind ICONOPLASM_DB again; that would undo the gateway boundary instead of merely refactoring it",
+  )
+})
+
+test("DO NOT DELETE: the caller worker should route through a caller-only boundary module instead of importing the D1-heavy Iconoplasm runtime directly", () => {
+  const indexWorker = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./index.js")
+  const callerBoundary = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-caller.js")
+  const gatewayEntry = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-db-gateway.js")
+
+  assert.match(indexWorker, /from "\.\/iconoplasm-caller\.js"/, "index worker should import the caller-only Iconoplasm boundary")
+  assert.doesNotMatch(
+    indexWorker,
+    /from "\.\/iconoplasm-gateway\.js"/,
+    "index worker should not import the D1-capable Iconoplasm gateway runtime directly",
+  )
+  assert.match(
+    gatewayEntry,
+    /from "\.\/iconoplasm-gateway\.js"/,
+    "the gateway entrypoint should import the explicit Iconoplasm gateway runtime",
+  )
+  assert.doesNotMatch(
+    gatewayEntry,
+    /from "\.\/iconoplasm-caller\.js"/,
+    "the gateway entrypoint should not import the caller-only boundary",
+  )
+  assert.doesNotMatch(
+    callerBoundary,
+    /ICONOPLASM_DB/,
+    "caller-only boundary should stay free of direct Iconoplasm D1 references",
   )
 })
 

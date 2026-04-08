@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
 import {
   handleIconoplasmDbGatewayRequest,
-  handleIconoplasmRequest,
   resetIconoplasmRuntimeCachesForTest,
-} from "./iconoplasm.js"
+} from "./iconoplasm-gateway.js"
 
 class FakeVotesStatement {
   constructor(db, sql) {
@@ -164,7 +164,7 @@ function buildEnv({ bindGateway = true } = {}) {
 test("vote-sorted gallery uses the cached snapshot instead of live rollup reads", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const env = buildEnv()
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     env,
     { waitUntil() {} },
@@ -179,3 +179,4 @@ test("vote-sorted gallery uses the cached snapshot instead of live rollup reads"
   assert.equal(env.gatewayDb.rollupReads, 0)
   assert.ok(env.gatewayDb.snapshotReads >= 1)
 })
+

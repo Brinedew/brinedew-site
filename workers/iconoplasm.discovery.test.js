@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmDbGatewayRequest, handleIconoplasmRequest } from "./iconoplasm.js"
+import { handleIconoplasmCallerRequest } from "./iconoplasm-caller.js"
+import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
 
 function sortSymbols(values) {
   return (Array.isArray(values) ? values : []).slice().sort()
@@ -247,7 +248,7 @@ function buildEncounterRequest({ cookie = "", symbol = "TP53", dwellMs = 900 } =
 
 test("discovery encounter quietly skips writes for signed-out visitors", async () => {
   const env = buildEnv()
-  const response = await handleIconoplasmRequest(buildEncounterRequest(), env, {})
+  const response = await handleIconoplasmCallerRequest(buildEncounterRequest(), env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -263,7 +264,7 @@ test("discovery encounter inserts the first authenticated gene discovery", async
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     buildEncounterRequest({ cookie: "session=abc" }),
     env,
     {},
@@ -301,14 +302,14 @@ test("discovery encounter increments count instead of duplicating the row", asyn
     },
   })
 
-  const firstResponse = await handleIconoplasmRequest(
+  const firstResponse = await handleIconoplasmCallerRequest(
     buildEncounterRequest({ cookie: "session=abc", dwellMs: 900 }),
     env,
     {},
   )
   const firstPayload = await firstResponse.json()
 
-  const secondResponse = await handleIconoplasmRequest(
+  const secondResponse = await handleIconoplasmCallerRequest(
     buildEncounterRequest({ cookie: "session=abc", dwellMs: 1200 }),
     env,
     {},
@@ -337,10 +338,10 @@ test("discoveries me returns the signed-in user's discovered symbols", async () 
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -369,11 +370,11 @@ test("discoveries me honors gallery-style sort orders on the shelf", async () =>
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "EGFR" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "EGFR" }), env, {})
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?order=heaviest", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -398,7 +399,7 @@ test("discoveries me seeds the starter trio for an empty signed-in shelf", async
     },
   })
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -422,9 +423,9 @@ test("discoveries me ignores show-all requests from non-admin users", async () =
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
       method: "GET",
       headers: { Cookie: "session=abc" },
@@ -446,9 +447,9 @@ test("discoveries me lets admins override their shelf with the full catalog", as
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
       method: "GET",
       headers: {
@@ -479,9 +480,9 @@ test("discoveries merge upserts guest-local symbols into the signed-in account",
       "session:abc": { user_id: "user-123", username: "alex" },
     },
   })
-  await handleIconoplasmRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
+  await handleIconoplasmCallerRequest(buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }), env, {})
 
-  const response = await handleIconoplasmRequest(
+  const response = await handleIconoplasmCallerRequest(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
       method: "POST",
       headers: {

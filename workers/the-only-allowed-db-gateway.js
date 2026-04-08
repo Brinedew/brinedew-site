@@ -1,4 +1,4 @@
-import { handleIconoplasmDbGatewayRequest } from "./iconoplasm.js"
+import { handleIconoplasmDbGatewayRequest } from "./iconoplasm-gateway.js"
 
 export default {
   async fetch(request, env, ctx) {
