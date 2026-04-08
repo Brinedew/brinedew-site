@@ -55,10 +55,14 @@ const DISCOVERY_TRIGGER_STARTER_SEED = "starter_seed"
 const ICONOPLASM_STARTER_GENE_SYMBOLS = ["INS", "RHO", "PRL"]
 const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_BINDING_DO_NOT_DUPLICATE =
   "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
-const ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY"
-const ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
+  "ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
+  "ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_ENV_DO_NOT_SET_CASUALLY =
+  "ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_ENV_DO_NOT_SET_CASUALLY =
+  "ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_ID_DO_NOT_DUPLICATE = "global"
 // Alerts did not solve the real failure mode here because the expensive query day
 // was already over by the time a human could notice and react. Keep the hard stop
@@ -66,6 +70,9 @@ const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_ID_DO_NOT_DUPLICATE = "global"
 // notification-only system.
 const RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE = Symbol(
   "RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE",
+)
+const ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH = Symbol(
+  "ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH",
 )
 
 const catalogCache = {
@@ -173,23 +180,132 @@ function positiveIntFromEnv(raw, fallback = 0) {
   return value
 }
 
+function positiveNumberFromEnv(raw, fallback = 0) {
+  const value = Number.parseFloat(String(raw ?? ""))
+  if (!Number.isFinite(value) || value <= 0) return fallback
+  return value
+}
+
 function iconoplasmUtcDayKey(now = new Date()) {
   return new Date(now).toISOString().slice(0, 10)
 }
 
-function iconoplasmD1DailyBudgetConfigFromEnv(env) {
-  const rowsReadLimit = positiveIntFromEnv(
-    env?.[ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
-    0,
+function iconoplasmBudgetCycleInfo(now = new Date(), cycleDayOfMonth = 7) {
+  const safeCycleDay = Math.min(28, Math.max(1, positiveIntFromEnv(cycleDayOfMonth, 7) || 7))
+  const asDate = new Date(now)
+  const year = asDate.getUTCFullYear()
+  const month = asDate.getUTCMonth()
+  const day = asDate.getUTCDate()
+  const cycleStartMonthOffset = day >= safeCycleDay ? 0 : -1
+  const cycleStart = new Date(Date.UTC(year, month + cycleStartMonthOffset, safeCycleDay, 0, 0, 0, 0))
+  const nextCycleStart = new Date(
+    Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, safeCycleDay, 0, 0, 0, 0),
   )
-  const rowsWrittenLimit = positiveIntFromEnv(
-    env?.[ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
-    0,
-  )
-  if (rowsReadLimit <= 0 && rowsWrittenLimit <= 0) return null
   return {
-    rowsReadLimit,
-    rowsWrittenLimit,
+    dayKey: iconoplasmUtcDayKey(asDate),
+    cycleKey: cycleStart.toISOString().slice(0, 10),
+    cycleStartIso: cycleStart.toISOString(),
+    nextCycleStartIso: nextCycleStart.toISOString(),
+    daysRemainingInCycle: Math.max(1, Math.ceil((nextCycleStart.getTime() - asDate.getTime()) / 86400000)),
+  }
+}
+
+function iconoplasmD1BudgetConfigFromEnv(env, now = new Date()) {
+  const rowsReadMonthlyLimit = positiveIntFromEnv(
+    env?.[ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
+    0,
+  )
+  const rowsWrittenMonthlyLimit = positiveIntFromEnv(
+    env?.[ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
+    0,
+  )
+  if (rowsReadMonthlyLimit <= 0 && rowsWrittenMonthlyLimit <= 0) return null
+  const cycleDayOfMonth = positiveIntFromEnv(
+    env?.[ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_ENV_DO_NOT_SET_CASUALLY],
+    7,
+  )
+  const dailyBurstMultiplier = positiveNumberFromEnv(
+    env?.[ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_ENV_DO_NOT_SET_CASUALLY],
+    3,
+  )
+  return {
+    rowsReadMonthlyLimit,
+    rowsWrittenMonthlyLimit,
+    cycleDayOfMonth,
+    dailyBurstMultiplier,
+    cycleInfo: iconoplasmBudgetCycleInfo(now, cycleDayOfMonth),
+  }
+}
+
+function iconoplasmBudgetRouteFamilyFromPath(path) {
+  if (path === publicApiPath("/metadata")) return "public_metadata"
+  if (path === publicApiPath("/catalog/manifest") || isPublicCatalogArtifactPath(path)) return "public_catalog"
+  if (path.startsWith(publicApiPath("/dumps/catalog."))) return "public_catalog_dump"
+  if (path === publicApiPath("/gallery")) return "public_gallery"
+  if (path === publicApiPath("/genes/search")) return "public_gene_search"
+  if (path === publicApiPath("/genes/batch")) return "public_gene_batch"
+  if (path.startsWith(publicApiPath("/genes/"))) return "public_gene_detail"
+  if (path === publicApiPath("/resolve")) return "public_resolve"
+  if (path === publicApiPath("/changes")) return "public_changes"
+  if (path.startsWith(publicApiPath("/media/"))) return "public_media"
+  if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return "site_gene_detail"
+  if (path === "/api/iconoplasm/discoveries/encounter") return "discoveries_encounter"
+  if (path === "/api/iconoplasm/discoveries/me") return "discoveries_me"
+  if (path === "/api/iconoplasm/discoveries/merge") return "discoveries_merge"
+  if (path === "/api/iconoplasm/votes/set") return "votes_set"
+  if (path === "/api/iconoplasm/votes/snapshot") return "votes_snapshot"
+  if (path === "/api/iconoplasm/admin/ingest") return "admin_ingest"
+  if (path === "/api/iconoplasm/admin/reconcile") return "admin_reconcile"
+  if (path.startsWith("/api/iconoplasm/admin/catalog/")) return "admin_catalog"
+  if (path.startsWith("/api/iconoplasm/admin/essence/")) return "admin_essence"
+  if (path.startsWith("/api/iconoplasm/admin/read-models/")) return "admin_read_models"
+  if (path.startsWith("/api/iconoplasm/admin/votes/")) return "admin_votes"
+  if (path === "/api/iconoplasm/admin/assets/summary") return "admin_assets_summary"
+  if (path.startsWith("/api/iconoplasm/admin/assets")) return "admin_assets"
+  if (path === "/api/iconoplasm/admin/gallery") return "admin_gallery"
+  if (path === "/api/iconoplasm/admin/cost/usage") return "admin_cost_usage"
+  if (path.startsWith("/api/iconoplasm/admin/")) return "admin_other"
+  if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER) return "internal_repair"
+  if (path.startsWith("/api/iconoplasm/")) return "iconoplasm_other"
+  return "non_iconoplasm"
+}
+
+function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
+  if (routeFamily === "internal_repair") return "internal_maintenance"
+  if (path.startsWith("/api/iconoplasm/admin/")) {
+    if (
+      routeFamily === "admin_ingest" ||
+      routeFamily === "admin_reconcile" ||
+      routeFamily === "admin_catalog" ||
+      routeFamily === "admin_essence" ||
+      routeFamily === "admin_read_models"
+    ) {
+      return "workstation_sync"
+    }
+    return "admin_ui"
+  }
+  if (hasExtensionClientHeader(request)) return "extension"
+  if (hasTrustedIconoplasmBrowserOrigin(request)) return "first_party_site"
+  if (isInternalRequestForTheOnlyAllowedStatefulWorker(request)) return "public_edge_proxy"
+  return "public_api"
+}
+
+function iconoplasmBudgetActorClassFromRequest(request, path) {
+  if (path.startsWith("/api/iconoplasm/admin/")) {
+    return hasAdminTokenCredentialPresent(request) ? "admin_token" : "admin_session"
+  }
+  if (hasExtensionClientHeader(request)) return "extension_user"
+  if (hasTrustedIconoplasmBrowserOrigin(request)) return "first_party_browser"
+  return "anonymous_public"
+}
+
+function iconoplasmD1BudgetAttributionFromRequest(request) {
+  const path = new URL(request.url).pathname
+  const routeFamily = iconoplasmBudgetRouteFamilyFromPath(path)
+  return {
+    route_family: routeFamily,
+    actor_class: iconoplasmBudgetActorClassFromRequest(request, path),
+    source_class: iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily),
   }
 }
 
@@ -269,12 +385,20 @@ async function iconoplasmD1DailyBudgetRecordUsage(state, { rowsRead = 0, rowsWri
   const safeRowsRead = Math.max(0, Number(rowsRead || 0) || 0)
   const safeRowsWritten = Math.max(0, Number(rowsWritten || 0) || 0)
   if (safeRowsRead <= 0 && safeRowsWritten <= 0) return state.lastSnapshot
+  state.requestUsage.rowsRead += safeRowsRead
+  state.requestUsage.rowsWritten += safeRowsWritten
+  state.requestUsage.queryCount += 1
   const snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(state.stub, "/record", {
     day_key: state.dayKey,
+    cycle_key: state.cycleKey,
     rows_read: safeRowsRead,
     rows_written: safeRowsWritten,
     budgets: state.budgets,
+    days_remaining_in_cycle: state.daysRemainingInCycle,
+    attribution: state.attribution,
+    request_count: state.requestUsage.requestCountRecorded ? 0 : 1,
   })
+  state.requestUsage.requestCountRecorded = true
   state.lastSnapshot = snapshot
   state.exhausted = Boolean(snapshot?.exhausted)
   return snapshot
@@ -378,19 +502,51 @@ function wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(db, state) {
   }
 }
 
-async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env) {
-  const budgets = iconoplasmD1DailyBudgetConfigFromEnv(env)
+function iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env) {
+  const state = env?.[ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH]
+  if (!state) return null
+  return {
+    rows_read_request: state.requestUsage?.rowsRead || 0,
+    rows_written_request: state.requestUsage?.rowsWritten || 0,
+    query_count_request: state.requestUsage?.queryCount || 0,
+    route_family: state.attribution?.route_family || null,
+    actor_class: state.attribution?.actor_class || null,
+    source_class: state.attribution?.source_class || null,
+    budget_snapshot: state.lastSnapshot || null,
+  }
+}
+
+async function iconoplasmD1DailyBudgetReport(env, now = new Date()) {
+  const budgets = iconoplasmD1BudgetConfigFromEnv(env, now)
+  if (!budgets) return null
+  const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
+  if (!stub) {
+    throw new IconoplasmD1DailyBudgetConfigurationError(
+      "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while budget reporting is enabled",
+    )
+  }
+  return iconoplasmD1DailyBudgetKillSwitchJson(stub, "/report", {
+    day_key: budgets.cycleInfo.dayKey,
+    cycle_key: budgets.cycleInfo.cycleKey,
+    days_remaining_in_cycle: budgets.cycleInfo.daysRemainingInCycle,
+    budgets,
+  })
+}
+
+async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
+  const budgets = iconoplasmD1BudgetConfigFromEnv(env)
   if (!budgets) return env
   const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
   if (!stub) {
     throw new IconoplasmD1DailyBudgetConfigurationError(
-      "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while hard daily budgets are enabled",
+      "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while smart monthly budgets are enabled",
     )
   }
-  const dayKey = iconoplasmUtcDayKey()
   const snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(stub, "/snapshot", {
-    day_key: dayKey,
+    day_key: budgets.cycleInfo.dayKey,
+    cycle_key: budgets.cycleInfo.cycleKey,
     budgets,
+    days_remaining_in_cycle: budgets.cycleInfo.daysRemainingInCycle,
   })
   if (snapshot?.exhausted) {
     throw new IconoplasmD1DailyBudgetExceededError(snapshot)
@@ -398,13 +554,23 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env) {
   const state = {
     stub,
     budgets,
-    dayKey,
+    dayKey: budgets.cycleInfo.dayKey,
+    cycleKey: budgets.cycleInfo.cycleKey,
+    daysRemainingInCycle: budgets.cycleInfo.daysRemainingInCycle,
     exhausted: false,
     lastSnapshot: snapshot,
+    attribution: request ? iconoplasmD1BudgetAttributionFromRequest(request) : null,
+    requestUsage: {
+      rowsRead: 0,
+      rowsWritten: 0,
+      queryCount: 0,
+      requestCountRecorded: false,
+    },
   }
   return {
     ...env,
     ICONOPLASM_DB: wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(env.ICONOPLASM_DB, state),
+    [ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH]: state,
   }
 }
 
@@ -2382,6 +2548,15 @@ function hasAdminToken(request, env) {
   return fromHeader === configured || fromBearer === configured
 }
 
+function hasAdminTokenCredentialPresent(request) {
+  const fromHeader = String(request.headers.get("x-iconoplasm-admin-token") || "").trim()
+  const authHeader = String(request.headers.get("Authorization") || "").trim()
+  const fromBearer = authHeader.toLowerCase().startsWith("bearer ")
+    ? authHeader.slice(7).trim()
+    : ""
+  return Boolean(fromHeader || fromBearer)
+}
+
 async function isIconoplasmAdmin(request, env) {
   if (await isAdmin(request, env)) return true
   return hasAdminToken(request, env)
@@ -2557,7 +2732,7 @@ async function verifyTurnstileSubmission(env, request, token) {
   }
 }
 
-async function logReq(route, request, status, started, schema = null) {
+async function logReq(route, request, status, started, schema = null, usage = null) {
   console.log(
     JSON.stringify({
       service: "iconoplasm",
@@ -2567,6 +2742,7 @@ async function logReq(route, request, status, started, schema = null) {
       schema_version: schema,
       ext_version: extVersion(request),
       method: request.method,
+      ...(usage || {}),
     }),
   )
 }
@@ -4329,10 +4505,37 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       this.state.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS daily_budget_usage (
           day_key TEXT PRIMARY KEY,
+          cycle_key TEXT NOT NULL DEFAULT '',
           rows_read INTEGER NOT NULL DEFAULT 0,
           rows_written INTEGER NOT NULL DEFAULT 0,
           query_count INTEGER NOT NULL DEFAULT 0,
+          request_count INTEGER NOT NULL DEFAULT 0,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `)
+      const usageColumns = this.state.storage.sql.exec(`PRAGMA table_info(daily_budget_usage)`).toArray()
+      const usageColumnNames = new Set(usageColumns.map((column) => String(column?.name || "")))
+      if (!usageColumnNames.has("cycle_key")) {
+        this.state.storage.sql.exec(`ALTER TABLE daily_budget_usage ADD COLUMN cycle_key TEXT NOT NULL DEFAULT ''`)
+      }
+      if (!usageColumnNames.has("request_count")) {
+        this.state.storage.sql.exec(
+          `ALTER TABLE daily_budget_usage ADD COLUMN request_count INTEGER NOT NULL DEFAULT 0`,
+        )
+      }
+      this.state.storage.sql.exec(`
+        CREATE TABLE IF NOT EXISTS daily_budget_usage_attribution (
+          day_key TEXT NOT NULL,
+          cycle_key TEXT NOT NULL,
+          route_family TEXT NOT NULL,
+          actor_class TEXT NOT NULL,
+          source_class TEXT NOT NULL,
+          rows_read INTEGER NOT NULL DEFAULT 0,
+          rows_written INTEGER NOT NULL DEFAULT 0,
+          query_count INTEGER NOT NULL DEFAULT 0,
+          request_count INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (day_key, cycle_key, route_family, actor_class, source_class)
         );
       `)
     })
@@ -4342,7 +4545,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     return (
       this.state.storage.sql
         .exec(
-          `SELECT day_key, rows_read, rows_written, query_count, updated_at
+          `SELECT day_key, cycle_key, rows_read, rows_written, query_count, request_count, updated_at
            FROM daily_budget_usage
            WHERE day_key = ?`,
           String(dayKey || ""),
@@ -4351,29 +4554,132 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     )
   }
 
-  snapshot(dayKey, budgets) {
+  cycleUsageRow(cycleKey) {
+    return (
+      this.state.storage.sql
+        .exec(
+          `SELECT
+             COALESCE(SUM(rows_read), 0) AS rows_read,
+             COALESCE(SUM(rows_written), 0) AS rows_written,
+             COALESCE(SUM(query_count), 0) AS query_count,
+             COALESCE(SUM(request_count), 0) AS request_count
+           FROM daily_budget_usage
+           WHERE cycle_key = ?`,
+          String(cycleKey || ""),
+        )
+        .toArray()[0] || null
+    )
+  }
+
+  smartDailyLimit(monthlyRemainingAtStartOfDay, daysRemainingInCycle, burstMultiplier) {
+    const remaining = Math.max(0, Number(monthlyRemainingAtStartOfDay || 0) || 0)
+    const daysRemaining = Math.max(1, Number(daysRemainingInCycle || 1) || 1)
+    const burst = Math.max(1, Number(burstMultiplier || 1) || 1)
+    if (remaining <= 0) return 0
+    const baseAllowance = Math.ceil(remaining / daysRemaining)
+    return Math.min(remaining, Math.max(baseAllowance, Math.ceil(baseAllowance * burst)))
+  }
+
+  attributionRows(dayKey, cycleKey, mode = "daily") {
+    const sql =
+      mode === "cycle"
+        ? `SELECT
+             route_family,
+             actor_class,
+             source_class,
+             SUM(rows_read) AS rows_read,
+             SUM(rows_written) AS rows_written,
+             SUM(query_count) AS query_count,
+             SUM(request_count) AS request_count,
+             MAX(updated_at) AS updated_at
+           FROM daily_budget_usage_attribution
+           WHERE cycle_key = ?
+           GROUP BY route_family, actor_class, source_class
+           ORDER BY rows_read DESC, rows_written DESC, request_count DESC, route_family ASC`
+        : `SELECT
+             route_family,
+             actor_class,
+             source_class,
+             rows_read,
+             rows_written,
+             query_count,
+             request_count,
+             updated_at
+           FROM daily_budget_usage_attribution
+           WHERE day_key = ?
+           ORDER BY rows_read DESC, rows_written DESC, request_count DESC, route_family ASC`
+    return this.state.storage.sql.exec(sql, mode === "cycle" ? String(cycleKey || "") : String(dayKey || "")).toArray()
+  }
+
+  snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle) {
     const row = this.usageRow(dayKey) || {}
+    const cycleRow = this.cycleUsageRow(cycleKey) || {}
     const rowsRead = Math.max(0, Number(row?.rows_read || 0) || 0)
     const rowsWritten = Math.max(0, Number(row?.rows_written || 0) || 0)
-    const rowsReadLimit = Math.max(0, Number(budgets?.rowsReadLimit || 0) || 0)
-    const rowsWrittenLimit = Math.max(0, Number(budgets?.rowsWrittenLimit || 0) || 0)
-    const rowsReadExceeded = rowsReadLimit > 0 && rowsRead >= rowsReadLimit
-    const rowsWrittenExceeded = rowsWrittenLimit > 0 && rowsWritten >= rowsWrittenLimit
+    const cycleRowsRead = Math.max(0, Number(cycleRow?.rows_read || 0) || 0)
+    const cycleRowsWritten = Math.max(0, Number(cycleRow?.rows_written || 0) || 0)
+    const rowsReadMonthlyLimit = Math.max(0, Number(budgets?.rowsReadMonthlyLimit || 0) || 0)
+    const rowsWrittenMonthlyLimit = Math.max(0, Number(budgets?.rowsWrittenMonthlyLimit || 0) || 0)
+    const burstMultiplier = Math.max(1, Number(budgets?.dailyBurstMultiplier || 1) || 1)
+    const cycleRowsReadBeforeToday = Math.max(0, cycleRowsRead - rowsRead)
+    const cycleRowsWrittenBeforeToday = Math.max(0, cycleRowsWritten - rowsWritten)
+    const rowsReadMonthlyRemaining = rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
+    const rowsWrittenMonthlyRemaining =
+      rowsWrittenMonthlyLimit > 0 ? Math.max(0, rowsWrittenMonthlyLimit - cycleRowsWritten) : null
+    const rowsReadDailySmartLimit =
+      rowsReadMonthlyLimit > 0
+        ? this.smartDailyLimit(rowsReadMonthlyLimit - cycleRowsReadBeforeToday, daysRemainingInCycle, burstMultiplier)
+        : null
+    const rowsWrittenDailySmartLimit =
+      rowsWrittenMonthlyLimit > 0
+        ? this.smartDailyLimit(
+            rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeToday,
+            daysRemainingInCycle,
+            burstMultiplier,
+          )
+        : null
+    const rowsReadDailyExceeded = rowsReadDailySmartLimit !== null && rowsRead >= rowsReadDailySmartLimit
+    const rowsWrittenDailyExceeded =
+      rowsWrittenDailySmartLimit !== null && rowsWritten >= rowsWrittenDailySmartLimit
+    const rowsReadMonthlyExceeded = rowsReadMonthlyLimit > 0 && cycleRowsRead >= rowsReadMonthlyLimit
+    const rowsWrittenMonthlyExceeded = rowsWrittenMonthlyLimit > 0 && cycleRowsWritten >= rowsWrittenMonthlyLimit
     return {
       day_key: dayKey,
+      cycle_key: cycleKey,
       rows_read: rowsRead,
       rows_written: rowsWritten,
       query_count: Math.max(0, Number(row?.query_count || 0) || 0),
-      rows_read_limit: rowsReadLimit,
-      rows_written_limit: rowsWrittenLimit,
-      rows_read_remaining: rowsReadLimit > 0 ? Math.max(0, rowsReadLimit - rowsRead) : null,
-      rows_written_remaining: rowsWrittenLimit > 0 ? Math.max(0, rowsWrittenLimit - rowsWritten) : null,
-      exhausted: rowsReadExceeded || rowsWrittenExceeded,
-      exhausted_by: rowsReadExceeded
-        ? "rows_read"
-        : rowsWrittenExceeded
-          ? "rows_written"
-          : null,
+      request_count: Math.max(0, Number(row?.request_count || 0) || 0),
+      cycle_rows_read: cycleRowsRead,
+      cycle_rows_written: cycleRowsWritten,
+      cycle_query_count: Math.max(0, Number(cycleRow?.query_count || 0) || 0),
+      cycle_request_count: Math.max(0, Number(cycleRow?.request_count || 0) || 0),
+      rows_read_monthly_limit: rowsReadMonthlyLimit || null,
+      rows_written_monthly_limit: rowsWrittenMonthlyLimit || null,
+      rows_read_monthly_remaining: rowsReadMonthlyRemaining,
+      rows_written_monthly_remaining: rowsWrittenMonthlyRemaining,
+      rows_read_daily_smart_limit: rowsReadDailySmartLimit,
+      rows_written_daily_smart_limit: rowsWrittenDailySmartLimit,
+      rows_read_daily_remaining:
+        rowsReadDailySmartLimit !== null ? Math.max(0, rowsReadDailySmartLimit - rowsRead) : null,
+      rows_written_daily_remaining:
+        rowsWrittenDailySmartLimit !== null ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten) : null,
+      days_remaining_in_cycle: Math.max(1, Number(daysRemainingInCycle || 1) || 1),
+      daily_burst_multiplier: burstMultiplier,
+      exhausted:
+        rowsReadMonthlyExceeded ||
+        rowsWrittenMonthlyExceeded ||
+        rowsReadDailyExceeded ||
+        rowsWrittenDailyExceeded,
+      exhausted_by: rowsReadMonthlyExceeded
+        ? "rows_read_monthly"
+        : rowsWrittenMonthlyExceeded
+          ? "rows_written_monthly"
+          : rowsReadDailyExceeded
+            ? "rows_read_daily_smart"
+            : rowsWrittenDailyExceeded
+              ? "rows_written_daily_smart"
+              : null,
       updated_at: row?.updated_at || null,
     }
   }
@@ -4389,37 +4695,88 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     } catch {}
     const dayKeyRaw = String(payload?.day_key || "").trim()
     const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(dayKeyRaw) ? dayKeyRaw : iconoplasmUtcDayKey()
+    const cycleKeyRaw = String(payload?.cycle_key || "").trim()
+    const cycleKey = /^\d{4}-\d{2}-\d{2}$/.test(cycleKeyRaw) ? cycleKeyRaw : dayKey
+    const daysRemainingInCycle = Math.max(1, Number(payload?.days_remaining_in_cycle || 1) || 1)
     const budgets = {
-      rowsReadLimit: positiveIntFromEnv(payload?.budgets?.rowsReadLimit, 0),
-      rowsWrittenLimit: positiveIntFromEnv(payload?.budgets?.rowsWrittenLimit, 0),
+      rowsReadMonthlyLimit: positiveIntFromEnv(payload?.budgets?.rowsReadMonthlyLimit, 0),
+      rowsWrittenMonthlyLimit: positiveIntFromEnv(payload?.budgets?.rowsWrittenMonthlyLimit, 0),
+      dailyBurstMultiplier: positiveNumberFromEnv(payload?.budgets?.dailyBurstMultiplier, 1),
     }
 
     if (url.pathname === "/snapshot") {
-      return Response.json(this.snapshot(dayKey, budgets))
+      return Response.json(this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle))
     }
 
     if (url.pathname === "/record") {
       const rowsRead = Math.max(0, Number(payload?.rows_read || 0) || 0)
       const rowsWritten = Math.max(0, Number(payload?.rows_written || 0) || 0)
+      const requestCount = Math.max(0, Number(payload?.request_count || 0) || 0)
+      const attribution = payload?.attribution && typeof payload.attribution === "object" ? payload.attribution : null
       this.state.storage.sql.exec(
         `INSERT INTO daily_budget_usage (
            day_key,
+           cycle_key,
            rows_read,
            rows_written,
            query_count,
+           request_count,
            updated_at
-         ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(day_key) DO UPDATE SET
+           cycle_key = excluded.cycle_key,
            rows_read = daily_budget_usage.rows_read + excluded.rows_read,
            rows_written = daily_budget_usage.rows_written + excluded.rows_written,
            query_count = daily_budget_usage.query_count + excluded.query_count,
+           request_count = daily_budget_usage.request_count + excluded.request_count,
            updated_at = CURRENT_TIMESTAMP`,
         dayKey,
+        cycleKey,
         rowsRead,
         rowsWritten,
         rowsRead > 0 || rowsWritten > 0 ? 1 : 0,
+        requestCount,
       )
-      return Response.json(this.snapshot(dayKey, budgets))
+      if (attribution && (rowsRead > 0 || rowsWritten > 0 || requestCount > 0)) {
+        this.state.storage.sql.exec(
+          `INSERT INTO daily_budget_usage_attribution (
+             day_key,
+             cycle_key,
+             route_family,
+             actor_class,
+             source_class,
+             rows_read,
+             rows_written,
+             query_count,
+             request_count,
+             updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(day_key, cycle_key, route_family, actor_class, source_class) DO UPDATE SET
+             rows_read = daily_budget_usage_attribution.rows_read + excluded.rows_read,
+             rows_written = daily_budget_usage_attribution.rows_written + excluded.rows_written,
+             query_count = daily_budget_usage_attribution.query_count + excluded.query_count,
+             request_count = daily_budget_usage_attribution.request_count + excluded.request_count,
+             updated_at = CURRENT_TIMESTAMP`,
+          dayKey,
+          cycleKey,
+          String(attribution?.route_family || "unknown"),
+          String(attribution?.actor_class || "unknown"),
+          String(attribution?.source_class || "unknown"),
+          rowsRead,
+          rowsWritten,
+          rowsRead > 0 || rowsWritten > 0 ? 1 : 0,
+          requestCount,
+        )
+      }
+      return Response.json(this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle))
+    }
+
+    if (url.pathname === "/report") {
+      return Response.json({
+        snapshot: this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle),
+        daily_attribution: this.attributionRows(dayKey, cycleKey, "daily"),
+        cycle_attribution: this.attributionRows(dayKey, cycleKey, "cycle"),
+      })
     }
 
     return Response.json({ error: "Not found" }, { status: 404 })
@@ -9811,7 +10168,11 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
     }
 
-    env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env)
+    const isIconoplasmCostUsageReportRequest =
+      path === "/api/iconoplasm/admin/cost/usage" && request.method === "GET"
+    if (!isIconoplasmCostUsageReportRequest) {
+      env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
+    }
 
     if (isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
       const payload = await parseJsonBody(request)
@@ -10051,7 +10412,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
   const internalGatewayRequest = isInternalRequestForTheOnlyAllowedStatefulWorker(request)
   const done = async (route, res, schema = null) => {
     const out = asHead(request, res)
-    await logReq(route, request, out.status, started, schema)
+    await logReq(route, request, out.status, started, schema, iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env))
     return out
   }
 
@@ -12196,6 +12557,19 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           { "Cache-Control": "no-store" },
         ),
       )
+    }
+
+    if (path === "/api/iconoplasm/admin/cost/usage" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_cost_usage_403", json({ error: "Unauthorized" }, 403))
+      const report = await iconoplasmD1DailyBudgetReport(env)
+      if (!report) {
+        return done(
+          "admin_cost_usage_503",
+          json({ error: "Iconoplasm D1 smart budgeting is not enabled" }, 503, { "Cache-Control": "no-store" }),
+        )
+      }
+      return done("admin_cost_usage", json(report, 200, { "Cache-Control": "no-store" }))
     }
 
     if (path === "/api/iconoplasm/admin/coverage" && request.method === "GET") {

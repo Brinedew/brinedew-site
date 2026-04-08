@@ -69,11 +69,14 @@ tag = "v3"
 new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
 
 [vars]
-# This is a hard stop, not an alert. Recent normal days sat around ~106M-115M
-# D1 rows read, while the bill came from multi-billion-row days. Keep the cap
-# comfortably above normal traffic and far below runaway query explosions.
-ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "300000000"
-ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
+# Billing guardrail model:
+# 1) hard monthly stop near the included PAYGO allowance, and
+# 2) smart daily allowance derived from monthly remaining budget and days left in
+#    the current cycle so low-spend months can absorb intermittent viral days.
+ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "24000000000"
+ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "40000000"
+ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"
+ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"
 
 [[r2_buckets]]
 binding = "STRUCTURES_BUCKET"
@@ -137,8 +140,10 @@ tag = "v3"
 new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
 
 [env.staging.vars]
-ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "50000000"
-ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "100000"
+ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "500000000"
+ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
+ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"
+ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"
 
 [[env.staging.r2_buckets]]
 binding = "STRUCTURES_BUCKET"

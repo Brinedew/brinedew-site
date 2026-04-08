@@ -161,13 +161,23 @@ test("DO NOT DELETE: public workers must proxy to the one allowed internal state
   )
   assert.match(
     internalWrangler,
-    /ICONOPLASM_D1_ROWS_READ_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "300000000"/,
-    "prod internal worker should define a real hard daily rows-read cap instead of relying on alerts",
+    /ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "24000000000"/,
+    "prod internal worker should define a real hard monthly rows-read cap instead of relying on alerts",
   )
   assert.match(
     internalWrangler,
-    /ICONOPLASM_D1_ROWS_WRITTEN_HARD_DAILY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"/,
-    "prod internal worker should define a hard daily rows-written cap as a second stop",
+    /ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "40000000"/,
+    "prod internal worker should define a hard monthly rows-written cap as a second stop",
+  )
+  assert.match(
+    internalWrangler,
+    /ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"/,
+    "prod internal worker should pin the billing cycle day so smart daily allowances reset on the real billing boundary",
+  )
+  assert.match(
+    internalWrangler,
+    /ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"/,
+    "prod internal worker should explicitly declare how much daily burst room to allow under the monthly cap",
   )
 })
 
