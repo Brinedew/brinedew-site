@@ -23,23 +23,45 @@ class FakeRequestStatement {
   async all() {
     if (this.sql.includes("WITH ranked_previews AS")) {
       this.db.previewReads += 1
+      if (this.db.failPreviewHydration) {
+        throw new Error("D1_ERROR: too many SQL variables at offset 1179: SQLITE_ERROR")
+      }
+      const requestedVisionIds = this.args
+        .slice(0, Math.max(0, this.args.length - 1))
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
       return {
-        results: [
-          {
-            vision_id: "anima-v1-3001",
-            gene_symbol: "INS",
-            asset_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            r2_key_medium: "portraits/v1/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/medium.webp",
-            r2_key_thumb: "portraits/v1/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/thumb.webp",
-            is_current: 1,
-            preview_rank: 1,
-          },
-        ],
+        results: requestedVisionIds.map((visionId, index) => ({
+          vision_id: visionId,
+          gene_symbol: index % 2 === 0 ? "INS" : "A1BG",
+          asset_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          r2_key_medium: "portraits/v1/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/medium.webp",
+          r2_key_thumb: "portraits/v1/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/thumb.webp",
+          is_current: 1,
+          preview_rank: 1,
+        })),
       }
     }
 
     if (this.sql.includes("FROM icono_admin_vision_rollup")) {
       this.db.visionRollupReads += 1
+      if (this.db.manyVisionOptions) {
+        return {
+          results: Array.from({ length: 65 }, function (_unused, index) {
+            return {
+              vision_id: "anima-v1-" + String(3001 + index),
+              artist_tag: "anima",
+              artist_name: "Anima Archive",
+              workflow_id: "A1-",
+              prompt_version: String(93 + (index % 3)),
+              variant_slot: String(19 + index),
+              image_count: 10 - (index % 3),
+              live_count: 5,
+              score: 7 - (index % 2),
+            }
+          }),
+        }
+      }
       return {
         results: [
           {
@@ -91,10 +113,12 @@ class FakeRequestStatement {
 }
 
 class FakeRequestDb {
-  constructor() {
+  constructor(options = {}) {
     this.requestReads = 0
     this.visionRollupReads = 0
     this.previewReads = 0
+    this.manyVisionOptions = !!options.manyVisionOptions
+    this.failPreviewHydration = !!options.failPreviewHydration
   }
 
   prepare(sql) {
@@ -113,11 +137,12 @@ function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} })
   return env
 }
 
-function buildEnv({ bindGateway = true } = {}) {
-  const gatewayDb = new FakeRequestDb()
+function buildEnv({ bindGateway = true, dbOptions = {} } = {}) {
+  const gatewayDb = new FakeRequestDb(dbOptions)
   const gatewayEnv = {
     ICONOPLASM_DB: gatewayDb,
     GAME_SESSIONS: null,
+    ICONOPLASM_ADMIN_TOKEN: "test-admin-token",
   }
   const env = {
     ...gatewayEnv,
@@ -200,5 +225,61 @@ test("authenticated gene request state returns rich emulsion options with previe
   )
   assert.equal(env.gatewayDb.visionRollupReads, 1)
   assert.equal(env.gatewayDb.previewReads, 1)
+})
+
+test("authenticated gene request state chunks preview hydration instead of failing on long option lists", async () => {
+  const env = buildEnv({ dbOptions: { manyVisionOptions: true } })
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+          ICONOPLASM_ADMIN_TOKEN: "test-admin-token",
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.authenticated, true)
+  assert.equal(payload.request_options.length, 65)
+  assert.equal(env.gatewayDb.previewReads, 3)
+})
+
+test("admin diagnostics returns request-option failure details instead of another opaque 500", async () => {
+  const env = buildEnv({ dbOptions: { failPreviewHydration: true } })
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/requests/gene/A1BG/diagnostics", {
+      headers: {
+        "x-iconoplasm-admin-token": "test-admin-token",
+      },
+    }),
+    {
+      ICONOPLASM_DB: env.gatewayDb,
+      GAME_SESSIONS: null,
+      ICONOPLASM_ADMIN_TOKEN: "test-admin-token",
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.gene_symbol, "A1BG")
+  assert.equal(payload.request_options.ok, false)
+  assert.match(String(payload.request_options.error || ""), /too many SQL variables/i)
 })
 

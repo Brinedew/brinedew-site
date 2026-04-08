@@ -2892,6 +2892,58 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
+  function renderRequestDiagnosticsMarkup(diagnostics) {
+    var payload = diagnostics || {}
+    var requestOptions = payload.request_options || {}
+    var sample = Array.isArray(requestOptions.sample) ? requestOptions.sample : []
+    var html =
+      '<details class="icono-request-diagnostics">' +
+      '<summary>Admin diagnostics</summary>' +
+      '<div class="icono-request-diagnostics-body">' +
+      '<div class="icono-request-diagnostics-grid">' +
+      '<div><span class="icono-request-diagnostics-label">Gene</span><strong>' +
+      esc(String(payload.gene_symbol || "").trim() || "Unknown") +
+      "</strong></div>" +
+      '<div><span class="icono-request-diagnostics-label">Open requests</span><strong>' +
+      esc(String(Number(payload.open_request_count || 0) || 0)) +
+      "</strong></div>" +
+      '<div><span class="icono-request-diagnostics-label">Request lanes</span><strong>' +
+      esc(String(Number(payload.lane_count || 0) || 0)) +
+      "</strong></div>" +
+      '<div><span class="icono-request-diagnostics-label">Option hydration</span><strong>' +
+      esc(requestOptions.ok ? "OK" : String(requestOptions.error || "Failed")) +
+      "</strong></div>" +
+      "</div>"
+    if (sample.length) {
+      html += '<div class="icono-request-diagnostics-sample"><div class="icono-request-diagnostics-label">Sample options</div><ul>'
+      for (var i = 0; i < sample.length; i++) {
+        var row = sample[i] || {}
+        html +=
+          "<li><strong>" +
+          esc(String(row.label || row.vision_id || "Unknown")) +
+          "</strong>" +
+          (row.secondary_label ? '<span> · ' + esc(String(row.secondary_label || "")) + "</span>" : "") +
+          '<span> · ' +
+          esc(String(Number(row.preview_count || 0) || 0)) +
+          " previews</span></li>"
+      }
+      html += "</ul></div>"
+    }
+    html += "</div></details>"
+    return html
+  }
+
+  function loadGeneRequestDiagnostics(symbol) {
+    return fetchJSON(
+      "/api/iconoplasm/admin/requests/gene/" +
+        encodeURIComponent(symbol) +
+        "/diagnostics",
+      {
+        credentials: "include",
+      },
+    )
+  }
+
   function wireGeneRequestPanel(container, genePayload) {
     if (!container || !genePayload) return
     var panel = container.querySelector("[data-icono-request-panel]")
@@ -3192,7 +3244,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<div class="icono-home-auth-note">Could not load request state.</div>' +
         '<div data-icono-request-note style="font-size:0.92rem;color:#b42318;">' +
         esc(String((error && error.message) || "Unknown error")) +
-        '</div>'
+        "</div>"
+      if (!currentUserIsIconoAdmin) return
+      loadGeneRequestDiagnostics(symbol)
+        .then(function (diagnostics) {
+          body.innerHTML += renderRequestDiagnosticsMarkup(diagnostics)
+        })
+        .catch(function (diagnosticError) {
+          body.innerHTML +=
+            '<details class="icono-request-diagnostics">' +
+            '<summary>Admin diagnostics</summary>' +
+            '<div class="icono-request-diagnostics-body">' +
+            esc(String((diagnosticError && diagnosticError.message) || "Diagnostics unavailable")) +
+            "</div></details>"
+        })
     })
   }
 

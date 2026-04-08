@@ -559,6 +559,74 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   justify-self: flex-start;
 }
 
+.icono-request-diagnostics {
+  margin-top: 0.4rem;
+  border: 1px dashed color-mix(in srgb, var(--ui-border) 60%, var(--dark) 40%);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--light) 92%, #f5eee2 8%);
+}
+
+.icono-request-diagnostics summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.7rem 0.85rem;
+  font-family: var(--codeFont, monospace);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-request-diagnostics summary::-webkit-details-marker {
+  display: none;
+}
+
+.icono-request-diagnostics-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0 0.85rem 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-request-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 0.9rem;
+}
+
+.icono-request-diagnostics-grid div {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.icono-request-diagnostics-grid strong,
+.icono-request-diagnostics-sample strong {
+  color: var(--dark);
+  font-weight: 600;
+}
+
+.icono-request-diagnostics-label {
+  font-family: var(--codeFont, monospace);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-request-diagnostics-sample {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.icono-request-diagnostics-sample ul {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.32rem;
+}
+
 /* ───────── Gallery toolbar ───────── */
 .icono-gallery-toolbar {
   display: flex;
@@ -2265,6 +2333,10 @@ html[data-theme="dark"] .icono-card--brick {
   .icono-request-submit {
     width: 100%;
     justify-self: stretch;
+  }
+
+  .icono-request-diagnostics-grid {
+    grid-template-columns: 1fr;
   }
 
   .icono-home-auth-link {

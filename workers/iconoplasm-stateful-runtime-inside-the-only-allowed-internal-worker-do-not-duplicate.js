@@ -1513,72 +1513,79 @@ async function listGenerationRequestVisionPreviewAssets(
     1,
     Math.min(4, Number.parseInt(String(perVisionLimit || "3"), 10) || 3),
   )
-  const placeholders = safeVisionIds.map(() => "?").join(", ")
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `WITH ranked_previews AS (
-       SELECT
-         pa.vision_id,
-         pa.gene_symbol,
-         lower(pa.asset_sha256) AS asset_sha256,
-         pa.r2_key_medium,
-         pa.r2_key_thumb,
-         pa.r2_key_full,
-         CASE
-           WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
-           ELSE 0
-         END AS is_current,
-         ROW_NUMBER() OVER (
-           PARTITION BY pa.vision_id
-           ORDER BY
-             CASE
-               WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
-               ELSE 0
-             END DESC,
-             pa.created_at DESC,
-             lower(pa.asset_sha256) ASC
-         ) AS preview_rank
-       FROM icono_portrait_assets pa
-       LEFT JOIN icono_publish_state ps
-         ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
-       WHERE pa.vision_id IN (${placeholders})
-         AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
-     )
-     SELECT
-       vision_id,
-       gene_symbol,
-       asset_sha256,
-       r2_key_medium,
-       r2_key_thumb,
-       r2_key_full,
-       is_current,
-       preview_rank
-     FROM ranked_previews
-     WHERE preview_rank <= ?
-     ORDER BY vision_id ASC, preview_rank ASC`,
-  )
-    .bind(...safeVisionIds, previewLimit)
-    .all()
   const base = portraitBase(url, env)
   const previewsByVision = new Map()
-  for (const row of Array.isArray(resp?.results) ? resp.results : []) {
-    const visionId = sanitizeVoteVisionId(row?.vision_id || "")
-    if (!visionId) continue
-    const asset = {
-      gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
-      asset_sha256: normalizeSha256(row?.asset_sha256 || "") || "",
-      is_current: Number(row?.is_current || 0) > 0,
-      preview_rank: Number(row?.preview_rank || 0) || 0,
-      medium_url:
-        row?.r2_key_medium || row?.r2_key_full
-          ? joinUrl(base, row?.r2_key_medium || row?.r2_key_full)
-          : adminPortraitUrl(base, row?.asset_sha256 || "", "medium"),
-      thumb_url:
-        row?.r2_key_thumb || row?.r2_key_medium
-          ? joinUrl(base, row?.r2_key_thumb || row?.r2_key_medium)
-          : adminPortraitUrl(base, row?.asset_sha256 || "", "thumb"),
+  // D1 on Cloudflare rejects very wide IN (...) bind lists. Chunk the preview
+  // hydration query so the public request picker can still show many emulsions
+  // without turning one page load into a 500 for logged-in users.
+  const chunkSize = 32
+  for (let offset = 0; offset < safeVisionIds.length; offset += chunkSize) {
+    const chunk = safeVisionIds.slice(offset, offset + chunkSize)
+    const placeholders = chunk.map(() => "?").join(", ")
+    const resp = await env.ICONOPLASM_DB.prepare(
+      `WITH ranked_previews AS (
+         SELECT
+           pa.vision_id,
+           pa.gene_symbol,
+           lower(pa.asset_sha256) AS asset_sha256,
+           pa.r2_key_medium,
+           pa.r2_key_thumb,
+           pa.r2_key_full,
+           CASE
+             WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+             ELSE 0
+           END AS is_current,
+           ROW_NUMBER() OVER (
+             PARTITION BY pa.vision_id
+             ORDER BY
+               CASE
+                 WHEN lower(COALESCE(ps.current_asset_sha256, '')) = lower(pa.asset_sha256) THEN 1
+                 ELSE 0
+               END DESC,
+               pa.created_at DESC,
+               lower(pa.asset_sha256) ASC
+           ) AS preview_rank
+         FROM icono_portrait_assets pa
+         LEFT JOIN icono_publish_state ps
+           ON upper(ps.gene_symbol) = upper(pa.gene_symbol)
+         WHERE pa.vision_id IN (${placeholders})
+           AND COALESCE(pa.r2_key_medium, pa.r2_key_thumb, pa.r2_key_full, '') <> ''
+       )
+       SELECT
+         vision_id,
+         gene_symbol,
+         asset_sha256,
+         r2_key_medium,
+         r2_key_thumb,
+         r2_key_full,
+         is_current,
+         preview_rank
+       FROM ranked_previews
+       WHERE preview_rank <= ?
+       ORDER BY vision_id ASC, preview_rank ASC`,
+    )
+      .bind(...chunk, previewLimit)
+      .all()
+    for (const row of Array.isArray(resp?.results) ? resp.results : []) {
+      const visionId = sanitizeVoteVisionId(row?.vision_id || "")
+      if (!visionId) continue
+      const asset = {
+        gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+        asset_sha256: normalizeSha256(row?.asset_sha256 || "") || "",
+        is_current: Number(row?.is_current || 0) > 0,
+        preview_rank: Number(row?.preview_rank || 0) || 0,
+        medium_url:
+          row?.r2_key_medium || row?.r2_key_full
+            ? joinUrl(base, row?.r2_key_medium || row?.r2_key_full)
+            : adminPortraitUrl(base, row?.asset_sha256 || "", "medium"),
+        thumb_url:
+          row?.r2_key_thumb || row?.r2_key_medium
+            ? joinUrl(base, row?.r2_key_thumb || row?.r2_key_medium)
+            : adminPortraitUrl(base, row?.asset_sha256 || "", "thumb"),
+      }
+      if (!previewsByVision.has(visionId)) previewsByVision.set(visionId, [])
+      previewsByVision.get(visionId).push(asset)
     }
-    if (!previewsByVision.has(visionId)) previewsByVision.set(visionId, [])
-    previewsByVision.get(visionId).push(asset)
   }
   return previewsByVision
 }
@@ -1633,6 +1640,50 @@ async function listGenerationRequestVisionOptions(env, url) {
     ...row,
     preview_assets: previewsByVision.get(row.vision_id) || [],
   }))
+}
+
+async function generationRequestDiagnostics(env, url, request, symbol) {
+  const normalized = normalizeSymbol(symbol || "")
+  if (!normalized) return { ok: false, error: "Invalid symbol" }
+  const sessionUser = await iconoplasmSessionUser(request, env)
+  const requestRows = await listOpenGenerationRequests(env, { limit: 500, geneSymbol: normalized })
+  const result = {
+    ok: true,
+    gene_symbol: normalized,
+    authenticated: Boolean(sessionUser?.user_id),
+    requester_user_id: normalizeUserId(sessionUser?.user_id || "") || null,
+    open_request_count: Array.isArray(requestRows) ? requestRows.length : 0,
+    lane_count: summarizeGenerationRequestRows(requestRows, {
+      requesterUserId: normalizeUserId(sessionUser?.user_id || ""),
+    }).length,
+    request_options: {
+      ok: true,
+      count: 0,
+      sample: [],
+    },
+  }
+  try {
+    const options = await listGenerationRequestVisionOptions(env, url)
+    result.request_options = {
+      ok: true,
+      count: Array.isArray(options) ? options.length : 0,
+      sample: (Array.isArray(options) ? options : []).slice(0, 8).map((option) => ({
+        vision_id: sanitizeVoteVisionId(option?.vision_id || "") || "",
+        label: sanitizeText(option?.label || "", 255) || "",
+        secondary_label: sanitizeText(option?.secondary_label || "", 255) || "",
+        preview_count: Array.isArray(option?.preview_assets) ? option.preview_assets.length : 0,
+      })),
+    }
+  } catch (error) {
+    result.ok = false
+    result.request_options = {
+      ok: false,
+      error: sanitizeText(error?.message || "Request option hydration failed", 500) || "Request option hydration failed",
+      count: 0,
+      sample: [],
+    }
+  }
+  return result
 }
 
 async function fulfillGenerationRequests(
@@ -12761,6 +12812,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       return done("admin_cost_usage", json(report, 200, { "Cache-Control": "no-store" }))
+    }
+
+    const geneRequestDiagnosticsMatch = path.match(/^\/api\/iconoplasm\/admin\/requests\/gene\/([^/]+)\/diagnostics$/)
+    if (geneRequestDiagnosticsMatch && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_gene_request_diagnostics_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_gene_request_diagnostics_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const symbol = normalizeSymbol(geneRequestDiagnosticsMatch[1])
+      if (!symbol)
+        return done("admin_gene_request_diagnostics_400", json({ error: "Invalid symbol" }, 400))
+      const diagnostics = await generationRequestDiagnostics(env, url, request, symbol)
+      return done(
+        "admin_gene_request_diagnostics",
+        json(diagnostics, 200, { "Cache-Control": "no-store" }),
+      )
     }
 
     if (path === "/api/iconoplasm/admin/coverage" && request.method === "GET") {
