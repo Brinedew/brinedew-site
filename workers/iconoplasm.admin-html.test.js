@@ -21,4 +21,5 @@ test("iconoplasm admin exposes the cost dashboard as a first-class tab", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /Top cycle spenders/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewSummary\(\)/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewCoverage\(\)/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /refreshOverview\(\)/)
 })

@@ -4019,7 +4019,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.activityFilter.addEventListener('input', renderActivityFeed);
         }
         bindActions();
-        refreshOverview();
+        refreshDerivedAdminViews();
       }
 
       init();

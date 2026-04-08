@@ -356,6 +356,19 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   throw new IconoplasmUnclassifiedHandledRouteError(`budget-class:${family}`)
 }
 
+function iconoplasmBudgetClassFromHistoricalRouteFamilyForReport(routeFamily) {
+  try {
+    return iconoplasmBudgetClassFromRouteFamily(routeFamily)
+  } catch {
+    // CHESTERTON'S FENCE: old budget rows already stored before the fail-loud
+    // classifier existed must stay visible in the dashboard, or the curiosity
+    // layer becomes useless right when we need to understand old damage. This
+    // helper is for historical report rows only. Live request attribution must
+    // still throw loudly above instead of quietly inventing a bucket.
+    return "legacy_unclassified_pre_fail_loud_do_not_reuse"
+  }
+}
+
 function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
   if (routeFamily === "internal_repair") return "internal_maintenance"
   if (path.startsWith("/api/iconoplasm/admin/")) {
@@ -5150,7 +5163,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       .toArray()
       .map((row) => ({
         ...row,
-        budget_class: iconoplasmBudgetClassFromRouteFamily(row?.route_family || ""),
+        budget_class: iconoplasmBudgetClassFromHistoricalRouteFamilyForReport(row?.route_family || ""),
       }))
   }
 
