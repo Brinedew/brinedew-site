@@ -2929,6 +2929,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
+  function renderRequestShellMarkup(symbol) {
+    return (
+      '<div class="icono-request-shell">' +
+      '<div class="icono-request-actions">' +
+      renderRequestFormMarkup(symbol) +
+      '<div data-icono-request-my-summary hidden></div>' +
+      '<div data-icono-request-gene-summary hidden></div>' +
+      '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function wireGeneRequestPanel(container, genePayload) {
     if (!container || !genePayload) return
     var panel = container.querySelector("[data-icono-request-panel]")
@@ -2946,37 +2959,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       note.style.color = tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
     }
 
-    function renderPanel(state) {
-      var safeState = state || {}
-      var requestOptions = Array.isArray(safeState.request_options) ? safeState.request_options : []
+    function updateSummaryHosts(myLaneSummary, geneLaneSummary) {
+      var mySummaryHost = body.querySelector("[data-icono-request-my-summary]")
+      var geneSummaryHost = body.querySelector("[data-icono-request-gene-summary]")
+      if (mySummaryHost) {
+        var myHtml = renderGeneRequestSummaryMarkup("Your open requests", myLaneSummary, "my_request_count")
+        mySummaryHost.innerHTML = myHtml
+        mySummaryHost.hidden = !String(myHtml || "").trim()
+      }
+      if (geneSummaryHost) {
+        var geneHtml = renderGeneRequestSummaryMarkup("Open requests on this gene", geneLaneSummary, "request_count")
+        geneSummaryHost.innerHTML = geneHtml
+        geneSummaryHost.hidden = !String(geneHtml || "").trim()
+      }
+    }
+
+    function wireAuthenticatedRequestForm(summaryState) {
+      var safeState = summaryState || {}
       var myLaneSummary = Array.isArray(safeState.my_lane_summary) ? safeState.my_lane_summary : []
       var geneLaneSummary = Array.isArray(safeState.gene_lane_summary) ? safeState.gene_lane_summary : []
-      if (!safeState.authenticated) {
-        body.innerHTML =
-          '<div class="icono-home-auth-copy">' +
-          '<div class="icono-home-auth-kicker">request access</div>' +
-          '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
-          '<div class="icono-home-auth-note">Requests feed the workstation queue. You can choose a specific emulsion ID after login.</div>' +
-          '</div>' +
-          '<div style="display:grid;gap:12px;">' +
-          '<a class="icono-home-auth-link" href="' +
-          esc(voteLoginUrl()) +
-          '">Discord Login</a>' +
-          renderGeneRequestSummaryMarkup('Open requests on this gene', geneLaneSummary, 'request_count') +
-          '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
-          '</div>'
-        return
-      }
-
-      body.innerHTML =
-        '<div class="icono-request-shell">' +
-        '<div class="icono-request-actions">' +
-        renderRequestFormMarkup(symbol) +
-        renderGeneRequestSummaryMarkup("Your open requests", myLaneSummary, "my_request_count") +
-        renderGeneRequestSummaryMarkup("Open requests on this gene", geneLaneSummary, "request_count") +
-        '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
-        "</div>" +
-        "</div>"
+      updateSummaryHosts(myLaneSummary, geneLaneSummary)
 
       var form = body.querySelector("[data-icono-request-form]")
       var hiddenInput = body.querySelector("[data-icono-request-vision]")
@@ -2984,6 +2986,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var results = body.querySelector("[data-icono-request-results]")
       var picker = body.querySelector("[data-icono-request-picker]")
       if (!form || !hiddenInput || !queryInput || !results || !picker) return
+      var requestOptions = []
+      var optionsLoaded = false
+      var optionsLoadingPromise = null
       var activeIndex = -1
       var filteredOptions = []
       var pickerOpen = false
@@ -3000,6 +3005,27 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         pickerOpen = true
         results.hidden = false
         queryInput.setAttribute("aria-expanded", "true")
+      }
+
+      function ensureRequestOptionsLoaded() {
+        if (optionsLoaded) return Promise.resolve(requestOptions)
+        if (optionsLoadingPromise) return optionsLoadingPromise
+        optionsLoadingPromise = fetchJSON("/api/iconoplasm/requests/options", {
+          credentials: "include",
+        })
+          .then(function (payload) {
+            requestOptions = Array.isArray(payload && payload.request_options) ? payload.request_options : []
+            optionsLoaded = true
+            optionsLoadingPromise = null
+            return requestOptions
+          })
+          .catch(function (error) {
+            optionsLoadingPromise = null
+            closeResults()
+            setStatus(String((error && error.message) || "Could not load emulsion lanes."), "error")
+            throw error
+          })
+        return optionsLoadingPromise
       }
 
       function scoreRequestOption(option, query) {
@@ -3056,7 +3082,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         }
       }
 
-      function renderResultsList() {
+      async function renderResultsList() {
+        await ensureRequestOptionsLoaded()
         filteredOptions = filterRequestOptions(queryInput.value)
         var html = renderRequestOptionButtonMarkup(null, hiddenInput.value, true)
         if (filteredOptions.length) {
@@ -3081,28 +3108,34 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
 
       queryInput.addEventListener("focus", function () {
-        renderResultsList()
+        void renderResultsList()
       })
       queryInput.addEventListener("click", function () {
-        renderResultsList()
+        void renderResultsList()
       })
       queryInput.addEventListener("input", function () {
         hiddenInput.value = ""
         activeIndex = -1
-        renderResultsList()
+        void renderResultsList()
       })
       queryInput.addEventListener("keydown", function (event) {
         var items = results.querySelectorAll(".icono-request-option")
         if (event.key === "ArrowDown") {
           event.preventDefault()
-          if (!pickerOpen) renderResultsList()
+          if (!pickerOpen) {
+            void renderResultsList()
+            return
+          }
           activeIndex = Math.min(activeIndex + 1, items.length - 1)
           paintActiveOption()
           return
         }
         if (event.key === "ArrowUp") {
           event.preventDefault()
-          if (!pickerOpen) renderResultsList()
+          if (!pickerOpen) {
+            void renderResultsList()
+            return
+          }
           activeIndex = Math.max(activeIndex - 1, 0)
           paintActiveOption()
           return
@@ -3179,33 +3212,38 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
     }
 
-    function loadState() {
-      body.innerHTML =
-        '<div class="icono-request-shell">' +
-        '<div class="icono-request-actions">' +
-        renderRequestFormMarkup(symbol, {
-          disabled: true,
-          submitLabel: "loading...",
-          placeholder: "Loading emulsion lanes...",
-        }) +
-        '<div class="icono-home-auth-note">Loading request tools...</div>' +
-        '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
-        "</div>" +
-        "</div>"
-      return fetchJSON("/api/iconoplasm/requests/gene/" + encodeURIComponent(symbol), {
+    function loadSummary() {
+      return fetchJSON("/api/iconoplasm/requests/gene/" + encodeURIComponent(symbol) + "/summary", {
         credentials: "include",
       }).then(function (state) {
-        renderPanel(state)
+        if (!state || !state.authenticated) {
+          body.innerHTML =
+            '<div class="icono-home-auth-copy">' +
+            '<div class="icono-home-auth-kicker">request access</div>' +
+            '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
+            '<div class="icono-home-auth-note">Requests feed the workstation queue. You can choose a specific emulsion ID after login.</div>' +
+            '</div>' +
+            '<div style="display:grid;gap:12px;">' +
+            '<a class="icono-home-auth-link" href="' +
+            esc(voteLoginUrl()) +
+            '">Discord Login</a>' +
+            renderGeneRequestSummaryMarkup(
+              "Open requests on this gene",
+              Array.isArray(state && state.gene_lane_summary) ? state.gene_lane_summary : [],
+              "request_count",
+            ) +
+            '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
+            "</div>"
+          return state
+        }
+        wireAuthenticatedRequestForm(state)
         return state
       })
     }
 
-    void loadState().catch(function (error) {
-      body.innerHTML =
-        '<div class="icono-home-auth-note">Could not load request state.</div>' +
-        '<div data-icono-request-note style="font-size:0.92rem;color:#b42318;">' +
-        esc(String((error && error.message) || "Unknown error")) +
-        "</div>"
+    body.innerHTML = renderRequestShellMarkup(symbol)
+    void loadSummary().catch(function (error) {
+      setStatus("Request tools unavailable: " + String((error && error.message) || "Unknown error"), "error")
       if (!currentUserIsIconoAdmin) return
       loadGeneRequestDiagnostics(symbol)
         .then(function (diagnostics) {

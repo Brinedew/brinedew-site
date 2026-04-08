@@ -365,3 +365,55 @@ test("admin diagnostics returns request-option failure details instead of anothe
   assert.match(String(payload.request_options.error || ""), /too many SQL variables/i)
 })
 
+test("gene request summary stays cheap and skips vision-rollup reads", async () => {
+  const env = buildEnv()
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG/summary"),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.authenticated, false)
+  assert.equal(env.gatewayDb.requestReads, 1)
+  assert.equal(env.gatewayDb.visionRollupReads, 0)
+  assert.equal(env.gatewayDb.previewReads, 0)
+  assert.equal(payload.gene_lane_summary[0]?.request_count, 1)
+})
+
+test("request options load through the dedicated options endpoint only for authenticated users", async () => {
+  const env = buildEnv()
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.authenticated, true)
+  assert.equal(payload.request_options.length, 1)
+  assert.equal(payload.request_options[0]?.label, "A1-93-19")
+  assert.equal(env.gatewayDb.visionRollupReads, 1)
+  assert.equal(env.gatewayDb.previewReads, 1)
+})
+
