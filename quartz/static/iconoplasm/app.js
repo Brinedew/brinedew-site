@@ -2799,7 +2799,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       return '<span class="icono-request-option-strip icono-request-option-strip--empty"><span class="icono-request-option-empty">No examples yet</span></span>'
     }
     var html = '<span class="icono-request-option-strip">'
-    for (var i = 0; i < previews.length && i < 3; i++) {
+    for (var i = 0; i < previews.length && i < 6; i++) {
       var asset = previews[i] || {}
       var url = requestOptionPreviewUrl(asset)
       if (!url) continue
@@ -2823,10 +2823,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var optionVisionId = isRandom ? "" : String(item.vision_id || "").trim()
     var isSelected = String(selectedVisionId || "").trim() === optionVisionId
     var primary = isRandom ? "Random default" : requestOptionPrimaryLabel(item)
-    var secondary = isRandom
-      ? "Let the workstation choose the best fresh lane for this gene."
-      : requestOptionSecondaryLabel(item)
-    var meta = isRandom ? ["No emulsion lock"] : requestOptionMetaParts(item)
+    var meta = isRandom ? "" : requestOptionMetaParts(item).join(" · ")
     return (
       '<button type="button" class="icono-request-option' +
       (isSelected ? " is-selected" : "") +
@@ -2835,23 +2832,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(optionVisionId) +
       '">' +
       '<span class="icono-request-option-copy">' +
-      '<span class="icono-request-option-kicker">' +
-      esc(isRandom ? "default lane" : "specific emulsion") +
-      "</span>" +
       '<span class="icono-request-option-title-row">' +
       '<span class="icono-request-option-title">' +
       esc(primary) +
       "</span>" +
-      (meta.length
-        ? '<span class="icono-request-option-badge">' + esc(meta[0]) + "</span>"
-        : "") +
       "</span>" +
-      (secondary
-        ? '<span class="icono-request-option-secondary">' + esc(secondary) + "</span>"
-        : "") +
-      (meta.length > 1
-        ? '<span class="icono-request-option-meta">' + esc(meta.slice(1).join(" · ")) + "</span>"
-        : "") +
+      (meta ? '<span class="icono-request-option-meta">' + esc(meta) + "</span>" : "") +
       "</span>" +
       renderRequestOptionPreviewStripMarkup(item) +
       "</button>"
@@ -3093,7 +3079,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           if (scoreDiff) return scoreDiff
           return requestOptionPrimaryLabel(a).localeCompare(requestOptionPrimaryLabel(b))
         })
-        return matched.slice(0, cleanedQuery ? 18 : 14)
+        return matched.slice(0, cleanedQuery ? 12 : 8)
       }
 
       function paintActiveOption() {

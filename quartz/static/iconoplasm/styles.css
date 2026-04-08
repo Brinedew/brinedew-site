@@ -441,12 +441,12 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 
 .icono-request-option {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
   width: 100%;
-  padding: 0.72rem 0.78rem;
+  padding: 0.62rem 0.72rem;
   border: 1px solid transparent;
-  border-radius: 16px;
+  border-radius: 14px;
   background: color-mix(in srgb, var(--light) 78%, white 22%);
   color: inherit;
   text-align: left;
@@ -474,59 +474,41 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 .icono-request-option-copy {
   min-width: 0;
   display: grid;
-  gap: 0.14rem;
-}
-
-.icono-request-option-kicker {
-  font-family: var(--codeFont, monospace);
-  font-size: 0.65rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
+  gap: 0.12rem;
 }
 
 .icono-request-option-title-row {
   display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
 }
 
 .icono-request-option-title {
-  font-size: 0.98rem;
+  font-size: 0.95rem;
   line-height: 1.2;
   font-weight: 600;
   color: var(--dark);
-  text-wrap: balance;
-}
-
-.icono-request-option-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.45rem;
-  padding: 0.12rem 0.45rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, white 88%);
-  color: color-mix(in srgb, var(--dark) 80%, #7a5532 20%);
   font-family: var(--codeFont, monospace);
-  font-size: 0.72rem;
 }
 
-.icono-request-option-secondary,
 .icono-request-option-meta,
 .icono-request-results-empty,
 .icono-request-option-empty {
-  font-size: 0.82rem;
-  line-height: 1.34;
+  font-size: 0.76rem;
+  line-height: 1.25;
   color: var(--secondary, var(--darkgray));
+  font-family: var(--codeFont, monospace);
 }
 
 .icono-request-option-strip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.28rem;
-  min-width: 6.8rem;
+  width: 100%;
+  overflow: hidden;
+  min-height: 2.4rem;
 }
 
 .icono-request-option-strip--empty {
@@ -534,13 +516,14 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 .icono-request-option-thumb {
-  width: 46px;
-  height: 60px;
-  border-radius: 12px;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   overflow: hidden;
   border: 1px solid rgba(43, 29, 16, 0.08);
   background: color-mix(in srgb, var(--ui-bg) 86%, white 14%);
-  box-shadow: 0 4px 10px rgba(43, 29, 16, 0.07);
+  box-shadow: 0 2px 5px rgba(43, 29, 16, 0.07);
 }
 
 .icono-request-option-thumb.is-current {
