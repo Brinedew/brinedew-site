@@ -2829,6 +2829,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === publicApiPath("/resolve")) return true
   if (path === publicApiPath("/changes")) return true
   if (path.startsWith(publicApiPath("/media/"))) return true
+  if (path.startsWith("/portraits/")) return true
   if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
   if (path.startsWith("/api/iconoplasm/")) {
     return true

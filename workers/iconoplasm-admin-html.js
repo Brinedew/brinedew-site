@@ -2563,7 +2563,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.costTrendMeta.textContent =
             'Cycle ' + String(snapshot.cycle_key || 'unknown') +
             ' · ' + String(snapshot.days_remaining_in_cycle || 0) +
-            ' day(s) left · hard stop only happens when the monthly budget or today\'s elastic allowance is actually exhausted.';
+            " day(s) left · hard stop only happens when the monthly budget or today's elastic allowance is actually exhausted.";
         }
         if (els.costReadTrend) {
           els.costReadTrend.innerHTML = buildCostTrendSvg(cycleDays, snapshot);

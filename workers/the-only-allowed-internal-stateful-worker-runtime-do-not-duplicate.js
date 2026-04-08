@@ -642,6 +642,26 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx)
       }
 
+      // Portrait binaries must resolve even after service-binding hops or route
+      // reassignment, so do not make them depend on the incoming hostname still
+      // looking like iconoplasm.brinedew.bio.
+      if (url.pathname.startsWith("/portraits/")) {
+        const key = url.pathname.replace(/^\/+/, "")
+        const object = await env.ICONOPLASM_PORTRAITS?.get?.(key)
+        if (object) {
+          return new Response(request.method === "HEAD" ? null : object.body, {
+            status: 200,
+            headers: {
+              "Content-Type": object.httpMetadata?.contentType || "image/webp",
+              "Cache-Control": "public, max-age=31536000, immutable",
+              ETag: `"${object.httpEtag || key}"`,
+              "Access-Control-Allow-Origin": "*",
+            },
+          })
+        }
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx)
+      }
+
       // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
       // delegate API/portrait/admin to the iconoplasm handler.
       if (isIconoplasmRequest(url.hostname)) {
