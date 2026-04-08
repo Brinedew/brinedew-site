@@ -226,7 +226,7 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
 test("DO NOT DELETE: cost attribution should name request-picker and admin dashboard routes explicitly", () => {
   const runtime = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js")
 
-  assert.match(runtime, /return "gene_request_state"/, "legacy request-state route should have its own named cost bucket")
+  assert.match(runtime, /return "gene_request_state_gone"/, "legacy request-state route should stay tombstoned as an explicit removed bucket")
   assert.match(runtime, /return "gene_request_summary"/, "request summary route should have its own named cost bucket")
   assert.match(runtime, /return "gene_request_options"/, "request options route should have its own named cost bucket")
   assert.match(runtime, /return "gene_request_submit"/, "request submit route should have its own named cost bucket")
@@ -234,4 +234,5 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
   assert.match(runtime, /return "admin_coverage"/, "admin coverage should not disappear into admin_other")
   assert.match(runtime, /return "admin_requests_open"/, "admin request queue should not disappear into admin_other")
   assert.match(runtime, /return "admin_requests_fulfill"/, "admin request fulfillment should not disappear into admin_other")
+  assert.match(runtime, /LEGACY_GENE_REQUEST_ROUTE_REMOVED/, "deleted request-state route should fail loudly instead of silently lingering")
 })

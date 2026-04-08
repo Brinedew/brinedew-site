@@ -247,7 +247,7 @@ function buildSessionBinding(session) {
   }
 }
 
-test("anonymous gene request state skips the vision-options rollup", async () => {
+test("legacy one-shot gene request route is gone and fails loudly", async () => {
   const env = buildEnv()
   const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG"),
@@ -256,15 +256,34 @@ test("anonymous gene request state skips the vision-options rollup", async () =>
   )
   const payload = await response.json()
 
+  assert.equal(response.status, 410)
+  assert.equal(payload.code, "LEGACY_GENE_REQUEST_ROUTE_REMOVED")
+  assert.match(String(payload.error || ""), /removed/i)
+  assert.equal(env.gatewayDb.visionRollupReads, 0)
+  assert.equal(env.gatewayDb.optionRollupReads, 0)
+  assert.equal(env.gatewayDb.requestReads, 0)
+  assert.equal(env.gatewayDb.previewReads, 0)
+})
+
+test("anonymous gene request summary stays cheap and skips options rollups", async () => {
+  const env = buildEnv()
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG/summary"),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
   assert.equal(response.status, 200)
   assert.equal(payload.authenticated, false)
-  assert.deepEqual(payload.request_options, [])
   assert.equal(env.gatewayDb.requestReads, 1)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
+  assert.equal(env.gatewayDb.optionRollupReads, 0)
+  assert.equal(env.gatewayDb.previewReads, 0)
   assert.equal(payload.gene_lane_summary[0]?.request_count, 1)
 })
 
-test("authenticated gene request state returns rich emulsion options with previews", async () => {
+test("authenticated request options return rich emulsion rows from the dedicated rollup", async () => {
   const env = buildEnv()
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -280,7 +299,7 @@ test("authenticated gene request state returns rich emulsion options with previe
     },
   }
   const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG", {
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
       headers: {
         Cookie: "session=abc123",
       },
@@ -306,7 +325,7 @@ test("authenticated gene request state returns rich emulsion options with previe
   assert.equal(env.gatewayDb.previewReads, 0)
 })
 
-test("authenticated gene request state infers emulsion code from vision id when rollup row omits workflow fields", async () => {
+test("authenticated request options infer emulsion code from vision id when rollup row omits workflow fields", async () => {
   const env = buildEnv()
   env.gatewayDb.prepare = function (sql) {
     const statement = new FakeRequestStatement(this, sql)
@@ -364,7 +383,7 @@ test("authenticated gene request state infers emulsion code from vision id when 
   }
 
   const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG", {
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
       headers: {
         Cookie: "session=abc123",
       },
@@ -378,7 +397,7 @@ test("authenticated gene request state infers emulsion code from vision id when 
   assert.equal(payload.request_options[0]?.label, "A1-3696")
 })
 
-test("authenticated gene request state chunks preview hydration instead of failing on long option lists", async () => {
+test("authenticated request options stay cheap even on long option lists", async () => {
   const env = buildEnv({ dbOptions: { manyVisionOptions: true } })
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -395,7 +414,7 @@ test("authenticated gene request state chunks preview hydration instead of faili
     },
   }
   const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG", {
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
       headers: {
         Cookie: "session=abc123",
       },
@@ -409,6 +428,7 @@ test("authenticated gene request state chunks preview hydration instead of faili
   assert.equal(payload.authenticated, true)
   assert.equal(payload.request_options.length, 65)
   assert.equal(env.gatewayDb.optionRollupReads, 1)
+  assert.equal(env.gatewayDb.requestReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
 })
 
@@ -433,24 +453,6 @@ test("admin diagnostics returns request-option failure details instead of anothe
   assert.equal(payload.gene_symbol, "A1BG")
   assert.equal(payload.request_options.ok, false)
   assert.match(String(payload.request_options.error || ""), /rollup missing or unreadable/i)
-})
-
-test("gene request summary stays cheap and skips vision-rollup reads", async () => {
-  const env = buildEnv()
-  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG/summary"),
-    env,
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload.authenticated, false)
-  assert.equal(env.gatewayDb.requestReads, 1)
-  assert.equal(env.gatewayDb.optionRollupReads, 0)
-  assert.equal(env.gatewayDb.visionRollupReads, 0)
-  assert.equal(env.gatewayDb.previewReads, 0)
-  assert.equal(payload.gene_lane_summary[0]?.request_count, 1)
 })
 
 test("request options load through the dedicated options endpoint only for authenticated users", async () => {

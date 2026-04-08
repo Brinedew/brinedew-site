@@ -255,7 +255,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/requests") return "gene_request_submit"
   if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path)) return "gene_request_summary"
-  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state"
+  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state_gone"
   if (path === "/api/iconoplasm/votes/set") return "votes_set"
   if (path === "/api/iconoplasm/votes/snapshot") return "votes_snapshot"
   if (path === "/api/iconoplasm/admin/me") return "admin_me"
@@ -11538,43 +11538,26 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    const geneRequestMatch = path.match(/^\/api\/iconoplasm\/requests\/gene\/([^/]+)$/)
-    if (geneRequestMatch && request.method === "GET") {
-      if (!env.ICONOPLASM_DB)
-        return done("gene_requests_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      const symbol = normalizeSymbol(geneRequestMatch[1])
-      if (!symbol) return done("gene_requests_400", json({ error: "Invalid symbol" }, 400))
-      const sessionUser = await iconoplasmSessionUser(request, env)
-      const userId = normalizeUserId(sessionUser?.user_id || "")
-      const requestRows = await listOpenGenerationRequests(env, { limit: 500, geneSymbol: symbol })
-      // Cost fence: logged-out visitors only need the queue summary + login CTA.
-      // Do not burn a vision-rollup read for users who cannot submit a request yet.
-      const requestOptions = sessionUser?.user_id
-        ? await listGenerationRequestVisionOptions(env, url)
-        : []
-      const myRows = sessionUser?.user_id
-        ? requestRows.filter((row) => row.requester_user_id === userId)
-        : []
+    const geneRequestLegacyMatch = path.match(/^\/api\/iconoplasm\/requests\/gene\/([^/]+)$/)
+    if (geneRequestLegacyMatch && request.method === "GET") {
+      // Chesterton fence: this old one-shot route used to mix summary state,
+      // auth gating, and request-option hydration in one response. That shape is
+      // exactly how the request picker drifted back into a hot-path cost hazard.
+      // Do not resurrect it as a "convenient aggregate" route. The split
+      // contract is the architecture now:
+      //   GET /api/iconoplasm/requests/gene/:symbol/summary
+      //   GET /api/iconoplasm/requests/options
+      //   POST /api/iconoplasm/requests
       return done(
-        "gene_requests",
+        "gene_request_state_gone_410",
         json(
           {
-            ok: true,
-            authenticated: Boolean(sessionUser?.user_id),
-            can_request: Boolean(sessionUser?.user_id),
-            user: sessionUser?.user_id
-              ? {
-                  id: userId,
-                  username: sessionUser.username || null,
-                }
-              : null,
-            gene_symbol: symbol,
-            request_options: requestOptions,
-            my_open_requests: myRows,
-            my_lane_summary: summarizeGenerationRequestRows(myRows, { requesterUserId: userId }),
-            gene_lane_summary: summarizeGenerationRequestRows(requestRows, { requesterUserId: userId }),
+            ok: false,
+            code: "LEGACY_GENE_REQUEST_ROUTE_REMOVED",
+            error:
+              "This legacy request-state route was removed. Use /api/iconoplasm/requests/gene/:symbol/summary plus /api/iconoplasm/requests/options instead.",
           },
-          200,
+          410,
           { "Cache-Control": "no-store" },
         ),
       )

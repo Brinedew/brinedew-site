@@ -3198,7 +3198,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         })
           .then(function () {
             setStatus("Request queued. The workstation will pick it up on refresh.", "success")
-            return loadState()
+            return loadSummary()
           })
           .catch(function (error) {
             setStatus(String((error && error.message) || "Could not queue request."), "error")
@@ -3213,6 +3213,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
 
     function loadSummary() {
+      // Chesterton fence: summary is intentionally its own request. Do not fold
+      // this back into a one-shot endpoint that also hydrates picker options.
       return fetchJSON("/api/iconoplasm/requests/gene/" + encodeURIComponent(symbol) + "/summary", {
         credentials: "include",
       }).then(function (state) {
@@ -4292,12 +4294,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
     html += renderPublishedEmulsionNotice(g)
+    // Chesterton fence: this shell must exist before any network round-trip.
+    // The old blocking placeholder trained the codebase back toward a monolithic
+    // request-state bootstrap. Keep the shell static and let summary/options
+    // load through their own endpoints.
     html +=
       '<section class="icono-gene-request-surface icono-gene-request-panel" data-icono-request-panel="' +
       esc(g.symbol) +
       '">' +
       '<div data-icono-request-body>' +
-      '<div class="icono-home-auth-note">Loading request state...</div>' +
+      renderRequestShellMarkup(g.symbol) +
       '</div>' +
       '</section>'
     html += "</section>"

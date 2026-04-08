@@ -78,12 +78,17 @@ test("DO NOT DELETE: request picker hot path must stay on a precomputed rollup i
   )
 
   const geneRequestRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    'const geneRequestMatch = path.match(/^\\/api\\/iconoplasm\\/requests\\/gene\\/([^/]+)$/)',
+    'const geneRequestLegacyMatch = path.match(/^\\/api\\/iconoplasm\\/requests\\/gene\\/([^/]+)$/)',
     'if (path === "/api/iconoplasm/requests" && request.method === "POST")',
   )
   assert.match(
     geneRequestRoute,
-    /listGenerationRequestVisionOptions\(/,
-    "legacy request-state route should still source options through the dedicated rollup reader until it is deleted",
+    /LEGACY_GENE_REQUEST_ROUTE_REMOVED/,
+    "legacy request-state route should stay deleted with a loud tombstone response",
+  )
+  assert.doesNotMatch(
+    geneRequestRoute,
+    /listGenerationRequestVisionOptions\(|listOpenGenerationRequests\(/,
+    "legacy request-state route must not quietly regain mixed summary+options logic",
   )
 })
