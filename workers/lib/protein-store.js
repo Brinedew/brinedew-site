@@ -17,6 +17,29 @@ function normalizeKey(uniprot) {
   return (uniprot || "").toUpperCase()
 }
 
+function prefixUpperBound(prefix) {
+  return `${prefix}\uffff`
+}
+
+function clampSearchLimit(limit) {
+  const parsed = Number.parseInt(String(limit || 20), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 20
+  return Math.min(parsed, 100)
+}
+
+function toProteinSearchTokens(query) {
+  return String(query || "")
+    .normalize("NFKC")
+    .match(/[\p{L}\p{N}]+/gu)
+    ?.filter(Boolean) || []
+}
+
+function toProteinSearchMatchQuery(query) {
+  const tokens = toProteinSearchTokens(query)
+  if (!tokens.length) return ""
+  return tokens.map((token) => `${token}*`).join(" ")
+}
+
 function rememberProtein(key, value) {
   if (!key || !value) {
     return
@@ -256,7 +279,7 @@ export async function fetchProteinByUniprot(db, uniprot) {
   let protein = null
   try {
     const row = await db
-      .prepare(`SELECT * FROM proteins WHERE upper(uniprot) = ? LIMIT 1`)
+      .prepare(`SELECT * FROM proteins WHERE uniprot = ? LIMIT 1`)
       .bind(key)
       .first()
     protein = toProteinObject(row)
@@ -280,7 +303,7 @@ export async function fetchProteinByGene(db, gene) {
   let protein = null
   try {
     const row = await db
-      .prepare(`SELECT * FROM proteins WHERE upper(gene) = ? LIMIT 1`)
+      .prepare(`SELECT * FROM proteins WHERE gene = ? LIMIT 1`)
       .bind(key)
       .first()
     protein = toProteinObject(row)
@@ -316,7 +339,7 @@ export async function fetchProteinEmbedding(db, geneSymbol) {
   }
   const row = await db
     .prepare(
-      `SELECT vector, dim FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`,
+      `SELECT vector, dim FROM ${DUAL_EMBEDDINGS_TABLE} WHERE gene_symbol = ? LIMIT 1`,
     )
     .bind(key)
     .first()
@@ -357,7 +380,7 @@ export async function fetchDualEmbeddings(db, geneSymbol) {
   const row = await db
     .prepare(
       `SELECT vector, dim, esm2_vector, esm2_dim, saprot_vector, saprot_dim
-     FROM ${DUAL_EMBEDDINGS_TABLE} WHERE upper(gene_symbol) = ? LIMIT 1`,
+     FROM ${DUAL_EMBEDDINGS_TABLE} WHERE gene_symbol = ? LIMIT 1`,
     )
     .bind(key)
     .first()
@@ -414,67 +437,81 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
     return []
   }
   await ensureStructureFailureTable(db)
-  const needle = query.trim().toLowerCase()
-  const wildcard = `%${needle}%`
-  const prefix = `${needle}%`
+  const cleanedLimit = clampSearchLimit(limit)
+  const exactUpper = query.trim().toUpperCase()
+  const upperPrefixEnd = prefixUpperBound(exactUpper)
+  const ftsQuery = toProteinSearchMatchQuery(query)
+  if (!ftsQuery) return []
 
   // Build exclusion clause if needed
   let excludeClause = ""
   const excludeBindings = []
   if (exclude.length > 0) {
     const placeholders = exclude.map(() => "?").join(",")
-    excludeClause = `AND upper(p.uniprot) NOT IN (${placeholders})`
+    excludeClause = `AND p.uniprot NOT IN (${placeholders})`
     excludeBindings.push(...exclude)
   }
 
   try {
     const statement = `
-      SELECT p.uniprot, p.gene, p.full_name, p.length,
-        MIN(
-          CASE
-            WHEN lower(p.gene) = ? THEN 0
-            WHEN s.normalized = ? THEN 1
-            WHEN lower(p.gene) LIKE ? ESCAPE '\\' THEN 2
-            WHEN s.normalized LIKE ? ESCAPE '\\' THEN 3
-            WHEN lower(p.full_name) LIKE ? ESCAPE '\\' THEN 4
-            WHEN lower(p.gene) LIKE ? ESCAPE '\\' THEN 5
-            WHEN s.normalized LIKE ? ESCAPE '\\' THEN 6
-            WHEN lower(p.full_name) LIKE ? ESCAPE '\\' THEN 7
-            ELSE 8
-          END
-        ) AS match_rank
-      FROM proteins p
-      LEFT JOIN protein_synonyms s ON s.protein_id = p.id
-      LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
-      WHERE (lower(p.gene) LIKE ? OR lower(p.full_name) LIKE ? OR s.normalized LIKE ?)
+      SELECT
+        p.uniprot,
+        p.gene,
+        p.full_name,
+        p.length,
+        CASE
+          WHEN p.gene = ? THEN 0
+          WHEN p.uniprot = ? THEN 1
+          WHEN EXISTS (
+            SELECT 1
+            FROM protein_synonyms s
+            WHERE s.protein_id = p.id
+              AND s.normalized = ?
+          ) THEN 2
+          WHEN p.gene >= ? AND p.gene < ? THEN 3
+          WHEN p.uniprot >= ? AND p.uniprot < ? THEN 4
+          WHEN EXISTS (
+            SELECT 1
+            FROM protein_synonyms s
+            WHERE s.protein_id = p.id
+              AND s.normalized >= ?
+              AND s.normalized < ?
+          ) THEN 5
+          ELSE 6
+        END AS match_rank,
+        bm25(protein_search) AS relevance
+      FROM protein_search
+      JOIN proteins p
+        ON p.id = protein_search.rowid
+      LEFT JOIN structure_failures sf
+        ON sf.uniprot = p.uniprot
+      WHERE protein_search MATCH ?
         AND p.structure_source IS NOT NULL
         AND sf.uniprot IS NULL
         ${excludeClause}
-      GROUP BY p.id
-      ORDER BY match_rank ASC, lower(p.gene) ASC
+      ORDER BY match_rank ASC, relevance ASC, p.gene ASC, p.uniprot ASC
       LIMIT ?`
-    const { results } = await db
+    const response = await db
       .prepare(statement)
       .bind(
-        needle,
-        needle,
-        prefix,
-        prefix,
-        prefix,
-        wildcard,
-        wildcard,
-        wildcard,
-        wildcard,
-        wildcard,
-        wildcard,
+        exactUpper,
+        exactUpper,
+        exactUpper,
+        exactUpper,
+        upperPrefixEnd,
+        exactUpper,
+        upperPrefixEnd,
+        exactUpper,
+        upperPrefixEnd,
+        ftsQuery,
         ...excludeBindings,
-        limit,
+        cleanedLimit,
       )
       .all()
-    return (results || []).map((row) => sanitizeProteinSummary(row))
+    return (response?.results || []).map((row) => sanitizeProteinSummary(row))
   } catch (err) {
     console.warn("GeneGuessr: D1 searchProteins failed", err)
-    return []
+    throw err
   }
 }
 
@@ -488,7 +525,7 @@ export async function getEligibleProteinIds(db) {
     const statement = `
       SELECT p.uniprot
       FROM proteins p
-      LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
+      LEFT JOIN structure_failures sf ON sf.uniprot = p.uniprot
       ${clause}
     `
     const { results } = await db.prepare(statement).all()
@@ -538,7 +575,7 @@ export async function getEligibleProteinsBySurname(db) {
     const statement = `
       SELECT p.uniprot, p.gene_surname
       FROM proteins p
-      LEFT JOIN structure_failures sf ON sf.uniprot = upper(p.uniprot)
+      LEFT JOIN structure_failures sf ON sf.uniprot = p.uniprot
       WHERE p.structure_source IS NOT NULL
         AND p.gene_summary IS NOT NULL
         AND sf.uniprot IS NULL

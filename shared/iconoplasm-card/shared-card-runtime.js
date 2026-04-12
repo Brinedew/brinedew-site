@@ -1656,7 +1656,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       },
     }
     var snapshotPrimed = false
-    var visibilityObserver = null
+    var snapshotPrimePromise = null
     var candidateRef = "a:" + symbol + "|" + assetSha
     var candidateImageId = Number(cfg.candidateImageId || 0)
     if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0
@@ -1738,97 +1738,84 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       // C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction states).
       // Keep the selected vote lit on click, not after the network round-trip. This is shared
       // by both the website and extension, so sluggish feedback here propagates everywhere.
-      var previousSnapshot = cloneSnapshot(state.snapshot)
-      var currentVote = Number(previousSnapshot.user_vote || 0)
-      var requestedVote = Number(voteValue || 0)
-      var nextVote = currentVote === requestedVote ? 0 : requestedVote
-      state.snapshot = optimisticSnapshot(nextVote)
-      state.pending = true
-      notifySnapshot()
-      render()
-      fetchJSON(
-        "/api/iconoplasm/votes/set",
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            candidate_ref: candidateRef,
-            symbol: symbol,
-            asset_sha256: assetSha,
-            candidate_image_id: candidateImageId || undefined,
-            vision_id: visionId,
-            vote_value: nextVote,
-          }),
-        },
-        {
-          apiBaseUrl: cfg.apiBaseUrl,
-          fetchImpl: cfg.fetchImpl,
-        },
-      )
-        .then(function (data) {
-          state.authenticated = true
-          state.snapshot = (data && data.snapshot) || state.snapshot
-          notifySnapshot()
-          if (typeof cfg.onVoteCommitted === "function") {
-            try {
-              cfg.onVoteCommitted(data, state)
-            } catch (callbackError) {
-              if (typeof cfg.onError === "function") {
-                cfg.onError("vote_committed", callbackError)
+      var ready =
+        cfg.deferSnapshot && !snapshotPrimed
+          ? ensureSnapshot().catch(function () {
+              return null
+            })
+          : Promise.resolve()
+      ready.then(function () {
+        var previousSnapshot = cloneSnapshot(state.snapshot)
+        var currentVote = Number(previousSnapshot.user_vote || 0)
+        var requestedVote = Number(voteValue || 0)
+        var nextVote = currentVote === requestedVote ? 0 : requestedVote
+        state.snapshot = optimisticSnapshot(nextVote)
+        state.pending = true
+        notifySnapshot()
+        render()
+        fetchJSON(
+          "/api/iconoplasm/votes/set",
+          {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              candidate_ref: candidateRef,
+              symbol: symbol,
+              asset_sha256: assetSha,
+              candidate_image_id: candidateImageId || undefined,
+              vision_id: visionId,
+              vote_value: nextVote,
+            }),
+          },
+          {
+            apiBaseUrl: cfg.apiBaseUrl,
+            fetchImpl: cfg.fetchImpl,
+          },
+        )
+          .then(function (data) {
+            state.authenticated = true
+            state.snapshot = (data && data.snapshot) || state.snapshot
+            notifySnapshot()
+            if (typeof cfg.onVoteCommitted === "function") {
+              try {
+                cfg.onVoteCommitted(data, state)
+              } catch (callbackError) {
+                if (typeof cfg.onError === "function") {
+                  cfg.onError("vote_committed", callbackError)
+                }
               }
             }
-          }
-        })
-        .catch(function (err) {
-          state.snapshot = previousSnapshot
-          if (
-            Number((err && err.status) || 0) === 401 ||
-            (err && err.payload && err.payload.code === "AUTH_REQUIRED")
-          ) {
-            state.authenticated = false
+          })
+          .catch(function (err) {
+            state.snapshot = previousSnapshot
+            if (
+              Number((err && err.status) || 0) === 401 ||
+              (err && err.payload && err.payload.code === "AUTH_REQUIRED")
+            ) {
+              state.authenticated = false
+              notifySnapshot()
+              if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err)
+              return
+            }
             notifySnapshot()
-            if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err)
-            return
-          }
-          notifySnapshot()
-          if (typeof cfg.onError === "function") cfg.onError("set", err)
-        })
-        .finally(function () {
-          state.pending = false
-          render()
-        })
-    }
-
-    function disconnectObserver() {
-      if (!visibilityObserver) return
-      visibilityObserver.disconnect()
-      visibilityObserver = null
+            if (typeof cfg.onError === "function") cfg.onError("set", err)
+          })
+          .finally(function () {
+            state.pending = false
+            render()
+          })
+      })
     }
 
     function ensureSnapshot() {
-      if (snapshotPrimed) return
+      if (snapshotPrimePromise) return snapshotPrimePromise
+      if (snapshotPrimed) return Promise.resolve()
       snapshotPrimed = true
-      disconnectObserver()
-      void refreshSnapshot()
-    }
-
-    function primeSnapshotOnVisibility() {
-      if (snapshotPrimed || typeof IntersectionObserver !== "function") return
-      visibilityObserver = new IntersectionObserver(
-        function (entries) {
-          for (var i = 0; i < entries.length; i++) {
-            if (entries[i] && entries[i].isIntersecting) {
-              ensureSnapshot()
-              return
-            }
-          }
-        },
-        {
-          rootMargin: String(cfg.visibleRootMargin || "240px 0px"),
-        },
-      )
-      visibilityObserver.observe(box)
+      snapshotPrimePromise = refreshSnapshot().finally(function () {
+        snapshotPrimePromise = null
+      })
+      return snapshotPrimePromise
     }
 
     if (upBtn) {
@@ -1847,10 +1834,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     render()
 
     if (cfg.deferSnapshot) {
-      primeSnapshotOnVisibility()
-      box.addEventListener("pointerenter", ensureSnapshot, { once: true })
-      box.addEventListener("focusin", ensureSnapshot, { once: true })
-      box.addEventListener("touchstart", ensureSnapshot, { once: true, passive: true })
+      // Cost fence: defer means "no personalized snapshot request until the user actually
+      // tries to vote". Priming on hover/visibility recreated the same per-card request flood.
       return { ensureSnapshot: ensureSnapshot }
     }
 

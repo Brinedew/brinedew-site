@@ -47,7 +47,10 @@
   const DEFAULT_PORTRAIT_DIMENSIONS = Object.freeze({ width: 768, height: 1024 })
   const DISCOVERY_HOVER_DWELL_MS = 900
   const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
+  const DISCOVERY_AUTH_CACHE_TTL_MS = 5 * 60 * 1000
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
+  const GENE_DETAIL_VISIBLE_LIMIT = 16
+  const PORTRAIT_VISIBLE_LIMIT = 8
   const escapeHtml = IconoCardShared.escapeHtml
 
   function extensionApiFetch(input, init = {}) {
@@ -508,6 +511,11 @@
   const guestDiscoverySymbols = new Set()
   let guestDiscoveryMergePromise = null
   let discoveryBufferFlushScheduled = false
+  let discoveryAuthState = {
+    checkedAt: 0,
+    authenticated: null,
+    discoveredSymbols: [],
+  }
   let portraitLoadToken = 0
   const portraitDataUrlCache = new Map()
   const portraitDataUrlPromiseCache = new Map()
@@ -535,7 +543,6 @@
   // bulk prewarm work, which is why "simple text loads seconds later" showed up in practice.
   const GENE_DETAIL_WARM_BATCH_SIZE = 8
   const PORTRAIT_WARM_BATCH_SIZE = 6
-  const GENE_DETAIL_VISIBLE_LIMIT = 80
   const GENE_DETAIL_VIEWPORT_ABOVE_PX = 160
   const GENE_DETAIL_VIEWPORT_BELOW_PX = 960
 
@@ -646,18 +653,70 @@
     await persistGuestDiscoverySymbols()
   }
 
+  function rememberDiscoveryAuthState(payload) {
+    const authenticated = !!(payload && payload.authenticated)
+    discoveryAuthState = {
+      checkedAt: Date.now(),
+      authenticated,
+      discoveredSymbols: authenticated
+        ? normalizeDiscoverySymbolList(payload && payload.discovered_symbols)
+        : [],
+    }
+    if (authenticated) {
+      for (const symbol of discoveryAuthState.discoveredSymbols) {
+        discoveredPageSymbols.add(symbol)
+      }
+    }
+    return discoveryAuthState
+  }
+
+  function hasFreshDiscoveryAuthState() {
+    return (
+      Number(discoveryAuthState.checkedAt || 0) > 0 &&
+      Date.now() - Number(discoveryAuthState.checkedAt || 0) < DISCOVERY_AUTH_CACHE_TTL_MS
+    )
+  }
+
+  function resetDiscoveryAuthState() {
+    discoveryAuthState = {
+      checkedAt: 0,
+      authenticated: null,
+      discoveredSymbols: [],
+    }
+  }
+
   async function fetchDiscoveryState() {
     try {
       const response = await extensionApiFetch(ICONOPLASM_DISCOVERY_STATE_URL, {
         method: "GET",
         credentials: "include",
       })
-      if (!response.ok) return null
-      return await response.json().catch(() => null)
+      if (!response.ok) {
+        resetDiscoveryAuthState()
+        return null
+      }
+      const payload = await response.json().catch(() => null)
+      if (payload && typeof payload === "object") {
+        rememberDiscoveryAuthState(payload)
+      } else {
+        resetDiscoveryAuthState()
+      }
+      return payload
     } catch (err) {
+      resetDiscoveryAuthState()
       console.error("[Iconoplasm] discovery state fetch error:", err)
       return null
     }
+  }
+
+  async function ensureDiscoveryStateFresh() {
+    if (hasFreshDiscoveryAuthState()) {
+      return {
+        authenticated: Boolean(discoveryAuthState.authenticated),
+        discovered_symbols: discoveryAuthState.discoveredSymbols.slice(),
+      }
+    }
+    return fetchDiscoveryState()
   }
 
   async function mergeGuestDiscoveriesIfSignedIn() {
@@ -665,7 +724,7 @@
     const pendingSymbols = Array.from(guestDiscoverySymbols)
     if (!pendingSymbols.length) return null
     guestDiscoveryMergePromise = (async () => {
-      const state = await fetchDiscoveryState()
+      const state = await ensureDiscoveryStateFresh()
       if (!state || !state.authenticated) return null
       const knownSymbols = normalizeDiscoverySymbolList(state.discovered_symbols)
       for (const symbol of knownSymbols) discoveredPageSymbols.add(symbol)
@@ -680,6 +739,12 @@
         return null
       }
       const payload = await mergeResponse.json().catch(() => null)
+      if (payload && typeof payload === "object") {
+        rememberDiscoveryAuthState({
+          authenticated: true,
+          discovered_symbols: payload.discovered_symbols,
+        })
+      }
       const mergedSymbols = normalizeDiscoverySymbolList((payload && payload.discovered_symbols) || pendingSymbols)
       for (const symbol of mergedSymbols) discoveredPageSymbols.add(symbol)
       await removeMergedGuestDiscoveries(pendingSymbols)
@@ -746,6 +811,11 @@
     discoveryInFlightSymbols.add(normalizedSymbol)
     markDiscoveryCooldown(normalizedSymbol)
     try {
+      const authState = await ensureDiscoveryStateFresh()
+      if (authState && authState.authenticated === false) {
+        await rememberGuestDiscovery(normalizedSymbol)
+        return
+      }
       const response = await extensionApiFetch(ICONOPLASM_DISCOVERY_ENCOUNTER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -769,11 +839,13 @@
       }
       const payload = await response.json().catch(() => null)
       if (payload && payload.authenticated && payload.recorded) {
+        rememberDiscoveryAuthState(payload)
         discoveredPageSymbols.add(normalizedSymbol)
         if (guestDiscoverySymbols.size > 0) {
           scheduleDiscoveryBufferFlush()
         }
       } else if (payload && payload.authenticated === false) {
+        rememberDiscoveryAuthState(payload)
         await rememberGuestDiscovery(normalizedSymbol)
       }
     } catch (err) {
@@ -940,7 +1012,7 @@
     }
   }
 
-  function scheduleWarmVisiblePortraits(limit = 24) {
+  function scheduleWarmVisiblePortraits(limit = PORTRAIT_VISIBLE_LIMIT) {
     if (portraitWarmScheduled) return
     portraitWarmScheduled = true
     deferPortraitWarm(() => {
@@ -1826,6 +1898,7 @@
       candidateImageId: Number(portrait.candidate_image_id || 0),
       apiBaseUrl: ICONOPLASM_API_BASE,
       fetchImpl: extensionApiFetch,
+      deferSnapshot: true,
       onAuthRequired: showVoteLoginPopup,
       onError: (phase, err) => {
         console.error("[Iconoplasm] extension vote " + phase + " error:", err)

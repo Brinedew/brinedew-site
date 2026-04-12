@@ -64,6 +64,80 @@ class FakeDailyBudgetNamespace {
     return String(name || "")
   }
 
+  smartDailyLimit(monthlyRemainingAtStartOfDay, daysRemainingInCycle, burstMultiplier) {
+    const remaining = Math.max(0, Number(monthlyRemainingAtStartOfDay || 0) || 0)
+    const daysRemaining = Math.max(1, Number(daysRemainingInCycle || 1) || 1)
+    const burst = Math.max(1, Number(burstMultiplier || 1) || 1)
+    if (remaining <= 0) return 0
+    const baseAllowance = Math.ceil(remaining / daysRemaining)
+    return Math.min(remaining, Math.max(baseAllowance, Math.ceil(baseAllowance * burst)))
+  }
+
+  cycleDayRowsWithBudgetHistory(cycleKey, budgets) {
+    const cycleStart = new Date(String(cycleKey || "") + "T00:00:00.000Z")
+    const cycleStartMs = cycleStart.getTime()
+    const nextCycleStartMs = Number.isFinite(cycleStartMs)
+      ? Date.UTC(
+          cycleStart.getUTCFullYear(),
+          cycleStart.getUTCMonth() + 1,
+          cycleStart.getUTCDate(),
+          0,
+          0,
+          0,
+          0,
+        )
+      : NaN
+    const rowsReadMonthlyLimit = Math.max(0, Number(budgets?.rowsReadMonthlyLimit || 0) || 0)
+    const rowsWrittenMonthlyLimit = Math.max(0, Number(budgets?.rowsWrittenMonthlyLimit || 0) || 0)
+    const burstMultiplier = Math.max(1, Number(budgets?.dailyBurstMultiplier || 1) || 1)
+    let cycleRowsReadBeforeDay = 0
+    let cycleRowsWrittenBeforeDay = 0
+    return Array.from(this.dayRows.values())
+      .filter((item) => item.cycle_key === cycleKey)
+      .sort((left, right) => String(left?.day_key || "").localeCompare(String(right?.day_key || "")))
+      .map((row) => {
+        const dayStart = new Date(String(row?.day_key || "") + "T00:00:00.000Z")
+        const dayStartMs = dayStart.getTime()
+        const daysRemainingInCycle =
+          Number.isFinite(nextCycleStartMs) && Number.isFinite(dayStartMs)
+            ? Math.max(1, Math.ceil((nextCycleStartMs - dayStartMs) / 86400000))
+            : 1
+        const rowsRead = Math.max(0, Number(row?.rows_read || 0) || 0)
+        const rowsWritten = Math.max(0, Number(row?.rows_written || 0) || 0)
+        const rowsReadDailySmartLimit =
+          rowsReadMonthlyLimit > 0
+            ? this.smartDailyLimit(
+                rowsReadMonthlyLimit - cycleRowsReadBeforeDay,
+                daysRemainingInCycle,
+                burstMultiplier,
+              )
+            : null
+        const rowsWrittenDailySmartLimit =
+          rowsWrittenMonthlyLimit > 0
+            ? this.smartDailyLimit(
+                rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeDay,
+                daysRemainingInCycle,
+                burstMultiplier,
+              )
+            : null
+        const out = {
+          ...row,
+          days_remaining_in_cycle: daysRemainingInCycle,
+          rows_read_daily_smart_limit: rowsReadDailySmartLimit,
+          rows_written_daily_smart_limit: rowsWrittenDailySmartLimit,
+          rows_read_daily_remaining:
+            rowsReadDailySmartLimit !== null ? Math.max(0, rowsReadDailySmartLimit - rowsRead) : null,
+          rows_written_daily_remaining:
+            rowsWrittenDailySmartLimit !== null
+              ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten)
+              : null,
+        }
+        cycleRowsReadBeforeDay += rowsRead
+        cycleRowsWrittenBeforeDay += rowsWritten
+        return out
+      })
+  }
+
   get(id) {
     return {
       fetch: async (request) => {
@@ -78,6 +152,7 @@ class FakeDailyBudgetNamespace {
           dailyBurstMultiplier: Math.max(1, Number(payload?.budgets?.dailyBurstMultiplier || 1) || 1),
         }
         const row = this.dayRows.get(dayKey) || {
+          day_key: dayKey,
           cycle_key: cycleKey,
           rows_read: 0,
           rows_written: 0,
@@ -94,6 +169,7 @@ class FakeDailyBudgetNamespace {
           row.rows_written += deltaRowsWritten
           row.query_count += deltaRowsRead > 0 || deltaRowsWritten > 0 ? 1 : 0
           row.request_count += deltaRequestCount
+          row.day_key = dayKey
           row.updated_at = "2026-04-08T00:00:00Z"
           this.dayRows.set(dayKey, row)
           if (payload?.attribution) {
@@ -142,36 +218,18 @@ class FakeDailyBudgetNamespace {
         const cycleRowsWrittenBeforeToday = Math.max(0, cycleTotals.rows_written - currentRow.rows_written)
         const smartDailyReadLimit =
           budgets.rowsReadMonthlyLimit > 0
-            ? Math.min(
-                Math.max(0, budgets.rowsReadMonthlyLimit - cycleRowsReadBeforeToday),
-                Math.max(
-                  Math.ceil(
-                    Math.max(0, budgets.rowsReadMonthlyLimit - cycleRowsReadBeforeToday) /
-                      Math.max(1, daysRemainingInCycle),
-                  ),
-                  Math.ceil(
-                    (Math.max(0, budgets.rowsReadMonthlyLimit - cycleRowsReadBeforeToday) /
-                      Math.max(1, daysRemainingInCycle)) *
-                      budgets.dailyBurstMultiplier,
-                  ),
-                ),
+            ? this.smartDailyLimit(
+                budgets.rowsReadMonthlyLimit - cycleRowsReadBeforeToday,
+                daysRemainingInCycle,
+                budgets.dailyBurstMultiplier,
               )
             : null
         const smartDailyWriteLimit =
           budgets.rowsWrittenMonthlyLimit > 0
-            ? Math.min(
-                Math.max(0, budgets.rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeToday),
-                Math.max(
-                  Math.ceil(
-                    Math.max(0, budgets.rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeToday) /
-                      Math.max(1, daysRemainingInCycle),
-                  ),
-                  Math.ceil(
-                    (Math.max(0, budgets.rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeToday) /
-                      Math.max(1, daysRemainingInCycle)) *
-                      budgets.dailyBurstMultiplier,
-                  ),
-                ),
+            ? this.smartDailyLimit(
+                budgets.rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeToday,
+                daysRemainingInCycle,
+                budgets.dailyBurstMultiplier,
               )
             : null
         const snapshot = {
@@ -233,6 +291,7 @@ class FakeDailyBudgetNamespace {
           const cycleAttribution = Array.from(this.attributionRows.values()).filter((item) => item.cycle_key === cycleKey)
           return Response.json({
             snapshot,
+            cycle_days: this.cycleDayRowsWithBudgetHistory(cycleKey, budgets),
             daily_attribution: dailyAttribution,
             cycle_attribution: cycleAttribution,
           })
@@ -332,6 +391,12 @@ test("smart budget curiosity layer reports attributed daily usage", async () => 
   assert.equal(reportResponse.status, 200)
   assert.equal(reportPayload?.snapshot?.rows_read, 3)
   assert.equal(reportPayload?.snapshot?.cycle_rows_read, 3)
+  assert.equal(Array.isArray(reportPayload?.cycle_days), true)
+  assert.equal(reportPayload?.cycle_days?.[0]?.rows_read, 3)
+  assert.equal(
+    reportPayload?.cycle_days?.[0]?.rows_read_daily_smart_limit,
+    reportPayload?.snapshot?.rows_read_daily_smart_limit,
+  )
   assert.equal(Array.isArray(reportPayload?.daily_attribution), true)
   assert.deepEqual(reportPayload?.daily_attribution?.[0], {
     day_key: reportPayload.snapshot.day_key,

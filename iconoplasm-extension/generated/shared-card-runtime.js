@@ -9789,7 +9789,7 @@
     }
     function labLabelEmulsionNumber(portrait) {
       var safePortrait = portrait && typeof portrait === "object" ? portrait : {};
-      var explicitArtistId = String(safePortrait.artist_id || safePortrait.emulsion_id || "").trim();
+      var explicitArtistId = String(safePortrait.emulsion_id || safePortrait.artist_id || "").trim();
       if (explicitArtistId) return explicitArtistId;
       var visionArtistId = labLabelArtistIdFromVision(safePortrait.vision_id);
       if (visionArtistId) return visionArtistId;
@@ -10301,6 +10301,7 @@
         }
       };
       var snapshotPrimed = false;
+      var snapshotPrimePromise = null;
       var visibilityObserver = null;
       var candidateRef = "a:" + symbol + "|" + assetSha;
       var candidateImageId = Number(cfg.candidateImageId || 0);
@@ -10370,59 +10371,64 @@
         });
       }
       function submitVote(voteValue) {
-        var previousSnapshot = cloneSnapshot(state.snapshot);
-        var currentVote = Number(previousSnapshot.user_vote || 0);
-        var requestedVote = Number(voteValue || 0);
-        var nextVote = currentVote === requestedVote ? 0 : requestedVote;
-        state.snapshot = optimisticSnapshot(nextVote);
-        state.pending = true;
-        notifySnapshot();
-        render();
-        fetchJSON(
-          "/api/iconoplasm/votes/set",
-          {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              candidate_ref: candidateRef,
-              symbol,
-              asset_sha256: assetSha,
-              candidate_image_id: candidateImageId || void 0,
-              vision_id: visionId,
-              vote_value: nextVote
-            })
-          },
-          {
-            apiBaseUrl: cfg.apiBaseUrl,
-            fetchImpl: cfg.fetchImpl
-          }
-        ).then(function(data) {
-          state.authenticated = true;
-          state.snapshot = data && data.snapshot || state.snapshot;
+        var ready = cfg.deferSnapshot && !snapshotPrimed ? ensureSnapshot().catch(function() {
+          return null;
+        }) : Promise.resolve();
+        ready.then(function() {
+          var previousSnapshot = cloneSnapshot(state.snapshot);
+          var currentVote = Number(previousSnapshot.user_vote || 0);
+          var requestedVote = Number(voteValue || 0);
+          var nextVote = currentVote === requestedVote ? 0 : requestedVote;
+          state.snapshot = optimisticSnapshot(nextVote);
+          state.pending = true;
           notifySnapshot();
-          if (typeof cfg.onVoteCommitted === "function") {
-            try {
-              cfg.onVoteCommitted(data, state);
-            } catch (callbackError) {
-              if (typeof cfg.onError === "function") {
-                cfg.onError("vote_committed", callbackError);
+          render();
+          fetchJSON(
+            "/api/iconoplasm/votes/set",
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                candidate_ref: candidateRef,
+                symbol,
+                asset_sha256: assetSha,
+                candidate_image_id: candidateImageId || void 0,
+                vision_id: visionId,
+                vote_value: nextVote
+              })
+            },
+            {
+              apiBaseUrl: cfg.apiBaseUrl,
+              fetchImpl: cfg.fetchImpl
+            }
+          ).then(function(data) {
+            state.authenticated = true;
+            state.snapshot = data && data.snapshot || state.snapshot;
+            notifySnapshot();
+            if (typeof cfg.onVoteCommitted === "function") {
+              try {
+                cfg.onVoteCommitted(data, state);
+              } catch (callbackError) {
+                if (typeof cfg.onError === "function") {
+                  cfg.onError("vote_committed", callbackError);
+                }
               }
             }
-          }
-        }).catch(function(err) {
-          state.snapshot = previousSnapshot;
-          if (Number(err && err.status || 0) === 401 || err && err.payload && err.payload.code === "AUTH_REQUIRED") {
-            state.authenticated = false;
+          }).catch(function(err) {
+            state.snapshot = previousSnapshot;
+            if (Number(err && err.status || 0) === 401 || err && err.payload && err.payload.code === "AUTH_REQUIRED") {
+              state.authenticated = false;
+              notifySnapshot();
+              if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err);
+              return;
+            }
             notifySnapshot();
-            if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err);
-            return;
-          }
-          notifySnapshot();
-          if (typeof cfg.onError === "function") cfg.onError("set", err);
-        }).finally(function() {
-          state.pending = false;
-          render();
+            if (typeof cfg.onError === "function") cfg.onError("set", err);
+          }).finally(function() {
+            state.pending = false;
+            render();
+          });
         });
       }
       function disconnectObserver() {
@@ -10431,10 +10437,14 @@
         visibilityObserver = null;
       }
       function ensureSnapshot() {
-        if (snapshotPrimed) return;
+        if (snapshotPrimePromise) return snapshotPrimePromise;
+        if (snapshotPrimed) return Promise.resolve();
         snapshotPrimed = true;
         disconnectObserver();
-        void refreshSnapshot();
+        snapshotPrimePromise = refreshSnapshot().finally(function() {
+          snapshotPrimePromise = null;
+        });
+        return snapshotPrimePromise;
       }
       function primeSnapshotOnVisibility() {
         if (snapshotPrimed || typeof IntersectionObserver !== "function") return;

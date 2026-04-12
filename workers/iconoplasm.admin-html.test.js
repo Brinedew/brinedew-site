@@ -23,3 +23,9 @@ test("iconoplasm admin exposes the cost dashboard as a first-class tab", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewCoverage\(\)/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /refreshOverview\(\)/)
 })
+
+test("iconoplasm admin trend chart uses per-day smart allowance history", () => {
+  assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rows_read_daily_smart_limit/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Current smart daily allowance/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /data-limit="' \+ esc\(String\(dailyLimit\)\)/)
+})

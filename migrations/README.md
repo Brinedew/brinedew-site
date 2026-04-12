@@ -6,6 +6,7 @@
 | ------------------------- | ---------------------- | ------------------------------------------ |
 | `proteins`                | step_4_upload_to_d1.py | Rebuilt on every pipeline run              |
 | `protein_synonyms`        | step_4_upload_to_d1.py | Rebuilt on every pipeline run              |
+| `protein_search`          | migration triggers     | FTS mirror derived from proteins/synonyms  |
 | `protein_embeddings`      | upload_embeddings.py   | **Static reference data - upload once**    |
 | `users`, `games`, `stats` | Worker runtime         | User/game state, never touch in migrations |
 | `structure_failures`      | Worker runtime         | Cache of failed structure fetches          |
@@ -24,5 +25,6 @@ If you need to change the embeddings schema:
 ## How it works
 
 - `proteins` and `protein_synonyms` are rebuilt from scratch on each pipeline run
+- `protein_search` is a derived FTS mirror kept in sync by D1 triggers during that rebuild
 - `protein_embeddings` is independent - keyed by gene symbol, not protein ID
 - The worker joins proteins to embeddings via gene symbol for similarity scoring

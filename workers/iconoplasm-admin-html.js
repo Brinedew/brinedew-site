@@ -2412,10 +2412,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var padBottom = 34;
         var usableWidth = width - padLeft - padRight;
         var usableHeight = height - padTop - padBottom;
-        var dailyLimit = safeNum(snapshot && snapshot.rows_read_daily_smart_limit);
+        var allowanceValues = rows.map(function (row) {
+          return safeNum(row && row.rows_read_daily_smart_limit);
+        });
+        var currentDailyLimit = allowanceValues.length
+          ? allowanceValues[allowanceValues.length - 1]
+          : safeNum(snapshot && snapshot.rows_read_daily_smart_limit);
         var maxValue = rows.reduce(function (acc, row) {
-          return Math.max(acc, safeNum(row && row.rows_read));
-        }, dailyLimit);
+          return Math.max(acc, safeNum(row && row.rows_read), safeNum(row && row.rows_read_daily_smart_limit));
+        }, currentDailyLimit);
         maxValue = Math.max(maxValue, 1);
         var xStep = rows.length <= 1 ? 0 : usableWidth / (rows.length - 1);
         function xAt(index) { return padLeft + (xStep * index); }
@@ -2424,36 +2429,43 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         var area = '';
         var line = '';
+        var allowanceLine = '';
         rows.forEach(function (row, index) {
           var x = xAt(index);
           var y = yAt(row && row.rows_read);
           area += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
           line += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+          allowanceLine += (index === 0 ? 'M' : 'L') + x + ' ' + yAt(row && row.rows_read_daily_smart_limit) + ' ';
         });
         if (rows.length) {
           area += 'L' + xAt(rows.length - 1) + ' ' + (padTop + usableHeight) + ' ';
           area += 'L' + xAt(0) + ' ' + (padTop + usableHeight) + ' Z';
         }
-        var limitY = yAt(dailyLimit);
         var points = rows.map(function (row, index) {
           var value = safeNum(row && row.rows_read);
+          var limit = safeNum(row && row.rows_read_daily_smart_limit);
           var x = xAt(index);
           var y = yAt(value);
           var dateLabel = String(row && row.day_key || '');
-          return '<circle cx="' + x + '" cy="' + y + '" r="5" fill="#b84a26" stroke="#fff9f3" stroke-width="2" tabindex="0" role="button" data-cost-trend-point="true" data-day="' + esc(dateLabel) + '" data-reads="' + esc(String(value)) + '" data-limit="' + esc(String(dailyLimit)) + '"><title>' + esc(dateLabel + ': ' + formatCompactNumber(value) + ' rows read') + '</title></circle>';
+          return '<circle cx="' + x + '" cy="' + y + '" r="5" fill="#b84a26" stroke="#fff9f3" stroke-width="2" tabindex="0" role="button" data-cost-trend-point="true" data-day="' + esc(dateLabel) + '" data-reads="' + esc(String(value)) + '" data-limit="' + esc(String(limit)) + '"><title>' + esc(dateLabel + ': ' + formatCompactNumber(value) + ' rows read / ' + compactMetricNumber(limit) + ' allowance') + '</title></circle>';
         }).join('');
         var firstLabel = String(rows[0] && rows[0].day_key || '');
         var lastLabel = String(rows[rows.length - 1] && rows[rows.length - 1].day_key || '');
+        var currentLimitY = yAt(currentDailyLimit);
+        var currentLimitX = xAt(rows.length - 1);
+        var allowanceMarkup = rows.length === 1
+          ? '<line x1="' + padLeft + '" y1="' + currentLimitY + '" x2="' + (padLeft + usableWidth) + '" y2="' + currentLimitY + '" stroke="#4f7f6d" stroke-width="2" stroke-dasharray="6 6" />'
+          : '<path d="' + allowanceLine + '" fill="none" stroke="#4f7f6d" stroke-width="2" stroke-dasharray="6 6" stroke-linejoin="round" stroke-linecap="round"></path>';
         return [
           '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Rows read by day across the current billing cycle">',
           '<line x1="' + padLeft + '" y1="' + (padTop + usableHeight) + '" x2="' + (padLeft + usableWidth) + '" y2="' + (padTop + usableHeight) + '" stroke="#e5ddd5" stroke-width="1" />',
-          '<line x1="' + padLeft + '" y1="' + limitY + '" x2="' + (padLeft + usableWidth) + '" y2="' + limitY + '" stroke="#4f7f6d" stroke-width="2" stroke-dasharray="6 6" />',
+          allowanceMarkup,
           '<path d="' + area + '" fill="rgba(184,74,38,0.12)" stroke="none"></path>',
           '<path d="' + line + '" fill="none" stroke="#b84a26" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>',
           points,
           '<text x="' + padLeft + '" y="' + (height - 8) + '" font-size="11" fill="#7a6d61">' + esc(firstLabel) + '</text>',
           '<text x="' + (padLeft + usableWidth) + '" y="' + (height - 8) + '" text-anchor="end" font-size="11" fill="#7a6d61">' + esc(lastLabel) + '</text>',
-          '<text x="' + (padLeft + 6) + '" y="' + Math.max(12, limitY - 8) + '" font-size="11" fill="#4f7f6d">Smart daily allowance ' + esc(compactMetricNumber(dailyLimit)) + '</text>',
+          '<text x="' + Math.max(padLeft + 6, currentLimitX - 6) + '" y="' + Math.max(12, currentLimitY - 8) + '" text-anchor="end" font-size="11" fill="#4f7f6d">Current smart daily allowance ' + esc(compactMetricNumber(currentDailyLimit)) + '</text>',
           '<text x="' + padLeft + '" y="' + (padTop + 12) + '" font-size="11" fill="#7a6d61">Peak ' + esc(compactMetricNumber(maxValue)) + ' rows</text>',
           '</svg>'
         ].join('');
