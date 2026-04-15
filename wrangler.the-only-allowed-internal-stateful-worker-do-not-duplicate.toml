@@ -78,13 +78,17 @@ ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "40000000"
 ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"
 ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"
 
-[[r2_buckets]]
-binding = "STRUCTURES_BUCKET"
-bucket_name = "geneguessr-structures"
+# Temporary no-R2 hotfix: Cloudflare is currently rejecting worker version
+# uploads with code 10136/10136-style binding failures because this account no
+# longer has R2 enabled. Leave these bindings commented out until R2 is
+# actually restored, otherwise even a structure-fallback worker cannot deploy.
+#[[r2_buckets]]
+#binding = "STRUCTURES_BUCKET"
+#bucket_name = "geneguessr-structures"
 
-[[r2_buckets]]
-binding = "ICONOPLASM_PORTRAITS"
-bucket_name = "iconoplasm-portraits"
+#[[r2_buckets]]
+#binding = "ICONOPLASM_PORTRAITS"
+#bucket_name = "iconoplasm-portraits"
 
 [triggers]
 crons = ["17 * * * *", "55 23 * * *", "3 0 * * *"]
@@ -145,15 +149,18 @@ ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
 ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"
 ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"
 
-[[env.staging.r2_buckets]]
-binding = "STRUCTURES_BUCKET"
-bucket_name = "geneguessr-structures-staging"
-preview_bucket_name = "geneguessr-structures-staging"
+# Temporary no-R2 hotfix: keep staging in the same state as prod so future
+# deploys do not fail the moment someone targets staging while the account's R2
+# service is still disabled.
+#[[env.staging.r2_buckets]]
+#binding = "STRUCTURES_BUCKET"
+#bucket_name = "geneguessr-structures-staging"
+#preview_bucket_name = "geneguessr-structures-staging"
 
-[[env.staging.r2_buckets]]
-binding = "ICONOPLASM_PORTRAITS"
-bucket_name = "iconoplasm-portraits-staging"
-preview_bucket_name = "iconoplasm-portraits-staging"
+#[[env.staging.r2_buckets]]
+#binding = "ICONOPLASM_PORTRAITS"
+#bucket_name = "iconoplasm-portraits-staging"
+#preview_bucket_name = "iconoplasm-portraits-staging"
 
 [env.staging.triggers]
 crons = []

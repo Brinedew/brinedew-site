@@ -2220,10 +2220,10 @@ async function handleStructureToken(request, env, corsHeaders) {
  *    Using `env.waitUntil()` causes "waitUntil is not a function" crashes.
  *    See: https://developers.cloudflare.com/workers/runtime-apis/context/
  *
- * 2. SWISS-MODEL structures require `upstream` query parameter for lazy loading.
- *    Unlike PDB (models.rcsb.org) and AlphaFold (alphafold.ebi.ac.uk) where URLs
- *    can be derived from the r2Key pattern, SWISS-MODEL URLs are custom per-protein
- *    and stored in the database. The client must pass the upstream URL explicitly.
+ * 2. The `upstream` query parameter is only a hint, not a hard dependency.
+ *    The worker should recover upstream URLs server-side from stored metadata
+ *    whenever possible, because old clients, cached URLs, or damaged R2 access
+ *    should not turn "file not in cache" into "structure permanently broken".
  *
  * 3. Lazy caching via ctx.waitUntil() is intentional for performance.
  *    Structure files are cached to R2 in the background AFTER the response is sent.
@@ -2292,7 +2292,84 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     return Response.json({ error: "Invalid key format" }, { status: 400, headers: corsHeaders })
   }
 
-  let object = await env.STRUCTURES_BUCKET.get(cacheKey)
+  const derivePdbUpstreamUrl = (id, format) => {
+    if (format === "bcif") {
+      return `https://models.rcsb.org/v1/${id}/full?encoding=bcif&copy_all_categories=false`
+    }
+    return `https://models.rcsb.org/${id}.${format}`
+  }
+
+  const resolveMetaFromCacheKey = async () => {
+    const [source, filename] = cacheKey.split("/")
+    const format = filename.endsWith(".bcif") ? "bcif" : filename.endsWith(".pdb") ? "pdb" : "cif"
+    const id = filename.replace(/\.(bcif|cif|pdb)$/, "")
+    const hintedUpstreamUrl = url.searchParams.get("upstream")
+
+    if (hintedUpstreamUrl) {
+      return { r2Key: cacheKey, upstreamUrl: hintedUpstreamUrl, format, source }
+    }
+
+    if (source === "pdb") {
+      return {
+        r2Key: cacheKey,
+        upstreamUrl: derivePdbUpstreamUrl(id, format),
+        format,
+        source,
+      }
+    }
+
+    let row = null
+    const structureRowSql = `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
+      FROM proteins
+      WHERE upper(uniprot) = ?`
+    try {
+      if (source === "alphafold" && env?.DB?.prepare) {
+        row = await env.DB.prepare(structureRowSql).bind(id.toUpperCase()).first()
+      } else if (source === "swissmodel" && env?.DB?.prepare) {
+        const uniprotFromKey = id.includes("_") ? id.slice(0, id.indexOf("_")) : ""
+        if (uniprotFromKey) {
+          row = await env.DB.prepare(structureRowSql).bind(uniprotFromKey.toUpperCase()).first()
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "GeneGuessr: failed to recover structure metadata from DB for",
+        cacheKey,
+        err?.message || err,
+      )
+    }
+
+    if (row) {
+      const exactStoredMeta = buildStoredStructureCandidates(row).find(
+        (candidate) => candidate?.r2Key === cacheKey,
+      )
+      if (exactStoredMeta?.upstreamUrl) {
+        return exactStoredMeta
+      }
+    }
+
+    if (source === "alphafold") {
+      return {
+        r2Key: cacheKey,
+        upstreamUrl: `https://alphafold.ebi.ac.uk/files/AF-${id}-F1-model_v6.cif`,
+        format,
+        source,
+      }
+    }
+
+    return null
+  }
+
+  let object = null
+  try {
+    object = (await env?.STRUCTURES_BUCKET?.get?.(cacheKey)) || null
+  } catch (err) {
+    console.warn(
+      "GeneGuessr: structure cache read failed, falling back to upstream",
+      cacheKey,
+      err?.message || err,
+    )
+  }
 
   // ⚠️ LAZY CACHING: If not in R2, fetch from upstream and cache
   // This happens on first request after bootstrap (which no longer pre-caches)
@@ -2303,42 +2380,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     if (type === "target" && protein) {
       meta = await getCanonicalStructureMeta(protein, env)
     } else {
-      // Parse key to build minimal meta for upstream fetch
-      const [source, filename] = cacheKey.split("/")
-      const format = filename.endsWith(".bcif") ? "bcif" : filename.endsWith(".pdb") ? "pdb" : "cif"
-      const id = filename.replace(/\.(bcif|cif|pdb)$/, "")
-
-      // Build upstream URL based on source
-      // CRITICAL: Check for client-provided upstream URL FIRST.
-      // SWISS-MODEL and AlphaFold URLs cannot be derived from r2Key:
-      // - SWISS-MODEL: custom per-protein with template/range params
-      // - AlphaFold: includes isoform number (AF-P11532-3-F1 not AF-P11532-F1)
-      // The client gets these URLs from buildGuessStructureToken which reads from the database.
-      // Only PDB has a truly predictable URL pattern (RCSB ModelServer).
-      let upstreamUrl = url.searchParams.get("upstream")
-      if (!upstreamUrl) {
-        if (source === "pdb") {
-          // PDB: predictable pattern from RCSB ModelServer
-          upstreamUrl = `https://models.rcsb.org/${id}.bcif`
-        } else if (source === "alphafold") {
-          // AlphaFold: NO predictable pattern - URL must come from client
-          // Multi-isoform proteins like DMD (P11532) have URLs like AF-P11532-3-F1
-          // We can't derive the isoform number from the key alone.
-          return Response.json(
-            { error: "AlphaFold structure requires upstream URL parameter" },
-            { status: 400, headers: corsHeaders },
-          )
-        } else if (source === "swissmodel") {
-          // SWISS-MODEL: NO predictable pattern - URL must come from client
-          // If we get here, the client didn't pass upstream param (old client code)
-          return Response.json(
-            { error: "SwissModel structure requires upstream URL parameter" },
-            { status: 400, headers: corsHeaders },
-          )
-        }
-      }
-
-      meta = { r2Key: cacheKey, upstreamUrl, format, source }
+      meta = await resolveMetaFromCacheKey()
     }
 
     if (!meta?.upstreamUrl) {
@@ -4801,6 +4843,12 @@ async function ensureStructureCached(env, meta, options = {}) {
   if (!meta?.r2Key) {
     return false
   }
+  if (!env?.STRUCTURES_BUCKET) {
+    // Temporary no-R2 deploy mode: we still want structure tokens and
+    // /api/structure-cached upstream fallback to work, we just cannot persist
+    // anything into the disabled bucket right now.
+    return Boolean(meta.upstreamUrl)
+  }
   const exists = await structureObjectExists(env, meta.r2Key)
   if (exists) {
     return true
@@ -4879,6 +4927,11 @@ async function ensureStructureCached(env, meta, options = {}) {
 async function ensureStructureCachedWithPin(env, meta, pinnedUntil) {
   if (!meta?.r2Key) {
     return false
+  }
+  if (!env?.STRUCTURES_BUCKET) {
+    // Temporary no-R2 deploy mode: skip prewarming/pinning entirely. The live
+    // structure route can still fetch directly from upstream when needed.
+    return Boolean(meta.upstreamUrl)
   }
 
   // Check if already cached
@@ -5010,6 +5063,9 @@ async function multipartUploadFromStream(env, r2Key, stream, contentType) {
 }
 
 async function getStructureBucketUsage(env) {
+  if (!env?.STRUCTURES_BUCKET) {
+    return { bytes: 0, objects: 0 }
+  }
   let cursor = undefined
   let bytes = 0
   let objects = 0
