@@ -25,6 +25,11 @@ class RecordingStatement {
 
   async all() {
     this.db.calls.push({ type: "all", sql: this.sql, args: this.args })
+    for (const [needle, results] of this.db.allResults) {
+      if (this.sql.includes(needle)) {
+        return { results }
+      }
+    }
     return { results: [] }
   }
 
@@ -35,8 +40,9 @@ class RecordingStatement {
 }
 
 class RecordingDb {
-  constructor() {
+  constructor({ allResults = [] } = {}) {
     this.calls = []
+    this.allResults = Array.isArray(allResults) ? allResults : []
   }
 
   prepare(sql) {
@@ -350,4 +356,60 @@ test("admin vote import is routed through the vote coordinator batch endpoint", 
     ),
     false,
   )
+})
+
+test("admin pending vote projection refresh endpoint exposes durable queue rows", async () => {
+  const db = new RecordingDb({
+    allResults: [
+      [
+        "FROM icono_vote_projection_refresh_jobs",
+        [
+          {
+            gene_symbol: "TP53",
+            actor_id: "vote_projection",
+            reason: "vote_auto_promote",
+            requested_at: "2026-04-15 10:00:00",
+            last_attempt_at: "2026-04-15 10:01:00",
+            next_attempt_at: "2026-04-15 10:05:00",
+            attempts: 2,
+            last_error: "timed out",
+          },
+        ],
+      ],
+    ],
+  })
+
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/votes/projection-refresh/pending?limit=5",
+      {
+        method: "GET",
+        headers: {
+          "X-Iconoplasm-Admin-Token": "secret",
+        },
+      },
+    ),
+    {
+      ICONOPLASM_DB: db,
+      ICONOPLASM_ADMIN_TOKEN: "secret",
+      KV: fakeKv(),
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.count, 1)
+  assert.deepEqual(payload?.requests?.[0], {
+    symbol: "TP53",
+    actor_id: "vote_projection",
+    reason: "vote_auto_promote",
+    requested_at: "2026-04-15 10:00:00",
+    last_attempt_at: "2026-04-15 10:01:00",
+    next_attempt_at: "2026-04-15 10:05:00",
+    attempts: 2,
+    last_error: "timed out",
+    retrying: true,
+  })
 })

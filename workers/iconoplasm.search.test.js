@@ -170,9 +170,8 @@ class FakeSearchDb {
       this.publishedPortraits.set(symbol, {
         symbol,
         asset_sha256: row?.asset_sha256 || null,
-        r2_key_full: row?.r2_key_full || null,
-        r2_key_medium: row?.r2_key_medium || null,
-        r2_key_thumb: row?.r2_key_thumb || null,
+        ph: row?.ph || null,
+        pt: row?.pt || null,
         updated_at: row?.updated_at || null,
       })
     }
@@ -181,9 +180,9 @@ class FakeSearchDb {
   listPublishedPortraitRefs() {
     return Array.from(this.publishedPortraits.values()).map((row) => ({
       symbol: row.symbol,
-      r2_key_full: row.r2_key_full,
-      r2_key_medium: row.r2_key_medium,
-      r2_key_thumb: row.r2_key_thumb,
+      asset_sha256: row.asset_sha256,
+      ph: row.ph,
+      pt: row.pt,
     }))
   }
 
@@ -193,10 +192,7 @@ class FakeSearchDb {
     }
     const publishedPairs = Array.from(this.publishedPortraits.values())
       .sort((left, right) => String(left.symbol || "").localeCompare(String(right.symbol || "")))
-      .map(
-        (row) =>
-          `${row.symbol}:${row.asset_sha256 || row.r2_key_full || row.r2_key_medium || row.r2_key_thumb || ""}`,
-      )
+      .map((row) => `${row.symbol}:${row.asset_sha256 || ""}`)
       .join("|")
     return {
       published_count: this.publishedPortraits.size,
@@ -331,10 +327,9 @@ test("catalog search refreshes canonical portraits even if gallery version does 
     publishedPortraits: [
       {
         symbol: "PRL",
-        asset_sha256: "old-prl-asset",
-        r2_key_full: "portraits/v1/aa/old-prl/full.webp",
-        r2_key_medium: "portraits/v1/aa/old-prl/medium.webp",
-        r2_key_thumb: "portraits/v1/aa/old-prl/thumb.webp",
+        asset_sha256: "a".repeat(64),
+        ph: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/full.webp`,
+        pt: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/medium.webp`,
         updated_at: "2026-04-05T00:00:01Z",
       },
     ],
@@ -348,16 +343,15 @@ test("catalog search refreshes canonical portraits even if gallery version does 
   const firstPayload = await firstResponse.json()
 
   assert.equal(firstResponse.status, 200)
-  assert.match(firstPayload?.genes?.[0]?.pt || "", /old-prl\/medium\.webp$/)
-  assert.match(firstPayload?.genes?.[0]?.ph || "", /old-prl\/full\.webp$/)
+  assert.match(firstPayload?.genes?.[0]?.pt || "", /a{64}\/medium\.webp$/)
+  assert.match(firstPayload?.genes?.[0]?.ph || "", /a{64}\/full\.webp$/)
 
   env.gatewayDb.setPublishedPortraits([
     {
       symbol: "PRL",
-      asset_sha256: "new-prl-asset",
-      r2_key_full: "portraits/v1/bb/new-prl/full.webp",
-      r2_key_medium: "portraits/v1/bb/new-prl/medium.webp",
-      r2_key_thumb: "portraits/v1/bb/new-prl/thumb.webp",
+      asset_sha256: "b".repeat(64),
+      ph: `portraits/v1/${"b".repeat(2)}/${"b".repeat(64)}/full.webp`,
+      pt: `portraits/v1/${"b".repeat(2)}/${"b".repeat(64)}/medium.webp`,
       updated_at: "2026-04-05T00:00:01Z",
     },
   ])
@@ -372,8 +366,8 @@ test("catalog search refreshes canonical portraits even if gallery version does 
   const secondPayload = await secondResponse.json()
 
   assert.equal(secondResponse.status, 200)
-  assert.match(secondPayload?.genes?.[0]?.pt || "", /new-prl\/medium\.webp$/)
-  assert.match(secondPayload?.genes?.[0]?.ph || "", /new-prl\/full\.webp$/)
+  assert.match(secondPayload?.genes?.[0]?.pt || "", /b{64}\/medium\.webp$/)
+  assert.match(secondPayload?.genes?.[0]?.ph || "", /b{64}\/full\.webp$/)
 })
 
 test("catalog search ranks symbol matches before full names before aliases", async () => {
@@ -513,7 +507,7 @@ test("catalog search uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when
   assert.equal(gateway.calls[0]?.method, "GET")
 })
 
-test("public catalog artifact uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
+test("catalog artifact uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({
       schema_version: 4,
@@ -536,8 +530,8 @@ test("public catalog artifact uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLI
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.genes?.[0]?.s, "PRL")
-  assert.equal(gateway.calls.length, 1)
+  assert.equal(payload?.gene_count, 1)
+  assert.equal(payload?.genes?.[0]?.n, "Gateway Prolactin")
   assert.equal(gateway.calls[0]?.url, "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/catalog/catalog.searchfixture01.json")
   assert.equal(gateway.calls[0]?.method, "GET")
 })

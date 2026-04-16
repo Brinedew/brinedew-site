@@ -52,7 +52,7 @@ class FakeCostBarrierStatement {
     if (
       this.sql.includes("FROM icono_publish_state ps") &&
       this.sql.includes("LEFT JOIN icono_portrait_assets pa") &&
-      this.sql.includes("pa.r2_key_full") &&
+      this.sql.includes("ps.current_asset_sha256 AS asset_sha256") &&
       !this.sql.includes("COALESCE(vs.upvotes, 0)")
     ) {
       this.db.portraitRefReads += 1
@@ -60,15 +60,15 @@ class FakeCostBarrierStatement {
         results: [
           {
             symbol: "A1BG",
-            r2_key_full: "portraits/full-a1bg.webp",
-            r2_key_medium: "portraits/medium-a1bg.webp",
-            r2_key_thumb: "portraits/thumb-a1bg.webp",
+            asset_sha256: "a".repeat(64),
+            ph: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/full.webp`,
+            pt: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/medium.webp`,
           },
           {
             symbol: "TP53",
-            r2_key_full: "portraits/full-tp53.webp",
-            r2_key_medium: "portraits/medium-tp53.webp",
-            r2_key_thumb: "portraits/thumb-tp53.webp",
+            asset_sha256: "b".repeat(64),
+            ph: `portraits/v1/${"b".repeat(2)}/${"b".repeat(64)}/full.webp`,
+            pt: `portraits/v1/${"b".repeat(2)}/${"b".repeat(64)}/medium.webp`,
           },
         ],
       }

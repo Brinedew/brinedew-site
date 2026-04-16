@@ -51,6 +51,18 @@
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
   const GENE_DETAIL_VISIBLE_LIMIT = 16
   const PORTRAIT_VISIBLE_LIMIT = 8
+  // Fence: the hover card needs identity, accent color, synced essence, and the
+  // published portrait metadata that powers both rendering and the vote box.
+  // Do not ask the batch API for the full deluxe gene payload here unless the
+  // tooltip/UI really starts consuming more fields, because that hot path is
+  // shared across repeated extension hovers on arbitrary pages.
+  const GENE_DETAIL_BATCH_FIELDS = Object.freeze([
+    "symbol",
+    "full_name",
+    "color",
+    "essence",
+    "portrait",
+  ])
   const escapeHtml = IconoCardShared.escapeHtml
 
   function extensionApiFetch(input, init = {}) {
@@ -1160,7 +1172,10 @@
           const resp = await extensionApiFetch(ICONOPLASM_GENE_BATCH_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ symbols: unresolvedSymbols }),
+            body: JSON.stringify({
+              symbols: unresolvedSymbols,
+              fields: GENE_DETAIL_BATCH_FIELDS,
+            }),
           })
           if (!resp.ok) {
             throw new Error("HTTP " + String(resp.status || 0))

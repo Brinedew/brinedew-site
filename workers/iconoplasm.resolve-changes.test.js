@@ -103,9 +103,8 @@ class FakeChangesDb {
       this.publishedPortraits.set(symbol, {
         symbol,
         asset_sha256: row?.asset_sha256 || null,
-        r2_key_full: row?.r2_key_full || null,
-        r2_key_medium: row?.r2_key_medium || null,
-        r2_key_thumb: row?.r2_key_thumb || null,
+        ph: row?.ph || null,
+        pt: row?.pt || null,
       })
     }
   }
@@ -117,9 +116,9 @@ class FakeChangesDb {
   listPublishedPortraitRefs() {
     return Array.from(this.publishedPortraits.values()).map((row) => ({
       symbol: row.symbol,
-      r2_key_full: row.r2_key_full,
-      r2_key_medium: row.r2_key_medium,
-      r2_key_thumb: row.r2_key_thumb,
+      asset_sha256: row.asset_sha256,
+      ph: row.ph,
+      pt: row.pt,
     }))
   }
 
@@ -129,10 +128,7 @@ class FakeChangesDb {
     }
     const publishedPairs = Array.from(this.publishedPortraits.values())
       .sort((left, right) => String(left.symbol || "").localeCompare(String(right.symbol || "")))
-      .map(
-        (row) =>
-          `${row.symbol}:${row.asset_sha256 || row.r2_key_full || row.r2_key_medium || row.r2_key_thumb || ""}`,
-      )
+      .map((row) => `${row.symbol}:${row.asset_sha256 || ""}`)
       .join("|")
     return {
       published_count: this.publishedPortraits.size,
@@ -190,9 +186,8 @@ function buildEnv(overrides = {}, { bindGateway = true } = {}) {
           {
             symbol: "PRL",
             asset_sha256: "a".repeat(64),
-            r2_key_full: "portraits/v1/aa/prl/full.webp",
-            r2_key_medium: "portraits/v1/aa/prl/medium.webp",
-            r2_key_thumb: "portraits/v1/aa/prl/thumb.webp",
+            ph: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/full.webp`,
+            pt: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/medium.webp`,
           },
         ],
       })

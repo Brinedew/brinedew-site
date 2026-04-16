@@ -107,6 +107,9 @@ jobs:
         working-directory: .wrangler-pages
         run: wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
+      - name: Apply Geneguessr D1 migrations (production)
+        run: wrangler d1 migrations apply geneguessr --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
       - name: Apply Iconoplasm D1 migrations (production)
         run: wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 

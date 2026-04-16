@@ -69,12 +69,9 @@ class FakeIconoplasmDb {
         "A1BG",
         {
           asset_sha256: "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212",
-          r2_key_full:
-            "portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/full.webp",
-          r2_key_medium:
-            "portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/medium.webp",
-          r2_key_thumb:
-            "portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/thumb.webp",
+          r2_key_full: "",
+          r2_key_medium: "",
+          r2_key_thumb: "",
           width: 384,
           height: 512,
           vision_id: "anima-v1-2397",
@@ -183,6 +180,34 @@ test("public media payload includes published portrait dimensions", async () => 
   assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
 })
 
+test("public catalog manifest publishes explicit extension contract fields", async () => {
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
+    buildEnv({
+      KV: {
+        async get(key) {
+          if (key !== "iconoplasm:catalog-manifest") return null
+          return JSON.stringify({
+            current_hash: "catalog-2026-04-16",
+            generated_at: "2026-04-16T16:30:00.000Z",
+            gene_count: 19001,
+          })
+        },
+      },
+    }),
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.artifact_schema_version, 4)
+  assert.equal(payload?.schema_version, 4)
+  assert.equal(payload?.min_extension_version, "0.3.0")
+  assert.equal(payload?.catalog_hash, "catalog")
+  assert.equal(payload?.build_version, "catalog-2026-04-16")
+  assert.equal(payload?.portrait_base_url, "https://iconoplasm.brinedew.bio")
+})
+
 test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {
   const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
@@ -251,6 +276,41 @@ test("public gene batch is limited to first-party clients and extension traffic"
   assert.equal(extensionResponse.status, 200)
   assert.equal(Array.isArray(extensionPayload?.genes), true)
   assert.equal(extensionPayload?.genes?.[0]?.symbol, "A1BG")
+})
+
+test("public gene batch honors lean field projection for extension traffic", async () => {
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Iconoplasm-Extension-Version": "0.3.0",
+      },
+      body: JSON.stringify({
+        symbols: ["A1BG"],
+        fields: ["symbol", "full_name", "color", "essence", "portrait"],
+      }),
+    }),
+    buildEnv(),
+    {},
+  )
+  const payload = await response.json()
+  const gene = payload?.genes?.[0] || null
+
+  assert.equal(response.status, 200)
+  assert.equal(gene?.symbol, "A1BG")
+  assert.equal(gene?.full_name, "alpha-1-B glycoprotein")
+  assert.equal(gene?.color, "#dd8c9d")
+  assert.deepEqual(gene?.essence, {
+    name: "alpha-1-B glycoprotein",
+    sex: "Female",
+    sex_origin: ["Soluble"],
+  })
+  assert.match(String(gene?.portrait?.medium_url || ""), /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//)
+  assert.equal("media" in (gene || {}), false)
+  assert.equal("portrait_candidates" in (gene || {}), false)
+  assert.equal("source_links" in (gene || {}), false)
+  assert.equal("page_url" in (gene || {}), false)
 })
 
 test("public media hot path uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
