@@ -15,6 +15,8 @@ Source for my personal site. Wet lab biologist, interested in aging and cancer, 
 
 For Iconoplasm specifically, this repo is the website/runtime side, not the local authoring workstation. If published catalog data, alias export, or Website Ops payloads look wrong, start in `d:\Coding\Datasets\iconoplasm` first. That sibling repo is the control plane that publishes what this website and the browser extension consume.
 
+If the question is specifically about portrait storage, do not jump straight to R2, Images, or other bucket-shaped answers. Read `docs/ICONOPLASM_PORTRAIT_STORAGE_REFACTOR.md` first. It spells out the actual fence: the public site must stay up when the laptop is off, the working budget target is under $5/month, and the current Cloudflare billing/card state means R2-style answers are not automatically available just because they sound tidy.
+
 If you are onboarding or debugging the homepage, read `docs/ICONOPLASM_ONBOARDING.md` before touching code. It spells out the mode split, starter-gene contract, route map, and the operational mistakes that are easy to make if you only look at one layer.
 
 If you need to answer a data question from the live Iconoplasm database, do not re-derive the retrieval steps from scratch. Start with `docs/ICONOPLASM_OPERATIONS.md`, which has the remote D1 query workflow, the tables that matter, and a canned example for shortest-name lookups.

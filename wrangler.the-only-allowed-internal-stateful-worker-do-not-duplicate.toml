@@ -77,11 +77,17 @@ ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "24000000000"
 ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "40000000"
 ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"
 ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"
+ICONOPLASM_PORTRAIT_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
+ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
+ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
+ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 
 # Temporary no-R2 hotfix: Cloudflare is currently rejecting worker version
 # uploads with code 10136/10136-style binding failures because this account no
-# longer has R2 enabled. Leave these bindings commented out until R2 is
-# actually restored, otherwise even a structure-fallback worker cannot deploy.
+# longer has R2 enabled. That is not just a random toggle state: the current
+# billing/card path is blocked, so "just use R2" is not a live portrait-storage
+# fix right now. Leave these bindings commented out until R2 is actually
+# restored, otherwise even a structure-fallback worker cannot deploy.
 #[[r2_buckets]]
 #binding = "STRUCTURES_BUCKET"
 #bucket_name = "geneguessr-structures"
@@ -148,10 +154,15 @@ ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "500000000"
 ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
 ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"
 ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"
+ICONOPLASM_PORTRAIT_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
+ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
+ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
+ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 
 # Temporary no-R2 hotfix: keep staging in the same state as prod so future
 # deploys do not fail the moment someone targets staging while the account's R2
-# service is still disabled.
+# service is still disabled. Same rule here: do not treat R2 as an easy answer
+# while the billing/card path that would re-enable it is still blocked.
 #[[env.staging.r2_buckets]]
 #binding = "STRUCTURES_BUCKET"
 #bucket_name = "geneguessr-structures-staging"

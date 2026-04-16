@@ -17,7 +17,20 @@ class FakeStatement {
 
   async all() {
     if (this.sql.includes("FROM icono_portrait_assets")) {
-      return { results: [] }
+      return {
+        results: [
+          {
+            symbol: "ABCA1",
+            asset_sha256: "bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6",
+            r2_key_full:
+              "portraits/v1/bc/bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6/full.webp",
+            r2_key_medium:
+              "portraits/v1/bc/bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6/medium.webp",
+            r2_key_thumb:
+              "portraits/v1/bc/bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6/thumb.webp",
+          },
+        ],
+      }
     }
     throw new Error(`Unexpected SQL in fake DB all(): ${this.sql}`)
   }

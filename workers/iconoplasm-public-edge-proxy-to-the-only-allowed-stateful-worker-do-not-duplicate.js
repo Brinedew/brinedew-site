@@ -274,6 +274,7 @@ function isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotD
   if (path === publicApiPath("/metadata")) return true
   if (path === publicApiPath("/catalog/manifest")) return true
   if (isPublicCatalogArtifactPath(path)) return true
+  if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) return true
   if (path === publicApiPath("/gallery")) return true
   if (path === publicApiPath("/genes/search")) return true
   if (path === publicApiPath("/genes/batch")) return requestMethod === "POST"
@@ -458,7 +459,9 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
           ),
         )
       }
-      const response = await handlePublicCatalogJsonlDump(env, path)
+      const response = env.ICONOPLASM_PORTRAITS
+        ? await handlePublicCatalogJsonlDump(env, path)
+        : await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(request, new Response(response.body, { status: response.status, headers }))

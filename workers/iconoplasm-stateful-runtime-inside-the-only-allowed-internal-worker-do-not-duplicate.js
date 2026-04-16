@@ -1018,6 +1018,150 @@ function joinUrl(base, key) {
   return `${b}/${k}`
 }
 
+function externalPortraitCdnBase(env) {
+  const raw = String(
+    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || env?.ICONOPLASM_PORTRAIT_CDN_BASE_URL || "",
+  ).trim()
+  return raw ? raw.replace(/\/+$/, "") : ""
+}
+
+function externalPortraitStorageZone(env) {
+  return String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE || "").trim()
+}
+
+function externalPortraitStorageHost(env) {
+  const raw = String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST || "").trim()
+  return raw || "storage.bunnycdn.com"
+}
+
+function externalPortraitStoragePassword(env) {
+  return String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD || "").trim()
+}
+
+function canReadExternalPortraitStorage(env) {
+  return Boolean(externalPortraitCdnBase(env))
+}
+
+function canWriteExternalPortraitStorage(env) {
+  return Boolean(
+    externalPortraitStorageZone(env) &&
+      externalPortraitStorageHost(env) &&
+      externalPortraitStoragePassword(env),
+  )
+}
+
+function externalPortraitPublicUrl(env, key) {
+  const base = externalPortraitCdnBase(env)
+  if (!base) return null
+  return joinUrl(base, key)
+}
+
+function externalPortraitStorageWriteUrl(env, key) {
+  const zone = externalPortraitStorageZone(env)
+  const host = externalPortraitStorageHost(env)
+  if (!zone || !host) return null
+  return joinUrl(`https://${host}/${zone}`, key)
+}
+
+async function readPortraitStorageObject(env, key, { fallbackContentType = "image/webp" } = {}) {
+  if (env.ICONOPLASM_PORTRAITS) {
+    const object = await env.ICONOPLASM_PORTRAITS.get(key)
+    if (!object) return null
+    return {
+      body: object.body,
+      contentType: object.httpMetadata?.contentType || fallbackContentType,
+      etag: object.httpEtag || key,
+    }
+  }
+  const publicUrl = externalPortraitPublicUrl(env, key)
+  if (!publicUrl) return null
+  const response = await fetch(publicUrl)
+  if (response.status === 404) return null
+  if (!response.ok) {
+    throw new Error(`External portrait fetch failed (${response.status}) for ${key}`)
+  }
+  return {
+    body: response.body,
+    contentType: response.headers.get("content-type") || fallbackContentType,
+    etag: response.headers.get("etag") || key,
+  }
+}
+
+async function headPortraitStorageObject(env, key) {
+  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.head === "function") {
+    return env.ICONOPLASM_PORTRAITS.head(key)
+  }
+  const writeUrl = externalPortraitStorageWriteUrl(env, key)
+  const password = externalPortraitStoragePassword(env)
+  if (!writeUrl || !password) return null
+  const response = await fetch(writeUrl, {
+    method: "HEAD",
+    headers: {
+      AccessKey: password,
+    },
+  })
+  if (response.status === 404) return null
+  if (!response.ok) {
+    throw new Error(`External portrait HEAD failed (${response.status}) for ${key}`)
+  }
+  return { ok: true }
+}
+
+async function putPortraitStorageObject(
+  env,
+  key,
+  bytes,
+  { contentType = "application/octet-stream", cacheControl = "", customMetadata = null } = {},
+) {
+  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.put === "function") {
+    return env.ICONOPLASM_PORTRAITS.put(key, bytes, {
+      httpMetadata: {
+        contentType,
+        ...(cacheControl ? { cacheControl } : {}),
+      },
+      ...(customMetadata ? { customMetadata } : {}),
+    })
+  }
+  const writeUrl = externalPortraitStorageWriteUrl(env, key)
+  const password = externalPortraitStoragePassword(env)
+  if (!writeUrl || !password) {
+    throw new Error("External portrait storage is not configured for writes")
+  }
+  const response = await fetch(writeUrl, {
+    method: "PUT",
+    headers: {
+      AccessKey: password,
+      "Content-Type": contentType,
+      ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
+    },
+    body: bytes,
+  })
+  if (!response.ok) {
+    throw new Error(`External portrait PUT failed (${response.status}) for ${key}`)
+  }
+  return { ok: true }
+}
+
+async function deletePortraitStorageObject(env, key) {
+  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.delete === "function") {
+    return env.ICONOPLASM_PORTRAITS.delete(key)
+  }
+  const writeUrl = externalPortraitStorageWriteUrl(env, key)
+  const password = externalPortraitStoragePassword(env)
+  if (!writeUrl || !password) return null
+  const response = await fetch(writeUrl, {
+    method: "DELETE",
+    headers: {
+      AccessKey: password,
+    },
+  })
+  if (response.status === 404) return null
+  if (!response.ok) {
+    throw new Error(`External portrait DELETE failed (${response.status}) for ${key}`)
+  }
+  return { ok: true }
+}
+
 function portraitBase(url, env) {
   if (
     typeof env.ICONOPLASM_PORTRAIT_BASE_URL === "string" &&
@@ -3409,6 +3553,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === publicApiPath("/metadata")) return true
   if (path === publicApiPath("/catalog/manifest")) return true
   if (isPublicCatalogArtifactPath(path)) return true
+  if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) return true
   if (path === publicApiPath("/gallery")) return true
   if (path === publicApiPath("/genes/search")) return true
   if (path === publicApiPath("/genes/batch")) return requestMethod === "POST"
@@ -9448,10 +9593,8 @@ async function removePortraitAssetAndQueueLocalRemoval(
   const keys = [existing?.r2_key_full, existing?.r2_key_medium, existing?.r2_key_thumb]
     .map((value) => String(value || "").trim())
     .filter(Boolean)
-  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.delete === "function") {
-    for (const key of keys) {
-      await env.ICONOPLASM_PORTRAITS.delete(key)
-    }
+  for (const key of keys) {
+    await deletePortraitStorageObject(env, key)
   }
 
   const autoPromote = await autoPromoteTopVotedPortrait(env, {
@@ -10839,14 +10982,15 @@ async function handlePublicCatalogArtifact(env, path) {
 async function handlePublicCatalogJsonlDump(env, path) {
   const match = path.match(/\/api\/public\/v1\/dumps\/catalog\.([a-z0-9-]+)\.jsonl$/i)
   if (!match) return json({ error: "Invalid public dump path" }, 400)
-  if (!env.ICONOPLASM_PORTRAITS) return json({ error: "Portrait bucket binding missing" }, 500)
   const hash = String(match[1] || "").split("-")[0]
-  const object = await env.ICONOPLASM_PORTRAITS.get(publicCatalogJsonlDumpKey(hash))
+  const object = await readPortraitStorageObject(env, publicCatalogJsonlDumpKey(hash), {
+    fallbackContentType: "application/x-ndjson; charset=utf-8",
+  })
   if (!object) return json({ error: "Catalog dump not found" }, 404)
   return new Response(object.body, {
     headers: {
       ...corsHeaders(),
-      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Content-Type": object.contentType || "application/x-ndjson; charset=utf-8",
       "Cache-Control": "public, max-age=31536000, immutable",
       ETag: `"${hash}"`,
     },
@@ -11256,6 +11400,20 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     if (isPublicCatalogArtifactPath(path)) {
       return handlePublicCatalogArtifact(env, path)
     }
+    if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
+      return handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+        ctx,
+      )
+    }
+    if (path.startsWith("/portraits/")) {
+      return handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+        ctx,
+      )
+    }
     if (path === publicApiPath("/gallery")) {
       return handlePublicGallery(request, env, ctx)
     }
@@ -11431,14 +11589,12 @@ async function publishCatalogArtifact(env) {
     .slice(0, 12)
   const filename = `catalog.${hash}.json`
   const catalogJsonl = `${hydrated.genes.map((gene) => JSON.stringify(gene)).join("\n")}\n`
-  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.put === "function") {
+  if (env.ICONOPLASM_PORTRAITS || canWriteExternalPortraitStorage(env)) {
     // Keep dumps alongside portraits under a separate prefix so public sync clients
     // get a stable immutable snapshot without us needing a brand new bucket.
-    await env.ICONOPLASM_PORTRAITS.put(publicCatalogJsonlDumpKey(hash), catalogJsonl, {
-      httpMetadata: {
-        contentType: "application/x-ndjson; charset=utf-8",
-        cacheControl: "public, max-age=31536000, immutable",
-      },
+    await putPortraitStorageObject(env, publicCatalogJsonlDumpKey(hash), catalogJsonl, {
+      contentType: "application/x-ndjson; charset=utf-8",
+      cacheControl: "public, max-age=31536000, immutable",
     })
   }
   const manifest = {
@@ -11813,18 +11969,19 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     }
 
     if (path.startsWith("/portraits/")) {
-      if (!env.ICONOPLASM_PORTRAITS)
-        return done("portrait_no_binding", json({ error: "Portrait bucket not configured" }, 404))
       const key = path.replace(/^\/+/, "")
-      const obj = await env.ICONOPLASM_PORTRAITS.get(key)
+      const obj = await readPortraitStorageObject(env, key, { fallbackContentType: "image/webp" })
+      if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
+        return done("portrait_no_binding", json({ error: "Portrait bucket not configured" }, 404))
+      }
       if (!obj) return done("portrait_404", json({ error: "Portrait not found" }, 404))
       return done(
         "portrait",
         new Response(obj.body, {
           headers: {
-            "Content-Type": obj.httpMetadata?.contentType || "image/webp",
+            "Content-Type": obj.contentType || "image/webp",
             "Cache-Control": "public, max-age=31536000, immutable",
-            ETag: `"${obj.httpEtag || key}"`,
+            ETag: `"${obj.etag || key}"`,
             "Access-Control-Allow-Origin": "*",
           },
         }),
@@ -14451,10 +14608,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done("admin_ingest_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
         return done("admin_ingest_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (!env.ICONOPLASM_PORTRAITS)
+      if (!env.ICONOPLASM_PORTRAITS && !canWriteExternalPortraitStorage(env))
         return done(
           "admin_ingest_500",
-          json({ error: "ICONOPLASM_PORTRAITS binding missing" }, 500),
+          json({ error: "Portrait storage backend is not configured" }, 500),
         )
 
       let p
@@ -14477,6 +14634,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
       const deferReadModels = coerceBoolean(
         p?.defer_read_models ?? p?.deferReadModels,
+        false,
+      )
+      const verifyStorageDefault = coerceBoolean(
+        p?.verify_storage ?? p?.verifyStorage,
+        false,
+      )
+      const forceUploadDefault = coerceBoolean(
+        p?.force_upload ?? p?.forceUpload,
         false,
       )
       const reasonDefault = String(p?.reason || "").slice(0, 2000) || null
@@ -14511,16 +14676,32 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             medium: r2PortraitKey(assetSha, "medium"),
             thumb: r2PortraitKey(assetSha, "thumb"),
           }
+          const verifyStorage = coerceBoolean(
+            item?.verify_storage ?? item?.verifyStorage,
+            verifyStorageDefault,
+          )
+          const forceUpload = coerceBoolean(
+            item?.force_upload ?? item?.forceUpload,
+            forceUploadDefault,
+          )
           // optimize/harden: repeated syncs should not re-probe and re-require
           // binary renditions for assets the website already knows about.
+          // But repair runs need an escape hatch because production can have D1
+          // rows whose portrait keys survived while the backing Bunny objects
+          // vanished during an interrupted cutover or partial upload failure.
+          // In that mode, trust real storage HEADs over "the row has keys".
+          // And when operators already know the storage layer is empty or stale,
+          // force-upload lets them overwrite the canonical sha-key paths without
+          // spending the request budget proving those missing blobs are missing.
           const storedRenditionsPresent =
             Boolean(existingAsset?.r2_key_full) &&
             Boolean(existingAsset?.r2_key_medium) &&
             Boolean(existingAsset?.r2_key_thumb)
+          const isNewAsset = !existingAsset
           let exists = {
-            full: storedRenditionsPresent,
-            medium: storedRenditionsPresent,
-            thumb: storedRenditionsPresent,
+            full: !forceUpload && !isNewAsset && storedRenditionsPresent && !verifyStorage,
+            medium: !forceUpload && !isNewAsset && storedRenditionsPresent && !verifyStorage,
+            thumb: !forceUpload && !isNewAsset && storedRenditionsPresent && !verifyStorage,
           }
           let fullPayload = null
           let mediumPayload = null
@@ -14528,11 +14709,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           let fullBytes = null
           let mediumBytes = null
           let thumbBytes = null
-          if (!storedRenditionsPresent) {
+          if (!forceUpload && !isNewAsset && (!storedRenditionsPresent || verifyStorage)) {
+            // Brand-new assets cannot already exist in portrait storage under
+            // this sha-key contract. Skipping pointless HEAD probes here keeps
+            // bulk backfills under the Worker subrequest ceiling.
             const [headFull, headMedium, headThumb] = await Promise.all([
-              env.ICONOPLASM_PORTRAITS.head(keys.full),
-              env.ICONOPLASM_PORTRAITS.head(keys.medium),
-              env.ICONOPLASM_PORTRAITS.head(keys.thumb),
+              headPortraitStorageObject(env, keys.full),
+              headPortraitStorageObject(env, keys.medium),
+              headPortraitStorageObject(env, keys.thumb),
             ])
             exists = {
               full: Boolean(headFull),
@@ -14554,8 +14738,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             if (!exists.full) {
               if (!fullBytes) throw new Error("Missing full rendition payload for new upload")
               uploadTasks.push(
-                env.ICONOPLASM_PORTRAITS.put(keys.full, fullBytes, {
-                  httpMetadata: { contentType: "image/webp" },
+                putPortraitStorageObject(env, keys.full, fullBytes, {
+                  contentType: "image/webp",
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
@@ -14567,8 +14751,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             if (!exists.medium) {
               if (!mediumBytes) throw new Error("Missing medium rendition payload for new upload")
               uploadTasks.push(
-                env.ICONOPLASM_PORTRAITS.put(keys.medium, mediumBytes, {
-                  httpMetadata: { contentType: "image/webp" },
+                putPortraitStorageObject(env, keys.medium, mediumBytes, {
+                  contentType: "image/webp",
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
@@ -14580,8 +14764,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             if (!exists.thumb) {
               if (!thumbBytes) throw new Error("Missing thumb rendition payload for new upload")
               uploadTasks.push(
-                env.ICONOPLASM_PORTRAITS.put(keys.thumb, thumbBytes, {
-                  httpMetadata: { contentType: "image/webp" },
+                putPortraitStorageObject(env, keys.thumb, thumbBytes, {
+                  contentType: "image/webp",
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
@@ -15454,10 +15638,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const keys = [existing?.r2_key_full, existing?.r2_key_medium, existing?.r2_key_thumb]
           .map((value) => String(value || "").trim())
           .filter(Boolean)
-        if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.delete === "function") {
-          for (const key of keys) {
-            await env.ICONOPLASM_PORTRAITS.delete(key)
-          }
+        for (const key of keys) {
+          await deletePortraitStorageObject(env, key)
         }
 
         await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
