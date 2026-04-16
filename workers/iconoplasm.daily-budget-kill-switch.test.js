@@ -981,3 +981,110 @@ test("write-heavy admin mutations clamp mid-run without chattering to the ledger
   assert.equal(budgetNamespace.calls[1]?.payload?.query_count, 4)
   assert.equal(budgetNamespace.calls[1]?.payload?.rows_written, 8)
 })
+
+test("iconoplasm health fails open when the snapshot preflight is telemetry-locked", async () => {
+  class ThrowingSnapshotBudgetNamespace {
+    constructor() {
+      this.calls = []
+    }
+
+    idFromName(name) {
+      return String(name || "")
+    }
+
+    get() {
+      return {
+        fetch: async (request) => {
+          const url = new URL(request.url)
+          this.calls.push({ pathname: url.pathname })
+          throw new Error("Exceeded allowed rows written in Durable Objects free tier.")
+        },
+      }
+    }
+  }
+
+  const budgetNamespace = new ThrowingSnapshotBudgetNamespace()
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/health"),
+    {
+      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+      ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+      ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+      ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+      ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(payload, { status: "ok", service: "iconoplasm" })
+  assert.deepEqual(
+    budgetNamespace.calls.map((call) => call.pathname),
+    ["/snapshot"],
+  )
+})
+
+test("write-heavy admin mutations still fail closed when snapshot telemetry is locked before preflight", async () => {
+  class ThrowingSnapshotBudgetNamespace {
+    constructor() {
+      this.calls = []
+    }
+
+    idFromName(name) {
+      return String(name || "")
+    }
+
+    get() {
+      return {
+        fetch: async (request) => {
+          const url = new URL(request.url)
+          this.calls.push({ pathname: url.pathname })
+          throw new Error("Exceeded allowed rows written in Durable Objects free tier.")
+        },
+      }
+    }
+  }
+
+  const db = new CatalogUpsertDb({ rowsWrittenPerRun: 2 })
+  const budgetNamespace = new ThrowingSnapshotBudgetNamespace()
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/catalog/upsert",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-iconoplasm-admin-token": "founder-secret",
+        },
+        body: JSON.stringify({
+          defer_read_models: true,
+          items: [{ gene_symbol: "TP53", full_name: "Tumor protein p53", tmh: false, aliases_json: [] }],
+        }),
+      },
+    ),
+    {
+      ICONOPLASM_DB: db,
+      ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+      ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+      ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+      ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+      ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+      ICONOPLASM_MUTATION_LIMITER_MIN_ROWS_WRITTEN_HEADROOM_DO_NOT_SET_CASUALLY: "5",
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 503)
+  assert.equal(payload?.code, "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE")
+  assert.equal(payload?.limiter?.stage, "preflight")
+  assert.equal(payload?.limiter?.reason, "telemetry_locked_before_snapshot")
+  assert.equal(payload?.limiter?.telemetry_locked, true)
+  assert.equal(db.catalogUpsertRuns, 0)
+  assert.deepEqual(
+    budgetNamespace.calls.map((call) => call.pathname),
+    ["/snapshot"],
+  )
+})

@@ -934,6 +934,10 @@ async function iconoplasmD1DailyBudgetReport(env, now = new Date()) {
   }
 }
 
+function iconoplasmBudgetTelemetryLockedReason() {
+  return "Cloudflare is already refusing Durable Objects writes for the shared Iconoplasm budget ledger, so per-request preflight telemetry cannot be trusted right now."
+}
+
 async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
   const budgets = iconoplasmD1BudgetConfigFromEnv(env)
   if (!budgets) return env
@@ -943,16 +947,50 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
       "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while smart monthly budgets are enabled",
     )
   }
-  const snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(stub, "/snapshot", {
-    day_key: budgets.cycleInfo.dayKey,
-    cycle_key: budgets.cycleInfo.cycleKey,
-    budgets,
-    days_remaining_in_cycle: budgets.cycleInfo.daysRemainingInCycle,
-  })
+  const attribution = request ? iconoplasmD1BudgetAttributionFromRequest(request) : null
+  let snapshot
+  try {
+    snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(stub, "/snapshot", {
+      day_key: budgets.cycleInfo.dayKey,
+      cycle_key: budgets.cycleInfo.cycleKey,
+      budgets,
+      days_remaining_in_cycle: budgets.cycleInfo.daysRemainingInCycle,
+    })
+  } catch (error) {
+    if (!isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)) {
+      throw error
+    }
+    // Public serving has to stay up even when the shared DO ledger is already at
+    // Cloudflare's daily write wall. In that state the telemetry barrier is gone,
+    // so let non-mutation traffic keep flowing instead of turning every catalog
+    // read into a fake outage. The one place we still fail closed is the exact
+    // write-heavy admin mutation family that could make the day more expensive.
+    if (!isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family)) {
+      return env
+    }
+    throw new IconoplasmAdminMutationLimiterActiveError(
+      iconoplasmAdminMutationLimiterDetail(
+        {
+          budgets,
+          attribution,
+          lastSnapshot: iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)?.snapshot || null,
+          mutationLimiter: {
+            active: true,
+            minimumRowsWrittenHeadroom: iconoplasmMutationLimiterMinimumRowsWrittenHeadroom(null, env),
+          },
+        },
+        {
+          stage: "preflight",
+          reason: "telemetry_locked_before_snapshot",
+          telemetryLocked: true,
+          telemetryLockedReason: iconoplasmBudgetTelemetryLockedReason(),
+        },
+      ),
+    )
+  }
   if (snapshot?.exhausted) {
     throw new IconoplasmD1DailyBudgetExceededError(snapshot)
   }
-  const attribution = request ? iconoplasmD1BudgetAttributionFromRequest(request) : null
   const state = {
     stub,
     budgets,
