@@ -66,7 +66,6 @@ const DURABLE_OBJECT_INVOCATIONS_QUERY = `query IconoplasmDOInvocations($account
         dimensions {
           date
           scriptName
-          className
         }
         sum {
           requests
@@ -429,51 +428,33 @@ async function fetchDurableObjectSnapshot({ apiToken, accountId, scriptName, cla
     .map((row) => ({
       date: String(row?.dimensions?.date || ""),
       scriptName: String(row?.dimensions?.scriptName || ""),
-      className: String(row?.dimensions?.className || "unknown"),
       requests: asNumber(row?.sum?.requests),
       errors: asNumber(row?.sum?.errors),
     }))
     .filter((row) => row.scriptName === scriptName)
   const daySet = new Set()
-  const classMap = new Map(
-    (Array.isArray(classNames) ? classNames : []).map((name) => [
-      String(name),
-      { className: String(name), requests: 0, errors: 0, activeDays: new Set(), lastActiveDate: null },
-    ]),
-  )
+  let totalRequests = 0
+  let totalErrors = 0
+  let lastActiveDate = null
   rows.forEach((row) => {
-    daySet.add(row.date)
-    const key = row.className || "unknown"
-    if (!classMap.has(key)) {
-      classMap.set(key, { className: key, requests: 0, errors: 0, activeDays: new Set(), lastActiveDate: null })
-    }
-    const entry = classMap.get(key)
-    entry.requests += row.requests
-    entry.errors += row.errors
     if (row.requests > 0 || row.errors > 0) {
-      entry.activeDays.add(row.date)
-      entry.lastActiveDate = entry.lastActiveDate && entry.lastActiveDate > row.date ? entry.lastActiveDate : row.date
+      daySet.add(row.date)
+      lastActiveDate = lastActiveDate && lastActiveDate > row.date ? lastActiveDate : row.date
     }
+    totalRequests += row.requests
+    totalErrors += row.errors
   })
-  const classes = Array.from(classMap.values())
-    .map((entry) => ({
-      className: entry.className,
-      requests: entry.requests,
-      errors: entry.errors,
-      activeDays: entry.activeDays.size,
-      lastActiveDate: entry.lastActiveDate,
-      errorRate: entry.requests > 0 ? roundMetric((entry.errors / entry.requests) * 100) : 0,
-    }))
-    .sort((left, right) => right.requests - left.requests || left.className.localeCompare(right.className))
   return {
     scriptName,
     classNames: Array.isArray(classNames) ? classNames : [],
     totals: {
-      requests: classes.reduce((sum, entry) => sum + entry.requests, 0),
-      errors: classes.reduce((sum, entry) => sum + entry.errors, 0),
+      requests: totalRequests,
+      errors: totalErrors,
       activeDays: daySet.size,
+      trackedClasses: Array.isArray(classNames) ? classNames.length : 0,
+      lastActiveDate,
     },
-    classes,
+    classes: [],
   }
 }
 

@@ -2654,22 +2654,54 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var durableObjects = report && report.durableObjects ? report.durableObjects : {};
         var totals = durableObjects && durableObjects.totals ? durableObjects.totals : {};
         var classes = Array.isArray(durableObjects && durableObjects.classes) ? durableObjects.classes : [];
-        renderMetricBars(els.costCycleSourceBars, classes.map(function (row) {
-          return {
-            key: row && row.className ? row.className : 'unknown',
-            value: safeNum(row && row.requests),
-            secondary: compactMetricNumber(row && row.errors) + ' errors · ' + String(safeNum(row && row.activeDays)) + ' active day(s)',
-            color: safeNum(row && row.errors) > 0 ? '#bf3030' : '#4f7f6d',
-            note: row && row.lastActiveDate
-              ? ('Last active ' + row.lastActiveDate + ' · script ' + String(durableObjects.scriptName || 'unknown'))
-              : ('No invocations recorded in cycle ' + String(report && report.d1 ? report.d1.cycleKey || 'unknown' : 'unknown'))
-          };
-        }), {
+        var rows = classes.length
+          ? classes.map(function (row) {
+            return {
+              key: row && row.className ? row.className : 'unknown',
+              value: safeNum(row && row.requests),
+              secondary: compactMetricNumber(row && row.errors) + ' errors · ' + String(safeNum(row && row.activeDays)) + ' active day(s)',
+              color: safeNum(row && row.errors) > 0 ? '#bf3030' : '#4f7f6d',
+              note: row && row.lastActiveDate
+                ? ('Last active ' + row.lastActiveDate + ' · script ' + String(durableObjects.scriptName || 'unknown'))
+                : ('No invocations recorded in cycle ' + String(report && report.d1 ? report.d1.cycleKey || 'unknown' : 'unknown'))
+            };
+          })
+          : [
+            {
+              key: 'Invocations',
+              value: safeNum(totals.requests),
+              secondary: compactMetricNumber(totals.errors) + ' errors',
+              color: '#4f7f6d',
+              note: 'Script-level Cloudflare DO invocations for ' + String(durableObjects.scriptName || 'unknown') + '.'
+            },
+            {
+              key: 'Errors',
+              value: safeNum(totals.errors),
+              secondary: compactMetricNumber(totals.requests) + ' requests',
+              color: safeNum(totals.errors) > 0 ? '#bf3030' : '#b84a26',
+              note: totals.lastActiveDate ? ('Last active ' + totals.lastActiveDate + '.') : 'No Durable Object errors recorded in this cycle.'
+            },
+            {
+              key: 'Active days',
+              value: safeNum(totals.activeDays),
+              secondary: String(safeNum(report && report.d1 ? report.d1.daysRemainingInCycle || 0 : 0)) + ' day(s) left',
+              color: '#8f4a7a',
+              note: 'Days in this cycle where Cloudflare saw Iconoplasm Durable Object traffic.'
+            },
+            {
+              key: 'Tracked classes',
+              value: safeNum(totals.trackedClasses),
+              secondary: String((durableObjects.classNames || []).join(', ') || 'none configured'),
+              color: '#b84a26',
+              note: 'Configured Iconoplasm Durable Object classes, even though this dataset is aggregated at script level.'
+            }
+          ];
+        renderMetricBars(els.costCycleSourceBars, rows, {
           emptyTitle: 'No Durable Object activity yet',
           emptyMessage: 'Cloudflare returned no Durable Object invocations for the Iconoplasm worker in this cycle.'
         });
-        if (classes.length && els.costCycleSourceBars) {
-          els.costCycleSourceBars.insertAdjacentHTML('afterbegin', '<div class="cost-subtle">' + esc(compactMetricNumber(totals.requests)) + ' total invocations · ' + esc(compactMetricNumber(totals.errors)) + ' total errors across ' + esc(String(classes.length)) + ' tracked class(es).</div>');
+        if (els.costCycleSourceBars) {
+          els.costCycleSourceBars.insertAdjacentHTML('afterbegin', '<div class="cost-subtle">' + esc(compactMetricNumber(totals.requests)) + ' total invocations · ' + esc(compactMetricNumber(totals.errors)) + ' total errors across script ' + esc(String(durableObjects.scriptName || 'unknown')) + '.</div>');
         }
       }
 
@@ -2768,7 +2800,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var storage = d1 && d1.storage ? d1.storage : {};
         var durableObjects = snapshot && snapshot.durableObjects ? snapshot.durableObjects : {};
         var durableObjectTotals = durableObjects && durableObjects.totals ? durableObjects.totals : {};
-        var trackedDurableObjectClasses = Array.isArray(durableObjects && durableObjects.classes) ? durableObjects.classes.length : 0;
+        var trackedDurableObjectClasses = safeNum(durableObjectTotals.trackedClasses || (Array.isArray(durableObjects && durableObjects.classNames) ? durableObjects.classNames.length : 0));
         var monthlyReadLimit = safeNum(cycleTotals.rowsReadMonthlyLimit);
         var monthlyReadRemaining = safeNum(cycleTotals.rowsReadMonthlyRemaining);
         var monthlyReadShareLeft = monthlyReadLimit > 0 ? Math.round((monthlyReadRemaining / monthlyReadLimit) * 1000) / 10 : 0;

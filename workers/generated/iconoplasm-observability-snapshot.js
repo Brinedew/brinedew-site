@@ -100,7 +100,9 @@ export const ICONOPLASM_OBSERVABILITY_SNAPSHOT = {
     totals: {
       requests: 0,
       errors: 0,
-      activeDays: 0
+      activeDays: 0,
+      trackedClasses: 2,
+      lastActiveDate: null
     },
     classes: [],
     classNames: [
