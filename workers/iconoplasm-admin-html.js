@@ -3130,7 +3130,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           {
             eyebrow: 'D1 writes today',
             value: compactMetricNumber(currentDay.rowsWritten) + ' / ' + compactMetricNumber(currentDay.rowsWrittenDailySmartLimit),
-            copy: compactMetricNumber(currentDay.rowsWrittenDailyRemaining) + ' left before today\'s smart write ceiling.'
+            copy: compactMetricNumber(currentDay.rowsWrittenDailyRemaining) + ' left before today\\'s smart write ceiling.'
           },
           {
             eyebrow: 'D1 writes this cycle',
@@ -3146,7 +3146,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             eyebrow: 'DO rows_written today',
             value: compactMetricNumber(doRowsWritten) + ' / ' + (doLimit > 0 ? compactMetricNumber(doLimit) : '—'),
             copy: doLimit > 0
-              ? compactMetricNumber(doRemaining) + ' left before Cloudflare\'s real daily wall.'
+              ? compactMetricNumber(doRemaining) + ' left before Cloudflare\\'s real daily wall.'
               : 'Daily DO ceiling missing from this bake.'
           },
         ];
