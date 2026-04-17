@@ -1738,6 +1738,16 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <div class="cost-metric-grid" id="cost-metrics"></div>
         </section>
 
+        <section class="cost-card">
+          <div class="cost-card-head">
+            <div>
+              <h2>Budget answer right now</h2>
+              <p class="small">Start here if the real question is “how much have we spent, how much is left, and does the platform still have room for more sync work?” This is the blunt baked answer before you open any drilldown.</p>
+            </div>
+          </div>
+          <div class="cost-detail-grid" id="cost-budget-answer"></div>
+        </section>
+
         <section class="cost-card cost-card--section">
           <div class="cost-card-head">
             <div>
@@ -2052,6 +2062,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         costUpdatedAt: document.getElementById('cost-updated-at'),
         costContextStrip: document.getElementById('cost-context-strip'),
         costMetrics: document.getElementById('cost-metrics'),
+        costBudgetAnswer: document.getElementById('cost-budget-answer'),
         costTrendMeta: document.getElementById('cost-trend-meta'),
         costReadTrend: document.getElementById('cost-read-trend'),
         costBudgetHeadroom: document.getElementById('cost-budget-headroom'),
@@ -3094,6 +3105,63 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         ].join('');
       }
 
+      function renderCostBudgetAnswer(report) {
+        if (!els.costBudgetAnswer) return;
+        var d1 = report && report.d1 ? report.d1 : {};
+        var cycleTotals = d1 && d1.cycleTotals ? d1.cycleTotals : {};
+        var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
+        var durableObjects = report && report.durableObjects ? report.durableObjects : {};
+        var durableCurrentDay = durableObjects && durableObjects.currentDay ? durableObjects.currentDay : {};
+        var doLimit = safeNum(durableCurrentDay.rowsWrittenDailyLimit || durableObjects.dailyLimitRowsWritten);
+        var doRemaining = safeNum(durableCurrentDay.rowsWrittenDailyRemaining);
+        var doRowsWritten = safeNum(durableCurrentDay.rowsWritten);
+        var tones = [
+          capacityToneFromRemaining(currentDay.rowsWrittenDailyRemaining, currentDay.rowsWrittenDailySmartLimit),
+          capacityToneFromRemaining(cycleTotals.rowsWrittenMonthlyRemaining, cycleTotals.rowsWrittenMonthlyLimit),
+          capacityToneFromRemaining(doRemaining, doLimit),
+        ];
+        var headlineTone = tones.includes('danger') ? 'danger' : tones.includes('warn') ? 'warn' : 'ok';
+        var headlineLabel = headlineTone === 'danger'
+          ? 'tight headroom'
+          : headlineTone === 'warn'
+            ? 'watch headroom'
+            : 'room left';
+        var rows = [
+          {
+            eyebrow: 'D1 writes today',
+            value: compactMetricNumber(currentDay.rowsWritten) + ' / ' + compactMetricNumber(currentDay.rowsWrittenDailySmartLimit),
+            copy: compactMetricNumber(currentDay.rowsWrittenDailyRemaining) + ' left before today\'s smart write ceiling.'
+          },
+          {
+            eyebrow: 'D1 writes this cycle',
+            value: compactMetricNumber(cycleTotals.rowsWritten) + ' / ' + compactMetricNumber(cycleTotals.rowsWrittenMonthlyLimit),
+            copy: compactMetricNumber(cycleTotals.rowsWrittenMonthlyRemaining) + ' left before the billing-cycle write ceiling.'
+          },
+          {
+            eyebrow: 'D1 reads this cycle',
+            value: compactMetricNumber(cycleTotals.rowsRead) + ' / ' + compactMetricNumber(cycleTotals.rowsReadMonthlyLimit),
+            copy: compactMetricNumber(cycleTotals.rowsReadMonthlyRemaining) + ' left before the billing-cycle read ceiling.'
+          },
+          {
+            eyebrow: 'DO rows_written today',
+            value: compactMetricNumber(doRowsWritten) + ' / ' + (doLimit > 0 ? compactMetricNumber(doLimit) : '—'),
+            copy: doLimit > 0
+              ? compactMetricNumber(doRemaining) + ' left before Cloudflare\'s real daily wall.'
+              : 'Daily DO ceiling missing from this bake.'
+          },
+        ];
+        els.costBudgetAnswer.innerHTML = [
+          '<div class="cost-status-banner">',
+          renderCostStateChip(headlineLabel, headlineTone),
+          '<strong>Fast answer from the baked Cloudflare snapshot</strong>',
+          '<div class="small">This page answers platform budget headroom directly. Specific live workstation-run finish odds belong in Website Ops, but the ceilings below tell you whether the platform itself still has room for more sync work.</div>',
+          '</div>',
+          rows.map(function (row) {
+            return renderCostDetailCard(row);
+          }).join('')
+        ].join('');
+      }
+
       function renderObservabilityLaunchpad(report) {
         if (!els.costCycleBudgetBars) return;
         var d1 = report && report.d1 ? report.d1 : {};
@@ -3386,6 +3454,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (trendRows.length) bindCostTrendHover();
         }
 
+        renderCostBudgetAnswer(snapshot);
         renderCostBudgetHeadroom(snapshot);
         renderObservabilityLaunchpad(snapshot);
         renderObservabilityDatasets(snapshot);

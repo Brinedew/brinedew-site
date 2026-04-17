@@ -691,7 +691,7 @@ test("admin cost usage no longer queries the DO ledger even when that report pat
   assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
 })
 
-test("write-heavy admin mutations fail before starting when rows-written headroom is already too thin", async () => {
+test("write-heavy admin mutations fail before starting once the configured target cap is already reached", async () => {
   class FixedSnapshotBudgetNamespace {
     constructor(initialSnapshot) {
       this.snapshot = { ...initialSnapshot }
@@ -758,21 +758,21 @@ test("write-heavy admin mutations fail before starting when rows-written headroo
     day_key: "2026-04-17",
     cycle_key: "2026-04-07",
     rows_read: 0,
-    rows_written: 15,
+    rows_written: 18,
     query_count: 3,
     request_count: 1,
     cycle_rows_read: 0,
-    cycle_rows_written: 15,
+    cycle_rows_written: 18,
     cycle_query_count: 3,
     cycle_request_count: 1,
     rows_read_monthly_limit: 24000000000,
     rows_written_monthly_limit: 100,
     rows_read_monthly_remaining: 24000000000,
-    rows_written_monthly_remaining: 85,
+    rows_written_monthly_remaining: 82,
     rows_read_daily_smart_limit: 1000,
     rows_written_daily_smart_limit: 20,
     rows_read_daily_remaining: 1000,
-    rows_written_daily_remaining: 5,
+    rows_written_daily_remaining: 2,
     days_remaining_in_cycle: 20,
     daily_burst_multiplier: 3,
     exhausted: false,
@@ -805,7 +805,6 @@ test("write-heavy admin mutations fail before starting when rows-written headroo
       ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100",
       ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
       ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
-      ICONOPLASM_MUTATION_LIMITER_MIN_ROWS_WRITTEN_HEADROOM_DO_NOT_SET_CASUALLY: "5",
     },
     { waitUntil() {} },
   )
@@ -814,7 +813,10 @@ test("write-heavy admin mutations fail before starting when rows-written headroo
   assert.equal(response.status, 503)
   assert.equal(payload?.code, "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE")
   assert.equal(payload?.limiter?.stage, "preflight")
-  assert.equal(payload?.limiter?.reason, "rows_written_headroom_too_low_to_start_safely")
+  assert.equal(payload?.limiter?.reason, "rows_written_target_cap_reached_before_start")
+  assert.equal(payload?.limiter?.target_daily_percent, 90)
+  assert.equal(payload?.limiter?.target_rows_written_ceiling, 18)
+  assert.equal(payload?.limiter?.rows_written_target_remaining, 0)
   assert.equal(db.catalogUpsertRuns, 0)
   assert.deepEqual(
     budgetNamespace.calls.map((call) => call.pathname),
@@ -940,7 +942,6 @@ test("write-heavy admin mutations clamp mid-run without chattering to the ledger
       ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100",
       ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
       ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
-      ICONOPLASM_MUTATION_LIMITER_MIN_ROWS_WRITTEN_HEADROOM_DO_NOT_SET_CASUALLY: "5",
     },
     { waitUntil() {} },
   )
@@ -1045,7 +1046,6 @@ test("write-heavy admin mutations still fail closed when snapshot telemetry is l
       ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
       ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
       ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
-      ICONOPLASM_MUTATION_LIMITER_MIN_ROWS_WRITTEN_HEADROOM_DO_NOT_SET_CASUALLY: "5",
     },
     { waitUntil() {} },
   )

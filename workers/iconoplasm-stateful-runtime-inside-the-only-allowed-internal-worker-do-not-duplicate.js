@@ -74,8 +74,8 @@ const RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE = Symbol(
 const ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH = Symbol(
   "ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH",
 )
-const ICONOPLASM_MUTATION_LIMITER_MIN_ROWS_WRITTEN_HEADROOM_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_MUTATION_LIMITER_MIN_ROWS_WRITTEN_HEADROOM_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY =
+  "ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_QUERY_THRESHOLD_DO_NOT_TUNE_LIGHTLY = 25
 const ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_ROWS_READ_THRESHOLD_DO_NOT_TUNE_LIGHTLY = 5000
 const ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_ROWS_WRITTEN_THRESHOLD_DO_NOT_TUNE_LIGHTLY = 500
@@ -454,15 +454,82 @@ function isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) {
   ]).has(String(routeFamily || "").trim())
 }
 
-function iconoplasmMutationLimiterMinimumRowsWrittenHeadroom(snapshot, env) {
-  const configured = positiveIntFromEnv(
-    env?.[ICONOPLASM_MUTATION_LIMITER_MIN_ROWS_WRITTEN_HEADROOM_ENV_DO_NOT_SET_CASUALLY],
-    0,
-  )
-  if (configured > 0) return configured
+function iconoplasmMutationLimiterChunkSlowZoneRows(snapshot) {
   const smartLimit = Math.max(0, Number(snapshot?.rows_written_daily_smart_limit || 0) || 0)
   if (smartLimit <= 0) return 0
   return Math.max(1000, Math.min(50000, Math.ceil(smartLimit * 0.005)))
+}
+
+function iconoplasmMutationLimiterTargetDailyPercent(env) {
+  const configured = positiveNumberFromEnv(
+    env?.[ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY],
+    90,
+  )
+  return Math.max(1, Math.min(100, configured))
+}
+
+function iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env) {
+  const smartLimit =
+    snapshot?.rows_written_daily_smart_limit === null ||
+    snapshot?.rows_written_daily_smart_limit === undefined
+      ? null
+      : Math.max(0, Number(snapshot?.rows_written_daily_smart_limit || 0) || 0)
+  if (smartLimit === null) return null
+  return Math.max(0, Math.floor(smartLimit * (iconoplasmMutationLimiterTargetDailyPercent(env) / 100)))
+}
+
+function iconoplasmMutationLimiterBudgetStatus(state, snapshot = null) {
+  const currentSnapshot = snapshot || iconoplasmD1DailyBudgetProjectedSnapshot(state) || state?.lastSnapshot || null
+  const targetDailyPercent = Math.max(
+    1,
+    Math.min(100, Number(state?.mutationLimiter?.targetDailyPercent || 0) || 0),
+  ) || iconoplasmMutationLimiterTargetDailyPercent(state?.rawEnv)
+  const targetRowsWrittenCeiling =
+    state?.mutationLimiter?.targetRowsWrittenCeiling === null ||
+    state?.mutationLimiter?.targetRowsWrittenCeiling === undefined
+      ? iconoplasmMutationLimiterTargetRowsWrittenCeiling(currentSnapshot, state?.rawEnv)
+      : Math.max(0, Number(state?.mutationLimiter?.targetRowsWrittenCeiling || 0) || 0)
+  const rowsWritten = Math.max(0, Number(currentSnapshot?.rows_written || 0) || 0)
+  const rowsWrittenTargetRemaining =
+    targetRowsWrittenCeiling === null ? null : Math.max(0, targetRowsWrittenCeiling - rowsWritten)
+  return {
+    snapshot: currentSnapshot,
+    target_daily_percent: targetDailyPercent,
+    target_rows_written_ceiling: targetRowsWrittenCeiling,
+    rows_written_target_remaining: rowsWrittenTargetRemaining,
+    target_cap_reached:
+      targetRowsWrittenCeiling !== null && rowsWritten >= targetRowsWrittenCeiling,
+  }
+}
+
+function iconoplasmMutationLimiterSuggestedChunkUnits(
+  state,
+  { requestedUnits = 0, observedRowsWrittenPerUnit = 0 } = {},
+) {
+  const safeRequestedUnits = Math.max(0, Number.parseInt(String(requestedUnits || 0), 10) || 0)
+  if (safeRequestedUnits <= 0) return 0
+  if (!state?.mutationLimiter?.active) return safeRequestedUnits
+  const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
+  const targetRemaining = budgetStatus.rows_written_target_remaining
+  if (targetRemaining === null) return safeRequestedUnits
+  if (targetRemaining <= 0) return 0
+
+  const observedCost = Math.max(0, Number(observedRowsWrittenPerUnit || 0) || 0)
+  if (observedCost > 0) {
+    const estimatedUnits = Math.floor(targetRemaining / observedCost)
+    if (estimatedUnits <= 0) return 0
+    return Math.max(1, Math.min(safeRequestedUnits, estimatedUnits))
+  }
+
+  const slowZone = Math.max(1, Number(state?.mutationLimiter?.chunkSlowZoneRows || 0) || 0)
+  // The old headroom rule used to hard-stop the whole request. Keep it only as
+  // a slow-zone hint now: when we get close to the cap and do not yet have a
+  // measured chunk cost, shrink admission so we learn on smaller bites instead
+  // of gambling the whole remaining day on one blind chunk.
+  if (targetRemaining <= slowZone) return 1
+  if (targetRemaining <= slowZone * 2) return Math.max(1, Math.min(safeRequestedUnits, Math.ceil(safeRequestedUnits / 4)))
+  if (targetRemaining <= slowZone * 4) return Math.max(1, Math.min(safeRequestedUnits, Math.ceil(safeRequestedUnits / 2)))
+  return safeRequestedUnits
 }
 
 function iconoplasmD1DailyBudgetProjectedSnapshot(state) {
@@ -588,7 +655,7 @@ function iconoplasmD1DailyBudgetConfigurationPayload(message) {
 function iconoplasmAdminMutationLimiterActivePayload(detail) {
   return {
     error:
-      "Iconoplasm is refusing another write-heavy admin run because the only allowed stateful worker is too close to the daily write wall to start or continue safely.",
+      "Iconoplasm paused another write-heavy admin run because the only allowed stateful worker reached the configured daily write cap for mutation work, or the shared telemetry fence is no longer trustworthy.",
     code: "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE",
     limiter: detail || null,
   }
@@ -629,6 +696,7 @@ function iconoplasmAdminMutationLimiterDetail(
   state,
   { stage = "preflight", reason = "", telemetryLocked = false, telemetryLockedReason = "" } = {},
 ) {
+  const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
   return {
     stage,
     reason: String(reason || "").trim() || null,
@@ -636,11 +704,13 @@ function iconoplasmAdminMutationLimiterDetail(
     budget_class: state?.attribution?.budget_class || null,
     actor_class: state?.attribution?.actor_class || null,
     source_class: state?.attribution?.source_class || null,
-    minimum_rows_written_headroom:
-      Math.max(0, Number(state?.mutationLimiter?.minimumRowsWrittenHeadroom || 0) || 0) || null,
+    target_daily_percent: budgetStatus.target_daily_percent || null,
+    target_rows_written_ceiling: budgetStatus.target_rows_written_ceiling,
+    rows_written_target_remaining: budgetStatus.rows_written_target_remaining,
+    target_cap_reached: budgetStatus.target_cap_reached,
     telemetry_locked: Boolean(telemetryLocked),
     telemetry_locked_reason: telemetryLocked ? String(telemetryLockedReason || "").trim() || null : null,
-    budget_snapshot: iconoplasmD1DailyBudgetProjectedSnapshot(state) || state?.lastSnapshot || null,
+    budget_snapshot: budgetStatus.snapshot || state?.lastSnapshot || null,
   }
 }
 
@@ -710,17 +780,13 @@ async function flushIconoplasmD1DailyBudgetUsageFromEnv(env) {
 
 function assertIconoplasmAdminMutationLimiterMayStart(state) {
   if (!state?.mutationLimiter?.active) return
-  const snapshot = iconoplasmD1DailyBudgetProjectedSnapshot(state) || state?.lastSnapshot || null
-  const rowsWrittenDailyRemaining =
-    snapshot?.rows_written_daily_remaining === null || snapshot?.rows_written_daily_remaining === undefined
-      ? null
-      : Math.max(0, Number(snapshot?.rows_written_daily_remaining || 0) || 0)
-  if (rowsWrittenDailyRemaining === null) return
-  if (rowsWrittenDailyRemaining > state.mutationLimiter.minimumRowsWrittenHeadroom) return
+  const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
+  if (budgetStatus.rows_written_target_remaining === null) return
+  if (budgetStatus.rows_written_target_remaining > 0) return
   throw new IconoplasmAdminMutationLimiterActiveError(
     iconoplasmAdminMutationLimiterDetail(state, {
       stage: "preflight",
-      reason: "rows_written_headroom_too_low_to_start_safely",
+      reason: "rows_written_target_cap_reached_before_start",
     }),
   )
 }
@@ -865,6 +931,26 @@ function iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env) {
   }
 }
 
+function iconoplasmAdminMutationLimiterSnapshotFromEnv(env) {
+  const state = env?.[ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH]
+  if (!state?.mutationLimiter?.active) return null
+  const usage = iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env) || null
+  const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
+  return {
+    target_daily_percent: budgetStatus.target_daily_percent || null,
+    target_rows_written_ceiling: budgetStatus.target_rows_written_ceiling,
+    rows_written_target_remaining: budgetStatus.rows_written_target_remaining,
+    target_cap_reached: budgetStatus.target_cap_reached,
+    budget_snapshot: budgetStatus.snapshot || usage?.budget_snapshot || null,
+    rows_read_request: usage?.rows_read_request || 0,
+    rows_written_request: usage?.rows_written_request || 0,
+    query_count_request: usage?.query_count_request || 0,
+    route_family: usage?.route_family || state?.attribution?.route_family || null,
+    actor_class: usage?.actor_class || state?.attribution?.actor_class || null,
+    source_class: usage?.source_class || state?.attribution?.source_class || null,
+  }
+}
+
 function iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets) {
   const dayKey = String(budgets?.cycleInfo?.dayKey || "")
   const cycleKey = String(budgets?.cycleInfo?.cycleKey || dayKey)
@@ -974,12 +1060,20 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
     throw new IconoplasmAdminMutationLimiterActiveError(
       iconoplasmAdminMutationLimiterDetail(
         {
+          rawEnv: env,
           budgets,
           attribution,
           lastSnapshot: iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)?.snapshot || null,
           mutationLimiter: {
             active: true,
-            minimumRowsWrittenHeadroom: iconoplasmMutationLimiterMinimumRowsWrittenHeadroom(null, env),
+            chunkSlowZoneRows: iconoplasmMutationLimiterChunkSlowZoneRows(
+              iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)?.snapshot || null,
+            ),
+            targetDailyPercent: iconoplasmMutationLimiterTargetDailyPercent(env),
+            targetRowsWrittenCeiling: iconoplasmMutationLimiterTargetRowsWrittenCeiling(
+              iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)?.snapshot || null,
+              env,
+            ),
           },
         },
         {
@@ -994,7 +1088,10 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
   if (snapshot?.exhausted) {
     throw new IconoplasmD1DailyBudgetExceededError(snapshot)
   }
+  const targetDailyPercent = iconoplasmMutationLimiterTargetDailyPercent(env)
+  const targetRowsWrittenCeiling = iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env)
   const state = {
+    rawEnv: env,
     stub,
     budgets,
     dayKey: budgets.cycleInfo.dayKey,
@@ -1017,7 +1114,9 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
     },
     mutationLimiter: {
       active: isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family),
-      minimumRowsWrittenHeadroom: iconoplasmMutationLimiterMinimumRowsWrittenHeadroom(snapshot, env),
+      chunkSlowZoneRows: iconoplasmMutationLimiterChunkSlowZoneRows(snapshot),
+      targetDailyPercent,
+      targetRowsWrittenCeiling,
     },
   }
   assertIconoplasmAdminMutationLimiterMayStart(state)
@@ -8029,6 +8128,7 @@ async function syncAdminReadModels(
     return bulkRebuildAdminReadModels(env)
   }
 
+  const budgetState = env?.[ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH] || null
   const symbolList = Array.from(
     new Set(symbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
   )
@@ -8036,13 +8136,37 @@ async function syncAdminReadModels(
     visionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean),
   )
   const symbolBatchSize = ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT
-  for (let start = 0; start < symbolList.length; start += symbolBatchSize) {
-    const symbolChunk = symbolList.slice(start, start + symbolBatchSize)
-    if (!symbolChunk.length) continue
+  let processedSymbols = 0
+  let processedVisions = 0
+  let symbolIndex = 0
+  let visionIndex = 0
+  let partial = false
+  let stopReason = ""
+  let observedRowsWrittenPerSymbol = 0
+  let observedRowsWrittenPerVision = 0
+  let sampledSymbolUnits = 0
+  let sampledVisionUnits = 0
+
+  while (symbolIndex < symbolList.length) {
+    const requestedSymbolUnits = Math.min(symbolBatchSize, symbolList.length - symbolIndex)
+    const allowedSymbolUnits = budgetState
+      ? iconoplasmMutationLimiterSuggestedChunkUnits(budgetState, {
+          requestedUnits: requestedSymbolUnits,
+          observedRowsWrittenPerUnit: observedRowsWrittenPerSymbol,
+        })
+      : requestedSymbolUnits
+    if (allowedSymbolUnits <= 0) {
+      partial = true
+      stopReason = "rows_written_target_cap_reached_before_symbol_chunk"
+      break
+    }
+    const symbolChunk = symbolList.slice(symbolIndex, symbolIndex + allowedSymbolUnits)
+    if (!symbolChunk.length) break
     // Architecture guardrail: reconcile can touch most of the catalog in one
     // run. Rebuilding admin read models for all touched symbols in one giant
     // JSON-bound D1 statement turned the refresh into a single oversized point
     // of failure. Chunk the durable work so each slice can finish cleanly.
+    const beforeRowsWritten = Math.max(0, Number(budgetState?.lastSnapshot?.rows_written || 0) || 0)
     if (!skipVoteSummaries) {
       await rebuildVoteAssetSummaryForSymbols(env, symbolChunk)
     }
@@ -8055,24 +8179,128 @@ async function syncAdminReadModels(
         finalVisionIdSet.add(visionId)
       }
     }
+    processedSymbols += symbolChunk.length
+    symbolIndex += symbolChunk.length
+    if (budgetState) {
+      const flushedSnapshot = await flushIconoplasmD1DailyBudgetPendingUsage(budgetState)
+      const afterRowsWritten = Math.max(0, Number(flushedSnapshot?.rows_written || 0) || 0)
+      const chunkRowsWritten = Math.max(0, afterRowsWritten - beforeRowsWritten)
+      if (chunkRowsWritten > 0) {
+        observedRowsWrittenPerSymbol =
+          ((observedRowsWrittenPerSymbol * sampledSymbolUnits) + chunkRowsWritten) /
+          (sampledSymbolUnits + symbolChunk.length)
+        sampledSymbolUnits += symbolChunk.length
+      }
+      const budgetStatus = iconoplasmMutationLimiterBudgetStatus(budgetState, flushedSnapshot)
+      if (budgetStatus.rows_written_target_remaining !== null && budgetStatus.rows_written_target_remaining <= 0) {
+        if (symbolIndex < symbolList.length) {
+          partial = true
+          stopReason = "rows_written_target_cap_reached_after_symbol_chunk"
+          break
+        }
+      }
+    }
+    if (symbolChunk.length < requestedSymbolUnits) {
+      partial = true
+      stopReason = "rows_written_target_cap_reached_mid_symbol_window"
+      break
+    }
   }
   const finalVisionIds = skipVisionRollups ? [] : Array.from(finalVisionIdSet)
-  if (!skipVisionRollups) {
-    if (fullVision) await rebuildVisionRollups(env, [], { full: true })
-    else {
+  if (!partial && !skipVisionRollups) {
+    if (fullVision) {
+      // This path is not part of the workstation sync contract. Keep the old
+      // behavior for explicit operator rebuilds until there is a separately
+      // durable full-rebuild resume story.
+      await rebuildVisionRollups(env, [], { full: true })
+      processedVisions = -1
+    } else {
       const visionBatchSize = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT
-      for (let start = 0; start < finalVisionIds.length; start += visionBatchSize) {
-        const visionChunk = finalVisionIds.slice(start, start + visionBatchSize)
-        if (!visionChunk.length) continue
+      while (visionIndex < finalVisionIds.length) {
+        const requestedVisionUnits = Math.min(visionBatchSize, finalVisionIds.length - visionIndex)
+        const allowedVisionUnits = budgetState
+          ? iconoplasmMutationLimiterSuggestedChunkUnits(budgetState, {
+              requestedUnits: requestedVisionUnits,
+              observedRowsWrittenPerUnit: observedRowsWrittenPerVision,
+            })
+          : requestedVisionUnits
+        if (allowedVisionUnits <= 0) {
+          partial = true
+          stopReason = "rows_written_target_cap_reached_before_vision_chunk"
+          break
+        }
+        const visionChunk = finalVisionIds.slice(visionIndex, visionIndex + allowedVisionUnits)
+        if (!visionChunk.length) break
+        const beforeRowsWritten = Math.max(0, Number(budgetState?.lastSnapshot?.rows_written || 0) || 0)
         await rebuildVisionRollupsBatch(env, visionChunk)
+        processedVisions += visionChunk.length
+        visionIndex += visionChunk.length
+        if (budgetState) {
+          const flushedSnapshot = await flushIconoplasmD1DailyBudgetPendingUsage(budgetState)
+          const afterRowsWritten = Math.max(0, Number(flushedSnapshot?.rows_written || 0) || 0)
+          const chunkRowsWritten = Math.max(0, afterRowsWritten - beforeRowsWritten)
+          if (chunkRowsWritten > 0) {
+            observedRowsWrittenPerVision =
+              ((observedRowsWrittenPerVision * sampledVisionUnits) + chunkRowsWritten) /
+              (sampledVisionUnits + visionChunk.length)
+            sampledVisionUnits += visionChunk.length
+          }
+          const budgetStatus = iconoplasmMutationLimiterBudgetStatus(budgetState, flushedSnapshot)
+          if (
+            budgetStatus.rows_written_target_remaining !== null &&
+            budgetStatus.rows_written_target_remaining <= 0 &&
+            visionIndex < finalVisionIds.length
+          ) {
+            partial = true
+            stopReason = "rows_written_target_cap_reached_after_vision_chunk"
+            break
+          }
+        }
+        if (visionChunk.length < requestedVisionUnits) {
+          partial = true
+          stopReason = "rows_written_target_cap_reached_mid_vision_window"
+          break
+        }
       }
     }
   }
-  if (!skipDashboard) {
+
+  const dashboardPending = !skipDashboard && !partial
+  if (!skipDashboard && !partial) {
+    const allowedDashboardUnits = budgetState
+      ? iconoplasmMutationLimiterSuggestedChunkUnits(budgetState, {
+          requestedUnits: 1,
+          observedRowsWrittenPerUnit: 0,
+        })
+      : 1
+    if (allowedDashboardUnits <= 0) {
+      partial = true
+      stopReason = "rows_written_target_cap_reached_before_dashboard_refresh"
+    }
+  }
+  if (!skipDashboard && !partial) {
     await rebuildDashboardSummary(env)
+    if (budgetState) {
+      await flushIconoplasmD1DailyBudgetPendingUsage(budgetState)
+    }
   }
   adminReadModelState.ready = true
-  return { symbols: symbolList.length, visions: fullVision ? -1 : finalVisionIds.length }
+  const budgetStatus = budgetState ? iconoplasmMutationLimiterBudgetStatus(budgetState) : null
+  return {
+    symbols: processedSymbols,
+    visions: fullVision ? processedVisions : processedVisions,
+    partial,
+    stop_reason: partial ? stopReason || "rows_written_target_cap_reached" : null,
+    deferred: partial
+      ? {
+          symbols: Math.max(0, symbolList.length - symbolIndex),
+          visions: fullVision ? null : Math.max(0, finalVisionIds.length - visionIndex),
+          dashboard: Boolean(!skipDashboard),
+        }
+      : { symbols: 0, visions: 0, dashboard: false },
+    budget: budgetStatus?.snapshot || null,
+    target_daily_percent: budgetStatus?.target_daily_percent || null,
+  }
 }
 
 async function projectVoteCoordinatorLedgerRow(
@@ -8828,6 +9056,16 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
   if (!symbol) throw new Error("Finalization job is missing gene_symbol")
   const reason = sanitizeText(job?.reason || "", 2000) || "sync_finalization"
   const phase = normalizeSyncFinalizationJobPhase(job?.phase)
+  const pauseCurrentPhase = (result, stopReasonFallback) => ({
+    symbol,
+    phase,
+    next_phase: phase,
+    partial: true,
+    stop_reason:
+      sanitizeText(result?.stop_reason || stopReasonFallback || "rows_written_target_cap_reached", 255) ||
+      "rows_written_target_cap_reached",
+    result,
+  })
   if (phase === ICONOPLASM_SYNC_FINALIZATION_PHASE_RECONCILE) {
     const reconcile = await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       env,
@@ -8844,6 +9082,9 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
         },
       },
     )
+    if (reconcile?.partial) {
+      return pauseCurrentPhase({ reconcile }, "rows_written_target_cap_reached_during_reconcile")
+    }
     return {
       symbol,
       phase,
@@ -8866,6 +9107,12 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
         },
       },
     )
+    if (voteSummaries?.partial) {
+      return pauseCurrentPhase(
+        { vote_summaries: voteSummaries },
+        "rows_written_target_cap_reached_before_vote_summaries",
+      )
+    }
     return {
       symbol,
       phase,
@@ -8888,6 +9135,12 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
         },
       },
     )
+    if (geneRollups?.partial) {
+      return pauseCurrentPhase(
+        { gene_rollups: geneRollups },
+        "rows_written_target_cap_reached_before_gene_rollups",
+      )
+    }
     return {
       symbol,
       phase,
@@ -8912,6 +9165,12 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
           },
         },
       )
+      if (visionRollups?.partial) {
+        return pauseCurrentPhase(
+          { vision_rollups: visionRollups },
+          "rows_written_target_cap_reached_before_vision_rollups",
+        )
+      }
       return {
         symbol,
         phase,
@@ -9031,6 +9290,9 @@ async function processPendingSyncFinalizationJobs(
   const results = []
   let processed = 0
   let failed = 0
+  let partial = false
+  let stopReason = ""
+  let partialBudget = null
   for (const job of rows) {
     const attemptCount = Math.max(0, Number(job?.attempts || 0) || 0)
     await writeSyncFinalizationJobState(env, {
@@ -9043,6 +9305,38 @@ async function processPendingSyncFinalizationJobs(
     })
     try {
       const phaseResult = await processSyncFinalizationJobPhase(env, ctx, job)
+      if (phaseResult?.partial) {
+        await writeSyncFinalizationJobState(env, {
+          symbol: job.symbol,
+          status: ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+          phase: phaseResult.next_phase || job.phase,
+          nextAttemptAt: new Date().toISOString(),
+          lastAttemptAt: new Date().toISOString(),
+          attempts: attemptCount,
+          lastError: "",
+          completedAt: null,
+        })
+        partial = true
+        stopReason =
+          sanitizeText(phaseResult?.stop_reason || "rows_written_target_cap_reached", 255) ||
+          "rows_written_target_cap_reached"
+        partialBudget =
+          phaseResult?.result?.reconcile?.budget ||
+          phaseResult?.result?.vote_summaries?.budget ||
+          phaseResult?.result?.gene_rollups?.budget ||
+          phaseResult?.result?.vision_rollups?.budget ||
+          null
+        results.push({
+          ok: true,
+          partial: true,
+          symbol: job.symbol,
+          phase: job.phase,
+          next_phase: phaseResult.next_phase || job.phase,
+          stop_reason: stopReason,
+          result: phaseResult.result,
+        })
+        break
+      }
       await writeSyncFinalizationJobState(env, {
         symbol: job.symbol,
         status: ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
@@ -9081,7 +9375,7 @@ async function processPendingSyncFinalizationJobs(
       })
     }
   }
-  const finalizeResult = finalizeIfDrained
+  const finalizeResult = !partial && finalizeIfDrained
     ? await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx)
     : { ok: true, finalized: 0, remaining: 0 }
   const remaining = await countSyncFinalizationJobs(env, {
@@ -9092,6 +9386,9 @@ async function processPendingSyncFinalizationJobs(
     ok: true,
     processed,
     failed,
+    partial,
+    stop_reason: partial ? stopReason : null,
+    budget: partial ? partialBudget : null,
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
     remaining,
     results,
@@ -14891,7 +15188,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       return done(
         "admin_finalization_process",
-        json(result, 200, { "Cache-Control": "no-store" }),
+        json(
+          {
+            ...result,
+            mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
       )
     }
 
@@ -14997,6 +15301,24 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ok: true,
             symbols: Number(result?.symbols || 0),
             visions: Number(result?.visions || 0),
+            partial: Boolean(result?.partial),
+            stop_reason: sanitizeText(result?.stop_reason || "", 255) || null,
+            deferred:
+              result?.deferred && typeof result.deferred === "object"
+                ? {
+                    symbols: Math.max(0, Number(result?.deferred?.symbols || 0) || 0),
+                    visions:
+                      result?.deferred?.visions === null || result?.deferred?.visions === undefined
+                        ? null
+                        : Math.max(0, Number(result?.deferred?.visions || 0) || 0),
+                    dashboard: Boolean(result?.deferred?.dashboard),
+                  }
+                : { symbols: 0, visions: 0, dashboard: false },
+            budget: result?.budget || null,
+            target_daily_percent:
+              result?.target_daily_percent === null || result?.target_daily_percent === undefined
+                ? null
+                : Number(result.target_daily_percent || 0) || null,
             invalidate_gallery: invalidateGallery,
             full_vision: fullVision,
             full_rebuild: fullRebuild,
@@ -15732,6 +16054,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             invalid,
             total: items.length,
             defer_read_models: deferReadModels,
+            mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
             results,
           },
           invalid > 0 && processed === 0 ? 400 : 200,
@@ -15803,6 +16126,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             kept: keepSymbols.size,
             deleted: toDelete.length,
             defer_read_models: deferReadModels,
+            mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
           },
           200,
           { "Cache-Control": "no-store" },
@@ -15910,6 +16234,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             invalid,
             total: items.length,
             defer_read_models: deferReadModels,
+            mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
             results,
           },
           invalid > 0 && processed === 0 ? 400 : 200,
@@ -16381,6 +16706,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             processed,
             failed,
             total: itemsRaw.length,
+            mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
             results,
           },
           statusCode,
