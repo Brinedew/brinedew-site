@@ -305,6 +305,81 @@ test("admin finalization enqueue stores normalized durable job rows", async () =
   assert.deepEqual(JSON.parse(String(stored?.vision_ids_json || "[]")), ["anima-v1-1"])
 })
 
+test("admin finalization enqueue returns current mutation-limiter telemetry for workstation accounting", async () => {
+  const budgetNamespace = {
+    idFromName(name) {
+      return String(name || "")
+    },
+    get() {
+      return {
+        fetch: async () =>
+          new Response(
+            JSON.stringify({
+              day_key: "2026-04-16",
+              cycle_key: "2026-04",
+              days_remaining_in_cycle: 12,
+              rows_written: 24,
+              rows_written_daily_smart_limit: 100,
+              rows_written_daily_remaining: 76,
+              rows_written_monthly_limit: 1000,
+              rows_written_monthly_remaining: 976,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+      }
+    },
+  }
+  const gatewayDb = new FakeIconoplasmDb()
+  const gatewayEnv = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: gatewayDb,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "1000",
+    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+  }
+  const env = bindOnlyAllowedGateway(
+    {
+      ...gatewayEnv,
+      ICONOPLASM_DB: null,
+      gatewayDb,
+    },
+    gatewayEnv,
+  )
+
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reason: "pytest_sync_finalization",
+        rows: [
+          {
+            symbol: "TP53",
+            phase: "reconcile",
+          },
+        ],
+      }),
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.mutation_limiter?.target_daily_percent, 90)
+  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, 90)
+  assert.equal(payload?.mutation_limiter?.rows_written_target_remaining, 66)
+  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, 24)
+})
+
 test("admin finalization process advances reconcile jobs to the next durable phase", async () => {
   const env = buildEnv({
     jobs: [

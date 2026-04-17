@@ -15154,6 +15154,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ok: true,
             queued: Number(enqueueResult?.queued || 0),
             symbols: Array.isArray(enqueueResult?.symbols) ? enqueueResult.symbols : [],
+            mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
             process: processResult,
           },
           200,

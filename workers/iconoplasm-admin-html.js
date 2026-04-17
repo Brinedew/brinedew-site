@@ -3143,10 +3143,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             copy: compactMetricNumber(cycleTotals.rowsReadMonthlyRemaining) + ' left before the billing-cycle read ceiling.'
           },
           {
-            eyebrow: 'DO rows_written today',
+            eyebrow: 'Account-wide DO rows_written today',
             value: compactMetricNumber(doRowsWritten) + ' / ' + (doLimit > 0 ? compactMetricNumber(doLimit) : '—'),
             copy: doLimit > 0
-              ? compactMetricNumber(doRemaining) + ' left before Cloudflare\\'s real daily wall.'
+              ? compactMetricNumber(doRemaining) + ' left before Cloudflare\\'s real daily wall. This is tracked DO storage-write volume for the day, not an upload count.'
               : 'Daily DO ceiling missing from this bake.'
           },
         ];
@@ -3154,7 +3154,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<div class="cost-status-banner">',
           renderCostStateChip(headlineLabel, headlineTone),
           '<strong>Fast answer from the baked Cloudflare snapshot</strong>',
-          '<div class="small">This page answers platform budget headroom directly. Specific live workstation-run finish odds belong in Website Ops, but the ceilings below tell you whether the platform itself still has room for more sync work.</div>',
+          '<div class="small">This page answers platform budget headroom directly. Specific live workstation-run finish odds and upload-vs-bookkeeping attribution belong in Website Ops. The DO number below is account-wide Cloudflare rows_written headroom, not a count of uploads bought by one sync.</div>',
           '</div>',
           rows.map(function (row) {
             return renderCostDetailCard(row);
@@ -3224,9 +3224,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var summaryLabel = currentDay.exhausted ? 'ceiling hit' : (tone === 'warn' ? 'watch headroom' : (tone === 'ok' ? 'headroom left' : 'missing limit'));
         var rows = [
           {
-            eyebrow: 'Today account-wide DO writes',
+            eyebrow: 'Today account-wide DO rows_written',
             value: compactMetricNumber(currentRows) + ' / ' + (dailyLimit > 0 ? compactMetricNumber(dailyLimit) : '—'),
-            copy: formatMonthDay(currentDay.date) + ' · ' + (dailyLimit > 0 ? (compactMetricNumber(currentRemaining) + ' left before the Cloudflare wall.') : 'Daily ceiling missing from this bake.')
+            copy: formatMonthDay(currentDay.date) + ' · ' + (dailyLimit > 0 ? (compactMetricNumber(currentRemaining) + ' left before the Cloudflare wall.') : 'Daily ceiling missing from this bake.') + ' This is account-wide DO storage-write volume, not a per-sync upload meter.'
           },
           {
             eyebrow: 'Worst baked day',
@@ -3243,7 +3243,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           {
             eyebrow: 'Rows written in baked window',
             value: compactMetricNumber(totals.rowsWritten),
-            copy: 'Account-wide DO rows_written across the same baked daily window shown in the chart.'
+            copy: 'Account-wide DO rows_written across the same baked daily window shown in the chart. It includes tracked DO work in the window, not just one sync run.'
           },
           {
             eyebrow: 'Invocations in window',
@@ -3263,7 +3263,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<div class="cost-status-banner">',
           renderCostStateChip(summaryLabel, tone),
           '<strong>Real daily rows_written headroom</strong>',
-          '<div class="small">The line chart shows account-wide Durable Object rows_written against the real 100,000/day Cloudflare ceiling that can knock writes offline.</div>',
+          '<div class="small">The line chart shows account-wide Durable Object rows_written against the real 100,000/day Cloudflare ceiling that can knock writes offline. It is a platform headroom view, not a per-sync accounting report.</div>',
           '</div>',
           rows.map(function (row) {
             return renderCostDetailCard(row);
