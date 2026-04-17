@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import worker from "./index.js"
+import worker from "./the-only-allowed-public-edge-worker-that-must-not-touch-state.js"
 
 test("public edge proxies apex iconoplasm admin me to the only allowed stateful worker", async () => {
   const calls = []

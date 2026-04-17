@@ -80,7 +80,7 @@ async function requireAuthenticatedSession(request, env) {
 function getGuestSessionTokenFromCookies(cookies) {
   const token = cookies.geneguessr_session
   if (!token) return null
-  // Keep in sync with resolveSessionCookie() regex in workers/index.js
+  // Keep in sync with resolveSessionCookie() regex in workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js
   if (!/^[a-zA-Z0-9_-]+$/.test(token)) return null
   return token
 }

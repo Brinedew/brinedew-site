@@ -70,6 +70,15 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bake Iconoplasm observability snapshot (staging)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/generate-iconoplasm-observability-snapshot.mjs --env staging
+
       - name: Install Wrangler CLI
         run: npm install -g wrangler@4
 

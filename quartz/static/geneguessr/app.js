@@ -20,7 +20,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
  *    - Contains all protein metadata including: clans, domain_names, domains, etc.
  *    - Data is uploaded to Cloudflare D1 database
  *
- * 3. Cloudflare Worker: workers/index.js
+ * 3. Cloudflare Worker: workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js
  *    - Serves /api/protein, /api/game/bootstrap, etc.
  *    - Returns protein data including parsed `metadata` JSON from D1
  *

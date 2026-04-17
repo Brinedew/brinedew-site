@@ -113,16 +113,15 @@ test("DO NOT DELETE: Website/wrangler.toml must not quietly regain direct state 
 })
 
 test("DO NOT DELETE: public workers must proxy to the one allowed internal stateful worker", () => {
-  const publicIndexShim = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./index.js")
   const publicEdge = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-public-edge-worker-that-must-not-touch-state.js")
   const benchmarkEdge = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./benchmark/the-only-allowed-public-benchmark-edge-worker-that-must-not-touch-state.js")
   const internalRuntime = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js")
   const internalWrangler = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml")
 
-  assert.match(
-    publicIndexShim,
-    /the-only-allowed-public-edge-worker-that-must-not-touch-state/,
-    "generic index shim should point at the explicitly named public edge worker",
+  assert.throws(
+    () => DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./index.js"),
+    /ENOENT|Cannot find module|no such file/i,
+    "generic workers/index.js shim should stay deleted after the clean cutover so nobody drifts back to a fake entrypoint",
   )
   assert.match(
     publicEdge,

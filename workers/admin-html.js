@@ -2682,6 +2682,83 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
     }
 
+    function renderIconoplasmCostObservabilityNotice(payload) {
+      const observability = payload?.observability || {};
+      const dashboardSurfaces = Array.isArray(observability.dashboard_surfaces) ? observability.dashboard_surfaces : [];
+      const graphqlDatasets = Array.isArray(observability.graphql_datasets) ? observability.graphql_datasets : [];
+      const metricsEl = document.getElementById('iconoplasm-cost-metrics');
+      if (metricsEl) {
+        const cards = [
+          {
+            label: 'Source of truth',
+            value: 'Cloudflare',
+            note: payload?.message || 'The internal request-path usage report was intentionally retired.'
+          },
+          {
+            label: 'Dashboards',
+            value: String(dashboardSurfaces.length || 2),
+            note: dashboardSurfaces.length
+              ? dashboardSurfaces.join(' · ')
+              : 'Use Cloudflare Durable Objects metrics and D1 metrics.'
+          },
+          {
+            label: 'GraphQL datasets',
+            value: String(graphqlDatasets.length || 4),
+            note: graphqlDatasets.length
+              ? graphqlDatasets.join(' · ')
+              : 'Use the GraphQL analytics API for the live metrics datasets.'
+          },
+          {
+            label: 'Admin state',
+            value: 'Retired',
+            note: 'This widget now points to Cloudflare-native observability instead of pretending to be the meter.'
+          }
+        ];
+        metricsEl.innerHTML = cards.map((card) => {
+          return '' +
+            '<article class="iconoplasm-cost-metric">' +
+              '<div class="iconoplasm-cost-metric-label">' + escapeHtml(card.label) + '</div>' +
+              '<div class="iconoplasm-cost-metric-value">' + escapeHtml(card.value) + '</div>' +
+              '<div class="iconoplasm-cost-metric-note">' + escapeHtml(card.note) + '</div>' +
+            '</article>';
+        }).join('');
+      }
+
+      const trendEl = document.getElementById('iconoplasm-cost-trend');
+      if (trendEl) {
+        trendEl.innerHTML = '' +
+          '<div class="helper-text">' +
+            '<strong>Live meter retired by design.</strong><br />' +
+            'Use Cloudflare dashboard Durable Objects metrics, Cloudflare dashboard D1 metrics, or the GraphQL analytics API for live usage visibility.' +
+          '</div>';
+      }
+
+      const budgetEl = document.getElementById('iconoplasm-cost-budget');
+      if (budgetEl) {
+        budgetEl.innerHTML = '<p class="helper-text">No local budget mirror lives here anymore. Cloudflare dashboards are the source of truth.</p>';
+      }
+
+      const sourcesEl = document.getElementById('iconoplasm-cost-sources');
+      if (sourcesEl) {
+        sourcesEl.innerHTML = '<p class="helper-text">The old request-path source split was intentionally removed with the internal usage report.</p>';
+      }
+
+      const routesEl = document.getElementById('iconoplasm-cost-routes');
+      if (routesEl) {
+        routesEl.innerHTML = '<p class="helper-text">Use Cloudflare-native observability when you need route-level investigation.</p>';
+      }
+
+      const metaEl = document.getElementById('iconoplasm-cost-trend-meta');
+      if (metaEl) {
+        metaEl.textContent = 'Live request-path D1 cost reporting was retired on purpose. Cloudflare Durable Objects and D1 analytics are now authoritative.';
+      }
+
+      const updatedEl = document.getElementById('iconoplasm-cost-updated');
+      if (updatedEl) {
+        updatedEl.textContent = 'Internal request-path meter retired. Cloudflare dashboards and GraphQL are the source of truth.';
+      }
+    }
+
     async function loadIconoplasmCostUsage() {
       const loadToken = ++iconoplasmCostLoadToken;
       const updatedEl = document.getElementById('iconoplasm-cost-updated');
@@ -2692,6 +2769,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const response = await fetch('/api/iconoplasm/admin/cost/usage', { credentials: 'include' });
         const data = await response.json();
         if (!response.ok) {
+          if (response.status === 410 && data?.code === 'ICONOPLASM_CLOUDFLARE_OBSERVABILITY_REQUIRED') {
+            if (loadToken !== iconoplasmCostLoadToken) {
+              return;
+            }
+            renderIconoplasmCostObservabilityNotice(data);
+            return;
+          }
           throw new Error(data?.error || 'Failed to load Iconoplasm cost usage');
         }
         if (loadToken !== iconoplasmCostLoadToken) {
