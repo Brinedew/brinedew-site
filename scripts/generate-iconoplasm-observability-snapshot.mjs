@@ -221,44 +221,20 @@ async function fetchD1Snapshot({ apiToken, accountId, databaseId }) {
   }
 }
 
-function buildRunbook({ accountId, config }) {
+function buildAutomationState({ config, d1 }) {
   return {
-    notes: [
-      "This view is baked out-of-band from Cloudflare analytics so the admin does not hit telemetry routes at page load.",
-      "GraphQL analytics is close enough for operational trend watching, but the Cloudflare Billing page is still the final bill.",
-      "Durable Objects Data Studio runs against live objects and can incur usage. Open it when you are investigating a real incident, not because the dashboard looks lonely.",
-    ],
-    commands: [
-      `wrangler d1 insights ${config.databaseName} --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml${config.scriptName.endsWith("-staging") ? " --env staging" : ""}`,
-      "Cloudflare dashboard → Workers & Pages → D1",
-      "Cloudflare dashboard → Workers & Pages → Durable Objects",
-    ],
-    graphqlTemplates: {
-      d1Daily: D1_DAILY_QUERY,
-      doInvestigate: `query IconoplasmDOInvestigate($accountTag: string, $startDate: Date, $endDate: Date) {
-  viewer {
-    accounts(filter: { accountTag: $accountTag }) {
-      durableObjectsInvocationsAdaptiveGroups(
-        limit: 1000
-        filter: { date_geq: $startDate, date_leq: $endDate }
-        orderBy: [date_ASC]
-      ) {
-        dimensions {
-          date
-          scriptName
-          className
-        }
-        sum {
-          requests
-          errors
-        }
-      }
-    }
-  }
-}`,
-    },
-    doClassNames: DURABLE_OBJECT_CLASS_NAMES,
-    dashboardBaseUrl: dashboardLink(accountId, ""),
+    refreshCadenceHours: 1,
+    deployBake: true,
+    scheduledBake: true,
+    runtimeTelemetryRequests: false,
+    currentDayCovered: Boolean(d1.lastDailyBucket?.date) && d1.lastDailyBucket.date === isoDateDaysAgo(0),
+    filledWindowDays: Array.isArray(d1.daily) ? d1.daily.length : 0,
+    rollingWindowDays: d1.rollingWindowDays,
+    storageBucketPresent: Boolean(d1.storage?.observedAt),
+    liveDetailLivesInCloudflare: true,
+    graphQLUsesAdaptiveSampling: true,
+    graphQLRateLimit: "300 queries per 5 minutes per user",
+    note: `Cloudflare dashboard links stay live. The app runtime does not answer observability requests. ${config.databaseName} is refreshed out of band.`,
   }
 }
 
@@ -286,6 +262,7 @@ async function main() {
     accountId,
     databaseId: config.databaseId,
   })
+  const automation = buildAutomationState({ config, d1 })
   const snapshot = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -318,6 +295,14 @@ async function main() {
       rowsReadHardMonthlyBudget: config.rowsReadHardMonthlyBudget,
       rowsWrittenHardMonthlyBudget: config.rowsWrittenHardMonthlyBudget,
     },
+    coverage: {
+      bakedD1DailyTrend: true,
+      bakedLatency: d1.latency.avgQueryBatchTimeMs != null || d1.latency.p90QueryBatchTimeMs != null,
+      bakedStorage: Boolean(d1.storage.observedAt),
+      liveDurableObjectDrilldownOnly: true,
+      billingTruthLivesInCloudflare: true,
+    },
+    automation,
     launchpad: [
       {
         label: "D1 metrics",
@@ -335,19 +320,10 @@ async function main() {
         note: "Final bill, usage alerts, and the place reality cashes the check.",
       },
     ],
-    datasets: [
-      "d1AnalyticsAdaptiveGroups",
-      "d1StorageAdaptiveGroups",
-      "durableObjectsInvocationsAdaptiveGroups",
-      "durableObjectsStorageGroups",
-      "durableObjectsSubrequestsAdaptiveGroups",
-    ],
     durableObjects: {
       scriptName: config.scriptName,
       classNames: DURABLE_OBJECT_CLASS_NAMES,
-      note: "Use Cloudflare dashboard metrics/logs and GraphQL for live DO investigation. This snapshot pipeline avoids request-path telemetry inside the app.",
     },
-    runbook: buildRunbook({ accountId, config }),
   }
   await writeSnapshotFiles(rootDir, snapshot)
 }

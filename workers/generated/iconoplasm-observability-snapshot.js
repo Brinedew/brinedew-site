@@ -9,12 +9,12 @@ export const ICONOPLASM_OBSERVABILITY_SNAPSHOT = {
     mode: "out_of_band_snapshot",
     analyticsTruth: "Cloudflare GraphQL analytics",
     billingTruth: "Cloudflare Billing dashboard",
-    note: "Run the snapshot generator in CI or before deploy so the admin shows current Cloudflare analytics without touching runtime telemetry routes."
+    note: "The admin UI reads this baked snapshot instead of calling a runtime cost endpoint."
   },
   status: {
     level: "warning",
     headline: "Snapshot not generated yet",
-    detail: "Run the out-of-band snapshot workflow or deploy pipeline to bake a fresh Cloudflare analytics snapshot into the admin UI."
+    detail: "The automatic snapshot pipeline has not written fresh Cloudflare analytics yet."
   },
   d1: {
     databaseId: "",
@@ -43,35 +43,33 @@ export const ICONOPLASM_OBSERVABILITY_SNAPSHOT = {
     rowsReadHardMonthlyBudget: null,
     rowsWrittenHardMonthlyBudget: null
   },
+  coverage: {
+    bakedD1DailyTrend: true,
+    bakedLatency: false,
+    bakedStorage: false,
+    liveDurableObjectDrilldownOnly: true,
+    billingTruthLivesInCloudflare: true
+  },
+  automation: {
+    refreshCadenceHours: 1,
+    deployBake: true,
+    scheduledBake: true,
+    runtimeTelemetryRequests: false,
+    currentDayCovered: false,
+    filledWindowDays: 0,
+    rollingWindowDays: 14,
+    storageBucketPresent: false,
+    liveDetailLivesInCloudflare: true,
+    graphQLUsesAdaptiveSampling: true,
+    graphQLRateLimit: "300 queries per 5 minutes per user",
+    note: "Cloudflare dashboard links stay live. The app runtime does not answer observability requests. iconoplasm is refreshed out of band."
+  },
   launchpad: [],
-  datasets: [
-    "d1AnalyticsAdaptiveGroups",
-    "d1StorageAdaptiveGroups",
-    "durableObjectsInvocationsAdaptiveGroups",
-    "durableObjectsStorageGroups",
-    "durableObjectsSubrequestsAdaptiveGroups"
-  ],
   durableObjects: {
     scriptName: "",
     classNames: [
       "IconoplasmVoteCoordinator",
       "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
-    ],
-    note: "Use Cloudflare dashboard metrics/logs and GraphQL for live DO investigation. This snapshot pipeline avoids request-path telemetry inside the app."
-  },
-  runbook: {
-    notes: [
-      "GraphQL analytics is fast and honest enough for ops snapshots, but Cloudflare Billing is still the final bill.",
-      "Durable Objects Data Studio hits live objects and can incur usage. Treat it like a scalpel, not a homepage widget."
-    ],
-    commands: [
-      "wrangler d1 insights iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-      "Open Cloudflare dashboard → Workers & Pages → D1 → iconoplasm",
-      "Open Cloudflare dashboard → Workers & Pages → Durable Objects"
-    ],
-    graphqlTemplates: {
-      d1Daily: "query IconoplasmD1Daily($accountTag: string, $databaseId: string, $startDate: Date, $endDate: Date) { viewer { accounts(filter: { accountTag: $accountTag }) { d1AnalyticsAdaptiveGroups(limit: 1000, filter: { databaseId: $databaseId, date_geq: $startDate, date_leq: $endDate }, orderBy: [date_ASC]) { dimensions { date } sum { readQueries writeQueries rowsRead rowsWritten queryBatchResponseBytes } avg { queryBatchTimeMs } quantiles { queryBatchTimeMsP90 } } } } }",
-      doInvestigate: "query IconoplasmDOInvestigate($accountTag: string, $startDate: Date, $endDate: Date) { viewer { accounts(filter: { accountTag: $accountTag }) { durableObjectsInvocationsAdaptiveGroups(limit: 1000, filter: { date_geq: $startDate, date_leq: $endDate }, orderBy: [date_ASC]) { dimensions { date scriptName className } sum { requests errors } } } } }"
-    }
+    ]
   }
 }
