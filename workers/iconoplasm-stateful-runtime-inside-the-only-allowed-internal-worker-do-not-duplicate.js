@@ -941,13 +941,16 @@ function iconoplasmBudgetTelemetryLockedReason() {
 async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
   const budgets = iconoplasmD1BudgetConfigFromEnv(env)
   if (!budgets) return env
+  const attribution = request ? iconoplasmD1BudgetAttributionFromRequest(request) : null
+  if (!isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family)) {
+    return env
+  }
   const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
   if (!stub) {
     throw new IconoplasmD1DailyBudgetConfigurationError(
       "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while smart monthly budgets are enabled",
     )
   }
-  const attribution = request ? iconoplasmD1BudgetAttributionFromRequest(request) : null
   let snapshot
   try {
     snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(stub, "/snapshot", {
@@ -12463,11 +12466,7 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
         return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
       }
 
-      const isIconoplasmCostUsageReportRequest =
-        path === "/api/iconoplasm/admin/cost/usage" && request.method === "GET"
-      if (!isIconoplasmCostUsageReportRequest) {
-        env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
-      }
+      env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
 
       if (
         path === "/health" ||
@@ -15141,14 +15140,32 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/cost/usage" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_cost_usage_403", json({ error: "Unauthorized" }, 403))
-      const report = await iconoplasmD1DailyBudgetReport(env)
-      if (!report) {
-        return done(
-          "admin_cost_usage_503",
-          json({ error: "Iconoplasm D1 smart budgeting is not enabled" }, 503, { "Cache-Control": "no-store" }),
-        )
-      }
-      return done("admin_cost_usage", json(report, 200, { "Cache-Control": "no-store" }))
+      return done(
+        "admin_cost_usage",
+        json(
+          {
+            ok: true,
+            code: "ICONOPLASM_CLOUDFLARE_OBSERVABILITY_REQUIRED",
+            message:
+              "Iconoplasm no longer exposes an internal request-path D1 usage report here. Use Cloudflare dashboard Durable Object and D1 analytics, or the GraphQL analytics API, for visibility.",
+            observability: {
+              source_of_truth: "cloudflare_dashboard_and_graphql",
+              dashboard_surfaces: [
+                "Cloudflare dashboard Durable Objects metrics",
+                "Cloudflare dashboard D1 metrics",
+              ],
+              graphql_datasets: [
+                "durableObjectsInvocationsAdaptiveGroups",
+                "durableObjectsPeriodicGroups",
+                "durableObjectsStorageGroups",
+                "durableObjectsSubrequestsAdaptiveGroups",
+              ],
+            },
+          },
+          410,
+          { "Cache-Control": "no-store" },
+        ),
+      )
     }
 
     const geneRequestDiagnosticsMatch = path.match(/^\/api\/iconoplasm\/admin\/requests\/gene\/([^/]+)\/diagnostics$/)

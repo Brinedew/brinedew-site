@@ -30,7 +30,11 @@ class MeteredSummaryStatement {
   }
 
   async first() {
-    throw new Error("metered ICONOPLASM_DB tests should flow through all() so rows_read meta is counted")
+    this.db.calls.push({ type: "first", sql: this.sql, args: this.args })
+    if (this.sql.includes("COUNT(*) AS candidate_assets")) {
+      return { candidate_assets: 12, stale_assets: 1, legacy_assets: 2 }
+    }
+    return null
   }
 
   async run() {
@@ -370,7 +374,7 @@ function adminSummaryRequest() {
   )
 }
 
-test("smart daily Iconoplasm D1 budget fails closed when the monthly budget is spent", async () => {
+test("read-only Iconoplasm admin summaries no longer touch the daily budget limiter", async () => {
   const db = new MeteredSummaryDb({ rowsReadPerQuery: 2 })
   const budgetNamespace = new FakeDailyBudgetNamespace()
   const env = {
@@ -388,33 +392,20 @@ test("smart daily Iconoplasm D1 budget fails closed when the monthly budget is s
     env,
     { waitUntil() {} },
   )
-  const firstPayload = await first.json()
-  assert.equal(first.status, 503)
-  assert.equal(firstPayload?.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
-  assert.equal(firstPayload?.budget?.rows_read, 2)
-  assert.equal(firstPayload?.budget?.rows_read_monthly_limit, 2)
-  assert.equal(firstPayload?.budget?.exhausted_by, "rows_read_monthly")
+  assert.equal(first.status, 200)
 
   const second = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     adminSummaryRequest(),
     env,
     { waitUntil() {} },
   )
-  const secondPayload = await second.json()
-  assert.equal(second.status, 503)
-  assert.equal(secondPayload?.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
-  assert.equal(secondPayload?.budget?.rows_read, 2)
-  assert.equal(secondPayload?.budget?.rows_read_monthly_limit, 2)
-  assert.equal(secondPayload?.budget?.exhausted_by, "rows_read_monthly")
+  assert.equal(second.status, 200)
 
-  assert.equal(db.calls.filter((call) => call.type === "all").length, 1)
-  assert.deepEqual(
-    budgetNamespace.calls.map((call) => call.pathname),
-    ["/snapshot", "/record", "/snapshot"],
-  )
+  assert.equal(db.calls.filter((call) => call.type === "first").length >= 2, true)
+  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
 })
 
-test("smart budget curiosity layer reports attributed daily usage", async () => {
+test("admin cost usage now points operators at Cloudflare observability instead of an internal ledger report", async () => {
   const db = new MeteredSummaryDb({ rowsReadPerQuery: 3 })
   const budgetNamespace = new FakeDailyBudgetNamespace()
   const env = {
@@ -447,29 +438,10 @@ test("smart budget curiosity layer reports attributed daily usage", async () => 
     { waitUntil() {} },
   )
   const reportPayload = await reportResponse.json()
-  assert.equal(reportResponse.status, 200)
-  assert.equal(reportPayload?.snapshot?.rows_read, 3)
-  assert.equal(reportPayload?.snapshot?.cycle_rows_read, 3)
-  assert.equal(Array.isArray(reportPayload?.cycle_days), true)
-  assert.equal(reportPayload?.cycle_days?.[0]?.rows_read, 3)
-  assert.equal(
-    reportPayload?.cycle_days?.[0]?.rows_read_daily_smart_limit,
-    reportPayload?.snapshot?.rows_read_daily_smart_limit,
-  )
-  assert.equal(Array.isArray(reportPayload?.daily_attribution), true)
-  assert.deepEqual(reportPayload?.daily_attribution?.[0], {
-    day_key: reportPayload.snapshot.day_key,
-    cycle_key: reportPayload.snapshot.cycle_key,
-    route_family: "admin_assets_summary",
-    budget_class: "admin_operational",
-    actor_class: "admin_token",
-    source_class: "admin_ui",
-    rows_read: 3,
-    rows_written: 0,
-    query_count: 1,
-    request_count: 1,
-    updated_at: "2026-04-08T00:00:00Z",
-  })
+  assert.equal(reportResponse.status, 410)
+  assert.equal(reportPayload?.code, "ICONOPLASM_CLOUDFLARE_OBSERVABILITY_REQUIRED")
+  assert.equal(reportPayload?.observability?.source_of_truth, "cloudflare_dashboard_and_graphql")
+  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
 })
 
 test("daily budget durable object rebuilds legacy attribution schema before reporting", async () => {
@@ -643,8 +615,12 @@ test("daily budget report survives constructor schema writes after DO free-tier 
   assert.equal(payload?.daily_attribution?.[0]?.rows_written, 100000)
 })
 
-test("admin cost usage returns a saturated telemetry-locked payload when the DO report path is write-locked", async () => {
+test("admin cost usage no longer queries the DO ledger even when that report path would be write-locked", async () => {
   class ThrowingReportBudgetNamespace {
+    constructor() {
+      this.calls = []
+    }
+
     idFromName(name) {
       return String(name || "")
     }
@@ -653,6 +629,7 @@ test("admin cost usage returns a saturated telemetry-locked payload when the DO 
       return {
         fetch: async (request) => {
           const url = new URL(request.url)
+          this.calls.push({ pathname: url.pathname })
           if (url.pathname === "/report") {
             throw new Error("Exceeded allowed rows written in Durable Objects free tier.")
           }
@@ -686,6 +663,8 @@ test("admin cost usage returns a saturated telemetry-locked payload when the DO 
     }
   }
 
+  const budgetNamespace = new ThrowingReportBudgetNamespace()
+
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request(
       "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/usage",
@@ -697,7 +676,7 @@ test("admin cost usage returns a saturated telemetry-locked payload when the DO 
     ),
     {
       ICONOPLASM_ADMIN_TOKEN: "founder-secret",
-      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new ThrowingReportBudgetNamespace(),
+      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
       ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
       ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
       ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
@@ -707,11 +686,9 @@ test("admin cost usage returns a saturated telemetry-locked payload when the DO 
   )
   const payload = await response.json()
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.telemetry_locked, true)
-  assert.equal(payload?.snapshot?.rows_written, 100000)
-  assert.equal(payload?.snapshot?.exhausted, true)
-  assert.equal(payload?.snapshot?.exhausted_by, "durable_object_rows_written_free_tier")
+  assert.equal(response.status, 410)
+  assert.equal(payload?.code, "ICONOPLASM_CLOUDFLARE_OBSERVABILITY_REQUIRED")
+  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
 })
 
 test("write-heavy admin mutations fail before starting when rows-written headroom is already too thin", async () => {
@@ -982,7 +959,7 @@ test("write-heavy admin mutations clamp mid-run without chattering to the ledger
   assert.equal(budgetNamespace.calls[1]?.payload?.rows_written, 8)
 })
 
-test("iconoplasm health fails open when the snapshot preflight is telemetry-locked", async () => {
+test("iconoplasm health stays up and does not touch the limiter DO on read-only paths", async () => {
   class ThrowingSnapshotBudgetNamespace {
     constructor() {
       this.calls = []
@@ -1019,10 +996,7 @@ test("iconoplasm health fails open when the snapshot preflight is telemetry-lock
 
   assert.equal(response.status, 200)
   assert.deepEqual(payload, { status: "ok", service: "iconoplasm" })
-  assert.deepEqual(
-    budgetNamespace.calls.map((call) => call.pathname),
-    ["/snapshot"],
-  )
+  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
 })
 
 test("write-heavy admin mutations still fail closed when snapshot telemetry is locked before preflight", async () => {
