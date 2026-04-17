@@ -76,6 +76,38 @@ const DURABLE_OBJECT_INVOCATIONS_QUERY = `query IconoplasmDOInvocations($account
   }
 }`
 
+// Chesterton's fence:
+// The DO write ceiling that broke live traffic is not a design flourish.
+// Cloudflare's free-tier SQLite-backed Durable Objects really do clamp at
+// 100,000 rows_written per day. Keep this number loud in the baked snapshot so
+// the admin can show the real wall instead of drifting back into vague totals.
+const DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT = 100000
+
+const DURABLE_OBJECT_PERIODIC_QUERY = `query IconoplasmDOPeriodic($accountTag: string, $startDate: Date, $endDate: Date) {
+  viewer {
+    accounts(filter: { accountTag: $accountTag }) {
+      durableObjectsPeriodicGroups(
+        limit: 1000
+        filter: { date_geq: $startDate, date_leq: $endDate }
+        orderBy: [date_ASC]
+      ) {
+        dimensions {
+          date
+        }
+        sum {
+          rowsRead
+          rowsWritten
+          storageReadUnits
+          storageWriteUnits
+          activeTime
+          cpuTime
+          subrequests
+        }
+      }
+    }
+  }
+}`
+
 const DURABLE_OBJECT_CLASS_NAMES = [
   "IconoplasmVoteCoordinator",
   "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate",
@@ -415,14 +447,22 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
 }
 
 async function fetchDurableObjectSnapshot({ apiToken, accountId, scriptName, classNames, startDate, endDate }) {
-  const payload = await callGraphQL(apiToken, DURABLE_OBJECT_INVOCATIONS_QUERY, {
-    accountTag: accountId,
-    startDate,
-    endDate,
-  })
-  const account = firstAccount(payload)
-  const rows = (Array.isArray(account.durableObjectsInvocationsAdaptiveGroups)
-    ? account.durableObjectsInvocationsAdaptiveGroups
+  const [invocationsPayload, periodicPayload] = await Promise.all([
+    callGraphQL(apiToken, DURABLE_OBJECT_INVOCATIONS_QUERY, {
+      accountTag: accountId,
+      startDate,
+      endDate,
+    }),
+    callGraphQL(apiToken, DURABLE_OBJECT_PERIODIC_QUERY, {
+      accountTag: accountId,
+      startDate,
+      endDate,
+    }),
+  ])
+  const invocationsAccount = firstAccount(invocationsPayload)
+  const periodicAccount = firstAccount(periodicPayload)
+  const invocationRows = (Array.isArray(invocationsAccount.durableObjectsInvocationsAdaptiveGroups)
+    ? invocationsAccount.durableObjectsInvocationsAdaptiveGroups
     : []
   )
     .map((row) => ({
@@ -432,28 +472,147 @@ async function fetchDurableObjectSnapshot({ apiToken, accountId, scriptName, cla
       errors: asNumber(row?.sum?.errors),
     }))
     .filter((row) => row.scriptName === scriptName)
-  const daySet = new Set()
+  const invocationDaySet = new Set()
   let totalRequests = 0
   let totalErrors = 0
-  let lastActiveDate = null
-  rows.forEach((row) => {
+  let lastInvocationDate = null
+  invocationRows.forEach((row) => {
     if (row.requests > 0 || row.errors > 0) {
-      daySet.add(row.date)
-      lastActiveDate = lastActiveDate && lastActiveDate > row.date ? lastActiveDate : row.date
+      invocationDaySet.add(row.date)
+      lastInvocationDate = lastInvocationDate && lastInvocationDate > row.date ? lastInvocationDate : row.date
     }
     totalRequests += row.requests
     totalErrors += row.errors
   })
+
+  const periodicByDate = new Map()
+  ;(Array.isArray(periodicAccount.durableObjectsPeriodicGroups)
+    ? periodicAccount.durableObjectsPeriodicGroups
+    : []
+  ).forEach((row) => {
+    const date = String(row?.dimensions?.date || "")
+    if (!date) return
+    const existing = periodicByDate.get(date) || {
+      date,
+      rowsRead: 0,
+      rowsWritten: 0,
+      storageReadUnits: 0,
+      storageWriteUnits: 0,
+      activeTime: 0,
+      cpuTime: 0,
+      subrequests: 0,
+    }
+    existing.rowsRead += asNumber(row?.sum?.rowsRead)
+    existing.rowsWritten += asNumber(row?.sum?.rowsWritten)
+    existing.storageReadUnits += asNumber(row?.sum?.storageReadUnits)
+    existing.storageWriteUnits += asNumber(row?.sum?.storageWriteUnits)
+    existing.activeTime += asNumber(row?.sum?.activeTime)
+    existing.cpuTime += asNumber(row?.sum?.cpuTime)
+    existing.subrequests += asNumber(row?.sum?.subrequests)
+    periodicByDate.set(date, existing)
+  })
+
+  const daily = []
+  const cursor = new Date(`${startDate}T00:00:00.000Z`)
+  const endCursor = new Date(`${endDate}T00:00:00.000Z`)
+  while (cursor.getTime() <= endCursor.getTime()) {
+    const date = cursor.toISOString().slice(0, 10)
+    const base = periodicByDate.get(date) || {
+      date,
+      rowsRead: 0,
+      rowsWritten: 0,
+      storageReadUnits: 0,
+      storageWriteUnits: 0,
+      activeTime: 0,
+      cpuTime: 0,
+      subrequests: 0,
+    }
+    daily.push({
+      ...base,
+      rowsWrittenDailyLimit: DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT,
+      rowsWrittenDailyRemaining: Math.max(0, DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT - base.rowsWritten),
+      exhausted: base.rowsWritten >= DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT,
+    })
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  const periodTotals = daily.reduce(
+    (totals, row) => ({
+      rowsRead: totals.rowsRead + row.rowsRead,
+      rowsWritten: totals.rowsWritten + row.rowsWritten,
+      storageReadUnits: totals.storageReadUnits + row.storageReadUnits,
+      storageWriteUnits: totals.storageWriteUnits + row.storageWriteUnits,
+      activeTime: totals.activeTime + row.activeTime,
+      cpuTime: totals.cpuTime + row.cpuTime,
+      subrequests: totals.subrequests + row.subrequests,
+    }),
+    {
+      rowsRead: 0,
+      rowsWritten: 0,
+      storageReadUnits: 0,
+      storageWriteUnits: 0,
+      activeTime: 0,
+      cpuTime: 0,
+      subrequests: 0,
+    },
+  )
+  const currentDay = daily.find((row) => row.date === endDate) || null
+  const peakDay = daily.reduce((best, row) => {
+    if (!best) return row
+    if (row.rowsWritten > best.rowsWritten) return row
+    return best
+  }, null)
+  const daysAtDailyLimit = daily.reduce((count, row) => count + (row.exhausted ? 1 : 0), 0)
+  const lastRowsWrittenDate = daily.reduce((latest, row) => {
+    if (row.rowsWritten <= 0) return latest
+    return latest && latest > row.date ? latest : row.date
+  }, null)
+
   return {
     scriptName,
     classNames: Array.isArray(classNames) ? classNames : [],
+    dailyLimitRowsWritten: DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT,
+    currentDay: currentDay
+      ? {
+          ...currentDay,
+          covered: true,
+        }
+      : {
+          date: endDate,
+          rowsRead: 0,
+          rowsWritten: 0,
+          storageReadUnits: 0,
+          storageWriteUnits: 0,
+          activeTime: 0,
+          cpuTime: 0,
+          subrequests: 0,
+          rowsWrittenDailyLimit: DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT,
+          rowsWrittenDailyRemaining: DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT,
+          exhausted: false,
+          covered: false,
+        },
+    peakDay: peakDay
+      ? {
+          ...peakDay,
+        }
+      : null,
     totals: {
       requests: totalRequests,
       errors: totalErrors,
-      activeDays: daySet.size,
+      activeDays: invocationDaySet.size,
       trackedClasses: Array.isArray(classNames) ? classNames.length : 0,
-      lastActiveDate,
+      lastActiveDate: lastInvocationDate,
+      rowsRead: periodTotals.rowsRead,
+      rowsWritten: periodTotals.rowsWritten,
+      storageReadUnits: periodTotals.storageReadUnits,
+      storageWriteUnits: periodTotals.storageWriteUnits,
+      activeTime: periodTotals.activeTime,
+      cpuTime: periodTotals.cpuTime,
+      subrequests: periodTotals.subrequests,
+      daysAtDailyLimit,
+      lastRowsWrittenDate,
     },
+    daily,
     classes: [],
   }
 }
@@ -523,7 +682,7 @@ async function main() {
   // truth in Cloudflare Billing, but keep budget/attribution facts in this
   // snapshot so the UI does not devolve into link soup.
   const snapshot = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     environment: envName,
     source: {
@@ -564,9 +723,10 @@ async function main() {
     },
     coverage: {
       bakedD1DailyTrend: true,
+      bakedDurableObjectDailyTrend: true,
       bakedLatency: d1.latency.avgQueryBatchTimeMs != null || d1.latency.p90QueryBatchTimeMs != null,
       bakedStorage: Boolean(d1.storage.observedAt),
-      liveDurableObjectDrilldownOnly: true,
+      liveDurableObjectDrilldownOnly: false,
       billingTruthLivesInCloudflare: true,
     },
     automation,

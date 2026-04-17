@@ -383,12 +383,45 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       border-radius: 14px;
       background: var(--surface);
     }
+    .cost-card--section {
+      gap: 16px;
+    }
     .cost-card-head {
       display: flex;
       justify-content: space-between;
       gap: 10px 18px;
       align-items: baseline;
       flex-wrap: wrap;
+    }
+    .cost-section-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.95fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .cost-section-side {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+      align-content: start;
+    }
+    .cost-subcard {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid #efe6dc;
+      border-radius: 12px;
+      background: #fbfaf8;
+      min-width: 0;
+    }
+    .cost-subcard-head {
+      display: grid;
+      gap: 4px;
+    }
+    .cost-subcard-head h3 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.2;
     }
     .cost-subtle {
       color: var(--muted);
@@ -472,6 +505,54 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .cost-budget-grid {
       display: grid;
       gap: 10px;
+    }
+    .cost-focus-block {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #efe6dc;
+      background: rgba(255,255,255,0.84);
+    }
+    .cost-focus-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .cost-mini-grid,
+    .cost-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+    }
+    .cost-detail-card {
+      display: grid;
+      gap: 4px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #ede4da;
+      background: rgba(255,255,255,0.9);
+    }
+    .cost-detail-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--faint);
+    }
+    .cost-detail-value {
+      font-size: 18px;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+    .cost-detail-copy {
+      font-size: 12px;
+      color: var(--muted);
     }
     .cost-budget-row {
       display: grid;
@@ -1590,6 +1671,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       .page { padding: 16px 16px 40px; }
       .split { grid-template-columns: 1fr; }
       .cost-grid { grid-template-columns: 1fr; }
+      .cost-section-grid { grid-template-columns: 1fr; }
       .plot-frame { height: 260px; }
       .metric-grid { gap: 20px; }
     }
@@ -1656,15 +1738,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <div class="cost-metric-grid" id="cost-metrics"></div>
         </section>
 
-        <div class="cost-grid">
-          <section class="cost-card">
-            <div class="cost-card-head">
-              <div>
-                <h2>D1 read trend</h2>
-                <p class="small">Daily rows read across the current billing-cycle window. The dashed line is that day’s smart read ceiling.</p>
-              </div>
-              <div class="cost-subtle" id="cost-trend-meta">Waiting for data…</div>
+        <section class="cost-card cost-card--section">
+          <div class="cost-card-head">
+            <div>
+              <h2>D1 read trend</h2>
+              <p class="small">Daily rows read across the current billing-cycle window. The dashed line is that day’s smart read ceiling.</p>
             </div>
+            <div class="cost-subtle" id="cost-trend-meta">Waiting for data…</div>
+          </div>
+          <div class="cost-section-grid">
             <div class="cost-chart-shell">
               <div class="cost-chart" id="cost-read-trend"></div>
               <div class="cost-legend">
@@ -1672,50 +1754,70 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                 <span class="cost-legend-item"><span class="cost-legend-swatch" style="background:#4f7f6d"></span>Smart daily allowance</span>
               </div>
             </div>
-          </section>
-
-          <section class="cost-card">
-            <div class="cost-card-head">
-              <div>
-                <h2>Capacity against real ceilings</h2>
-                <p class="small">Only denominator-backed limits get gauges here: today’s smart read ceiling and the billing-cycle read ceiling.</p>
-              </div>
+            <div class="cost-section-side">
+              <section class="cost-subcard">
+                <div class="cost-subcard-head">
+                  <h3>Capacity against real ceilings</h3>
+                  <p class="small">Only denominator-backed limits get gauges here: today’s smart read ceiling and the billing-cycle read ceiling.</p>
+                </div>
+                <div class="cost-budget-grid" id="cost-budget-headroom"></div>
+              </section>
+              <section class="cost-subcard">
+                <div class="cost-subcard-head">
+                  <h3>Exact D1 denominators</h3>
+                  <p class="small">Daily versus cycle, reads versus writes, with used, ceiling, and remaining values side by side.</p>
+                </div>
+                <div class="cost-detail-grid" id="cost-cycle-budget-bars"></div>
+              </section>
             </div>
-            <div class="cost-budget-grid" id="cost-budget-headroom"></div>
-          </section>
-        </div>
+          </div>
+        </section>
 
-        <div class="cost-grid cost-grid--triple">
-          <section class="cost-card">
-            <div class="cost-card-head">
-              <div>
-                <h2>Exact D1 denominators</h2>
-                <p class="small">Daily versus cycle, reads versus writes, with used, ceiling, and remaining values side by side.</p>
-              </div>
+        <section class="cost-card cost-card--section">
+          <div class="cost-card-head">
+            <div>
+              <h2>Durable Objects traffic</h2>
+              <p class="small">A baked DO chart on the left, exact headroom on the right — same cadence as the D1 section, this time against the real 100,000 rows_written/day ceiling.</p>
             </div>
-            <div class="cost-bars" id="cost-cycle-budget-bars"></div>
-          </section>
+          </div>
+          <div class="cost-section-grid">
+            <div class="cost-chart-shell">
+              <div class="cost-chart" id="cost-cycle-source-chart"></div>
+            </div>
+            <div class="cost-section-side">
+              <section class="cost-subcard">
+                <div class="cost-subcard-head">
+                  <h3>DO info</h3>
+                  <p class="small">Today versus the real ceiling, the worst baked day, and the surrounding DO activity that explains how close the account is to the wall.</p>
+                </div>
+                <div class="cost-detail-grid" id="cost-cycle-source-bars"></div>
+              </section>
+            </div>
+          </div>
+        </section>
 
-          <section class="cost-card">
-            <div class="cost-card-head">
-              <div>
-                <h2>Durable Objects traffic</h2>
-                <p class="small">Exact cycle traffic and error share. This is a table because invocations here do not have a baked ceiling.</p>
-              </div>
+        <section class="cost-card cost-card--section">
+          <div class="cost-card-head">
+            <div>
+              <h2>Snapshot integrity</h2>
+              <p class="small">Freshness and trust checks for the baked view itself, not a live uptime panel.</p>
             </div>
-            <div class="cost-bars" id="cost-cycle-source-bars"></div>
-          </section>
-
-          <section class="cost-card">
-            <div class="cost-card-head">
-              <div>
-                <h2>Snapshot integrity</h2>
-                <p class="small">Freshness and trust checks for the baked view itself, not a live uptime panel.</p>
-              </div>
+          </div>
+          <div class="cost-section-grid">
+            <div class="cost-chart-shell">
+              <div class="cost-chart" id="cost-daily-route-chart"></div>
             </div>
-            <div class="cost-bars" id="cost-daily-route-bars"></div>
-          </section>
-        </div>
+            <div class="cost-section-side">
+              <section class="cost-subcard">
+                <div class="cost-subcard-head">
+                  <h3>Integrity notes</h3>
+                  <p class="small">The same checks as before, but grouped into a predictable right rail instead of a floating bespoke block.</p>
+                </div>
+                <div class="cost-detail-grid" id="cost-daily-route-bars"></div>
+              </section>
+            </div>
+          </div>
+        </section>
 
         <section class="cost-card">
           <div class="cost-card-head">
@@ -1954,7 +2056,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         costReadTrend: document.getElementById('cost-read-trend'),
         costBudgetHeadroom: document.getElementById('cost-budget-headroom'),
         costCycleBudgetBars: document.getElementById('cost-cycle-budget-bars'),
+        costCycleSourceChart: document.getElementById('cost-cycle-source-chart'),
         costCycleSourceBars: document.getElementById('cost-cycle-source-bars'),
+        costDailyRouteChart: document.getElementById('cost-daily-route-chart'),
         costDailyRouteBars: document.getElementById('cost-daily-route-bars'),
         costTopRoutes: document.getElementById('cost-top-routes'),
         overviewMetrics: document.getElementById('overview-metrics'),
@@ -2726,6 +2830,200 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return 'unknown';
       }
 
+      function costToneColor(tone) {
+        if (tone === 'danger') return '#bf3030';
+        if (tone === 'warn') return '#b87411';
+        if (tone === 'ok') return '#2a7a4d';
+        return '#9b8f82';
+      }
+
+      function renderCostDetailCard(row) {
+        var valueMarkup = row && row.valueHtml
+          ? String(row.valueHtml)
+          : esc(String(row && row.value != null ? row.value : '—'));
+        return [
+          '<article class="cost-detail-card">',
+          row && row.eyebrow ? ('<div class="cost-detail-eyebrow">' + esc(row.eyebrow) + '</div>') : '',
+          '<div class="cost-detail-value">' + valueMarkup + '</div>',
+          row && row.copy ? ('<div class="cost-detail-copy">' + esc(row.copy) + '</div>') : '',
+          '</article>'
+        ].join('');
+      }
+
+      // Keep the DO and integrity visuals in the same left-chart/right-info
+      // cadence as D1 so future edits do not drift back into bespoke card piles.
+      function buildBandChartSvg(rows, options) {
+        var list = Array.isArray(rows) ? rows.filter(function (row) {
+          return row && Number.isFinite(safeNum(row.value));
+        }) : [];
+        if (!list.length) {
+          return inlineFailureMarkup(
+            options && options.emptyTitle || 'No chart data yet',
+            options && options.emptyMessage || 'The baked snapshot did not contain enough data to draw this chart.'
+          );
+        }
+        var width = 720;
+        var labelX = 18;
+        var trackX = 250;
+        var trackWidth = 330;
+        var valueX = width - 18;
+        var top = options && options.title ? 44 : 24;
+        var rowHeight = 52;
+        var bottom = options && options.footer ? 30 : 16;
+        var height = top + (list.length * rowHeight) + bottom;
+        var maxValue = Math.max(
+          safeNum(options && options.maxValue),
+          list.reduce(function (acc, row) {
+            return Math.max(acc, safeNum(row && row.value));
+          }, 1),
+          1
+        );
+        var svg = [
+          '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + esc(options && options.ariaLabel || 'Metric chart') + '">'
+        ];
+        if (options && options.title) {
+          svg.push('<text x="18" y="22" font-size="12" fill="#7a6d61">' + esc(options.title) + '</text>');
+        }
+        list.forEach(function (row, index) {
+          var y = top + (index * rowHeight);
+          var widthPct = safeNum(row && row.value) <= 0 ? 0 : Math.max(10, Math.round((safeNum(row.value) / maxValue) * trackWidth));
+          var note = row && row.note ? String(row.note) : '';
+          svg.push('<text x="' + labelX + '" y="' + (y + 14) + '" font-size="12" font-weight="700" fill="#1a1a1a">' + esc(String(row && row.label || 'Metric')) + '</text>');
+          if (note) {
+            svg.push('<text x="' + labelX + '" y="' + (y + 30) + '" font-size="11" fill="#7a6d61">' + esc(note) + '</text>');
+          }
+          svg.push('<rect x="' + trackX + '" y="' + (y + 8) + '" width="' + trackWidth + '" height="12" rx="999" fill="#ece4db"></rect>');
+          if (widthPct > 0) {
+            svg.push('<rect x="' + trackX + '" y="' + (y + 8) + '" width="' + widthPct + '" height="12" rx="999" fill="' + esc(costToneColor(row && row.tone || 'neutral')) + '"></rect>');
+          }
+          svg.push('<text x="' + valueX + '" y="' + (y + 14) + '" text-anchor="end" font-size="12" font-weight="700" fill="#1a1a1a">' + esc(String(row && row.display != null ? row.display : compactMetricNumber(row && row.value))) + '</text>');
+        });
+        if (options && options.footer) {
+          svg.push('<text x="18" y="' + (height - 10) + '" font-size="11" fill="#7a6d61">' + esc(options.footer) + '</text>');
+        }
+        svg.push('</svg>');
+        return svg.join('');
+      }
+
+      function buildDurableObjectTrafficSvg(report) {
+        var durableObjects = report && report.durableObjects ? report.durableObjects : {};
+        var rows = Array.isArray(durableObjects && durableObjects.daily) ? durableObjects.daily : [];
+        if (!rows.length) {
+          return inlineFailureMarkup('No DO daily history yet', 'The baked snapshot did not include durable-object periodic rows for this window.');
+        }
+        var width = 720;
+        var height = 280;
+        var padLeft = 50;
+        var padRight = 18;
+        var padTop = 18;
+        var padBottom = 34;
+        var usableWidth = width - padLeft - padRight;
+        var usableHeight = height - padTop - padBottom;
+        var currentDailyLimit = safeNum((rows[rows.length - 1] && rows[rows.length - 1].rowsWrittenDailyLimit) || durableObjects.dailyLimitRowsWritten);
+        var maxValue = rows.reduce(function (acc, row) {
+          return Math.max(acc, safeNum(row && row.rowsWritten), safeNum(row && row.rowsWrittenDailyLimit));
+        }, Math.max(currentDailyLimit, 1));
+        var xStep = rows.length <= 1 ? 0 : usableWidth / (rows.length - 1);
+        function xAt(index) { return padLeft + (xStep * index); }
+        function yAt(value) {
+          return padTop + usableHeight - ((safeNum(value) / Math.max(maxValue, 1)) * usableHeight);
+        }
+        var area = '';
+        var line = '';
+        var ceilingLine = '';
+        rows.forEach(function (row, index) {
+          var x = xAt(index);
+          var y = yAt(row && row.rowsWritten);
+          area += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+          line += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+          ceilingLine += (index === 0 ? 'M' : 'L') + x + ' ' + yAt(row && row.rowsWrittenDailyLimit) + ' ';
+        });
+        if (rows.length) {
+          area += 'L' + xAt(rows.length - 1) + ' ' + (padTop + usableHeight) + ' ';
+          area += 'L' + xAt(0) + ' ' + (padTop + usableHeight) + ' Z';
+        }
+        var points = rows.map(function (row, index) {
+          var value = safeNum(row && row.rowsWritten);
+          var limit = safeNum(row && row.rowsWrittenDailyLimit);
+          var x = xAt(index);
+          var y = yAt(value);
+          var exhausted = value >= limit && limit > 0;
+          var label = formatMonthDay(row && row.date);
+          return '<circle cx="' + x + '" cy="' + y + '" r="5" fill="' + (exhausted ? '#bf3030' : '#b84a26') + '" stroke="#fff9f3" stroke-width="2"><title>' + esc(label + ': ' + formatCompactNumber(value) + ' DO rows written / ' + compactMetricNumber(limit) + ' daily ceiling') + '</title></circle>';
+        }).join('');
+        var firstLabel = formatMonthDay(rows[0] && rows[0].date);
+        var lastLabel = formatMonthDay(rows[rows.length - 1] && rows[rows.length - 1].date);
+        var ceilingY = yAt(currentDailyLimit);
+        var ceilingX = xAt(rows.length - 1);
+        return [
+          '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Daily Durable Object rows written against the real Cloudflare ceiling">',
+          '<line x1="' + padLeft + '" y1="' + (padTop + usableHeight) + '" x2="' + (padLeft + usableWidth) + '" y2="' + (padTop + usableHeight) + '" stroke="#e5ddd5" stroke-width="1" />',
+          '<path d="' + ceilingLine + '" fill="none" stroke="#4f7f6d" stroke-width="2" stroke-dasharray="6 6" stroke-linejoin="round" stroke-linecap="round"></path>',
+          '<path d="' + area + '" fill="rgba(184,74,38,0.12)" stroke="none"></path>',
+          '<path d="' + line + '" fill="none" stroke="#b84a26" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>',
+          points,
+          '<text x="' + padLeft + '" y="' + (height - 8) + '" font-size="11" fill="#7a6d61">' + esc(firstLabel) + '</text>',
+          '<text x="' + (padLeft + usableWidth) + '" y="' + (height - 8) + '" text-anchor="end" font-size="11" fill="#7a6d61">' + esc(lastLabel) + '</text>',
+          '<text x="' + Math.max(padLeft + 6, ceilingX - 6) + '" y="' + Math.max(12, ceilingY - 8) + '" text-anchor="end" font-size="11" fill="#4f7f6d">Daily DO write ceiling ' + esc(compactMetricNumber(currentDailyLimit)) + '</text>',
+          '<text x="' + padLeft + '" y="' + (padTop + 12) + '" font-size="11" fill="#7a6d61">Peak ' + esc(compactMetricNumber(maxValue)) + ' rows written</text>',
+          '</svg>'
+        ].join('');
+      }
+
+      function buildIntegritySignalSvg(report) {
+        var status = report && report.status ? report.status : {};
+        var d1 = report && report.d1 ? report.d1 : {};
+        var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
+        var automation = report && report.automation ? report.automation : {};
+        var expectedWindow = safeNum(automation.rollingWindowDays || d1.expectedWindowDays || 0);
+        var filledWindow = safeNum(automation.filledWindowDays);
+        var coverageScore = expectedWindow > 0 ? Math.min(100, Math.round((filledWindow / expectedWindow) * 100)) : 0;
+        var freshnessTone = costStateTone(status.level || 'neutral');
+        var freshnessScore = freshnessTone === 'ok' ? 100 : (freshnessTone === 'warn' ? 60 : (freshnessTone === 'danger' ? 24 : 48));
+        return buildBandChartSvg([
+          {
+            label: 'Freshness',
+            note: String(status.detail || 'No baked freshness detail yet.'),
+            value: freshnessScore,
+            display: String(status.headline || 'unknown'),
+            tone: freshnessTone
+          },
+          {
+            label: 'Window coverage',
+            note: 'Filled ' + String(filledWindow) + ' of ' + String(expectedWindow || 0) + ' intended days',
+            value: coverageScore,
+            display: String(filledWindow) + '/' + String(expectedWindow || 0),
+            tone: coverageScore >= 100 ? 'ok' : (coverageScore >= 70 ? 'warn' : 'danger')
+          },
+          {
+            label: 'Latest day bucket',
+            note: currentDay.covered ? 'Latest daily bucket is present.' : 'Latest day bucket is missing from the bake.',
+            value: currentDay.covered ? 100 : 0,
+            display: currentDay.covered ? 'present' : 'missing',
+            tone: currentDay.covered ? 'ok' : 'danger'
+          },
+          {
+            label: 'Storage sample',
+            note: automation.storageBucketPresent ? 'D1 storage bucket is present.' : 'No D1 storage sample in this bake.',
+            value: automation.storageBucketPresent ? 100 : 40,
+            display: automation.storageBucketPresent ? 'present' : 'missing',
+            tone: automation.storageBucketPresent ? 'ok' : 'warn'
+          },
+          {
+            label: 'Request path',
+            note: automation.runtimeTelemetryRequests === false ? 'request path untouched' : 'Runtime telemetry requests are enabled.',
+            value: automation.runtimeTelemetryRequests === false ? 100 : 0,
+            display: automation.runtimeTelemetryRequests === false ? 'quiet' : 'active',
+            tone: automation.runtimeTelemetryRequests === false ? 'ok' : 'danger'
+          }
+        ], {
+          ariaLabel: 'Snapshot integrity chart',
+          title: '100 means healthy or present. Lower bars are the checks that need attention.',
+          maxValue: 100,
+          footer: 'This is trust-in-the-bake, not a live uptime probe.'
+        });
+      }
+
       function renderCostBudgetHeadroom(report) {
         if (!els.costBudgetHeadroom) return;
         var d1 = report && report.d1 ? report.d1 : {};
@@ -2774,31 +3072,25 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           rows.map(function (row) {
             var pct = row.limit > 0 ? Math.min(100, Math.round((safeNum(row.used) / row.limit) * 1000) / 10) : 0;
             return [
-              '<div class="cost-budget-row">',
-              '<div class="cost-budget-meta">',
+              '<div class="cost-focus-block">',
+              '<div class="cost-focus-head">',
               '<strong>' + esc(row.label) + '</strong>',
-              '<span>' + esc(compactMetricNumber(row.used)) + ' / ' + esc(compactMetricNumber(row.limit)) + '</span>',
+              '<span class="cost-subtle">' + esc(compactMetricNumber(row.used)) + ' / ' + esc(compactMetricNumber(row.limit)) + '</span>',
               '</div>',
               '<div class="cost-budget-bar"><div class="cost-budget-fill' + costFillToneClass(row.used, row.limit) + '" style="width:' + pct + '%;"></div></div>',
               '<div class="small">' + esc(row.note) + '</div>',
               '</div>'
             ].join('');
           }).join(''),
-          '<table class="cost-table">',
-          '<thead><tr><th>Write scope</th><th class="num">Used</th><th class="num">Ceiling</th><th class="num">Left</th></tr></thead>',
-          '<tbody>',
+          '<div class="cost-mini-grid">',
           writeRows.map(function (row) {
-            return [
-              '<tr>',
-              '<td><strong>' + esc(row.scope) + '</strong></td>',
-              '<td class="num">' + esc(compactMetricNumber(row.used)) + '</td>',
-              '<td class="num">' + esc(row.limit == null ? '—' : compactMetricNumber(row.limit)) + '</td>',
-              '<td class="num">' + esc(row.left == null ? '—' : compactMetricNumber(row.left)) + '</td>',
-              '</tr>'
-            ].join('');
+            return renderCostDetailCard({
+              eyebrow: row.scope,
+              value: compactMetricNumber(row.used) + ' / ' + (row.limit == null ? '—' : compactMetricNumber(row.limit)),
+              copy: (row.left == null ? 'No baked ceiling left value.' : (compactMetricNumber(row.left) + ' left in this scope.'))
+            });
           }).join(''),
-          '</tbody>',
-          '</table>'
+          '</div>'
         ].join('');
       }
 
@@ -2838,87 +3130,76 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             left: cycleTotals.rowsWrittenMonthlyRemaining
           }
         ];
-        els.costCycleBudgetBars.innerHTML = [
-          '<table class="cost-table">',
-          '<thead><tr><th>Scope</th><th>Period</th><th class="num">Used</th><th class="num">Ceiling</th><th class="num">Left</th><th class="num">Used %</th></tr></thead>',
-          '<tbody>',
-          rows.map(function (row) {
-            return [
-              '<tr>',
-              '<td><strong>' + esc(row.scope) + '</strong></td>',
-              '<td>' + esc(row.context) + '</td>',
-              '<td class="num">' + esc(compactMetricNumber(row.used)) + '</td>',
-              '<td class="num">' + esc(row.limit == null ? '—' : compactMetricNumber(row.limit)) + '</td>',
-              '<td class="num">' + esc(row.left == null ? '—' : compactMetricNumber(row.left)) + '</td>',
-              '<td class="num">' + esc(row.limit == null ? '—' : formatRatioPercent(row.used, row.limit)) + '</td>',
-              '</tr>'
-            ].join('');
-          }).join(''),
-          '</tbody>',
-          '</table>',
-          '<div class="small">Burst ×' + esc(String(safeNum(guardrails.dailyBurstMultiplier || 1))) + ' means the daily read ceiling moves as the cycle burns. Billing page is still the final bill.</div>'
-        ].join('');
+        els.costCycleBudgetBars.innerHTML = rows.map(function (row) {
+          return renderCostDetailCard({
+            eyebrow: row.scope,
+            value: compactMetricNumber(row.used) + ' / ' + (row.limit == null ? '—' : compactMetricNumber(row.limit)),
+            copy: row.context + ' · ' + (row.left == null ? 'left unknown' : (compactMetricNumber(row.left) + ' left')) + ' · ' + (row.limit == null ? 'no used %' : (formatRatioPercent(row.used, row.limit) + ' used'))
+          });
+        }).join('') + '<div class="small">Burst ×' + esc(String(safeNum(guardrails.dailyBurstMultiplier || 1))) + ' means the daily read ceiling moves as the cycle burns. Billing page is still the final bill.</div>';
       }
 
       function renderObservabilityDatasets(report) {
         if (!els.costCycleSourceBars) return;
-        var d1 = report && report.d1 ? report.d1 : {};
-        var automation = report && report.automation ? report.automation : {};
         var durableObjects = report && report.durableObjects ? report.durableObjects : {};
         var totals = durableObjects && durableObjects.totals ? durableObjects.totals : {};
+        var currentDay = durableObjects && durableObjects.currentDay ? durableObjects.currentDay : {};
+        var peakDay = durableObjects && durableObjects.peakDay ? durableObjects.peakDay : {};
+        var dailyLimit = safeNum(currentDay.rowsWrittenDailyLimit || durableObjects.dailyLimitRowsWritten);
+        var currentRows = safeNum(currentDay.rowsWritten);
+        var currentRemaining = safeNum(currentDay.rowsWrittenDailyRemaining);
         var requests = safeNum(totals.requests);
         var errors = safeNum(totals.errors);
         var errorRate = requests > 0 ? (errors / requests) : null;
-        var tone = requests <= 0 ? 'neutral' : (errorRate >= 0.05 ? 'danger' : (errorRate >= 0.01 ? 'warn' : 'ok'));
-        var summaryLabel = requests <= 0 ? 'no traffic' : (tone === 'danger' ? 'errors up' : (tone === 'warn' ? 'watch errors' : 'low error rate'));
-        var classNames = Array.isArray(durableObjects && durableObjects.classNames) ? durableObjects.classNames : [];
+        var usageRatio = dailyLimit > 0 ? (currentRows / dailyLimit) : 0;
+        var tone = currentDay.exhausted ? 'danger' : (usageRatio >= 0.8 ? 'warn' : (dailyLimit > 0 ? 'ok' : 'neutral'));
+        var summaryLabel = currentDay.exhausted ? 'ceiling hit' : (tone === 'warn' ? 'watch headroom' : (tone === 'ok' ? 'headroom left' : 'missing limit'));
         var rows = [
           {
-            metric: 'Invocations in cycle',
+            eyebrow: 'Today account-wide DO writes',
+            value: compactMetricNumber(currentRows) + ' / ' + (dailyLimit > 0 ? compactMetricNumber(dailyLimit) : '—'),
+            copy: formatMonthDay(currentDay.date) + ' · ' + (dailyLimit > 0 ? (compactMetricNumber(currentRemaining) + ' left before the Cloudflare wall.') : 'Daily ceiling missing from this bake.')
+          },
+          {
+            eyebrow: 'Worst baked day',
+            value: peakDay && peakDay.date ? (formatMonthDay(peakDay.date) + ' · ' + compactMetricNumber(peakDay.rowsWritten)) : '—',
+            copy: peakDay && peakDay.date
+              ? ((peakDay.exhausted ? 'Reached the ceiling.' : (compactMetricNumber(peakDay.rowsWrittenDailyRemaining) + ' left on the worst day.')) + ' ' + formatRatioPercent(peakDay.rowsWritten, peakDay.rowsWrittenDailyLimit) + ' of the daily limit.')
+              : 'No peak day available in this bake.'
+          },
+          {
+            eyebrow: 'Days at the ceiling',
+            value: compactMetricNumber(totals.daysAtDailyLimit),
+            copy: 'Baked days that reached or exceeded the real 100,000 rows_written/day ceiling.'
+          },
+          {
+            eyebrow: 'Rows written in baked window',
+            value: compactMetricNumber(totals.rowsWritten),
+            copy: 'Account-wide DO rows_written across the same baked daily window shown in the chart.'
+          },
+          {
+            eyebrow: 'Invocations in window',
             value: compactMetricNumber(requests),
-            context: 'Script-level Cloudflare count for ' + String(durableObjects.scriptName || 'unknown script') + '.'
+            copy: 'Script-level Cloudflare count for ' + String(durableObjects.scriptName || 'unknown script') + '. The write ceiling above is account-wide.'
           },
           {
-            metric: 'Errors in cycle',
+            eyebrow: 'Errors in window',
             value: compactMetricNumber(errors),
-            context: requests > 0 ? (formatRatioPercent(errors, requests) + ' of cycle invocations.') : 'No invocation denominator in this cycle.'
-          },
-          {
-            metric: 'Active days with traffic',
-            value: compactMetricNumber(totals.activeDays),
-            context: compactMetricNumber(automation.filledWindowDays) + ' baked days currently in view.'
-          },
-          {
-            metric: 'Tracked classes',
-            value: compactMetricNumber(totals.trackedClasses || classNames.length),
-            context: classNames.length ? classNames.join(', ') : 'No class names baked into this snapshot.'
-          },
-          {
-            metric: 'Last active day',
-            value: totals.lastActiveDate ? formatCalendarDate(totals.lastActiveDate) : '—',
-            context: 'Latest day Cloudflare saw Durable Object traffic.'
+            copy: requests > 0 ? (formatRatioPercent(errors, requests) + ' of script-level invocations.') : 'No invocation denominator in this bake.'
           }
         ];
+        if (els.costCycleSourceChart) {
+          els.costCycleSourceChart.innerHTML = buildDurableObjectTrafficSvg(report);
+        }
         els.costCycleSourceBars.innerHTML = [
           '<div class="cost-status-banner">',
           renderCostStateChip(summaryLabel, tone),
-          '<strong>Traffic without fake ceilings</strong>',
-          '<div class="small">This is exact volume and error share. There is no invocation ceiling in this baked snapshot, so there is no bar pretending otherwise.</div>',
+          '<strong>Real daily rows_written headroom</strong>',
+          '<div class="small">The line chart shows account-wide Durable Object rows_written against the real 100,000/day Cloudflare ceiling that can knock writes offline.</div>',
           '</div>',
-          '<table class="cost-table">',
-          '<thead><tr><th>Metric</th><th class="num">Value</th><th>Context</th></tr></thead>',
-          '<tbody>',
           rows.map(function (row) {
-            return [
-              '<tr>',
-              '<td><strong>' + esc(row.metric) + '</strong></td>',
-              '<td class="num">' + esc(row.value) + '</td>',
-              '<td>' + esc(row.context) + '</td>',
-              '</tr>'
-            ].join('');
-          }).join(''),
-          '</tbody>',
-          '</table>'
+            return renderCostDetailCard(row);
+          }).join('')
         ].join('');
       }
 
@@ -2956,27 +3237,22 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             note: automation.runtimeTelemetryRequests === false ? 'request path untouched' : 'Runtime telemetry requests are enabled, which should not happen here.'
           }
         ];
+        if (els.costDailyRouteChart) {
+          els.costDailyRouteChart.innerHTML = buildIntegritySignalSvg(report);
+        }
         els.costDailyRouteBars.innerHTML = [
           '<div class="cost-status-banner">',
           renderCostStateChip('trust checks', 'neutral'),
           '<strong>Can this baked view be trusted right now?</strong>',
           '<div class="small">These are freshness and integrity checks for the snapshot itself, not a live uptime probe.</div>',
           '</div>',
-          '<div class="cost-status-list">',
           rows.map(function (row) {
-            return [
-              '<div class="cost-status-row">',
-              '<div class="cost-status-main">',
-              '<strong>' + esc(row.label) + '</strong>',
-              '</div>',
-              '<div class="cost-status-main" style="justify-items:end;">',
-              row.chip,
-              '<div class="cost-status-note">' + esc(row.note) + '</div>',
-              '</div>',
-              '</div>'
-            ].join('');
-          }).join(''),
-          '</div>'
+            return renderCostDetailCard({
+              eyebrow: row.label,
+              valueHtml: row.chip,
+              copy: row.note,
+            });
+          }).join('')
         ].join('');
       }
 
@@ -3140,7 +3416,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (els.costReadTrend) els.costReadTrend.innerHTML = '';
           if (els.costBudgetHeadroom) els.costBudgetHeadroom.innerHTML = '';
           if (els.costCycleBudgetBars) els.costCycleBudgetBars.innerHTML = '';
+          if (els.costCycleSourceChart) els.costCycleSourceChart.innerHTML = '';
           if (els.costCycleSourceBars) els.costCycleSourceBars.innerHTML = '';
+          if (els.costDailyRouteChart) els.costDailyRouteChart.innerHTML = '';
           if (els.costDailyRouteBars) els.costDailyRouteBars.innerHTML = '';
           if (els.costTopRoutes) els.costTopRoutes.innerHTML = '';
           if (els.costUpdatedAt) els.costUpdatedAt.textContent = requestErrorMessage(err, 'Snapshot load failed.');

@@ -15,10 +15,14 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /data-tab="costs">Observability<\/button>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="panel-costs"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare snapshot, baked out of band/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /cost-section-grid/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Capacity against real ceilings/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Exact D1 denominators/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Durable Objects traffic/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="cost-cycle-source-chart"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /real 100,000 rows_written\/day ceiling/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Snapshot integrity/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="cost-daily-route-chart"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare drilldown/)
   assert.match(ICONOPLASM_ADMIN_HTML, /var OBSERVABILITY_SNAPSHOT = /)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /\/cost\/usage/)
@@ -30,8 +34,12 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
 test("iconoplasm admin trend chart explains the baked budget pace guide", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rows_read_daily_smart_limit/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Smart daily allowance/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rowsWrittenDailyLimit/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Daily DO write ceiling/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Real daily rows_written headroom/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Billing page is still the final bill\./)
   assert.match(ICONOPLASM_ADMIN_HTML, /request path untouched/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /No fake invocation ceiling here/)
 })
 
 test("iconoplasm admin keeps the observability chesterton fence comment", () => {
