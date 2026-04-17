@@ -238,6 +238,7 @@ import {
   buildStructureMetaFromStoredSource,
 } from "./lib/structure-utils.js"
 import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
+import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
 
@@ -1752,7 +1753,10 @@ async function resolveSessionContextAsync(request, env, options = {}) {
         guestGuesses > 0
 
       if (shouldMigrate) {
-        await saveGameState(env, userSessionId, guestState)
+        await saveGameState(env, userSessionId, guestState, {
+          operation: "bootstrap_guest_state_migration",
+          requestPath: "/api/game/bootstrap",
+        })
       }
     } catch {
       // Non-fatal: fallback is a fresh user session.
@@ -1825,17 +1829,30 @@ async function getGameState(env, sessionId) {
   return text ? JSON.parse(text) : null
 }
 
-async function saveGameState(env, sessionId, state) {
-  const id = env.GAME_SESSIONS.idFromName(sessionId)
-  const stub = env.GAME_SESSIONS.get(id)
-  const response = await stub.fetch("https://sessions/game/state", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(state || null),
-  })
-  if (!response.ok) {
-    throw new Error("Failed to persist session state")
-  }
+async function saveGameState(env, sessionId, state, observation = {}) {
+  // Keep the evidence path off the Durable Object itself. If GameSession writes are
+  // what is failing, recording that failure through another GameSession write would
+  // be a pretty spectacular own goal.
+  return withObservedGameSessionWrite(
+    env,
+    {
+      operation: observation?.operation || "game_session_state_write",
+      requestPath: observation?.requestPath || null,
+      sessionId,
+    },
+    async () => {
+      const id = env.GAME_SESSIONS.idFromName(sessionId)
+      const stub = env.GAME_SESSIONS.get(id)
+      const response = await stub.fetch("https://sessions/game/state", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(state || null),
+      })
+      if (!response.ok) {
+        throw new Error("Failed to persist session state")
+      }
+    },
+  )
 }
 
 async function checkD1Health(db) {
@@ -2797,6 +2814,10 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       practiceMode,
       forceReset,
       preservePracticePool: true,
+      writeObservation: {
+        operation: "bootstrap_session_ensure",
+        requestPath: "/api/game/bootstrap",
+      },
     })
     console.log(
       `[B-206] bootstrap: sessionId=${sessionId}, forceReset=${forceReset}, targetId=${state.targetId}, seedId=${targetSeed?.uniprot}`,
@@ -2881,7 +2902,10 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
               practiceMode,
             })
             if (didUpdate) {
-              await saveGameState(env, sessionId, latest)
+              await saveGameState(env, sessionId, latest, {
+                operation: "bootstrap_guess_aggregate_backfill",
+                requestPath: "/api/game/bootstrap",
+              })
             }
           } catch (err) {
             console.warn("Guess aggregate backfill failed (non-fatal):", err?.message || err)
@@ -2976,7 +3000,13 @@ async function handleGuessSubmission(request, env, corsHeaders) {
           { status: 500, headers: responseHeaders },
         )
       }
-      state = await ensureSessionForToday(env, sessionId, targetSeed, { practiceMode })
+      state = await ensureSessionForToday(env, sessionId, targetSeed, {
+        practiceMode,
+        writeObservation: {
+          operation: "guess_session_ensure",
+          requestPath: "/api/game/guess",
+        },
+      })
     }
 
     // ⚡ PERFORMANCE: Fetch target and guess proteins in parallel
@@ -3047,7 +3077,10 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     // This eliminates ~3s API round-trip on client after guess submission
     const url = new URL(request.url)
     const [, guessStructureToken] = await Promise.all([
-      saveGameState(env, sessionId, state),
+      saveGameState(env, sessionId, state, {
+        operation: "guess_submission",
+        requestPath: "/api/game/guess",
+      }),
       buildGuessStructureToken(guessProtein, env, { origin: url.origin }),
     ])
 
@@ -3164,7 +3197,10 @@ async function handleHintReveal(request, env, corsHeaders) {
       }
       state.revealedHints = [...(state.revealedHints || []), hintId]
       state.hintBalance = Math.max(0, (state.hintBalance || 0) - DEFAULT_HINT_COST)
-      await saveGameState(env, sessionId, state)
+      await saveGameState(env, sessionId, state, {
+        operation: "hint_reveal",
+        requestPath: "/api/game/reveal-hint",
+      })
       t5 = Date.now()
     }
     console.log(
@@ -3269,7 +3305,10 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
     // Update session state with calculated score
     state.guesses[guessIndex].score = score
     state.guesses[guessIndex].similarityPending = false
-    await saveGameState(env, sessionId, state)
+    await saveGameState(env, sessionId, state, {
+      operation: "guess_similarity",
+      requestPath: "/api/game/guess-similarity",
+    })
 
     return Response.json({ guessId, score }, { headers: responseHeaders })
   } catch (err) {
@@ -3533,6 +3572,7 @@ async function ensureSessionForTodayWithState(
   const practiceMode = Boolean(options.practiceMode)
   const forceReset = Boolean(options.forceReset)
   const preservePracticePool = Boolean(options.preservePracticePool)
+  const writeObservation = options.writeObservation || null
   const today = new Date().toISOString().slice(0, 10)
   let state = existingState
   const applyDesiredTarget = forceReset || !state
@@ -3551,10 +3591,10 @@ async function ensureSessionForTodayWithState(
         ? existingState.practicePool
         : null
     state = createInitialGameState(today, targetProtein.uniprot, { practiceMode, practicePool })
-    await saveGameState(env, sessionId, state)
+    await saveGameState(env, sessionId, state, writeObservation)
   } else if (state.practiceMode !== practiceMode) {
     state.practiceMode = practiceMode
-    await saveGameState(env, sessionId, state)
+    await saveGameState(env, sessionId, state, writeObservation)
   }
   return state
 }
@@ -3647,7 +3687,10 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
   }
 
   if (dirty && sessionId) {
-    await saveGameState(env, sessionId, state)
+    await saveGameState(env, sessionId, state, {
+      operation: "hydrate_guess_proteins",
+      requestPath: null,
+    })
   }
 }
 
@@ -4027,7 +4070,10 @@ async function handlePracticeStart(request, env, ctx, corsHeaders) {
       practiceMode: true,
       practicePool: pool,
     })
-    await saveGameState(env, sessionId, state)
+    await saveGameState(env, sessionId, state, {
+      operation: "practice_start",
+      requestPath: "/api/game/practice/start",
+    })
 
     let structureToken = null
     try {

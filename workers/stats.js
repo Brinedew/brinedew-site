@@ -5,6 +5,7 @@
 
 import { parseCookies } from "./auth.js"
 import { buildAvatarProxyPath } from "./lib/avatar-proxy.js"
+import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 
 const LEADERBOARD_DEFAULT_LIMIT = 5
 const LEADERBOARD_MAX_LIMIT = 25
@@ -309,14 +310,24 @@ export async function handleUpdateStats(request, env) {
         const userSessionId = `user_${userId}`
         const doId = env.GAME_SESSIONS.idFromName(userSessionId)
         const userStub = env.GAME_SESSIONS.get(doId)
-        await userStub.fetch("https://sessions/game/state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...guest.state,
-            statsRecorded: Boolean(guest.state?.statsRecorded),
-          }),
-        })
+        await withObservedGameSessionWrite(
+          env,
+          {
+            operation: "stats_guest_to_user_migration",
+            requestPath: "/api/stats/update",
+            sessionId: userSessionId,
+          },
+          async () => {
+            await userStub.fetch("https://sessions/game/state", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...guest.state,
+                statsRecorded: Boolean(guest.state?.statsRecorded),
+              }),
+            })
+          },
+        )
       } catch {
         // If migration fails, we can still proceed based on guest state.
       }
@@ -428,11 +439,21 @@ export async function handleUpdateStats(request, env) {
       const updatedState = { ...authoritative.state, statsRecorded: true }
       const doId = env.GAME_SESSIONS.idFromName(authoritative.sessionId)
       const stub = env.GAME_SESSIONS.get(doId)
-      await stub.fetch("https://sessions/game/state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedState),
-      })
+      await withObservedGameSessionWrite(
+        env,
+        {
+          operation: "stats_mark_recorded",
+          requestPath: "/api/stats/update",
+          sessionId: authoritative.sessionId,
+        },
+        async () => {
+          await stub.fetch("https://sessions/game/state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedState),
+          })
+        },
+      )
     } catch {
       // Non-fatal: D1 is the source of truth for user stats.
     }
@@ -539,12 +560,22 @@ export async function handleSetLeaderboardVisibility(request, env) {
         ...auth.session,
         leaderboard_opt_in: parsed === 1,
       }
-      await auth.sessionStub.fetch(
-        new Request("http://internal/store", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatedSession),
-        }),
+      await withObservedGameSessionWrite(
+        env,
+        {
+          operation: "leaderboard_visibility_session_cache",
+          requestPath: "/api/stats/leaderboard-visibility",
+          sessionId: `session:${auth.sessionId}`,
+        },
+        async () => {
+          await auth.sessionStub.fetch(
+            new Request("http://internal/store", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(updatedSession),
+            }),
+          )
+        },
       )
     } catch (sessionErr) {
       console.warn("Failed to update session leaderboard visibility cache:", sessionErr)

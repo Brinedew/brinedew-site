@@ -2,6 +2,7 @@
  * Discord OAuth with PKCE implementation
  */
 import { buildAvatarProxyPath, sanitizeDiscordAvatarUrl } from "./lib/avatar-proxy.js"
+import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 
 const DISCORD_API = "https://discord.com/api/v10"
 const DISCORD_OAUTH = "https://discord.com/oauth2/authorize"
@@ -193,20 +194,30 @@ export async function handleLogin(request, env) {
   const id = env.GAME_SESSIONS.idFromName(`oauth:${sessionId}`)
   const stub = env.GAME_SESSIONS.get(id)
 
-  await stub.fetch(
-    new Request("http://internal/store", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code_verifier: codeVerifier,
-        state: state,
-        leaderboard_opt_in: leaderboardOptIn ? 1 : 0,
-        return_to: returnTo,
-        redirect_uri: redirectUri,
-        cookie_domain: cookieDomain,
-        expires_at: Date.now() + 600000, // 10 minutes
-      }),
-    }),
+  await withObservedGameSessionWrite(
+    env,
+    {
+      operation: "auth_oauth_store",
+      requestPath: "/api/auth/login",
+      sessionId: `oauth:${sessionId}`,
+    },
+    async () => {
+      await stub.fetch(
+        new Request("http://internal/store", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code_verifier: codeVerifier,
+            state: state,
+            leaderboard_opt_in: leaderboardOptIn ? 1 : 0,
+            return_to: returnTo,
+            redirect_uri: redirectUri,
+            cookie_domain: cookieDomain,
+            expires_at: Date.now() + 600000, // 10 minutes
+          }),
+        }),
+      )
+    },
   )
 
   // Build Discord OAuth URL
@@ -386,22 +397,32 @@ export async function handleCallback(request, env) {
   const sessionStubId = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
   const sessionStub = env.GAME_SESSIONS.get(sessionStubId)
 
-  await sessionStub.fetch(
-    new Request("http://internal/store", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: user.id,
-        username: user.username,
-        avatar_url: toClientAvatarUrl(avatarUrl),
-        tier: "registered",
-        leaderboard_opt_in: leaderboardOptIn === 1,
-        is_guild_member: isMember,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: Date.now() + tokens.expires_in * 1000,
-      }),
-    }),
+  await withObservedGameSessionWrite(
+    env,
+    {
+      operation: "auth_session_store",
+      requestPath: "/api/auth/callback",
+      sessionId: `session:${sessionId}`,
+    },
+    async () => {
+      await sessionStub.fetch(
+        new Request("http://internal/store", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: user.id,
+            username: user.username,
+            avatar_url: toClientAvatarUrl(avatarUrl),
+            tier: "registered",
+            leaderboard_opt_in: leaderboardOptIn === 1,
+            is_guild_member: isMember,
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            expires_at: Date.now() + tokens.expires_in * 1000,
+          }),
+        }),
+      )
+    },
   )
 
   // Clear OAuth session and set persistent session cookie
@@ -480,7 +501,17 @@ export async function handleLogout(request, env) {
     // Clear session data
     const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
     const stub = env.GAME_SESSIONS.get(id)
-    await stub.fetch(new Request("http://internal/reset", { method: "POST" }))
+    await withObservedGameSessionWrite(
+      env,
+      {
+        operation: "auth_session_reset",
+        requestPath: "/api/auth/logout",
+        sessionId: `session:${sessionId}`,
+      },
+      async () => {
+        await stub.fetch(new Request("http://internal/reset", { method: "POST" }))
+      },
+    )
   }
 
   // Clear session cookie. Do not redirect from this API endpoint because

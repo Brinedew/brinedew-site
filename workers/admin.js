@@ -14,6 +14,7 @@ import {
 } from "./lib/protein-store.js"
 import { buildClueSections, maskClueSections, sanitizeTargetProtein } from "./lib/game-engine.js"
 import { getDailyGuessAggregates, getGuessAggregatesForDateRange } from "./lib/guess-aggregates.js"
+import { getGameSessionWriteEvidence } from "./lib/game-session-write-evidence.js"
 
 function addDaysISO(dateIso, days) {
   const base = new Date(`${dateIso}T00:00:00.000Z`)
@@ -894,6 +895,7 @@ export async function handleAdminStatus(request, env) {
 
     // Filter out null values (failed fetches)
     const validOverrides = overrides.filter((o) => o !== null)
+    const gameSessionWriteEvidence = await getGameSessionWriteEvidence(env.DB)
 
     return Response.json({
       today: {
@@ -903,6 +905,7 @@ export async function handleAdminStatus(request, env) {
       feature_flags: featureFlags,
       graphics_settings: graphicsSettings,
       all_overrides: validOverrides,
+      game_session_write_evidence: gameSessionWriteEvidence,
     })
   } catch (err) {
     console.error("Error in handleAdminStatus:", err)
