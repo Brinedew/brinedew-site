@@ -18,8 +18,38 @@ export const ICONOPLASM_OBSERVABILITY_SNAPSHOT = {
   },
   d1: {
     databaseId: "",
+    cycleKey: null,
+    cycleStartDate: null,
+    cycleEndDate: null,
+    nextCycleStartDate: null,
+    daysRemainingInCycle: null,
+    currentDay: {
+      date: null,
+      readQueries: 0,
+      writeQueries: 0,
+      rowsRead: 0,
+      rowsWritten: 0,
+      queryBatchResponseBytes: 0,
+      rowsReadDailySmartLimit: null,
+      rowsWrittenDailySmartLimit: null,
+      rowsReadDailyRemaining: null,
+      rowsWrittenDailyRemaining: null,
+      covered: false
+    },
+    cycleTotals: {
+      readQueries: 0,
+      writeQueries: 0,
+      rowsRead: 0,
+      rowsWritten: 0,
+      queryBatchResponseBytes: 0,
+      rowsReadMonthlyLimit: null,
+      rowsWrittenMonthlyLimit: null,
+      rowsReadMonthlyRemaining: null,
+      rowsWrittenMonthlyRemaining: null
+    },
     lastDailyBucket: null,
     rollingWindowDays: 14,
+    expectedWindowDays: 14,
     periodTotals: {
       readQueries: 0,
       writeQueries: 0,
@@ -67,6 +97,12 @@ export const ICONOPLASM_OBSERVABILITY_SNAPSHOT = {
   launchpad: [],
   durableObjects: {
     scriptName: "",
+    totals: {
+      requests: 0,
+      errors: 0,
+      activeDays: 0
+    },
+    classes: [],
     classNames: [
       "IconoplasmVoteCoordinator",
       "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"

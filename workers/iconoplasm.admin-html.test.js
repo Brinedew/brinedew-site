@@ -15,9 +15,10 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /data-tab="costs">Observability<\/button>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="panel-costs"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare snapshot, baked out of band/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /Window activity mix/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /D1 cycle accountability/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Durable Objects at a glance/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Snapshot health/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /Open in Cloudflare/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare drilldown/)
   assert.match(ICONOPLASM_ADMIN_HTML, /var OBSERVABILITY_SNAPSHOT = /)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /\/cost\/usage/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewSummary\(\)/)
@@ -27,7 +28,14 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
 
 test("iconoplasm admin trend chart explains the baked budget pace guide", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rows_read_daily_smart_limit/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /Budget pace guide/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Smart daily allowance/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Billing page is still the final bill\./)
   assert.match(ICONOPLASM_ADMIN_HTML, /request path untouched/)
+})
+
+test("iconoplasm admin keeps the observability chesterton fence comment", () => {
+  assert.match(ICONOPLASM_ADMIN_HTML, /Chesterton's fence:/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /do not generate observability load from the admin page itself/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /just links/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /just a runbook/)
 })

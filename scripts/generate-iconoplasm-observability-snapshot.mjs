@@ -55,6 +55,28 @@ const D1_STORAGE_QUERY = `query IconoplasmD1Storage($accountTag: string, $databa
   }
 }`
 
+const DURABLE_OBJECT_INVOCATIONS_QUERY = `query IconoplasmDOInvocations($accountTag: string, $startDate: Date, $endDate: Date) {
+  viewer {
+    accounts(filter: { accountTag: $accountTag }) {
+      durableObjectsInvocationsAdaptiveGroups(
+        limit: 1000
+        filter: { date_geq: $startDate, date_leq: $endDate }
+        orderBy: [date_ASC]
+      ) {
+        dimensions {
+          date
+          scriptName
+          className
+        }
+        sum {
+          requests
+          errors
+        }
+      }
+    }
+  }
+}`
+
 const DURABLE_OBJECT_CLASS_NAMES = [
   "IconoplasmVoteCoordinator",
   "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate",
@@ -114,6 +136,55 @@ function dashboardLink(accountId, toPath) {
   return `https://dash.cloudflare.com/?to=/${accountId}${toPath}`
 }
 
+function isoDate(date) {
+  return new Date(date).toISOString().slice(0, 10)
+}
+
+function utcMonthDays(year, monthIndex) {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+}
+
+function clampedBillingDay(year, monthIndex, billingDayOfMonth) {
+  const requested = Math.max(1, Number(billingDayOfMonth || 1) || 1)
+  return Math.min(requested, utcMonthDays(year, monthIndex))
+}
+
+function cycleBoundaryForMonth(year, monthIndex, billingDayOfMonth) {
+  return new Date(
+    Date.UTC(year, monthIndex, clampedBillingDay(year, monthIndex, billingDayOfMonth), 0, 0, 0, 0),
+  )
+}
+
+function currentBillingCycle(nowInput, billingDayOfMonth) {
+  const now = new Date(nowInput)
+  now.setUTCHours(0, 0, 0, 0)
+  let cycleStart = cycleBoundaryForMonth(now.getUTCFullYear(), now.getUTCMonth(), billingDayOfMonth)
+  if (now.getTime() < cycleStart.getTime()) {
+    cycleStart = cycleBoundaryForMonth(now.getUTCFullYear(), now.getUTCMonth() - 1, billingDayOfMonth)
+  }
+  const nextCycleStart = cycleBoundaryForMonth(
+    cycleStart.getUTCFullYear(),
+    cycleStart.getUTCMonth() + 1,
+    billingDayOfMonth,
+  )
+  return {
+    cycleKey: isoDate(cycleStart),
+    cycleStartDate: isoDate(cycleStart),
+    cycleEndDate: isoDate(now),
+    nextCycleStartDate: isoDate(nextCycleStart),
+    daysRemainingInCycle: Math.max(1, Math.ceil((nextCycleStart.getTime() - now.getTime()) / 86400000)),
+  }
+}
+
+function smartDailyLimit(monthlyRemainingAtStartOfDay, daysRemainingInCycle, burstMultiplier) {
+  const remaining = Math.max(0, Number(monthlyRemainingAtStartOfDay || 0) || 0)
+  const daysRemaining = Math.max(1, Number(daysRemainingInCycle || 1) || 1)
+  const burst = Math.max(1, Number(burstMultiplier || 1) || 1)
+  if (remaining <= 0) return 0
+  const baseAllowance = Math.ceil(remaining / daysRemaining)
+  return Math.min(remaining, Math.max(baseAllowance, Math.ceil(baseAllowance * burst)))
+}
+
 async function loadWranglerConfig(rootDir, envName) {
   const configPath = path.join(rootDir, "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml")
   const parsed = toml.parse(await readFile(configPath, "utf8"))
@@ -159,14 +230,13 @@ function firstAccount(payload) {
   return account
 }
 
-async function fetchD1Snapshot({ apiToken, accountId, databaseId }) {
-  const startDate = isoDateDaysAgo(LOOKBACK_DAYS - 1)
-  const endDate = isoDateDaysAgo(0)
+async function fetchD1Snapshot({ apiToken, accountId, config }) {
+  const cycle = currentBillingCycle(new Date(), config.billingCycleDayOfMonth)
   const variables = {
     accountTag: accountId,
-    databaseId,
-    startDate,
-    endDate,
+    databaseId: config.databaseId,
+    startDate: cycle.cycleStartDate,
+    endDate: cycle.cycleEndDate,
   }
   const [analyticsPayload, storagePayload] = await Promise.all([
     callGraphQL(apiToken, D1_DAILY_QUERY, variables),
@@ -174,7 +244,7 @@ async function fetchD1Snapshot({ apiToken, accountId, databaseId }) {
   ])
   const analyticsAccount = firstAccount(analyticsPayload)
   const storageAccount = firstAccount(storagePayload)
-  const daily = Array.isArray(analyticsAccount.d1AnalyticsAdaptiveGroups)
+  const rawDaily = Array.isArray(analyticsAccount.d1AnalyticsAdaptiveGroups)
     ? analyticsAccount.d1AnalyticsAdaptiveGroups.map((row) => ({
         date: String(row?.dimensions?.date || ""),
         readQueries: asNumber(row?.sum?.readQueries),
@@ -186,9 +256,71 @@ async function fetchD1Snapshot({ apiToken, accountId, databaseId }) {
         p90QueryBatchTimeMs: roundMetric(asNumber(row?.quantiles?.queryBatchTimeMsP90)),
       }))
     : []
-  const storageRow = Array.isArray(storageAccount.d1StorageAdaptiveGroups)
-    ? storageAccount.d1StorageAdaptiveGroups[0] || null
-    : null
+  let cycleRowsReadBeforeDay = 0
+  let cycleRowsWrittenBeforeDay = 0
+  const cycleDaily = rawDaily.map((row) => {
+    const dayStartMs = Date.parse(`${row.date}T00:00:00.000Z`)
+    const nextCycleStartMs = Date.parse(`${cycle.nextCycleStartDate}T00:00:00.000Z`)
+    const daysRemainingInCycle =
+      Number.isFinite(dayStartMs) && Number.isFinite(nextCycleStartMs)
+        ? Math.max(1, Math.ceil((nextCycleStartMs - dayStartMs) / 86400000))
+        : 1
+    const rowsReadDailySmartLimit =
+      config.rowsReadHardMonthlyBudget > 0
+        ? smartDailyLimit(
+            config.rowsReadHardMonthlyBudget - cycleRowsReadBeforeDay,
+            daysRemainingInCycle,
+            config.dailyBurstMultiplier,
+          )
+        : null
+    const rowsWrittenDailySmartLimit =
+      config.rowsWrittenHardMonthlyBudget > 0
+        ? smartDailyLimit(
+            config.rowsWrittenHardMonthlyBudget - cycleRowsWrittenBeforeDay,
+            daysRemainingInCycle,
+            config.dailyBurstMultiplier,
+          )
+        : null
+    cycleRowsReadBeforeDay += row.rowsRead
+    cycleRowsWrittenBeforeDay += row.rowsWritten
+    return {
+      ...row,
+      daysRemainingInCycle,
+      rowsReadDailySmartLimit,
+      rowsWrittenDailySmartLimit,
+      rowsReadDailyRemaining:
+        rowsReadDailySmartLimit == null ? null : Math.max(0, rowsReadDailySmartLimit - row.rowsRead),
+      rowsWrittenDailyRemaining:
+        rowsWrittenDailySmartLimit == null
+          ? null
+          : Math.max(0, rowsWrittenDailySmartLimit - row.rowsWritten),
+    }
+  })
+  const cycleTotalsBase = cycleDaily.reduce(
+    (totals, row) => ({
+      readQueries: totals.readQueries + row.readQueries,
+      writeQueries: totals.writeQueries + row.writeQueries,
+      rowsRead: totals.rowsRead + row.rowsRead,
+      rowsWritten: totals.rowsWritten + row.rowsWritten,
+      queryBatchResponseBytes: totals.queryBatchResponseBytes + row.queryBatchResponseBytes,
+    }),
+    {
+      readQueries: 0,
+      writeQueries: 0,
+      rowsRead: 0,
+      rowsWritten: 0,
+      queryBatchResponseBytes: 0,
+    },
+  )
+  const elapsedCycleDays = Math.max(
+    1,
+    Math.floor(
+      (Date.parse(`${cycle.cycleEndDate}T00:00:00.000Z`) - Date.parse(`${cycle.cycleStartDate}T00:00:00.000Z`)) /
+        86400000,
+    ) + 1,
+  )
+  const expectedWindowDays = Math.min(LOOKBACK_DAYS, elapsedCycleDays)
+  const daily = cycleDaily.slice(-expectedWindowDays)
   const periodTotals = daily.reduce(
     (totals, row) => ({
       readQueries: totals.readQueries + row.readQueries,
@@ -205,10 +337,72 @@ async function fetchD1Snapshot({ apiToken, accountId, databaseId }) {
       queryBatchResponseBytes: 0,
     },
   )
+  const currentDayRow = cycleDaily.find((row) => row.date === cycle.cycleEndDate) || null
+  const currentDayRowsRead = asNumber(currentDayRow?.rowsRead)
+  const currentDayRowsWritten = asNumber(currentDayRow?.rowsWritten)
+  const cycleRowsReadBeforeToday = Math.max(0, cycleTotalsBase.rowsRead - currentDayRowsRead)
+  const cycleRowsWrittenBeforeToday = Math.max(0, cycleTotalsBase.rowsWritten - currentDayRowsWritten)
+  const currentDayRowsReadDailySmartLimit =
+    config.rowsReadHardMonthlyBudget > 0
+      ? smartDailyLimit(
+          config.rowsReadHardMonthlyBudget - cycleRowsReadBeforeToday,
+          cycle.daysRemainingInCycle,
+          config.dailyBurstMultiplier,
+        )
+      : null
+  const currentDayRowsWrittenDailySmartLimit =
+    config.rowsWrittenHardMonthlyBudget > 0
+      ? smartDailyLimit(
+          config.rowsWrittenHardMonthlyBudget - cycleRowsWrittenBeforeToday,
+          cycle.daysRemainingInCycle,
+          config.dailyBurstMultiplier,
+        )
+      : null
+  const storageRow = Array.isArray(storageAccount.d1StorageAdaptiveGroups)
+    ? storageAccount.d1StorageAdaptiveGroups[0] || null
+    : null
   return {
+    cycleKey: cycle.cycleKey,
+    cycleStartDate: cycle.cycleStartDate,
+    cycleEndDate: cycle.cycleEndDate,
+    nextCycleStartDate: cycle.nextCycleStartDate,
+    daysRemainingInCycle: cycle.daysRemainingInCycle,
     rollingWindowDays: LOOKBACK_DAYS,
+    expectedWindowDays,
     lastDailyBucket: daily.length ? daily[daily.length - 1] : null,
+    currentDay: {
+      date: cycle.cycleEndDate,
+      readQueries: asNumber(currentDayRow?.readQueries),
+      writeQueries: asNumber(currentDayRow?.writeQueries),
+      rowsRead: currentDayRowsRead,
+      rowsWritten: currentDayRowsWritten,
+      queryBatchResponseBytes: asNumber(currentDayRow?.queryBatchResponseBytes),
+      rowsReadDailySmartLimit: currentDayRowsReadDailySmartLimit,
+      rowsWrittenDailySmartLimit: currentDayRowsWrittenDailySmartLimit,
+      rowsReadDailyRemaining:
+        currentDayRowsReadDailySmartLimit == null
+          ? null
+          : Math.max(0, currentDayRowsReadDailySmartLimit - currentDayRowsRead),
+      rowsWrittenDailyRemaining:
+        currentDayRowsWrittenDailySmartLimit == null
+          ? null
+          : Math.max(0, currentDayRowsWrittenDailySmartLimit - currentDayRowsWritten),
+      covered: Boolean(currentDayRow),
+    },
     periodTotals,
+    cycleTotals: {
+      ...cycleTotalsBase,
+      rowsReadMonthlyLimit: config.rowsReadHardMonthlyBudget || null,
+      rowsWrittenMonthlyLimit: config.rowsWrittenHardMonthlyBudget || null,
+      rowsReadMonthlyRemaining:
+        config.rowsReadHardMonthlyBudget > 0
+          ? Math.max(0, config.rowsReadHardMonthlyBudget - cycleTotalsBase.rowsRead)
+          : null,
+      rowsWrittenMonthlyRemaining:
+        config.rowsWrittenHardMonthlyBudget > 0
+          ? Math.max(0, config.rowsWrittenHardMonthlyBudget - cycleTotalsBase.rowsWritten)
+          : null,
+    },
     latency: {
       avgQueryBatchTimeMs: roundMetric(avg(daily.map((row) => row.avgQueryBatchTimeMs))),
       p90QueryBatchTimeMs: roundMetric(avg(daily.map((row) => row.p90QueryBatchTimeMs))),
@@ -221,15 +415,77 @@ async function fetchD1Snapshot({ apiToken, accountId, databaseId }) {
   }
 }
 
+async function fetchDurableObjectSnapshot({ apiToken, accountId, scriptName, classNames, startDate, endDate }) {
+  const payload = await callGraphQL(apiToken, DURABLE_OBJECT_INVOCATIONS_QUERY, {
+    accountTag: accountId,
+    startDate,
+    endDate,
+  })
+  const account = firstAccount(payload)
+  const rows = (Array.isArray(account.durableObjectsInvocationsAdaptiveGroups)
+    ? account.durableObjectsInvocationsAdaptiveGroups
+    : []
+  )
+    .map((row) => ({
+      date: String(row?.dimensions?.date || ""),
+      scriptName: String(row?.dimensions?.scriptName || ""),
+      className: String(row?.dimensions?.className || "unknown"),
+      requests: asNumber(row?.sum?.requests),
+      errors: asNumber(row?.sum?.errors),
+    }))
+    .filter((row) => row.scriptName === scriptName)
+  const daySet = new Set()
+  const classMap = new Map(
+    (Array.isArray(classNames) ? classNames : []).map((name) => [
+      String(name),
+      { className: String(name), requests: 0, errors: 0, activeDays: new Set(), lastActiveDate: null },
+    ]),
+  )
+  rows.forEach((row) => {
+    daySet.add(row.date)
+    const key = row.className || "unknown"
+    if (!classMap.has(key)) {
+      classMap.set(key, { className: key, requests: 0, errors: 0, activeDays: new Set(), lastActiveDate: null })
+    }
+    const entry = classMap.get(key)
+    entry.requests += row.requests
+    entry.errors += row.errors
+    if (row.requests > 0 || row.errors > 0) {
+      entry.activeDays.add(row.date)
+      entry.lastActiveDate = entry.lastActiveDate && entry.lastActiveDate > row.date ? entry.lastActiveDate : row.date
+    }
+  })
+  const classes = Array.from(classMap.values())
+    .map((entry) => ({
+      className: entry.className,
+      requests: entry.requests,
+      errors: entry.errors,
+      activeDays: entry.activeDays.size,
+      lastActiveDate: entry.lastActiveDate,
+      errorRate: entry.requests > 0 ? roundMetric((entry.errors / entry.requests) * 100) : 0,
+    }))
+    .sort((left, right) => right.requests - left.requests || left.className.localeCompare(right.className))
+  return {
+    scriptName,
+    classNames: Array.isArray(classNames) ? classNames : [],
+    totals: {
+      requests: classes.reduce((sum, entry) => sum + entry.requests, 0),
+      errors: classes.reduce((sum, entry) => sum + entry.errors, 0),
+      activeDays: daySet.size,
+    },
+    classes,
+  }
+}
+
 function buildAutomationState({ config, d1 }) {
   return {
     refreshCadenceHours: 1,
     deployBake: true,
     scheduledBake: true,
     runtimeTelemetryRequests: false,
-    currentDayCovered: Boolean(d1.lastDailyBucket?.date) && d1.lastDailyBucket.date === isoDateDaysAgo(0),
+    currentDayCovered: Boolean(d1.currentDay?.covered),
     filledWindowDays: Array.isArray(d1.daily) ? d1.daily.length : 0,
-    rollingWindowDays: d1.rollingWindowDays,
+    rollingWindowDays: d1.expectedWindowDays || d1.rollingWindowDays,
     storageBucketPresent: Boolean(d1.storage?.observedAt),
     liveDetailLivesInCloudflare: true,
     graphQLUsesAdaptiveSampling: true,
@@ -260,9 +516,31 @@ async function main() {
   const d1 = await fetchD1Snapshot({
     apiToken,
     accountId,
-    databaseId: config.databaseId,
+    config,
+  })
+  const durableObjects = await fetchDurableObjectSnapshot({
+    apiToken,
+    accountId,
+    scriptName: config.scriptName,
+    classNames: DURABLE_OBJECT_CLASS_NAMES,
+    startDate: d1.cycleStartDate,
+    endDate: d1.cycleEndDate,
   })
   const automation = buildAutomationState({ config, d1 })
+  // Chesterton's fence:
+  // We retired the in-app /api/iconoplasm/admin/cost/usage path on purpose.
+  // The admin must not hit telemetry routes, Durable Objects, or GraphQL at
+  // page load just to explain observability to itself.
+  //
+  // This bake is the compromise: collect Cloudflare analytics out of band, then
+  // ship enough concrete facts into the UI that operators can see accountability
+  // at a glance without leaving the page. If this payload collapses back into
+  // little more than dashboard links, the UI becomes vague and we recreate the
+  // regression that motivated the refactor.
+  //
+  // GraphQL here is operational trend data, not billing truth. Keep billing
+  // truth in Cloudflare Billing, but keep budget/attribution facts in this
+  // snapshot so the UI does not devolve into link soup.
   const snapshot = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -271,7 +549,7 @@ async function main() {
       mode: "out_of_band_snapshot",
       analyticsTruth: "Cloudflare GraphQL analytics",
       billingTruth: "Cloudflare Billing dashboard",
-      note: "The admin UI reads this baked snapshot instead of calling a runtime cost endpoint.",
+      note: "The admin UI reads this baked snapshot instead of calling runtime telemetry endpoints.",
     },
     status: {
       level: d1.lastDailyBucket ? "ok" : "warning",
@@ -282,8 +560,16 @@ async function main() {
     },
     d1: {
       databaseId: config.databaseId,
+      cycleKey: d1.cycleKey,
+      cycleStartDate: d1.cycleStartDate,
+      cycleEndDate: d1.cycleEndDate,
+      nextCycleStartDate: d1.nextCycleStartDate,
+      daysRemainingInCycle: d1.daysRemainingInCycle,
+      currentDay: d1.currentDay,
+      cycleTotals: d1.cycleTotals,
       lastDailyBucket: d1.lastDailyBucket,
       rollingWindowDays: d1.rollingWindowDays,
+      expectedWindowDays: d1.expectedWindowDays,
       periodTotals: d1.periodTotals,
       latency: d1.latency,
       storage: d1.storage,
@@ -307,12 +593,12 @@ async function main() {
       {
         label: "D1 metrics",
         href: dashboardLink(accountId, "/workers/d1"),
-        note: "Rows read, rows written, latency, and storage for the iconoplasm database.",
+        note: "Final drilldown for D1 reads, writes, latency, and storage after the baked cycle summary raises a flag.",
       },
       {
         label: "Durable Objects metrics",
         href: dashboardLink(accountId, "/workers/durable-objects"),
-        note: "Live DO invocations, storage, and logs. Use class names below to drill into Iconoplasm.",
+        note: "Live Durable Object invocations, storage, and logs after the baked class summary tells you where to look.",
       },
       {
         label: "Billing usage",
@@ -320,10 +606,7 @@ async function main() {
         note: "Final bill, usage alerts, and the place reality cashes the check.",
       },
     ],
-    durableObjects: {
-      scriptName: config.scriptName,
-      classNames: DURABLE_OBJECT_CLASS_NAMES,
-    },
+    durableObjects,
   }
   await writeSnapshotFiles(rootDir, snapshot)
 }

@@ -1564,7 +1564,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <div>
               <div class="cost-kicker">Iconoplasm observability</div>
               <h2>Cloudflare snapshot, baked out of band</h2>
-              <p class="small">This tab auto-refreshes from Cloudflare on deploy and on the hourly snapshot job. No request-path meter. No fake live graph. No homework for the person opening the page.</p>
+              <p class="small">This tab auto-refreshes from Cloudflare on deploy and on the hourly snapshot job. The page itself stays off the telemetry path, but it still has to show real D1 and Durable Object accountability.</p>
             </div>
             <div class="cost-toolbar-actions">
               <button type="button" id="cost-refresh">Reload snapshot</button>
@@ -1579,7 +1579,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <div class="cost-card-head">
               <div>
                 <h2>D1 daily trend</h2>
-                <p class="small">Rows-read history from the out-of-band snapshot window. Good enough for trend spotting, without pretending to be the live bill.</p>
+                <p class="small">Rows-read history across the current cycle view, with the smart daily allowance recomputed from spend already burned and days left in the cycle.</p>
               </div>
               <div class="cost-subtle" id="cost-trend-meta">Waiting for data…</div>
             </div>
@@ -1587,7 +1587,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               <div class="cost-chart" id="cost-read-trend"></div>
               <div class="cost-legend">
                 <span class="cost-legend-item"><span class="cost-legend-swatch" style="background:#c26a32"></span>Daily rows read</span>
-                <span class="cost-legend-item"><span class="cost-legend-swatch" style="background:#4f7f6d"></span>Daily pace implied by the hard monthly read budget</span>
+                <span class="cost-legend-item"><span class="cost-legend-swatch" style="background:#4f7f6d"></span>Smart daily allowance</span>
               </div>
             </div>
           </section>
@@ -1595,8 +1595,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <section class="cost-card">
             <div class="cost-card-head">
               <div>
-                <h2>Snapshot status</h2>
-                <p class="small">What this snapshot knows, when it was baked, and which guardrails the worker is currently carrying.</p>
+                <h2>D1 budget status</h2>
+                <p class="small">Cycle burn, today’s ceiling, and remaining monthly headroom from the same guardrail model that protects the worker.</p>
               </div>
             </div>
             <div class="cost-budget-grid" id="cost-budget-headroom"></div>
@@ -1607,8 +1607,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <section class="cost-card">
             <div class="cost-card-head">
               <div>
-                <h2>Cloudflare links</h2>
-                <p class="small">Open the real Cloudflare surfaces when you need live detail beyond the baked snapshot.</p>
+                <h2>D1 cycle accountability</h2>
+                <p class="small">What the current cycle has already burned, how much room is left, and why today’s ceiling is where it is.</p>
               </div>
             </div>
             <div class="cost-bars" id="cost-cycle-budget-bars"></div>
@@ -1617,8 +1617,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <section class="cost-card">
             <div class="cost-card-head">
               <div>
-                <h2>Window activity mix</h2>
-                <p class="small">Read pressure, write pressure, and response volume across the baked window.</p>
+                <h2>Durable Objects at a glance</h2>
+                <p class="small">Which Iconoplasm classes are active, how many invocations they handled, and whether errors are showing up.</p>
               </div>
             </div>
             <div class="cost-bars" id="cost-cycle-source-bars"></div>
@@ -1638,8 +1638,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <section class="cost-card">
           <div class="cost-card-head">
             <div>
-              <h2>Open in Cloudflare</h2>
-              <p class="small">Use these when you need live drilldown beyond the baked snapshot.</p>
+              <h2>Cloudflare drilldown</h2>
+              <p class="small">Use these only when the baked summary tells you something smells off.</p>
             </div>
           </div>
           <div id="cost-top-routes"></div>
@@ -2399,7 +2399,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         chrome.tooltip.innerHTML = [
           '<strong>' + esc(day || 'Unknown day') + '</strong>',
           '<div>' + esc(formatCompactNumber(reads)) + ' rows read</div>',
-          '<div class="cost-subtle">Budget pace guide: ' + esc(compactMetricNumber(limit)) + '</div>'
+          '<div class="cost-subtle">Smart daily allowance: ' + esc(compactMetricNumber(limit)) + '</div>'
         ].join('');
         chrome.tooltip.classList.add('is-visible');
         chrome.tooltip.setAttribute('aria-hidden', 'false');
@@ -2507,7 +2507,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           var x = xAt(index);
           var y = yAt(value);
           var dateLabel = String(row && row.day_key || '');
-          return '<circle cx="' + x + '" cy="' + y + '" r="5" fill="#b84a26" stroke="#fff9f3" stroke-width="2" tabindex="0" role="button" data-cost-trend-point="true" data-day="' + esc(dateLabel) + '" data-reads="' + esc(String(value)) + '" data-limit="' + esc(String(limit)) + '"><title>' + esc(dateLabel + ': ' + formatCompactNumber(value) + ' rows read / ' + compactMetricNumber(limit) + ' budget pace guide') + '</title></circle>';
+          return '<circle cx="' + x + '" cy="' + y + '" r="5" fill="#b84a26" stroke="#fff9f3" stroke-width="2" tabindex="0" role="button" data-cost-trend-point="true" data-day="' + esc(dateLabel) + '" data-reads="' + esc(String(value)) + '" data-limit="' + esc(String(limit)) + '"><title>' + esc(dateLabel + ': ' + formatCompactNumber(value) + ' rows read / ' + compactMetricNumber(limit) + ' smart daily allowance') + '</title></circle>';
         }).join('');
         var firstLabel = String(rows[0] && rows[0].day_key || '');
         var lastLabel = String(rows[rows.length - 1] && rows[rows.length - 1].day_key || '');
@@ -2525,7 +2525,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           points,
           '<text x="' + padLeft + '" y="' + (height - 8) + '" font-size="11" fill="#7a6d61">' + esc(firstLabel) + '</text>',
           '<text x="' + (padLeft + usableWidth) + '" y="' + (height - 8) + '" text-anchor="end" font-size="11" fill="#7a6d61">' + esc(lastLabel) + '</text>',
-          '<text x="' + Math.max(padLeft + 6, currentLimitX - 6) + '" y="' + Math.max(12, currentLimitY - 8) + '" text-anchor="end" font-size="11" fill="#4f7f6d">Budget pace guide ' + esc(compactMetricNumber(currentDailyLimit)) + '</text>',
+          '<text x="' + Math.max(padLeft + 6, currentLimitX - 6) + '" y="' + Math.max(12, currentLimitY - 8) + '" text-anchor="end" font-size="11" fill="#4f7f6d">Smart daily allowance ' + esc(compactMetricNumber(currentDailyLimit)) + '</text>',
           '<text x="' + padLeft + '" y="' + (padTop + 12) + '" font-size="11" fill="#7a6d61">Peak ' + esc(compactMetricNumber(maxValue)) + ' rows</text>',
           '</svg>'
         ].join('');
@@ -2577,40 +2577,39 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function renderCostBudgetHeadroom(report) {
         if (!els.costBudgetHeadroom) return;
         var status = report && report.status ? report.status : {};
-        var guardrails = report && report.guardrails ? report.guardrails : {};
         var d1 = report && report.d1 ? report.d1 : {};
-        var latestRowsRead = safeNum(d1 && d1.lastDailyBucket ? d1.lastDailyBucket.rowsRead : 0);
-        var averageRowsRead = Array.isArray(d1 && d1.daily) && d1.daily.length
-          ? safeNum(d1 && d1.periodTotals ? d1.periodTotals.rowsRead : 0) / d1.daily.length
-          : 0;
-        var dailyGuide = Math.max(1, Math.round(safeNum(guardrails.rowsReadHardMonthlyBudget) / 30));
-        var windowFraction = Math.min(1, safeNum(d1.rollingWindowDays || 14) / 30);
-        var windowReadBudget = Math.max(1, Math.round(safeNum(guardrails.rowsReadHardMonthlyBudget) * windowFraction));
-        var windowWriteBudget = Math.max(1, Math.round(safeNum(guardrails.rowsWrittenHardMonthlyBudget) * windowFraction));
+        var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
+        var cycleTotals = d1 && d1.cycleTotals ? d1.cycleTotals : {};
         var rows = [
           {
-            label: 'Latest day vs guide',
-            used: latestRowsRead,
-            limit: dailyGuide,
-            note: 'Most recent baked day compared with the daily pace guide.'
+            label: 'Today reads vs smart ceiling',
+            used: safeNum(currentDay.rowsRead),
+            limit: safeNum(currentDay.rowsReadDailySmartLimit),
+            note: currentDay.covered
+              ? compactMetricNumber(currentDay.rowsReadDailyRemaining) + ' rows left before today closes.'
+              : 'No bucket for today yet. Ceiling still reflects current cycle remainder.'
           },
           {
-            label: 'Average day vs guide',
-            used: averageRowsRead,
-            limit: dailyGuide,
-            note: 'Average baked day across the current window.'
+            label: 'Cycle reads vs monthly ceiling',
+            used: safeNum(cycleTotals.rowsRead),
+            limit: safeNum(cycleTotals.rowsReadMonthlyLimit),
+            note: compactMetricNumber(cycleTotals.rowsReadMonthlyRemaining) + ' rows left in cycle ' + String(d1.cycleKey || 'unknown') + '.'
           },
           {
-            label: 'Window reads vs budget slice',
-            used: safeNum(d1 && d1.periodTotals ? d1.periodTotals.rowsRead : 0),
-            limit: windowReadBudget,
-            note: String(safeNum(d1.rollingWindowDays || 14)) + '-day share of the hard monthly read budget.'
+            label: 'Today writes vs smart ceiling',
+            used: safeNum(currentDay.rowsWritten),
+            limit: safeNum(currentDay.rowsWrittenDailySmartLimit),
+            note: currentDay.rowsWrittenDailySmartLimit == null
+              ? 'No write ceiling configured.'
+              : compactMetricNumber(currentDay.rowsWrittenDailyRemaining) + ' writes left before today closes.'
           },
           {
-            label: 'Window writes vs budget slice',
-            used: safeNum(d1 && d1.periodTotals ? d1.periodTotals.rowsWritten : 0),
-            limit: windowWriteBudget,
-            note: String(safeNum(d1.rollingWindowDays || 14)) + '-day share of the hard monthly write budget.'
+            label: 'Cycle writes vs monthly ceiling',
+            used: safeNum(cycleTotals.rowsWritten),
+            limit: safeNum(cycleTotals.rowsWrittenMonthlyLimit),
+            note: cycleTotals.rowsWrittenMonthlyRemaining == null
+              ? 'No monthly write ceiling configured.'
+              : compactMetricNumber(cycleTotals.rowsWrittenMonthlyRemaining) + ' writes left this cycle.'
           }
         ];
         els.costBudgetHeadroom.innerHTML = [
@@ -2636,51 +2635,42 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function renderObservabilityLaunchpad(report) {
         if (!els.costCycleBudgetBars) return;
-        var launchpad = Array.isArray(report && report.launchpad) ? report.launchpad : [];
-        if (!launchpad.length) {
-          els.costCycleBudgetBars.innerHTML = '<div class="cost-empty-note">No launch links baked into this snapshot yet.</div>';
-          return;
-        }
-        els.costCycleBudgetBars.innerHTML = '<div class="cost-launch-list">' + launchpad.map(function (item) {
-          return [
-            '<div class="cost-launch-item">',
-            '<a href="' + esc(item && item.href || '#') + '" target="_blank" rel="noreferrer">' + esc(item && item.label || 'Cloudflare dashboard') + '</a>',
-            '<div class="small">' + esc(item && item.note || '') + '</div>',
-            '</div>'
-          ].join('');
-        }).join('') + '</div>';
+        var d1 = report && report.d1 ? report.d1 : {};
+        var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
+        var cycleTotals = d1 && d1.cycleTotals ? d1.cycleTotals : {};
+        var guardrails = report && report.guardrails ? report.guardrails : {};
+        els.costCycleBudgetBars.innerHTML = [
+          '<div class="cost-text-list">',
+          '<div class="cost-text-item"><strong>Cycle window</strong><div>' + esc(String(d1.cycleStartDate || 'unknown')) + ' → ' + esc(String(d1.nextCycleStartDate || 'unknown')) + '</div><div class="small">' + esc(String(safeNum(d1.daysRemainingInCycle || 0))) + ' day(s) left · ' + esc(String(safeNum(d1.expectedWindowDays || d1.rollingWindowDays || 0))) + ' day baked view.</div></div>',
+          '<div class="cost-text-item"><strong>Read burn</strong><div>' + esc(compactMetricNumber(cycleTotals.rowsRead)) + ' used · ' + esc(compactMetricNumber(cycleTotals.rowsReadMonthlyRemaining)) + ' left</div><div class="small">' + esc(compactMetricNumber(cycleTotals.readQueries)) + ' read queries billed against the current cycle ceiling.</div></div>',
+          '<div class="cost-text-item"><strong>Write burn</strong><div>' + esc(compactMetricNumber(cycleTotals.rowsWritten)) + ' used · ' + esc(compactMetricNumber(cycleTotals.rowsWrittenMonthlyRemaining)) + ' left</div><div class="small">' + esc(compactMetricNumber(cycleTotals.writeQueries)) + ' write queries so far this cycle.</div></div>',
+          '<div class="cost-text-item"><strong>Burst rule</strong><div>Today reads cap at ' + esc(compactMetricNumber(currentDay.rowsReadDailySmartLimit)) + ' · burst ×' + esc(String(safeNum(guardrails.dailyBurstMultiplier || 1))) + '</div><div class="small">The allowance expands when the cycle is under-spent and tightens when earlier days already burned the month.</div></div>',
+          '</div>'
+        ].join('');
       }
 
       function renderObservabilityDatasets(report) {
         if (!els.costCycleSourceBars) return;
-        var d1 = report && report.d1 ? report.d1 : {};
-        var totals = d1 && d1.periodTotals ? d1.periodTotals : {};
-        renderMetricBars(els.costCycleSourceBars, [
-          {
-            key: 'Rows read',
-            value: safeNum(totals.rowsRead),
-            secondary: compactMetricNumber(totals.readQueries) + ' read queries',
-            color: '#b84a26',
-            note: 'Biggest cost driver in the baked window.'
-          },
-          {
-            key: 'Rows written',
-            value: safeNum(totals.rowsWritten),
-            secondary: compactMetricNumber(totals.writeQueries) + ' write queries',
-            color: '#8f4a7a',
-            note: 'Write pressure across the same window.'
-          },
-          {
-            key: 'Response bytes',
-            value: safeNum(totals.queryBatchResponseBytes),
-            secondary: formatByteSize(totals.queryBatchResponseBytes),
-            color: '#4f7f6d',
-            note: 'Returned from the GraphQL snapshot queries.'
-          }
-        ], {
-          emptyTitle: 'No baked activity yet',
-          emptyMessage: 'The snapshot has not returned period totals yet.'
+        var durableObjects = report && report.durableObjects ? report.durableObjects : {};
+        var totals = durableObjects && durableObjects.totals ? durableObjects.totals : {};
+        var classes = Array.isArray(durableObjects && durableObjects.classes) ? durableObjects.classes : [];
+        renderMetricBars(els.costCycleSourceBars, classes.map(function (row) {
+          return {
+            key: row && row.className ? row.className : 'unknown',
+            value: safeNum(row && row.requests),
+            secondary: compactMetricNumber(row && row.errors) + ' errors · ' + String(safeNum(row && row.activeDays)) + ' active day(s)',
+            color: safeNum(row && row.errors) > 0 ? '#bf3030' : '#4f7f6d',
+            note: row && row.lastActiveDate
+              ? ('Last active ' + row.lastActiveDate + ' · script ' + String(durableObjects.scriptName || 'unknown'))
+              : ('No invocations recorded in cycle ' + String(report && report.d1 ? report.d1.cycleKey || 'unknown' : 'unknown'))
+          };
+        }), {
+          emptyTitle: 'No Durable Object activity yet',
+          emptyMessage: 'Cloudflare returned no Durable Object invocations for the Iconoplasm worker in this cycle.'
         });
+        if (classes.length && els.costCycleSourceBars) {
+          els.costCycleSourceBars.insertAdjacentHTML('afterbegin', '<div class="cost-subtle">' + esc(compactMetricNumber(totals.requests)) + ' total invocations · ' + esc(compactMetricNumber(totals.errors)) + ' total errors across ' + esc(String(classes.length)) + ' tracked class(es).</div>');
+        }
       }
 
       function renderObservabilityRunbook(report) {
@@ -2725,6 +2715,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function renderObservabilityQueryPack(report) {
         if (!els.costTopRoutes) return;
         var automation = report && report.automation ? report.automation : {};
+        var d1 = report && report.d1 ? report.d1 : {};
+        var cycleTotals = d1 && d1.cycleTotals ? d1.cycleTotals : {};
+        var durableObjects = report && report.durableObjects ? report.durableObjects : {};
+        var durableObjectTotals = durableObjects && durableObjects.totals ? durableObjects.totals : {};
         var launchpad = Array.isArray(report && report.launchpad) ? report.launchpad : [];
         if (!launchpad.length) {
           els.costTopRoutes.innerHTML = '<div class="cost-empty-note">No Cloudflare links baked into this snapshot yet.</div>';
@@ -2732,8 +2726,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         els.costTopRoutes.innerHTML = [
           '<div class="cost-status-banner">',
-          '<strong>' + esc(automation.note || 'This page shows the baked snapshot and keeps live detail in Cloudflare.') + '</strong>',
-          '<div class="small">GraphQL is collected out of band, subject to Cloudflare sampling, and rate-limited on the API side rather than in your browser session.</div>',
+          '<strong>Baked summary first, Cloudflare drilldown second.</strong>',
+          '<div class="small">This page already covers ' + esc(compactMetricNumber(cycleTotals.rowsRead)) + ' cycle rows read and ' + esc(compactMetricNumber(durableObjectTotals.requests)) + ' Durable Object invocations. Open Cloudflare when you need logs, billing truth, or class-level drilldown beyond this baked view.</div>',
           '</div>',
           '<div class="cost-launch-list">',
           launchpad.map(function (item) {
@@ -2748,21 +2742,41 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         ].join('');
       }
 
+      // Chesterton's fence:
+      // This panel exists because we deliberately retired the old request-path
+      // usage meter. That old path looked authoritative, but it was an
+      // app-owned telemetry story sitting in the blast radius of the product
+      // itself.
+      //
+      // The replacement has to preserve both constraints at once:
+      // 1) do not generate observability load from the admin page itself, and
+      // 2) still show real at-a-glance accountability in the UI.
+      //
+      // If this panel drifts into "just links" or "just a runbook", we have
+      // recreated the exact regression that triggered the refactor. Cloudflare
+      // links are drilldown escape hatches, not the primary content. Keep the
+      // baked D1 budget math, attribution, and durable-object summary visible in
+      // the page itself. Billing still lives in Cloudflare Billing.
       function renderCostUsage(report) {
         var snapshot = report && typeof report === 'object' ? report : {};
         var d1 = snapshot && snapshot.d1 ? snapshot.d1 : {};
+        var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
+        var cycleTotals = d1 && d1.cycleTotals ? d1.cycleTotals : {};
         var lastDailyBucket = d1 && d1.lastDailyBucket ? d1.lastDailyBucket : null;
         var latency = d1 && d1.latency ? d1.latency : {};
-        var storage = d1 && d1.storage ? d1.storage : {};
         var daily = Array.isArray(d1 && d1.daily) ? d1.daily : [];
-        var periodTotals = d1 && d1.periodTotals ? d1.periodTotals : {};
-        var guardrails = snapshot && snapshot.guardrails ? snapshot.guardrails : {};
-        var dailyBudgetGuide = Math.max(1, Math.round(safeNum(guardrails.rowsReadHardMonthlyBudget) / 30));
+        var storage = d1 && d1.storage ? d1.storage : {};
+        var durableObjects = snapshot && snapshot.durableObjects ? snapshot.durableObjects : {};
+        var durableObjectTotals = durableObjects && durableObjects.totals ? durableObjects.totals : {};
+        var trackedDurableObjectClasses = Array.isArray(durableObjects && durableObjects.classes) ? durableObjects.classes.length : 0;
+        var monthlyReadLimit = safeNum(cycleTotals.rowsReadMonthlyLimit);
+        var monthlyReadRemaining = safeNum(cycleTotals.rowsReadMonthlyRemaining);
+        var monthlyReadShareLeft = monthlyReadLimit > 0 ? Math.round((monthlyReadRemaining / monthlyReadLimit) * 1000) / 10 : 0;
         var trendRows = daily.map(function (row) {
           return {
             day_key: row && row.date ? row.date : '',
             rows_read: safeNum(row && row.rowsRead),
-            rows_read_daily_smart_limit: dailyBudgetGuide
+            rows_read_daily_smart_limit: safeNum(row && row.rowsReadDailySmartLimit)
           };
         });
         if (els.costMetrics) {
@@ -2773,29 +2787,31 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               note: snapshot && snapshot.source ? String(snapshot.source.note || '') : 'Out-of-band Cloudflare analytics snapshot.'
             },
             {
-              label: 'Latest daily rows read',
-              value: compactMetricNumber(lastDailyBucket && lastDailyBucket.rowsRead),
-              note: lastDailyBucket && lastDailyBucket.date ? ('Bucket ' + lastDailyBucket.date) : 'No daily bucket returned yet.'
+              label: 'Cycle rows read',
+              value: compactMetricNumber(cycleTotals.rowsRead),
+              note: String(d1.cycleKey || 'unknown cycle') + ' · ' + compactMetricNumber(cycleTotals.rowsReadMonthlyRemaining) + ' left this cycle.'
             },
             {
-              label: 'Rows read in window',
-              value: compactMetricNumber(periodTotals.rowsRead),
-              note: compactMetricNumber(periodTotals.readQueries) + ' read queries over the snapshot window.'
+              label: 'Monthly read headroom',
+              value: compactMetricNumber(monthlyReadRemaining),
+              note: String(monthlyReadShareLeft) + '% of the monthly read ceiling still open.'
             },
             {
-              label: 'Storage size',
-              value: formatByteSize(storage.databaseSizeBytes),
-              note: storage.observedAt ? ('Observed on ' + storage.observedAt) : 'No storage bucket returned yet.'
+              label: 'Today smart read ceiling',
+              value: compactMetricNumber(currentDay.rowsReadDailySmartLimit),
+              note: currentDay.covered
+                ? (compactMetricNumber(currentDay.rowsReadDailyRemaining) + ' rows left before today closes.')
+                : 'No daily bucket for today yet. Ceiling still reflects cycle remainder.'
+            },
+            {
+              label: 'DO invocations in cycle',
+              value: compactMetricNumber(durableObjectTotals.requests),
+              note: compactMetricNumber(durableObjectTotals.errors) + ' errors across ' + String(trackedDurableObjectClasses) + ' tracked class(es).'
             },
             {
               label: 'Average latency',
               value: latency.avgQueryBatchTimeMs == null ? '—' : (String(latency.avgQueryBatchTimeMs) + ' ms'),
-              note: latency.p90QueryBatchTimeMs == null ? 'No p90 bucket returned yet.' : ('P90 ' + latency.p90QueryBatchTimeMs + ' ms')
-            },
-            {
-              label: 'Hard monthly read budget',
-              value: compactMetricNumber(guardrails.rowsReadHardMonthlyBudget),
-              note: 'Configured guardrail, not a fake request-path mirror.'
+              note: storage.observedAt ? ('Storage ' + formatByteSize(storage.databaseSizeBytes) + ' observed on ' + storage.observedAt + '.') : 'No storage bucket returned yet.'
             }
           ].map(function (metric) {
             return [
@@ -2808,11 +2824,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           }).join('');
         }
         if (els.costTrendMeta) {
-          els.costTrendMeta.textContent = (snapshot.generatedAt ? ('Generated ' + snapshot.generatedAt + ' · ') : '') + String(d1.rollingWindowDays || 14) + ' day analytics window · Billing page is still the final bill.';
+          els.costTrendMeta.textContent = (snapshot.generatedAt ? ('Generated ' + snapshot.generatedAt + ' · ') : '') + 'Cycle ' + String(d1.cycleKey || 'unknown') + ' · ' + String(safeNum(d1.daysRemainingInCycle || 0)) + ' day(s) left · Billing page is still the final bill.';
         }
         if (els.costReadTrend) {
           els.costReadTrend.innerHTML = trendRows.length
-            ? buildCostTrendSvg(trendRows, { rows_read_daily_smart_limit: dailyBudgetGuide })
+            ? buildCostTrendSvg(trendRows, { rows_read_daily_smart_limit: safeNum(currentDay.rowsReadDailySmartLimit) })
             : inlineFailureMarkup('No snapshot rows yet', 'Cloudflare returned no D1 daily buckets for the current snapshot window.');
           if (trendRows.length) bindCostTrendHover();
         }
