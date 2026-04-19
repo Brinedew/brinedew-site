@@ -290,6 +290,125 @@ export const ICONOPLASM_OBSERVABILITY_SNAPSHOT = {
       "note": "Final bill, usage alerts, and the place reality cashes the check."
     }
   ],
+  "workerLimiter": {
+    "active": true,
+    "refreshCadenceHours": 1,
+    "budgetBasis": "d1_rows_written_daily_smart_limit",
+    "budgetBasisLabel": "Worker D1 mutation limiter",
+    "explanation": "This is the worker-side write limiter for admin mutation families. It is baked from Cloudflare D1 analytics plus the wrangler guardrail config, so operators can make launch decisions without hitting a request-path telemetry endpoint.",
+    "decision": "Worker mutation writes still have headroom today and in the current cycle.",
+    "currentDay": {
+      "date": "2026-04-17",
+      "rowsWritten": 75,
+      "rowsWrittenDailySmartLimit": 5942571,
+      "rowsWrittenDailyRemaining": 5942496,
+      "exhausted": false,
+      "covered": true
+    },
+    "cycleTotals": {
+      "rowsWritten": 382940,
+      "rowsWrittenMonthlyLimit": 40000000,
+      "rowsWrittenMonthlyRemaining": 39617060,
+      "daysRemainingInCycle": 20
+    },
+    "peakDay": {
+      "date": "2026-04-08",
+      "rowsWritten": 170339,
+      "rowsWrittenDailySmartLimit": 4137930,
+      "rowsWrittenDailyRemaining": 3967591,
+      "exhausted": false
+    },
+    "totals": {
+      "activeDays": 11,
+      "daysAtDailySmartLimit": 0,
+      "rowsWritten": 382940,
+      "lastRowsWrittenDate": "2026-04-17"
+    },
+    "guardrails": {
+      "billingCycleDayOfMonth": 7,
+      "dailyBurstMultiplier": 3,
+      "rowsWrittenHardMonthlyBudget": 40000000
+    },
+    "daily": [
+      {
+        "date": "2026-04-07",
+        "rowsWritten": 16,
+        "rowsWrittenDailySmartLimit": 4000002,
+        "rowsWrittenDailyRemaining": 3999986,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-08",
+        "rowsWritten": 170339,
+        "rowsWrittenDailySmartLimit": 4137930,
+        "rowsWrittenDailyRemaining": 3967591,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-09",
+        "rowsWritten": 476,
+        "rowsWrittenDailySmartLimit": 4267464,
+        "rowsWrittenDailyRemaining": 4266988,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-10",
+        "rowsWritten": 408,
+        "rowsWrittenDailySmartLimit": 4425465,
+        "rowsWrittenDailyRemaining": 4425057,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-11",
+        "rowsWritten": 420,
+        "rowsWrittenDailySmartLimit": 4595628,
+        "rowsWrittenDailyRemaining": 4595208,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-12",
+        "rowsWritten": 454,
+        "rowsWrittenDailySmartLimit": 4779402,
+        "rowsWrittenDailyRemaining": 4778948,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-13",
+        "rowsWritten": 450,
+        "rowsWrittenDailySmartLimit": 4978488,
+        "rowsWrittenDailyRemaining": 4978038,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-14",
+        "rowsWritten": 411,
+        "rowsWrittenDailySmartLimit": 5194884,
+        "rowsWrittenDailyRemaining": 5194473,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-15",
+        "rowsWritten": 408,
+        "rowsWrittenDailySmartLimit": 5430960,
+        "rowsWrittenDailyRemaining": 5430552,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-16",
+        "rowsWritten": 209483,
+        "rowsWrittenDailySmartLimit": 5689518,
+        "rowsWrittenDailyRemaining": 5480035,
+        "exhausted": false
+      },
+      {
+        "date": "2026-04-17",
+        "rowsWritten": 75,
+        "rowsWrittenDailySmartLimit": 5942571,
+        "rowsWrittenDailyRemaining": 5942496,
+        "exhausted": false
+      }
+    ]
+  },
   "durableObjects": {
     "scriptName": "geneguessr-api",
     "classNames": [

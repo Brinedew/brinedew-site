@@ -274,6 +274,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/ingest") return "admin_ingest"
   if (path === "/api/iconoplasm/admin/reconcile") return "admin_reconcile"
   if (path === "/api/iconoplasm/admin/overview") return "admin_overview"
+  if (path === "/api/iconoplasm/admin/mutation-limiter/policy") return "admin_mutation_limiter_policy"
   if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
   if (path === "/api/iconoplasm/admin/canon-audit") return "admin_canon_audit"
   if (path === "/api/iconoplasm/admin/read-models/bootstrap") return "admin_read_models_bootstrap"
@@ -331,7 +332,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "artist_blacklist_submission") return "public_submission"
   if (family === "internal_repair") return "internal_maintenance"
   if (family === "internal_vote_projection_refresh") return "internal_maintenance"
-  if (family === "admin_overview" || family === "admin_coverage" || family === "admin_cost_usage" || family === "admin_me")
+  if (family === "admin_overview" || family === "admin_coverage" || family === "admin_cost_usage" || family === "admin_mutation_limiter_policy" || family === "admin_me")
     return "admin_dashboard"
   if (
     family === "admin_ingest" ||
@@ -937,6 +938,8 @@ function iconoplasmAdminMutationLimiterSnapshotFromEnv(env) {
   const usage = iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env) || null
   const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
   return {
+    budget_basis: "d1_rows_written_daily_smart_limit",
+    budget_basis_label: "D1 rows_written daily smart limit",
     target_daily_percent: budgetStatus.target_daily_percent || null,
     target_rows_written_ceiling: budgetStatus.target_rows_written_ceiling,
     rows_written_target_remaining: budgetStatus.rows_written_target_remaining,
@@ -948,6 +951,21 @@ function iconoplasmAdminMutationLimiterSnapshotFromEnv(env) {
     route_family: usage?.route_family || state?.attribution?.route_family || null,
     actor_class: usage?.actor_class || state?.attribution?.actor_class || null,
     source_class: usage?.source_class || state?.attribution?.source_class || null,
+  }
+}
+
+function iconoplasmAdminMutationLimiterPolicyFromEnv(env) {
+  const snapshot = iconoplasmAdminMutationLimiterSnapshotFromEnv(env)
+  const budgetConfig = iconoplasmD1BudgetConfigFromEnv(env)
+  return {
+    active: !!snapshot || !!budgetConfig,
+    budget_basis: snapshot?.budget_basis || "d1_rows_written_daily_smart_limit",
+    budget_basis_label: snapshot?.budget_basis_label || "D1 rows_written daily smart limit",
+    target_daily_percent:
+      snapshot?.target_daily_percent || iconoplasmMutationLimiterTargetDailyPercent(env),
+    explains_do_cap: false,
+    explanation:
+      "This worker currently gates sync mutations against the D1 rows_written daily smart limit, not the Cloudflare Durable Objects rows_written daily cap.",
   }
 }
 
@@ -4077,6 +4095,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/read-models/sync") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/read-models/bootstrap") return true
+  if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/overview") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/cost/usage") return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
@@ -15453,6 +15473,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             summary: overview.summary || {},
             attention: Array.isArray(overview.attention) ? overview.attention : [],
             recent_events: recentEvents,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/mutation-limiter/policy" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_mutation_limiter_policy_403", json({ error: "Unauthorized" }, 403))
+      return done(
+        "admin_mutation_limiter_policy",
+        json(
+          {
+            ok: true,
+            mutation_limiter: iconoplasmAdminMutationLimiterPolicyFromEnv(env),
           },
           200,
           { "Cache-Control": "no-store" },

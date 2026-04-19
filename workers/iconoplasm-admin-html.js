@@ -1786,6 +1786,29 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <section class="cost-card cost-card--section">
           <div class="cost-card-head">
             <div>
+              <h2>Worker mutation limiter</h2>
+              <p class="small">Same baked cadence, different question: can the worker still mutate today, or has the D1 smart write limiter already closed the gate for admin mutation work?</p>
+            </div>
+          </div>
+          <div class="cost-section-grid">
+            <div class="cost-chart-shell">
+              <div class="cost-chart" id="cost-worker-limiter-chart"></div>
+            </div>
+            <div class="cost-section-side">
+              <section class="cost-subcard">
+                <div class="cost-subcard-head">
+                  <h3>Worker limiter info</h3>
+                  <p class="small">Today’s smart write ceiling, the worst baked day, cycle headroom, and the blunt launch/no-launch answer the operator actually needs.</p>
+                </div>
+                <div class="cost-detail-grid" id="cost-worker-limiter-bars"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="cost-card cost-card--section">
+          <div class="cost-card-head">
+            <div>
               <h2>Durable Objects traffic</h2>
               <p class="small">A baked DO chart on the left, exact headroom on the right — same cadence as the D1 section, this time against the real 100,000 rows_written/day ceiling.</p>
             </div>
@@ -2067,6 +2090,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         costReadTrend: document.getElementById('cost-read-trend'),
         costBudgetHeadroom: document.getElementById('cost-budget-headroom'),
         costCycleBudgetBars: document.getElementById('cost-cycle-budget-bars'),
+        costWorkerLimiterChart: document.getElementById('cost-worker-limiter-chart'),
+        costWorkerLimiterBars: document.getElementById('cost-worker-limiter-bars'),
         costCycleSourceChart: document.getElementById('cost-cycle-source-chart'),
         costCycleSourceBars: document.getElementById('cost-cycle-source-bars'),
         costDailyRouteChart: document.getElementById('cost-daily-route-chart'),
@@ -2981,6 +3006,169 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         ].join('');
       }
 
+      function getWorkerLimiterSnapshot(report) {
+        if (report && report.workerLimiter) return report.workerLimiter;
+        return null;
+      }
+
+      function buildWorkerLimiterTrafficSvg(report) {
+        var workerLimiter = getWorkerLimiterSnapshot(report);
+        var rows = Array.isArray(workerLimiter && workerLimiter.daily) ? workerLimiter.daily : [];
+        if (!rows.length) {
+          return inlineFailureMarkup('Worker limiter snapshot missing', 'This baked report did not include the first-class workerLimiter section, so the dashboard is refusing to invent one from other fields.');
+        }
+        var width = 720;
+        var height = 280;
+        var padLeft = 50;
+        var padRight = 18;
+        var padTop = 18;
+        var padBottom = 34;
+        var usableWidth = width - padLeft - padRight;
+        var usableHeight = height - padTop - padBottom;
+        var currentDailyLimit = safeNum(rows[rows.length - 1] && rows[rows.length - 1].rowsWrittenDailySmartLimit);
+        var maxValue = rows.reduce(function (acc, row) {
+          return Math.max(acc, safeNum(row && row.rowsWritten), safeNum(row && row.rowsWrittenDailySmartLimit));
+        }, Math.max(currentDailyLimit, 1));
+        var xStep = rows.length <= 1 ? 0 : usableWidth / (rows.length - 1);
+        function xAt(index) { return padLeft + (xStep * index); }
+        function yAt(value) {
+          return padTop + usableHeight - ((safeNum(value) / Math.max(maxValue, 1)) * usableHeight);
+        }
+        var area = '';
+        var line = '';
+        var ceilingLine = '';
+        rows.forEach(function (row, index) {
+          var x = xAt(index);
+          var y = yAt(row && row.rowsWritten);
+          area += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+          line += (index === 0 ? 'M' : 'L') + x + ' ' + y + ' ';
+          ceilingLine += (index === 0 ? 'M' : 'L') + x + ' ' + yAt(row && row.rowsWrittenDailySmartLimit) + ' ';
+        });
+        if (rows.length) {
+          area += 'L' + xAt(rows.length - 1) + ' ' + (padTop + usableHeight) + ' ';
+          area += 'L' + xAt(0) + ' ' + (padTop + usableHeight) + ' Z';
+        }
+        var points = rows.map(function (row, index) {
+          var value = safeNum(row && row.rowsWritten);
+          var limit = safeNum(row && row.rowsWrittenDailySmartLimit);
+          var x = xAt(index);
+          var y = yAt(value);
+          var exhausted = value >= limit && limit > 0;
+          var label = formatMonthDay(row && row.date);
+          return '<circle cx="' + x + '" cy="' + y + '" r="5" fill="' + (exhausted ? '#bf3030' : '#6b4fb0') + '" stroke="#fff9f3" stroke-width="2"><title>' + esc(label + ': ' + formatCompactNumber(value) + ' worker mutation rows / ' + compactMetricNumber(limit) + ' smart daily ceiling') + '</title></circle>';
+        }).join('');
+        var firstLabel = formatMonthDay(rows[0] && rows[0].date);
+        var lastLabel = formatMonthDay(rows[rows.length - 1] && rows[rows.length - 1].date);
+        var ceilingY = yAt(currentDailyLimit);
+        var ceilingX = xAt(rows.length - 1);
+        return [
+          '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Daily worker mutation rows against the smart write ceiling">',
+          '<line x1="' + padLeft + '" y1="' + (padTop + usableHeight) + '" x2="' + (padLeft + usableWidth) + '" y2="' + (padTop + usableHeight) + '" stroke="#e5ddd5" stroke-width="1" />',
+          '<path d="' + ceilingLine + '" fill="none" stroke="#4f7f6d" stroke-width="2" stroke-dasharray="6 6" stroke-linejoin="round" stroke-linecap="round"></path>',
+          '<path d="' + area + '" fill="rgba(107,79,176,0.12)" stroke="none"></path>',
+          '<path d="' + line + '" fill="none" stroke="#6b4fb0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>',
+          points,
+          '<text x="' + padLeft + '" y="' + (height - 8) + '" font-size="11" fill="#7a6d61">' + esc(firstLabel) + '</text>',
+          '<text x="' + (padLeft + usableWidth) + '" y="' + (height - 8) + '" text-anchor="end" font-size="11" fill="#7a6d61">' + esc(lastLabel) + '</text>',
+          '<text x="' + Math.max(padLeft + 6, ceilingX - 6) + '" y="' + Math.max(12, ceilingY - 8) + '" text-anchor="end" font-size="11" fill="#4f7f6d">Smart daily write ceiling ' + esc(compactMetricNumber(currentDailyLimit)) + '</text>',
+          '<text x="' + padLeft + '" y="' + (padTop + 12) + '" font-size="11" fill="#7a6d61">Peak ' + esc(compactMetricNumber(maxValue)) + ' worker mutation rows</text>',
+          '</svg>'
+        ].join('');
+      }
+
+      function renderWorkerLimiterPanel(report) {
+        if (!els.costWorkerLimiterChart && !els.costWorkerLimiterBars) return;
+        var workerLimiter = getWorkerLimiterSnapshot(report);
+        if (!workerLimiter) {
+          if (els.costWorkerLimiterChart) {
+            els.costWorkerLimiterChart.innerHTML = buildWorkerLimiterTrafficSvg(report);
+          }
+          if (els.costWorkerLimiterBars) {
+            els.costWorkerLimiterBars.innerHTML = [
+              '<div class="cost-status-banner">',
+              renderCostStateChip('snapshot missing', 'danger'),
+              '<strong>Worker-side mutation headroom unavailable</strong>',
+              '<div class="small">This panel now fails loud. If the baked snapshot omits <code>workerLimiter</code>, the admin page will not reverse-engineer a replacement from the D1 section.</div>',
+              '</div>'
+            ].join('');
+          }
+          return;
+        }
+        var currentDay = workerLimiter && workerLimiter.currentDay ? workerLimiter.currentDay : {};
+        var cycleTotals = workerLimiter && workerLimiter.cycleTotals ? workerLimiter.cycleTotals : {};
+        var peakDay = workerLimiter && workerLimiter.peakDay ? workerLimiter.peakDay : {};
+        var totals = workerLimiter && workerLimiter.totals ? workerLimiter.totals : {};
+        var guardrails = workerLimiter && workerLimiter.guardrails ? workerLimiter.guardrails : {};
+        var todayLimit = safeNum(currentDay.rowsWrittenDailySmartLimit);
+        var todayWritten = safeNum(currentDay.rowsWritten);
+        var todayRemaining = safeNum(currentDay.rowsWrittenDailyRemaining);
+        var cycleLimit = safeNum(cycleTotals.rowsWrittenMonthlyLimit);
+        var cycleWritten = safeNum(cycleTotals.rowsWritten);
+        var cycleRemaining = safeNum(cycleTotals.rowsWrittenMonthlyRemaining);
+        var tone = currentDay.exhausted || (todayLimit > 0 && todayRemaining <= 0)
+          ? 'danger'
+          : cycleLimit > 0 && cycleRemaining <= 0
+            ? 'danger'
+            : todayLimit > 0 && (todayWritten / Math.max(todayLimit, 1)) >= 0.8
+              ? 'warn'
+              : 'ok';
+        var summaryLabel = tone === 'danger'
+          ? 'mutations blocked'
+          : tone === 'warn'
+            ? 'watch worker headroom'
+            : 'worker headroom left';
+        if (els.costWorkerLimiterChart) {
+          els.costWorkerLimiterChart.innerHTML = buildWorkerLimiterTrafficSvg(report);
+        }
+        if (!els.costWorkerLimiterBars) return;
+        var rows = [
+          {
+            eyebrow: 'Worker writes today',
+            value: compactMetricNumber(todayWritten) + ' / ' + (todayLimit > 0 ? compactMetricNumber(todayLimit) : '—'),
+            copy: currentDay.covered
+              ? (formatMonthDay(currentDay.date) + ' · ' + compactMetricNumber(todayRemaining) + ' left before the worker closes mutation writes for the day.')
+              : 'Latest day bucket is missing from this bake.'
+          },
+          {
+            eyebrow: 'Worst baked day',
+            value: peakDay && peakDay.date ? (formatMonthDay(peakDay.date) + ' · ' + compactMetricNumber(peakDay.rowsWritten)) : '—',
+            copy: peakDay && peakDay.date
+              ? ((peakDay.exhausted ? 'Hit the smart daily write ceiling.' : (compactMetricNumber(peakDay.rowsWrittenDailyRemaining) + ' left on the tightest baked day.')) + ' ' + formatRatioPercent(peakDay.rowsWritten, peakDay.rowsWrittenDailySmartLimit) + ' of that day\'s ceiling.')
+              : 'No peak worker-limiter day is available in this bake.'
+          },
+          {
+            eyebrow: 'Worker writes this cycle',
+            value: compactMetricNumber(cycleWritten) + ' / ' + (cycleLimit > 0 ? compactMetricNumber(cycleLimit) : '—'),
+            copy: compactMetricNumber(cycleRemaining) + ' left before the billing-cycle write ceiling.'
+          },
+          {
+            eyebrow: 'Days at smart ceiling',
+            value: compactMetricNumber(totals.daysAtDailySmartLimit),
+            copy: 'Baked days where worker mutation writes reached or crossed the smart daily D1 write ceiling.'
+          },
+          {
+            eyebrow: 'Guardrail config',
+            value: 'Burst ×' + compactMetricNumber(guardrails.dailyBurstMultiplier || 1),
+            copy: 'Billing day ' + compactMetricNumber(guardrails.billingCycleDayOfMonth || 0) + ' · monthly write budget ' + compactMetricNumber(guardrails.rowsWrittenHardMonthlyBudget || 0) + '.'
+          },
+          {
+            eyebrow: 'Launch answer',
+            valueHtml: renderCostStateChip(summaryLabel, tone),
+            copy: String(workerLimiter && workerLimiter.decision || workerLimiter && workerLimiter.explanation || 'Worker-limiter decision not available.')
+          }
+        ];
+        els.costWorkerLimiterBars.innerHTML = [
+          '<div class="cost-status-banner">',
+          renderCostStateChip(summaryLabel, tone),
+          '<strong>Worker-side mutation headroom</strong>',
+          '<div class="small">This is the write guard the worker enforces for admin mutation families. Same baked cadence as the D1 and DO panels, but aimed at the operator question: can we still mutate, or is today\'s worker gate already shut?</div>',
+          '</div>',
+          rows.map(function (row) {
+            return renderCostDetailCard(row);
+          }).join('')
+        ].join('');
+      }
+
       function buildIntegritySignalSvg(report) {
         var status = report && report.status ? report.status : {};
         var d1 = report && report.d1 ? report.d1 : {};
@@ -3456,6 +3644,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
         renderCostBudgetAnswer(snapshot);
         renderCostBudgetHeadroom(snapshot);
+        renderWorkerLimiterPanel(snapshot);
         renderObservabilityLaunchpad(snapshot);
         renderObservabilityDatasets(snapshot);
         renderObservabilityRunbook(snapshot);
@@ -3485,6 +3674,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (els.costReadTrend) els.costReadTrend.innerHTML = '';
           if (els.costBudgetHeadroom) els.costBudgetHeadroom.innerHTML = '';
           if (els.costCycleBudgetBars) els.costCycleBudgetBars.innerHTML = '';
+          if (els.costWorkerLimiterChart) els.costWorkerLimiterChart.innerHTML = '';
+          if (els.costWorkerLimiterBars) els.costWorkerLimiterBars.innerHTML = '';
           if (els.costCycleSourceChart) els.costCycleSourceChart.innerHTML = '';
           if (els.costCycleSourceBars) els.costCycleSourceBars.innerHTML = '';
           if (els.costDailyRouteChart) els.costDailyRouteChart.innerHTML = '';

@@ -444,6 +444,43 @@ test("admin cost usage now points operators at Cloudflare observability instead 
   assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
 })
 
+test("admin mutation limiter policy reports the live limiter basis so Website Ops can fail closed", async () => {
+  const db = new MeteredSummaryDb({ rowsReadPerQuery: 3 })
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+  const env = {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+  }
+
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/mutation-limiter/policy",
+      {
+        headers: {
+          "x-iconoplasm-admin-token": "founder-secret",
+        },
+      },
+    ),
+    env,
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.mutation_limiter?.active, true)
+  assert.equal(payload?.mutation_limiter?.budget_basis, "d1_rows_written_daily_smart_limit")
+  assert.equal(payload?.mutation_limiter?.target_daily_percent, 90)
+  assert.equal(payload?.mutation_limiter?.explains_do_cap, false)
+  assert.match(String(payload?.mutation_limiter?.explanation || ""), /not the Cloudflare Durable Objects rows_written daily cap/i)
+  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
+})
+
 test("daily budget durable object rebuilds legacy attribution schema before reporting", async () => {
   class FakeLegacyBudgetSql {
     constructor() {
@@ -1061,4 +1098,72 @@ test("write-heavy admin mutations still fail closed when snapshot telemetry is l
     budgetNamespace.calls.map((call) => call.pathname),
     ["/snapshot"],
   )
+})
+
+test("all sync-owned admin mutation routes still hit the limiter preflight before route-specific work", async () => {
+  class ThrowingSnapshotBudgetNamespace {
+    constructor() {
+      this.calls = []
+    }
+
+    idFromName(name) {
+      return String(name || "")
+    }
+
+    get() {
+      return {
+        fetch: async (request) => {
+          const url = new URL(request.url)
+          this.calls.push({ pathname: url.pathname })
+          throw new Error("Exceeded allowed rows written in Durable Objects free tier.")
+        },
+      }
+    }
+  }
+
+  const guardedRoutes = [
+    "/api/iconoplasm/admin/ingest",
+    "/api/iconoplasm/admin/reconcile",
+    "/api/iconoplasm/admin/catalog/upsert",
+    "/api/iconoplasm/admin/catalog/reconcile",
+    "/api/iconoplasm/admin/catalog/publish",
+    "/api/iconoplasm/admin/essence/upsert",
+    "/api/iconoplasm/admin/read-models/bootstrap",
+    "/api/iconoplasm/admin/finalization/enqueue",
+    "/api/iconoplasm/admin/finalization/process",
+  ]
+
+  for (const path of guardedRoutes) {
+    const budgetNamespace = new ThrowingSnapshotBudgetNamespace()
+    const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(`https://the-only-allowed-internal-stateful-worker-do-not-duplicate${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-iconoplasm-admin-token": "founder-secret",
+        },
+        body: JSON.stringify({}),
+      }),
+      {
+        ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+      },
+      { waitUntil() {} },
+    )
+    const payload = await response.json()
+
+    assert.equal(response.status, 503, `${path} should fail closed when limiter telemetry is locked`)
+    assert.equal(payload?.code, "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE")
+    assert.equal(payload?.limiter?.stage, "preflight")
+    assert.equal(payload?.limiter?.reason, "telemetry_locked_before_snapshot")
+    assert.deepEqual(
+      budgetNamespace.calls.map((call) => call.pathname),
+      ["/snapshot"],
+      `${path} should consult the limiter snapshot before any route-specific work`,
+    )
+  }
 })

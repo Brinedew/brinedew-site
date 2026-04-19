@@ -634,6 +634,74 @@ function buildAutomationState({ config, d1 }) {
   }
 }
 
+function buildWorkerLimiterSnapshot({ config, d1 }) {
+  const dailyRows = Array.isArray(d1?.daily)
+    ? d1.daily.map((row) => ({
+        date: String(row?.date || ""),
+        rowsWritten: asNumber(row?.rowsWritten),
+        rowsWrittenDailySmartLimit: asNumber(row?.rowsWrittenDailySmartLimit),
+        rowsWrittenDailyRemaining: asNumber(row?.rowsWrittenDailyRemaining),
+        exhausted:
+          asNumber(row?.rowsWrittenDailySmartLimit) > 0
+            ? asNumber(row?.rowsWritten) >= asNumber(row?.rowsWrittenDailySmartLimit)
+            : false,
+      }))
+    : []
+  const currentDay = d1?.currentDay || {}
+  const cycleTotals = d1?.cycleTotals || {}
+  const currentDayRowsWritten = asNumber(currentDay?.rowsWritten)
+  const currentDayDailyLimit = asNumber(currentDay?.rowsWrittenDailySmartLimit)
+  const currentDayDailyRemaining = asNumber(currentDay?.rowsWrittenDailyRemaining)
+  const cycleRowsWritten = asNumber(cycleTotals?.rowsWritten)
+  const cycleRowsWrittenLimit = asNumber(cycleTotals?.rowsWrittenMonthlyLimit)
+  const cycleRowsWrittenRemaining = asNumber(cycleTotals?.rowsWrittenMonthlyRemaining)
+  const peakDay = dailyRows.reduce((best, row) => {
+    if (!best) return row
+    return asNumber(row?.rowsWritten) > asNumber(best?.rowsWritten) ? row : best
+  }, null)
+  return {
+    active: currentDayDailyLimit > 0 || cycleRowsWrittenLimit > 0,
+    refreshCadenceHours: 1,
+    budgetBasis: "d1_rows_written_daily_smart_limit",
+    budgetBasisLabel: "Worker D1 mutation limiter",
+    explanation:
+      "This is the worker-side write limiter for admin mutation families. It is baked from Cloudflare D1 analytics plus the wrangler guardrail config, so operators can make launch decisions without hitting a request-path telemetry endpoint.",
+    decision:
+      currentDayDailyRemaining <= 0
+        ? "Worker mutation writes are out of headroom today."
+        : cycleRowsWrittenRemaining <= 0
+          ? "Worker mutation writes are out of billing-cycle headroom."
+          : `Worker mutation writes still have headroom today and in the current cycle.`,
+    currentDay: {
+      date: String(currentDay?.date || d1?.cycleEndDate || ""),
+      rowsWritten: currentDayRowsWritten,
+      rowsWrittenDailySmartLimit: currentDayDailyLimit,
+      rowsWrittenDailyRemaining: currentDayDailyRemaining,
+      exhausted: currentDayDailyLimit > 0 ? currentDayRowsWritten >= currentDayDailyLimit : false,
+      covered: Boolean(currentDay?.covered),
+    },
+    cycleTotals: {
+      rowsWritten: cycleRowsWritten,
+      rowsWrittenMonthlyLimit: cycleRowsWrittenLimit,
+      rowsWrittenMonthlyRemaining: cycleRowsWrittenRemaining,
+      daysRemainingInCycle: asNumber(d1?.daysRemainingInCycle),
+    },
+    peakDay,
+    totals: {
+      activeDays: dailyRows.length,
+      daysAtDailySmartLimit: dailyRows.filter((row) => Boolean(row?.exhausted)).length,
+      rowsWritten: dailyRows.reduce((sum, row) => sum + asNumber(row?.rowsWritten), 0),
+      lastRowsWrittenDate: dailyRows.length ? String(dailyRows[dailyRows.length - 1]?.date || "") : "",
+    },
+    guardrails: {
+      billingCycleDayOfMonth: asNumber(config?.billingCycleDayOfMonth),
+      dailyBurstMultiplier: asNumber(config?.dailyBurstMultiplier),
+      rowsWrittenHardMonthlyBudget: asNumber(config?.rowsWrittenHardMonthlyBudget),
+    },
+    daily: dailyRows,
+  }
+}
+
 async function writeSnapshotFiles(rootDir, snapshot) {
   const generatedDir = path.join(rootDir, "workers", "generated")
   await mkdir(generatedDir, { recursive: true })
@@ -667,6 +735,7 @@ async function main() {
     endDate: d1.cycleEndDate,
   })
   const automation = buildAutomationState({ config, d1 })
+  const workerLimiter = buildWorkerLimiterSnapshot({ config, d1 })
   // Chesterton's fence:
   // We retired the in-app /api/iconoplasm/admin/cost/usage path on purpose.
   // The admin must not hit telemetry routes, Durable Objects, or GraphQL at
@@ -747,6 +816,7 @@ async function main() {
         note: "Final bill, usage alerts, and the place reality cashes the check.",
       },
     ],
+    workerLimiter,
     durableObjects,
   }
   await writeSnapshotFiles(rootDir, snapshot)

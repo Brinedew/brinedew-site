@@ -20,6 +20,9 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /cost-section-grid/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Capacity against real ceilings/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Exact D1 denominators/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Worker mutation limiter/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="cost-worker-limiter-chart"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="cost-worker-limiter-bars"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Durable Objects traffic/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="cost-cycle-source-chart"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /real 100,000 rows_written\/day ceiling/)
@@ -36,6 +39,10 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
 test("iconoplasm admin trend chart explains the baked budget pace guide", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rows_read_daily_smart_limit/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Smart daily allowance/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /getWorkerLimiterSnapshot\(report\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Worker-side mutation headroom/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /refusing to invent one from other fields/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /can we still mutate, or is today.?s worker gate already shut\?/) 
   assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rowsWrittenDailyLimit/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Fast answer from the baked Cloudflare snapshot/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Account-wide DO rows_written today/)
@@ -45,6 +52,7 @@ test("iconoplasm admin trend chart explains the baked budget pace guide", () => 
   assert.match(ICONOPLASM_ADMIN_HTML, /platform headroom view, not a per-sync accounting report/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Billing page is still the final bill\./)
   assert.match(ICONOPLASM_ADMIN_HTML, /request path untouched/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /baked from D1 analytics and the configured smart daily write guardrails/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /No fake invocation ceiling here/)
 })
 
