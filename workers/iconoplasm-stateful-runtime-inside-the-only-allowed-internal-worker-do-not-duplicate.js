@@ -13003,6 +13003,11 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
         return json(
           await processPendingSyncFinalizationJobs(env, ctx, {
             limit: payload?.limit,
+            symbols: payload?.symbols,
+            finalizeIfDrained: coerceBoolean(
+              payload?.finalize_if_drained ?? payload?.finalizeIfDrained,
+              true,
+            ),
           }),
           200,
           { "Cache-Control": "no-store" },

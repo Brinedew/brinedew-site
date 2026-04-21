@@ -533,3 +533,52 @@ test("admin finalization process can scope durable work to the current sync symb
   assert.equal(env.gatewayDb.jobs.get("TP53")?.phase, "vote_summaries")
   assert.equal(env.gatewayDb.jobs.get("BRCA1")?.phase, "reconcile")
 })
+
+test("internal finalization process route preserves symbol scope instead of draining unrelated jobs", async () => {
+  const gatewayDb = new FakeIconoplasmDb({
+    jobs: [
+      {
+        gene_symbol: "TP53",
+        status: "queued",
+        phase: "reconcile",
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      },
+      {
+        gene_symbol: "BRCA1",
+        status: "queued",
+        phase: "reconcile",
+        requested_at: "2026-04-16T00:01:00.000Z",
+        next_attempt_at: "2026-04-16T00:01:00.000Z",
+      },
+    ],
+  })
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        limit: 5,
+        symbols: ["TP53"],
+        finalize_if_drained: false,
+      }),
+    }),
+    {
+      ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+      ICONOPLASM_DB: gatewayDb,
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.processed, 1)
+  assert.equal(payload?.remaining, 1)
+  assert.equal(payload?.results?.[0]?.symbol, "TP53")
+  assert.equal(gatewayDb.jobs.get("TP53")?.phase, "vote_summaries")
+  assert.equal(gatewayDb.jobs.get("BRCA1")?.phase, "reconcile")
+})
