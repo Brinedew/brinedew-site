@@ -8877,6 +8877,19 @@ function parseSyncFinalizationJsonArray(rawValue, fallback = []) {
   }
 }
 
+function normalizeSyncFinalizationJobSymbols(rawSymbols, { maxItems = 5000 } = {}) {
+  const out = []
+  const seen = new Set()
+  for (const rawSymbol of Array.isArray(rawSymbols) ? rawSymbols : []) {
+    const symbol = normalizeSymbol(rawSymbol)
+    if (!symbol || seen.has(symbol)) continue
+    seen.add(symbol)
+    out.push(symbol)
+    if (out.length >= maxItems) break
+  }
+  return out
+}
+
 function mapSyncFinalizationJobRow(row) {
   const symbol = normalizeSymbol(row?.gene_symbol || "")
   const keepAssets = normalizeSyncFinalizationAssetPairs(
@@ -9326,21 +9339,30 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
   }
 }
 
-async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx) {
+async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols = null } = {}) {
   if (!env?.ICONOPLASM_DB) return { ok: false, finalized: 0, remaining: 0 }
+  const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
+  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
+  const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
   const remainingBeforeFinalize = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ? AND phase NOT IN (?, ?)`,
+    whereSql: `status <> ? AND phase NOT IN (?, ?)
+      AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
     bindArgs: [
       ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
+      scopedEnabled,
+      scopedSymbolsJson,
     ],
   })
   const pendingFinalizeCount = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ? AND phase = ?`,
+    whereSql: `status <> ? AND phase = ?
+      AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
     bindArgs: [
       ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+      scopedEnabled,
+      scopedSymbolsJson,
     ],
   })
   if (remainingBeforeFinalize > 0 || pendingFinalizeCount <= 0) {
@@ -9366,24 +9388,47 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx) {
     },
   })
   const completedAt = new Date().toISOString()
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_sync_finalization_jobs
-     SET status = ?,
-         phase = ?,
-         updated_at = CURRENT_TIMESTAMP,
-         completed_at = ?,
-         last_error = ''
-     WHERE status <> ?
-       AND phase = ?`,
-  )
-    .bind(
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-      completedAt,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+  if (scopedEnabled > 0) {
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_sync_finalization_jobs
+       SET status = ?,
+           phase = ?,
+           updated_at = CURRENT_TIMESTAMP,
+           completed_at = ?,
+           last_error = ''
+       WHERE status <> ?
+         AND phase = ?
+         AND gene_symbol IN (SELECT value FROM json_each(?))`,
     )
-    .run()
+      .bind(
+        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
+        completedAt,
+        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+        scopedSymbolsJson,
+      )
+      .run()
+  } else {
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_sync_finalization_jobs
+       SET status = ?,
+           phase = ?,
+           updated_at = CURRENT_TIMESTAMP,
+           completed_at = ?,
+           last_error = ''
+       WHERE status <> ?
+         AND phase = ?`,
+    )
+      .bind(
+        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
+        completedAt,
+        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+      )
+      .run()
+  }
   return {
     ok: true,
     finalized: pendingFinalizeCount,
@@ -9394,28 +9439,38 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx) {
 async function processPendingSyncFinalizationJobs(
   env,
   ctx,
-  { limit = 25, finalizeIfDrained = true } = {},
+  { limit = 25, finalizeIfDrained = true, symbols = null } = {},
 ) {
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, code: "NO_DB", processed: 0, failed: 0, finalized: 0, remaining: 0 }
   }
   await ensureSyncFinalizationJobsTable(env)
   const safeLimit = Math.max(1, Math.min(250, Number.parseInt(String(limit || 25), 10) || 25))
+  const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
+  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
+  const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
   const nowIso = new Date().toISOString()
   const queued = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
+    `WITH scoped_symbols AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     )
+     SELECT *
      FROM icono_sync_finalization_jobs
      WHERE status IN (?, ?)
        AND phase <> ?
        AND next_attempt_at <= ?
+       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
      ORDER BY requested_at ASC, gene_symbol ASC
      LIMIT ?`,
   )
     .bind(
+      scopedSymbolsJson,
       ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
       ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
       nowIso,
+      scopedEnabled,
       safeLimit,
     )
     .all()
@@ -9509,11 +9564,16 @@ async function processPendingSyncFinalizationJobs(
     }
   }
   const finalizeResult = !partial && finalizeIfDrained
-    ? await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx)
+    ? await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: scopedSymbols })
     : { ok: true, finalized: 0, remaining: 0 }
   const remaining = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ?`,
-    bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED],
+    whereSql: `status <> ?
+      AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+    bindArgs: [
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+      scopedEnabled,
+      scopedSymbolsJson,
+    ],
   })
   return {
     ok: true,
@@ -15314,6 +15374,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       const result = await processPendingSyncFinalizationJobs(env, ctx, {
         limit: p?.limit,
+        symbols: p?.symbols,
         finalizeIfDrained: coerceBoolean(
           p?.finalize_if_drained ?? p?.finalizeIfDrained,
           true,

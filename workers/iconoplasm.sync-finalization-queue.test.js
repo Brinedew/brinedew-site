@@ -19,10 +19,24 @@ class FakeStatement {
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
     if (this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE status IN (?, ?)")) {
-      const [queuedStatus, retryingStatus, excludedPhase, nowIso, limit] = this.args
+      const [
+        scopedSymbolsJson,
+        queuedStatus,
+        retryingStatus,
+        excludedPhase,
+        nowIso,
+        scopedEnabled,
+        limit,
+      ] = this.args
+      const scopedSymbols = new Set(
+        (Array.isArray(JSON.parse(String(scopedSymbolsJson || "[]"))) ? JSON.parse(String(scopedSymbolsJson || "[]")) : [])
+          .map((value) => String(value || "").trim().toUpperCase())
+          .filter(Boolean),
+      )
       const rows = [...this.db.jobs.values()]
         .filter((row) => (row.status === queuedStatus || row.status === retryingStatus) && row.phase !== excludedPhase)
         .filter((row) => !row.next_attempt_at || String(row.next_attempt_at) <= String(nowIso || ""))
+        .filter((row) => !Number(scopedEnabled || 0) || scopedSymbols.has(String(row.gene_symbol || "").trim().toUpperCase()))
         .sort((left, right) => {
           const requestedDelta = String(left.requested_at || "").localeCompare(String(right.requested_at || ""))
           if (requestedDelta !== 0) return requestedDelta
@@ -67,13 +81,56 @@ class FakeStatement {
         const [status] = this.args
         return { count: [...this.db.jobs.values()].filter((row) => row.status === status).length }
       }
-      if (this.sql.includes("WHERE phase = ? AND status <> ?")) {
-        const [phase, excludedStatus] = this.args
-        return { count: [...this.db.jobs.values()].filter((row) => row.phase === phase && row.status !== excludedStatus).length }
+      if (this.sql.includes("phase = ?") && this.sql.includes("status <> ?")) {
+        const phaseFirst = this.sql.includes("phase = ? AND status <> ?")
+        const [phase, excludedStatus, scopedEnabled, scopedSymbolsJson] = phaseFirst
+          ? this.args
+          : [this.args[1], this.args[0], this.args[2], this.args[3]]
+        const scopedSymbols = new Set(
+          (Array.isArray(JSON.parse(String(scopedSymbolsJson || "[]"))) ? JSON.parse(String(scopedSymbolsJson || "[]")) : [])
+            .map((value) => String(value || "").trim().toUpperCase())
+            .filter(Boolean),
+        )
+        return {
+          count: [...this.db.jobs.values()].filter(
+            (row) =>
+              row.phase === phase &&
+              row.status !== excludedStatus &&
+              (!Number(scopedEnabled || 0) || scopedSymbols.has(String(row.gene_symbol || "").trim().toUpperCase())),
+          ).length,
+        }
+      }
+      if (this.sql.includes("phase NOT IN (?, ?)") && this.sql.includes("status <> ?")) {
+        const [excludedStatus, excludedPhaseA, excludedPhaseB, scopedEnabled, scopedSymbolsJson] = this.args
+        const scopedSymbols = new Set(
+          (Array.isArray(JSON.parse(String(scopedSymbolsJson || "[]"))) ? JSON.parse(String(scopedSymbolsJson || "[]")) : [])
+            .map((value) => String(value || "").trim().toUpperCase())
+            .filter(Boolean),
+        )
+        return {
+          count: [...this.db.jobs.values()].filter(
+            (row) =>
+              row.status !== excludedStatus &&
+              row.phase !== excludedPhaseA &&
+              row.phase !== excludedPhaseB &&
+              (!Number(scopedEnabled || 0) || scopedSymbols.has(String(row.gene_symbol || "").trim().toUpperCase())),
+          ).length,
+        }
       }
       if (this.sql.includes("WHERE status <> ?")) {
-        const [excludedStatus] = this.args
-        return { count: [...this.db.jobs.values()].filter((row) => row.status !== excludedStatus).length }
+        const [excludedStatus, scopedEnabled, scopedSymbolsJson] = this.args
+        const scopedSymbols = new Set(
+          (Array.isArray(JSON.parse(String(scopedSymbolsJson || "[]"))) ? JSON.parse(String(scopedSymbolsJson || "[]")) : [])
+            .map((value) => String(value || "").trim().toUpperCase())
+            .filter(Boolean),
+        )
+        return {
+          count: [...this.db.jobs.values()].filter(
+            (row) =>
+              row.status !== excludedStatus &&
+              (!Number(scopedEnabled || 0) || scopedSymbols.has(String(row.gene_symbol || "").trim().toUpperCase())),
+          ).length,
+        }
       }
     }
     return null
@@ -428,4 +485,51 @@ test("admin finalization process advances reconcile jobs to the next durable pha
   const stored = env.gatewayDb.jobs.get("TP53")
   assert.equal(stored?.status, "queued")
   assert.equal(stored?.phase, "vote_summaries")
+})
+
+test("admin finalization process can scope durable work to the current sync symbols", async () => {
+  const env = buildEnv({
+    jobs: [
+      {
+        gene_symbol: "TP53",
+        status: "queued",
+        phase: "reconcile",
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      },
+      {
+        gene_symbol: "BRCA1",
+        status: "queued",
+        phase: "reconcile",
+        requested_at: "2026-04-16T00:01:00.000Z",
+        next_attempt_at: "2026-04-16T00:01:00.000Z",
+      },
+    ],
+  })
+
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        limit: 5,
+        symbols: ["TP53"],
+        finalize_if_drained: false,
+      }),
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.processed, 1)
+  assert.equal(payload?.remaining, 1)
+  assert.equal(payload?.results?.[0]?.symbol, "TP53")
+  assert.equal(env.gatewayDb.jobs.get("TP53")?.phase, "vote_summaries")
+  assert.equal(env.gatewayDb.jobs.get("BRCA1")?.phase, "reconcile")
 })
