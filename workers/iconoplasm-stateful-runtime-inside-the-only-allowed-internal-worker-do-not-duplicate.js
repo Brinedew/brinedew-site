@@ -4108,11 +4108,13 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/canon-audit") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/assets") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/assets/summary") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/assets/state") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/assets/state")
+    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/local-removals/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/local-removals/ack") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/catalog/state") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/catalog/state")
+    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/catalog/upsert") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/catalog/reconcile") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/catalog/publish") return requestMethod === "POST"
@@ -4464,6 +4466,59 @@ async function fetchCatalogState(env) {
   }
 }
 
+async function fetchCatalogStateRows(env, requestedSymbols = null) {
+  if (!env.ICONOPLASM_DB) return []
+  const wantedSymbols = Array.isArray(requestedSymbols)
+    ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
+    : []
+  let results = []
+  if (wantedSymbols.length && wantedSymbols.length <= 1000) {
+    const placeholders = wantedSymbols.map(() => "?").join(", ")
+    const response = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json
+         FROM icono_gene_catalog
+        WHERE gene_symbol IN (${placeholders})
+        ORDER BY gene_symbol ASC`,
+    )
+      .bind(...wantedSymbols)
+      .all()
+    results = Array.isArray(response?.results) ? response.results : []
+  } else {
+    const response = await env.ICONOPLASM_DB.prepare(
+      `WITH incoming_scope AS (
+         SELECT value AS gene_symbol
+         FROM json_each(?)
+       )
+       SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json
+         FROM icono_gene_catalog
+        WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+        ORDER BY gene_symbol ASC`,
+    )
+      .bind(JSON.stringify(wantedSymbols), wantedSymbols.length > 0 ? 1 : 0)
+      .all()
+    results = Array.isArray(response?.results) ? response.results : []
+  }
+  const out = []
+  for (const row of results) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    out.push({
+      symbol,
+      content_hash: await hashCatalogItems([
+        {
+          gene_symbol: symbol,
+          full_name: sanitizeText(row?.full_name || "", 255) || "",
+          uniprot: normalizeUniprot(row?.uniprot || "") || "",
+          color_hex: normalizeHexColor(row?.color_hex || "") || "",
+          tmh: Number(row?.tmh || 0) > 0,
+          aliases_json: String(row?.aliases_json || "[]"),
+        },
+      ]),
+    })
+  }
+  return out
+}
+
 async function fetchEssenceStateRows(env, requestedSymbols = null) {
   if (!env.ICONOPLASM_DB) return []
   const wantedSymbols = Array.isArray(requestedSymbols)
@@ -4554,6 +4609,64 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
     })
   }
   return out
+}
+
+async function fetchAssetStateRows(env, requestedSymbols = null) {
+  if (!env.ICONOPLASM_DB) return []
+  const wantedSymbols = Array.isArray(requestedSymbols)
+    ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
+    : []
+  const applyScope = wantedSymbols.length > 0 ? 1 : 0
+  const response = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming_scope AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     ),
+     scoped_assets AS (
+       SELECT *
+       FROM icono_portrait_assets
+       WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+     ),
+     scoped_votes AS (
+       SELECT
+         candidate_ref,
+         COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+         COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+         COALESCE(SUM(vote_value), 0) AS score
+       FROM icono_image_votes
+       WHERE (? = 0 OR candidate_ref IN (
+         SELECT 'a:' || gene_symbol || '|' || asset_sha256
+         FROM scoped_assets
+       ))
+       GROUP BY candidate_ref
+     )
+     SELECT
+       sa.gene_symbol,
+       sa.asset_sha256,
+       sa.candidate_image_id,
+       sa.vision_id,
+       sa.emulsion_id,
+       sa.workflow_id,
+       sa.workflow_label,
+       sa.workflow_path,
+       sa.prompt_version,
+       sa.variant_slot,
+       sa.artist_tag,
+       sa.artist_name,
+       sa.status,
+       COALESCE(sa.is_stale, 0) AS is_stale,
+       COALESCE(sa.is_legacy, 0) AS is_legacy,
+       COALESCE(v.upvotes, 0) AS image_upvotes,
+       COALESCE(v.downvotes, 0) AS image_downvotes,
+       COALESCE(v.score, 0) AS image_score
+     FROM scoped_assets sa
+     LEFT JOIN scoped_votes v
+       ON v.candidate_ref = ('a:' || sa.gene_symbol || '|' || sa.asset_sha256)
+     ORDER BY sa.gene_symbol ASC, sa.asset_sha256 ASC`,
+  )
+    .bind(JSON.stringify(wantedSymbols), applyScope, applyScope)
+    .all()
+  return Array.isArray(response?.results) ? response.results : []
 }
 
 async function fetchCatalogRow(env, symbol) {
@@ -15861,39 +15974,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/assets/state" && request.method === "GET") {
+    if (path === "/api/iconoplasm/admin/assets/state" && (request.method === "GET" || request.method === "POST")) {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_assets_state_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
         return done("admin_assets_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      const resp = await env.ICONOPLASM_DB.prepare(
-         `SELECT
-           pa.gene_symbol,
-           pa.asset_sha256,
-           pa.candidate_image_id,
-           pa.vision_id,
-           pa.emulsion_id,
-           pa.artist_tag,
-           pa.artist_name,
-           pa.status,
-           COALESCE(pa.is_stale, 0) AS is_stale,
-           COALESCE(v.upvotes, 0) AS image_upvotes,
-           COALESCE(v.downvotes, 0) AS image_downvotes,
-           COALESCE(v.score, 0) AS image_score
-         FROM icono_portrait_assets pa
-         LEFT JOIN (
-           SELECT
-             candidate_ref,
-             COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-             COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-             COALESCE(SUM(vote_value), 0) AS score
-           FROM icono_image_votes
-           GROUP BY candidate_ref
-         ) v
-          ON v.candidate_ref = ('a:' || pa.gene_symbol || '|' || pa.asset_sha256)
-         ORDER BY pa.gene_symbol ASC, pa.asset_sha256 ASC`,
-      ).all()
-      const assets = (Array.isArray(resp?.results) ? resp.results : [])
+      let requestedSymbols = null
+      if (request.method === "POST") {
+        let p
+        try {
+          p = await request.json()
+        } catch {
+          return done("admin_assets_state_400", json({ error: "Invalid JSON" }, 400))
+        }
+        const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
+        if (rawSymbols.length > 25000)
+          return done("admin_assets_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
+        requestedSymbols = rawSymbols
+      }
+      const assets = (await fetchAssetStateRows(env, requestedSymbols))
         .map((row) => ({
           symbol: normalizeSymbol(row?.gene_symbol || ""),
           asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
@@ -15980,7 +16079,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/catalog/state" && request.method === "GET") {
+    if (path === "/api/iconoplasm/admin/catalog/state" && (request.method === "GET" || request.method === "POST")) {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_catalog_state_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
@@ -15988,6 +16087,30 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           "admin_catalog_state_500",
           json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
+      if (request.method === "POST") {
+        let p
+        try {
+          p = await request.json()
+        } catch {
+          return done("admin_catalog_state_400", json({ error: "Invalid JSON" }, 400))
+        }
+        const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
+        if (rawSymbols.length > 25000)
+          return done("admin_catalog_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
+        const rows = await fetchCatalogStateRows(env, rawSymbols.length ? rawSymbols : null)
+        return done(
+          "admin_catalog_state",
+          json(
+            {
+              ok: true,
+              count: rows.length,
+              rows,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
       const state = await fetchCatalogState(env)
       return done(
         "admin_catalog_state",
@@ -16117,33 +16240,43 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
 
       const keepSymbolsRaw = Array.isArray(p?.keep_symbols) ? p.keep_symbols : []
+      const deleteSymbolsRaw = Array.isArray(p?.delete_symbols) ? p.delete_symbols : []
       const deferReadModels = coerceBoolean(
         p?.defer_read_models ?? p?.deferReadModels,
         false,
       )
-      if (!keepSymbolsRaw.length)
-        return done("admin_catalog_reconcile_400", json({ error: "No keep_symbols provided" }, 400))
       if (keepSymbolsRaw.length > 25000)
         return done(
           "admin_catalog_reconcile_400",
           json({ error: "Too many keep_symbols (max 25000)" }, 400),
         )
+      if (deleteSymbolsRaw.length > 25000)
+        return done(
+          "admin_catalog_reconcile_400",
+          json({ error: "Too many delete_symbols (max 25000)" }, 400),
+        )
       const keepSymbols = new Set(
         keepSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean),
       )
-      if (!keepSymbols.size)
+      const explicitDeleteSymbols = Array.from(
+        new Set(deleteSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean)),
+      )
+      if (!keepSymbols.size && !explicitDeleteSymbols.length)
         return done(
           "admin_catalog_reconcile_400",
-          json({ error: "No valid keep_symbols provided" }, 400),
+          json({ error: "No keep_symbols or delete_symbols provided" }, 400),
         )
 
-      const currentRows = await env.ICONOPLASM_DB.prepare(
-        "SELECT gene_symbol FROM icono_gene_catalog",
-      ).all()
-      const currentSymbols = Array.isArray(currentRows?.results) ? currentRows.results : []
-      const toDelete = currentSymbols
-        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-        .filter((symbol) => symbol && !keepSymbols.has(symbol))
+      let toDelete = explicitDeleteSymbols
+      if (keepSymbols.size) {
+        const currentRows = await env.ICONOPLASM_DB.prepare(
+          "SELECT gene_symbol FROM icono_gene_catalog",
+        ).all()
+        const currentSymbols = Array.isArray(currentRows?.results) ? currentRows.results : []
+        toDelete = currentSymbols
+          .map((row) => normalizeSymbol(row?.gene_symbol || ""))
+          .filter((symbol) => symbol && !keepSymbols.has(symbol))
+      }
 
       for (const symbol of toDelete) {
         await env.ICONOPLASM_DB.prepare("DELETE FROM icono_gene_catalog WHERE gene_symbol=?")
@@ -16162,6 +16295,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ok: true,
             kept: keepSymbols.size,
             deleted: toDelete.length,
+            mode: keepSymbols.size ? "keep_symbols" : "delete_symbols",
             defer_read_models: deferReadModels,
             mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
           },
