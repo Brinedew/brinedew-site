@@ -10576,6 +10576,7 @@ async function recordSyncFinalizationJobFailure(
 }
 
 const ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES = 15
+const ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT = 250
 
 async function recoverStaleRunningSyncFinalizationJobs(
   env,
@@ -10598,33 +10599,50 @@ async function recoverStaleRunningSyncFinalizationJobs(
   // still count as pending forever, but the normal processor only selects
   // queued/retrying work. Requeue old leases here so the backlog can become
   // real work again instead of an undead counter that never drains.
-  const result = await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_sync_finalization_jobs
-     SET status = ?,
-         updated_at = CURRENT_TIMESTAMP,
-         next_attempt_at = ?,
-         last_error = ?,
-         attempts = CASE WHEN attempts > 0 THEN attempts ELSE 1 END
+  const runningRowsResp = await env.ICONOPLASM_DB.prepare(
+    `WITH scoped_symbols AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     )
+     SELECT gene_symbol, phase, attempts, requested_at, last_attempt_at
+     FROM icono_sync_finalization_jobs
      WHERE status = ?
        AND phase <> ?
-       AND COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) <> ''
-       AND COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) <= ?
-       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
+     ORDER BY COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) ASC, gene_symbol ASC
+     LIMIT ?`,
   )
     .bind(
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-      retryAtIso,
-      recoveredError,
+      scopedSymbolsJson,
       ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      cutoffIso,
       scopedEnabled,
-      scopedSymbolsJson,
+      ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
     )
-    .run()
+    .all()
+  const runningRows = Array.isArray(runningRowsResp?.results) ? runningRowsResp.results : []
+  let recovered = 0
+  for (const row of runningRows) {
+    const leaseAt =
+      sanitizeText(String(row?.last_attempt_at || row?.requested_at || ""), 64) || ""
+    if (!leaseAt || leaseAt > cutoffIso) continue
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    await writeSyncFinalizationJobState(env, {
+      symbol,
+      status: ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+      phase: row?.phase,
+      nextAttemptAt: retryAtIso,
+      lastAttemptAt: retryAtIso,
+      attempts: Math.max(1, Number(row?.attempts || 0) || 0),
+      lastError: recoveredError,
+      completedAt: null,
+    })
+    recovered += 1
+  }
   return {
     ok: true,
-    recovered: Math.max(0, Number(result?.meta?.changes || 0) || 0),
+    recovered,
     stale_after_minutes: safeMinutes,
   }
 }

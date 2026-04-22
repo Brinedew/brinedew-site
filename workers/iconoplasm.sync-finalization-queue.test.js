@@ -18,6 +18,32 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE status = ?") && this.sql.includes("phase <> ?")) {
+      const [scopedSymbolsJson, runningStatus, excludedPhase, scopedEnabled, limit] = this.args
+      let scopedSymbols = null
+      if (Number(scopedEnabled || 0) > 0) {
+        try {
+          scopedSymbols = new Set(
+            (JSON.parse(String(scopedSymbolsJson || "[]")) || [])
+              .map((item) => String(item || "").trim().toUpperCase())
+              .filter(Boolean),
+          )
+        } catch {
+          scopedSymbols = new Set()
+        }
+      }
+      const rows = [...this.db.jobs.values()]
+        .filter((row) => row.status === runningStatus && row.phase !== excludedPhase)
+        .filter((row) => !scopedSymbols || scopedSymbols.has(String(row.gene_symbol || "").trim().toUpperCase()))
+        .sort((left, right) => {
+          const leftLeaseAt = String(left.last_attempt_at || left.requested_at || "")
+          const rightLeaseAt = String(right.last_attempt_at || right.requested_at || "")
+          const leaseDelta = leftLeaseAt.localeCompare(rightLeaseAt)
+          if (leaseDelta !== 0) return leaseDelta
+          return String(left.gene_symbol || "").localeCompare(String(right.gene_symbol || ""))
+        })
+      return { results: rows.slice(0, Math.max(0, Number(limit || 0) || 0)).map((row) => ({ ...row })) }
+    }
     if (this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE status IN (?, ?)")) {
       const scopedQuery = this.sql.includes("WITH scoped_symbols")
       const [scopedSymbolsJson, queuedStatus, retryingStatus, excludedPhase, nowIso, scopedEnabled, limit] = scopedQuery
@@ -170,50 +196,6 @@ class FakeStatement {
         completed_at: "",
       })
       return { success: true }
-    }
-    if (this.sql.includes("UPDATE icono_sync_finalization_jobs") && this.sql.includes("WHERE status = ?") && this.sql.includes("COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) <= ?")) {
-      const [
-        retryingStatus,
-        retryAtIso,
-        recoveredError,
-        runningStatus,
-        excludedPhase,
-        cutoffIso,
-        scopedEnabled,
-        scopedSymbolsJson,
-      ] = this.args
-      let scopedSymbols = null
-      if (Number(scopedEnabled || 0) > 0) {
-        try {
-          scopedSymbols = new Set(
-            (JSON.parse(String(scopedSymbolsJson || "[]")) || [])
-              .map((item) => String(item || "").trim().toUpperCase())
-              .filter(Boolean),
-          )
-        } catch {
-          scopedSymbols = new Set()
-        }
-      }
-      let changes = 0
-      for (const [symbol, current] of this.db.jobs.entries()) {
-        const leaseAt = String(current.last_attempt_at || current.requested_at || "")
-        const inScope = !scopedSymbols || scopedSymbols.has(String(symbol || "").trim().toUpperCase())
-        if (
-          current.status === runningStatus &&
-          current.phase !== excludedPhase &&
-          leaseAt &&
-          leaseAt <= String(cutoffIso || "") &&
-          inScope
-        ) {
-          current.status = String(retryingStatus)
-          current.next_attempt_at = String(retryAtIso || "")
-          current.last_error = String(recoveredError || "")
-          current.attempts = Math.max(1, Number(current.attempts || 0) || 0)
-          this.db.jobs.set(symbol, current)
-          changes += 1
-        }
-      }
-      return { success: true, meta: { changes } }
     }
     if (this.sql.includes("UPDATE icono_sync_finalization_jobs")) {
       const symbol = String(this.args[this.args.length - 1] || "")
