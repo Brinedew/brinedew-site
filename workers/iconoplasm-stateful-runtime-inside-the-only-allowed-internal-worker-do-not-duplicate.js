@@ -10575,6 +10575,60 @@ async function recordSyncFinalizationJobFailure(
   return true
 }
 
+const ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES = 15
+
+async function recoverStaleRunningSyncFinalizationJobs(
+  env,
+  { symbols = null, staleAfterMinutes = ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES } = {},
+) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, recovered: 0 }
+  await ensureSyncFinalizationJobsTable(env)
+  const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
+  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
+  const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
+  const safeMinutes = Math.max(5, Math.min(240, Number(staleAfterMinutes || 0) || 15))
+  const cutoffIso = new Date(Date.now() - safeMinutes * 60 * 1000).toISOString()
+  const retryAtIso = new Date().toISOString()
+  const recoveredError =
+    sanitizeText(
+      `Recovered stale running finalization lease after ${safeMinutes} minute(s) without progress`,
+      2000,
+    ) || "Recovered stale running finalization lease"
+  // Chesterton's fence: stale `running` rows from an aborted workstation run
+  // still count as pending forever, but the normal processor only selects
+  // queued/retrying work. Requeue old leases here so the backlog can become
+  // real work again instead of an undead counter that never drains.
+  const result = await env.ICONOPLASM_DB.prepare(
+    `UPDATE icono_sync_finalization_jobs
+     SET status = ?,
+         updated_at = CURRENT_TIMESTAMP,
+         next_attempt_at = ?,
+         last_error = ?,
+         attempts = CASE WHEN attempts > 0 THEN attempts ELSE 1 END
+     WHERE status = ?
+       AND phase <> ?
+       AND COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) <> ''
+       AND COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) <= ?
+       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+  )
+    .bind(
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+      retryAtIso,
+      recoveredError,
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+      cutoffIso,
+      scopedEnabled,
+      scopedSymbolsJson,
+    )
+    .run()
+  return {
+    ok: true,
+    recovered: Math.max(0, Number(result?.meta?.changes || 0) || 0),
+    stale_after_minutes: safeMinutes,
+  }
+}
+
 async function callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
   env,
   ctx,
@@ -10902,6 +10956,9 @@ async function processPendingSyncFinalizationJobs(
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
+  const staleRecovery = await recoverStaleRunningSyncFinalizationJobs(env, {
+    symbols: scopedSymbols,
+  })
   const nowIso = new Date().toISOString()
   const queued = await env.ICONOPLASM_DB.prepare(
     `WITH scoped_symbols AS (
@@ -11035,6 +11092,7 @@ async function processPendingSyncFinalizationJobs(
     partial,
     stop_reason: partial ? stopReason : null,
     budget: partial ? partialBudget : null,
+    recovered_stale_running: Math.max(0, Number(staleRecovery?.recovered || 0) || 0),
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
     remaining,
     results,

@@ -171,6 +171,50 @@ class FakeStatement {
       })
       return { success: true }
     }
+    if (this.sql.includes("UPDATE icono_sync_finalization_jobs") && this.sql.includes("WHERE status = ?") && this.sql.includes("COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) <= ?")) {
+      const [
+        retryingStatus,
+        retryAtIso,
+        recoveredError,
+        runningStatus,
+        excludedPhase,
+        cutoffIso,
+        scopedEnabled,
+        scopedSymbolsJson,
+      ] = this.args
+      let scopedSymbols = null
+      if (Number(scopedEnabled || 0) > 0) {
+        try {
+          scopedSymbols = new Set(
+            (JSON.parse(String(scopedSymbolsJson || "[]")) || [])
+              .map((item) => String(item || "").trim().toUpperCase())
+              .filter(Boolean),
+          )
+        } catch {
+          scopedSymbols = new Set()
+        }
+      }
+      let changes = 0
+      for (const [symbol, current] of this.db.jobs.entries()) {
+        const leaseAt = String(current.last_attempt_at || current.requested_at || "")
+        const inScope = !scopedSymbols || scopedSymbols.has(String(symbol || "").trim().toUpperCase())
+        if (
+          current.status === runningStatus &&
+          current.phase !== excludedPhase &&
+          leaseAt &&
+          leaseAt <= String(cutoffIso || "") &&
+          inScope
+        ) {
+          current.status = String(retryingStatus)
+          current.next_attempt_at = String(retryAtIso || "")
+          current.last_error = String(recoveredError || "")
+          current.attempts = Math.max(1, Number(current.attempts || 0) || 0)
+          this.db.jobs.set(symbol, current)
+          changes += 1
+        }
+      }
+      return { success: true, meta: { changes } }
+    }
     if (this.sql.includes("UPDATE icono_sync_finalization_jobs")) {
       const symbol = String(this.args[this.args.length - 1] || "")
       const current = this.db.jobs.get(symbol)
@@ -480,6 +524,54 @@ test("admin finalization process advances reconcile jobs to the next durable pha
   // Chesterton's fence: the whole point of this queue is fail-loud late-stage
   // progress. If process() can return success without moving the stored job
   // state forward, the ops GUI will look calm while sync is secretly stalled.
+  const stored = env.gatewayDb.jobs.get("TP53")
+  assert.equal(stored?.status, "queued")
+  assert.equal(stored?.phase, "vote_summaries")
+})
+
+test("admin finalization process reclaims stale running jobs before draining the queue", async () => {
+  const env = buildEnv({
+    jobs: [
+      {
+        gene_symbol: "TP53",
+        status: "running",
+        phase: "reconcile",
+        keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        requested_at: "2026-04-16T00:00:00.000Z",
+        last_attempt_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      },
+    ],
+  })
+
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        limit: 25,
+        finalize_if_drained: false,
+      }),
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.recovered_stale_running, 1)
+  assert.equal(payload?.processed, 1)
+  assert.equal(payload?.failed, 0)
+  assert.equal(payload?.results?.[0]?.symbol, "TP53")
+  assert.equal(payload?.results?.[0]?.phase, "reconcile")
+  assert.equal(payload?.results?.[0]?.next_phase, "vote_summaries")
+
   const stored = env.gatewayDb.jobs.get("TP53")
   assert.equal(stored?.status, "queued")
   assert.equal(stored?.phase, "vote_summaries")
