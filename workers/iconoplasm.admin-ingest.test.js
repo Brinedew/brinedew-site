@@ -232,3 +232,44 @@ test("admin ingest success returns current mutation-limiter telemetry for sync f
   assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, 24)
 })
 
+test("admin ingest proxy forwards POST bodies without cloning them into text first", async () => {
+  const request = new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/ingest", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer secret-admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dry_run: true,
+      defer_read_models: true,
+      items: [
+        {
+          symbol: "ABCA1",
+          asset_sha256: "bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6",
+          vision_id: "anima-v1-42",
+          workflow_path: "d:/Coding/Datasets/iconoplasm/data/comfyui/workflows/anima-preview.api.json",
+          renditions: {
+            full: { base64: "QUJDRA==", width: 2, height: 2, bytes: 4 },
+            medium: { base64: "QUJDRA==", width: 2, height: 2, bytes: 4 },
+            thumb: { base64: "QUJDRA==", width: 2, height: 2, bytes: 4 },
+          },
+        },
+      ],
+    }),
+  })
+  Object.defineProperty(request, "clone", {
+    configurable: true,
+    value() {
+      throw new Error("proxy must not clone ingest bodies into text")
+    },
+  })
+
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, buildEnv(), {})
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.processed, 1)
+  assert.equal(payload?.failed, 0)
+})
+

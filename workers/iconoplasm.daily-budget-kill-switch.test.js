@@ -444,6 +444,37 @@ test("admin cost usage now points operators at Cloudflare observability instead 
   assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
 })
 
+test("admin cost snapshot serves the baked observability payload without touching the budget ledger", async () => {
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/snapshot",
+      {
+        headers: {
+          "x-iconoplasm-admin-token": "founder-secret",
+        },
+      },
+    ),
+    {
+      ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+      ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+      ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+      ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+      ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.snapshot?.source?.mode, "out_of_band_snapshot")
+  assert.equal(payload?.snapshot?.source?.analyticsTruth, "Cloudflare GraphQL analytics")
+  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
+})
+
 test("admin mutation limiter policy reports the live limiter basis so Website Ops can fail closed", async () => {
   const db = new MeteredSummaryDb({ rowsReadPerQuery: 3 })
   const budgetNamespace = new FakeDailyBudgetNamespace()
@@ -1166,4 +1197,272 @@ test("all sync-owned admin mutation routes still hit the limiter preflight befor
       `${path} should consult the limiter snapshot before any route-specific work`,
     )
   }
+})
+
+test("write-heavy admin mutations flush the shared budget ledger once even when a chunk crosses the old flush thresholds", async () => {
+  class FixedSnapshotBudgetNamespace {
+    constructor(initialSnapshot) {
+      this.snapshot = { ...initialSnapshot }
+      this.calls = []
+    }
+
+    idFromName(name) {
+      return String(name || "")
+    }
+
+    get() {
+      return {
+        fetch: async (request) => {
+          const url = new URL(request.url)
+          const payload = (await request.json().catch(() => ({}))) || {}
+          this.calls.push({ pathname: url.pathname, payload })
+          if (url.pathname === "/record") {
+            const rowsRead = Math.max(0, Number(payload?.rows_read || 0) || 0)
+            const rowsWritten = Math.max(0, Number(payload?.rows_written || 0) || 0)
+            const queryCount = Math.max(0, Number(payload?.query_count || 0) || 0)
+            const requestCount = Math.max(0, Number(payload?.request_count || 0) || 0)
+            this.snapshot = {
+              ...this.snapshot,
+              rows_read: Number(this.snapshot.rows_read || 0) + rowsRead,
+              rows_written: Number(this.snapshot.rows_written || 0) + rowsWritten,
+              query_count: Number(this.snapshot.query_count || 0) + queryCount,
+              request_count: Number(this.snapshot.request_count || 0) + requestCount,
+              cycle_rows_read: Number(this.snapshot.cycle_rows_read || 0) + rowsRead,
+              cycle_rows_written: Number(this.snapshot.cycle_rows_written || 0) + rowsWritten,
+              cycle_query_count: Number(this.snapshot.cycle_query_count || 0) + queryCount,
+              cycle_request_count: Number(this.snapshot.cycle_request_count || 0) + requestCount,
+              rows_read_monthly_remaining:
+                this.snapshot.rows_read_monthly_limit == null
+                  ? null
+                  : Math.max(0, Number(this.snapshot.rows_read_monthly_remaining || 0) - rowsRead),
+              rows_written_monthly_remaining:
+                this.snapshot.rows_written_monthly_limit == null
+                  ? null
+                  : Math.max(0, Number(this.snapshot.rows_written_monthly_remaining || 0) - rowsWritten),
+              rows_read_daily_remaining:
+                this.snapshot.rows_read_daily_smart_limit == null
+                  ? null
+                  : Math.max(0, Number(this.snapshot.rows_read_daily_remaining || 0) - rowsRead),
+              rows_written_daily_remaining:
+                this.snapshot.rows_written_daily_smart_limit == null
+                  ? null
+                  : Math.max(0, Number(this.snapshot.rows_written_daily_remaining || 0) - rowsWritten),
+            }
+            this.snapshot.exhausted =
+              (this.snapshot.rows_read_daily_smart_limit != null &&
+                Number(this.snapshot.rows_read || 0) >= Number(this.snapshot.rows_read_daily_smart_limit || 0)) ||
+              (this.snapshot.rows_written_daily_smart_limit != null &&
+                Number(this.snapshot.rows_written || 0) >= Number(this.snapshot.rows_written_daily_smart_limit || 0))
+            this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily_smart" : null
+          }
+          return Response.json(this.snapshot)
+        },
+      }
+    }
+  }
+
+  const db = new CatalogUpsertDb({ rowsWrittenPerRun: 600 })
+  const budgetNamespace = new FixedSnapshotBudgetNamespace({
+    day_key: "2026-04-17",
+    cycle_key: "2026-04-07",
+    rows_read: 0,
+    rows_written: 0,
+    query_count: 0,
+    request_count: 0,
+    cycle_rows_read: 0,
+    cycle_rows_written: 0,
+    cycle_query_count: 0,
+    cycle_request_count: 0,
+    rows_read_monthly_limit: 24000000000,
+    rows_written_monthly_limit: 50000,
+    rows_read_monthly_remaining: 24000000000,
+    rows_written_monthly_remaining: 50000,
+    rows_read_daily_smart_limit: 100000,
+    rows_written_daily_smart_limit: 10000,
+    rows_read_daily_remaining: 100000,
+    rows_written_daily_remaining: 10000,
+    days_remaining_in_cycle: 20,
+    daily_burst_multiplier: 3,
+    exhausted: false,
+    exhausted_by: null,
+    updated_at: "2026-04-17T05:00:00Z",
+  })
+
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/catalog/upsert",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-iconoplasm-admin-token": "founder-secret",
+        },
+        body: JSON.stringify({
+          defer_read_models: true,
+          items: [
+            { gene_symbol: "TP53", full_name: "Tumor protein p53", tmh: false, aliases_json: [] },
+            { gene_symbol: "EGFR", full_name: "Epidermal growth factor receptor", tmh: true, aliases_json: [] },
+          ],
+        }),
+      },
+    ),
+    {
+      ICONOPLASM_DB: db,
+      ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+      ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+      ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "50000",
+      ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+      ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(db.catalogUpsertRuns, 2)
+  assert.deepEqual(
+    budgetNamespace.calls.map((call) => call.pathname),
+    ["/snapshot", "/record"],
+  )
+  assert.equal(budgetNamespace.calls[1]?.payload?.rows_written, 1200)
+  assert.equal(budgetNamespace.calls[1]?.payload?.request_count, 1)
+})
+
+test("daily budget durable object records only shared totals and skips hot-path attribution writes", async () => {
+  class AttributionFreeBudgetSql {
+    constructor() {
+      this.calls = []
+      this.dayRow = {
+        day_key: "2026-04-17",
+        cycle_key: "2026-04-07",
+        rows_read: 0,
+        rows_written: 0,
+        query_count: 0,
+        request_count: 0,
+        updated_at: null,
+      }
+    }
+
+    exec(sql, ...args) {
+      const text = String(sql || "")
+      this.calls.push({ sql: text, args })
+      if (text.includes("PRAGMA table_info(daily_budget_usage)")) {
+        return {
+          toArray() {
+            return [
+              { name: "day_key", pk: 1 },
+              { name: "cycle_key", pk: 0 },
+              { name: "rows_read", pk: 0 },
+              { name: "rows_written", pk: 0 },
+              { name: "query_count", pk: 0 },
+              { name: "request_count", pk: 0 },
+              { name: "updated_at", pk: 0 },
+            ]
+          },
+        }
+      }
+      if (text.includes("PRAGMA table_info(daily_budget_usage_attribution)")) {
+        return {
+          toArray() {
+            return [
+              { name: "day_key", pk: 1 },
+              { name: "cycle_key", pk: 2 },
+              { name: "route_family", pk: 3 },
+              { name: "actor_class", pk: 4 },
+              { name: "source_class", pk: 5 },
+              { name: "rows_read", pk: 0 },
+              { name: "rows_written", pk: 0 },
+              { name: "query_count", pk: 0 },
+              { name: "request_count", pk: 0 },
+              { name: "updated_at", pk: 0 },
+            ]
+          },
+        }
+      }
+      if (text.includes("INSERT INTO daily_budget_usage (")) {
+        this.dayRow = {
+          ...this.dayRow,
+          day_key: String(args[0] || this.dayRow.day_key),
+          cycle_key: String(args[1] || this.dayRow.cycle_key),
+          rows_read: Number(this.dayRow.rows_read || 0) + Math.max(0, Number(args[2] || 0) || 0),
+          rows_written: Number(this.dayRow.rows_written || 0) + Math.max(0, Number(args[3] || 0) || 0),
+          query_count: Number(this.dayRow.query_count || 0) + Math.max(0, Number(args[4] || 0) || 0),
+          request_count: Number(this.dayRow.request_count || 0) + Math.max(0, Number(args[5] || 0) || 0),
+          updated_at: "2026-04-17T06:00:00Z",
+        }
+        return { toArray: () => [] }
+      }
+      if (text.includes("FROM daily_budget_usage\n           WHERE day_key = ?")) {
+        return { toArray: () => [this.dayRow] }
+      }
+      if (text.includes("FROM daily_budget_usage\n           WHERE cycle_key = ?")) {
+        return {
+          toArray: () => [
+            {
+              rows_read: this.dayRow.rows_read,
+              rows_written: this.dayRow.rows_written,
+              query_count: this.dayRow.query_count,
+              request_count: this.dayRow.request_count,
+            },
+          ],
+        }
+      }
+      if (text.includes("FROM daily_budget_usage_attribution")) {
+        return { toArray: () => [] }
+      }
+      if (text.includes("FROM daily_budget_usage\n         WHERE cycle_key = ?")) {
+        return { toArray: () => [this.dayRow] }
+      }
+      return {
+        toArray() {
+          return []
+        },
+      }
+    }
+  }
+
+  const fakeSql = new AttributionFreeBudgetSql()
+  const workerModule = await import("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js")
+  const durableObject = new workerModule.IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate({
+    storage: { sql: fakeSql },
+    blockConcurrencyWhile(callback) {
+      return callback()
+    },
+  })
+
+  const response = await durableObject.fetch(
+    new Request("https://iconoplasm-d1-daily-budget-kill-switch/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day_key: "2026-04-17",
+        cycle_key: "2026-04-07",
+        days_remaining_in_cycle: 20,
+        budgets: {
+          rowsReadMonthlyLimit: 24000000000,
+          rowsWrittenMonthlyLimit: 40000000,
+          dailyBurstMultiplier: 3,
+        },
+        rows_read: 11,
+        rows_written: 22,
+        query_count: 3,
+        request_count: 1,
+        attribution: {
+          route_family: "admin_catalog_upsert",
+          actor_class: "admin_token",
+          source_class: "admin_ui",
+        },
+      }),
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.rows_written, 22)
+  assert.equal(
+    fakeSql.calls.some((call) => call.sql.includes("INSERT INTO daily_budget_usage_attribution (")),
+    false,
+  )
 })

@@ -316,17 +316,18 @@ async function proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicat
   if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
     return missingTheOnlyAllowedStatefulWorkerResponse()
   }
-  const upstreamRequest = new Request(
-    `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${url.pathname}${url.search}`,
-    {
-      method: request.method,
-      headers: request.headers,
-      body:
-        request.method === "GET" || request.method === "HEAD"
-          ? undefined
-          : await request.clone().text(),
-    },
-  )
+    // Hard-path rationale:
+    // Website sync ingest batches can carry base64 payloads for three portrait
+    // renditions per item. Re-buffering those POST bodies as text here doubles
+    // memory pressure in the public edge worker and can turn a perfectly valid
+    // internal request into a fake "stateful worker unavailable" 503 before the
+    // real worker ever sees it. Forward the original request stream directly so
+    // the public shell stays a thin transport boundary instead of becoming the
+    // upload bottleneck.
+    const upstreamRequest = new Request(
+      `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${url.pathname}${url.search}`,
+      request,
+    )
   try {
     const response = await theOnlyAllowedStatefulWorker.fetch(upstreamRequest)
     if (request.method === "HEAD") return response

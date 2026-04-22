@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { execFileSync } from "node:child_process"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
@@ -112,6 +113,7 @@ const DURABLE_OBJECT_CLASS_NAMES = [
   "IconoplasmVoteCoordinator",
   "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate",
 ]
+const ICONOPLASM_BUDGET_ATTRIBUTION_ANALYTICS_BINDING = "ICONOPLASM_BUDGET_ATTRIBUTION_ANALYTICS"
 
 function parseArgs(argv) {
   let envName = "production"
@@ -132,12 +134,70 @@ function parseArgs(argv) {
   return { envName }
 }
 
+function optionalEnv(name) {
+  return String(process.env[name] || "").trim()
+}
+
 function requireEnv(name) {
-  const value = String(process.env[name] || "").trim()
+  const value = optionalEnv(name)
   if (!value) {
     throw new Error(`${name} is required`)
   }
   return value
+}
+
+function runWranglerCli(rootDir, args = []) {
+  const safeArgs = Array.isArray(args) ? args.map((value) => String(value || "")) : []
+  if (process.platform === "win32") {
+    // Windows detail that bit us in real use:
+    // `execFileSync` does not reliably execute the `.cmd` shim the way an
+    // interactive shell does, so the OAuth reuse path silently looked like
+    // "no token available" even though `npx wrangler ...` worked fine in the
+    // terminal. Route the command through `cmd.exe /c` on Windows so the same
+    // Wrangler lane works in the snapshot generator and in operator shells.
+    const command = ["npx", "wrangler", ...safeArgs].join(" ")
+    return execFileSync("cmd.exe", ["/d", "/s", "/c", command], {
+      cwd: rootDir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    })
+  }
+  return execFileSync("npx", ["wrangler", ...safeArgs], {
+    cwd: rootDir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+}
+
+function readWranglerOAuthTokenFromCli(rootDir) {
+  try {
+    const stdout = runWranglerCli(rootDir, ["auth", "token", "--json"])
+    const payload = JSON.parse(String(stdout || "{}"))
+    return payload?.type === "oauth" && String(payload?.token || "").trim()
+      ? String(payload.token).trim()
+      : ""
+  } catch {
+    return ""
+  }
+}
+
+async function readWranglerAccountId(rootDir) {
+  const cachePath = path.join(rootDir, "node_modules", ".cache", "wrangler", "wrangler-account.json")
+  try {
+    const parsed = JSON.parse(await readFile(cachePath, "utf8"))
+    const accountId = String(parsed?.id || parsed?.account?.id || "").trim()
+    if (accountId) return accountId
+  } catch {
+    // Fall through to the CLI parse below.
+  }
+  try {
+    const stdout = runWranglerCli(rootDir, ["whoami"])
+    const match = String(stdout || "").match(/[a-f0-9]{32}/i)
+    return match ? match[0] : ""
+  } catch {
+    return ""
+  }
 }
 
 function asNumber(value) {
@@ -160,6 +220,15 @@ function isoDateDaysAgo(daysAgo) {
   const date = new Date()
   date.setUTCHours(0, 0, 0, 0)
   date.setUTCDate(date.getUTCDate() - daysAgo)
+  return date.toISOString().slice(0, 10)
+}
+
+function isoDatePlusDays(baseDate, days) {
+  const date = new Date(`${String(baseDate || "")}T00:00:00.000Z`)
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error(`Invalid ISO date for offset: ${baseDate}`)
+  }
+  date.setUTCDate(date.getUTCDate() + Number(days || 0))
   return date.toISOString().slice(0, 10)
 }
 
@@ -221,7 +290,11 @@ async function loadWranglerConfig(rootDir, envName) {
   const parsed = toml.parse(await readFile(configPath, "utf8"))
   const envConfig = envName === "staging" ? parsed.env?.staging || {} : {}
   const d1Bindings = envName === "staging" ? envConfig.d1_databases || [] : parsed.d1_databases || []
+  const analyticsDatasets = envName === "staging" ? envConfig.analytics_engine_datasets || [] : parsed.analytics_engine_datasets || []
   const iconoplasmDb = d1Bindings.find((entry) => entry.binding === "ICONOPLASM_DB")
+  const budgetAttributionDataset = analyticsDatasets.find(
+    (entry) => entry.binding === ICONOPLASM_BUDGET_ATTRIBUTION_ANALYTICS_BINDING,
+  )
   if (!iconoplasmDb?.database_id) {
     throw new Error(`Could not find ICONOPLASM_DB database_id for ${envName}`)
   }
@@ -234,6 +307,7 @@ async function loadWranglerConfig(rootDir, envName) {
     dailyBurstMultiplier: asNumber(vars.ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY),
     rowsReadHardMonthlyBudget: asNumber(vars.ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY),
     rowsWrittenHardMonthlyBudget: asNumber(vars.ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY),
+    budgetAttributionDataset: String(budgetAttributionDataset?.dataset || ""),
   }
 }
 
@@ -251,6 +325,178 @@ async function callGraphQL(apiToken, query, variables) {
     throw new Error(`Cloudflare GraphQL query failed: ${JSON.stringify(payload, null, 2)}`)
   }
   return payload
+}
+
+function analyticsDatasetIdentifier(raw) {
+  const dataset = String(raw || "").trim()
+  if (!dataset) return ""
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dataset)) {
+    throw new Error(`Invalid Analytics Engine dataset identifier: ${dataset}`)
+  }
+  return dataset
+}
+
+function analyticsSqlDateTime(dateInput) {
+  const value = new Date(dateInput)
+  if (!Number.isFinite(value.getTime())) {
+    throw new Error(`Invalid Analytics Engine SQL timestamp input: ${dateInput}`)
+  }
+  return value.toISOString().slice(0, 19).replace("T", " ")
+}
+
+async function callAnalyticsEngineSql({ apiToken, accountId, query }) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+    },
+    body: String(query || "").trim(),
+  })
+  const payload = await response.json()
+  if (!response.ok) {
+    throw new Error(`Analytics Engine SQL query failed (${response.status}): ${JSON.stringify(payload, null, 2)}`)
+  }
+  if (payload?.success === false) {
+    throw new Error(`Analytics Engine SQL API reported failure: ${JSON.stringify(payload, null, 2)}`)
+  }
+  return Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.result?.data)
+      ? payload.result.data
+      : []
+}
+
+async function fetchBudgetAttributionSnapshot({ apiToken, accountId, config, d1 }) {
+  const dataset = analyticsDatasetIdentifier(config?.budgetAttributionDataset)
+  if (!dataset) {
+    return {
+      available: false,
+      backend: "cloudflare_analytics_engine",
+      dataset: "",
+      note: "No Analytics Engine dataset is configured for Iconoplasm budget attribution in this Wrangler target.",
+      currentDay: null,
+      cycleTotals: null,
+      cycleTopRoutes: [],
+    }
+  }
+
+  const cycleStart = analyticsSqlDateTime(`${d1.cycleStartDate}T00:00:00.000Z`)
+  const nextCycleStart = analyticsSqlDateTime(`${d1.nextCycleStartDate}T00:00:00.000Z`)
+  const dayStart = analyticsSqlDateTime(`${d1.cycleEndDate}T00:00:00.000Z`)
+  const nextDay = analyticsSqlDateTime(`${isoDatePlusDays(d1.cycleEndDate, 1)}T00:00:00.000Z`)
+
+  const totalsQuery = `SELECT
+    SUM(_sample_interval * double1) AS rows_read,
+    SUM(_sample_interval * double2) AS rows_written,
+    SUM(_sample_interval * double3) AS query_count,
+    SUM(_sample_interval * double4) AS request_count,
+    SUM(_sample_interval * double9) AS target_cap_reached_events,
+    SUM(_sample_interval * double10) AS telemetry_locked_events
+  FROM ${dataset}
+  WHERE timestamp >= toDateTime('${cycleStart}')
+    AND timestamp < toDateTime('${nextCycleStart}')`
+
+  const currentDayQuery = `SELECT
+    SUM(_sample_interval * double1) AS rows_read,
+    SUM(_sample_interval * double2) AS rows_written,
+    SUM(_sample_interval * double3) AS query_count,
+    SUM(_sample_interval * double4) AS request_count,
+    SUM(_sample_interval * double9) AS target_cap_reached_events,
+    SUM(_sample_interval * double10) AS telemetry_locked_events
+  FROM ${dataset}
+  WHERE timestamp >= toDateTime('${dayStart}')
+    AND timestamp < toDateTime('${nextDay}')`
+
+  const topRoutesQuery = `SELECT
+    blob2 AS route_family,
+    blob3 AS budget_class,
+    blob4 AS actor_class,
+    blob5 AS source_class,
+    blob6 AS outcome_class,
+    SUM(_sample_interval * double4) AS request_count,
+    SUM(_sample_interval * double1) AS rows_read,
+    SUM(_sample_interval * double2) AS rows_written,
+    SUM(_sample_interval * double3) AS query_count,
+    MAX(timestamp) AS latest_at
+  FROM ${dataset}
+  WHERE timestamp >= toDateTime('${cycleStart}')
+    AND timestamp < toDateTime('${nextCycleStart}')
+  GROUP BY route_family, budget_class, actor_class, source_class, outcome_class
+  ORDER BY rows_written DESC, request_count DESC, route_family ASC
+  LIMIT 12`
+
+  let cycleTotalsRows = []
+  let currentDayRows = []
+  let topRouteRows = []
+  let sqlError = null
+  try {
+    ;[cycleTotalsRows, currentDayRows, topRouteRows] = await Promise.all([
+      callAnalyticsEngineSql({ apiToken, accountId, query: totalsQuery }),
+      callAnalyticsEngineSql({ apiToken, accountId, query: currentDayQuery }),
+      callAnalyticsEngineSql({ apiToken, accountId, query: topRoutesQuery }),
+    ])
+  } catch (error) {
+    sqlError = error instanceof Error ? error.message : String(error)
+  }
+
+  if (sqlError) {
+    // Fail loudly and honestly: route attribution only counts as available when
+    // Analytics Engine SQL returns the real custom columns we wrote. A GraphQL
+    // side path that can only see event counts is not the same product and must
+    // not masquerade as one under a softer backend label.
+    return {
+      available: false,
+      backend: "cloudflare_analytics_engine",
+      dataset,
+      note: `Analytics Engine route attribution is unavailable in this bake because the SQL endpoint failed: ${sqlError}`,
+      currentDay: null,
+      cycleTotals: null,
+      cycleTopRoutes: [],
+    }
+  }
+
+  const cycleTotals = cycleTotalsRows[0] || null
+  const currentDay = currentDayRows[0] || null
+  return {
+    available: true,
+    backend: "cloudflare_analytics_engine",
+    dataset,
+    note:
+      "Detailed route attribution is baked from Cloudflare Analytics Engine. Request, read, write, and query counts are weighted with _sample_interval so sampled data still aggregates honestly.",
+    currentDay: currentDay
+      ? {
+          date: d1.cycleEndDate,
+          rowsRead: asNumber(currentDay.rows_read),
+          rowsWritten: asNumber(currentDay.rows_written),
+          queryCount: asNumber(currentDay.query_count),
+          requestCount: asNumber(currentDay.request_count),
+          targetCapReachedEvents: asNumber(currentDay.target_cap_reached_events),
+          telemetryLockedEvents: asNumber(currentDay.telemetry_locked_events),
+        }
+      : null,
+    cycleTotals: cycleTotals
+      ? {
+          rowsRead: asNumber(cycleTotals.rows_read),
+          rowsWritten: asNumber(cycleTotals.rows_written),
+          queryCount: asNumber(cycleTotals.query_count),
+          requestCount: asNumber(cycleTotals.request_count),
+          targetCapReachedEvents: asNumber(cycleTotals.target_cap_reached_events),
+          telemetryLockedEvents: asNumber(cycleTotals.telemetry_locked_events),
+        }
+      : null,
+    cycleTopRoutes: (Array.isArray(topRouteRows) ? topRouteRows : []).map((row) => ({
+      routeFamily: String(row?.route_family || ""),
+      budgetClass: String(row?.budget_class || ""),
+      actorClass: String(row?.actor_class || ""),
+      sourceClass: String(row?.source_class || ""),
+      outcomeClass: String(row?.outcome_class || ""),
+      requestCount: asNumber(row?.request_count),
+      rowsRead: asNumber(row?.rows_read),
+      rowsWritten: asNumber(row?.rows_written),
+      queryCount: asNumber(row?.query_count),
+      latestAt: row?.latest_at ? new Date(row.latest_at).toISOString() : null,
+    })),
+  }
 }
 
 function firstAccount(payload) {
@@ -717,9 +963,19 @@ async function writeSnapshotFiles(rootDir, snapshot) {
 
 async function main() {
   const { envName } = parseArgs(process.argv)
-  const apiToken = requireEnv("CLOUDFLARE_API_TOKEN")
-  const accountId = requireEnv("CLOUDFLARE_ACCOUNT_ID")
   const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+  const apiToken = optionalEnv("CLOUDFLARE_API_TOKEN") || readWranglerOAuthTokenFromCli(rootDir)
+  if (!apiToken) {
+    throw new Error(
+      "CLOUDFLARE_API_TOKEN is required, or Wrangler must already be logged in so the snapshot generator can reuse its OAuth token.",
+    )
+  }
+  const accountId = optionalEnv("CLOUDFLARE_ACCOUNT_ID") || (await readWranglerAccountId(rootDir))
+  if (!accountId) {
+    throw new Error(
+      "CLOUDFLARE_ACCOUNT_ID is required, or Wrangler must already know the active account so the snapshot generator can recover it.",
+    )
+  }
   const config = await loadWranglerConfig(rootDir, envName)
   const d1 = await fetchD1Snapshot({
     apiToken,
@@ -733,6 +989,12 @@ async function main() {
     classNames: DURABLE_OBJECT_CLASS_NAMES,
     startDate: d1.cycleStartDate,
     endDate: d1.cycleEndDate,
+  })
+  const budgetAttribution = await fetchBudgetAttributionSnapshot({
+    apiToken,
+    accountId,
+    config,
+    d1,
   })
   const automation = buildAutomationState({ config, d1 })
   const workerLimiter = buildWorkerLimiterSnapshot({ config, d1 })
@@ -751,7 +1013,7 @@ async function main() {
   // truth in Cloudflare Billing, but keep budget/attribution facts in this
   // snapshot so the UI does not devolve into link soup.
   const snapshot = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     environment: envName,
     source: {
@@ -816,6 +1078,7 @@ async function main() {
         note: "Final bill, usage alerts, and the place reality cashes the check.",
       },
     ],
+    budgetAttribution,
     workerLimiter,
     durableObjects,
   }

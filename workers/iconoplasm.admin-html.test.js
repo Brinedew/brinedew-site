@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { Script } from "node:vm"
 
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 
@@ -31,6 +32,8 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare drilldown/)
   assert.match(ICONOPLASM_ADMIN_HTML, /var OBSERVABILITY_SNAPSHOT = /)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /\/cost\/usage/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\('\/cost\/snapshot\?ts='/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Reloading baked Cloudflare snapshot…/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewSummary\(\)/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewCoverage\(\)/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /refreshOverview\(\)/)
@@ -42,7 +45,7 @@ test("iconoplasm admin trend chart explains the baked budget pace guide", () => 
   assert.match(ICONOPLASM_ADMIN_HTML, /getWorkerLimiterSnapshot\(report\)/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Worker-side mutation headroom/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refusing to invent one from other fields/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /can we still mutate, or is today.?s worker gate already shut\?/) 
+  assert.match(ICONOPLASM_ADMIN_HTML, /can we still mutate, or is today(?:\\)?'s worker gate already shut\?/) 
   assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rowsWrittenDailyLimit/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Fast answer from the baked Cloudflare snapshot/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Account-wide DO rows_written today/)
@@ -61,4 +64,10 @@ test("iconoplasm admin keeps the observability chesterton fence comment", () => 
   assert.match(ICONOPLASM_ADMIN_HTML, /do not generate observability load from the admin page itself/)
   assert.match(ICONOPLASM_ADMIN_HTML, /just links/)
   assert.match(ICONOPLASM_ADMIN_HTML, /just a runbook/)
+})
+
+test("iconoplasm admin inline script parses", () => {
+  const match = ICONOPLASM_ADMIN_HTML.match(/<script>([\s\S]*?)<\/script>/)
+  assert.ok(match, "expected inline admin script in emitted HTML")
+  assert.doesNotThrow(() => new Script(match[1], { filename: "iconoplasm-admin-inline.js" }))
 })

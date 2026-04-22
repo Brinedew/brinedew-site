@@ -56,6 +56,16 @@ class_name = "IconoplasmVoteCoordinator"
 name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
 class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
 
+# Production account reality fence:
+# Cloudflare currently rejects production deploys for this account with
+# API code 10089 unless Analytics Engine is explicitly enabled server-side.
+# Do not leave an undeployable binding here and pretend route attribution is
+# "almost live"; the worker should ship, and the baked snapshot should report
+# that budget attribution is unavailable until the account capability exists.
+# [[analytics_engine_datasets]]
+# binding = "ICONOPLASM_BUDGET_ATTRIBUTION_ANALYTICS"
+# dataset = "iconoplasm_budget_attribution"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameSession"]
@@ -136,6 +146,10 @@ class_name = "IconoplasmVoteCoordinator"
 [[env.staging.durable_objects.bindings]]
 name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
 class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
+
+[[env.staging.analytics_engine_datasets]]
+binding = "ICONOPLASM_BUDGET_ATTRIBUTION_ANALYTICS"
+dataset = "iconoplasm_budget_attribution_staging"
 
 [[env.staging.migrations]]
 tag = "v1"

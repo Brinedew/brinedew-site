@@ -3133,7 +3133,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             eyebrow: 'Worst baked day',
             value: peakDay && peakDay.date ? (formatMonthDay(peakDay.date) + ' · ' + compactMetricNumber(peakDay.rowsWritten)) : '—',
             copy: peakDay && peakDay.date
-              ? ((peakDay.exhausted ? 'Hit the smart daily write ceiling.' : (compactMetricNumber(peakDay.rowsWrittenDailyRemaining) + ' left on the tightest baked day.')) + ' ' + formatRatioPercent(peakDay.rowsWritten, peakDay.rowsWrittenDailySmartLimit) + ' of that day\'s ceiling.')
+                ? ((peakDay.exhausted ? 'Hit the smart daily write ceiling.' : (compactMetricNumber(peakDay.rowsWrittenDailyRemaining) + ' left on the tightest baked day.')) + ' ' + formatRatioPercent(peakDay.rowsWritten, peakDay.rowsWrittenDailySmartLimit) + ' of that day\\'s ceiling.')
               : 'No peak worker-limiter day is available in this bake.'
           },
           {
@@ -3161,7 +3161,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<div class="cost-status-banner">',
           renderCostStateChip(summaryLabel, tone),
           '<strong>Worker-side mutation headroom</strong>',
-          '<div class="small">This is the write guard the worker enforces for admin mutation families. Same baked cadence as the D1 and DO panels, but aimed at the operator question: can we still mutate, or is today\'s worker gate already shut?</div>',
+          '<div class="small">This is the write guard the worker enforces for admin mutation families. Same baked cadence as the D1 and DO panels, but aimed at the operator question: can we still mutate, or is today\\'s worker gate already shut?</div>',
           '</div>',
           rows.map(function (row) {
             return renderCostDetailCard(row);
@@ -3334,7 +3334,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             eyebrow: 'Account-wide DO rows_written today',
             value: compactMetricNumber(doRowsWritten) + ' / ' + (doLimit > 0 ? compactMetricNumber(doLimit) : '—'),
             copy: doLimit > 0
-              ? compactMetricNumber(doRemaining) + ' left before Cloudflare\\'s real daily wall. This is tracked DO storage-write volume for the day, not an upload count.'
+                  ? compactMetricNumber(doRemaining) + ' left before Cloudflare\\'s real daily wall. This is tracked DO storage-write volume for the day, not an upload count.'
               : 'Daily DO ceiling missing from this bake.'
           },
         ];
@@ -3515,26 +3515,81 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function renderObservabilityQueryPack(report) {
         if (!els.costTopRoutes) return;
         var launchpad = Array.isArray(report && report.launchpad) ? report.launchpad : [];
-        if (!launchpad.length) {
-          els.costTopRoutes.innerHTML = '<div class="cost-empty-note">No Cloudflare links baked into this snapshot yet.</div>';
+        var attribution = report && report.budgetAttribution ? report.budgetAttribution : {};
+        var topRoutes = Array.isArray(attribution && attribution.cycleTopRoutes) ? attribution.cycleTopRoutes : [];
+        var currentDay = attribution && attribution.currentDay ? attribution.currentDay : {};
+        var cycleTotals = attribution && attribution.cycleTotals ? attribution.cycleTotals : {};
+        var sections = [];
+
+        if (topRoutes.length) {
+          var attributionTone = safeNum(currentDay.telemetryLockedEvents) > 0
+            ? 'danger'
+            : (safeNum(currentDay.targetCapReachedEvents) > 0 ? 'warn' : 'ok');
+          var attributionSummaryLabel = safeNum(currentDay.telemetryLockedEvents) > 0
+            ? 'telemetry locked seen'
+            : (safeNum(currentDay.targetCapReachedEvents) > 0 ? 'cap pressure seen' : 'routes baked');
+          sections.push([
+            '<div class="cost-status-banner">',
+            renderCostStateChip(attributionSummaryLabel, attributionTone),
+            '<strong>Top write-heavy mutation families this cycle</strong>',
+            '<div class="small">',
+            esc(String(attribution && attribution.note || 'Detailed route attribution is unavailable in this bake.')),
+            ' ',
+            esc(compactMetricNumber(cycleTotals.requestCount || 0) + ' request(s), ' + compactMetricNumber(cycleTotals.rowsWritten || 0) + ' rows_written in-cycle. Today: ' + compactMetricNumber(currentDay.requestCount || 0) + ' request(s), ' + compactMetricNumber(currentDay.rowsWritten || 0) + ' rows_written.'),
+            '</div>',
+            '</div>',
+            '<table class="cost-table">',
+            '<thead><tr><th>Mutation family</th><th>Outcome</th><th>Requests</th><th>Rows written</th><th>Context</th></tr></thead>',
+            '<tbody>',
+            topRoutes.map(function (row) {
+              var contextBits = [
+                row && row.budgetClass ? String(row.budgetClass) : '',
+                row && row.sourceClass ? String(row.sourceClass) : '',
+                row && row.actorClass ? String(row.actorClass) : ''
+              ].filter(Boolean);
+              if (row && row.latestAt) contextBits.push('last ' + formatTimestampShort(row.latestAt));
+              return [
+                '<tr>',
+                '<td><strong>' + esc(row && row.routeFamily || 'unknown route') + '</strong><div class="small">' + esc(compactMetricNumber(row && row.rowsRead || 0) + ' rows_read · ' + compactMetricNumber(row && row.queryCount || 0) + ' queries') + '</div></td>',
+                '<td>' + renderCostStateChip(String(row && row.outcomeClass || 'unknown'), String(row && row.outcomeClass || '').indexOf('error') >= 0 ? 'danger' : (String(row && row.outcomeClass || '') === 'limited' ? 'warn' : 'ok')) + '</td>',
+                '<td>' + esc(compactMetricNumber(row && row.requestCount || 0)) + '</td>',
+                '<td>' + esc(compactMetricNumber(row && row.rowsWritten || 0)) + '</td>',
+                '<td>' + esc(contextBits.join(' · ') || 'No extra context baked.') + '</td>',
+                '</tr>'
+              ].join('');
+            }).join(''),
+            '</tbody>',
+            '</table>'
+          ].join(''));
+        } else if (attribution && attribution.available === false && attribution.note) {
+          sections.push('<div class="cost-empty-note">' + esc(String(attribution.note || 'Analytics Engine attribution is not available in this bake yet.')) + '</div>');
+        }
+
+        if (launchpad.length) {
+          sections.push([
+            '<table class="cost-table">',
+            '<thead><tr><th>Cloudflare view</th><th>Open when</th></tr></thead>',
+            '<tbody>',
+            launchpad.map(function (item) {
+              return [
+                '<tr>',
+                '<td><a href="' + esc(item && item.href || '#') + '" target="_blank" rel="noreferrer">' + esc(item && item.label || 'Cloudflare dashboard') + '</a></td>',
+                '<td>' + esc(item && item.note || '') + '</td>',
+                '</tr>'
+              ].join('');
+            }).join(''),
+            '</tbody>',
+            '</table>',
+            '<div class="small">Use Cloudflare links as drilldown, not as the primary dashboard. Billing page remains the bill of record.</div>'
+          ].join(''));
+        }
+
+        if (!sections.length) {
+          els.costTopRoutes.innerHTML = '<div class="cost-empty-note">No baked route attribution or Cloudflare drilldown links are available yet.</div>';
           return;
         }
-        els.costTopRoutes.innerHTML = [
-          '<table class="cost-table">',
-          '<thead><tr><th>Cloudflare view</th><th>Open when</th></tr></thead>',
-          '<tbody>',
-          launchpad.map(function (item) {
-            return [
-              '<tr>',
-              '<td><a href="' + esc(item && item.href || '#') + '" target="_blank" rel="noreferrer">' + esc(item && item.label || 'Cloudflare dashboard') + '</a></td>',
-              '<td>' + esc(item && item.note || '') + '</td>',
-              '</tr>'
-            ].join('');
-          }).join(''),
-          '</tbody>',
-          '</table>',
-          '<div class="small">Use this table as drilldown, not as the primary dashboard. Billing page remains the bill of record.</div>'
-        ].join('');
+
+        els.costTopRoutes.innerHTML = sections.join('');
       }
 
       // Chesterton's fence:
@@ -3657,9 +3712,32 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       async function refreshCostUsage() {
         if (els.costRefresh) els.costRefresh.disabled = true;
-        if (els.costUpdatedAt) els.costUpdatedAt.textContent = 'Loading baked Cloudflare snapshot…';
+        var shouldRefetchBakedSnapshot = Boolean(state.costLoaded);
+        if (els.costUpdatedAt) {
+          els.costUpdatedAt.textContent = shouldRefetchBakedSnapshot
+            ? 'Reloading baked Cloudflare snapshot…'
+            : 'Loading baked Cloudflare snapshot…';
+        }
         try {
           var report = OBSERVABILITY_SNAPSHOT || {};
+          // Chesterton's fence:
+          // This button must refresh only the already-baked snapshot payload.
+          // Pulling live telemetry here would recreate the exact budget hazard we
+          // retired: admin observability generating its own observability load.
+          // So the manual reload hits a tiny authenticated endpoint that returns
+          // the baked snapshot constant with no D1, DO, or GraphQL work behind it.
+          if (shouldRefetchBakedSnapshot) {
+            var payload = await apiJson('/cost/snapshot?ts=' + encodeURIComponent(String(Date.now())), {
+              method: 'GET',
+              headers: {
+                'Cache-Control': 'no-store'
+              }
+            });
+            if (payload && payload.snapshot && typeof payload.snapshot === 'object') {
+              report = payload.snapshot;
+              OBSERVABILITY_SNAPSHOT = report;
+            }
+          }
           state.costLoaded = true;
           state.costReport = report;
           renderCostUsage(report);

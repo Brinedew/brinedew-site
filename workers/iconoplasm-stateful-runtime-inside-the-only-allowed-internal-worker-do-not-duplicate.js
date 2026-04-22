@@ -2,6 +2,8 @@ import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { writeIconoplasmBudgetAttributionDataPoint } from "./iconoplasm-budget-attribution-analytics.js"
+import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
@@ -76,9 +78,6 @@ const ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH = Symbol(
 )
 const ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_DO_NOT_SET_CASUALLY"
-const ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_QUERY_THRESHOLD_DO_NOT_TUNE_LIGHTLY = 25
-const ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_ROWS_READ_THRESHOLD_DO_NOT_TUNE_LIGHTLY = 5000
-const ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_ROWS_WRITTEN_THRESHOLD_DO_NOT_TUNE_LIGHTLY = 500
 
 const catalogCache = {
   hash: null,
@@ -219,7 +218,31 @@ function iconoplasmBudgetCycleInfo(now = new Date(), cycleDayOfMonth = 7) {
   }
 }
 
-function iconoplasmD1BudgetConfigFromEnv(env, now = new Date()) {
+// Chesterton's fence for the Iconoplasm budget path:
+//
+// The previous implementation was "safe" in three separate ways that fought
+// each other and collectively became the most expensive part of the system:
+// 1) monthly D1 ceilings lived in one helper,
+// 2) the admin mutation limiter derived a second write ceiling elsewhere, and
+// 3) the shared budget Durable Object flushed mid-request and also wrote
+//    attribution rows on the hot path.
+//
+// That meant one logical admin sync request could pay several times just to
+// narrate its own spending: once for the real D1 work, again for repeated DO
+// `/record` flushes, and again for attribution writes inside the same global
+// ledger object. Cloudflare's current guidance points the other direction:
+// keep shared coordination narrow, keep hot telemetry off synchronous request
+// paths, and do not turn a global DO into a universal accounting singleton.
+//
+// This unified policy function exists so every budget-derived decision comes
+// from one source of truth. The D1 monthly limits, cycle math, burst factor,
+// and mutation-limiter target percentage are intentionally read together here
+// so future edits cannot quietly reintroduce a second or third independent cap
+// with slightly different semantics. If a future refactor moves detailed cost
+// attribution into Analytics Engine or Queues, this policy should remain the
+// enforcement/configuration boundary while the attribution plumbing changes
+// underneath it.
+function iconoplasmBudgetPolicyFromEnv(env, now = new Date()) {
   const rowsReadMonthlyLimit = positiveIntFromEnv(
     env?.[ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
     0,
@@ -237,13 +260,53 @@ function iconoplasmD1BudgetConfigFromEnv(env, now = new Date()) {
     env?.[ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_ENV_DO_NOT_SET_CASUALLY],
     3,
   )
+  const targetDailyPercent = Math.max(
+    1,
+    Math.min(
+      100,
+      positiveNumberFromEnv(
+        env?.[ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY],
+        90,
+      ),
+    ),
+  )
   return {
-    rowsReadMonthlyLimit,
-    rowsWrittenMonthlyLimit,
-    cycleDayOfMonth,
-    dailyBurstMultiplier,
-    cycleInfo: iconoplasmBudgetCycleInfo(now, cycleDayOfMonth),
+    d1: {
+      rowsReadMonthlyLimit,
+      rowsWrittenMonthlyLimit,
+      cycleDayOfMonth,
+      dailyBurstMultiplier,
+      cycleInfo: iconoplasmBudgetCycleInfo(now, cycleDayOfMonth),
+    },
+    mutationLimiter: {
+      active: true,
+      budgetBasis: "d1_rows_written_daily_smart_limit",
+      budgetBasisLabel: "D1 rows_written daily smart limit",
+      targetDailyPercent,
+      explainsDoCap: false,
+      explanation:
+        "This worker now derives its mutation-write ceiling from one shared Iconoplasm budget policy built on the D1 rows_written daily smart limit, not the Cloudflare Durable Objects rows_written daily cap. The Durable Objects cap is tracked separately in Cloudflare observability instead of being copied into a second hot-path limiter.",
+    },
   }
+}
+
+function iconoplasmD1BudgetConfigFromEnv(env, now = new Date()) {
+  return iconoplasmBudgetPolicyFromEnv(env, now)?.d1 || null
+}
+
+function iconoplasmMutationLimiterPolicyFromEnv(env, now = new Date()) {
+  const policy = iconoplasmBudgetPolicyFromEnv(env, now)
+  return (
+    policy?.mutationLimiter || {
+      active: false,
+      budgetBasis: "d1_rows_written_daily_smart_limit",
+      budgetBasisLabel: "D1 rows_written daily smart limit",
+      targetDailyPercent: 90,
+      explainsDoCap: false,
+      explanation:
+        "This worker derives mutation ceilings from the shared Iconoplasm D1 budget policy when that policy is enabled.",
+    }
+  )
 }
 
 function iconoplasmBudgetRouteFamilyFromPath(path) {
@@ -307,7 +370,8 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/requests/fulfill") return "admin_requests_fulfill"
   if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
     return "admin_gene_request_diagnostics"
-  if (path === "/api/iconoplasm/admin/cost/usage") return "admin_cost_usage"
+  if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
+    return "admin_cost_usage"
   if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER) return "internal_repair"
   if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return "internal_vote_projection_refresh"
@@ -462,11 +526,7 @@ function iconoplasmMutationLimiterChunkSlowZoneRows(snapshot) {
 }
 
 function iconoplasmMutationLimiterTargetDailyPercent(env) {
-  const configured = positiveNumberFromEnv(
-    env?.[ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY],
-    90,
-  )
-  return Math.max(1, Math.min(100, configured))
+  return iconoplasmMutationLimiterPolicyFromEnv(env).targetDailyPercent
 }
 
 function iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env) {
@@ -476,7 +536,10 @@ function iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env) {
       ? null
       : Math.max(0, Number(snapshot?.rows_written_daily_smart_limit || 0) || 0)
   if (smartLimit === null) return null
-  return Math.max(0, Math.floor(smartLimit * (iconoplasmMutationLimiterTargetDailyPercent(env) / 100)))
+  return Math.max(
+    0,
+    Math.floor(smartLimit * (iconoplasmMutationLimiterPolicyFromEnv(env).targetDailyPercent / 100)),
+  )
 }
 
 function iconoplasmMutationLimiterBudgetStatus(state, snapshot = null) {
@@ -596,15 +659,12 @@ function iconoplasmD1DailyBudgetProjectedSnapshot(state) {
 }
 
 function iconoplasmD1DailyBudgetShouldFlushPendingUsage(state) {
-  const pendingRowsRead = Math.max(0, Number(state?.pendingUsage?.rowsRead || 0) || 0)
-  const pendingRowsWritten = Math.max(0, Number(state?.pendingUsage?.rowsWritten || 0) || 0)
-  const pendingQueryCount = Math.max(0, Number(state?.pendingUsage?.queryCount || 0) || 0)
-  if (pendingRowsRead <= 0 && pendingRowsWritten <= 0) return false
-  return (
-    pendingQueryCount >= ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_QUERY_THRESHOLD_DO_NOT_TUNE_LIGHTLY ||
-    pendingRowsRead >= ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_ROWS_READ_THRESHOLD_DO_NOT_TUNE_LIGHTLY ||
-    pendingRowsWritten >= ICONOPLASM_D1_BUDGET_LEDGER_FLUSH_ROWS_WRITTEN_THRESHOLD_DO_NOT_TUNE_LIGHTLY
-  )
+  // 2026 sanity fence: this DO is the shared enforcement counter, not a
+  // per-query telemetry firehose. Threshold-based flushes multiplied DO writes
+  // during big sync requests and turned the guardrail into the dominant bill.
+  // Keep the hot path to one shared ledger write at request end unless the
+  // projected budget is already exhausted and we need an immediate hard stop.
+  return false
 }
 
 class IconoplasmD1DailyBudgetExceededError extends Error {
@@ -713,6 +773,83 @@ function iconoplasmAdminMutationLimiterDetail(
     telemetry_locked_reason: telemetryLocked ? String(telemetryLockedReason || "").trim() || null : null,
     budget_snapshot: budgetStatus.snapshot || state?.lastSnapshot || null,
   }
+}
+
+function iconoplasmBudgetAttributionOutcomeClass(responseStatus, errorCode = "") {
+  const status = Math.max(0, Number(responseStatus || 0) || 0)
+  const code = String(errorCode || "").trim()
+  if (code === "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE") return "limited"
+  if (code === "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED") return "budget_exhausted"
+  if (status >= 500) return "server_error"
+  if (status >= 400) return "client_error"
+  if (status >= 200 && status < 400) return "ok"
+  return "unknown"
+}
+
+function emitIconoplasmBudgetAttributionTelemetryFromState(
+  env,
+  request,
+  state,
+  { responseStatus = 0, errorCode = "", limiterDetail = null } = {},
+) {
+  if (!state || !request) return false
+  const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
+  return writeIconoplasmBudgetAttributionDataPoint(env, {
+    cycleKey: state?.cycleKey || budgetStatus?.snapshot?.cycle_key || "",
+    routeFamily: state?.attribution?.route_family || null,
+    budgetClass: state?.attribution?.budget_class || null,
+    actorClass: state?.attribution?.actor_class || null,
+    sourceClass: state?.attribution?.source_class || null,
+    outcomeClass: iconoplasmBudgetAttributionOutcomeClass(responseStatus, errorCode),
+    errorCode,
+    requestMethod: request.method,
+    limiterStage: limiterDetail?.stage || (state?.mutationLimiter?.active ? "request_end" : ""),
+    rowsRead: state?.requestUsage?.rowsRead || 0,
+    rowsWritten: state?.requestUsage?.rowsWritten || 0,
+    queryCount: state?.requestUsage?.queryCount || 0,
+    requestCount: state?.requestUsage?.requestCountRecorded ? 1 : 0,
+    responseStatus,
+    targetDailyPercent: budgetStatus?.target_daily_percent,
+    targetRowsWrittenCeiling: budgetStatus?.target_rows_written_ceiling,
+    rowsWrittenTargetRemaining: budgetStatus?.rows_written_target_remaining,
+    targetCapReached: budgetStatus?.target_cap_reached,
+    telemetryLocked: Boolean(limiterDetail?.telemetry_locked),
+  })
+}
+
+function emitIconoplasmBudgetAttributionTelemetryForLimiterRejection(
+  env,
+  request,
+  detail,
+  { responseStatus = 503 } = {},
+) {
+  if (!request || !detail) return false
+  const fallbackBudgets = iconoplasmD1BudgetConfigFromEnv(env)
+  const fallbackAttribution = iconoplasmD1BudgetAttributionFromRequest(request)
+  return writeIconoplasmBudgetAttributionDataPoint(env, {
+    cycleKey:
+      detail?.budget_snapshot?.cycle_key ||
+      fallbackBudgets?.cycleInfo?.cycleKey ||
+      "",
+    routeFamily: detail?.route_family || fallbackAttribution?.route_family || null,
+    budgetClass: detail?.budget_class || fallbackAttribution?.budget_class || null,
+    actorClass: detail?.actor_class || fallbackAttribution?.actor_class || null,
+    sourceClass: detail?.source_class || fallbackAttribution?.source_class || null,
+    outcomeClass: iconoplasmBudgetAttributionOutcomeClass(responseStatus, "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE"),
+    errorCode: "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE",
+    requestMethod: request.method,
+    limiterStage: detail?.stage || "preflight",
+    rowsRead: detail?.rows_read_request || 0,
+    rowsWritten: detail?.rows_written_request || 0,
+    queryCount: detail?.query_count_request || 0,
+    requestCount: 1,
+    responseStatus,
+    targetDailyPercent: detail?.target_daily_percent,
+    targetRowsWrittenCeiling: detail?.target_rows_written_ceiling,
+    rowsWrittenTargetRemaining: detail?.rows_written_target_remaining,
+    targetCapReached: detail?.target_cap_reached,
+    telemetryLocked: Boolean(detail?.telemetry_locked),
+  })
 }
 
 async function flushIconoplasmD1DailyBudgetPendingUsage(state) {
@@ -937,9 +1074,10 @@ function iconoplasmAdminMutationLimiterSnapshotFromEnv(env) {
   if (!state?.mutationLimiter?.active) return null
   const usage = iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env) || null
   const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
+  const policy = iconoplasmMutationLimiterPolicyFromEnv(state?.rawEnv)
   return {
-    budget_basis: "d1_rows_written_daily_smart_limit",
-    budget_basis_label: "D1 rows_written daily smart limit",
+    budget_basis: policy.budgetBasis,
+    budget_basis_label: policy.budgetBasisLabel,
     target_daily_percent: budgetStatus.target_daily_percent || null,
     target_rows_written_ceiling: budgetStatus.target_rows_written_ceiling,
     rows_written_target_remaining: budgetStatus.rows_written_target_remaining,
@@ -957,15 +1095,14 @@ function iconoplasmAdminMutationLimiterSnapshotFromEnv(env) {
 function iconoplasmAdminMutationLimiterPolicyFromEnv(env) {
   const snapshot = iconoplasmAdminMutationLimiterSnapshotFromEnv(env)
   const budgetConfig = iconoplasmD1BudgetConfigFromEnv(env)
+  const policy = iconoplasmMutationLimiterPolicyFromEnv(env)
   return {
-    active: !!snapshot || !!budgetConfig,
-    budget_basis: snapshot?.budget_basis || "d1_rows_written_daily_smart_limit",
-    budget_basis_label: snapshot?.budget_basis_label || "D1 rows_written daily smart limit",
-    target_daily_percent:
-      snapshot?.target_daily_percent || iconoplasmMutationLimiterTargetDailyPercent(env),
-    explains_do_cap: false,
-    explanation:
-      "This worker currently gates sync mutations against the D1 rows_written daily smart limit, not the Cloudflare Durable Objects rows_written daily cap.",
+    active: Boolean(snapshot || policy.active || budgetConfig),
+    budget_basis: snapshot?.budget_basis || policy.budgetBasis,
+    budget_basis_label: snapshot?.budget_basis_label || policy.budgetBasisLabel,
+    target_daily_percent: snapshot?.target_daily_percent || policy.targetDailyPercent,
+    explains_do_cap: policy.explainsDoCap,
+    explanation: policy.explanation,
   }
 }
 
@@ -4098,7 +4235,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/overview") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/cost/usage") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/coverage") return requestMethod === "GET" || requestMethod === "HEAD"
@@ -6378,7 +6516,6 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       const rowsWritten = Math.max(0, Number(payload?.rows_written || 0) || 0)
       const queryCount = Math.max(0, Number(payload?.query_count || 0) || 0)
       const requestCount = Math.max(0, Number(payload?.request_count || 0) || 0)
-      const attribution = payload?.attribution && typeof payload.attribution === "object" ? payload.attribution : null
       this.state.storage.sql.exec(
         `INSERT INTO daily_budget_usage (
            day_key,
@@ -6403,37 +6540,12 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
         queryCount,
         requestCount,
       )
-      if (attribution && (rowsRead > 0 || rowsWritten > 0 || requestCount > 0)) {
-        this.state.storage.sql.exec(
-          `INSERT INTO daily_budget_usage_attribution (
-             day_key,
-             cycle_key,
-             route_family,
-             actor_class,
-             source_class,
-             rows_read,
-             rows_written,
-             query_count,
-             request_count,
-             updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(day_key, cycle_key, route_family, actor_class, source_class) DO UPDATE SET
-             rows_read = daily_budget_usage_attribution.rows_read + excluded.rows_read,
-             rows_written = daily_budget_usage_attribution.rows_written + excluded.rows_written,
-             query_count = daily_budget_usage_attribution.query_count + excluded.query_count,
-             request_count = daily_budget_usage_attribution.request_count + excluded.request_count,
-             updated_at = CURRENT_TIMESTAMP`,
-          dayKey,
-          cycleKey,
-          String(attribution?.route_family || "unknown"),
-          String(attribution?.actor_class || "unknown"),
-          String(attribution?.source_class || "unknown"),
-          rowsRead,
-          rowsWritten,
-          queryCount,
-          requestCount,
-        )
-      }
+      // 2026 architecture fence: this DO remains the shared enforcement ledger,
+      // but route-level attribution no longer belongs on the synchronous admin
+      // mutation hot path. Updating both tables per request made the budget DO
+      // pay twice to describe each write. Keep historical attribution rows
+      // readable for forensics, but stop minting new ones here; detailed cost
+      // attribution now comes from Cloudflare observability and baked snapshots.
       return Response.json(this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle))
     }
 
@@ -8868,15 +8980,6 @@ function normalizeSyncFinalizationVisionIds(rawVisionIds, { maxItems = 1000 } = 
   return out
 }
 
-function parseSyncFinalizationJsonArray(rawValue, fallback = []) {
-  try {
-    const parsed = JSON.parse(String(rawValue || "[]"))
-    return Array.isArray(parsed) ? parsed : fallback
-  } catch {
-    return fallback
-  }
-}
-
 function normalizeSyncFinalizationJobSymbols(rawSymbols, { maxItems = 5000 } = {}) {
   const out = []
   const seen = new Set()
@@ -8888,6 +8991,15 @@ function normalizeSyncFinalizationJobSymbols(rawSymbols, { maxItems = 5000 } = {
     if (out.length >= maxItems) break
   }
   return out
+}
+
+function parseSyncFinalizationJsonArray(rawValue, fallback = []) {
+  try {
+    const parsed = JSON.parse(String(rawValue || "[]"))
+    return Array.isArray(parsed) ? parsed : fallback
+  } catch {
+    return fallback
+  }
 }
 
 function mapSyncFinalizationJobRow(row) {
@@ -9373,16 +9485,47 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     }
   }
 
+  const pendingFinalizeRowsResp = await env.ICONOPLASM_DB.prepare(
+    `SELECT vision_ids_json
+     FROM icono_sync_finalization_jobs
+     WHERE status <> ?
+       AND phase = ?
+       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+  )
+    .bind(
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+      scopedEnabled,
+      scopedSymbolsJson,
+    )
+    .all()
+  const pendingFinalizeRows = Array.isArray(pendingFinalizeRowsResp?.results) ? pendingFinalizeRowsResp.results : []
+  const uniqueVisionIds = normalizeSyncFinalizationVisionIds(
+    pendingFinalizeRows.flatMap((row) => {
+      try {
+        const parsed = JSON.parse(String(row?.vision_ids_json || "[]"))
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    }),
+    { maxItems: 5000 },
+  )
+
   // Chesterton's fence: dashboard refresh + gallery invalidation is the one
   // intentionally global tail step. Keep it out of every per-symbol phase so a
   // single finalizer runs once after the queue drains, instead of repeating the
-  // same global work until the worker falls over near the finish line.
+  // same global work until the worker falls over near the finish line. Vision
+  // rollups follow the same rule: dedupe them across the whole scoped drain
+  // instead of recomputing the same shared vision IDs once per symbol.
   await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
     path: "/api/iconoplasm/admin/read-models/sync",
     payload: {
       symbols: [],
-      vision_ids: [],
-      skip_vision_rollups: true,
+      vision_ids: uniqueVisionIds,
+      skip_vote_summaries: true,
+      skip_gene_rollups: true,
+      skip_vision_rollups: uniqueVisionIds.length <= 0,
       skip_dashboard: false,
       invalidate_gallery: true,
     },
@@ -12947,154 +13090,197 @@ async function handlePublicGallery(request, env, ctx) {
 export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx = { waitUntil() {} }) {
   const url = new URL(request.url)
   const path = url.pathname
+  let meteredEnv = env
+  let responseStatus = 0
+  let handledError = null
   try {
-    try {
-      if (request.method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: corsHeaders() })
-      }
-      if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)) {
-        return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
-      }
-
-      env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
-
-      if (
-        path === "/health" ||
-        path === "/api/health" ||
-        path === "/admin" ||
-        path === "/blocklist" ||
-        path === "/blocklist/" ||
-        path === "/artist-styles" ||
-        path === "/artist-styles/"
-      ) {
-        return await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-          request,
-          env,
-          ctx,
-        )
-      }
-
-      if (isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
-        const payload = await parseJsonBody(request)
-        return json(
-          await repairCanonInvariants(env, {
-            limit: payload?.limit,
-            actorId: payload?.actorId,
-            reason: payload?.reason,
-          }),
-          200,
-          { "Cache-Control": "no-store" },
-        )
-      }
-
-      if (isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
-        const payload = await parseJsonBody(request)
-        return json(
-          await processPendingVoteProjectionRefreshJobs(env, {
-            limit: payload?.limit,
-          }),
-          200,
-          { "Cache-Control": "no-store" },
-        )
-      }
-
-      if (isIconoplasmSyncFinalizationProcessRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
-        const payload = await parseJsonBody(request)
-        return json(
-          await processPendingSyncFinalizationJobs(env, ctx, {
-            limit: payload?.limit,
-            symbols: payload?.symbols,
-            finalizeIfDrained: coerceBoolean(
-              payload?.finalize_if_drained ?? payload?.finalizeIfDrained,
-              true,
-            ),
-          }),
-          200,
-          { "Cache-Control": "no-store" },
-        )
-      }
-
-      if (path === publicApiPath("/metadata")) {
-        return await handlePublicMetadata(request, env)
-      }
-      if (path === publicApiPath("/catalog/manifest")) {
-        return await handlePublicCatalogManifest(request, env)
-      }
-      if (isPublicCatalogArtifactPath(path)) {
-        return await handlePublicCatalogArtifact(env, path)
-      }
-      if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
-        return await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-          request,
-          env,
-          ctx,
-        )
-      }
-      if (path.startsWith("/portraits/")) {
-        return await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-          request,
-          env,
-          ctx,
-        )
-      }
-      if (path === publicApiPath("/gallery")) {
-        return await handlePublicGallery(request, env, ctx)
-      }
-      if (path === publicApiPath("/genes/search")) {
-        return await handlePublicGeneSearch(request, env)
-      }
-      if (path === publicApiPath("/genes/batch")) {
-        return await handlePublicGeneBatch(request, env)
-      }
-      if (path.startsWith(publicApiPath("/genes/"))) {
-        const url = new URL(request.url)
-        return json(publicRichRouteDeniedPayload(url, "gene_detail"), 403, { "Cache-Control": "no-store" })
-      }
-      if (path === publicApiPath("/resolve")) {
-        return await handlePublicResolve(request, env)
-      }
-      if (path === publicApiPath("/changes")) {
-        return await handlePublicChanges(request, env)
-      }
-      if (path.startsWith(publicApiPath("/media/"))) {
-        const rawSymbol = path.slice(publicApiPath("/media/").length)
-        return await handlePublicMedia(request, env, rawSymbol)
-      }
-      if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
-        return await handleSiteGeneDetail(request, env, path)
-      }
-      if (path.startsWith("/api/iconoplasm/")) {
-        const headers = new Headers(request.headers)
-        headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
-        const internalRequest = new Request(request, { headers })
-        return await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-          internalRequest,
-          env,
-          ctx,
-        )
-      }
-
-      return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
-    } finally {
-      await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
+    if (request.method === "OPTIONS") {
+      responseStatus = 204
+      return new Response(null, { status: 204, headers: corsHeaders() })
     }
+    if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)) {
+      responseStatus = 404
+      return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
+    }
+
+    meteredEnv = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
+
+    if (
+      path === "/health" ||
+      path === "/api/health" ||
+      path === "/admin" ||
+      path === "/blocklist" ||
+      path === "/blocklist/" ||
+      path === "/artist-styles" ||
+      path === "/artist-styles/"
+    ) {
+      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        meteredEnv,
+        ctx,
+      )
+      responseStatus = response.status
+      return response
+    }
+
+    if (isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
+      const payload = await parseJsonBody(request)
+      const response = json(
+        await repairCanonInvariants(meteredEnv, {
+          limit: payload?.limit,
+          actorId: payload?.actorId,
+          reason: payload?.reason,
+        }),
+        200,
+        { "Cache-Control": "no-store" },
+      )
+      responseStatus = response.status
+      return response
+    }
+
+    if (isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
+      const payload = await parseJsonBody(request)
+      const response = json(
+        await processPendingVoteProjectionRefreshJobs(meteredEnv, {
+          limit: payload?.limit,
+        }),
+        200,
+        { "Cache-Control": "no-store" },
+      )
+      responseStatus = response.status
+      return response
+    }
+
+    if (isIconoplasmSyncFinalizationProcessRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
+      const payload = await parseJsonBody(request)
+      const response = json(
+        await processPendingSyncFinalizationJobs(meteredEnv, ctx, {
+          limit: payload?.limit,
+          symbols: payload?.symbols,
+          finalizeIfDrained: coerceBoolean(
+            payload?.finalize_if_drained ?? payload?.finalizeIfDrained,
+            true,
+          ),
+        }),
+        200,
+        { "Cache-Control": "no-store" },
+      )
+      responseStatus = response.status
+      return response
+    }
+
+    if (path === publicApiPath("/metadata")) {
+      const response = await handlePublicMetadata(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
+    if (path === publicApiPath("/catalog/manifest")) {
+      const response = await handlePublicCatalogManifest(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
+    if (isPublicCatalogArtifactPath(path)) {
+      const response = await handlePublicCatalogArtifact(meteredEnv, path)
+      responseStatus = response.status
+      return response
+    }
+    if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
+      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        meteredEnv,
+        ctx,
+      )
+      responseStatus = response.status
+      return response
+    }
+    if (path.startsWith("/portraits/")) {
+      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        meteredEnv,
+        ctx,
+      )
+      responseStatus = response.status
+      return response
+    }
+    if (path === publicApiPath("/gallery")) {
+      const response = await handlePublicGallery(request, meteredEnv, ctx)
+      responseStatus = response.status
+      return response
+    }
+    if (path === publicApiPath("/genes/search")) {
+      const response = await handlePublicGeneSearch(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
+    if (path === publicApiPath("/genes/batch")) {
+      const response = await handlePublicGeneBatch(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
+    if (path.startsWith(publicApiPath("/genes/"))) {
+      const deniedUrl = new URL(request.url)
+      const response = json(publicRichRouteDeniedPayload(deniedUrl, "gene_detail"), 403, { "Cache-Control": "no-store" })
+      responseStatus = response.status
+      return response
+    }
+    if (path === publicApiPath("/resolve")) {
+      const response = await handlePublicResolve(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
+    if (path === publicApiPath("/changes")) {
+      const response = await handlePublicChanges(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
+    if (path.startsWith(publicApiPath("/media/"))) {
+      const rawSymbol = path.slice(publicApiPath("/media/").length)
+      const response = await handlePublicMedia(request, meteredEnv, rawSymbol)
+      responseStatus = response.status
+      return response
+    }
+    if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
+      const response = await handleSiteGeneDetail(request, meteredEnv, path)
+      responseStatus = response.status
+      return response
+    }
+    if (path.startsWith("/api/iconoplasm/")) {
+      const headers = new Headers(request.headers)
+      headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
+      const internalRequest = new Request(request, { headers })
+      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        internalRequest,
+        meteredEnv,
+        ctx,
+      )
+      responseStatus = response.status
+      return response
+    }
+
+    responseStatus = 404
+    return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
   } catch (error) {
+    handledError = error
     if (error instanceof IconoplasmD1DailyBudgetExceededError) {
+      responseStatus = 503
       return json(iconoplasmD1DailyBudgetExceededPayload(error.snapshot), 503, {
         "Cache-Control": "no-store",
       })
     }
     if (error instanceof IconoplasmD1DailyBudgetConfigurationError) {
+      responseStatus = 500
       return json(iconoplasmD1DailyBudgetConfigurationPayload(error.message), 500, {
         "Cache-Control": "no-store",
       })
     }
     if (error instanceof IconoplasmAdminMutationLimiterActiveError) {
+      responseStatus = 503
       return json(iconoplasmAdminMutationLimiterActivePayload(error.detail), 503, {
         "Cache-Control": "no-store",
       })
     }
     if (error instanceof IconoplasmUnclassifiedHandledRouteError) {
+      responseStatus = 500
       return json(
         {
           error:
@@ -13107,6 +13293,29 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       )
     }
     throw error
+  } finally {
+    await flushIconoplasmD1DailyBudgetUsageFromEnv(meteredEnv)
+    const budgetState = meteredEnv?.[ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH] || null
+    if (budgetState) {
+      emitIconoplasmBudgetAttributionTelemetryFromState(meteredEnv, request, budgetState, {
+        responseStatus,
+        errorCode:
+          handledError instanceof IconoplasmD1DailyBudgetExceededError
+            ? "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED"
+            : handledError instanceof IconoplasmAdminMutationLimiterActiveError
+              ? "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE"
+              : handledError instanceof IconoplasmD1DailyBudgetConfigurationError
+                ? "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_MISCONFIGURED"
+                : handledError instanceof IconoplasmUnclassifiedHandledRouteError
+                  ? "ICONOPLASM_ROUTE_CLASSIFICATION_MISSING"
+                  : "",
+        limiterDetail: handledError instanceof IconoplasmAdminMutationLimiterActiveError ? handledError.detail : null,
+      })
+    } else if (handledError instanceof IconoplasmAdminMutationLimiterActiveError) {
+      emitIconoplasmBudgetAttributionTelemetryForLimiterRejection(meteredEnv, request, handledError.detail, {
+        responseStatus,
+      })
+    }
   }
 }
 
@@ -15706,6 +15915,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
+    if (path === "/api/iconoplasm/admin/cost/snapshot" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_cost_snapshot_403", json({ error: "Unauthorized" }, 403))
+      return done(
+        "admin_cost_snapshot",
+        json(
+          {
+            ok: true,
+            snapshot: ICONOPLASM_OBSERVABILITY_SNAPSHOT,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     const geneRequestDiagnosticsMatch = path.match(/^\/api\/iconoplasm\/admin\/requests\/gene\/([^/]+)\/diagnostics$/)
     if (geneRequestDiagnosticsMatch && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
@@ -16566,7 +16791,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const results = []
       let processed = 0
       let failed = 0
-      const ingestConcurrency = dryRun ? 16 : 12
+      const binaryUploadLikelyItemCount = itemsRaw.filter((rawItem) => {
+        const item = rawItem && typeof rawItem === "object" ? rawItem : {}
+        if (coerceBoolean(item?.force_upload ?? item?.forceUpload, false)) return true
+        return !coerceBoolean(item?.remote_known, false)
+      }).length
+      // B-437 / live GUI sync hardening: workstation repair runs spend most of
+      // their time on metadata-only ingest, i.e. D1 upserts with no portrait
+      // uploads. Running 12 of those in parallel inside one stateful worker
+      // request turned out to be the wrong shape: the public edge kept seeing
+      // "the only allowed stateful worker is unavailable" after a fixed number
+      // of ingest requests, even after batch size dropped from 500 to 100. The
+      // request count stayed suspiciously similar while the per-request fan-out
+      // stayed constant, which points at worker-local concurrency pressure, not
+      // the outer batch size. Keep binary-upload requests moderately parallel,
+      // but serialize metadata-only repair traffic much more aggressively.
+      const ingestConcurrency = dryRun ? 8 : binaryUploadLikelyItemCount > 0 ? 6 : 1
 
       const ingestOne = async (rawItem) => {
         try {

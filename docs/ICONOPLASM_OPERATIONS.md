@@ -116,6 +116,36 @@ Admin classic gallery mode is different. That mode should use the classic public
 - If names look stale or absent, compare `icono_gene_essence` and `icono_gene_catalog` instead of trusting one blindly.
 - If published portraits look wrong, that is usually `icono_publish_state` plus `icono_portrait_assets`, not `icono_gene_essence`.
 
+## website ops sync: durable objects telemetry guard
+
+If Website Ops shows a last-finished message like:
+
+`Paused website sync because the local Cloudflare Durable Objects guard lost live telemetry. Website Ops will not keep mutating blindly past the 50% DO ceiling. (live DO telemetry unavailable during candidate ingest batch)`
+
+then treat that as a **real stop condition**, not a flaky retry candidate.
+
+What it means:
+
+- the workstation could no longer read live Cloudflare Durable Objects `rows_written` usage
+- the local 50% DO guard therefore could not prove remaining headroom
+- the sync intentionally failed closed during a mutating stage instead of guessing
+
+What to do next:
+
+1. fix Cloudflare telemetry/auth first
+  - check the Website Ops Cloudflare diagnostic in the GUI
+  - verify the workstation can reuse `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` or Wrangler-auth cache successfully
+2. confirm the DO usage panel is green again
+3. only then rerun Website Ops sync
+
+What **not** to do:
+
+- do **not** keep pressing `Run Sync` blindly
+- do **not** loosen the DO guard just to get a run through
+- do **not** treat repeated retries as progress; they only replay candidate ingest without a trustworthy DO budget reading
+
+This guard is intentional. The problem to fix is telemetry/auth availability, not the existence of the guardrail.
+
 ## when to leave this repo
 
 Leave this repo and inspect `d:\Coding\Datasets\iconoplasm` when the problem is about:
