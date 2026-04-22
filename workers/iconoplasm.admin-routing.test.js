@@ -211,11 +211,12 @@ test("admin assets list derives portrait URLs from asset sha instead of copied k
   assert.equal(payload?.assets?.[0]?.thumb_url, `https://iconoplasm.brinedew.bio/portraits/v1/${"c".repeat(2)}/${"c".repeat(64)}/thumb.webp`)
 })
 
-test("admin asset repair scope reads the durable broken backlog instead of probing storage live", async () => {
+test("admin asset repair scope falls back to unverified published portraits when the broken backlog is sparse", async () => {
   resetIconoplasmRuntimeCachesForTest()
 
   const missingSha = "d".repeat(64)
   const healthySha = "e".repeat(64)
+  const renderableSha = "f".repeat(64)
 
   class FakePortraitBucket {
     async head() {
@@ -252,8 +253,8 @@ test("admin asset repair scope reads the durable broken backlog instead of probi
     }
 
     async all() {
-      if (this.sql.includes("FROM icono_storage_audit_queue q") && this.sql.includes("q.audit_state = 'broken'")) {
-        return { results: this.db.brokenRows() }
+      if (this.sql.includes("FROM icono_publish_state ps") && this.sql.includes("COALESCE(q.audit_state, 'unknown') <> 'renderable'")) {
+        return { results: this.db.repairableRows() }
       }
       throw new Error(`Unexpected SQL in durable repair-scope all(): ${this.sql}`)
     }
@@ -326,7 +327,16 @@ test("admin asset repair scope reads the durable broken backlog instead of probi
           is_stale: 0,
           is_legacy: 0,
           created_at: "2026-04-18T00:00:00Z",
-          is_current: 0,
+          is_current: 1,
+        },
+        {
+          gene_symbol: "BRAF",
+          asset_sha256: renderableSha,
+          status: "approved",
+          is_stale: 0,
+          is_legacy: 0,
+          created_at: "2026-04-17T00:00:00Z",
+          is_current: 1,
         },
       ]
       this.queueRows = [
@@ -345,13 +355,13 @@ test("admin asset repair scope reads the durable broken backlog instead of probi
           attempts: 0,
         },
         {
-          gene_symbol: "EGFR",
-          asset_sha256: healthySha,
+          gene_symbol: "BRAF",
+          asset_sha256: renderableSha,
           asset_status: "approved",
           is_stale: 0,
           is_legacy: 0,
-          is_current: 0,
-          created_at: "2026-04-18T00:00:00Z",
+          is_current: 1,
+          created_at: "2026-04-17T00:00:00Z",
           audit_state: "renderable",
           status: "completed",
           missing_renditions_json: "[]",
@@ -395,20 +405,33 @@ test("admin asset repair scope reads the durable broken backlog instead of probi
       }
     }
 
-    brokenRows() {
-      return this.queueRows
-        .filter((row) => row.audit_state === "broken")
-        .map((row) => ({
-          gene_symbol: row.gene_symbol,
-          asset_sha256: row.asset_sha256,
-          status: row.asset_status,
-          is_stale: row.is_stale,
-          is_legacy: row.is_legacy,
-          is_current: row.is_current,
-          created_at: row.created_at,
-          last_audited_at: row.last_audited_at,
-          missing_renditions_json: row.missing_renditions_json,
-        }))
+    repairableRows() {
+      return [
+        {
+          gene_symbol: "TP53",
+          asset_sha256: missingSha,
+          status: "approved",
+          is_stale: 0,
+          is_legacy: 0,
+          is_current: 1,
+          created_at: "2026-04-19T00:00:00Z",
+          last_audited_at: "2026-04-20T00:00:00Z",
+          missing_renditions_json: JSON.stringify(["full", "medium", "thumb"]),
+          audit_state: "broken",
+        },
+        {
+          gene_symbol: "EGFR",
+          asset_sha256: healthySha,
+          status: "approved",
+          is_stale: 0,
+          is_legacy: 0,
+          is_current: 1,
+          created_at: "2026-04-18T00:00:00Z",
+          last_audited_at: "",
+          missing_renditions_json: "[]",
+          audit_state: "unknown",
+        },
+      ]
     }
 
     prepare(sql) {
@@ -435,12 +458,16 @@ test("admin asset repair scope reads the durable broken backlog instead of probi
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.count, 1)
+  assert.equal(payload?.count, 2)
   assert.equal(payload?.assets?.[0]?.symbol, "TP53")
   assert.equal(payload?.assets?.[0]?.asset_sha256, missingSha)
   assert.deepEqual(payload?.assets?.[0]?.missing_renditions, ["full", "medium", "thumb"])
+  assert.equal(payload?.assets?.[1]?.symbol, "EGFR")
+  assert.equal(payload?.assets?.[1]?.asset_sha256, healthySha)
+  assert.deepEqual(payload?.assets?.[1]?.missing_renditions, [])
   assert.equal(payload?.summary?.broken_live_images, 1)
-  assert.equal(payload?.summary?.renderable_live_exact_known, true)
+  assert.equal(payload?.summary?.unverified_live_portraits, 1)
+  assert.equal(payload?.summary?.renderable_live_exact_known, false)
 })
 
 test("admin asset storage audit consumes queued work and refreshes the persisted truth summary", async () => {

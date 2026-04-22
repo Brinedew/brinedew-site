@@ -6015,35 +6015,52 @@ async function fetchKnownBrokenStorageAuditRows(env, { requestedSymbols = null, 
     : []
   const applyScope = wantedSymbols.length > 0 ? 1 : 0
   const cleanedLimit = normalizeAdminAssetMaintenanceLimit(limit, 50, 250)
+  // Chesterton's fence: repairing only the already-broken audit backlog turns
+  // Website Ops into a hall pass for inaction. The real missing-image problem
+  // shows up long before the storage audit has crawled the whole corpus, so the
+  // repair button has to work from the currently published portrait whenever it
+  // is not yet proven renderable. Keep broken audited rows first, but fall back
+  // to current live portraits whose storage truth is still unknown so each
+  // repair click can make bounded forward progress instead of waiting for a
+  // near-complete audit sweep.
   const response = await env.ICONOPLASM_DB.prepare(
     `WITH incoming_scope AS (
        SELECT value AS gene_symbol
        FROM json_each(?)
      )
      SELECT
-       q.gene_symbol,
-       q.asset_sha256,
-       q.asset_status AS status,
-       q.is_stale,
-       q.is_legacy,
-       q.created_at,
-       q.is_current,
-       q.last_audited_at,
-       q.missing_renditions_json
-     FROM icono_storage_audit_queue q
+       ps.gene_symbol,
+       ps.current_asset_sha256 AS asset_sha256,
+       COALESCE(pa.status, 'draft') AS status,
+       COALESCE(pa.is_stale, 0) AS is_stale,
+       COALESCE(pa.is_legacy, 0) AS is_legacy,
+       COALESCE(pa.created_at, '') AS created_at,
+       1 AS is_current,
+       COALESCE(q.last_audited_at, '') AS last_audited_at,
+       COALESCE(q.missing_renditions_json, '[]') AS missing_renditions_json,
+       COALESCE(q.audit_state, 'unknown') AS audit_state
+     FROM icono_publish_state ps
      JOIN icono_portrait_assets pa
-       ON pa.gene_symbol = q.gene_symbol
-      AND pa.asset_sha256 = q.asset_sha256
-     WHERE q.audit_state = 'broken'
-       AND (? = 0 OR q.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+       ON pa.gene_symbol = ps.gene_symbol
+      AND pa.asset_sha256 = ps.current_asset_sha256
+     LEFT JOIN icono_storage_audit_queue q
+       ON q.gene_symbol = ps.gene_symbol
+      AND q.asset_sha256 = ps.current_asset_sha256
+     WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+       AND (? = 0 OR ps.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
        AND COALESCE(pa.is_legacy, 0) = 0
        AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+       AND COALESCE(q.audit_state, 'unknown') <> 'renderable'
      ORDER BY
-       q.is_current DESC,
-       COALESCE(q.last_audited_at, '') DESC,
-       COALESCE(q.created_at, '') DESC,
-       q.gene_symbol ASC,
-       q.asset_sha256 ASC
+       CASE COALESCE(q.audit_state, 'unknown')
+         WHEN 'broken' THEN 0
+         ELSE 1
+       END ASC,
+       CASE WHEN COALESCE(q.last_audited_at, '') = '' THEN 0 ELSE 1 END ASC,
+       COALESCE(q.last_audited_at, '') ASC,
+       COALESCE(pa.created_at, '') DESC,
+       ps.gene_symbol ASC,
+       ps.current_asset_sha256 ASC
      LIMIT ?`,
   )
     .bind(JSON.stringify(wantedSymbols), applyScope, cleanedLimit)
