@@ -413,3 +413,63 @@ test("admin pending vote projection refresh endpoint exposes durable queue rows"
     retrying: true,
   })
 })
+
+test("admin vision stats endpoint stays exposed for Website Ops vote telemetry", async () => {
+  const db = new RecordingDb({
+    allResults: [
+      [
+        "FROM icono_artist_style_blacklist",
+        [],
+      ],
+      [
+        "FROM icono_admin_vision_rollup",
+        [
+          {
+            vision_id: "anima-v1-1",
+            artist_tag: "@artist_(name)",
+            artist_name: "Artist Name",
+            image_count: 3,
+            avg_vote: 1.5,
+            rejected_count: 0,
+            rejection_rate: 0,
+            upvotes: 5,
+            downvotes: 1,
+            score: 4,
+            live_count: 2,
+            blacklisted: 0,
+            blacklist_reason: "",
+            blacklist_updated_at: "",
+          },
+        ],
+      ],
+    ],
+  })
+
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/votes/vision-stats",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Iconoplasm-Admin-Token": "secret",
+        },
+        body: JSON.stringify({}),
+      },
+    ),
+    {
+      ICONOPLASM_DB: db,
+      ICONOPLASM_ADMIN_TOKEN: "secret",
+      KV: fakeKv(),
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.count, 1)
+  assert.equal(payload?.rows?.[0]?.vision_id, "anima-v1-1")
+  assert.equal(payload?.rows?.[0]?.live_count, 2)
+  assert.deepEqual(payload?.blacklisted, [])
+})

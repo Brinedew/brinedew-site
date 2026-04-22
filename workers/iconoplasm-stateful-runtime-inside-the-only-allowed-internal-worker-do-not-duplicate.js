@@ -4213,6 +4213,10 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/votes/snapshots") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/votes/ledger") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/votes/events") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/votes/vision-stats")
+    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/votes/vision-previews")
+    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/votes/vision-detail") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/votes/projection-refresh/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
@@ -6050,7 +6054,7 @@ async function fetchKnownBrokenStorageAuditRows(env, { requestedSymbols = null, 
        AND (? = 0 OR ps.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
        AND COALESCE(pa.is_legacy, 0) = 0
        AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
-       AND COALESCE(q.audit_state, 'unknown') <> 'renderable'
+      AND COALESCE(q.audit_state, 'unknown') <> 'renderable'
      ORDER BY
        CASE COALESCE(q.audit_state, 'unknown')
          WHEN 'broken' THEN 0
