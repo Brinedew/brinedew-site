@@ -10989,7 +10989,15 @@ async function processPendingSyncFinalizationJobs(
        AND phase <> ?
        AND next_attempt_at <= ?
        AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
-     ORDER BY requested_at ASC, gene_symbol ASC
+     ORDER BY
+       CASE phase
+         WHEN ? THEN 0
+         WHEN ? THEN 1
+         WHEN ? THEN 2
+         ELSE 3
+       END ASC,
+       requested_at ASC,
+       gene_symbol ASC
      LIMIT ?`,
   )
     .bind(
@@ -10999,6 +11007,9 @@ async function processPendingSyncFinalizationJobs(
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
       nowIso,
       scopedEnabled,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_VOTE_SUMMARIES,
       safeLimit,
     )
     .all()

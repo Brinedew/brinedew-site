@@ -4,6 +4,14 @@ import test from "node:test"
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
+function finalizationPhasePriority(phase) {
+  const value = String(phase || "").trim().toLowerCase()
+  if (value === "vision_rollups") return 0
+  if (value === "gene_rollups") return 1
+  if (value === "vote_summaries") return 2
+  return 3
+}
+
 class FakeStatement {
   constructor(db, sql) {
     this.db = db
@@ -46,9 +54,9 @@ class FakeStatement {
     }
     if (this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE status IN (?, ?)")) {
       const scopedQuery = this.sql.includes("WITH scoped_symbols")
-      const [scopedSymbolsJson, queuedStatus, retryingStatus, excludedPhase, nowIso, scopedEnabled, limit] = scopedQuery
+      const [scopedSymbolsJson, queuedStatus, retryingStatus, excludedPhase, nowIso, scopedEnabled, visionRollupsPhase, geneRollupsPhase, voteSummariesPhase, limit] = scopedQuery
         ? this.args
-        : ["[]", ...this.args, 0]
+        : ["[]", ...this.args, 0, "vision_rollups", "gene_rollups", "vote_summaries", 0]
       let scopedSymbols = []
       try {
         const parsed = JSON.parse(String(scopedSymbolsJson || "[]"))
@@ -61,6 +69,9 @@ class FakeStatement {
         .filter((row) => !row.next_attempt_at || String(row.next_attempt_at) <= String(nowIso || ""))
         .filter((row) => Number(scopedEnabled || 0) <= 0 || scopedSymbols.includes(String(row.gene_symbol || "").trim().toUpperCase()))
         .sort((left, right) => {
+          const leftPriority = finalizationPhasePriority(left.phase)
+          const rightPriority = finalizationPhasePriority(right.phase)
+          if (leftPriority !== rightPriority) return leftPriority - rightPriority
           const requestedDelta = String(left.requested_at || "").localeCompare(String(right.requested_at || ""))
           if (requestedDelta !== 0) return requestedDelta
           return String(left.gene_symbol || "").localeCompare(String(right.gene_symbol || ""))
@@ -616,6 +627,59 @@ test("admin finalization process honors scoped symbol filters", async () => {
   const advanced = env.gatewayDb.jobs.get("BRCA1")
   assert.equal(untouched?.phase, "reconcile")
   assert.equal(advanced?.phase, "vote_summaries")
+})
+
+test("admin finalization process prioritizes later-phase jobs before earlier-phase rows", async () => {
+  const env = buildEnv({
+    jobs: [
+      {
+        gene_symbol: "TP53",
+        status: "queued",
+        phase: "reconcile",
+        keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      },
+      {
+        gene_symbol: "BRCA1",
+        status: "queued",
+        phase: "gene_rollups",
+        keep_assets_json: JSON.stringify([{ symbol: "BRCA1", asset_sha256: "b".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify([]),
+        requested_at: "2026-04-16T00:01:00.000Z",
+        next_attempt_at: "2026-04-16T00:01:00.000Z",
+      },
+    ],
+  })
+
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        limit: 1,
+        finalize_if_drained: false,
+      }),
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.processed, 1)
+  assert.equal(payload?.results?.[0]?.symbol, "BRCA1")
+  assert.equal(payload?.results?.[0]?.phase, "gene_rollups")
+  assert.equal(payload?.results?.[0]?.next_phase, "completed_pending_finalize")
+  assert.equal(env.gatewayDb.jobs.get("BRCA1")?.phase, "completed_pending_finalize")
+  assert.equal(env.gatewayDb.jobs.get("TP53")?.phase, "reconcile")
 })
 
 test("internal finalization process route preserves symbol scope instead of draining unrelated jobs", async () => {
