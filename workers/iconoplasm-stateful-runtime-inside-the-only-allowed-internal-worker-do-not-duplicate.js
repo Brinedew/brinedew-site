@@ -4246,6 +4246,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/canon-audit") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/assets") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/assets/summary") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/assets/storage-audit") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/assets/repair-scope") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/assets/state")
     return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/local-removals/pending")
@@ -4805,6 +4807,1293 @@ async function fetchAssetStateRows(env, requestedSymbols = null) {
     .bind(JSON.stringify(wantedSymbols), applyScope, applyScope)
     .all()
   return Array.isArray(response?.results) ? response.results : []
+}
+
+const ICONO_WEBSITE_TRUTH_SUMMARY_KEY = "iconoplasm_website_truth_summary"
+const ICONO_STORAGE_AUDIT_QUEUE_KEY = "iconoplasm_storage_audit"
+const ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH = 200
+// Cloudflare gives each invocation a finite request budget. Each audited asset
+// costs three storage HEADs plus the queue bookkeeping around it, so keep a
+// single pass intentionally small and make progress across repeated clicks.
+const ICONO_STORAGE_AUDIT_SAFE_INSPECTION_BATCH = 8
+// Each asset probes full + medium + thumb. Two assets at a time keeps the
+// Worker on the documented six-open-connections ceiling instead of pointlessly
+// stampeding Bunny/Cloudflare with eighteen parallel HEADs.
+const ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY = 2
+
+function normalizeAdminAssetMaintenanceSymbols(rawSymbols, max = 5000) {
+  const values = Array.isArray(rawSymbols) ? rawSymbols : []
+  if (values.length > max) {
+    throw new Error(`Too many symbols (max ${max})`)
+  }
+  return Array.from(new Set(values.map((value) => normalizeSymbol(value)).filter(Boolean)))
+}
+
+function normalizeAdminAssetMaintenanceLimit(rawLimit, fallback = 50, max = 500) {
+  const value = Number.parseInt(String(rawLimit ?? fallback), 10)
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(1, Math.min(max, value || fallback))
+}
+
+function parseAdminAssetMissingRenditions(rawValue) {
+  try {
+    const parsed = JSON.parse(String(rawValue || "[]"))
+    return Array.isArray(parsed)
+      ? Array.from(
+          new Set(
+            parsed
+              .map((value) => String(value || "").trim().toLowerCase())
+              .filter((value) => ["full", "medium", "thumb"].includes(value)),
+          ),
+        )
+      : []
+  } catch {
+    return []
+  }
+}
+
+function normalizeStorageAuditInspectionLimit(rawLimit, fallback = 100) {
+  const requested = normalizeAdminAssetMaintenanceLimit(rawLimit, fallback, 500)
+  return Math.max(1, Math.min(ICONO_STORAGE_AUDIT_SAFE_INSPECTION_BATCH, requested))
+}
+
+function mapWebsiteTruthSummaryRow(row) {
+  return {
+    candidate_assets: Math.max(0, Number(row?.candidate_assets || 0)),
+    stale_assets: Math.max(0, Number(row?.stale_assets || 0)),
+    legacy_assets: Math.max(0, Number(row?.legacy_assets || 0)),
+    published_live_portraits: Math.max(0, Number(row?.published_live_portraits || 0)),
+    audited_assets: Math.max(0, Number(row?.audited_assets || 0)),
+    verified_renderable_images: Math.max(0, Number(row?.verified_renderable_images || 0)),
+    storage_audit_coverage_percent: Number(row?.storage_audit_coverage_percent || 0),
+    storage_incomplete_assets: Math.max(0, Number(row?.storage_incomplete_assets || 0)),
+    broken_live_images: Math.max(0, Number(row?.broken_live_images || 0)),
+    renderable_live_confirmed: Math.max(0, Number(row?.renderable_live_confirmed || 0)),
+    unverified_live_portraits: Math.max(0, Number(row?.unverified_live_portraits || 0)),
+    renderable_live_exact_known: Number(row?.renderable_live_exact_known || 0) > 0,
+    last_exact_audit_total:
+      row?.last_exact_audit_total === null || row?.last_exact_audit_total === undefined
+        ? null
+        : Math.max(0, Number(row?.last_exact_audit_total || 0)),
+    last_exact_audit_at: sanitizeText(row?.last_exact_audit_at || "", 64) || "",
+    storage_queue_backlog_assets: Math.max(0, Number(row?.storage_queue_backlog_assets || 0)),
+    storage_queue_seeded_complete: Number(row?.storage_queue_seeded_complete || 0) > 0,
+    storage_audit_status_note:
+      sanitizeText(row?.storage_audit_status_note || "", 2000) ||
+      "Website storage truth has not been computed yet.",
+    updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+  }
+}
+
+function mapStorageAuditQueueStateRow(row) {
+  const seedStatus = sanitizeText(row?.seed_status || "idle", 32).toLowerCase() || "idle"
+  return {
+    queue_key: String(row?.queue_key || ICONO_STORAGE_AUDIT_QUEUE_KEY),
+    seed_status: ["idle", "running", "complete"].includes(seedStatus) ? seedStatus : "idle",
+    last_seeded_symbol: normalizeSymbol(row?.last_seeded_symbol || "") || "",
+    processed_symbols: Math.max(0, Number(row?.processed_symbols || 0)),
+    total_symbols: Math.max(0, Number(row?.total_symbols || 0)),
+    seeded_complete: Number(row?.seeded_complete || 0) > 0,
+    last_error: sanitizeText(row?.last_error || "", 2000) || "",
+    started_at: sanitizeText(row?.started_at || "", 64) || "",
+    updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+    completed_at: sanitizeText(row?.completed_at || "", 64) || "",
+  }
+}
+
+async function fetchStorageAuditQueueState(env) {
+  if (!env.ICONOPLASM_DB) return null
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_storage_audit_queue_state
+     WHERE queue_key = ?
+     LIMIT 1`,
+  )
+    .bind(ICONO_STORAGE_AUDIT_QUEUE_KEY)
+    .first()
+  return row ? mapStorageAuditQueueStateRow(row) : null
+}
+
+async function ensureStorageAuditQueueState(env) {
+  if (!env.ICONOPLASM_DB) return null
+  const existing = await fetchStorageAuditQueueState(env)
+  if (existing) return existing
+
+  const totalSymbolsRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT COUNT(*) AS count
+     FROM icono_admin_gene_rollup
+     WHERE COALESCE(total_assets, 0) > 0`,
+  ).first()
+
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_storage_audit_queue_state (
+       queue_key,
+       seed_status,
+       last_seeded_symbol,
+       processed_symbols,
+       total_symbols,
+       seeded_complete,
+       last_error,
+       started_at,
+       updated_at,
+       completed_at
+     ) VALUES (?, 'idle', '', 0, ?, 0, '', NULL, CURRENT_TIMESTAMP, NULL)`,
+  )
+    .bind(ICONO_STORAGE_AUDIT_QUEUE_KEY, Math.max(0, Number(totalSymbolsRow?.count || 0)))
+    .run()
+
+  return fetchStorageAuditQueueState(env)
+}
+
+async function writeStorageAuditQueueState(env, patch = {}) {
+  if (!env.ICONOPLASM_DB) return null
+  const current = (await ensureStorageAuditQueueState(env)) || mapStorageAuditQueueStateRow({})
+  const next = mapStorageAuditQueueStateRow({ ...current, ...patch })
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_storage_audit_queue_state (
+       queue_key,
+       seed_status,
+       last_seeded_symbol,
+       processed_symbols,
+       total_symbols,
+       seeded_complete,
+       last_error,
+       started_at,
+       updated_at,
+       completed_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+     ON CONFLICT(queue_key) DO UPDATE SET
+       seed_status = excluded.seed_status,
+       last_seeded_symbol = excluded.last_seeded_symbol,
+       processed_symbols = excluded.processed_symbols,
+       total_symbols = excluded.total_symbols,
+       seeded_complete = excluded.seeded_complete,
+       last_error = excluded.last_error,
+       started_at = excluded.started_at,
+       updated_at = CURRENT_TIMESTAMP,
+       completed_at = excluded.completed_at`,
+  )
+    .bind(
+      ICONO_STORAGE_AUDIT_QUEUE_KEY,
+      next.seed_status,
+      next.last_seeded_symbol,
+      next.processed_symbols,
+      next.total_symbols,
+      next.seeded_complete ? 1 : 0,
+      next.last_error,
+      next.started_at || null,
+      next.completed_at || null,
+    )
+    .run()
+  return fetchStorageAuditQueueState(env)
+}
+
+async function listStorageAuditSeedSymbolsAfter(env, rawAfterSymbol = "", limit = ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH) {
+  if (!env.ICONOPLASM_DB) return []
+  const afterSymbol = normalizeSymbol(rawAfterSymbol) || ""
+  const cleanedLimit = normalizeAdminAssetMaintenanceLimit(limit, ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH, 500)
+  const response = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol
+     FROM icono_admin_gene_rollup
+     WHERE COALESCE(total_assets, 0) > 0
+       AND (? = '' OR gene_symbol > ?)
+     ORDER BY gene_symbol ASC
+     LIMIT ?`,
+  )
+    .bind(afterSymbol, afterSymbol, cleanedLimit)
+    .all()
+  return Array.from(
+    new Set(
+      (Array.isArray(response?.results) ? response.results : [])
+        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
+        .filter(Boolean),
+    ),
+  )
+}
+
+async function upsertStorageAuditQueueRowsForSymbols(env, rawSymbols) {
+  if (!env.ICONOPLASM_DB) return { symbols: 0, auditable_assets: 0 }
+  const symbols = normalizeAdminAssetMaintenanceSymbols(rawSymbols, 5000)
+  if (!symbols.length) return { symbols: 0, auditable_assets: 0 }
+  const symbolsJson = JSON.stringify(symbols)
+
+  const countRow = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming_scope AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     )
+     SELECT COUNT(*) AS count
+     FROM icono_portrait_assets pa
+     WHERE pa.gene_symbol IN (SELECT gene_symbol FROM incoming_scope)
+       AND COALESCE(pa.asset_sha256, '') <> ''
+       AND COALESCE(pa.is_legacy, 0) = 0
+       AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'`,
+  )
+    .bind(symbolsJson)
+    .first()
+
+  await env.ICONOPLASM_DB.prepare(
+    `WITH incoming_scope AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     ),
+     current_assets AS (
+       SELECT
+         pa.gene_symbol,
+         pa.asset_sha256,
+         lower(COALESCE(pa.status, 'draft')) AS asset_status,
+         COALESCE(pa.is_stale, 0) AS is_stale,
+         COALESCE(pa.is_legacy, 0) AS is_legacy,
+         COALESCE(pa.created_at, '') AS created_at,
+         CASE
+           WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
+           ELSE 0
+         END AS is_current
+       FROM icono_portrait_assets pa
+       LEFT JOIN icono_publish_state ps
+         ON ps.gene_symbol = pa.gene_symbol
+       WHERE pa.gene_symbol IN (SELECT gene_symbol FROM incoming_scope)
+         AND COALESCE(pa.asset_sha256, '') <> ''
+         AND COALESCE(pa.is_legacy, 0) = 0
+         AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+     )
+     INSERT OR IGNORE INTO icono_storage_audit_queue (
+       gene_symbol,
+       asset_sha256,
+       status,
+       audit_state,
+       missing_renditions_json,
+       is_current,
+       is_stale,
+       is_legacy,
+       asset_status,
+       created_at,
+       last_seen_at,
+       last_audited_at,
+       last_error,
+       attempts,
+       next_attempt_at,
+       updated_at
+     )
+     SELECT
+       gene_symbol,
+       asset_sha256,
+       'queued',
+       'unknown',
+       '[]',
+       is_current,
+       is_stale,
+       is_legacy,
+       asset_status,
+       created_at,
+       CURRENT_TIMESTAMP,
+       NULL,
+       '',
+       0,
+       CURRENT_TIMESTAMP,
+       CURRENT_TIMESTAMP
+     FROM current_assets`,
+  )
+    .bind(symbolsJson)
+    .run()
+
+  await env.ICONOPLASM_DB.prepare(
+    `WITH incoming_scope AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     ),
+     current_assets AS (
+       SELECT
+         pa.gene_symbol,
+         pa.asset_sha256,
+         lower(COALESCE(pa.status, 'draft')) AS asset_status,
+         COALESCE(pa.is_stale, 0) AS is_stale,
+         COALESCE(pa.is_legacy, 0) AS is_legacy,
+         COALESCE(pa.created_at, '') AS created_at,
+         CASE
+           WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
+           ELSE 0
+         END AS is_current
+       FROM icono_portrait_assets pa
+       LEFT JOIN icono_publish_state ps
+         ON ps.gene_symbol = pa.gene_symbol
+       WHERE pa.gene_symbol IN (SELECT gene_symbol FROM incoming_scope)
+         AND COALESCE(pa.asset_sha256, '') <> ''
+         AND COALESCE(pa.is_legacy, 0) = 0
+         AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+     )
+     UPDATE icono_storage_audit_queue
+     SET is_current = COALESCE((
+           SELECT ca.is_current
+           FROM current_assets ca
+           WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
+             AND ca.asset_sha256 = icono_storage_audit_queue.asset_sha256
+           LIMIT 1
+         ), icono_storage_audit_queue.is_current),
+         is_stale = COALESCE((
+           SELECT ca.is_stale
+           FROM current_assets ca
+           WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
+             AND ca.asset_sha256 = icono_storage_audit_queue.asset_sha256
+           LIMIT 1
+         ), icono_storage_audit_queue.is_stale),
+         is_legacy = COALESCE((
+           SELECT ca.is_legacy
+           FROM current_assets ca
+           WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
+             AND ca.asset_sha256 = icono_storage_audit_queue.asset_sha256
+           LIMIT 1
+         ), icono_storage_audit_queue.is_legacy),
+         asset_status = COALESCE((
+           SELECT ca.asset_status
+           FROM current_assets ca
+           WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
+             AND ca.asset_sha256 = icono_storage_audit_queue.asset_sha256
+           LIMIT 1
+         ), icono_storage_audit_queue.asset_status),
+         created_at = COALESCE((
+           SELECT ca.created_at
+           FROM current_assets ca
+           WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
+             AND ca.asset_sha256 = icono_storage_audit_queue.asset_sha256
+           LIMIT 1
+         ), icono_storage_audit_queue.created_at),
+         last_seen_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP,
+         status = CASE
+           WHEN icono_storage_audit_queue.audit_state = 'unknown' THEN 'queued'
+           ELSE icono_storage_audit_queue.status
+         END,
+         next_attempt_at = CASE
+           WHEN icono_storage_audit_queue.audit_state = 'unknown' THEN CURRENT_TIMESTAMP
+           ELSE icono_storage_audit_queue.next_attempt_at
+         END
+     WHERE EXISTS (
+       SELECT 1
+       FROM current_assets ca
+       WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
+         AND ca.asset_sha256 = icono_storage_audit_queue.asset_sha256
+     )`,
+  )
+    .bind(symbolsJson)
+    .run()
+
+  await env.ICONOPLASM_DB.prepare(
+    `WITH incoming_scope AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     ),
+     current_assets AS (
+       SELECT pa.gene_symbol, pa.asset_sha256
+       FROM icono_portrait_assets pa
+       WHERE pa.gene_symbol IN (SELECT gene_symbol FROM incoming_scope)
+         AND COALESCE(pa.asset_sha256, '') <> ''
+         AND COALESCE(pa.is_legacy, 0) = 0
+         AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+     )
+     DELETE FROM icono_storage_audit_queue
+     WHERE gene_symbol IN (SELECT gene_symbol FROM incoming_scope)
+       AND NOT EXISTS (
+         SELECT 1
+         FROM current_assets ca
+         WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
+           AND ca.asset_sha256 = icono_storage_audit_queue.asset_sha256
+       )`,
+  )
+    .bind(symbolsJson)
+    .run()
+
+  return {
+    symbols: symbols.length,
+    auditable_assets: Math.max(0, Number(countRow?.count || 0)),
+  }
+}
+
+async function seedStorageAuditQueueStep(
+  env,
+  { requestedSymbols = null, symbolBatch = ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { seeded_symbols: 0, seeded_complete: false, scoped: false }
+  const scopedSymbols = Array.isArray(requestedSymbols)
+    ? normalizeAdminAssetMaintenanceSymbols(requestedSymbols, 5000)
+    : []
+  if (scopedSymbols.length > 0) {
+    const upserted = await upsertStorageAuditQueueRowsForSymbols(env, scopedSymbols)
+    return {
+      seeded_symbols: upserted.symbols,
+      seeded_complete: false,
+      scoped: true,
+    }
+  }
+
+  const state = await ensureStorageAuditQueueState(env)
+  if (state?.seeded_complete) {
+    return {
+      seeded_symbols: 0,
+      seeded_complete: true,
+      scoped: false,
+    }
+  }
+
+  const symbols = await listStorageAuditSeedSymbolsAfter(env, state?.last_seeded_symbol || "", symbolBatch)
+  if (!symbols.length) {
+    await writeStorageAuditQueueState(env, {
+      ...state,
+      seed_status: "complete",
+      seeded_complete: true,
+      completed_at: new Date().toISOString(),
+      last_error: "",
+    })
+    return {
+      seeded_symbols: 0,
+      seeded_complete: true,
+      scoped: false,
+    }
+  }
+
+  const startedAt = state?.started_at || new Date().toISOString()
+  await writeStorageAuditQueueState(env, {
+    ...state,
+    seed_status: "running",
+    started_at: startedAt,
+    completed_at: "",
+    last_error: "",
+  })
+  const upserted = await upsertStorageAuditQueueRowsForSymbols(env, symbols)
+  const seededComplete = symbols.length < normalizeAdminAssetMaintenanceLimit(symbolBatch, ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH, 500)
+  const nextState = await writeStorageAuditQueueState(env, {
+    ...state,
+    seed_status: seededComplete ? "complete" : "running",
+    last_seeded_symbol: symbols[symbols.length - 1] || state?.last_seeded_symbol || "",
+    processed_symbols: Math.min(
+      Math.max(0, Number(state?.total_symbols || 0)),
+      Math.max(0, Number(state?.processed_symbols || 0)) + upserted.symbols,
+    ),
+    seeded_complete: seededComplete,
+    started_at: startedAt,
+    completed_at: seededComplete ? new Date().toISOString() : "",
+    last_error: "",
+  })
+  return {
+    seeded_symbols: upserted.symbols,
+    seeded_complete: Boolean(nextState?.seeded_complete),
+    scoped: false,
+  }
+}
+
+async function fetchAdminAssetSummaryBaseline(env) {
+  if (!env.ICONOPLASM_DB) {
+    return {
+      candidate_assets: 0,
+      auditable_assets: 0,
+      stale_assets: 0,
+      legacy_assets: 0,
+      published_live_portraits: 0,
+    }
+  }
+
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       COUNT(*) AS candidate_assets,
+       SUM(CASE WHEN COALESCE(pa.is_legacy, 0) = 0 AND lower(COALESCE(pa.status, 'draft')) <> 'rejected' THEN 1 ELSE 0 END) AS auditable_assets,
+       SUM(CASE WHEN COALESCE(pa.is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
+       SUM(CASE WHEN COALESCE(pa.is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets,
+       (
+         SELECT COUNT(*)
+         FROM icono_publish_state
+         WHERE COALESCE(current_asset_sha256, '') <> ''
+       ) AS published_live_portraits
+     FROM icono_portrait_assets pa`,
+  ).first()
+
+  return {
+    candidate_assets: Math.max(0, Number(row?.candidate_assets || 0)),
+    auditable_assets: Math.max(0, Number(row?.auditable_assets || 0)),
+    stale_assets: Math.max(0, Number(row?.stale_assets || 0)),
+    legacy_assets: Math.max(0, Number(row?.legacy_assets || 0)),
+    published_live_portraits: Math.max(0, Number(row?.published_live_portraits || 0)),
+  }
+}
+
+async function fetchPersistedWebsiteTruthSummary(env) {
+  if (!env.ICONOPLASM_DB) return null
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_website_truth_summary
+     WHERE summary_key = ?
+     LIMIT 1`,
+  )
+    .bind(ICONO_WEBSITE_TRUTH_SUMMARY_KEY)
+    .first()
+  return row ? mapWebsiteTruthSummaryRow(row) : null
+}
+
+async function computeWebsiteTruthSummary(env) {
+  const baseline = await fetchAdminAssetSummaryBaseline(env)
+  const queueState = await ensureStorageAuditQueueState(env)
+  const previous = await fetchPersistedWebsiteTruthSummary(env)
+
+  if (!env.ICONOPLASM_DB) {
+    return mapWebsiteTruthSummaryRow({
+      ...baseline,
+      audited_assets: 0,
+      verified_renderable_images: 0,
+      storage_audit_coverage_percent: 0,
+      storage_incomplete_assets: 0,
+      broken_live_images: 0,
+      renderable_live_confirmed: 0,
+      unverified_live_portraits: baseline.published_live_portraits,
+      renderable_live_exact_known: 0,
+      last_exact_audit_total: previous?.last_exact_audit_total ?? null,
+      last_exact_audit_at: previous?.last_exact_audit_at || "",
+      storage_queue_backlog_assets: 0,
+      storage_queue_seeded_complete: 0,
+      storage_audit_status_note: "Website storage truth is unavailable because ICONOPLASM_DB is missing.",
+      updated_at: "",
+    })
+  }
+
+  const queueRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN q.audit_state <> 'unknown' THEN 1 ELSE 0 END), 0) AS audited_assets,
+       COALESCE(SUM(CASE WHEN q.audit_state = 'renderable' THEN 1 ELSE 0 END), 0) AS verified_renderable_images,
+       COALESCE(SUM(CASE WHEN q.audit_state = 'broken' THEN 1 ELSE 0 END), 0) AS storage_incomplete_assets,
+       COALESCE(SUM(CASE WHEN q.is_current = 1 AND q.audit_state = 'broken' THEN 1 ELSE 0 END), 0) AS broken_live_images,
+       COALESCE(SUM(CASE WHEN q.is_current = 1 AND q.audit_state = 'renderable' THEN 1 ELSE 0 END), 0) AS renderable_live_confirmed,
+       COALESCE(SUM(CASE WHEN q.audit_state = 'unknown' THEN 1 ELSE 0 END), 0) AS storage_queue_backlog_assets
+     FROM icono_storage_audit_queue q
+     WHERE EXISTS (
+       SELECT 1
+       FROM icono_portrait_assets pa
+       WHERE pa.gene_symbol = q.gene_symbol
+         AND pa.asset_sha256 = q.asset_sha256
+         AND COALESCE(pa.asset_sha256, '') <> ''
+         AND COALESCE(pa.is_legacy, 0) = 0
+         AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+     )`,
+  ).first()
+
+  const auditableAssets = Math.max(0, Number(baseline?.auditable_assets || 0))
+  const candidateAssets = Math.max(0, Number(baseline?.candidate_assets || 0))
+  const auditedAssets = Math.max(0, Number(queueRow?.audited_assets || 0))
+  const verifiedRenderableImages = Math.max(0, Number(queueRow?.verified_renderable_images || 0))
+  const storageIncompleteAssets = Math.max(0, Number(queueRow?.storage_incomplete_assets || 0))
+  const brokenLiveImages = Math.max(0, Number(queueRow?.broken_live_images || 0))
+  const renderableLiveConfirmed = Math.max(0, Number(queueRow?.renderable_live_confirmed || 0))
+  const storageQueueBacklogAssets = Math.max(0, Number(queueRow?.storage_queue_backlog_assets || 0))
+  const coveragePercent = auditableAssets > 0 ? Number(((auditedAssets / auditableAssets) * 100).toFixed(1)) : 100.0
+  const exactKnown =
+    auditableAssets === 0 ||
+    (Boolean(queueState?.seeded_complete) && auditedAssets >= auditableAssets && storageQueueBacklogAssets <= 0)
+  const updatedAt = new Date().toISOString()
+  const lastExactAuditTotal = exactKnown
+    ? verifiedRenderableImages
+    : previous?.last_exact_audit_total ?? null
+  const lastExactAuditAt = exactKnown ? updatedAt : previous?.last_exact_audit_at || ""
+  const publishedLivePortraits = Math.max(0, Number(baseline?.published_live_portraits || 0))
+  const unverifiedLivePortraits = Math.max(
+    0,
+    publishedLivePortraits - renderableLiveConfirmed - brokenLiveImages,
+  )
+  const statusNote = exactKnown
+    ? `Storage audit has a complete persisted verdict for all ${auditableAssets.toLocaleString("en-US")} auditable website assets.`
+    : queueState?.seeded_complete
+      ? `Storage audit has persisted verdicts for ${auditedAssets.toLocaleString("en-US")} of ${auditableAssets.toLocaleString("en-US")} auditable website assets (${coveragePercent.toFixed(1)}% coverage); ${storageQueueBacklogAssets.toLocaleString("en-US")} rows still need verification.`
+      : `Storage audit backlog is still being seeded from persisted asset rows. Persisted verdicts currently cover ${auditedAssets.toLocaleString("en-US")} of ${auditableAssets.toLocaleString("en-US")} auditable website assets (${coveragePercent.toFixed(1)}% coverage).`
+
+  return mapWebsiteTruthSummaryRow({
+    candidate_assets: candidateAssets,
+    stale_assets: baseline?.stale_assets || 0,
+    legacy_assets: baseline?.legacy_assets || 0,
+    published_live_portraits: publishedLivePortraits,
+    audited_assets: auditedAssets,
+    verified_renderable_images: verifiedRenderableImages,
+    storage_audit_coverage_percent: coveragePercent,
+    storage_incomplete_assets: storageIncompleteAssets,
+    broken_live_images: brokenLiveImages,
+    renderable_live_confirmed: renderableLiveConfirmed,
+    unverified_live_portraits: unverifiedLivePortraits,
+    renderable_live_exact_known: exactKnown ? 1 : 0,
+    last_exact_audit_total: lastExactAuditTotal,
+    last_exact_audit_at: lastExactAuditAt,
+    storage_queue_backlog_assets: storageQueueBacklogAssets,
+    storage_queue_seeded_complete: queueState?.seeded_complete ? 1 : 0,
+    storage_audit_status_note: statusNote,
+    updated_at: updatedAt,
+  })
+}
+
+async function writeWebsiteTruthSummary(env, summary) {
+  if (!env.ICONOPLASM_DB) return null
+  const row = mapWebsiteTruthSummaryRow(summary || {})
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_website_truth_summary (
+       summary_key,
+       candidate_assets,
+       stale_assets,
+       legacy_assets,
+       published_live_portraits,
+       audited_assets,
+       verified_renderable_images,
+       storage_audit_coverage_percent,
+       storage_incomplete_assets,
+       broken_live_images,
+       renderable_live_confirmed,
+       unverified_live_portraits,
+       renderable_live_exact_known,
+       last_exact_audit_total,
+       last_exact_audit_at,
+       storage_queue_backlog_assets,
+       storage_queue_seeded_complete,
+       storage_audit_status_note,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(summary_key) DO UPDATE SET
+       candidate_assets = excluded.candidate_assets,
+       stale_assets = excluded.stale_assets,
+       legacy_assets = excluded.legacy_assets,
+       published_live_portraits = excluded.published_live_portraits,
+       audited_assets = excluded.audited_assets,
+       verified_renderable_images = excluded.verified_renderable_images,
+       storage_audit_coverage_percent = excluded.storage_audit_coverage_percent,
+       storage_incomplete_assets = excluded.storage_incomplete_assets,
+       broken_live_images = excluded.broken_live_images,
+       renderable_live_confirmed = excluded.renderable_live_confirmed,
+       unverified_live_portraits = excluded.unverified_live_portraits,
+       renderable_live_exact_known = excluded.renderable_live_exact_known,
+       last_exact_audit_total = excluded.last_exact_audit_total,
+       last_exact_audit_at = excluded.last_exact_audit_at,
+       storage_queue_backlog_assets = excluded.storage_queue_backlog_assets,
+       storage_queue_seeded_complete = excluded.storage_queue_seeded_complete,
+       storage_audit_status_note = excluded.storage_audit_status_note,
+       updated_at = CURRENT_TIMESTAMP`,
+  )
+    .bind(
+      ICONO_WEBSITE_TRUTH_SUMMARY_KEY,
+      row.candidate_assets,
+      row.stale_assets,
+      row.legacy_assets,
+      row.published_live_portraits,
+      row.audited_assets,
+      row.verified_renderable_images,
+      row.storage_audit_coverage_percent,
+      row.storage_incomplete_assets,
+      row.broken_live_images,
+      row.renderable_live_confirmed,
+      row.unverified_live_portraits,
+      row.renderable_live_exact_known ? 1 : 0,
+      row.last_exact_audit_total,
+      row.last_exact_audit_at || null,
+      row.storage_queue_backlog_assets,
+      row.storage_queue_seeded_complete ? 1 : 0,
+      row.storage_audit_status_note,
+    )
+    .run()
+  return fetchPersistedWebsiteTruthSummary(env)
+}
+
+async function refreshWebsiteTruthSummaryRow(env) {
+  const summary = await computeWebsiteTruthSummary(env)
+  return writeWebsiteTruthSummary(env, summary)
+}
+
+async function fetchAdminAssetSummaryCounts(env, { refresh = false } = {}) {
+  if (!env.ICONOPLASM_DB) return mapWebsiteTruthSummaryRow({})
+  if (refresh) return refreshWebsiteTruthSummaryRow(env)
+  const row = await fetchPersistedWebsiteTruthSummary(env)
+  if (row) return row
+  return refreshWebsiteTruthSummaryRow(env)
+}
+
+async function selectStorageAuditQueueRowsToProcess(env, { requestedSymbols = null, limit = 100 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const wantedSymbols = Array.isArray(requestedSymbols)
+    ? normalizeAdminAssetMaintenanceSymbols(requestedSymbols, 5000)
+    : []
+  const applyScope = wantedSymbols.length > 0 ? 1 : 0
+  const cleanedLimit = normalizeAdminAssetMaintenanceLimit(limit, 100, 500)
+  const response = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming_scope AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     )
+     SELECT
+       q.gene_symbol,
+       q.asset_sha256,
+       q.asset_status AS status,
+       q.is_stale,
+       q.is_legacy,
+       q.created_at,
+       q.is_current,
+       q.attempts
+     FROM icono_storage_audit_queue q
+     JOIN icono_portrait_assets pa
+       ON pa.gene_symbol = q.gene_symbol
+      AND pa.asset_sha256 = q.asset_sha256
+     WHERE q.audit_state = 'unknown'
+       AND q.next_attempt_at <= CURRENT_TIMESTAMP
+       AND (? = 0 OR q.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+       AND COALESCE(pa.is_legacy, 0) = 0
+       AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+     ORDER BY
+       q.is_current DESC,
+       COALESCE(q.is_stale, 0) ASC,
+       COALESCE(q.created_at, '') DESC,
+       q.gene_symbol ASC,
+       q.asset_sha256 ASC
+     LIMIT ?`,
+  )
+    .bind(JSON.stringify(wantedSymbols), applyScope, cleanedLimit)
+    .all()
+  return Array.isArray(response?.results) ? response.results : []
+}
+
+async function inspectAdminAssetStorageRows(env, rawRows, { concurrency = ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY } = {}) {
+  const rows = Array.isArray(rawRows) ? rawRows : []
+  const safeConcurrency = Math.max(
+    1,
+    Math.min(
+      16,
+      Number.parseInt(String(concurrency || ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY), 10) ||
+        ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY,
+    ),
+  )
+  const out = []
+
+  const inspectOne = async (rawRow) => {
+    const symbol = normalizeSymbol(rawRow?.gene_symbol || rawRow?.symbol || "")
+    const assetSha = normalizeSha256(rawRow?.asset_sha256 || rawRow?.sha256 || "")
+    if (!symbol || !assetSha) return null
+
+    try {
+      const keys = {
+        full: r2PortraitKey(assetSha, "full"),
+        medium: r2PortraitKey(assetSha, "medium"),
+        thumb: r2PortraitKey(assetSha, "thumb"),
+      }
+      const [fullHead, mediumHead, thumbHead] = await Promise.all([
+        headPortraitStorageObject(env, keys.full),
+        headPortraitStorageObject(env, keys.medium),
+        headPortraitStorageObject(env, keys.thumb),
+      ])
+
+      const missingRenditions = []
+      if (!fullHead) missingRenditions.push("full")
+      if (!mediumHead) missingRenditions.push("medium")
+      if (!thumbHead) missingRenditions.push("thumb")
+
+      return {
+        ok: true,
+        symbol,
+        asset_sha256: assetSha,
+        status: normalizeAssetStatus(rawRow?.status || "", "draft"),
+        is_stale: Number(rawRow?.is_stale || 0) > 0,
+        is_legacy: Number(rawRow?.is_legacy || 0) > 0,
+        is_current: Number(rawRow?.is_current || 0) > 0,
+        created_at: sanitizeText(rawRow?.created_at || "", 64) || "",
+        attempts: Math.max(0, Number(rawRow?.attempts || 0)),
+        storage_complete: missingRenditions.length === 0,
+        missing_renditions: missingRenditions,
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        symbol,
+        asset_sha256: assetSha,
+        status: normalizeAssetStatus(rawRow?.status || "", "draft"),
+        is_stale: Number(rawRow?.is_stale || 0) > 0,
+        is_legacy: Number(rawRow?.is_legacy || 0) > 0,
+        is_current: Number(rawRow?.is_current || 0) > 0,
+        created_at: sanitizeText(rawRow?.created_at || "", 64) || "",
+        attempts: Math.max(0, Number(rawRow?.attempts || 0)),
+        error: sanitizeText(String(error?.message || error || "storage audit failed"), 2000) || "storage audit failed",
+      }
+    }
+  }
+
+  for (let start = 0; start < rows.length; start += safeConcurrency) {
+    const chunk = rows.slice(start, start + safeConcurrency)
+    const chunkResults = await Promise.all(chunk.map((row) => inspectOne(row)))
+    for (const result of chunkResults) {
+      if (result) out.push(result)
+    }
+  }
+
+  return out
+}
+
+async function writeStorageAuditQueueInspectionResult(env, result) {
+  return (await writeStorageAuditQueueInspectionResults(env, [result])) > 0
+}
+
+async function writeStorageAuditQueueInspectionResults(env, rows) {
+  if (!env.ICONOPLASM_DB) return 0
+  const successRows = []
+  const retryRows = []
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const symbol = normalizeSymbol(row?.symbol || row?.gene_symbol || "")
+    const assetSha = normalizeSha256(row?.asset_sha256 || "")
+    if (!symbol || !assetSha) continue
+
+    if (row?.ok) {
+      successRows.push({
+        gene_symbol: symbol,
+        asset_sha256: assetSha,
+        audit_state: row?.storage_complete ? "renderable" : "broken",
+        missing_renditions_json: JSON.stringify(
+          Array.isArray(row?.missing_renditions) ? row.missing_renditions : [],
+        ),
+        is_current: row?.is_current ? 1 : 0,
+        is_stale: row?.is_stale ? 1 : 0,
+        is_legacy: row?.is_legacy ? 1 : 0,
+        asset_status: normalizeAssetStatus(row?.status || "", "draft"),
+        created_at: sanitizeText(row?.created_at || "", 64) || "",
+        last_audited_at: new Date().toISOString(),
+      })
+      continue
+    }
+
+    const attempts = Math.max(0, Number(row?.attempts || 0) || 0)
+    const delayMinutes = Math.max(1, Math.min(60, Math.pow(2, attempts)))
+    retryRows.push({
+      gene_symbol: symbol,
+      asset_sha256: assetSha,
+      is_current: row?.is_current ? 1 : 0,
+      is_stale: row?.is_stale ? 1 : 0,
+      is_legacy: row?.is_legacy ? 1 : 0,
+      asset_status: normalizeAssetStatus(row?.status || "", "draft"),
+      created_at: sanitizeText(row?.created_at || "", 64) || "",
+      last_error:
+        sanitizeText(row?.error || "storage audit failed", 2000) || "storage audit failed",
+      next_attempt_at: new Date(Date.now() + delayMinutes * 60 * 1000).toISOString(),
+    })
+  }
+
+  if (successRows.length > 0) {
+    await env.ICONOPLASM_DB.prepare(
+      `WITH incoming_results AS (
+         SELECT
+           json_extract(value, '$.gene_symbol') AS gene_symbol,
+           json_extract(value, '$.asset_sha256') AS asset_sha256,
+           json_extract(value, '$.audit_state') AS audit_state,
+           json_extract(value, '$.missing_renditions_json') AS missing_renditions_json,
+           CAST(COALESCE(json_extract(value, '$.is_current'), 0) AS INTEGER) AS is_current,
+           CAST(COALESCE(json_extract(value, '$.is_stale'), 0) AS INTEGER) AS is_stale,
+           CAST(COALESCE(json_extract(value, '$.is_legacy'), 0) AS INTEGER) AS is_legacy,
+           json_extract(value, '$.asset_status') AS asset_status,
+           json_extract(value, '$.created_at') AS created_at,
+           json_extract(value, '$.last_audited_at') AS last_audited_at
+         FROM json_each(?)
+       )
+       INSERT OR IGNORE INTO icono_storage_audit_queue (
+         gene_symbol,
+         asset_sha256,
+         status,
+         audit_state,
+         missing_renditions_json,
+         is_current,
+         is_stale,
+         is_legacy,
+         asset_status,
+         created_at,
+         last_seen_at,
+         last_audited_at,
+         last_error,
+         attempts,
+         next_attempt_at,
+         updated_at
+       )
+       SELECT
+         gene_symbol,
+         asset_sha256,
+         'completed',
+         audit_state,
+         missing_renditions_json,
+         is_current,
+         is_stale,
+         is_legacy,
+         asset_status,
+         created_at,
+         CURRENT_TIMESTAMP,
+         last_audited_at,
+         '',
+         0,
+         CURRENT_TIMESTAMP,
+         CURRENT_TIMESTAMP
+       FROM incoming_results`,
+    )
+      .bind(JSON.stringify(successRows))
+      .run()
+
+    await env.ICONOPLASM_DB.prepare(
+      `WITH incoming_results AS (
+         SELECT
+           json_extract(value, '$.gene_symbol') AS gene_symbol,
+           json_extract(value, '$.asset_sha256') AS asset_sha256,
+           json_extract(value, '$.audit_state') AS audit_state,
+           json_extract(value, '$.missing_renditions_json') AS missing_renditions_json,
+           CAST(COALESCE(json_extract(value, '$.is_current'), 0) AS INTEGER) AS is_current,
+           CAST(COALESCE(json_extract(value, '$.is_stale'), 0) AS INTEGER) AS is_stale,
+           CAST(COALESCE(json_extract(value, '$.is_legacy'), 0) AS INTEGER) AS is_legacy,
+           json_extract(value, '$.asset_status') AS asset_status,
+           json_extract(value, '$.created_at') AS created_at,
+           json_extract(value, '$.last_audited_at') AS last_audited_at
+         FROM json_each(?)
+       )
+       UPDATE icono_storage_audit_queue
+       SET status = 'completed',
+           audit_state = COALESCE((
+             SELECT ir.audit_state
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.audit_state),
+           missing_renditions_json = COALESCE((
+             SELECT ir.missing_renditions_json
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.missing_renditions_json),
+           is_current = COALESCE((
+             SELECT ir.is_current
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.is_current),
+           is_stale = COALESCE((
+             SELECT ir.is_stale
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.is_stale),
+           is_legacy = COALESCE((
+             SELECT ir.is_legacy
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.is_legacy),
+           asset_status = COALESCE((
+             SELECT ir.asset_status
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.asset_status),
+           created_at = COALESCE((
+             SELECT ir.created_at
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.created_at),
+           last_seen_at = CURRENT_TIMESTAMP,
+           last_audited_at = COALESCE((
+             SELECT ir.last_audited_at
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.last_audited_at),
+           last_error = '',
+           attempts = 0,
+           next_attempt_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE EXISTS (
+         SELECT 1
+         FROM incoming_results ir
+         WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+           AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+       )`,
+    )
+      .bind(JSON.stringify(successRows))
+      .run()
+  }
+
+  if (retryRows.length > 0) {
+    await env.ICONOPLASM_DB.prepare(
+      `WITH incoming_results AS (
+         SELECT
+           json_extract(value, '$.gene_symbol') AS gene_symbol,
+           json_extract(value, '$.asset_sha256') AS asset_sha256,
+           CAST(COALESCE(json_extract(value, '$.is_current'), 0) AS INTEGER) AS is_current,
+           CAST(COALESCE(json_extract(value, '$.is_stale'), 0) AS INTEGER) AS is_stale,
+           CAST(COALESCE(json_extract(value, '$.is_legacy'), 0) AS INTEGER) AS is_legacy,
+           json_extract(value, '$.asset_status') AS asset_status,
+           json_extract(value, '$.created_at') AS created_at,
+           json_extract(value, '$.last_error') AS last_error,
+           json_extract(value, '$.next_attempt_at') AS next_attempt_at
+         FROM json_each(?)
+       )
+       INSERT OR IGNORE INTO icono_storage_audit_queue (
+         gene_symbol,
+         asset_sha256,
+         status,
+         audit_state,
+         missing_renditions_json,
+         is_current,
+         is_stale,
+         is_legacy,
+         asset_status,
+         created_at,
+         last_seen_at,
+         last_audited_at,
+         last_error,
+         attempts,
+         next_attempt_at,
+         updated_at
+       )
+       SELECT
+         gene_symbol,
+         asset_sha256,
+         'retrying',
+         'unknown',
+         '[]',
+         is_current,
+         is_stale,
+         is_legacy,
+         asset_status,
+         created_at,
+         CURRENT_TIMESTAMP,
+         NULL,
+         last_error,
+         1,
+         next_attempt_at,
+         CURRENT_TIMESTAMP
+       FROM incoming_results`,
+    )
+      .bind(JSON.stringify(retryRows))
+      .run()
+
+    await env.ICONOPLASM_DB.prepare(
+      `WITH incoming_results AS (
+         SELECT
+           json_extract(value, '$.gene_symbol') AS gene_symbol,
+           json_extract(value, '$.asset_sha256') AS asset_sha256,
+           CAST(COALESCE(json_extract(value, '$.is_current'), 0) AS INTEGER) AS is_current,
+           CAST(COALESCE(json_extract(value, '$.is_stale'), 0) AS INTEGER) AS is_stale,
+           CAST(COALESCE(json_extract(value, '$.is_legacy'), 0) AS INTEGER) AS is_legacy,
+           json_extract(value, '$.asset_status') AS asset_status,
+           json_extract(value, '$.created_at') AS created_at,
+           json_extract(value, '$.last_error') AS last_error,
+           json_extract(value, '$.next_attempt_at') AS next_attempt_at
+         FROM json_each(?)
+       )
+       UPDATE icono_storage_audit_queue
+       SET status = 'retrying',
+           is_current = COALESCE((
+             SELECT ir.is_current
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.is_current),
+           is_stale = COALESCE((
+             SELECT ir.is_stale
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.is_stale),
+           is_legacy = COALESCE((
+             SELECT ir.is_legacy
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.is_legacy),
+           asset_status = COALESCE((
+             SELECT ir.asset_status
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.asset_status),
+           created_at = COALESCE((
+             SELECT ir.created_at
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.created_at),
+           last_seen_at = CURRENT_TIMESTAMP,
+           last_error = COALESCE((
+             SELECT ir.last_error
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.last_error),
+           attempts = COALESCE(icono_storage_audit_queue.attempts, 0) + 1,
+           next_attempt_at = COALESCE((
+             SELECT ir.next_attempt_at
+             FROM incoming_results ir
+             WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+               AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+             LIMIT 1
+           ), icono_storage_audit_queue.next_attempt_at),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE EXISTS (
+         SELECT 1
+         FROM incoming_results ir
+         WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
+           AND ir.asset_sha256 = icono_storage_audit_queue.asset_sha256
+       )`,
+    )
+      .bind(JSON.stringify(retryRows))
+      .run()
+  }
+
+  return successRows.length + retryRows.length
+}
+
+async function recordStorageAuditRenderableAsset(
+  env,
+  { symbol, assetSha256, status = "draft", isStale = false, isLegacy = false, isCurrent = false, createdAt = "" } = {},
+) {
+  if (!env.ICONOPLASM_DB) return false
+  const safeSymbol = normalizeSymbol(symbol)
+  const safeAssetSha = normalizeSha256(assetSha256 || "")
+  if (!safeSymbol || !safeAssetSha) return false
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_storage_audit_queue (
+       gene_symbol,
+       asset_sha256,
+       status,
+       audit_state,
+       missing_renditions_json,
+       is_current,
+       is_stale,
+       is_legacy,
+       asset_status,
+       created_at,
+       last_seen_at,
+       last_audited_at,
+       last_error,
+       attempts,
+       next_attempt_at,
+       updated_at
+     ) VALUES (?, ?, 'completed', 'renderable', '[]', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+       status = 'completed',
+       audit_state = 'renderable',
+       missing_renditions_json = '[]',
+       is_current = excluded.is_current,
+       is_stale = excluded.is_stale,
+       is_legacy = excluded.is_legacy,
+       asset_status = excluded.asset_status,
+       created_at = excluded.created_at,
+       last_seen_at = CURRENT_TIMESTAMP,
+       last_audited_at = CURRENT_TIMESTAMP,
+       last_error = '',
+       attempts = 0,
+       next_attempt_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+  )
+    .bind(
+      safeSymbol,
+      safeAssetSha,
+      isCurrent ? 1 : 0,
+      isStale ? 1 : 0,
+      isLegacy ? 1 : 0,
+      normalizeAssetStatus(status || "", "draft"),
+      sanitizeText(createdAt || "", 64) || "",
+    )
+    .run()
+  return true
+}
+
+async function fetchKnownBrokenStorageAuditRows(env, { requestedSymbols = null, limit = 50 } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const wantedSymbols = Array.isArray(requestedSymbols)
+    ? normalizeAdminAssetMaintenanceSymbols(requestedSymbols, 5000)
+    : []
+  const applyScope = wantedSymbols.length > 0 ? 1 : 0
+  const cleanedLimit = normalizeAdminAssetMaintenanceLimit(limit, 50, 250)
+  const response = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming_scope AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     )
+     SELECT
+       q.gene_symbol,
+       q.asset_sha256,
+       q.asset_status AS status,
+       q.is_stale,
+       q.is_legacy,
+       q.created_at,
+       q.is_current,
+       q.last_audited_at,
+       q.missing_renditions_json
+     FROM icono_storage_audit_queue q
+     JOIN icono_portrait_assets pa
+       ON pa.gene_symbol = q.gene_symbol
+      AND pa.asset_sha256 = q.asset_sha256
+     WHERE q.audit_state = 'broken'
+       AND (? = 0 OR q.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+       AND COALESCE(pa.is_legacy, 0) = 0
+       AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
+     ORDER BY
+       q.is_current DESC,
+       COALESCE(q.last_audited_at, '') DESC,
+       COALESCE(q.created_at, '') DESC,
+       q.gene_symbol ASC,
+       q.asset_sha256 ASC
+     LIMIT ?`,
+  )
+    .bind(JSON.stringify(wantedSymbols), applyScope, cleanedLimit)
+    .all()
+  return (Array.isArray(response?.results) ? response.results : []).map((row) => ({
+    symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+    asset_sha256: normalizeSha256(row?.asset_sha256 || "") || "",
+    status: normalizeAssetStatus(row?.status || "", "draft"),
+    is_stale: Number(row?.is_stale || 0) > 0,
+    is_legacy: Number(row?.is_legacy || 0) > 0,
+    is_current: Number(row?.is_current || 0) > 0,
+    created_at: sanitizeText(row?.created_at || "", 64) || "",
+    last_audited_at: sanitizeText(row?.last_audited_at || "", 64) || "",
+    storage_complete: false,
+    missing_renditions: parseAdminAssetMissingRenditions(row?.missing_renditions_json),
+  }))
+}
+
+async function fetchAdminAssetStorageAudit(env, { requestedSymbols = null, limit = 100 } = {}) {
+  await seedStorageAuditQueueStep(env, {
+    requestedSymbols,
+    symbolBatch: ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH,
+  })
+  const safeLimit = normalizeStorageAuditInspectionLimit(limit, 100)
+  const queuedRows = await selectStorageAuditQueueRowsToProcess(env, {
+    requestedSymbols,
+    limit: safeLimit,
+  })
+  const inspectedRows = await inspectAdminAssetStorageRows(env, queuedRows, {
+    concurrency: ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY,
+  })
+  await writeStorageAuditQueueInspectionResults(env, inspectedRows)
+  return {
+    rows: inspectedRows.filter((row) => row?.ok),
+    processed_assets: inspectedRows.filter((row) => row?.ok).length,
+    summary: await fetchAdminAssetSummaryCounts(env, { refresh: true }),
+  }
+}
+
+async function fetchAdminAssetRepairScope(env, { requestedSymbols = null, limit = 50 } = {}) {
+  await seedStorageAuditQueueStep(env, {
+    requestedSymbols,
+    symbolBatch: ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH,
+  })
+  const summary = await fetchAdminAssetSummaryCounts(env, { refresh: true })
+  return {
+    rows: await fetchKnownBrokenStorageAuditRows(env, { requestedSymbols, limit }),
+    scanned_assets: Math.max(0, Number(summary?.audited_assets || 0)),
+    summary,
+  }
 }
 
 async function fetchCatalogRow(env, symbol) {
@@ -16243,13 +17532,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           "admin_assets_summary_500",
           json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
-      const summaryRow = await env.ICONOPLASM_DB.prepare(
-        `SELECT
-            COUNT(*) AS candidate_assets,
-            SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
-            SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets
-           FROM icono_portrait_assets`,
-      ).first()
+      const summaryRow = await fetchAdminAssetSummaryCounts(env, { refresh: true })
       return done(
         "admin_assets_summary",
         json(
@@ -16258,6 +17541,130 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             candidate_assets: Number(summaryRow?.candidate_assets || 0),
             stale_assets: Number(summaryRow?.stale_assets || 0),
             legacy_assets: Number(summaryRow?.legacy_assets || 0),
+            published_live_portraits: Number(summaryRow?.published_live_portraits || 0),
+            audited_assets: Number(summaryRow?.audited_assets || 0),
+            verified_renderable_images: Number(summaryRow?.verified_renderable_images || 0),
+            storage_audit_coverage_percent: Number(summaryRow?.storage_audit_coverage_percent || 0),
+            storage_incomplete_assets: Number(summaryRow?.storage_incomplete_assets || 0),
+            broken_live_images: Number(summaryRow?.broken_live_images || 0),
+            renderable_live_confirmed: Number(summaryRow?.renderable_live_confirmed || 0),
+            unverified_live_portraits: Number(summaryRow?.unverified_live_portraits || 0),
+            renderable_live_exact_known: Boolean(summaryRow?.renderable_live_exact_known),
+            last_exact_audit_total:
+              summaryRow?.last_exact_audit_total === null || summaryRow?.last_exact_audit_total === undefined
+                ? null
+                : Number(summaryRow?.last_exact_audit_total || 0),
+            last_exact_audit_at: sanitizeText(summaryRow?.last_exact_audit_at || "", 64) || null,
+            storage_queue_backlog_assets: Number(summaryRow?.storage_queue_backlog_assets || 0),
+            storage_queue_seeded_complete: Boolean(summaryRow?.storage_queue_seeded_complete),
+            storage_audit_status_note:
+              sanitizeText(summaryRow?.storage_audit_status_note || "", 2000) ||
+              "Website storage truth has not been computed yet.",
+            updated_at: sanitizeText(summaryRow?.updated_at || "", 64) || null,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/assets/storage-audit" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_assets_storage_audit_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_assets_storage_audit_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_assets_storage_audit_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      let requestedSymbols = []
+      let limit = 100
+      const mode = sanitizeText(p?.mode || "backlog-batch", 64).toLowerCase() || "backlog-batch"
+      try {
+        requestedSymbols = normalizeAdminAssetMaintenanceSymbols(p?.symbols, 5000)
+        limit = normalizeAdminAssetMaintenanceLimit(p?.limit, 100, 500)
+      } catch (error) {
+        return done(
+          "admin_assets_storage_audit_400",
+          json({ error: String(error?.message || error || "Invalid storage audit scope") }, 400),
+        )
+      }
+
+      const audit = await fetchAdminAssetStorageAudit(env, {
+        requestedSymbols,
+        limit,
+      })
+
+      return done(
+        "admin_assets_storage_audit",
+        json(
+          {
+            ok: true,
+            mode,
+            requested_symbols: requestedSymbols.length,
+            count: Array.isArray(audit?.rows) ? audit.rows.length : 0,
+            audited_assets: Number(audit?.summary?.audited_assets || 0),
+            assets: Array.isArray(audit?.rows) ? audit.rows : [],
+            summary: audit?.summary || {},
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/assets/repair-scope" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_assets_repair_scope_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_assets_repair_scope_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_assets_repair_scope_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      let requestedSymbols = []
+      let limit = 50
+      const mode = sanitizeText(p?.mode || "backlog-batch", 64).toLowerCase() || "backlog-batch"
+      try {
+        requestedSymbols = normalizeAdminAssetMaintenanceSymbols(p?.symbols, 5000)
+        limit = normalizeAdminAssetMaintenanceLimit(p?.limit, 50, 250)
+      } catch (error) {
+        return done(
+          "admin_assets_repair_scope_400",
+          json({ error: String(error?.message || error || "Invalid repair scope") }, 400),
+        )
+      }
+
+      const repairScope = await fetchAdminAssetRepairScope(env, {
+        requestedSymbols,
+        limit,
+      })
+
+      return done(
+        "admin_assets_repair_scope",
+        json(
+          {
+            ok: true,
+            mode,
+            requested_symbols: requestedSymbols.length,
+            scanned_assets: Number(repairScope?.scanned_assets || 0),
+            count: Array.isArray(repairScope?.rows) ? repairScope.rows.length : 0,
+            assets: Array.isArray(repairScope?.rows) ? repairScope.rows : [],
+            summary: repairScope?.summary || {},
           },
           200,
           { "Cache-Control": "no-store" },
@@ -16861,6 +18268,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           let fullBytes = null
           let mediumBytes = null
           let thumbBytes = null
+          let uploadedAny = false
           if (!forceUpload && !isNewAsset && (!storedRenditionsPresent || verifyStorage)) {
             // Brand-new assets cannot already exist in portrait storage under
             // this sha-key contract. Skipping pointless HEAD probes here keeps
@@ -16928,6 +18336,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             }
             if (uploadTasks.length > 0) {
               await Promise.all(uploadTasks)
+              uploadedAny = true
             }
           }
           const visionId =
@@ -17066,6 +18475,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 createdBy,
               )
               .run()
+
+            // Keep the durable storage truth in step with successful repair or
+            // verification work. The whole point of the queue redesign is to
+            // stop re-discovering image truth with fresh Bunny HEAD storms on
+            // every admin request.
+            if (finalStatus !== "rejected" && (verifyStorage || forceUpload || uploadedAny)) {
+              await recordStorageAuditRenderableAsset(env, {
+                symbol,
+                assetSha256: assetSha,
+                status: finalStatus,
+                isStale: persistedIsStale,
+                isLegacy: false,
+                isCurrent: false,
+                createdAt: existingAsset?.created_at || "",
+              })
+            }
           }
 
           const essenceResult = "not_provided"

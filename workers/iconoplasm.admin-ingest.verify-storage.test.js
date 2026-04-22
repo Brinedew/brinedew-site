@@ -39,6 +39,9 @@ class FakeStatement {
     if (this.sql.includes("INSERT INTO icono_portrait_assets")) {
       return { success: true, meta: { changes: 1 } }
     }
+    if (this.sql.includes("INSERT INTO icono_storage_audit_queue")) {
+      return { success: true, meta: { changes: 1 } }
+    }
     throw new Error(`Unexpected SQL in fake DB run(): ${this.sql}`)
   }
 }
