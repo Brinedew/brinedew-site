@@ -10460,14 +10460,22 @@ async function enqueueSyncFinalizationJobs(
   }
 }
 
-async function listPendingSyncFinalizationJobs(env, { limit = 200 } = {}) {
+async function listPendingSyncFinalizationJobs(env, { limit = 200, symbols = null } = {}) {
   if (!env?.ICONOPLASM_DB) return []
   await ensureSyncFinalizationJobsTable(env)
   const cleanedLimit = Math.max(1, Math.min(1000, Number.parseInt(String(limit || 200), 10) || 200))
+  const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
+  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
+  const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
   const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
+    `WITH scoped_symbols AS (
+       SELECT value AS gene_symbol
+       FROM json_each(?)
+     )
+     SELECT *
      FROM icono_sync_finalization_jobs
      WHERE status <> ?
+       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
      ORDER BY
        CASE
          WHEN phase = ? THEN 1
@@ -10479,7 +10487,9 @@ async function listPendingSyncFinalizationJobs(env, { limit = 200 } = {}) {
      LIMIT ?`,
   )
     .bind(
+      scopedSymbolsJson,
       ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+      scopedEnabled,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
       cleanedLimit,
     )
@@ -10989,6 +10999,11 @@ async function processPendingSyncFinalizationJobs(
        AND phase <> ?
        AND next_attempt_at <= ?
        AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
+     -- Live lesson: oldest-first alone made the queue look honest but drain
+     -- badly, because late-phase rows kept sitting behind fresh reconcile work.
+     -- Prefer jobs that are already closest to completed_pending_finalize so the
+     -- visible pending bucket can actually collapse instead of endlessly
+     -- recycling half-finished symbols.
      ORDER BY
        CASE phase
          WHEN ? THEN 0
@@ -16836,39 +16851,62 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         1,
         Math.min(1000, Number.parseInt(url.searchParams.get("limit") || "200", 10) || 200),
       )
-      const jobs = await listPendingSyncFinalizationJobs(env, { limit })
+      const scopedSymbols = normalizeSyncFinalizationJobSymbols(
+        (() => {
+          const raw = sanitizeText(url.searchParams.get("symbols") || "", 200000)
+          if (!raw) return []
+          try {
+            const parsed = JSON.parse(raw)
+            return Array.isArray(parsed) ? parsed : []
+          } catch {
+            return raw.split(",")
+          }
+        })(),
+        { maxItems: 5000 },
+      )
+      const scopedSymbolsJson = JSON.stringify(scopedSymbols)
+      const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
+      const jobs = await listPendingSyncFinalizationJobs(env, { limit, symbols: scopedSymbols })
       const [queuedCount, runningCount, retryingCount, pendingFinalizeCount, completedCount, latestCompletedRow] =
         await Promise.all([
           countSyncFinalizationJobs(env, {
-            whereSql: "status = ?",
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED],
+            whereSql: `status = ?
+              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED, scopedEnabled, scopedSymbolsJson],
           }),
           countSyncFinalizationJobs(env, {
-            whereSql: "status = ?",
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING],
+            whereSql: `status = ?
+              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING, scopedEnabled, scopedSymbolsJson],
           }),
           countSyncFinalizationJobs(env, {
-            whereSql: "status = ?",
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING],
+            whereSql: `status = ?
+              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING, scopedEnabled, scopedSymbolsJson],
           }),
           countSyncFinalizationJobs(env, {
-            whereSql: "phase = ? AND status <> ?",
+            whereSql: `phase = ? AND status <> ?
+              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
             bindArgs: [
               ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
               ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+              scopedEnabled,
+              scopedSymbolsJson,
             ],
           }),
           countSyncFinalizationJobs(env, {
-            whereSql: "status = ?",
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED],
+            whereSql: `status = ?
+              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson],
           }),
           env.ICONOPLASM_DB.prepare(
             `SELECT MAX(completed_at) AS completed_at
              FROM icono_sync_finalization_jobs
              WHERE status = ?
+               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))
                AND completed_at <> ''`,
           )
-            .bind(ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED)
+            .bind(ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson)
             .first(),
         ])
       const latestCompletedAt = sanitizeText(latestCompletedRow?.completed_at || "", 64) || ""

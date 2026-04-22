@@ -79,9 +79,27 @@ class FakeStatement {
       return { results: rows.slice(0, Math.max(0, Number(limit || 0) || 0)).map((row) => ({ ...row })) }
     }
     if (this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE status <> ?")) {
-      const [completedStatus, pendingFinalizePhase, limit] = this.args
+      const scopedQuery =
+        this.sql.includes("WITH scoped_symbols") ||
+        this.sql.includes("gene_symbol IN (SELECT value FROM json_each(?))")
+      const [scopedSymbolsJson, completedStatus, scopedEnabled, pendingFinalizePhase, limit] = scopedQuery
+        ? this.args
+        : ["[]", this.args[0], 0, this.args[1], this.args[2]]
+      let scopedSymbols = null
+      if (Number(scopedEnabled || 0) > 0) {
+        try {
+          scopedSymbols = new Set(
+            (JSON.parse(String(scopedSymbolsJson || "[]")) || [])
+              .map((item) => String(item || "").trim().toUpperCase())
+              .filter(Boolean),
+          )
+        } catch {
+          scopedSymbols = new Set()
+        }
+      }
       const rows = [...this.db.jobs.values()]
         .filter((row) => row.status !== completedStatus)
+        .filter((row) => !scopedSymbols || scopedSymbols.has(String(row.gene_symbol || "").trim().toUpperCase()))
         .sort((left, right) => {
           const leftPendingFinalize = left.phase === pendingFinalizePhase ? 1 : 0
           const rightPendingFinalize = right.phase === pendingFinalizePhase ? 1 : 0
@@ -125,8 +143,15 @@ class FakeStatement {
         }
       }
       if (this.sql.includes("WHERE status = ?")) {
-        const [status] = this.args
-        return { count: [...this.db.jobs.values()].filter((row) => row.status === status).length }
+        const [status, scopedEnabled, scopedSymbolsJson] = this.args
+        const scopedSymbols = parseScopedSymbols(scopedEnabled, scopedSymbolsJson)
+        return {
+          count: [...this.db.jobs.values()].filter(
+            (row) =>
+              row.status === status &&
+              (!scopedSymbols || scopedSymbols.has(String(row.gene_symbol || "").trim().toUpperCase())),
+          ).length,
+        }
       }
       if (this.sql.includes("phase = ?") && this.sql.includes("status <> ?")) {
         const phaseBeforeStatus = this.sql.indexOf("phase = ?") < this.sql.indexOf("status <> ?")
@@ -350,6 +375,65 @@ test("admin finalization pending exposes queued, retrying, and pending-finalize 
   assert.deepEqual(
     (payload?.jobs || []).map((job) => job.symbol),
     ["TP53", "BRCA1", "EGFR"],
+  )
+})
+
+test("admin finalization pending can scope the snapshot to selected symbols", async () => {
+  const env = buildEnv({
+    jobs: [
+      {
+        gene_symbol: "TP53",
+        status: "queued",
+        phase: "reconcile",
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      },
+      {
+        gene_symbol: "BRCA1",
+        status: "retrying",
+        phase: "gene_rollups",
+        requested_at: "2026-04-16T00:01:00.000Z",
+        next_attempt_at: "2026-04-16T00:02:00.000Z",
+        attempts: 2,
+        last_error: "timed out",
+      },
+      {
+        gene_symbol: "EGFR",
+        status: "queued",
+        phase: "completed_pending_finalize",
+        requested_at: "2026-04-16T00:03:00.000Z",
+        next_attempt_at: "2026-04-16T00:03:00.000Z",
+      },
+    ],
+  })
+
+  const scopedSymbols = encodeURIComponent(JSON.stringify(["EGFR"]))
+  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/pending?limit=10&symbols=${scopedSymbols}`, {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+      },
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.deepEqual(payload?.summary, {
+    queued: 1,
+    running: 0,
+    retrying: 0,
+    pending_finalize: 1,
+    completed: 0,
+    last_completed_at: "",
+    total_pending: 2,
+  })
+  assert.deepEqual(
+    (payload?.jobs || []).map((job) => job.symbol),
+    ["EGFR"],
   )
 })
 
