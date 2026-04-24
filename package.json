@@ -15,6 +15,7 @@
     "quartz": "node ./quartz/bootstrap-cli.mjs",
     "sync:iconoplasm-shared": "node ./scripts/sync-iconoplasm-shared.mjs",
     "package:iconoplasm-extension": "node ./scripts/package-iconoplasm-extension.mjs",
+    "package:iconoplasm-firefox": "node ./scripts/package-iconoplasm-extension.mjs --target=firefox",
     "package:iconoplasm-firefox-source": "node ./scripts/package-iconoplasm-firefox-source.mjs",
     "dev": "npm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build --serve -d content",
     "build": "npm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build -d content",

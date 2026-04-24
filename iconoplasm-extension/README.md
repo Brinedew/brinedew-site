@@ -20,6 +20,7 @@ That will drag in `store-assets/`, screenshots, promo files, and any local Playw
 Use the repo-level package command instead:
 
 - `npm run package:iconoplasm-extension`
+- `npm run package:iconoplasm-firefox`
 
 What it does:
 
@@ -30,12 +31,14 @@ What it does:
 
 Current output:
 
-- staged runtime payload: `iconoplasm-extension/dist/package/`
-- zip for upload/manual distribution: `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
+- Chromium/manual staged runtime payload: `iconoplasm-extension/dist/package/`
+- Chromium/manual zip: `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
+- Firefox staged runtime payload: `iconoplasm-extension/dist/firefox-package/`
+- Firefox/AMO upload zip: `iconoplasm-extension/dist/iconoplasm-firefox-v<version>.zip`
 
 For AMO's first upload screen, select:
 
-- `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
+- `iconoplasm-extension/dist/iconoplasm-firefox-v<version>.zip`
 
 If AMO asks for a source code package during review, create it with:
 
@@ -56,7 +59,7 @@ Canonical path:
 What it does:
 
 - installs website dependencies
-- builds the clean extension payload with `npm run package:iconoplasm-extension`
+- builds the clean Firefox extension payload with `npm run package:iconoplasm-firefox`
 - runs `web-ext lint` against the staged runtime folder
 - submits the extension to AMO for signing/review
 - uploads the signed Firefox artifact back to the workflow run

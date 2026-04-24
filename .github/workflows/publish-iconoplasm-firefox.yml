@@ -46,7 +46,7 @@ jobs:
         run: npm ci
 
       - name: Package extension payload
-        run: node ./scripts/package-iconoplasm-extension.mjs --target=firefox
+        run: npm run package:iconoplasm-firefox
 
       - name: Lint Firefox package
         run: npx web-ext lint --source-dir iconoplasm-extension/dist/firefox-package

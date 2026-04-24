@@ -60,6 +60,24 @@ test("DO NOT DELETE: extension package script ships the content modules", () => 
   }
 })
 
+test("DO NOT DELETE: Firefox release packaging is a first-class path", () => {
+  const packageJson = JSON.parse(readUtf8("./package.json"))
+  assert.equal(
+    packageJson.scripts["package:iconoplasm-firefox"],
+    "node ./scripts/package-iconoplasm-extension.mjs --target=firefox",
+    "Firefox packaging should not depend on fragile npm argument forwarding",
+  )
+
+  const sourcePackageScript = readUtf8("./scripts/package-iconoplasm-firefox-source.mjs")
+  for (const moduleName of requiredContentModules) {
+    assert.match(
+      sourcePackageScript,
+      new RegExp(`"iconoplasm-extension/${escapeRegExp(moduleName)}"`),
+      `${moduleName} should be included in the AMO source package`,
+    )
+  }
+})
+
 test("DO NOT DELETE: content.js delegates split responsibilities to extension modules", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   const requiredGlobals = [

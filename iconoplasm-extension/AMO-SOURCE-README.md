@@ -32,7 +32,7 @@ From the repo root of this source package:
 
 1. `npm ci`
 2. `npm run sync:iconoplasm-shared`
-3. `node ./scripts/package-iconoplasm-extension.mjs --target=firefox`
+3. `npm run package:iconoplasm-firefox`
 
 That produces the Firefox review payload at:
 
@@ -47,7 +47,7 @@ The unsigned Firefox package should match the extension version uploaded to AMO 
 Notes about the build:
 
 - `scripts/sync-iconoplasm-shared.mjs` regenerates the shared assets copied into the extension runtime.
-- `scripts/package-iconoplasm-extension.mjs --target=firefox` stages a Firefox-specific manifest and strips files that are not part of the AMO upload bundle.
+- `npm run package:iconoplasm-firefox` stages a Firefox-specific manifest and strips files that are not part of the AMO upload bundle.
 - The signed XPI is produced by AMO after upload; the local build reproduces the unsigned package submitted for review.
 
 ## reviewer notes
