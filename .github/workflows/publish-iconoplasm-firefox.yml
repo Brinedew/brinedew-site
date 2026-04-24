@@ -1,5 +1,8 @@
 name: Publish Iconoplasm Firefox extension
 
+# Store publish is deliberately workflow_dispatch-only. The supported trigger
+# surface is the local Iconoplasm GUI's human release gate, not pushes, cron, or
+# unattended LLM/CLI automation.
 on:
   workflow_dispatch:
     inputs:
@@ -11,6 +14,10 @@ on:
         options:
           - listed
           - unlisted
+      human_confirmation:
+        description: "Type exactly: YES, I AM A HUMAN, PUBLISH ICONOPLASM"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +32,14 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
+
+      - name: Confirm human publish intent
+        env:
+          HUMAN_CONFIRMATION: ${{ inputs.human_confirmation }}
+        run: |
+          if ($env:HUMAN_CONFIRMATION -ne "YES, I AM A HUMAN, PUBLISH ICONOPLASM") {
+            throw "Firefox store publish requires the exact human confirmation phrase from the Iconoplasm GUI."
+          }
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
