@@ -6,7 +6,14 @@
   "use strict"
 
   const IconoCardShared = globalThis.IconoplasmCardShared
+  const IconoContentApi = globalThis.IconoplasmContentApi
+  const IconoContentSettings = globalThis.IconoplasmContentSettings
   const IconoContentMatcher = globalThis.IconoplasmContentMatcher
+  const IconoContentScanner = globalThis.IconoplasmContentScanner
+  const IconoContentTooltip = globalThis.IconoplasmContentTooltip
+  const IconoContentPortraitCache = globalThis.IconoplasmContentPortraitCache
+  const IconoContentDetailCache = globalThis.IconoplasmContentDetailCache
+  const IconoContentVoteBridge = globalThis.IconoplasmContentVoteBridge
   const IconoHighlightRuntime = globalThis.IconoplasmHighlightRuntime
   const IconoVisibilityScheduler = globalThis.IconoplasmVisibilityScheduler
   if (!IconoCardShared) {
@@ -15,21 +22,63 @@
     )
     return
   }
+  if (!IconoContentApi || typeof IconoContentApi.createExtensionApiFetch !== "function") {
+    console.error("[Iconoplasm] content API bridge missing: load content-api.js first")
+    return
+  }
+  if (!IconoContentSettings) {
+    console.error("[Iconoplasm] content settings missing: load content-settings.js first")
+    return
+  }
   if (!IconoContentMatcher) {
     console.error("[Iconoplasm] content matcher missing: load content-matcher.js first")
     return
   }
-  if (!IconoHighlightRuntime || typeof IconoHighlightRuntime.createHighlightRuntime !== "function") {
+  if (!IconoContentScanner || typeof IconoContentScanner.createPageScanner !== "function") {
+    console.error("[Iconoplasm] content scanner missing: load content-scanner.js first")
+    return
+  }
+  if (!IconoContentTooltip || typeof IconoContentTooltip.createTooltipShell !== "function") {
+    console.error("[Iconoplasm] content tooltip shell missing: load content-tooltip.js first")
+    return
+  }
+  if (
+    !IconoContentPortraitCache ||
+    typeof IconoContentPortraitCache.createPortraitCache !== "function"
+  ) {
+    console.error(
+      "[Iconoplasm] content portrait cache missing: load content-portrait-cache.js first",
+    )
+    return
+  }
+  if (
+    !IconoContentDetailCache ||
+    typeof IconoContentDetailCache.createGeneDetailStore !== "function"
+  ) {
+    console.error("[Iconoplasm] content detail cache missing: load content-detail-cache.js first")
+    return
+  }
+  if (!IconoContentVoteBridge || typeof IconoContentVoteBridge.createVoteBoxNode !== "function") {
+    console.error("[Iconoplasm] content vote bridge missing: load content-vote-bridge.js first")
+    return
+  }
+  if (
+    !IconoHighlightRuntime ||
+    typeof IconoHighlightRuntime.createHighlightRuntime !== "function"
+  ) {
     console.error("[Iconoplasm] highlight runtime missing: load highlight-runtime.js first")
     return
   }
 
   // -- Placeholder color for genes without color data ----------------
   const PLACEHOLDER_COLOR = "#6B6B78"
-  const HIGHLIGHT_MODE_KEY = "iconoplasm_highlight_mode"
-  const TOOLTIP_THEME_KEY = "iconoplasm_tooltip_theme"
-  const CARD_VARIANT_KEY = "iconoplasm_card_variant"
-  const GUEST_DISCOVERIES_STORAGE_KEY = "iconoplasm_guest_discoveries_v1"
+  const CONTENT_STORAGE_KEYS = IconoContentSettings.storageKeys
+  const HIGHLIGHT_MODE_KEY = CONTENT_STORAGE_KEYS.highlightMode
+  const TOOLTIP_THEME_KEY = CONTENT_STORAGE_KEYS.tooltipTheme
+  const CARD_VARIANT_KEY = CONTENT_STORAGE_KEYS.cardVariant
+  const GUEST_DISCOVERIES_STORAGE_KEY = CONTENT_STORAGE_KEYS.guestDiscoveries
+  const REMOVED_DEFAULTS_KEY = CONTENT_STORAGE_KEYS.removedDefaults
+  const USER_BLOCKLIST_KEY = CONTENT_STORAGE_KEYS.userBlocklist
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase("https://iconoplasm.brinedew.bio")
   const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
   const ICONOPLASM_DISCOVERY_ENCOUNTER_URL =
@@ -64,44 +113,7 @@
     "portrait",
   ])
   const escapeHtml = IconoCardShared.escapeHtml
-
-  function extensionApiFetch(input, init = {}) {
-    const url = typeof input === "string" ? input : String((input && input.url) || "")
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.runtime.sendMessage(
-          {
-            type: "ICONOPLASM_API_FETCH",
-            url,
-            method: String(init.method || "GET").toUpperCase(),
-            headers: init.headers && typeof init.headers === "object" ? init.headers : {},
-            body: typeof init.body === "string" ? init.body : undefined,
-            credentials: init.credentials === "include" ? "include" : "same-origin",
-          },
-          (result) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message || "Extension API fetch failed"))
-              return
-            }
-            if (!result || typeof result !== "object") {
-              reject(new Error("Extension API fetch returned no response"))
-              return
-            }
-            const payload = result && typeof result === "object" ? result : {}
-            const rawText = String(payload.text || "")
-            resolve({
-              ok: Boolean(payload.ok),
-              status: Number(payload.status || 0),
-              text: () => Promise.resolve(rawText),
-              json: () => Promise.resolve(rawText ? JSON.parse(rawText) : null),
-            })
-          },
-        )
-      } catch (err) {
-        reject(err)
-      }
-    })
-  }
+  const extensionApiFetch = IconoContentApi.createExtensionApiFetch(chrome)
 
   const DARK_TEXT_RGB = Object.freeze([24, 22, 20])
   const LIGHT_TEXT_RGB = Object.freeze([249, 247, 242])
@@ -139,7 +151,9 @@
 
   function apcaClampBlack(relativeLuminance) {
     if (relativeLuminance >= APCA_BLACK_THRESHOLD) return relativeLuminance
-    return relativeLuminance + Math.pow(APCA_BLACK_THRESHOLD - relativeLuminance, APCA_BLACK_CLAMP_EXP)
+    return (
+      relativeLuminance + Math.pow(APCA_BLACK_THRESHOLD - relativeLuminance, APCA_BLACK_CLAMP_EXP)
+    )
   }
 
   function apcaContrast(textRgb, backgroundRgb) {
@@ -198,17 +212,9 @@
   const refreshHighlightStyles = highlightRuntime.refreshHighlightStyles
   const scheduleHighlightGeometryRefresh = highlightRuntime.scheduleHighlightGeometryRefresh
 
-  function normalizeTooltipTheme(raw) {
-    return String(raw || "")
-      .trim()
-      .toLowerCase() === "dark"
-      ? "dark"
-      : "light"
-  }
-
-  function normalizeCardVariant(raw) {
-    return IconoCardShared.normalizeCardVariant(raw)
-  }
+  const normalizeTooltipTheme = IconoContentSettings.normalizeTooltipTheme
+  const normalizeCardVariant = (raw) =>
+    IconoContentSettings.normalizeCardVariant(raw, IconoCardShared)
 
   async function loadHighlightMode() {
     try {
@@ -264,52 +270,6 @@
     tooltip.classList.toggle("iconoplasm-tooltip--variant-lab-label", isArchivalCardVariant())
     tooltip.classList.toggle("iconoplasm-tooltip--variant-image-only", isImageOnlyCardVariant())
     tooltip.classList.toggle("iconoplasm-tooltip--frame-card", usesTooltipFrameRenderer())
-  }
-
-  function buildVoteIconSvg(kind) {
-    const svgNs = "http://www.w3.org/2000/svg"
-    const svg = document.createElementNS(svgNs, "svg")
-    svg.setAttribute("viewBox", "0 0 20 20")
-    svg.setAttribute("fill", "none")
-    svg.setAttribute("aria-hidden", "true")
-
-    const path = document.createElementNS(svgNs, "path")
-    if (kind === "approve") {
-      path.setAttribute("d", "M5 10.5 8.25 13.75 15 7")
-      path.setAttribute("stroke-linejoin", "round")
-    } else {
-      path.setAttribute("d", "M6 6 14 14M14 6 6 14")
-    }
-    path.setAttribute("stroke", "currentColor")
-    path.setAttribute("stroke-width", "2")
-    path.setAttribute("stroke-linecap", "round")
-    svg.appendChild(path)
-    return svg
-  }
-
-  function createVoteBoxNode() {
-    const box = document.createElement("div")
-    box.className = "icono-vote-box icono-vote-box--brick"
-    box.setAttribute("data-icono-vote-box", "")
-
-    const approve = document.createElement("button")
-    approve.type = "button"
-    approve.className = "icono-vote-btn icono-vote-btn--approve"
-    approve.setAttribute("data-icono-vote-up", "")
-    approve.setAttribute("aria-label", "Approve portrait")
-    approve.title = "Approve portrait"
-    approve.appendChild(buildVoteIconSvg("approve"))
-
-    const reject = document.createElement("button")
-    reject.type = "button"
-    reject.className = "icono-vote-btn icono-vote-btn--reject"
-    reject.setAttribute("data-icono-vote-down", "")
-    reject.setAttribute("aria-label", "Reject portrait")
-    reject.title = "Reject portrait"
-    reject.appendChild(buildVoteIconSvg("reject"))
-
-    box.append(approve, reject)
-    return box
   }
 
   function applySupportedTooltipInlineMarkup(container, markup) {
@@ -451,7 +411,7 @@
     voteSlot.className = "iconoplasm-tooltip-vote-slot"
     voteSlot.setAttribute("data-icono-tooltip-vote-slot", "")
     if (assetSha) {
-      voteSlot.appendChild(createVoteBoxNode())
+      voteSlot.appendChild(IconoContentVoteBridge.createVoteBoxNode(document))
     }
 
     headerRow.append(headerCopy, voteSlot)
@@ -503,8 +463,6 @@
   // in chrome.storage under REMOVED_DEFAULTS_KEY. Extra user-added
   // entries live under USER_BLOCKLIST_KEY. The effective blocklist at
   // runtime = (defaults - removed) + user-added.
-  const REMOVED_DEFAULTS_KEY = "iconoplasm_removed_defaults"
-
   // prettier-ignore
   const SKIP_TAGS = new Set(["SCRIPT","STYLE","TEXTAREA","INPUT","SELECT","CODE","PRE","NOSCRIPT","IFRAME","SVG","MATH","HEAD","TITLE","META","LINK"])
 
@@ -529,22 +487,12 @@
     discoveredSymbols: [],
   }
   let portraitLoadToken = 0
-  const portraitDataUrlCache = new Map()
-  const portraitDataUrlPromiseCache = new Map()
-  const portraitWarmQueue = []
-  const queuedPortraitSrcs = new Set()
   let portraitWarmScheduled = false
-  let portraitWarmDraining = false
-  const geneDetailCache = new Map() // symbol -> gene payload or null
-  const geneDetailPromiseCache = new Map() // symbol -> Promise<payload|null>
-  const geneDetailWarmQueue = []
-  const queuedGeneDetailSymbols = new Set()
-  let geneDetailWarmScheduled = false
-  let geneDetailWarmDraining = false
   let viewportWarmFrame = 0
   let visibilityScheduler = null
   const mutationScanRoots = new Set()
   let mutationScanScheduled = false
+  let pageScanner = null
   let highlightMode = highlightRuntime.getMode()
   let tooltipTheme = "light"
   let cardVariant = "simple"
@@ -557,6 +505,28 @@
   const PORTRAIT_WARM_BATCH_SIZE = 6
   const GENE_DETAIL_VIEWPORT_ABOVE_PX = 160
   const GENE_DETAIL_VIEWPORT_BELOW_PX = 960
+  const portraitCache = IconoContentPortraitCache.createPortraitCache({
+    windowRef: window,
+    chromeApi: chrome,
+    batchSize: PORTRAIT_WARM_BATCH_SIZE,
+    delayMs: 20,
+    onWarmBatch: prewarmLitArchivalFramePortraitSrcs,
+  })
+  const portraitDataUrlCache = portraitCache.dataUrlCache
+  const geneDetailStore = IconoContentDetailCache.createGeneDetailStore({
+    windowRef: window,
+    fetchImpl: extensionApiFetch,
+    batchUrl: ICONOPLASM_GENE_BATCH_URL,
+    fields: GENE_DETAIL_BATCH_FIELDS,
+    warmBatchSize: GENE_DETAIL_WARM_BATCH_SIZE,
+    visibleLimit: GENE_DETAIL_VISIBLE_LIMIT,
+    delayMs: 20,
+    deferTask: deferGeneDetailWarm,
+    onError: (err) => {
+      console.error("[Iconoplasm] extension gene detail batch fetch error:", err)
+    },
+  })
+  const geneDetailCache = geneDetailStore.cache // symbol -> gene payload or null
 
   function buildGenePageUrl(symbol) {
     return "https://iconoplasm.brinedew.bio/gene/" + encodeURIComponent(symbol)
@@ -757,7 +727,9 @@
           discovered_symbols: payload.discovered_symbols,
         })
       }
-      const mergedSymbols = normalizeDiscoverySymbolList((payload && payload.discovered_symbols) || pendingSymbols)
+      const mergedSymbols = normalizeDiscoverySymbolList(
+        (payload && payload.discovered_symbols) || pendingSymbols,
+      )
       for (const symbol of mergedSymbols) discoveredPageSymbols.add(symbol)
       await removeMergedGuestDiscoveries(pendingSymbols)
       return payload
@@ -914,10 +886,6 @@
     window.setTimeout(task, 0)
   }
 
-  function delay(ms) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms))
-  }
-
   function shouldIgnoreMutationNode(node) {
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return true
     const el = /** @type {Element} */ (node)
@@ -983,45 +951,7 @@
   }
 
   function warmPortraitUrls(urls) {
-    const seen = new Set()
-    let added = false
-    for (const rawUrl of Array.isArray(urls) ? urls : []) {
-      const url = String(rawUrl || "").trim()
-      if (!url || seen.has(url)) continue
-      if (
-        portraitDataUrlCache.has(url) ||
-        portraitDataUrlPromiseCache.has(url) ||
-        queuedPortraitSrcs.has(url)
-      )
-        continue
-      seen.add(url)
-      queuedPortraitSrcs.add(url)
-      portraitWarmQueue.push(url)
-      added = true
-    }
-    if (added) {
-      drainPortraitWarmQueue().catch(() => null)
-    }
-  }
-
-  async function drainPortraitWarmQueue() {
-    if (portraitWarmDraining) return
-    portraitWarmDraining = true
-    try {
-      while (portraitWarmQueue.length) {
-        const batch = portraitWarmQueue.splice(0, PORTRAIT_WARM_BATCH_SIZE)
-        for (const url of batch) queuedPortraitSrcs.delete(url)
-        const usableSources = await Promise.all(
-          batch.map((url) => getUsablePortraitSrc(url).catch(() => "")),
-        )
-        prewarmLitArchivalFramePortraitSrcs(usableSources)
-        if (portraitWarmQueue.length) {
-          await delay(20)
-        }
-      }
-    } finally {
-      portraitWarmDraining = false
-    }
+    portraitCache.warmUrls(urls)
   }
 
   function scheduleWarmVisiblePortraits(limit = PORTRAIT_VISIBLE_LIMIT) {
@@ -1151,151 +1081,21 @@
   }
 
   async function fetchGeneDetailsBatch(symbols) {
-    const uniqueSymbols = []
-    const seenSymbols = new Set()
-    for (const rawSymbol of Array.isArray(symbols) ? symbols : []) {
-      const symbol = String(rawSymbol || "")
-        .trim()
-        .toUpperCase()
-      if (!symbol || seenSymbols.has(symbol)) continue
-      seenSymbols.add(symbol)
-      uniqueSymbols.push(symbol)
-    }
-
-    const unresolvedSymbols = uniqueSymbols.filter(
-      (symbol) => !geneDetailCache.has(symbol) && !geneDetailPromiseCache.has(symbol),
-    )
-
-    if (unresolvedSymbols.length) {
-      const batchRequest = (async () => {
-        try {
-          const resp = await extensionApiFetch(ICONOPLASM_GENE_BATCH_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              symbols: unresolvedSymbols,
-              fields: GENE_DETAIL_BATCH_FIELDS,
-            }),
-          })
-          if (!resp.ok) {
-            throw new Error("HTTP " + String(resp.status || 0))
-          }
-          const payload = (await resp.json()) || {}
-          const genes = Array.isArray(payload.genes) ? payload.genes : []
-          const resolvedMap = new Map()
-          for (const record of genes) {
-            const symbol = String((record && record.symbol) || "")
-              .trim()
-              .toUpperCase()
-            if (!symbol) continue
-            const safeRecord = record && typeof record === "object" ? record : null
-            geneDetailCache.set(symbol, safeRecord)
-            resolvedMap.set(symbol, safeRecord)
-          }
-          const missingSymbols = Array.isArray(payload.missing) ? payload.missing : []
-          for (const rawMissing of missingSymbols) {
-            const symbol = String(rawMissing || "")
-              .trim()
-              .toUpperCase()
-            if (!symbol) continue
-            geneDetailCache.set(symbol, null)
-            resolvedMap.set(symbol, null)
-          }
-          for (const symbol of unresolvedSymbols) {
-            if (!resolvedMap.has(symbol)) {
-              geneDetailCache.set(symbol, null)
-            }
-          }
-        } catch (err) {
-          console.error("[Iconoplasm] extension gene detail batch fetch error:", err)
-          for (const symbol of unresolvedSymbols) {
-            geneDetailCache.set(symbol, null)
-          }
-        } finally {
-          for (const symbol of unresolvedSymbols) {
-            geneDetailPromiseCache.delete(symbol)
-          }
-        }
-      })()
-
-      for (const symbol of unresolvedSymbols) {
-        geneDetailPromiseCache.set(
-          symbol,
-          batchRequest.then(() => geneDetailCache.get(symbol) || null),
-        )
-      }
-    }
-
-    const entries = await Promise.all(
-      uniqueSymbols.map(async (symbol) => {
-        if (geneDetailCache.has(symbol)) return [symbol, geneDetailCache.get(symbol) || null]
-        if (geneDetailPromiseCache.has(symbol)) {
-          return [symbol, await geneDetailPromiseCache.get(symbol)]
-        }
-        return [symbol, null]
-      }),
-    )
-    return new Map(entries)
-  }
-
-  async function drainGeneDetailWarmQueue() {
-    if (geneDetailWarmDraining) return
-    geneDetailWarmDraining = true
-    try {
-      while (geneDetailWarmQueue.length) {
-        const batch = geneDetailWarmQueue.splice(0, GENE_DETAIL_WARM_BATCH_SIZE)
-        for (const symbol of batch) queuedGeneDetailSymbols.delete(symbol)
-        await fetchGeneDetailsBatch(batch)
-        if (geneDetailWarmQueue.length) {
-          await delay(20)
-        }
-      }
-    } finally {
-      geneDetailWarmDraining = false
-      if (geneDetailWarmQueue.length) {
-        scheduleWarmVisibleGeneDetails()
-      }
-    }
+    return geneDetailStore.fetchBatch(symbols)
   }
 
   function warmGeneDetails(symbols, limit = GENE_DETAIL_VISIBLE_LIMIT) {
-    const uniqueSymbols = []
-    const seen = new Set()
-    for (const rawSymbol of Array.isArray(symbols) ? symbols : []) {
-      const symbol = String(rawSymbol || "")
-        .trim()
-        .toUpperCase()
-      if (!symbol || seen.has(symbol)) continue
-      if (
-        geneDetailCache.has(symbol) ||
-        geneDetailPromiseCache.has(symbol) ||
-        queuedGeneDetailSymbols.has(symbol)
-      )
-        continue
-      seen.add(symbol)
-      uniqueSymbols.push(symbol)
-      if (uniqueSymbols.length >= limit) break
-    }
-    for (const symbol of uniqueSymbols) {
-      queuedGeneDetailSymbols.add(symbol)
-      geneDetailWarmQueue.push(symbol)
-    }
-    if (uniqueSymbols.length) {
-      drainGeneDetailWarmQueue().catch(() => null)
-    }
+    geneDetailStore.warm(symbols, limit)
   }
 
   function scheduleWarmVisibleGeneDetails(limit = GENE_DETAIL_VISIBLE_LIMIT) {
-    if (geneDetailWarmScheduled) return
-    geneDetailWarmScheduled = true
-    deferGeneDetailWarm(() => {
-      geneDetailWarmScheduled = false
-      const sourceSymbols =
+    geneDetailStore.scheduleWarm(
+      () =>
         visibilityScheduler && visibilityScheduler.hasVisibleSymbols()
           ? collectObservedVisibleGeneSymbols(limit)
-          : collectVisibleGeneSymbols(limit)
-      warmGeneDetails(sourceSymbols, limit)
-    })
+          : collectVisibleGeneSymbols(limit),
+      limit,
+    )
   }
 
   function scheduleViewportWarm() {
@@ -1308,44 +1108,7 @@
   }
 
   async function getUsablePortraitSrc(portraitSrc) {
-    if (!portraitSrc) return ""
-    if (portraitDataUrlCache.has(portraitSrc)) {
-      return portraitDataUrlCache.get(portraitSrc)
-    }
-    if (portraitDataUrlPromiseCache.has(portraitSrc)) {
-      return portraitDataUrlPromiseCache.get(portraitSrc)
-    }
-
-    const request = (async () => {
-      try {
-        const response = await new Promise((resolve) => {
-          chrome.runtime.sendMessage(
-            { type: "GET_PORTRAIT_DATA_URL", url: portraitSrc },
-            (result) => {
-              if (chrome.runtime.lastError) {
-                resolve(null)
-                return
-              }
-              resolve(result)
-            },
-          )
-        })
-
-        const dataUrl = response && response.ok && response.dataUrl ? response.dataUrl : ""
-        if (dataUrl) {
-          portraitDataUrlCache.set(portraitSrc, dataUrl)
-          return dataUrl
-        }
-      } catch (_) {
-        // Fall back to the direct site URL below.
-      } finally {
-        portraitDataUrlPromiseCache.delete(portraitSrc)
-      }
-
-      return portraitSrc
-    })()
-    portraitDataUrlPromiseCache.set(portraitSrc, request)
-    return request
+    return portraitCache.getUsableSrc(portraitSrc)
   }
 
   async function loadTooltipPortrait({
@@ -1477,23 +1240,15 @@
     // Effective blocklist = (defaults - user-removed) + user-added extras.
     // Both lists live in chrome.storage; defaults come from blocklist-defaults.js.
     const blocklistStorage = await new Promise((resolve) => {
-      chrome.storage.local.get(["iconoplasm_user_blocklist", REMOVED_DEFAULTS_KEY], (result) => {
+      chrome.storage.local.get([USER_BLOCKLIST_KEY, REMOVED_DEFAULTS_KEY], (result) => {
         resolve(result)
       })
     })
-    const userBlocklistRaw = Array.isArray(blocklistStorage.iconoplasm_user_blocklist)
-      ? blocklistStorage.iconoplasm_user_blocklist : []
-    const removedDefaults = new Set(
-      Array.isArray(blocklistStorage[REMOVED_DEFAULTS_KEY])
-        ? blocklistStorage[REMOVED_DEFAULTS_KEY] : []
+    const effectiveBlocklist = IconoContentSettings.buildEffectiveBlocklist(
+      ICONOPLASM_DEFAULT_BLOCKLIST,
+      blocklistStorage[USER_BLOCKLIST_KEY],
+      blocklistStorage[REMOVED_DEFAULTS_KEY],
     )
-    const effectiveBlocklist = new Set()
-    for (const sym of ICONOPLASM_DEFAULT_BLOCKLIST) {
-      if (!removedDefaults.has(sym)) effectiveBlocklist.add(sym)
-    }
-    for (const sym of userBlocklistRaw) {
-      effectiveBlocklist.add(String(sym).toUpperCase())
-    }
 
     const payload = await new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }, resolve)
@@ -1512,6 +1267,16 @@
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.
     geneMatcher = IconoContentMatcher.createGeneMatcher(geneMap, { blocklist: effectiveBlocklist })
+    pageScanner = IconoContentScanner.createPageScanner({
+      documentRef: document,
+      nodeFilter: NodeFilter,
+      skipTags: SKIP_TAGS,
+      placeholderColor: PLACEHOLDER_COLOR,
+      getGeneMap: () => geneMap,
+      getMatcher: () => geneMatcher,
+      applyHighlightStyle,
+      observeGeneElement,
+    })
 
     if (!geneMap || Object.keys(geneMap).length === 0) {
       console.log("[Iconoplasm] No gene data yet. Retrying in 5s.")
@@ -1544,67 +1309,7 @@
 
   // -- DOM scanning --------------------------------------------------
   function scanPage(root) {
-    if (!root || typeof root.nodeType !== "number") return 0
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const parent = node.parentElement
-        if (!parent) return NodeFilter.FILTER_REJECT
-        if (parent.closest && parent.closest(".iconoplasm-tooltip")) return NodeFilter.FILTER_REJECT
-        if (parent.classList && parent.classList.contains("iconoplasm-gene"))
-          return NodeFilter.FILTER_REJECT
-        if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT
-        if (node.textContent.trim().length < 2) return NodeFilter.FILTER_REJECT
-        return NodeFilter.FILTER_ACCEPT
-      },
-    })
-
-    const textNodes = []
-    while (walker.nextNode()) textNodes.push(walker.currentNode)
-    let wrappedCount = 0
-    for (const textNode of textNodes) {
-      wrappedCount += processTextNode(textNode)
-    }
-    return wrappedCount
-  }
-
-  function processTextNode(textNode) {
-    const text = textNode.textContent
-    if (!text || !geneMatcher) return 0
-
-    const matches = geneMatcher.findMatches(text)
-
-    if (matches.length === 0) return 0
-
-    const frag = document.createDocumentFragment()
-    let cursor = 0
-
-    for (const m of matches) {
-      if (m.index > cursor) {
-        frag.appendChild(document.createTextNode(text.slice(cursor, m.index)))
-      }
-      const span = document.createElement("span")
-      span.className = "iconoplasm-gene"
-      span.dataset.geneLabel = text.slice(m.index, m.index + m.length)
-      const copy = document.createElement("span")
-      copy.className = "iconoplasm-gene-copy"
-      copy.setAttribute("data-icono-rough-copy", "true")
-      copy.textContent = span.dataset.geneLabel
-      span.appendChild(copy)
-
-      const gene = geneMap[m.symbol]
-      const color = gene.c || PLACEHOLDER_COLOR
-      applyHighlightStyle(span, m.symbol, color)
-      observeGeneElement(span)
-      frag.appendChild(span)
-      cursor = m.index + m.length
-    }
-
-    if (cursor < text.length) {
-      frag.appendChild(document.createTextNode(text.slice(cursor)))
-    }
-
-    textNode.parentNode.replaceChild(frag, textNode)
-    return matches.length
+    return pageScanner ? pageScanner.scanPage(root) : 0
   }
 
   // -- Mutation observer ---------------------------------------------
@@ -1623,33 +1328,22 @@
 
   // -- Tooltip -------------------------------------------------------
   function createTooltip() {
-    tooltip = document.createElement("div")
-    tooltip.className = "iconoplasm-tooltip"
-    tooltip.setAttribute("role", "tooltip")
-    const portrait = document.createElement("div")
-    portrait.className = "iconoplasm-tooltip-portrait"
-    const body = document.createElement("div")
-    body.className = "iconoplasm-tooltip-body"
-    tooltip.append(portrait, body)
-    document.body.appendChild(tooltip)
-    applyTooltipTheme()
-
-    document.addEventListener("mouseover", onMouseOver)
-    document.addEventListener("mouseout", onMouseOut)
-    window.addEventListener("message", onLitArchivalFrameMessage)
-    tooltip.addEventListener("click", onTooltipClick)
-    tooltip.addEventListener("keydown", onTooltipKeyDown)
-    tooltip.addEventListener("mouseenter", cancelHideTimer)
-    tooltip.addEventListener("mouseleave", onTooltipMouseLeave)
-    tooltip.tabIndex = 0
+    tooltip = IconoContentTooltip.createTooltipShell({
+      documentRef: document,
+      windowRef: window,
+      applyTooltipTheme,
+      onMouseOver,
+      onMouseOut,
+      onFrameMessage: onLitArchivalFrameMessage,
+      onTooltipClick,
+      onTooltipKeyDown,
+      cancelHideTimer,
+      onTooltipMouseLeave,
+    })
   }
 
   function createAuthToast() {
-    authToast = document.createElement("div")
-    authToast.className = "iconoplasm-auth-toast"
-    authToast.setAttribute("role", "status")
-    authToast.setAttribute("aria-live", "polite")
-    document.body.appendChild(authToast)
+    authToast = IconoContentTooltip.createAuthToast(document)
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -1676,12 +1370,14 @@
   function archivalTooltipGeneModel(summaryGene, geneDetail) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
-    return detail || {
-      symbol: summary.symbol || activeSymbol || "",
-      full_name: summary.n || summary.symbol || activeSymbol || "",
-      color: summary.c || PLACEHOLDER_COLOR,
-      essence: {},
-    }
+    return (
+      detail || {
+        symbol: summary.symbol || activeSymbol || "",
+        full_name: summary.n || summary.symbol || activeSymbol || "",
+        color: summary.c || PLACEHOLDER_COLOR,
+        essence: {},
+      }
+    )
   }
 
   function buildLitTooltipCardModel(summaryGene, geneDetail, portraitSrcOverride) {
@@ -1693,7 +1389,8 @@
       .trim()
       .toLowerCase()
     const portraitSrc =
-      String(portraitSrcOverride || "").trim() || buildTooltipFramePortraitSrc(summaryGene, geneDetail)
+      String(portraitSrcOverride || "").trim() ||
+      buildTooltipFramePortraitSrc(summaryGene, geneDetail)
     return IconoCardShared.resolveArchivalCardModel(geneModel, {
       mode: "brick",
       layoutVariant: isImageOnlyCardVariant() ? "image-only" : "lit-archival",
@@ -1715,7 +1412,8 @@
   function buildTooltipFramePortraitSrc(summaryGene, geneDetail) {
     const detailPortrait = geneDetail && geneDetail.portrait ? geneDetail.portrait : null
     const detailUrl = String(
-      (detailPortrait && (detailPortrait.medium_url || detailPortrait.hero_url || detailPortrait.thumb_url)) ||
+      (detailPortrait &&
+        (detailPortrait.medium_url || detailPortrait.hero_url || detailPortrait.thumb_url)) ||
         "",
     ).trim()
     if (detailUrl) return detailUrl
@@ -1736,23 +1434,12 @@
   }
 
   function buildLitArchivalTooltipVoteConfig(geneDetail) {
-    if (isImageOnlyCardVariant()) return null
-    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
-    const symbol = String((detail && detail.symbol) || activeSymbol || "")
-      .trim()
-      .toUpperCase()
-    const portrait = (detail || {}).portrait || {}
-    const assetSha = String(portrait.asset_sha256 || "")
-      .trim()
-      .toLowerCase()
-    if (!symbol || !assetSha) return null
-    return {
-      symbol,
-      assetSha,
-      visionId: String(portrait.vision_id || "").trim(),
-      candidateImageId: Number(portrait.candidate_image_id || 0),
+    return IconoContentVoteBridge.buildTooltipVoteConfig({
+      geneDetail,
+      activeSymbol,
       apiBaseUrl: ICONOPLASM_API_BASE,
-    }
+      imageOnly: isImageOnlyCardVariant(),
+    })
   }
 
   function buildLitArchivalTooltipFrameHtml(summaryGene, geneDetail) {
@@ -1839,7 +1526,9 @@
       .trim()
       .toUpperCase()
     const directPortraitSrc = buildTooltipFramePortraitSrc(summaryGene, geneDetail)
-    const warmedPortraitSrc = directPortraitSrc ? portraitDataUrlCache.get(directPortraitSrc) || "" : ""
+    const warmedPortraitSrc = directPortraitSrc
+      ? portraitDataUrlCache.get(directPortraitSrc) || ""
+      : ""
     const payload = {
       type: LIT_ARCHIVAL_RENDER_MESSAGE,
       requestId: String(++litArchivalFrameRequestSerial),
@@ -1851,7 +1540,11 @@
       gene: detail || archivalTooltipGeneModel(summaryGene, null),
       portraitSrc: warmedPortraitSrc || directPortraitSrc,
       portraitDimensions: buildTooltipFramePortraitDimensions(summaryGene, geneDetail),
-      model: buildLitTooltipCardModel(summaryGene, geneDetail, warmedPortraitSrc || directPortraitSrc),
+      model: buildLitTooltipCardModel(
+        summaryGene,
+        geneDetail,
+        warmedPortraitSrc || directPortraitSrc,
+      ),
       vote: buildLitArchivalTooltipVoteConfig(geneDetail),
     }
     if (warmedPortraitSrc) {
@@ -1895,25 +1588,13 @@
 
   function wireRenderedTooltipVoteBox(geneDetail) {
     if (usesTooltipFrameRenderer()) return
-    if (!tooltip || !geneDetail) return
-    const box = tooltip.querySelector("[data-icono-vote-box]")
-    if (!box) return
-    const symbol = String((geneDetail && geneDetail.symbol) || activeSymbol || "")
-      .trim()
-      .toUpperCase()
-    const portrait = (geneDetail || {}).portrait || {}
-    const assetSha = String(portrait.asset_sha256 || "")
-      .trim()
-      .toLowerCase()
-    if (!symbol || !assetSha) return
-    IconoCardShared.wireVoteBox(box, {
-      symbol,
-      assetSha,
-      visionId: String(portrait.vision_id || "").trim(),
-      candidateImageId: Number(portrait.candidate_image_id || 0),
+    IconoContentVoteBridge.wireRenderedTooltipVoteBox({
+      tooltip,
+      geneDetail,
+      activeSymbol,
+      cardShared: IconoCardShared,
       apiBaseUrl: ICONOPLASM_API_BASE,
       fetchImpl: extensionApiFetch,
-      deferSnapshot: true,
       onAuthRequired: showVoteLoginPopup,
       onError: (phase, err) => {
         console.error("[Iconoplasm] extension vote " + phase + " error:", err)
@@ -1927,7 +1608,9 @@
       .toUpperCase()
     if (!normalizedSymbol) return null
     if (geneDetailCache.has(normalizedSymbol)) return geneDetailCache.get(normalizedSymbol)
-    if (geneDetailPromiseCache.has(normalizedSymbol)) return geneDetailPromiseCache.get(normalizedSymbol)
+    if (geneDetailStore.promiseCache.has(normalizedSymbol)) {
+      return geneDetailStore.promiseCache.get(normalizedSymbol)
+    }
     const responses = await fetchGeneDetailsBatch([normalizedSymbol])
     return responses.get(normalizedSymbol) || null
   }
@@ -2070,7 +1753,11 @@
       return
     }
     if (data.type === LIT_ARCHIVAL_OPEN_MESSAGE) {
-      openGenePage(String(data.symbol || activeSymbol || "").trim().toUpperCase())
+      openGenePage(
+        String(data.symbol || activeSymbol || "")
+          .trim()
+          .toUpperCase(),
+      )
       return
     }
     if (data.type === LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE) {

@@ -53,7 +53,14 @@ const zipPath = resolve(distRoot, targetConfig.zipName)
 const runtimeFiles = [
   "manifest.json",
   "blocklist-defaults.js",
+  "content-api.js",
+  "content-settings.js",
   "content-matcher.js",
+  "content-scanner.js",
+  "content-tooltip.js",
+  "content-portrait-cache.js",
+  "content-detail-cache.js",
+  "content-vote-bridge.js",
   "content-visibility-scheduler.js",
   "content.css",
   "highlight-runtime.js",
@@ -162,7 +169,11 @@ function stripUnusedRuntimeFiles() {
 }
 
 function writeStagedManifest(stagedManifest) {
-  writeFileSync(resolve(stageRoot, "manifest.json"), JSON.stringify(stagedManifest, null, 2) + "\n", "utf8")
+  writeFileSync(
+    resolve(stageRoot, "manifest.json"),
+    JSON.stringify(stagedManifest, null, 2) + "\n",
+    "utf8",
+  )
 }
 
 function applyTargetSpecificOverrides() {
@@ -173,9 +184,10 @@ function applyTargetSpecificOverrides() {
   stagedManifest.background = {
     scripts: ["service-worker.js"],
   }
-  stagedManifest.web_accessible_resources = (Array.isArray(stagedManifest.web_accessible_resources)
-    ? stagedManifest.web_accessible_resources
-    : []
+  stagedManifest.web_accessible_resources = (
+    Array.isArray(stagedManifest.web_accessible_resources)
+      ? stagedManifest.web_accessible_resources
+      : []
   ).map((entry) => {
     const resources = Array.isArray(entry && entry.resources) ? entry.resources : []
     return Object.assign({}, entry, {
@@ -227,7 +239,9 @@ function zipPayload() {
 
 function main() {
   if (process.platform !== "win32") {
-    fail("This packaging script currently expects Windows PowerShell because the repo is using a Windows packaging flow.")
+    fail(
+      "This packaging script currently expects Windows PowerShell because the repo is using a Windows packaging flow.",
+    )
   }
 
   ensureExists(extensionRoot, "extension root")
@@ -244,7 +258,9 @@ function main() {
   for (const file of stagedFiles) {
     console.log(`  - ${file}`)
   }
-  console.log("[package-iconoplasm-extension] store-assets/, docs, and other dev-only files were excluded on purpose.")
+  console.log(
+    "[package-iconoplasm-extension] store-assets/, docs, and other dev-only files were excluded on purpose.",
+  )
 }
 
 main()
