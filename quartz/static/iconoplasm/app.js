@@ -241,10 +241,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function emulsionDisplayInfo(item) {
     var source = item || {}
-    var emulsionId = String(source.emulsion_id || '').trim()
+    var emulsionId = String(source.emulsion_id || "").trim()
     var artistId = String(source.artist_id || "").trim()
     var label = String(source.emulsion_label || "").trim()
-    var primary = emulsionId || label || (artistId ? 'Emulsion ' + artistId : '')
+    var primary = emulsionId || label || (artistId ? "Emulsion " + artistId : "")
     return {
       emulsionId: emulsionId,
       artistId: artistId,
@@ -264,7 +264,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="' +
       className +
       '">' +
-      (kicker ? '<div class="icono-emulsion-meta-kicker">' + esc(kicker) + '</div>' : "") +
+      (kicker ? '<div class="icono-emulsion-meta-kicker">' + esc(kicker) + "</div>" : "") +
       '<div class="icono-emulsion-meta-primary">' +
       esc(info.primary) +
       "</div>" +
@@ -458,7 +458,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         "load",
         function () {
           if (typeof img.decode === "function") {
-            img.decode()
+            img
+              .decode()
               .catch(function () {
                 return null
               })
@@ -562,8 +563,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       delete portraitDetailCache[key]
       delete portraitDetailPromiseCache[key]
     }
-    if (!options.forceFresh && portraitDetailCache[key]) return Promise.resolve(portraitDetailCache[key])
-    if (!options.forceFresh && portraitDetailPromiseCache[key]) return portraitDetailPromiseCache[key]
+    if (!options.forceFresh && portraitDetailCache[key])
+      return Promise.resolve(portraitDetailCache[key])
+    if (!options.forceFresh && portraitDetailPromiseCache[key])
+      return portraitDetailPromiseCache[key]
 
     // Rich per-gene detail is intentionally first-party only now. Bulk consumers
     // should sync from catalog snapshots + changes instead of crawling one gene at a time.
@@ -943,7 +946,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function buildCollectionSummaryMarkup(collectionState) {
     var discoveredCount = Number(collectionState && collectionState.discoveryEntries.length) || 0
     var totalCount = Math.max(0, Number((collectionState && collectionState.total) || 0) || 0)
-    var progressPct = totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
+    var progressPct =
+      totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = progressPct
     var totalCopy = totalCount > 0 ? totalCount.toLocaleString() : "the catalog"
     return (
@@ -952,19 +956,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-collection-label icono-collection-label--archive">Archive</div>' +
       '<div class="icono-collection-value">' +
       esc(discoveredCount.toLocaleString()) +
-      '</div>' +
+      "</div>" +
       '<div class="icono-collection-copy">recorded out of ' +
       esc(totalCopy) +
-      '</div>' +
+      "</div>" +
       '<div class="icono-collection-progress-inline">' +
       '<div class="icono-collection-progress-track" aria-hidden="true">' +
       '<span class="icono-collection-progress-fill" style="width:' +
       esc(progressWidth.toFixed(1)) +
       '%"></span>' +
-      '</div>' +
-      '</div>' +
-      '</article>' +
-      '</section>'
+      "</div>" +
+      "</div>" +
+      "</article>" +
+      "</section>"
     )
   }
 
@@ -985,21 +989,21 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           esc(voteLoginUrl()) +
           '">Discord Login</a>') +
       '<a class="icono-empty-link icono-empty-link--subtle" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">Read FAQ</a>' +
-      '</div>'
+      "</div>"
     return (
       '<section class="icono-empty icono-empty--collection">' +
       '<div class="icono-empty-kicker">collection pending</div>' +
-      '<h2>' +
+      "<h2>" +
       esc(title) +
-      '</h2>' +
-      '<p>' +
+      "</h2>" +
+      "<p>" +
       esc(body) +
-      '</p>' +
+      "</p>" +
       '<p class="icono-empty-support">' +
       esc(support) +
-      '</p>' +
+      "</p>" +
       actions +
-      '</section>'
+      "</section>"
     )
   }
 
@@ -1086,7 +1090,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-collection-shell" id="icono-collection-shell">' +
       '<div class="icono-collection-summary-host" id="icono-collection-summary" hidden></div>' +
       '<div class="icono-empty" id="icono-empty" hidden></div>' +
-      '</div>' +
+      "</div>" +
       '<div class="icono-loading" id="icono-loading" hidden aria-live="polite"></div>' +
       '<div class="icono-grid" id="icono-grid" data-layout="' +
       esc(resolvedLayout) +
@@ -1348,8 +1352,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!root) return
     if (String(root.getAttribute("data-iconoplasm-extension-installed") || "") !== "true") return
     iconoInstallState.installed = true
-    iconoInstallState.version = String(root.getAttribute("data-iconoplasm-extension-version") || "")
-      .trim()
+    iconoInstallState.version = String(
+      root.getAttribute("data-iconoplasm-extension-version") || "",
+    ).trim()
   }
 
   function handleIconoplasmExtensionPresence(event) {
@@ -1555,7 +1560,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var escapedStep = esc(step)
         stepsHtml +=
           "<li>" +
-          escapedStep.replace(escapedUrl, '<code class="icono-install-code">' + escapedUrl + "</code>") +
+          escapedStep.replace(
+            escapedUrl,
+            '<code class="icono-install-code">' + escapedUrl + "</code>",
+          ) +
           "</li>"
         continue
       }
@@ -1588,7 +1596,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(model.tone || "info") +
       '" id="icono-install-panel" aria-live="polite">' +
       buildInstallTabsMarkup(model) +
-      '<div' +
+      "<div" +
       panelBodyAttrs +
       ">" +
       '<div class="icono-install-header">' +
@@ -1599,9 +1607,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</div>" +
       (stepsHtml ? '<ul class="icono-install-steps">' + stepsHtml + "</ul>" : "") +
       (actionsHtml ? '<div class="icono-install-actions">' + actionsHtml + "</div>" : "") +
-      (model.footnote
-        ? '<p class="icono-install-footnote">' + esc(model.footnote) + "</p>"
-        : "") +
+      (model.footnote ? '<p class="icono-install-footnote">' + esc(model.footnote) + "</p>" : "") +
       "</div>" +
       "</section>"
     )
@@ -1616,7 +1622,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     toggleHost.hidden = showInstallCard
     toggleHost.innerHTML = showInstallCard ? "" : buildInstallToggleMarkup(model)
     panelHost.hidden = showInstallCard ? false : !iconoInstallState.panelOpen
-    panelHost.innerHTML = showInstallCard || iconoInstallState.panelOpen ? buildInstallPanelMarkup(model) : ""
+    panelHost.innerHTML =
+      showInstallCard || iconoInstallState.panelOpen ? buildInstallPanelMarkup(model) : ""
     if (!showInstallCard) {
       var toggle = toggleHost.querySelector("[data-icono-install-toggle]")
       if (toggle) {
@@ -1765,19 +1772,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     dims,
     fetchPriority,
   ) {
-    return IconoCardShared.renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, {
-      buttonAttrs:
-        'data-icono-pswp data-icono-pswp-src="' +
-        esc(portraitFullUrl) +
-        '" data-icono-pswp-alt="' +
-        esc(normalizedSymbol(symbol)) +
-        ' portrait" data-pswp-width="' +
-        dims.width +
-        '" data-pswp-height="' +
-        dims.height +
-        '"',
-      fetchPriority: fetchPriority || "low",
-    })
+    return IconoCardShared.renderLabLabelPortraitMediaHtml(
+      symbol,
+      portraitUrl,
+      portraitFullUrl,
+      dims,
+      {
+        buttonAttrs:
+          'data-icono-pswp data-icono-pswp-src="' +
+          esc(portraitFullUrl) +
+          '" data-icono-pswp-alt="' +
+          esc(normalizedSymbol(symbol)) +
+          ' portrait" data-pswp-width="' +
+          dims.width +
+          '" data-pswp-height="' +
+          dims.height +
+          '"',
+        fetchPriority: fetchPriority || "low",
+      },
+    )
   }
 
   function buildBrickCardMarkup(g, cardIndex) {
@@ -1916,11 +1929,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             "</div>" +
             '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
             "</div>") +
-      (isImageOnlyVariant
-        ? ""
-        : '<div class="iconoplasm-tooltip-body">' +
-          bodyHtml +
-          "</div>") +
+      (isImageOnlyVariant ? "" : '<div class="iconoplasm-tooltip-body">' + bodyHtml + "</div>") +
       (isLitCardVariant(cardVariant)
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
@@ -2047,10 +2056,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           portraitAlt: g.symbol + " portrait",
           portraitSrc: portraitUrl,
           voteHtml:
-            !isImageOnlyVariant &&
-            portraitAssetSha
-            ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", { showArrows: false })
-            : "",
+            !isImageOnlyVariant && portraitAssetSha
+              ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", { showArrows: false })
+              : "",
         })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-shared-card-header-row">' +
@@ -2082,7 +2090,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '" data-icono-card-variant="' +
       esc(cardVariant) +
       '">' +
-      (isImageOnlyVariant ? bodyHtml : portraitMarkup + '<div class="iconoplasm-tooltip-body">' + bodyHtml + "</div>") +
+      (isImageOnlyVariant
+        ? bodyHtml
+        : portraitMarkup + '<div class="iconoplasm-tooltip-body">' + bodyHtml + "</div>") +
       "</article>"
     )
   }
@@ -2133,12 +2143,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       existing = headerRow.querySelector("[data-icono-brick-vote-box]")
     }
     if (!existing) return
-    // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Optimistic UI) +
-    // C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction states).
-    // Brick votes must show the user's prior choice before hover. Deferring these snapshots
-    // until pointer intent is what made the gallery look unresponsive and inconsistent.
     wireVoteBox(existing, card.getAttribute("data-icono-symbol"), assetSha, {
-      deferSnapshot: false,
+      // Cost fence: gallery cards can appear by the dozen on first paint and on lazy-load.
+      // Personalized vote state is useful, but not worth a per-card snapshot storm before
+      // the visitor actually tries to vote. The shared runtime fetches the snapshot before
+      // submitting a click, so correctness is preserved while idle page load stays quiet.
+      deferSnapshot: true,
     })
   }
 
@@ -2153,7 +2163,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     // entered the gallery. Rewire the replacement box immediately so swipe-review still submits
     // after the card has hydrated, after returning to the gallery, and after any later body swap.
     wireVoteBox(box, card.getAttribute("data-icono-symbol"), assetSha, {
-      deferSnapshot: false,
+      deferSnapshot: true,
       visionId: box.getAttribute("data-icono-vision-id") || brickVoteVisionId(genePayload) || "",
       candidateImageId:
         box.getAttribute("data-icono-candidate-image-id") ||
@@ -2311,7 +2321,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         card.getAttribute("data-icono-symbol"),
         box.getAttribute("data-icono-brick-vote-box"),
         {
-          deferSnapshot: false,
+          deferSnapshot: true,
           visionId: box.getAttribute("data-icono-vision-id") || "",
           candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
         },
@@ -2637,6 +2647,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .toUpperCase()
     var portrait = (genePayload && genePayload.portrait) || {}
     wireVoteBox(box, symbol, portrait.asset_sha256, {
+      deferSnapshot: true,
       visionId: portrait.vision_id || "",
       candidateImageId: portrait.candidate_image_id || 0,
       onVoteCommitted: function (data) {
@@ -2654,6 +2665,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i]
       wireVoteBox(box, symbol, box.getAttribute("data-icono-candidate-vote-box"), {
+        deferSnapshot: true,
         visionId: box.getAttribute("data-icono-vision-id") || "",
         candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
         onVoteCommitted: function (data) {
@@ -2677,7 +2689,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           var assetSha = String(button.getAttribute("data-icono-asset-sha256") || "")
             .trim()
             .toLowerCase()
-          var candidateImageId = Number(button.getAttribute("data-icono-candidate-image-id") || 0) || 0
+          var candidateImageId =
+            Number(button.getAttribute("data-icono-candidate-image-id") || 0) || 0
           if (!symbol || !assetSha) return
           if (
             !window.confirm(
@@ -2717,7 +2730,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function geneRequestLaneLabel(item) {
-    if (!item || String(item.request_mode || "").trim().toLowerCase() !== "specific") {
+    if (
+      !item ||
+      String(item.request_mode || "")
+        .trim()
+        .toLowerCase() !== "specific"
+    ) {
       return "Random default"
     }
     return (
@@ -2848,7 +2866,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var sample = Array.isArray(requestOptions.sample) ? requestOptions.sample : []
     var html =
       '<details class="icono-request-diagnostics">' +
-      '<summary>Admin diagnostics</summary>' +
+      "<summary>Admin diagnostics</summary>" +
       '<div class="icono-request-diagnostics-body">' +
       '<div class="icono-request-diagnostics-grid">' +
       '<div><span class="icono-request-diagnostics-label">Gene</span><strong>' +
@@ -2865,15 +2883,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</strong></div>" +
       "</div>"
     if (sample.length) {
-      html += '<div class="icono-request-diagnostics-sample"><div class="icono-request-diagnostics-label">Sample options</div><ul>'
+      html +=
+        '<div class="icono-request-diagnostics-sample"><div class="icono-request-diagnostics-label">Sample options</div><ul>'
       for (var i = 0; i < sample.length; i++) {
         var row = sample[i] || {}
         html +=
           "<li><strong>" +
           esc(String(row.label || row.vision_id || "Unknown")) +
           "</strong>" +
-          (row.secondary_label ? '<span> · ' + esc(String(row.secondary_label || "")) + "</span>" : "") +
-          '<span> · ' +
+          (row.secondary_label
+            ? "<span> · " + esc(String(row.secondary_label || "")) + "</span>"
+            : "") +
+          "<span> · " +
           esc(String(Number(row.preview_count || 0) || 0)) +
           " previews</span></li>"
       }
@@ -2885,9 +2906,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function loadGeneRequestDiagnostics(symbol) {
     return fetchJSON(
-      "/api/iconoplasm/admin/requests/gene/" +
-        encodeURIComponent(symbol) +
-        "/diagnostics",
+      "/api/iconoplasm/admin/requests/gene/" + encodeURIComponent(symbol) + "/diagnostics",
       {
         credentials: "include",
       },
@@ -2934,8 +2953,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-request-shell">' +
       '<div class="icono-request-actions">' +
       renderRequestFormMarkup(symbol) +
-      '<div data-icono-request-my-summary hidden></div>' +
-      '<div data-icono-request-gene-summary hidden></div>' +
+      "<div data-icono-request-my-summary hidden></div>" +
+      "<div data-icono-request-gene-summary hidden></div>" +
       '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
       "</div>" +
       "</div>"
@@ -2963,12 +2982,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var mySummaryHost = body.querySelector("[data-icono-request-my-summary]")
       var geneSummaryHost = body.querySelector("[data-icono-request-gene-summary]")
       if (mySummaryHost) {
-        var myHtml = renderGeneRequestSummaryMarkup("Your open requests", myLaneSummary, "my_request_count")
+        var myHtml = renderGeneRequestSummaryMarkup(
+          "Your open requests",
+          myLaneSummary,
+          "my_request_count",
+        )
         mySummaryHost.innerHTML = myHtml
         mySummaryHost.hidden = !String(myHtml || "").trim()
       }
       if (geneSummaryHost) {
-        var geneHtml = renderGeneRequestSummaryMarkup("Open requests on this gene", geneLaneSummary, "request_count")
+        var geneHtml = renderGeneRequestSummaryMarkup(
+          "Open requests on this gene",
+          geneLaneSummary,
+          "request_count",
+        )
         geneSummaryHost.innerHTML = geneHtml
         geneSummaryHost.hidden = !String(geneHtml || "").trim()
       }
@@ -2977,7 +3004,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     function wireAuthenticatedRequestForm(summaryState) {
       var safeState = summaryState || {}
       var myLaneSummary = Array.isArray(safeState.my_lane_summary) ? safeState.my_lane_summary : []
-      var geneLaneSummary = Array.isArray(safeState.gene_lane_summary) ? safeState.gene_lane_summary : []
+      var geneLaneSummary = Array.isArray(safeState.gene_lane_summary)
+        ? safeState.gene_lane_summary
+        : []
       updateSummaryHosts(myLaneSummary, geneLaneSummary)
 
       var form = body.querySelector("[data-icono-request-form]")
@@ -3014,7 +3043,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           credentials: "include",
         })
           .then(function (payload) {
-            requestOptions = Array.isArray(payload && payload.request_options) ? payload.request_options : []
+            requestOptions = Array.isArray(payload && payload.request_options)
+              ? payload.request_options
+              : []
             optionsLoaded = true
             optionsLoadingPromise = null
             return requestOptions
@@ -3029,7 +3060,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
 
       function scoreRequestOption(option, query) {
-        var cleanedQuery = String(query || "").trim().toLowerCase()
+        var cleanedQuery = String(query || "")
+          .trim()
+          .toLowerCase()
         if (!cleanedQuery) return 0
         var primary = requestOptionPrimaryLabel(option).toLowerCase()
         var secondary = requestOptionSecondaryLabel(option).toLowerCase()
@@ -3045,19 +3078,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
 
       function compareRequestOptionStrength(left, right) {
-        var hIndexDiff = Number((right && right.vote_h_index) || 0) - Number((left && left.vote_h_index) || 0)
+        var hIndexDiff =
+          Number((right && right.vote_h_index) || 0) - Number((left && left.vote_h_index) || 0)
         if (hIndexDiff) return hIndexDiff
-        var liveDiff = Number((right && right.live_count) || 0) - Number((left && left.live_count) || 0)
+        var liveDiff =
+          Number((right && right.live_count) || 0) - Number((left && left.live_count) || 0)
         if (liveDiff) return liveDiff
         var scoreDiff = Number((right && right.score) || 0) - Number((left && left.score) || 0)
         if (scoreDiff) return scoreDiff
-        var imageDiff = Number((right && right.image_count) || 0) - Number((left && left.image_count) || 0)
+        var imageDiff =
+          Number((right && right.image_count) || 0) - Number((left && left.image_count) || 0)
         if (imageDiff) return imageDiff
-        return String((left && left.vision_id) || "").localeCompare(String((right && right.vision_id) || ""))
+        return String((left && left.vision_id) || "").localeCompare(
+          String((right && right.vision_id) || ""),
+        )
       }
 
       function filterRequestOptions(query) {
-        var cleanedQuery = String(query || "").trim().toLowerCase()
+        var cleanedQuery = String(query || "")
+          .trim()
+          .toLowerCase()
         var terms = cleanedQuery ? cleanedQuery.split(/\s+/g).filter(Boolean) : []
         var matched = requestOptions.filter(function (option) {
           if (!terms.length) return true
@@ -3171,7 +3211,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           return
         }
         for (var i = 0; i < requestOptions.length; i++) {
-          if (String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === visionId) {
+          if (
+            String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === visionId
+          ) {
             setSelection(requestOptions[i])
             return
           }
@@ -3218,7 +3260,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           .finally(function () {
             if (button) {
               button.disabled = false
-              button.textContent = String(button.getAttribute("data-default-label") || "submit (free)")
+              button.textContent = String(
+                button.getAttribute("data-default-label") || "submit (free)",
+              )
             }
           })
       })
@@ -3236,7 +3280,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             '<div class="icono-home-auth-kicker">request access</div>' +
             '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
             '<div class="icono-home-auth-note">Requests feed the workstation queue. You can choose a specific emulsion ID after login.</div>' +
-            '</div>' +
+            "</div>" +
             '<div style="display:grid;gap:12px;">' +
             '<a class="icono-home-auth-link" href="' +
             esc(voteLoginUrl()) +
@@ -3257,7 +3301,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
     body.innerHTML = renderRequestShellMarkup(symbol)
     void loadSummary().catch(function (error) {
-      setStatus("Request tools unavailable: " + String((error && error.message) || "Unknown error"), "error")
+      setStatus(
+        "Request tools unavailable: " + String((error && error.message) || "Unknown error"),
+        "error",
+      )
       if (!currentUserIsIconoAdmin) return
       loadGeneRequestDiagnostics(symbol)
         .then(function (diagnostics) {
@@ -3266,7 +3313,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         .catch(function (diagnosticError) {
           body.innerHTML +=
             '<details class="icono-request-diagnostics">' +
-            '<summary>Admin diagnostics</summary>' +
+            "<summary>Admin diagnostics</summary>" +
             '<div class="icono-request-diagnostics-body">' +
             esc(String((diagnosticError && diagnosticError.message) || "Diagnostics unavailable")) +
             "</div></details>"
@@ -3367,7 +3414,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var previousValue = String(orderEl.value || "").trim()
       orderEl.innerHTML = activeOrderMarkup()
       var nextValue = useClassicGallery
-        ? normalizeHomeCollectionOrder(previousValue || GALLERY_DEFAULT_ORDER, GALLERY_DEFAULT_ORDER)
+        ? normalizeHomeCollectionOrder(
+            previousValue || GALLERY_DEFAULT_ORDER,
+            GALLERY_DEFAULT_ORDER,
+          )
         : normalizeHomeCollectionOrder(previousValue || HOME_COLLECTION_DEFAULT_ORDER)
       var hasValue = false
       for (var i = 0; i < orderEl.options.length; i++) {
@@ -3484,7 +3534,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
       if (grid) grid.hidden = galleryState.ready && !hasItems
       if (sentinelEl) sentinelEl.hidden = !galleryState.hasMore
-      if (orderEl) orderEl.disabled = !galleryState.ready || galleryState.sortedDiscoveries.length < 2
+      if (orderEl)
+        orderEl.disabled = !galleryState.ready || galleryState.sortedDiscoveries.length < 2
     }
 
     function ensureCollectionReady() {
@@ -3508,12 +3559,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         .then(function (results) {
           if (renderDisposed) return { discoveryData: {}, countData: {} }
           var countData = results[1] || {}
-          return fetchDiscoveryState(galleryState.order, galleryState.seed).then(function (discoveryData) {
-            return {
-              discoveryData: discoveryData || {},
-              countData: countData,
-            }
-          })
+          return fetchDiscoveryState(galleryState.order, galleryState.seed).then(
+            function (discoveryData) {
+              return {
+                discoveryData: discoveryData || {},
+                countData: countData,
+              }
+            },
+          )
         })
         .then(function (results) {
           if (renderDisposed) return
@@ -3886,9 +3939,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       window.removeEventListener("scroll", handleHomeScroll)
     }
 
-    resetGallery(
-      pendingRestoreState ? pendingRestoreState.order : activeDefaultOrder(),
-    )
+    resetGallery(pendingRestoreState ? pendingRestoreState.order : activeDefaultOrder())
 
     function activeSearchScope() {
       return useClassicGallery ? "catalog" : "discoveries"
@@ -3988,7 +4039,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           '" alt="' +
           esc(g.symbol) +
           ' portrait" loading="eager" decoding="async">' +
-          '</span>'
+          "</span>"
         : '<span class="icono-search-result-media icono-search-result-media--fallback" style="background:' +
           esc(g.color) +
           '"></span>'
@@ -4212,7 +4263,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '">' +
         "</span>" +
         "</button>" +
-        (candidateMetaMarkup ? '<div class="icono-candidate-meta">' + candidateMetaMarkup + '</div>' : "") +
+        (candidateMetaMarkup
+          ? '<div class="icono-candidate-meta">' + candidateMetaMarkup + "</div>"
+          : "") +
         '<div class="icono-candidate-footer">' +
         voteBoxMarkup(voteAttrs) +
         removeMarkup +
@@ -4314,10 +4367,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<section class="icono-gene-request-surface icono-gene-request-panel" data-icono-request-panel="' +
       esc(g.symbol) +
       '">' +
-      '<div data-icono-request-body>' +
+      "<div data-icono-request-body>" +
       renderRequestShellMarkup(g.symbol) +
-      '</div>' +
-      '</section>'
+      "</div>" +
+      "</section>"
     html += "</section>"
 
     html += renderCandidateGallery(g)

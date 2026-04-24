@@ -124,6 +124,22 @@ test("DO NOT DELETE: deferred vote cards do not prime vote snapshots on visibili
   }
 })
 
+test("DO NOT DELETE: public Iconoplasm pages do not prime vote snapshots per card on page load", () => {
+  const source = readUtf8("./quartz/static/iconoplasm/app.js")
+
+  assert.doesNotMatch(
+    source,
+    /deferSnapshot:\s*false/,
+    "public homepage/gene-page vote boxes must not opt out of deferred snapshots; one false here can recreate a per-card /api/iconoplasm/votes/snapshot storm",
+  )
+
+  const deferredCallers = source.match(/deferSnapshot:\s*true/g) || []
+  assert.ok(
+    deferredCallers.length >= 5,
+    "gallery brick votes, archival brick votes, hydrated brick votes, canonical gene votes, and candidate votes should all defer personalized snapshots until vote intent",
+  )
+})
+
 test("DO NOT DELETE: extension highlight renderers explicitly commit to paint-only no-inline-metrics rendering", () => {
   const source = readUtf8("./iconoplasm-extension/highlight-runtime.js")
 
