@@ -46,7 +46,9 @@ function buildChooserFromSource(source) {
 
   function apcaClampBlack(relativeLuminance) {
     if (relativeLuminance >= APCA_BLACK_THRESHOLD) return relativeLuminance
-    return relativeLuminance + Math.pow(APCA_BLACK_THRESHOLD - relativeLuminance, APCA_BLACK_CLAMP_EXP)
+    return (
+      relativeLuminance + Math.pow(APCA_BLACK_THRESHOLD - relativeLuminance, APCA_BLACK_CLAMP_EXP)
+    )
   }
 
   function apcaContrast(textRgb, backgroundRgb) {
@@ -94,6 +96,33 @@ function extractRuleBlock(css, selector) {
   }
   return ""
 }
+
+test("DO NOT DELETE: deferred vote cards do not prime vote snapshots on visibility or hover", () => {
+  const sources = [
+    ["shared source", readUtf8("./shared/iconoplasm-card/shared-card-runtime.js")],
+    [
+      "extension generated runtime",
+      readUtf8("./iconoplasm-extension/generated/shared-card-runtime.js"),
+    ],
+    [
+      "website generated runtime",
+      readUtf8("./quartz/static/iconoplasm/generated/shared-card-runtime.js"),
+    ],
+  ]
+
+  for (const [label, source] of sources) {
+    assert.match(
+      source,
+      /if \(cfg\.deferSnapshot\) \{[\s\S]*?return \{ ensureSnapshot/,
+      `${label} should keep an explicit deferred snapshot branch`,
+    )
+    assert.doesNotMatch(
+      source,
+      /primeSnapshotOnVisibility|visibilityObserver|pointerenter|focusin|touchstart/,
+      `${label} must not prefetch /api/iconoplasm/votes/snapshot before the user actually votes`,
+    )
+  }
+})
 
 test("DO NOT DELETE: extension highlight renderers explicitly commit to paint-only no-inline-metrics rendering", () => {
   const source = readUtf8("./iconoplasm-extension/highlight-runtime.js")

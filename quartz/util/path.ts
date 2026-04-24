@@ -287,7 +287,9 @@ function _hasFileExtension(s: string): boolean {
 
 export function getFileExtension(s: string): string | undefined {
   const clean = s.split(/[?#]/, 1)[0]
-  return clean.match(/\.[A-Za-z0-9]+$/)?.[0]
+  return (
+    clean.match(/\.[A-Za-z0-9]+$/)?.[0] ?? s.match(/(?:\s[?#][^/]*|[?#])(\.[A-Za-z0-9]+)$/)?.[1]
+  )
 }
 
 function isRelativeSegment(s: string): boolean {

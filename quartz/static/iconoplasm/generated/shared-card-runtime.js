@@ -10302,7 +10302,6 @@
       };
       var snapshotPrimed = false;
       var snapshotPrimePromise = null;
-      var visibilityObserver = null;
       var candidateRef = "a:" + symbol + "|" + assetSha;
       var candidateImageId = Number(cfg.candidateImageId || 0);
       if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0;
@@ -10431,37 +10430,14 @@
           });
         });
       }
-      function disconnectObserver() {
-        if (!visibilityObserver) return;
-        visibilityObserver.disconnect();
-        visibilityObserver = null;
-      }
       function ensureSnapshot() {
         if (snapshotPrimePromise) return snapshotPrimePromise;
         if (snapshotPrimed) return Promise.resolve();
         snapshotPrimed = true;
-        disconnectObserver();
         snapshotPrimePromise = refreshSnapshot().finally(function() {
           snapshotPrimePromise = null;
         });
         return snapshotPrimePromise;
-      }
-      function primeSnapshotOnVisibility() {
-        if (snapshotPrimed || typeof IntersectionObserver !== "function") return;
-        visibilityObserver = new IntersectionObserver(
-          function(entries) {
-            for (var i = 0; i < entries.length; i++) {
-              if (entries[i] && entries[i].isIntersecting) {
-                ensureSnapshot();
-                return;
-              }
-            }
-          },
-          {
-            rootMargin: String(cfg.visibleRootMargin || "240px 0px")
-          }
-        );
-        visibilityObserver.observe(box);
       }
       if (upBtn) {
         upBtn.addEventListener("click", function(event) {
@@ -10477,10 +10453,6 @@
       }
       render();
       if (cfg.deferSnapshot) {
-        primeSnapshotOnVisibility();
-        box.addEventListener("pointerenter", ensureSnapshot, { once: true });
-        box.addEventListener("focusin", ensureSnapshot, { once: true });
-        box.addEventListener("touchstart", ensureSnapshot, { once: true, passive: true });
         return { ensureSnapshot };
       }
       ensureSnapshot();
