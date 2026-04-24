@@ -4254,6 +4254,21 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/assets/repair-scope") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/assets/state")
     return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
+  if (
+    [
+      "/api/iconoplasm/admin/publish",
+      "/api/iconoplasm/admin/clear-override",
+      "/api/iconoplasm/admin/reject",
+      "/api/iconoplasm/admin/rollback",
+      "/api/iconoplasm/admin/unpublish",
+      "/api/iconoplasm/admin/unstale",
+      "/api/iconoplasm/admin/unstale-batch",
+      "/api/iconoplasm/admin/purge-legacy",
+      "/api/iconoplasm/admin/remove-candidate",
+    ].includes(path)
+  ) {
+    return requestMethod === "POST"
+  }
   if (path === "/api/iconoplasm/admin/local-removals/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/local-removals/ack") return requestMethod === "POST"

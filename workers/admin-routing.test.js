@@ -4,7 +4,11 @@ import test from "node:test"
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
 test("apex admin route stays on the worker instead of getting swallowed by the static-site proxy", async () => {
-  const response = await worker.fetch(new Request("https://brinedew.bio/admin", { method: "GET" }), {}, {})
+  const response = await worker.fetch(
+    new Request("https://brinedew.bio/admin", { method: "GET" }),
+    {},
+    {},
+  )
 
   assert.equal(response.status, 403)
   assert.match(await response.text(), /Unauthorized/)
@@ -47,4 +51,33 @@ test("portrait binaries stay wired even when they arrive through a non-iconoplas
 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("content-type"), "image/webp")
+})
+
+test("iconoplasm admin gallery mutation routes reach the admin gate instead of 404", async () => {
+  const mutationPaths = [
+    "/api/iconoplasm/admin/publish",
+    "/api/iconoplasm/admin/clear-override",
+    "/api/iconoplasm/admin/reject",
+    "/api/iconoplasm/admin/rollback",
+    "/api/iconoplasm/admin/unpublish",
+    "/api/iconoplasm/admin/unstale",
+    "/api/iconoplasm/admin/unstale-batch",
+    "/api/iconoplasm/admin/purge-legacy",
+    "/api/iconoplasm/admin/remove-candidate",
+  ]
+
+  for (const path of mutationPaths) {
+    const response = await worker.fetch(
+      new Request(`https://iconoplasm.brinedew.bio${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: "TP53" }),
+      }),
+      {},
+      { waitUntil() {} },
+    )
+
+    assert.equal(response.status, 403, `${path} should be gated, not missing`)
+    assert.match(await response.text(), /Unauthorized/)
+  }
 })
