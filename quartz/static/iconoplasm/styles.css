@@ -522,6 +522,49 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   opacity: 0.72;
 }
 
+.icono-gene-edit-panel .icono-request-inline-submit,
+.icono-candidate-copy-panel .icono-request-inline-submit {
+  position: static;
+  transform: none;
+  min-height: 2.65rem;
+  justify-self: start;
+}
+
+.icono-gene-edit-panel textarea.icono-request-picker-input {
+  min-height: 7rem;
+  padding: 0.85rem 1rem;
+  resize: vertical;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--light) 98%, white 2%);
+}
+
+.icono-candidate-copy-panel {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0 1rem 1rem;
+  color: var(--dark);
+}
+
+.icono-candidate-copy-panel summary {
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-family: var(--codeFont, monospace);
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-candidate-copy-panel .icono-request-picker-input {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--light) 98%, white 2%);
+}
+
+.icono-candidate-copy-panel .icono-request-results {
+  position: static;
+  max-height: 260px;
+}
+
 .icono-request-diagnostics {
   margin-top: 0.4rem;
   border: 1px dashed color-mix(in srgb, var(--ui-border) 60%, var(--dark) 40%);

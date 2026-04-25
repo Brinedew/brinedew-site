@@ -2736,6 +2736,155 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
   }
 
+  function wireCandidateCopyForms(container, genePayload) {
+    if (!container || !genePayload) return
+    var forms = container.querySelectorAll("[data-icono-candidate-copy-form]")
+    for (var i = 0; i < forms.length; i++) {
+      ;(function (form) {
+        if (!form || form.getAttribute("data-icono-copy-wired") === "true") return
+        form.setAttribute("data-icono-copy-wired", "true")
+        var sourceSymbol = normalizedSymbol(form.getAttribute("data-icono-source-symbol") || genePayload.symbol)
+        var assetSha = String(form.getAttribute("data-icono-asset-sha256") || "")
+          .trim()
+          .toLowerCase()
+        var input = form.querySelector("[data-icono-candidate-copy-query]")
+        var hidden = form.querySelector("[data-icono-candidate-copy-target]")
+        var results = form.querySelector("[data-icono-candidate-copy-results]")
+        var note = form.querySelector("[data-icono-candidate-copy-note]")
+        var searchTimer = null
+        if (!sourceSymbol || !assetSha || !input || !hidden || !results) return
+
+        function setCopyStatus(message, tone) {
+          if (!note) return
+          note.textContent = String(message || "").trim()
+          note.hidden = !note.textContent
+          note.style.color = tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
+        }
+
+        function renderCopyResults(genes) {
+          var rows = Array.isArray(genes) ? genes : []
+          if (!rows.length) {
+            results.innerHTML = '<div class="icono-request-results-empty">No genes found.</div>'
+            results.hidden = false
+            return
+          }
+          var html = ""
+          for (var j = 0; j < rows.length; j++) {
+            var gene = rows[j] || {}
+            var symbol = normalizedSymbol(gene.symbol || "")
+            if (!symbol || symbol === sourceSymbol) continue
+            html +=
+              '<button type="button" class="icono-request-option" data-icono-candidate-copy-option="' +
+              esc(symbol) +
+              '">' +
+              '<span class="icono-request-option-copy">' +
+              '<span class="icono-request-option-title">' +
+              esc(symbol) +
+              "</span>" +
+              "<span>" +
+              esc(String(gene.full_name || symbol)) +
+              "</span>" +
+              "</span>" +
+              "</button>"
+          }
+          results.innerHTML = html || '<div class="icono-request-results-empty">Only the source gene matched.</div>'
+          results.hidden = false
+        }
+
+        function runCopySearch() {
+          var query = String(input.value || "").trim()
+          hidden.value = ""
+          if (query.length < 2) {
+            results.hidden = true
+            results.innerHTML = ""
+            return
+          }
+          fetchJSON(
+            "/api/public/v1/genes/search?scope=catalog&limit=8&q=" +
+              encodeURIComponent(query),
+            { credentials: "include" },
+          )
+            .then(function (payload) {
+              renderCopyResults(Array.isArray(payload && payload.genes) ? payload.genes : [])
+            })
+            .catch(function (error) {
+              results.hidden = false
+              results.innerHTML =
+                '<div class="icono-request-results-empty">' +
+                esc(String((error && error.message) || "Search failed")) +
+                "</div>"
+            })
+        }
+
+        input.addEventListener("input", function () {
+          if (searchTimer) window.clearTimeout(searchTimer)
+          searchTimer = window.setTimeout(runCopySearch, 180)
+        })
+        results.addEventListener("click", function (event) {
+          var button = event.target.closest("[data-icono-candidate-copy-option]")
+          if (!button) return
+          var target = normalizedSymbol(button.getAttribute("data-icono-candidate-copy-option") || "")
+          if (!target) return
+          hidden.value = target
+          input.value = target
+          results.hidden = true
+          results.innerHTML = ""
+        })
+        form.addEventListener("submit", function (event) {
+          event.preventDefault()
+          var targetSymbol = normalizedSymbol(hidden.value || input.value || "")
+          if (!targetSymbol) {
+            setCopyStatus("Pick a target gene first.", "error")
+            input.focus()
+            return
+          }
+          var submit = form.querySelector('button[type="submit"]')
+          if (submit) {
+            submit.disabled = true
+            submit.textContent = "Copying..."
+          }
+          setCopyStatus("", "")
+          fetchJSON("/api/iconoplasm/candidates/copy", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+            },
+            body: JSON.stringify({
+              source_gene_symbol: sourceSymbol,
+              target_gene_symbol: targetSymbol,
+              asset_sha256: assetSha,
+            }),
+          })
+            .then(function (payload) {
+              var targetUrl = String((payload && payload.target_url) || "")
+              var target = normalizedSymbol((payload && payload.target_gene_symbol) || targetSymbol)
+              setCopyStatus("Copied to " + target + " and checkmarked.", "success")
+              if (targetUrl && note) {
+                note.innerHTML =
+                  'Copied to <a href="' +
+                  esc(targetUrl) +
+                  '" data-icono-nav>' +
+                  esc(target) +
+                  "</a> and checkmarked."
+              }
+            })
+            .catch(function (error) {
+              var message = String((error && error.message) || "Could not copy candidate image.")
+              if (/log in|auth/i.test(message)) message += " Use Discord Login first, then try again."
+              setCopyStatus(message, "error")
+            })
+            .finally(function () {
+              if (submit) {
+                submit.disabled = false
+                submit.textContent = "copy this image to another gene"
+              }
+            })
+        })
+      })(forms[i])
+    }
+  }
+
   function geneRequestLaneLabel(item) {
     if (
       !item ||
@@ -2923,8 +3072,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderRequestFormMarkup(symbol, options) {
     var config = options || {}
     var disabledAttr = config.disabled ? ' disabled aria-disabled="true"' : ""
-    var submitLabel = String(config.submitLabel || "submit (free)").trim() || "submit (free)"
-    var placeholder = String(config.placeholder || "pick an emulsion").trim() || "pick an emulsion"
+    var submitLabel = String(config.submitLabel || "new candidate").trim() || "new candidate"
+    var placeholder = String(config.placeholder || "random or pick emulsion").trim() || "random or pick emulsion"
     return (
       '<form data-icono-request-form class="icono-request-form">' +
       '<div class="icono-search icono-search--toolbar icono-request-search">' +
@@ -2966,6 +3115,117 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</div>" +
       "</div>"
     )
+  }
+
+  function renderEditImageShellMarkup(genePayload) {
+    var symbol = normalizedSymbol(genePayload && genePayload.symbol)
+    var portrait = (genePayload && genePayload.portrait) || null
+    var assetSha = String((portrait && portrait.asset_sha256) || "")
+      .trim()
+      .toLowerCase()
+    if (!symbol || !assetSha) return ""
+    return (
+      '<section class="icono-gene-request-surface icono-gene-edit-panel" data-icono-edit-image-panel="' +
+      esc(symbol) +
+      '" data-icono-source-asset-sha256="' +
+      esc(assetSha) +
+      '">' +
+      '<div class="icono-request-shell">' +
+      '<div class="icono-request-actions">' +
+      '<button type="button" class="icono-request-inline-submit" data-icono-edit-image-toggle>edit image</button>' +
+      '<form class="icono-request-form" data-icono-edit-image-form hidden>' +
+      '<label class="icono-request-option-copy" for="icono-edit-image-prompt-' +
+      esc(symbol) +
+      '">' +
+      '<span class="icono-request-option-title">Small correction prompt</span>' +
+      '<span>Describe the fix: anatomy, anchor traits, background, or style drift.</span>' +
+      "</label>" +
+      '<textarea id="icono-edit-image-prompt-' +
+      esc(symbol) +
+      '" data-icono-edit-image-prompt class="icono-search-input icono-request-picker-input" rows="3" maxlength="2000" placeholder="Fix the hands, keep the same character concept, add a fitting background..." required></textarea>' +
+      '<button type="submit" class="icono-request-inline-submit" data-default-label="submit edit">submit edit</button>' +
+      "</form>" +
+      '<div data-icono-edit-image-note hidden style="font-size:0.92rem;"></div>' +
+      "</div>" +
+      "</div>" +
+      "</section>"
+    )
+  }
+
+  function wireGeneEditImagePanel(container, genePayload) {
+    if (!container || !genePayload) return
+    var panel = container.querySelector("[data-icono-edit-image-panel]")
+    if (!panel) return
+    var form = panel.querySelector("[data-icono-edit-image-form]")
+    var toggle = panel.querySelector("[data-icono-edit-image-toggle]")
+    var promptInput = panel.querySelector("[data-icono-edit-image-prompt]")
+    var note = panel.querySelector("[data-icono-edit-image-note]")
+    var symbol = normalizedSymbol(genePayload.symbol)
+    var sourceAssetSha = String(panel.getAttribute("data-icono-source-asset-sha256") || "")
+      .trim()
+      .toLowerCase()
+    if (!form || !toggle || !promptInput || !symbol || !sourceAssetSha) return
+
+    function setEditStatus(message, tone) {
+      if (!note) return
+      note.textContent = String(message || "").trim()
+      note.hidden = !note.textContent
+      note.style.color = tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
+    }
+
+    toggle.addEventListener("click", function () {
+      form.hidden = !form.hidden
+      toggle.setAttribute("aria-expanded", form.hidden ? "false" : "true")
+      if (!form.hidden) promptInput.focus()
+    })
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault()
+      var prompt = String(promptInput.value || "").trim()
+      if (!prompt) {
+        setEditStatus("Describe the correction before submitting.", "error")
+        promptInput.focus()
+        return
+      }
+      var button = form.querySelector('button[type="submit"]')
+      if (button) {
+        button.disabled = true
+        button.textContent = "Submitting..."
+      }
+      setEditStatus("", "")
+      fetchJSON("/api/iconoplasm/requests", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        body: JSON.stringify({
+          symbol: symbol,
+          request_kind: "edit_image",
+          request_prompt: prompt,
+          source_gene_symbol: symbol,
+          source_asset_sha256: sourceAssetSha,
+          request_mode: "random",
+        }),
+      })
+        .then(function () {
+          promptInput.value = ""
+          form.hidden = true
+          toggle.setAttribute("aria-expanded", "false")
+          setEditStatus("Edit queued. The corrected image will land in the candidate pool after workstation review.", "success")
+        })
+        .catch(function (error) {
+          var message = String((error && error.message) || "Could not queue edit.")
+          if (/log in|auth/i.test(message)) message += " Use Discord Login first, then try again."
+          setEditStatus(message, "error")
+        })
+        .finally(function () {
+          if (button) {
+            button.disabled = false
+            button.textContent = String(button.getAttribute("data-default-label") || "submit edit")
+          }
+        })
+    })
   }
 
   function wireGeneRequestPanel(container, genePayload) {
@@ -3240,6 +3500,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var requestedVisionId = String(hiddenInput.value || "").trim()
         var payload = {
           symbol: symbol,
+          request_kind: "new_candidate",
           request_mode: requestedVisionId ? "specific" : "random",
           requested_vision_id: requestedVisionId || null,
         }
@@ -4277,6 +4538,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         voteBoxMarkup(voteAttrs) +
         removeMarkup +
         "</div>" +
+        '<details class="icono-candidate-copy-panel">' +
+        '<summary>copy this image to another gene</summary>' +
+        '<form class="icono-request-form" data-icono-candidate-copy-form data-icono-source-symbol="' +
+        esc(genePayload.symbol) +
+        '" data-icono-asset-sha256="' +
+        esc(assetSha) +
+        '">' +
+        '<input class="icono-search-input icono-request-picker-input" data-icono-candidate-copy-query type="text" autocomplete="off" placeholder="target gene symbol" aria-label="Target gene">' +
+        '<input type="hidden" data-icono-candidate-copy-target value="">' +
+        '<button type="submit" class="icono-request-inline-submit">copy this image to another gene</button>' +
+        '<div class="icono-search-results icono-request-results" data-icono-candidate-copy-results hidden></div>' +
+        '<div data-icono-candidate-copy-note hidden style="font-size:0.92rem;"></div>' +
+        "</form>" +
+        "</details>" +
         "</article>"
     }
     html += "</div>" + "</section>"
@@ -4366,6 +4641,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
     html += renderPublishedEmulsionNotice(g)
+    html += renderEditImageShellMarkup(g)
     // Chesterton fence: this shell must exist before any network round-trip.
     // The old blocking placeholder trained the codebase back toward a monolithic
     // request-state bootstrap. Keep the shell static and let summary/options
@@ -4384,9 +4660,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
     container.innerHTML = html
     wireGeneVoteBox(container, g)
+    wireGeneEditImagePanel(container, g)
     wireGeneRequestPanel(container, g)
     wireCandidateVoteBoxes(container, g)
     wireCandidateRemoveButtons(container, g)
+    wireCandidateCopyForms(container, g)
     applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
     refreshPortraitLightbox()
     var fullPortraitUrl = publishedPortraitUrl(g, "full")

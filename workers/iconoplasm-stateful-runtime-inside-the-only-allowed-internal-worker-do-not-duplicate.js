@@ -328,6 +328,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path)) return "gene_request_summary"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state_gone"
+  if (path === "/api/iconoplasm/candidates/copy") return "candidate_copy"
   if (path === "/api/iconoplasm/votes/me") return "votes_me"
   if (path === "/api/iconoplasm/votes/set") return "votes_set"
   if (path === "/api/iconoplasm/votes/snapshot") return "votes_snapshot"
@@ -405,6 +406,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "site_gene_detail") return "first_party_read"
   if (family.startsWith("discoveries_")) return "first_party_write"
   if (family.startsWith("gene_request_")) return "first_party_request"
+  if (family === "candidate_copy") return "first_party_write"
   if (family.startsWith("votes_")) return family === "votes_me" ? "first_party_read" : "first_party_write"
   if (family === "artist_styles_search") return "public_read"
   if (family === "artist_blacklist_submission") return "public_submission"
@@ -2122,11 +2124,43 @@ function normalizeGenerationRequestMode(raw) {
   return value === "specific" ? "specific" : "random"
 }
 
-function buildGenerationRequestLaneKey({ geneSymbol, requestMode, requestedVisionId } = {}) {
+function normalizeGenerationRequestKind(raw) {
+  const value = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+  return value === "edit" || value === "edit_image" ? "edit_image" : "new_candidate"
+}
+
+function sanitizeGenerationRequestPrompt(raw) {
+  return sanitizeText(raw || "", 2000) || ""
+}
+
+function buildGenerationRequestLaneKey({
+  geneSymbol,
+  requestMode,
+  requestedVisionId,
+  requestKind,
+  requestPrompt,
+  sourceGeneSymbol,
+  sourceAssetSha256,
+} = {}) {
   const symbol = normalizeSymbol(geneSymbol || "") || ""
   const mode = normalizeGenerationRequestMode(requestMode)
   const visionId = mode === "specific" ? sanitizeVoteVisionId(requestedVisionId || "") : ""
-  return `${symbol}|${mode}|${visionId || "random"}`
+  const kind = normalizeGenerationRequestKind(requestKind)
+  const prompt = sanitizeGenerationRequestPrompt(requestPrompt || "")
+  const sourceSymbol = normalizeSymbol(sourceGeneSymbol || "") || ""
+  const sourceAsset = normalizeSha256(sourceAssetSha256 || "") || ""
+  return [
+    symbol,
+    kind,
+    mode,
+    visionId || "random",
+    sourceSymbol || "none",
+    sourceAsset || "none",
+    prompt || "none",
+  ].join("|")
 }
 
 function generationRequestVisionLabel(row) {
@@ -2146,12 +2180,20 @@ function mapGenerationRequestRow(row) {
   const requestMode = normalizeGenerationRequestMode(row?.request_mode)
   const requestedVisionId =
     requestMode === "specific" ? sanitizeVoteVisionId(row?.requested_vision_id || "") : ""
+  const requestKind = normalizeGenerationRequestKind(row?.request_kind || "")
+  const requestPrompt = sanitizeGenerationRequestPrompt(row?.request_prompt || "")
+  const sourceGeneSymbol = normalizeSymbol(row?.source_gene_symbol || "") || ""
+  const sourceAssetSha = normalizeSha256(row?.source_asset_sha256 || "") || ""
   return {
     id: Number(row?.id || 0),
     gene_symbol: geneSymbol,
     full_name: sanitizeText(row?.full_name || "", 255) || "",
     requester_user_id: sanitizeText(row?.requester_user_id || "", 255) || "",
     requester_username: sanitizeText(row?.requester_username || "", 255) || "",
+    request_kind: requestKind,
+    request_prompt: requestPrompt,
+    source_gene_symbol: sourceGeneSymbol,
+    source_asset_sha256: sourceAssetSha,
     request_mode: requestMode,
     requested_vision_id: requestedVisionId,
     requested_emulsion_id:
@@ -2170,6 +2212,10 @@ function mapGenerationRequestRow(row) {
       geneSymbol,
       requestMode,
       requestedVisionId,
+      requestKind,
+      requestPrompt,
+      sourceGeneSymbol,
+      sourceAssetSha256: sourceAssetSha,
     }),
   }
 }
@@ -2220,6 +2266,10 @@ function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
       lane_key: row.lane_key,
       gene_symbol: row.gene_symbol,
       full_name: row.full_name,
+      request_kind: row.request_kind,
+      request_prompt: row.request_prompt,
+      source_gene_symbol: row.source_gene_symbol,
+      source_asset_sha256: row.source_asset_sha256,
       request_mode: row.request_mode,
       requested_vision_id: row.requested_vision_id,
       requested_emulsion_id: row.requested_emulsion_id,
@@ -2294,6 +2344,10 @@ async function createGenerationRequest(
     requesterUsername = "",
     requestMode = "random",
     requestedVisionId = "",
+    requestKind = "new_candidate",
+    requestPrompt = "",
+    sourceGeneSymbol = "",
+    sourceAssetSha256 = "",
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -2308,21 +2362,36 @@ async function createGenerationRequest(
   if (mode === "specific" && !visionNorm) {
     return { ok: false, error: "Choose a specific emulsion before submitting a specific request." }
   }
+  const kind = normalizeGenerationRequestKind(requestKind)
+  const prompt = sanitizeGenerationRequestPrompt(requestPrompt || "")
+  if (kind === "edit_image" && !prompt) {
+    return { ok: false, error: "Describe the image correction before submitting an edit request." }
+  }
+  const sourceSymbolNorm = normalizeSymbol(sourceGeneSymbol || geneSymbol || "") || symbolNorm
+  const sourceAssetNorm = normalizeSha256(sourceAssetSha256 || "") || ""
   const insertResp = await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_generation_requests (
        gene_symbol,
        requester_user_id,
        requester_username,
+       request_kind,
+       request_prompt,
+       source_gene_symbol,
+       source_asset_sha256,
        request_mode,
        requested_vision_id,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)`,
   )
     .bind(
       symbolNorm,
       requesterNorm,
       sanitizeText(requesterUsername || "", 255) || "",
+      kind,
+      prompt,
+      sourceSymbolNorm,
+      sourceAssetNorm,
       mode,
       visionNorm,
     )
@@ -2353,6 +2422,116 @@ async function createGenerationRequest(
   return {
     ok: true,
     request: mapped,
+  }
+}
+
+async function copyPortraitCandidateToGene(
+  env,
+  { sourceGeneSymbol, targetGeneSymbol, assetSha256, actorId } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  const sourceSymbol = normalizeSymbol(sourceGeneSymbol || "") || ""
+  const targetSymbol = normalizeSymbol(targetGeneSymbol || "") || ""
+  const assetSha = normalizeSha256(assetSha256 || "") || ""
+  const actorNorm = normalizeUserId(actorId || "") || "public_user"
+  if (!sourceSymbol) return { ok: false, error: "Missing source gene symbol" }
+  if (!targetSymbol) return { ok: false, error: "Missing target gene symbol" }
+  if (!assetSha) return { ok: false, error: "Missing asset SHA" }
+  if (sourceSymbol === targetSymbol) {
+    return { ok: false, error: "Choose a different target gene." }
+  }
+  const targetRow = await env.ICONOPLASM_DB.prepare(
+    // D1 cost fence: target symbols come from the normalized public search API.
+    // Keep the equality raw so copy-to-gene does not become a catalog scan.
+    `SELECT gene_symbol, COALESCE(full_name, '') AS full_name
+     FROM icono_gene_catalog
+     WHERE gene_symbol = ?
+     LIMIT 1`,
+  )
+    .bind(targetSymbol)
+    .first()
+  if (!targetRow?.gene_symbol) return { ok: false, error: "Target gene not found" }
+
+  const sourceRow = await env.ICONOPLASM_DB.prepare(
+    // D1 cost fence: icono_portrait_assets primary key is (gene_symbol, asset_sha256).
+    // Do not wrap either side in lower()/upper(); public copy writes must stay point lookups.
+    `SELECT
+       gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
+       mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
+       vision_id, emulsion_id, workflow_id, workflow_label, workflow_path, prompt_version, variant_slot,
+       candidate_image_id, created_by
+     FROM icono_portrait_assets
+     WHERE gene_symbol = ?
+       AND asset_sha256 = ?
+       AND COALESCE(status, '') <> 'rejected'
+     LIMIT 1`,
+  )
+    .bind(sourceSymbol, assetSha)
+    .first()
+  if (!sourceRow?.asset_sha256) return { ok: false, error: "Source candidate not found" }
+
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_portrait_assets (
+       gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
+       mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
+       vision_id, emulsion_id, workflow_id, workflow_label, workflow_path, prompt_version, variant_slot,
+       candidate_image_id, artist_tag, artist_name, created_by, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+       status=CASE WHEN COALESCE(icono_portrait_assets.status, '')='rejected' THEN 'approved' ELSE icono_portrait_assets.status END,
+       autopick_eligible=1,
+       is_stale=0,
+       is_legacy=0,
+       vision_id=COALESCE(icono_portrait_assets.vision_id, excluded.vision_id),
+       emulsion_id=COALESCE(icono_portrait_assets.emulsion_id, excluded.emulsion_id),
+       workflow_id=COALESCE(icono_portrait_assets.workflow_id, excluded.workflow_id),
+       workflow_label=COALESCE(icono_portrait_assets.workflow_label, excluded.workflow_label),
+       workflow_path=COALESCE(icono_portrait_assets.workflow_path, excluded.workflow_path),
+       prompt_version=COALESCE(icono_portrait_assets.prompt_version, excluded.prompt_version),
+       variant_slot=COALESCE(icono_portrait_assets.variant_slot, excluded.variant_slot),
+       candidate_image_id=COALESCE(icono_portrait_assets.candidate_image_id, excluded.candidate_image_id)`,
+  )
+    .bind(
+      targetSymbol,
+      assetSha,
+      String(sourceRow.r2_key_full || ""),
+      String(sourceRow.r2_key_medium || ""),
+      String(sourceRow.r2_key_thumb || ""),
+      String(sourceRow.mime || "image/webp"),
+      optionalInt(sourceRow.width),
+      optionalInt(sourceRow.height),
+      optionalInt(sourceRow.bytes),
+      sanitizeVoteVisionId(sourceRow.vision_id || "") || null,
+      sanitizeText(sourceRow.emulsion_id || "", 64) || null,
+      sanitizeText(sourceRow.workflow_id || "", 32) || null,
+      sanitizeText(sourceRow.workflow_label || "", 255) || null,
+      sanitizeText(sourceRow.workflow_path || "", 512) || null,
+      sanitizeText(sourceRow.prompt_version || "", 16) || null,
+      sanitizeText(sourceRow.variant_slot || "", 32) || null,
+      optionalInt(sourceRow.candidate_image_id),
+      actorNorm,
+    )
+    .run()
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
+     VALUES (?, ?, ?, 'copy_candidate', ?, ?)`,
+  )
+    .bind(
+      targetSymbol,
+      null,
+      assetSha,
+      actorNorm,
+      `Copied from ${sourceSymbol} by public copy-to-gene flow`,
+    )
+    .run()
+  return {
+    ok: true,
+    source_gene_symbol: sourceSymbol,
+    target_gene_symbol: targetSymbol,
+    target_full_name: sanitizeText(targetRow.full_name || "", 255) || "",
+    asset_sha256: assetSha,
+    candidate_image_id: optionalInt(sourceRow.candidate_image_id),
+    vision_id: sanitizeVoteVisionId(sourceRow.vision_id || "") || "",
   }
 }
 
@@ -4220,6 +4399,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/requests") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/requests/open") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/candidates/copy") return requestMethod === "POST"
   if (path === "/api/iconoplasm/votes/set") return requestMethod === "POST"
   if (path === "/api/iconoplasm/votes/snapshot") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/votes/import") return requestMethod === "POST"
@@ -15637,6 +15817,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requesterUsername: sessionUser.username || "",
         requestMode: p?.request_mode || p?.mode || "random",
         requestedVisionId: p?.requested_vision_id || p?.vision_id || "",
+        requestKind: p?.request_kind || p?.kind || "new_candidate",
+        requestPrompt: p?.request_prompt || p?.prompt || "",
+        sourceGeneSymbol: p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
+        sourceAssetSha256: p?.source_asset_sha256 || p?.asset_sha256 || "",
       })
       if (!result.ok) {
         return done(
@@ -15704,6 +15888,105 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       return done(
         "admin_requests_fulfill",
         json(result, 200, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/candidates/copy" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB)
+        return done("candidate_copy_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      if (!iconoplasmVoteCoordinatorBinding(env))
+        return done(
+          "candidate_copy_500",
+          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+        )
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "candidate_copy_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first to copy a candidate image." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("candidate_copy_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const userId = normalizeUserId(sessionUser.user_id)
+      const copyResult = await copyPortraitCandidateToGene(env, {
+        sourceGeneSymbol: p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
+        targetGeneSymbol: p?.target_gene_symbol || p?.target_symbol || "",
+        assetSha256: p?.asset_sha256 || p?.sha256 || "",
+        actorId: userId,
+      })
+      if (!copyResult.ok) {
+        return done(
+          "candidate_copy_400",
+          json({ ok: false, error: String(copyResult.error || "Could not copy candidate image") }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      const coordinatorWrite = await iconoplasmVoteCoordinatorSetVote(env, {
+        symbol: copyResult.target_gene_symbol,
+        assetSha256: copyResult.asset_sha256,
+        visionId: copyResult.vision_id,
+        candidateImageId: copyResult.candidate_image_id,
+        userId,
+        requestedVoteValue: 1,
+      })
+      if (!coordinatorWrite?.ok) {
+        return done("candidate_copy_502", json({ error: "Vote coordinator write failed" }, 502))
+      }
+      const assetCandidateRef = voteAssetIdentity(copyResult.target_gene_symbol, copyResult.asset_sha256)
+      await projectVoteCoordinatorLedgerRow(env, {
+        symbol: copyResult.target_gene_symbol,
+        assetSha256: copyResult.asset_sha256,
+        visionId: coordinatorWrite.resolved_vision_id,
+        candidateImageId: coordinatorWrite.candidate_image_id,
+        userId,
+        voteValue: coordinatorWrite.final_vote_value,
+      })
+      await appendVoteEvent(env, {
+        symbol: copyResult.target_gene_symbol,
+        assetSha256: copyResult.asset_sha256,
+        visionId: coordinatorWrite.resolved_vision_id,
+        candidateRef: assetCandidateRef,
+        candidateImageId: coordinatorWrite.candidate_image_id,
+        userId,
+        voteValue: coordinatorWrite.final_vote_value,
+      })
+      const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
+        symbol: copyResult.target_gene_symbol,
+        actorId: userId,
+        reason: "candidate_copy_auto_checkmark",
+      })
+      return done(
+        "candidate_copy",
+        json(
+          {
+            ok: true,
+            source_gene_symbol: copyResult.source_gene_symbol,
+            target_gene_symbol: copyResult.target_gene_symbol,
+            target_full_name: copyResult.target_full_name,
+            asset_sha256: copyResult.asset_sha256,
+            candidate_image_id: coordinatorWrite.candidate_image_id,
+            target_url: `/gene/${encodeURIComponent(copyResult.target_gene_symbol)}`,
+            vote: {
+              candidate_ref: assetCandidateRef,
+              vote_value: coordinatorWrite.final_vote_value,
+            },
+            auto_promote: {
+              deferred: true,
+              queued: Boolean(projectionRefresh?.queued),
+            },
+            message: `Copied to ${copyResult.target_gene_symbol} and checkmarked.`,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
       )
     }
 
