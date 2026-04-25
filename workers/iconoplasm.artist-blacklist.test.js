@@ -141,7 +141,9 @@ test("blocklist route serves the public blocklist page", async () => {
   const html = await response.text()
   assert.equal(response.status, 200)
   assert.match(html, /Blocklist an artist tag\./)
-  assert.match(html, /Use the exact @tag as shown on the site\. Spaces are not allowed\./)
+  assert.match(html, /Submit request/)
+  assert.doesNotMatch(html, /Use the exact @tag as shown on the site\. Spaces are not allowed\./)
+  assert.doesNotMatch(html, /Nothing submitted yet\./)
 })
 
 test("guest blacklist submissions stay singular per requester identity", async () => {

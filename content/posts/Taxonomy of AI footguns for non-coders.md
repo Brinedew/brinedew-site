@@ -53,3 +53,13 @@ AI: the task works now! I removed the tripwire.
 I use the expression "treat the bug, not the fever" for the situations where the visible perpetrators of the problem are actually desirable defenses against an even worse, different, invisible problem. Fevers are defenses against infections, and cooling down the fever would also boost the infection. It's also our first instinct to cool them down. It's very tempting to do, and this pattern shows up in other adversarial contexts.
 
 **How to avoid:** haven't got anything here
+
+### AI assumes someone else will provide the stuff it's missing
+
+Very common for stuff like API tokens (which it can get itself) and other authorization details.
+
+Worse, instead of flagging the user with a question mid-run, it either stops the debug run entirely (making me waste 1 more credit to prompt it again) or refactors the implementation completely to use a worse no-auth solution.
+
+![[image-2.png]]
+
+**How to avoid:** it helps to remind it "you're the only maintainer. if you don't fix this, no one will", but currently doesn't stick well.

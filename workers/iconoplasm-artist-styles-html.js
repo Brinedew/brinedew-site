@@ -185,6 +185,10 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
       overflow-wrap: anywhere;
     }
 
+    .status:empty {
+      display: none;
+    }
+
     .status[data-tone="ok"] {
       color: var(--ok);
       border-color: rgba(39, 89, 61, 0.22);
@@ -246,9 +250,6 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
     <section class="hero">
       <div class="kicker">Iconoplasm opt-out</div>
       <h1>Blocklist an artist tag.</h1>
-      <p class="lede">
-        If an Iconoplasm image matches your style, send the artist tag exactly as shown on the site.
-      </p>
     </section>
 
     <section class="panel">
@@ -272,17 +273,10 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
         }
 
         <div class="actions">
-          <button id="submit-btn" type="submit">Submit blocklist request</button>
-          <div class="help">Use the exact @tag as shown on the site. Spaces are not allowed.</div>
+          <button id="submit-btn" type="submit">Submit request</button>
         </div>
 
-        <div id="status" class="status" data-tone="neutral">Nothing submitted yet.</div>
-
-        ${
-          turnstileConfigured
-            ? '<div class="fine-print"><div>You may see a quick human check before sending.</div></div>'
-            : ""
-        }
+        <div id="status" class="status" data-tone="neutral" aria-live="polite"></div>
       </form>
     </section>
   </main>
