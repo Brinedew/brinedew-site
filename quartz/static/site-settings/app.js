@@ -4,7 +4,7 @@ import {
   readIconoplasmSettings,
   resetIconoplasmSettings,
   writeIconoplasmSettings,
-} from "../site-preferences.js?v=20260309e"
+} from "../site-preferences.js?v=20260425a"
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
@@ -26,6 +26,7 @@ import {
   var CARD_VARIANT_OPTIONS = [
     { value: "simple", label: "Simple shared card" },
     { value: "lit-archival", label: "Vintage lab label" },
+    { value: "neo-drab", label: "Neo-drab dossier" },
     { value: "image-only", label: "Image only" },
   ]
   var GENERATION_PROVIDERS = [

@@ -101,6 +101,121 @@
   overflow: hidden;
 }
 
+/* B-458 / B-464: neo-drab is intentionally a new card option, not a mutation of the
+   vintage lab label. Paper exploration favored the sodium-dossier direction: dark olive
+   field-paper, weak utility borders, and one sodium yellow accent. Keep this as a skin over
+   the existing lab-label DOM so the mobile slider/tap behavior stays exactly where users
+   already learned it, but never move these tokens into the plain lab-label selectors. */
+.icono-card--variant-neo-drab,
+.iconoplasm-tooltip--variant-neo-drab {
+  --icono-label-paper: #171a14;
+  --icono-label-paper-2: #202318;
+  --icono-label-ink: #ede2b5;
+  --icono-label-muted: rgba(237, 226, 181, 0.56);
+  --icono-label-rule: rgba(225, 205, 126, 0.18);
+  --icono-label-rule-strong: rgba(225, 205, 126, 0.32);
+  --icono-label-stamp: #c06a3a;
+  --icono-label-pen: #d7b642;
+}
+
+.icono-card--variant-neo-drab.icono-card--brick,
+.iconoplasm-tooltip--variant-neo-drab {
+  border-color: rgba(215, 182, 66, 0.5);
+  background:
+    radial-gradient(circle at 18% 10%, rgba(215, 182, 66, 0.16), transparent 32%),
+    linear-gradient(180deg, #1b1f17 0%, #13160f 68%, #0f120d 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 238, 166, 0.05),
+    0 18px 34px rgba(8, 10, 6, 0.34);
+}
+
+.icono-card--variant-neo-drab.icono-card--brick:hover,
+.icono-card--variant-neo-drab.icono-card--brick-static:hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 238, 166, 0.06),
+    0 18px 34px rgba(8, 10, 6, 0.34);
+}
+
+.icono-card--variant-neo-drab.icono-card--brick .iconoplasm-tooltip-portrait,
+.iconoplasm-tooltip--variant-neo-drab .iconoplasm-tooltip-portrait {
+  background:
+    linear-gradient(180deg, rgba(237, 226, 181, 0.08), rgba(237, 226, 181, 0.02)),
+    #12150f;
+}
+
+.icono-card--variant-neo-drab.icono-card--brick .iconoplasm-tooltip-body,
+.iconoplasm-tooltip--variant-neo-drab .iconoplasm-tooltip-body {
+  background: #171a14;
+  color: var(--icono-label-ink);
+}
+
+.icono-card--variant-neo-drab .icono-label-sheet-body,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-sheet-body {
+  background:
+    linear-gradient(90deg, rgba(215, 182, 66, 0.06) 0 1px, transparent 1px 100%),
+    radial-gradient(circle at 80% 12%, rgba(74, 114, 117, 0.14), transparent 30%),
+    linear-gradient(180deg, #1b1f17 0%, #15180f 100%);
+  background-size: 19px 100%, auto, auto;
+}
+
+.icono-card--variant-neo-drab .icono-label-specimen-viewport,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-specimen-viewport {
+  background:
+    radial-gradient(circle at 50% 22%, rgba(215, 182, 66, 0.12), transparent 35%),
+    linear-gradient(180deg, #202318, #10130d);
+}
+
+.icono-card--variant-neo-drab .iconoplasm-tooltip-portrait-img,
+.iconoplasm-tooltip--variant-neo-drab .iconoplasm-tooltip-portrait-img {
+  filter: saturate(0.82) contrast(1.08) sepia(0.12);
+}
+
+.icono-card--variant-neo-drab .icono-label-registry-line,
+.icono-card--variant-neo-drab .icono-label-qc-meta-item,
+.icono-card--variant-neo-drab .icono-label-footer-line--typed,
+.icono-card--variant-neo-drab .icono-label-footer-line--caption,
+.icono-card--variant-neo-drab .icono-label-specimen-note,
+.icono-card--variant-neo-drab .icono-label-specimen-metric,
+.icono-card--variant-neo-drab .icono-label-specimen-swatch-hex,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-registry-line,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-qc-meta-item,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-footer-line--typed,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-footer-line--caption,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-specimen-note,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-specimen-metric,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-specimen-swatch-hex {
+  color: rgba(237, 226, 181, 0.66);
+}
+
+.icono-card--variant-neo-drab .icono-label-mobile-peek,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-mobile-peek {
+  background:
+    linear-gradient(180deg, rgba(215, 182, 66, 0.08), transparent 38%),
+    #171a14;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 238, 166, 0.09),
+    inset 0 -1px 0 rgba(215, 182, 66, 0.18);
+}
+
+.icono-card--variant-neo-drab .icono-label-mobile-peek-tab-fill,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-mobile-peek-tab-fill {
+  fill: #1b1f17;
+  stroke: rgba(215, 182, 66, 0.46);
+}
+
+.icono-card--variant-neo-drab .icono-label-mobile-peek-tab-highlight,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-mobile-peek-tab-highlight {
+  stroke: rgba(237, 226, 181, 0.28);
+}
+
+.icono-card--variant-neo-drab .icono-label-dossier-shell,
+.iconoplasm-tooltip--variant-neo-drab .icono-label-dossier-shell {
+  background:
+    linear-gradient(90deg, rgba(215, 182, 66, 0.05) 0 1px, transparent 1px 100%),
+    linear-gradient(180deg, #1b1f17, #15180f);
+  background-size: 19px 100%, auto;
+}
+
 .icono-image-only-link {
   position: relative;
   display: block;
@@ -2661,5 +2776,31 @@
     font-size: 0.48rem;
     line-height: 1.08;
     letter-spacing: 0.08em;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick {
+    color: var(--icono-label-ink);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek {
+    background:
+      linear-gradient(180deg, rgba(215, 182, 66, 0.08), transparent 38%),
+      #171a14;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 238, 166, 0.09),
+      inset 0 -1px 0 rgba(215, 182, 66, 0.18);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell {
+    background:
+      linear-gradient(90deg, rgba(215, 182, 66, 0.05) 0 1px, transparent 1px 100%),
+      linear-gradient(180deg, #1b1f17, #15180f);
+    background-size: 19px 100%, auto;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-vote-btn,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-vote-btn-copy,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-vote-btn-arrow {
+    color: var(--icono-label-ink);
   }
 }

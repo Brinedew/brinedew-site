@@ -2,7 +2,7 @@ import {
   readIconoplasmSettings,
   startSharedIconoplasmSettingsAutoSync,
   syncSharedIconoplasmSettings,
-} from "../site-preferences.js?v=20260309e"
+} from "../site-preferences.js?v=20260425a"
 import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
@@ -1134,7 +1134,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function isArchivalCardVariant(cardVariant) {
-    return cardVariant === "lit-archival"
+    return cardVariant === "lit-archival" || cardVariant === "neo-drab"
   }
 
   function isImageOnlyCardVariant(cardVariant) {
@@ -1145,7 +1145,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return isArchivalCardVariant(cardVariant) || isImageOnlyCardVariant(cardVariant)
   }
 
+  function litLayoutVariantForCard(cardVariant) {
+    if (isImageOnlyCardVariant(cardVariant)) return "image-only"
+    if (cardVariant === "neo-drab") return "neo-drab"
+    return "lit-archival"
+  }
+
   function archivalVariantClass(cardVariant) {
+    if (cardVariant === "neo-drab") {
+      return " icono-card--variant-lab-label icono-card--variant-lit-archival icono-card--variant-neo-drab"
+    }
     if (cardVariant === "lit-archival") {
       return " icono-card--variant-lab-label icono-card--variant-lit-archival"
     }
@@ -1826,7 +1835,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var bodyHtml = isLitCardVariant(cardVariant)
       ? buildArchivalBodyMarkup(detail || g, {
           mode: "brick",
-          layoutVariant: isImageOnlyVariant ? "image-only" : "lit-archival",
+          layoutVariant: litLayoutVariantForCard(cardVariant),
           mobileReview: isMobileLabelReviewEnabled(),
           portraitAlt: g.symbol + " blot",
           portraitSrc: portraitUrl,
@@ -2051,7 +2060,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var bodyHtml = isLitCardVariant(cardVariant)
       ? buildArchivalBodyMarkup(detail || g, {
           mode: "sheet",
-          layoutVariant: isImageOnlyVariant ? "image-only" : "lit-archival",
+          layoutVariant: litLayoutVariantForCard(cardVariant),
           mobileReview: false,
           portraitAlt: g.symbol + " blot",
           portraitSrc: portraitUrl,

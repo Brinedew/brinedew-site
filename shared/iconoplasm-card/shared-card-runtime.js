@@ -392,6 +392,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       .trim()
       .toLowerCase()
     if (value === "image-only") return "image-only"
+    if (value === "neo-drab") return "neo-drab"
     if (value === "lab-label" || value === "lit-archival") return "lit-archival"
     if (value === "classic" || value === "simple") return "simple"
     return "simple"
