@@ -349,6 +349,20 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/assets/state") return "admin_assets_state"
   if (path.startsWith("/api/iconoplasm/admin/assets")) return "admin_assets"
   if (path === "/api/iconoplasm/admin/gallery") return "admin_gallery"
+  if (
+    [
+      "/api/iconoplasm/admin/publish",
+      "/api/iconoplasm/admin/clear-override",
+      "/api/iconoplasm/admin/reject",
+      "/api/iconoplasm/admin/rollback",
+      "/api/iconoplasm/admin/unpublish",
+      "/api/iconoplasm/admin/unstale",
+      "/api/iconoplasm/admin/unstale-batch",
+      "/api/iconoplasm/admin/purge-legacy",
+      "/api/iconoplasm/admin/remove-candidate",
+    ].includes(path)
+  )
+    return "admin_gallery_mutation"
   if (/^\/api\/iconoplasm\/admin\/gene\/[^/]+$/.test(path)) return "admin_gene_detail"
   if (path === "/api/iconoplasm/admin/local-removals/pending") return "admin_local_removals_pending"
   if (path === "/api/iconoplasm/admin/local-removals/ack") return "admin_local_removals_ack"
@@ -419,6 +433,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (
     family === "admin_votes" ||
     family === "admin_gallery" ||
+    family === "admin_gallery_mutation" ||
     family === "admin_assets" ||
     family === "admin_assets_summary" ||
     family === "admin_assets_state" ||
