@@ -17,9 +17,9 @@ tags:
 <p>About Iconoplasm.</p>
 <p>Iconoplasm assigns a unique color identity to every human protein-coding gene. These colors serve as visual mnemonics — persistent, recognizable identities that help you keep track of genes across tools and contexts.</p>
 <p>Gene personas.</p>
-<p>Each gene gets a deterministic color derived from its properties. Published genes also get a portrait — a visual representation of the protein's character.</p>
+<p>Each gene gets a deterministic color derived from its properties. Published genes also get a blot — a visual representation of the protein's character.</p>
 <p>Browse and search.</p>
-<p>Explore the full catalog of 19,000+ gene personas. Search by gene symbol (like TP53, BRCA1) or by full name. Click any gene to see its color, portrait status, and links to external databases.</p>
+<p>Explore the full catalog of 19,000+ gene personas. Search by gene symbol (like TP53, BRCA1) or by full name. Click any gene to see its color, blot status, and links to external databases.</p>
 </div>
 
 <div id="iconoplasm-root" data-static="/static/iconoplasm"></div>

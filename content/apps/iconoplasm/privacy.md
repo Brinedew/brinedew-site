@@ -13,7 +13,7 @@ This policy describes what data the Iconoplasm browser extension collects and ho
 
 ## What the Extension Does
 
-Iconoplasm scans web pages you visit for human gene symbols (like TP53, BRCA1). When it finds them, it highlights the text and shows hover cards with the gene's assigned color identity and portrait image. It also tracks which genes you've encountered (your "discovery" count).
+Iconoplasm scans web pages you visit for human gene symbols (like TP53, BRCA1). When it finds them, it highlights the text and shows hover cards with the gene's assigned color identity and blot image. It also tracks which genes you've encountered (your "discovery" count).
 
 ## Data Collected
 
@@ -23,7 +23,7 @@ The extension reads the text content of pages you visit to find gene symbol matc
 
 ### Gene Symbol Lists (sent to our server)
 
-When the extension finds gene symbols on a page, it sends those symbols — and only those symbols — to `iconoplasm.brinedew.bio` to fetch color data and portrait images. We do not send the URL you're visiting, the page content, or any other browsing data.
+When the extension finds gene symbols on a page, it sends those symbols — and only those symbols — to `iconoplasm.brinedew.bio` to fetch color data and blot images. We do not send the URL you're visiting, the page content, or any other browsing data.
 
 ### Discovery Encounters (optional, sent to our server)
 
@@ -47,7 +47,7 @@ The extension makes requests only to `iconoplasm.brinedew.bio`:
 | Request | What's Sent | When |
 |---------|-------------|------|
 | Gene batch lookup | List of gene symbols found on the current page | When you visit a page with gene symbols |
-| Portrait image fetch | Gene symbol | When a hover card is shown |
+| Blot image fetch | Gene symbol | When a hover card is shown |
 | Discovery encounter | Gene symbol | When a gene is first encountered (signed-in users only) |
 | Discovery state sync | Session cookie | On page load (signed-in users only) |
 

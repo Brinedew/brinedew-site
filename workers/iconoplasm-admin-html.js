@@ -1681,7 +1681,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <div class="page">
     <header>
       <h1>Iconoplasm Admin</h1>
-      <p>Images first, bookkeeping second. This page steers the canonical portrait shown in the extension. Votes auto-pick the canonical image unless a manual override is active.</p>
+      <p>Images first, bookkeeping second. This page steers the canonical blot shown in the extension. Votes auto-pick the canonical blot unless a manual override is active.</p>
     </header>
 
     <nav id="admin-tabs">
@@ -1869,7 +1869,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <div class="section-head">
         <div>
           <h2>Gallery</h2>
-          <p class="small">Canonical means the portrait shown in the extension. Votes pick it automatically unless you deliberately pin a manual override.</p>
+          <p class="small">Canonical means the blot shown in the extension. Votes pick it automatically unless you deliberately pin a manual override.</p>
         </div>
       </div>
 
@@ -1881,10 +1881,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             </label>
             <label>Show
               <select id="gallery-filter">
-                <option value="all" selected>all portraits</option>
+                <option value="all" selected>all blots</option>
                 <option value="mismatch">has mismatch</option>
                 <option value="pinned">manual override</option>
-                <option value="missing">missing canonical portrait</option>
+                <option value="missing">missing canonical blot</option>
                 <option value="stale">has stale images</option>
               </select>
             </label>
@@ -1907,7 +1907,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           </div>
         </div>
         <div class="gallery-toolbar-row">
-          <div class="small">Click a gene to inspect candidates. If a manual override exists, the compare view shows the current canonical portrait against the vote winner.</div>
+          <div class="small">Click a gene to inspect candidates. If a manual override exists, the compare view shows the current canonical blot against the vote winner.</div>
           <div class="actions">
             <button class="btn-flat" type="button" id="assets-unstale-visible" disabled>Restore stale in view</button>
             <button class="btn-primary" id="assets-refresh">Refresh</button>
@@ -2191,14 +2191,20 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return 'canonical only';
       }
 
-      // Terminology rule: "canonical" is the portrait shown in the extension.
-      // Votes auto-pick the canonical portrait unless admin_override is active.
+      // Terminology rule: "canonical" is the blot shown in the extension.
+      // Votes auto-pick the canonical blot unless admin_override is active.
       // Keep this language consistent in the admin even though legacy route/state
       // names still use "live" internally.
 
       function statusPill(status) {
         var s = String(status || 'unknown').toLowerCase();
         return '<span class="status status-' + esc(s) + '">' + esc(s) + '</span>';
+      }
+
+      function displayRouteFamily(routeFamily) {
+        return String(routeFamily || 'unknown route')
+          .replace(/admin_essence/g, 'admin_phenotype')
+          .replace(/\bessence\b/g, 'phenotype');
       }
 
       function previewCell(asset) {
@@ -2337,7 +2343,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return [
           '<article class="overview-event">',
           '<div class="overview-thumb">',
-          (evt.thumb_url ? '<img src="' + esc(evt.thumb_url) + '" alt="Portrait thumbnail" loading="lazy" width="40" height="40" />' : ''),
+          (evt.thumb_url ? '<img src="' + esc(evt.thumb_url) + '" alt="Blot thumbnail" loading="lazy" width="40" height="40" />' : ''),
           '</div>',
           '<div>',
           '<strong>' + esc(evt.symbol || 'unknown') + '</strong>',
@@ -2404,9 +2410,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       function renderOverviewSummary() {
         var summary = state.overviewSummary || {};
         els.overviewMetrics.innerHTML = [
-          metricMarkup('Canonical set', summary.with_live, 'Genes with a canonical portrait set.'),
-          metricMarkup('Broken canonical', summary.drift, 'Canonical portrait points at a missing or broken asset.'),
-          metricMarkup('Missing', summary.missing, 'Genes with no usable portrait candidates.'),
+          metricMarkup('Canonical set', summary.with_live, 'Genes with a canonical blot set.'),
+          metricMarkup('Broken canonical', summary.drift, 'Canonical blot points at a missing or broken asset.'),
+          metricMarkup('Missing', summary.missing, 'Genes with no usable blot candidates.'),
           metricMarkup('Stale', summary.stale_assets, 'Old images waiting for cleanup.'),
           metricMarkup('Legacy', summary.legacy_assets, 'Leftovers from older sync generations.')
         ].join('');
@@ -2414,13 +2420,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var notes = (state.overviewAttention || []).map(function (item) {
           if (!item || !item.symbol) return '';
           if (item.kind === 'drift') {
-            return attentionMarkup(item.symbol + ' -- broken canonical', 'The canonical portrait points at a missing or broken asset.', 'Browse', item.symbol);
+            return attentionMarkup(item.symbol + ' -- broken canonical', 'The canonical blot points at a missing or broken asset.', 'Browse', item.symbol);
           }
           if (item.kind === 'missing') {
-            return attentionMarkup(item.symbol + ' -- no canonical portrait', 'No usable candidate exists yet, so the extension has nothing canonical to show.', 'Look', item.symbol);
+            return attentionMarkup(item.symbol + ' -- no canonical blot', 'No usable candidate exists yet, so the extension has nothing canonical to show.', 'Look', item.symbol);
           }
           if (item.kind === 'override') {
-            return attentionMarkup(item.symbol + ' -- manual override', 'Votes are not auto-picking the canonical portrait until you clear the override.', 'Look', item.symbol);
+            return attentionMarkup(item.symbol + ' -- manual override', 'Votes are not auto-picking the canonical blot until you clear the override.', 'Look', item.symbol);
           }
           if (item.kind === 'stale') {
             return attentionMarkup(item.symbol + ' -- stale images', String(item.stale_assets || 0) + ' old images hanging around.', 'Clean up', item.symbol);
@@ -3550,7 +3556,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               if (row && row.latestAt) contextBits.push('last ' + formatTimestampShort(row.latestAt));
               return [
                 '<tr>',
-                '<td><strong>' + esc(row && row.routeFamily || 'unknown route') + '</strong><div class="small">' + esc(compactMetricNumber(row && row.rowsRead || 0) + ' rows_read · ' + compactMetricNumber(row && row.queryCount || 0) + ' queries') + '</div></td>',
+                '<td><strong>' + esc(displayRouteFamily(row && row.routeFamily)) + '</strong><div class="small">' + esc(compactMetricNumber(row && row.rowsRead || 0) + ' rows_read · ' + compactMetricNumber(row && row.queryCount || 0) + ' queries') + '</div></td>',
                 '<td>' + renderCostStateChip(String(row && row.outcomeClass || 'unknown'), String(row && row.outcomeClass || '').indexOf('error') >= 0 ? 'danger' : (String(row && row.outcomeClass || '') === 'limited' ? 'warn' : 'ok')) + '</td>',
                 '<td>' + esc(compactMetricNumber(row && row.requestCount || 0)) + '</td>',
                 '<td>' + esc(compactMetricNumber(row && row.rowsWritten || 0)) + '</td>',
@@ -4486,7 +4492,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (a.admin_override) badges.push('<span class="badge-pill badge-pinned">Manual override</span>');
         if (a.leader_sha && a.leader_sha !== a.live_sha) badges.push('<span class="badge-pill badge-pinned">Votes differ</span>');
         if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>');
-        if (a.missing) badges.push('<span class="badge-pill badge-missing">No canonical portrait</span>');
+        if (a.missing) badges.push('<span class="badge-pill badge-missing">No canonical blot</span>');
         if (a.has_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>');
         var actions = [];
         if (a.leader_sha && a.leader_sha !== a.live_sha) {
@@ -4498,7 +4504,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return [
           '<article class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" role="button" tabindex="0" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
           '<div class="gallery-media">',
-          (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="Portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
+          (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="Blot for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No blot</div>'),
           '</div>',
           '<div class="gallery-card-meta">',
           '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
@@ -4523,7 +4529,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         return [
           '<article class="gallery-card' + (state.selectedGene === String(a.gene_symbol || '') ? ' is-selected' : '') + '" role="button" tabindex="0" data-gene-symbol="' + esc(a.gene_symbol || '') + '">',
           '<div class="gallery-media">',
-          (a.thumb_url ? '<img src="' + esc(a.thumb_url) + '" alt="Candidate portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No portrait</div>'),
+          (a.thumb_url ? '<img src="' + esc(a.thumb_url) + '" alt="Candidate blot for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No blot</div>'),
           '</div>',
           '<div class="gallery-card-meta">',
           '<div class="gallery-title">' + esc(a.gene_symbol || '') + '</div>',
@@ -4541,7 +4547,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (a.admin_override) badges.push('<span class="badge-pill badge-pinned">Manual override</span>');
         if (a.leader_sha && a.leader_sha !== a.live_sha) badges.push('<span class="badge-pill badge-pinned">Votes differ</span>');
         if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>');
-        if (a.missing) badges.push('<span class="badge-pill badge-missing">No canonical portrait</span>');
+        if (a.missing) badges.push('<span class="badge-pill badge-missing">No canonical blot</span>');
         var actions = [];
         if (a.leader_sha && a.leader_sha !== a.live_sha) actions.push(galleryOverlayButton('Set vote winner', 'publish', a.gene_symbol, a.leader_sha, 'primary'));
         if (a.live_sha) actions.push(galleryOverlayButton('Reject', 'reject', a.gene_symbol, a.live_sha, 'danger'));
@@ -4551,7 +4557,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<div class="gallery-media-split">',
           '<div class="gallery-media-panel">',
           '<div class="gallery-media-image">',
-          (a.live_thumb_url ? '<img src="' + esc(a.live_thumb_url) + '" alt="Canonical portrait for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No canonical portrait</div>'),
+          (a.live_thumb_url ? '<img src="' + esc(a.live_thumb_url) + '" alt="Canonical blot for ' + esc(a.gene_symbol || '') + '" loading="lazy" width="160" height="160" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No canonical blot</div>'),
           '</div>',
           '<div class="gallery-media-label">Canonical</div>',
           '</div>',
@@ -4579,13 +4585,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.detail.innerHTML = [
             '<div class="detail-kicker">Gene review</div>',
             '<div class="detail-title">Pick a gene</div>',
-            '<div class="detail-copy">Click any gene to inspect candidates. The canonical portrait is what the extension shows; votes auto-pick it unless a manual override is active.</div>'
+            '<div class="detail-copy">Click any gene to inspect candidates. The canonical blot is what the extension shows; votes auto-pick it unless a manual override is active.</div>'
           ].join('');
           return;
         }
 
         var headerBadges = [];
-        if (detail.live_sha) headerBadges.push('<span class="badge-pill badge-live">Canonical portrait set</span>');
+        if (detail.live_sha) headerBadges.push('<span class="badge-pill badge-live">Canonical blot set</span>');
         if (detail.admin_override) headerBadges.push('<span class="badge-pill badge-pinned">Manual override</span>');
 
         var candidates = Array.isArray(detail.candidates) ? detail.candidates : [];
@@ -4598,7 +4604,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           (heroCandidate ? [
             '<div class="detail-hero">',
             '<div class="detail-hero-frame">',
-            (heroCandidate.medium_url ? '<img src="' + esc(heroCandidate.medium_url) + '" alt="Selected portrait for ' + esc(detail.gene_symbol || '') + '" loading="lazy" width="320" height="320" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No preview</div>'),
+            (heroCandidate.medium_url ? '<img src="' + esc(heroCandidate.medium_url) + '" alt="Selected blot for ' + esc(detail.gene_symbol || '') + '" loading="lazy" width="320" height="320" />' : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No preview</div>'),
             '</div>',
             '<div class="detail-hero-meta">',
             '<strong>' + esc(heroCandidate.artist_name || heroCandidate.artist_tag || heroCandidate.vision_id || 'Unknown vision') + '</strong>',
@@ -4610,8 +4616,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<div class="detail-title">' + esc(detail.gene_symbol || '') + '</div>',
           (detail.full_name ? '<div class="small">' + esc(detail.full_name) + '</div>' : ''),
           '<div class="badge-row">' + headerBadges.join('') + '</div>',
-          '<div class="detail-copy">' + esc(detail.manifestation || 'No manifestation note yet.') + '</div>',
-          '<div class="small">' + esc(detail.admin_override ? 'Manual override is active. Clear it to let votes pick the canonical portrait again.' : 'Votes automatically keep the canonical portrait synced to the top eligible candidate.') + '</div>',
+          '<div class="detail-copy">' + esc(detail.manifestation || 'No sample note yet.') + '</div>',
+          '<div class="small">' + esc(detail.admin_override ? 'Manual override is active. Clear it to let votes pick the canonical blot again.' : 'Votes automatically keep the canonical blot synced to the top eligible candidate.') + '</div>',
           '<div class="candidate-actions">',
           '<button class="btn-flat" data-detail-action="rollback" data-symbol="' + esc(detail.gene_symbol || '') + '">Roll back</button>',
           '<button class="btn-flat" data-detail-action="unpublish" data-symbol="' + esc(detail.gene_symbol || '') + '">Unpublish</button>',
@@ -4627,7 +4633,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             return [
               '<article class="candidate-row' + (heroCandidate && String(heroCandidate.asset_sha256 || '') === String(candidate.asset_sha256 || '') ? ' is-selected' : '') + '" data-candidate-sha="' + esc(candidate.asset_sha256 || '') + '">',
               '<div class="candidate-thumb">',
-              (candidate.thumb_url ? '<img src="' + esc(candidate.thumb_url) + '" alt="Candidate portrait" loading="lazy" width="64" height="64" />' : ''),
+              (candidate.thumb_url ? '<img src="' + esc(candidate.thumb_url) + '" alt="Candidate blot" loading="lazy" width="64" height="64" />' : ''),
               '</div>',
               '<div class="candidate-meta">',
               '<div><strong>' + esc(candidate.artist_name || candidate.artist_tag || candidate.vision_id || 'Unknown vision') + '</strong></div>',
@@ -4753,7 +4759,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
         if (action === 'publish') {
           if (!sha) throw new Error('Missing SHA for publish');
-          if (!window.confirm('Make this the canonical portrait for ' + symbol + '? This creates a manual override until you clear it.')) return;
+          if (!window.confirm('Make this the canonical blot for ' + symbol + '? This creates a manual override until you clear it.')) return;
           var publishBody = { symbol: symbol, asset_sha256: sha };
           if (reason) publishBody.reason = reason;
           setLog(await runMutation('/publish', publishBody));
@@ -4763,7 +4769,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
 
         if (action === 'clear-override') {
-          if (!window.confirm('Clear the manual override for ' + symbol + ' and let votes pick the canonical portrait?')) return;
+          if (!window.confirm('Clear the manual override for ' + symbol + ' and let votes pick the canonical blot?')) return;
           var clearBody = { symbol: symbol };
           if (reason) clearBody.reason = reason;
           setLog(await runMutation('/clear-override', clearBody));
@@ -4805,7 +4811,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
 
         if (action === 'rollback') {
-          if (!window.confirm('Roll back ' + symbol + ' to previous portrait?')) return;
+          if (!window.confirm('Roll back ' + symbol + ' to previous blot?')) return;
           var rollbackBody = { symbol: symbol };
           if (reason) rollbackBody.reason = reason;
           setLog(await runMutation('/rollback', rollbackBody));
@@ -4820,8 +4826,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (!symbols.length) throw new Error('No visible stale genes to restore.');
         var query = String((els.search && els.search.value) || '').trim().toUpperCase();
         var prompt = query
-          ? 'Restore stale manifestations for ' + symbols.length + ' visible genes matching "' + query + '"?'
-          : 'Restore stale manifestations for ' + symbols.length + ' visible genes in the current gallery slice?';
+          ? 'Restore stale samples for ' + symbols.length + ' visible genes matching "' + query + '"?'
+          : 'Restore stale samples for ' + symbols.length + ' visible genes in the current gallery slice?';
         if (!window.confirm(prompt)) return;
         var body = { symbols: symbols };
         var reason = reasonOrUndefined();

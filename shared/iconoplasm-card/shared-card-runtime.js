@@ -1,5 +1,4 @@
 import { resolveDisplayedColorName } from "./color-name-db.js"
-
 ;(function (global) {
   "use strict"
 
@@ -603,7 +602,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
   }
 
   function labLabelArtistIdFromVision(rawVisionId) {
-    var visionId = String(rawVisionId || "").trim().toLowerCase()
+    var visionId = String(rawVisionId || "")
+      .trim()
+      .toLowerCase()
     if (!/^[a-z0-9-]+-v\d+-\d+$/.test(visionId)) return ""
     var match = visionId.match(/-(\d+)$/)
     return match ? String(Number.parseInt(match[1], 10) || "") : ""
@@ -880,10 +881,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       safeGeneDetail.essence && typeof safeGeneDetail.essence === "object"
         ? safeGeneDetail.essence
         : {}
-     /* Never trust ad hoc display labels here. The shared resolver only accepts synced names that
+    /* Never trust ad hoc display labels here. The shared resolver only accepts synced names that
        are real entries in the calibrated palette file, and otherwise falls back to a calibrated
        lookup from that same dataset. */
-     var colorName = resolveDisplayedColorName(color, essence)
+    var colorName = resolveDisplayedColorName(color, essence)
     var symbol = String(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol || "").trim()
     var firstLetter = (symbol.charAt(0) || "?").toUpperCase()
     var tauRaw = safeGeneDetail.tissue_tau != null ? safeGeneDetail.tissue_tau : essence.tissue_tau
@@ -1052,13 +1053,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
-  function renderLabLabelPortraitMediaHtml(
-    symbol,
-    portraitUrl,
-    portraitFullUrl,
-    dims,
-    options,
-  ) {
+  function renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, options) {
     var opts = options || {}
     var resolvedSymbol = normalizedSymbol(symbol)
     var size = portraitDimensions(dims)
@@ -1074,7 +1069,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (!portraitUrl) {
       return (
         '<div class="iconoplasm-tooltip-portrait-fallback">' +
-        '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+        '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
         '<div class="iconoplasm-tooltip-portrait-symbol">' +
         escapeHtml(resolvedSymbol) +
         "</div>" +
@@ -1086,14 +1081,14 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       escapeHtml(buttonClassName) +
       '"' +
       (extraButtonAttrs ? " " + extraButtonAttrs : "") +
-      ' aria-label="Open full-size portrait for ' +
+      ' aria-label="Open full-size blot for ' +
       escapeHtml(resolvedSymbol) +
-      ' portrait">' +
+      '">' +
       '<img class="iconoplasm-tooltip-portrait-img" src="' +
       escapeHtml(portraitUrl) +
       '" alt="' +
       escapeHtml(resolvedSymbol) +
-      ' portrait" loading="' +
+      ' blot" loading="' +
       escapeHtml(loading) +
       '" decoding="async" fetchpriority="' +
       escapeHtml(fetchPriority) +
@@ -1232,12 +1227,16 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       layoutVariant: layoutVariant,
       mobileReview: !!opts.mobileReview,
       mode: mode === "brick" ? "brick" : "sheet",
-      molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
+      molecularAlignment: String(politicsDisplay.molecular || "")
+        .trim()
+        .toLowerCase(),
       politicalNote: normalizeHandwrittenText(politicsDisplay.character),
       portraitAlt:
-        String(opts.portraitAlt || "").trim() || (symbol ? symbol + " portrait" : "Gene portrait"),
+        String(opts.portraitAlt || "").trim() || (symbol ? symbol + " blot" : "Gene blot"),
       portraitDimensions: portraitDimensions(
-        Object.keys(safePortrait).length ? safeGeneDetail : Object.assign({}, safeGeneDetail, { portrait: {} }),
+        Object.keys(safePortrait).length
+          ? safeGeneDetail
+          : Object.assign({}, safeGeneDetail, { portrait: {} }),
       ),
       portraitSrc: String(opts.portraitSrc || "").trim(),
       selectedCategory: selectedCategory,
@@ -1576,10 +1575,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '" data-icono-vote-box' +
       attrs +
       ">" +
-      '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
+      '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' +
       approveInner +
       "</button>" +
-      '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
+      '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' +
       rejectInner +
       "</button>" +
       "</div>"

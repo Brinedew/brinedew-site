@@ -10065,9 +10065,9 @@
       var loading = String(opts.loading || "eager").trim() || "eager";
       var fetchPriority = String(opts.fetchPriority || "low").trim() || "low";
       if (!portraitUrl) {
-        return '<div class="iconoplasm-tooltip-portrait-fallback"><div class="iconoplasm-tooltip-portrait-status">Portrait pending</div><div class="iconoplasm-tooltip-portrait-symbol">' + escapeHtml(resolvedSymbol) + "</div></div>";
+        return '<div class="iconoplasm-tooltip-portrait-fallback"><div class="iconoplasm-tooltip-portrait-status">Blot pending</div><div class="iconoplasm-tooltip-portrait-symbol">' + escapeHtml(resolvedSymbol) + "</div></div>";
       }
-      return '<button type="button" class="' + escapeHtml(buttonClassName) + '"' + (extraButtonAttrs ? " " + extraButtonAttrs : "") + ' aria-label="Open full-size portrait for ' + escapeHtml(resolvedSymbol) + ' portrait"><img class="iconoplasm-tooltip-portrait-img" src="' + escapeHtml(portraitUrl) + '" alt="' + escapeHtml(resolvedSymbol) + ' portrait" loading="' + escapeHtml(loading) + '" decoding="async" fetchpriority="' + escapeHtml(fetchPriority) + '" width="' + size.width + '" height="' + size.height + '"></button>';
+      return '<button type="button" class="' + escapeHtml(buttonClassName) + '"' + (extraButtonAttrs ? " " + extraButtonAttrs : "") + ' aria-label="Open full-size blot for ' + escapeHtml(resolvedSymbol) + '"><img class="iconoplasm-tooltip-portrait-img" src="' + escapeHtml(portraitUrl) + '" alt="' + escapeHtml(resolvedSymbol) + ' blot" loading="' + escapeHtml(loading) + '" decoding="async" fetchpriority="' + escapeHtml(fetchPriority) + '" width="' + size.width + '" height="' + size.height + '"></button>';
     }
     function renderLabLabelSpecimenRailHtml(mediaHtml, geneDetail) {
       return '<div class="icono-label-specimen-viewport">' + String(mediaHtml || "") + "</div>" + renderLabLabelSpecimenFooterHtml(geneDetail) + '<div class="iconoplasm-tooltip-portrait-fade"></div>';
@@ -10150,7 +10150,7 @@
         mode: mode === "brick" ? "brick" : "sheet",
         molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
         politicalNote: normalizeHandwrittenText(politicsDisplay.character),
-        portraitAlt: String(opts.portraitAlt || "").trim() || (symbol ? symbol + " portrait" : "Gene portrait"),
+        portraitAlt: String(opts.portraitAlt || "").trim() || (symbol ? symbol + " blot" : "Gene blot"),
         portraitDimensions: portraitDimensions(
           Object.keys(safePortrait).length ? safeGeneDetail : Object.assign({}, safeGeneDetail, { portrait: {} })
         ),
@@ -10234,7 +10234,7 @@
       var rejectArrow = showArrows ? '<svg class="icono-vote-btn-arrow icono-vote-btn-arrow--left" viewBox="0 0 60 60" aria-hidden="true" focusable="false"><path d="M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z"></path></svg>' : "";
       var approveInner = isLabel ? '<span class="icono-vote-btn-copy-stack"><span class="icono-vote-btn-copy" data-icono-rough-copy="true">FIT</span>' + approveArrow + "</span>" + iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve") : ICONO_CHECK_ICON;
       var rejectInner = isLabel ? '<span class="icono-vote-btn-copy-stack">' + rejectArrow + '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span></span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject") : ICONO_CROSS_ICON;
-      return '<div class="icono-vote-box' + (isBrick ? " icono-vote-box--brick" : "") + (isLabel ? " icono-vote-box--label" : "") + '" data-icono-vote-box' + attrs + '><button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + approveInner + '</button><button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + rejectInner + "</button></div>";
+      return '<div class="icono-vote-box' + (isBrick ? " icono-vote-box--brick" : "") + (isLabel ? " icono-vote-box--label" : "") + '" data-icono-vote-box' + attrs + '><button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' + approveInner + '</button><button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' + rejectInner + "</button></div>";
     }
     function voteSummaryText(snapshot) {
       return String(Number((snapshot || {}).image_score || 0));

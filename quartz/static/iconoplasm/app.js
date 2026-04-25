@@ -275,7 +275,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderPublishedEmulsionNotice(genePayload) {
     var portrait = (genePayload && genePayload.portrait) || null
     var metaMarkup = renderEmulsionMetaMarkup(portrait, {
-      kicker: "current published portrait",
+      kicker: "current published blot",
       className: "icono-gene-emulsion-meta",
     })
     if (!metaMarkup) return ""
@@ -632,7 +632,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(portraitUrl) +
       '" alt="' +
       esc(key) +
-      ' portrait" loading="eager" decoding="async" fetchpriority="low" width="' +
+      ' blot" loading="eager" decoding="async" fetchpriority="low" width="' +
       dims.width +
       '" height="' +
       dims.height +
@@ -1186,7 +1186,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         html += iconoRowMarkup("Status", "Not found")
       } else {
         html += iconoRowMarkup("Gene", gene.symbol || "Unknown")
-        html += iconoRowMarkup("Portrait", gene.hasPortrait ? "Published" : "Pending")
+        html += iconoRowMarkup("Blot", gene.hasPortrait ? "Published" : "Pending")
         html += iconoRowMarkup("Candidates", String(gene.candidateCount || 0))
         html += iconoRowMarkup("Aliases", String(gene.aliasCount || 0))
       }
@@ -1460,7 +1460,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         title: "Already installed",
         note: "The homepage stays quiet on purpose. The extension activates on other pages with gene symbols.",
         steps: [
-          "Hover a gene symbol on another site to open the portrait card.",
+          "Hover a gene symbol on another site to open the blot card.",
           "Use the popup if you want pills, underlines, or the archival card style.",
         ],
         actions: [
@@ -1783,7 +1783,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           esc(portraitFullUrl) +
           '" data-icono-pswp-alt="' +
           esc(normalizedSymbol(symbol)) +
-          ' portrait" data-pswp-width="' +
+          ' blot" data-pswp-width="' +
           dims.width +
           '" data-pswp-height="' +
           dims.height +
@@ -1828,7 +1828,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           mode: "brick",
           layoutVariant: isImageOnlyVariant ? "image-only" : "lit-archival",
           mobileReview: isMobileLabelReviewEnabled(),
-          portraitAlt: g.symbol + " portrait",
+          portraitAlt: g.symbol + " blot",
           portraitSrc: portraitUrl,
           titleHref: href,
           titleLinkAttrs: geneLinkAttrs,
@@ -1899,20 +1899,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
                 esc(portraitFullUrl) +
                 '" data-icono-pswp-alt="' +
                 esc(g.symbol) +
-                ' portrait" data-pswp-width="' +
+                ' blot" data-pswp-width="' +
                 dims.width +
                 '" data-pswp-height="' +
                 dims.height +
-                '" aria-label="Open full-size portrait for ' +
+                '" aria-label="Open full-size blot for ' +
                 esc(g.symbol) +
-                ' portrait">' +
+                '">' +
                 '<img class="iconoplasm-tooltip-portrait-img" src="' +
                 esc(portraitUrl) +
                 '" alt="' +
                 esc(g.symbol) +
                 // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
                 // scroll show empty portrait boxes for a beat before the browser picked them up.
-                ' portrait" loading="eager" decoding="async" fetchpriority="' +
+                ' blot" loading="eager" decoding="async" fetchpriority="' +
                 (cardIndex < 6 ? "high" : "low") +
                 '" width="' +
                 dims.width +
@@ -1922,7 +1922,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
                 "</button>"
               : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
             '<div class="iconoplasm-tooltip-portrait-fallback">' +
-            '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+            '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
             '<div class="iconoplasm-tooltip-portrait-symbol">' +
             esc(g.symbol) +
             "</div>" +
@@ -1978,18 +1978,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
                   esc(portraitFullUrl) +
                   '" data-icono-pswp-alt="' +
                   esc(g.symbol) +
-                  ' portrait" data-pswp-width="' +
+                  ' blot" data-pswp-width="' +
                   dims.width +
                   '" data-pswp-height="' +
                   dims.height +
-                  '" aria-label="Open full-size portrait for ' +
+                  '" aria-label="Open full-size blot for ' +
                   esc(g.symbol) +
-                  ' portrait">' +
+                  '">' +
                   '<img class="iconoplasm-tooltip-portrait-img" src="' +
                   esc(portraitUrl) +
                   '" alt="' +
                   esc(g.symbol) +
-                  ' portrait" loading="eager" decoding="async" width="' +
+                  ' blot" loading="eager" decoding="async" width="' +
                   dims.width +
                   '" height="' +
                   dims.height +
@@ -1997,7 +1997,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
                   "</button>"
               : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
                   '<div class="iconoplasm-tooltip-portrait-fallback">' +
-                  '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+                  '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
                   '<div class="iconoplasm-tooltip-portrait-symbol">' +
                   esc(g.symbol) +
                   "</div>" +
@@ -2009,18 +2009,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             esc(portraitFullUrl) +
             '" data-icono-pswp-alt="' +
             esc(g.symbol) +
-            ' portrait" data-pswp-width="' +
+            ' blot" data-pswp-width="' +
             dims.width +
             '" data-pswp-height="' +
             dims.height +
-            '" aria-label="Open full-size portrait for ' +
+            '" aria-label="Open full-size blot for ' +
             esc(g.symbol) +
-            ' portrait">' +
+            '">' +
             '<img class="iconoplasm-tooltip-portrait-img" src="' +
             esc(portraitUrl) +
             '" alt="' +
             esc(g.symbol) +
-            ' portrait" loading="eager" decoding="async" width="' +
+            ' blot" loading="eager" decoding="async" width="' +
             dims.width +
             '" height="' +
             dims.height +
@@ -2031,7 +2031,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             "</button>"
           : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
             '<div class="iconoplasm-tooltip-portrait-fallback">' +
-            '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+            '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
             '<div class="iconoplasm-tooltip-portrait-symbol">' +
             esc(g.symbol) +
             "</div>" +
@@ -2053,7 +2053,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           mode: "sheet",
           layoutVariant: isImageOnlyVariant ? "image-only" : "lit-archival",
           mobileReview: false,
-          portraitAlt: g.symbol + " portrait",
+          portraitAlt: g.symbol + " blot",
           portraitSrc: portraitUrl,
           voteHtml:
             !isImageOnlyVariant && portraitAssetSha
@@ -2119,7 +2119,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     portraitImg.setAttribute("fetchpriority", "low")
     portraitImg.setAttribute("width", String(dims.width))
     portraitImg.setAttribute("height", String(dims.height))
-    portraitImg.setAttribute("alt", normalizedSymbol(genePayload.symbol) + " portrait")
+    portraitImg.setAttribute("alt", normalizedSymbol(genePayload.symbol) + " blot")
     card.style.setProperty("--width", String(dims.width))
     card.style.setProperty("--height", String(dims.height))
   }
@@ -2720,9 +2720,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             .catch(function (error) {
               button.disabled = false
               button.textContent = priorLabel
-              window.alert(
-                String((error && error.message) || "Failed to remove candidate portrait."),
-              )
+              window.alert(String((error && error.message) || "Failed to remove candidate blot."))
             })
         })
       })(buttons[i])
@@ -2818,7 +2816,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<img class="icono-thumbnail-viewport-image" src="' +
         esc(url) +
         '" alt="' +
-        esc(String(asset.gene_symbol || "Example") + " example portrait") +
+        esc(String(asset.gene_symbol || "Example") + " example blot") +
         '" loading="lazy" decoding="async">' +
         "</span>"
     }
@@ -4038,7 +4036,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           esc(portraitUrl) +
           '" alt="' +
           esc(g.symbol) +
-          ' portrait" loading="eager" decoding="async">' +
+          ' blot" loading="eager" decoding="async">' +
           "</span>"
         : '<span class="icono-search-result-media icono-search-result-media--fallback" style="background:' +
           esc(g.color) +
@@ -4105,7 +4103,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             esc(portraitUrl) +
             '" alt="' +
             esc(g.symbol) +
-            ' portrait" loading="' +
+            ' blot" loading="' +
             (cardIndex < 12 ? "eager" : "lazy") +
             '" decoding="async" width="' +
             dims.width +
@@ -4183,7 +4181,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var html =
       '<section class="icono-candidate-gallery">' +
       '<div class="icono-candidate-gallery-heading">' +
-      "<h2>Candidate portraits</h2>" +
+      "<h2>Candidate blots</h2>" +
       "</div>" +
       '<div class="' +
       gridClass +
@@ -4221,7 +4219,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           esc(assetSha) +
           '" data-icono-candidate-image-id="' +
           esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
-          '" aria-label="Remove candidate portrait for ' +
+          '" aria-label="Remove candidate blot for ' +
           esc(genePayload.symbol) +
           '">Remove</button>' +
           "</div>"
@@ -4236,11 +4234,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         esc(fullUrl) +
         '" data-icono-pswp-alt="' +
         esc(genePayload.symbol) +
-        ' portrait candidate" data-pswp-width="' +
+        ' candidate blot" data-pswp-width="' +
         width +
         '" data-pswp-height="' +
         height +
-        '" aria-label="Open candidate portrait for ' +
+        '" aria-label="Open candidate blot for ' +
         esc(genePayload.symbol) +
         '">' +
         '<span class="icono-candidate-media">' +
@@ -4252,7 +4250,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         esc(mediumUrl) +
         '" alt="' +
         esc(genePayload.symbol) +
-        ' portrait candidate" loading="' +
+        ' candidate blot" loading="' +
         (i < 2 ? "eager" : "lazy") +
         '" decoding="async" fetchpriority="' +
         (i < 2 ? "high" : "low") +
@@ -4353,7 +4351,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderGeneContent(container, g) {
     var html = '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g)
 
-    // Manifestation / character description
+    // Sample / character description
     var manifestation = g.manifestation || g.description || ""
     if (manifestation) {
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"

@@ -648,8 +648,7 @@ function optionTemplate(value, selected, extraClass, loopPreset) {
   if (extraClass) classes += " " + extraClass;
   if (selected) classes += " is-selected";
   return b2`<span class=${classes}
-    ><span class="icono-label-option-copy" data-icono-rough-copy="true">${value}</span
-    >${selected ? o5(penLoopSvgMarkup("icono-label-option-loop", loopPreset)) : A}</span
+    ><span class="icono-label-option-copy" data-icono-rough-copy="true">${value}</span>${selected ? o5(penLoopSvgMarkup("icono-label-option-loop", loopPreset)) : A}</span
   >`;
 }
 function voteShellTemplate(voteHtml) {
@@ -658,7 +657,9 @@ function voteShellTemplate(voteHtml) {
 }
 function familyTraitTemplate(familyFeature) {
   if (!String(familyFeature || "").trim()) {
-    return b2`<div class="icono-label-family-trait-field icono-label-family-trait-field--empty"></div>`;
+    return b2`<div
+      class="icono-label-family-trait-field icono-label-family-trait-field--empty"
+    ></div>`;
   }
   return b2`<div class="icono-label-family-trait-field">
     <div class="icono-label-hand-note icono-label-hand-note--family-trait">${familyFeature}</div>
@@ -668,7 +669,12 @@ function categoryFieldTemplate(selectedCategory) {
   var categoryKey = String(selectedCategory || "").trim().toLowerCase();
   return b2`<div class="icono-label-category-grid">
     <div class="icono-label-category-option icono-label-category-option--transmembrane">
-      ${optionTemplate("TRANSMEMBRANE", categoryKey === "transmembrane", "", "category-transmembrane")}
+      ${optionTemplate(
+    "TRANSMEMBRANE",
+    categoryKey === "transmembrane",
+    "",
+    "category-transmembrane"
+  )}
     </div>
     <div class="icono-label-category-option icono-label-category-option--soluble">
       ${optionTemplate("SOLUBLE", categoryKey === "soluble", "", "category-soluble")}
@@ -694,7 +700,9 @@ function alignmentFieldTemplate(molecularAlignment, politicalNote) {
   else if (isTumorSuppressor) noteClass += " icono-label-hand-note--politics-tumor-suppressor";
   else noteClass += " icono-label-hand-note--politics-neutral";
   return b2`<div class="icono-label-alignment-grid">
-    <div class=${"icono-label-selector-row icono-label-selector-row--alignment" + (isNeither ? " is-neither" : "")}>
+    <div
+      class=${"icono-label-selector-row icono-label-selector-row--alignment" + (isNeither ? " is-neither" : "")}
+    >
       ${optionTemplate("ONCOGENE", isOncogene, "", "alignment-oncogene")}
       ${optionTemplate("TUMOR SUPPRESSOR", isTumorSuppressor, "", "alignment-tumor-suppressor")}
       ${isNeither ? b2`<span class="icono-label-alignment-strike" aria-hidden="true"></span>` : A}
@@ -706,7 +714,9 @@ function titleTemplate(model) {
   var titleInner = b2`<div class="icono-label-caption">gene name</div>
     <div class="icono-label-symbol">${model.symbol}</div>
     <div class="icono-label-name">${model.fullName || model.symbol}</div>
-    <div class="icono-label-registry-line">ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03</div>`;
+    <div class="icono-label-registry-line">
+      ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03
+    </div>`;
   if (model.titleHref) {
     return b2`<a
       class="icono-label-title-link"
@@ -723,17 +733,29 @@ function footerTemplate(model) {
   var sheetNo = model.serial || "00000";
   return b2`<div class="icono-label-footer-copy">
     <div class="icono-label-footer-copy-main">
-      <div class="icono-label-footer-line icono-label-footer-line--caption">labelled / inspected / filed</div>
-      <div class="icono-label-footer-line icono-label-footer-line--typed">archive room b / bench 3 / human gene cabinet</div>
+      <div class="icono-label-footer-line icono-label-footer-line--caption">
+        labelled / inspected / filed
+      </div>
+      <div class="icono-label-footer-line icono-label-footer-line--typed">
+        archive room b / bench 3 / human gene cabinet
+      </div>
       <div class="icono-label-footer-line icono-label-footer-line--typed">
         stock tone ${stockTone} / sheet ${sheetNo} / print run 07
       </div>
-      <div class="icono-label-footer-line icono-label-footer-line--typed">seal after review / do not expose to open air</div>
+      <div class="icono-label-footer-line icono-label-footer-line--typed">
+        seal after review / do not expose to open air
+      </div>
     </div>
     <div class="icono-label-footer-copy-side">
-      <div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div>
-      <div class="icono-label-footer-line icono-label-footer-line--caption">keep away from heat and moisture</div>
-      <div class="icono-label-footer-line icono-label-footer-line--caption">registry copy retained in cabinet 5A</div>
+      <div class="icono-label-footer-line icono-label-footer-line--caption">
+        brinedew institute / internal matter
+      </div>
+      <div class="icono-label-footer-line icono-label-footer-line--caption">
+        keep away from heat and moisture
+      </div>
+      <div class="icono-label-footer-line icono-label-footer-line--caption">
+        registry copy retained in cabinet 5A
+      </div>
     </div>
   </div>`;
 }
@@ -773,13 +795,19 @@ function sheetTemplate(model) {
       <div class="icono-label-band-grid">
         <div class="icono-label-band-cell icono-label-band-cell--category">
           <div class="icono-label-caption">category</div>
-          <div class="icono-label-band-primary">${categoryFieldTemplate(model.selectedCategory)}</div>
-          <div class="icono-label-band-secondary">${sexNoteTemplate(model.sexNote, model.selectedCategory)}</div>
+          <div class="icono-label-band-primary">
+            ${categoryFieldTemplate(model.selectedCategory)}
+          </div>
+          <div class="icono-label-band-secondary">
+            ${sexNoteTemplate(model.sexNote, model.selectedCategory)}
+          </div>
         </div>
         <div class="icono-label-band-cell icono-label-band-cell--noted">
           <div class="icono-label-caption">first noted</div>
           <div class="icono-label-band-primary">
-            <div class="icono-label-typed-value icono-label-typed-value--band">${blankFallback(model.firstNoted)}</div>
+            <div class="icono-label-typed-value icono-label-typed-value--band">
+              ${blankFallback(model.firstNoted)}
+            </div>
           </div>
           <div class="icono-label-band-secondary">
             <div class="icono-label-hand-note icono-label-hand-note--age">${model.ageNote}</div>
@@ -790,10 +818,15 @@ function sheetTemplate(model) {
           <div class="icono-label-band-primary">
             <div class="icono-label-mass-line">
               <span class="icono-label-mass-fill">
-                <span class="icono-label-hand-note icono-label-hand-note--mass-number">${model.handwrittenWeight}</span>
+                <span class="icono-label-hand-note icono-label-hand-note--mass-number"
+                  >${model.handwrittenWeight}</span
+                >
               </span>
               <span class="icono-label-mass-unit-stack">
-                <span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span>
+                <span
+                  class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda"
+                  >kDa</span
+                >
                 <span class="icono-label-hand-note icono-label-hand-note--unit">kg</span>
               </span>
             </div>
@@ -828,18 +861,40 @@ function sheetTemplate(model) {
 function mobilePeekTemplate(model) {
   if (!(model.mode === "brick" && model.mobileReview)) return A;
   return b2`<div class="icono-label-mobile-peek">
-    <button type="button" class="icono-label-mobile-peek-toggle" data-icono-label-mobile-toggle aria-expanded="false">
+    <button
+      type="button"
+      class="icono-label-mobile-peek-toggle"
+      data-icono-label-mobile-toggle
+      aria-expanded="false"
+    >
       <span class="icono-label-mobile-peek-tab" aria-hidden="true">
-        <svg class="icono-label-mobile-peek-tab-art" viewBox="0 0 188 72" preserveAspectRatio="none" focusable="false" aria-hidden="true">
-          <path class="icono-label-mobile-peek-tab-fill" d="M6 72V44C6 39.6 9.6 36 14 36H51.4C58.6 36 64.7 31.3 69.1 22.1C73.1 13.8 79.6 8 94 8C108.4 8 114.9 13.8 118.9 22.1C123.3 31.3 129.4 36 136.6 36H174C178.4 36 182 39.6 182 44V72H6Z"></path>
-          <path class="icono-label-mobile-peek-tab-highlight" d="M17 42.6H50.2C61.5 42.6 70.8 34.9 76.5 22.8C80.1 15.1 84.8 11.8 94 11.8C103.2 11.8 107.9 15.1 111.5 22.8C117.2 34.9 126.5 42.6 137.8 42.6H171"></path>
+        <svg
+          class="icono-label-mobile-peek-tab-art"
+          viewBox="0 0 188 72"
+          preserveAspectRatio="none"
+          focusable="false"
+          aria-hidden="true"
+        >
+          <path
+            class="icono-label-mobile-peek-tab-fill"
+            d="M6 72V44C6 39.6 9.6 36 14 36H51.4C58.6 36 64.7 31.3 69.1 22.1C73.1 13.8 79.6 8 94 8C108.4 8 114.9 13.8 118.9 22.1C123.3 31.3 129.4 36 136.6 36H174C178.4 36 182 39.6 182 44V72H6Z"
+          ></path>
+          <path
+            class="icono-label-mobile-peek-tab-highlight"
+            d="M17 42.6H50.2C61.5 42.6 70.8 34.9 76.5 22.8C80.1 15.1 84.8 11.8 94 11.8C103.2 11.8 107.9 15.1 111.5 22.8C117.2 34.9 126.5 42.6 137.8 42.6H171"
+          ></path>
         </svg>
         <span class="icono-label-mobile-peek-tab-symbol">${model.symbol}</span>
       </span>
       <span class="icono-label-mobile-peek-topline">
         <span class="icono-label-mobile-peek-kicker">full name</span>
-        <span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--closed">tap to open</span>
-        <span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--open">tap to close</span>
+        <span
+          class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--closed"
+          >tap to open</span
+        >
+        <span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--open"
+          >tap to close</span
+        >
       </span>
       <span class="icono-label-mobile-peek-summary">
         <span class="icono-label-mobile-peek-name">${model.fullName}</span>
@@ -863,7 +918,7 @@ function archivalTemplate(model) {
 function imageOnlyTemplate(model) {
   var href = String(model.titleHref || "").trim();
   var portraitSrc = String(model.portraitSrc || "").trim();
-  var portraitAlt = String(model.portraitAlt || "").trim() || (model.symbol ? model.symbol + " portrait" : "Gene portrait");
+  var portraitAlt = String(model.portraitAlt || "").trim() || (model.symbol ? model.symbol + " blot" : "Gene blot");
   var dims = asObject(model.portraitDimensions);
   var width = Number(dims.width || 0);
   var height = Number(dims.height || 0);
