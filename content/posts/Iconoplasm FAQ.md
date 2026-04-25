@@ -10,7 +10,7 @@ draft: false
 
 1. **What is this and who is this for?**
 
-    [Iconoplasm](https://iconoplasm.brinedew.bio/) is a browser extension where each gene on any web page gets its own character portrait. The target audience are life science students and preclinical researchers.
+    [Iconoplasm](https://iconoplasm.brinedew.bio/) is a browser extension where each gene on any web page gets its own character blot: a memorable visual handle for the gene. The target audience are life science students and preclinical researchers.
 
 1. **Does anyone actually care about that?**
 
@@ -30,21 +30,21 @@ draft: false
 
 1. **Why use AI generation? Why not pay artists?**
 
-    Economics for 20 thousand images.
+    Economics for 20 thousand blots.
 
     I would love to get 20 thousand human-made illustrations. But the price floor for commissioning a basic original character illustration is $10.
 
-    This makes it necessary for me to get a $200k grant just for one image option per gene.
+    This makes it necessary for me to get a $200k grant just for one blot option per gene.
 
     This doesn't include the cost for tracking down and inviting the artists, or setting up and promoting some kind of reward program for content submission.
 
-    Also it limits us to 1 image per character - if we later decide they don't fit well within their gene family, we would have to spend extra on redraws.
+    Also it limits us to 1 blot per character - if we later decide they don't fit well within their gene family, we would have to spend extra on redraws.
 
     Plus, selecting $10 artists with no QC makes it basically guaranteed that AI-generated work will still be present on the site, just under a human name.
 
     That said, a later conversion to a human-made gallery is not out of the question.
 
-1. **One of the images looks like my work. I want that artist tag blocked.**
+1. **One of the blots looks like my work. I want that artist tag blocked.**
 
     You can use the [blocklist form](https://iconoplasm.brinedew.bio/blocklist).
 
@@ -54,33 +54,35 @@ draft: false
 
     If you don't want to use Discord site login, you can send a blocklist email request to <blacklist@brinedew.bio> from your business account. The first @name you send me will be blocklisted. Make sure to use the @ symbol in front of the name.
 
-1. **I noticed a poor quality of the canonical image for some gene. What do I do?**
+1. **I noticed a poor quality published blot for some gene. What do I do?**
 
-    Go to the gene page for that gene. Tap "edit image" under the canonical image, and input small corrections as an image prompt. This adds a corrected image to a candidate images pool.
+    Go to the gene page for that gene. Use the reject button on the published blot, and approve any candidate blot that fits the gene better.
 
-    Some corrections you can prompt for:
+    If none of the visible candidates are good enough, log in and request a new candidate. This does not generate a blot instantly in your browser. It adds a request to the workstation queue, where the local Iconoplasm app can generate, review, and sync the result back to the website.
+
+    Detailed correction notes still belong in Discord or project discussion for now. Examples:
 
     - Fix nonsensical anatomy (fingers, limbs, props)
     - Improve fit to anchor characteristics (weight, age, surface color)
     - Add a fitting background
 
-1. **It's not easily fixable - I don't like the entire concept or art style of the canonical image.**
+1. **It's not easily fixable - I don't like the entire concept or art style of the published blot.**
 
-    Downvote the canonical image by tapping X under the image. Upvote a better candidate image by pressing the checkmark.
+    Reject the published blot by tapping X under the blot. Approve a better candidate blot by pressing the checkmark.
 
-1. **All candidate images are even worse.**
+1. **All candidate blots are even worse.**
 
-    Tap "new candidate" to make a new candidate image. Make sure you have inputted API keys for your image generation service of choice in the site settings.
+    Log in and request a new candidate from the gene page. The request feeds the local workstation queue, so the next better blot appears only after the workstation generates, reviews, and syncs it.
 
-1. **All generated images for a gene reuse the same bad character concept.**
+1. **All generated blots for a gene reuse the same bad character concept.**
 
     Join our Discord to discuss how to modify character prompts for various gene families.
 
-1. **I noticed a candidate image that would better fit another gene.**
+1. **I noticed a candidate blot that would better fit another gene.**
 
-    Open this image fullscreen, then click "copy this image to another gene". Then select the gene from the dropdown menu. This adds it as a new candidate image to that gene, and auto-checkmarks it.
+    There is not a public "copy this blot to another gene" tool yet. Open the blot fullscreen and report the source gene, target gene, and why the fit is better in Discord or admin review. Reassignment is still a curated operation rather than a public one-click action.
 
-1. **What images are not suitable for Iconoplasm?**
+1. **What blots are not suitable for Iconoplasm?**
 
     - 18+ images aren't suitable. No reproductive organs, no nipples.
     - Furries aren't suitable to represent human genes. Keep them for other animal genomes. I'm looking forward to Drosophila characters.
@@ -102,6 +104,7 @@ draft: false
     - `/api/public/v1/metadata`
     - `/api/public/v1/catalog/manifest`
     - the immutable catalog artifact and JSONL dump listed in that manifest
+    - `/api/public/v1/genes/batch`
     - `/api/public/v1/changes`
     - `/api/public/v1/resolve`
 
@@ -117,7 +120,7 @@ draft: false
 
 1. **What's the legal status of the generated images?**
 
-    Who knows! It's 2026 and the status of generative content is murky and varies by jurisdiction. Regardless, my intent is for the images and the character designs to be freely available to anyone to reuse, spread, or profit from.
+    Who knows! It's 2026 and the status of generative content is murky and varies by jurisdiction. Regardless, my intent is for the blots and the character designs to be freely available to anyone to reuse, spread, or profit from.
 
 1. **Why aren't you allowing people to upload custom images from their PC?**
 
@@ -169,4 +172,4 @@ My favourite scenarios are the ones where cell makes a decision to self-sacrific
 
 1. **How can we support the project?**
 
-    Please participate! Vote on some images, generate and edit the picks, write lore pages. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on [[Support Me]] page.
+    Please participate! Vote on blots, request new candidates, and write lore notes or scenario ideas in Discord. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on [[Support Me]] page.
