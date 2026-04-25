@@ -62,6 +62,19 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
   assert.doesNotMatch(voteSetRoute, /syncVoteReadModelsAndInvalidateGallery\(|syncAdminReadModelsAndInvalidateGallery\(/, "single-vote writes must not call the bulk summary rebuild paths")
 })
 
+test("DO NOT DELETE: canon auto-promotion must not select stale portrait assets", () => {
+  const autoPromoteFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "async function autoPromoteTopVotedPortrait",
+    "async function getArtistStyleBlacklistRow",
+  )
+
+  assert.match(
+    autoPromoteFn,
+    /AND COALESCE\(pa\.is_stale, 0\) = 0/,
+    "automatic canon repair should ignore stale assets instead of republishing images a human already marked invalid",
+  )
+})
+
 test("DO NOT DELETE: request picker hot path must stay on a precomputed rollup instead of live portrait scans", () => {
   const requestOptionsFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function listGenerationRequestVisionOptions",

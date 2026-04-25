@@ -8008,6 +8008,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
      WHERE pa.gene_symbol = ?
        AND COALESCE(pa.autopick_eligible, 1) = 1
        AND COALESCE(pa.status, '') <> 'rejected'
+       AND COALESCE(pa.is_stale, 0) = 0
        AND COALESCE(pa.asset_sha256, '') <> ''
      ORDER BY
        COALESCE(vs.score, 0) DESC,
