@@ -8130,6 +8130,10 @@ async function iconoExistingAssetsBatch(env, rawItems) {
          pa.status,
          pa.autopick_eligible,
          COALESCE(pa.is_stale, 0) AS is_stale,
+         CASE
+           WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
+           ELSE 0
+         END AS is_current,
          pa.r2_key_full,
          pa.r2_key_medium,
          pa.r2_key_thumb,
@@ -8145,7 +8149,9 @@ async function iconoExistingAssetsBatch(env, rawItems) {
        FROM icono_portrait_assets pa
        JOIN incoming i
          ON pa.gene_symbol = i.symbol
-        AND pa.asset_sha256 = i.asset_sha256`,
+        AND pa.asset_sha256 = i.asset_sha256
+       LEFT JOIN icono_publish_state ps
+         ON ps.gene_symbol = pa.gene_symbol`,
     )
       .bind(JSON.stringify(lookupRows))
       .all()
@@ -18664,7 +18670,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 status: finalStatus,
                 isStale: persistedIsStale,
                 isLegacy: false,
-                isCurrent: false,
+                isCurrent:
+                  coerceBoolean(item?.is_current ?? item?.isCurrent, false) ||
+                  Number(existingAsset?.is_current || 0) > 0,
                 createdAt: existingAsset?.created_at || "",
               })
             }

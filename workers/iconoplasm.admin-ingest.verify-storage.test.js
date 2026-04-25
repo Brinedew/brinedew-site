@@ -5,11 +5,10 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeStatement {
-  constructor(sql, existingAsset, bucket) {
+  constructor(db, sql) {
     this.sql = String(sql || "")
     this.boundValues = []
-    this.existingAsset = existingAsset
-    this.bucket = bucket
+    this.db = db
   }
 
   bind(...values) {
@@ -23,10 +22,10 @@ class FakeStatement {
       const incoming = JSON.parse(String(raw || "[]"))
       const match = incoming.find(
         (row) =>
-          String(row?.symbol || "").toUpperCase() === this.existingAsset.symbol &&
-          String(row?.asset_sha256 || "").toLowerCase() === this.existingAsset.asset_sha256,
+          String(row?.symbol || "").toUpperCase() === this.db.existingAsset.symbol &&
+          String(row?.asset_sha256 || "").toLowerCase() === this.db.existingAsset.asset_sha256,
       )
-      return { results: match ? [this.existingAsset] : [] }
+      return { results: match ? [this.db.existingAsset] : [] }
     }
     throw new Error(`Unexpected SQL in fake DB all(): ${this.sql}`)
   }
@@ -40,6 +39,14 @@ class FakeStatement {
       return { success: true, meta: { changes: 1 } }
     }
     if (this.sql.includes("INSERT INTO icono_storage_audit_queue")) {
+      this.db.auditRows.push({
+        symbol: this.boundValues[0],
+        asset_sha256: this.boundValues[1],
+        is_current: this.boundValues[2],
+        is_stale: this.boundValues[3],
+        is_legacy: this.boundValues[4],
+        status: this.boundValues[5],
+      })
       return { success: true, meta: { changes: 1 } }
     }
     throw new Error(`Unexpected SQL in fake DB run(): ${this.sql}`)
@@ -50,10 +57,11 @@ class FakeIconoplasmDb {
   constructor(existingAsset, bucket) {
     this.existingAsset = existingAsset
     this.bucket = bucket
+    this.auditRows = []
   }
 
   prepare(sql) {
-    return new FakeStatement(sql, this.existingAsset, this.bucket)
+    return new FakeStatement(this, sql)
   }
 }
 
@@ -78,7 +86,11 @@ function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} })
   if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
     env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
       fetch(request) {
-        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, gatewayEnv, ctx)
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+          request,
+          gatewayEnv,
+          ctx,
+        )
       },
     }
   }
@@ -93,9 +105,13 @@ function buildEnv() {
     status: "approved",
     autopick_eligible: 1,
     is_stale: 0,
-    r2_key_full: "portraits/v1/e9/e985557951f4433f43320cc97997ab52fbbf9111f92a60e51173bf25a9ad34af/full.webp",
-    r2_key_medium: "portraits/v1/e9/e985557951f4433f43320cc97997ab52fbbf9111f92a60e51173bf25a9ad34af/medium.webp",
-    r2_key_thumb: "portraits/v1/e9/e985557951f4433f43320cc97997ab52fbbf9111f92a60e51173bf25a9ad34af/thumb.webp",
+    is_current: 1,
+    r2_key_full:
+      "portraits/v1/e9/e985557951f4433f43320cc97997ab52fbbf9111f92a60e51173bf25a9ad34af/full.webp",
+    r2_key_medium:
+      "portraits/v1/e9/e985557951f4433f43320cc97997ab52fbbf9111f92a60e51173bf25a9ad34af/medium.webp",
+    r2_key_thumb:
+      "portraits/v1/e9/e985557951f4433f43320cc97997ab52fbbf9111f92a60e51173bf25a9ad34af/thumb.webp",
     vision_id: "anima-v1-9044",
     emulsion_id: null,
     workflow_id: null,
@@ -150,7 +166,12 @@ test("admin ingest verify_storage reuploads missing portrait blobs for existing 
     }),
   })
 
-  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env, {})
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      request,
+      env,
+      {},
+    )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -164,6 +185,8 @@ test("admin ingest verify_storage reuploads missing portrait blobs for existing 
     medium: "uploaded",
     thumb: "uploaded",
   })
+  assert.equal(env.gatewayDb.auditRows.length, 1)
+  assert.equal(env.gatewayDb.auditRows[0]?.is_current, 1)
   assert.equal(env.bucket.headCalls.length, 3)
   assert.equal(env.bucket.putCalls.length, 3)
 })
@@ -197,7 +220,12 @@ test("admin ingest force_upload overwrites existing portrait blobs without stora
     }),
   })
 
-  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env, {})
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      request,
+      env,
+      {},
+    )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -210,6 +238,8 @@ test("admin ingest force_upload overwrites existing portrait blobs without stora
     medium: "uploaded",
     thumb: "uploaded",
   })
+  assert.equal(env.gatewayDb.auditRows.length, 1)
+  assert.equal(env.gatewayDb.auditRows[0]?.is_current, 1)
   assert.equal(env.bucket.headCalls.length, 0)
   assert.equal(env.bucket.putCalls.length, 3)
 })
