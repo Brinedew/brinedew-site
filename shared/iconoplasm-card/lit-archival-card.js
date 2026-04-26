@@ -330,39 +330,46 @@ function sheetTemplate(model) {
 function mobilePeekTemplate(model) {
   if (!(model.mode === "brick" && model.mobileReview)) return nothing
   return html`<div class="icono-label-mobile-peek">
-    <div class="icono-label-mobile-pocket">
-      <div class="icono-label-mobile-pocket-back" aria-hidden="true"></div>
-      <div class="icono-label-mobile-card-stack">
-        <div
-          class="icono-label-mobile-info-card"
-          data-icono-label-mobile-toggle
-          role="button"
-          tabindex="0"
-          aria-expanded="false"
+    <button
+      type="button"
+      class="icono-label-mobile-peek-toggle"
+      data-icono-label-mobile-toggle
+      aria-expanded="false"
+    >
+      <span class="icono-label-mobile-peek-tab" aria-hidden="true">
+        <svg
+          class="icono-label-mobile-peek-tab-art"
+          viewBox="0 0 188 72"
+          preserveAspectRatio="none"
+          focusable="false"
+          aria-hidden="true"
         >
-          <div class="icono-label-mobile-peek-card" aria-hidden="false">
-            <span class="icono-label-mobile-peek-symbol">${model.symbol}</span>
-            <span class="icono-label-mobile-peek-name">${model.fullName}</span>
-          </div>
-          <div class="icono-label-dossier-shell" data-icono-label-dossier-shell>
-            <div class="icono-label-dossier-sheet">${sheetTemplate(model)}</div>
-          </div>
-        </div>
-      </div>
-      <div class="icono-label-mobile-pocket-front" aria-hidden="false">
-        <span class="icono-label-mobile-pocket-thumbcut" aria-hidden="true"></span>
-        <div class="icono-label-mobile-sleeve-branding">
-          <span class="icono-label-mobile-sleeve-archive">Iconoplasm Archive</span>
-          <span class="icono-label-mobile-sleeve-serial">№ ${model.serial || "00000"}</span>
-        </div>
-      </div>
-      <div class="icono-label-mobile-sleeve-actions">
-        <div class="icono-label-mobile-peek-swipe icono-label-mobile-sleeve-vote">
-          ${voteShellTemplate(model.voteHtml)}
-        </div>
-        <span class="icono-label-mobile-sleeve-pull" aria-hidden="true">↑ tap to pull</span>
-      </div>
-    </div>
+          <path
+            class="icono-label-mobile-peek-tab-fill"
+            d="M6 72V44C6 39.6 9.6 36 14 36H51.4C58.6 36 64.7 31.3 69.1 22.1C73.1 13.8 79.6 8 94 8C108.4 8 114.9 13.8 118.9 22.1C123.3 31.3 129.4 36 136.6 36H174C178.4 36 182 39.6 182 44V72H6Z"
+          ></path>
+          <path
+            class="icono-label-mobile-peek-tab-highlight"
+            d="M17 42.6H50.2C61.5 42.6 70.8 34.9 76.5 22.8C80.1 15.1 84.8 11.8 94 11.8C103.2 11.8 107.9 15.1 111.5 22.8C117.2 34.9 126.5 42.6 137.8 42.6H171"
+          ></path>
+        </svg>
+        <span class="icono-label-mobile-peek-tab-symbol">${model.symbol}</span>
+      </span>
+      <span class="icono-label-mobile-peek-topline">
+        <span class="icono-label-mobile-peek-kicker">full name</span>
+        <span
+          class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--closed"
+          >tap to open</span
+        >
+        <span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--open"
+          >tap to close</span
+        >
+      </span>
+      <span class="icono-label-mobile-peek-summary">
+        <span class="icono-label-mobile-peek-name">${model.fullName}</span>
+      </span>
+    </button>
+    <div class="icono-label-mobile-peek-swipe">${voteShellTemplate(model.voteHtml)}</div>
   </div>`
 }
 
@@ -371,7 +378,10 @@ function archivalTemplate(model) {
     return imageOnlyTemplate(model)
   }
   if (model.mode === "brick" && model.mobileReview) {
-    return mobilePeekTemplate(model)
+    return html`${mobilePeekTemplate(model)}
+      <div class="icono-label-dossier-shell" data-icono-label-dossier-shell>
+        <div class="icono-label-dossier-sheet">${sheetTemplate(model)}</div>
+      </div>`
   }
   return sheetTemplate(model)
 }

@@ -1277,10 +1277,6 @@
   min-height: 0;
 }
 
-.icono-label-mobile-physical-sleeve {
-  display: contents;
-}
-
 .icono-label-mobile-peek {
   display: none;
 }
@@ -1357,21 +1353,49 @@
       rotate(var(--icono-label-mobile-swipe-rotate, 0deg));
   }
 
+  .icono-card--variant-lab-label.icono-card--brick::after {
+    /* B-474 physical model: this is the fixed kraft sleeve front, not a second
+       card. The existing dossier remains one printed paper surface and slides behind
+       this layer. The notch is transparent sleeve material, so the paper/card beneath
+       is what appears inside the thumb hole. Do not move this onto
+       .iconoplasm-tooltip-body; that would make the sleeve slide with the card again. */
+    content: "";
+    position: absolute;
+    z-index: 4;
+    inset-inline: 0;
+    bottom: 0;
+    block-size: 2.62rem;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.06) 15%, transparent 32%),
+      radial-gradient(circle at 18% 34%, rgba(255, 255, 255, 0.24), transparent 28%),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--icono-label-paper) 48%, #bd9366 52%) 0%,
+        color-mix(in srgb, var(--icono-label-paper) 42%, #aa8059 58%) 100%
+      );
+    -webkit-mask-image: radial-gradient(
+      ellipse 2.28rem 0.82rem at calc(100% - 2.7rem) 0,
+      transparent 0 96%,
+      #000 100%
+    );
+    mask-image: radial-gradient(
+      ellipse 2.28rem 0.82rem at calc(100% - 2.7rem) 0,
+      transparent 0 96%,
+      #000 100%
+    );
+    box-shadow:
+      inset 0 3px 5px -1px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 -0.22rem 0.72rem -0.42rem rgba(0, 0, 0, 0.64);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"] {
     transition: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swipe-pending="true"] {
     opacity: 0.72;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-physical-sleeve {
-    /* B-474 noun audit: this is the mobile physical object. It contains the visible
-       pulled portrait rail and the sliding info-card sleeve body, while remaining
-       display: contents on desktop so the archival two-column sheet does not change. */
-    display: block;
-    position: relative;
-    min-width: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait {
@@ -1877,304 +1901,9 @@
     display: inline;
   }
 
-  /* B-474 physical sleeve model. This block is deliberately noun-shaped instead of
-     value-shaped because the previous failure came from drawing a kraft sticker over a
-     separate card. The DOM must stay: pocket-back < card-stack/info-card < pocket-front.
-     The thumb cut is transparent space in the front layer; changing the info-card
-     background must change what appears inside the cut. If a future edit makes the
-     cutout its own paper-colored patch again, it has broken the sleeve. */
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek {
-    padding: 0;
-    background: transparent;
-    border-top: 0;
-    box-shadow: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket {
-    --icono-label-mobile-pocket-front-top: calc(
-      var(--icono-label-mobile-peek-height) + var(--icono-label-mobile-dossier-height) - 6.72rem
-    );
-    --icono-label-mobile-pocket-front-height: calc(100% - var(--icono-label-mobile-pocket-front-top));
-    --icono-label-mobile-pocket-notch-width: 4.28rem;
-    --icono-label-mobile-pocket-notch-depth: 0.78rem;
-    --icono-label-mobile-pocket-notch-right: 1.12rem;
-    position: relative;
-    isolation: isolate;
-    min-block-size: calc(
-      var(--icono-label-mobile-peek-height) + var(--icono-label-mobile-preview-height)
-    );
-    padding: 0.3rem 0.62rem 0.12rem;
-    box-sizing: border-box;
-    color: var(--icono-label-ink);
-    text-align: left;
-    overflow: visible;
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.24));
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-back,
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front {
-    position: absolute;
-    inset-inline: 0;
-    top: var(--icono-label-mobile-pocket-front-top);
-    bottom: auto;
-    block-size: var(--icono-label-mobile-pocket-front-height);
-    background:
-      linear-gradient(180deg, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0) 9%),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--icono-label-paper) 56%, #b89060 44%) 0%,
-        color-mix(in srgb, var(--icono-label-paper) 48%, #a8825a 52%) 100%
-      );
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-back {
-    z-index: 0;
-    transform: translateY(0.2rem) scaleX(0.985);
-    opacity: 0.72;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-card-stack {
-    position: relative;
-    z-index: 1;
-    min-width: 0;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-info-card {
-    position: relative;
-    display: grid;
-    grid-template-rows: auto auto;
-    min-width: 0;
-    color: inherit;
-    cursor: pointer;
-    /* B-474 physical constraint: a sliding paper card cannot print outside its own edge.
-       Several handwritten tail fields intentionally overflow inside the desktop sheet,
-       but on mobile that leaked readable text past the sleeve lip/notch. Clip the moving
-       card before the kraft front masks it so the pocket stays physically plausible. */
-    overflow: clip;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-info-card:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--icono-label-pen) 64%, white 36%);
-    outline-offset: -2px;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-card {
-    display: grid;
-    grid-template-rows: auto auto;
-    gap: 0.18rem;
-    align-content: start;
-    justify-items: start;
-    inline-size: 100%;
-    box-sizing: border-box;
-     /* B-474: keep the serviceable info-card surface. The sleeve is only a small masked
-       occluding mouth over it, not a second giant kraft panel that steals the viewport. */
-    padding: 0.66rem 0.82rem calc(var(--icono-label-mobile-pocket-notch-depth) + 0.88rem);
-    background:
-      radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.2), transparent 24%),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--icono-label-paper) 94%, #eadfce 6%) 0%,
-        var(--icono-label-paper) 100%
-      );
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 55%, transparent),
-      inset 0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 38%, transparent);
-  }
-
-  /* Gene symbol convention: lit-archival uses League Spartan 800 for ALL symbol
-     occurrences (.icono-label-symbol line ~695, mobile-peek-tab-symbol line ~1601).
-     Do NOT replace with --icono-label-type (IBM Plex Mono); that is the typewriter
-     voice for body copy, not the display voice for symbols. */
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-symbol {
-    font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
-    font-weight: 800;
-    font-size: 1.7rem;
-    line-height: 0.95;
-    letter-spacing: 0.04em;
-    color: var(--icono-label-ink);
-    text-transform: uppercase;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-card
-    .icono-label-mobile-peek-name {
-    font-family: var(--icono-label-type), "Special Elite", monospace;
-    font-size: var(--icono-label-mobile-typewriter-size);
-    line-height: 1.18;
-    color: color-mix(in srgb, var(--icono-label-ink) 88%, transparent);
-    min-block-size: 0;
-    max-block-size: none;
-    overflow: visible;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front {
-    z-index: 2;
-    padding: 0.42rem 0.62rem 0.34rem;
-    box-sizing: border-box;
-    pointer-events: none;
-    background:
-      linear-gradient(180deg, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0.08) 14%, rgba(0, 0, 0, 0) 26%) left
-        top / 100% 100% no-repeat,
-      radial-gradient(circle at 18% 34%, rgba(255, 255, 255, 0.14), transparent 24%) left top / 100% 100% no-repeat,
-      linear-gradient(
-          180deg,
-          color-mix(in srgb, var(--icono-label-paper) 36%, #b18458 64%) 0%,
-          color-mix(in srgb, var(--icono-label-paper) 28%, #97704c 72%) 100%
-        )
-        left top / 100% 100% no-repeat;
-    -webkit-mask-image: radial-gradient(
-      ellipse calc(var(--icono-label-mobile-pocket-notch-width) / 2)
-        var(--icono-label-mobile-pocket-notch-depth)
-        at calc(
-          100% - var(--icono-label-mobile-pocket-notch-right) -
-            (var(--icono-label-mobile-pocket-notch-width) / 2)
-        )
-        0,
-      transparent 0 96%,
-      #000 100%
-    );
-    mask-image: radial-gradient(
-      ellipse calc(var(--icono-label-mobile-pocket-notch-width) / 2)
-        var(--icono-label-mobile-pocket-notch-depth)
-        at calc(
-          100% - var(--icono-label-mobile-pocket-notch-right) -
-            (var(--icono-label-mobile-pocket-notch-width) / 2)
-        )
-        0,
-      transparent 0 96%,
-      #000 100%
-    );
-    box-shadow:
-      inset 0 3px 5px -1px rgba(0, 0, 0, 0.38),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.18),
-      0 -2px 5px -3px rgba(0, 0, 0, 0.52);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-thumbcut {
-    position: absolute;
-    top: 0;
-    right: var(--icono-label-mobile-pocket-notch-right);
-    width: var(--icono-label-mobile-pocket-notch-width);
-    height: var(--icono-label-mobile-pocket-notch-depth);
-    border-radius: 0 0 50% 50% / 0 0 100% 100%;
-    background: transparent;
-    box-shadow:
-      inset 0 2px 3px -1px rgba(0, 0, 0, 0.34),
-      inset 2px 0 4px -2px rgba(0, 0, 0, 0.24),
-      inset -2px 0 4px -2px rgba(0, 0, 0, 0.24);
-    pointer-events: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-branding {
-    display: none;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.6rem;
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-archive {
-    font-family: var(--icono-label-type), "Special Elite", monospace;
-    font-weight: 700;
-    font-size: 0.62rem;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--icono-label-ink);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-serial {
-    font-family: var(--icono-label-type), "Special Elite", monospace;
-    font-size: 0.62rem;
-    letter-spacing: 0.06em;
-    color: color-mix(in srgb, var(--icono-label-ink) 86%, transparent);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-actions {
-    position: absolute;
-    z-index: 3;
-    inset-inline: 0.92rem;
-    top: auto;
-    bottom: 0.34rem;
-    display: grid;
-     /* Keep controls on the low sleeve lip. A separate pull-instruction row was tested
-       and rejected because it floated over dossier facts like a fake toolbar. The
-       sleeve mouth must stay below readable content in collapsed state: below it is
-       sleeve front material, not more printed dossier. */
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
-    align-items: center;
-    gap: 0;
-    margin-top: 0;
-    pointer-events: auto;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-vote {
-    inline-size: 100%;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick
-    .icono-label-mobile-sleeve-actions
-    .icono-vote-box--label,
-  .icono-card--variant-lab-label.icono-card--brick
-    .icono-label-mobile-sleeve-actions
-    [data-icono-vote-box] {
-    display: flex;
-    justify-content: space-between;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick
-    .icono-label-mobile-sleeve-actions
-    .icono-vote-btn {
-    inline-size: 4.6rem;
-    color: color-mix(in srgb, var(--icono-label-ink) 62%, transparent);
-    opacity: 0.74;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick
-    .icono-label-mobile-sleeve-actions
-    .icono-vote-btn--approve {
-    margin-inline-end: 0;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick
-    .icono-label-mobile-sleeve-actions
-    .icono-vote-btn--reject {
-    margin-inline-end: calc(
-      var(--icono-label-mobile-pocket-notch-width) + var(--icono-label-mobile-pocket-notch-right) + 0.12rem
-    );
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-pull {
-    display: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
-    .icono-label-mobile-sleeve-pull {
-    /* Expanded state: arrow flips. Text is decorative-only (real affordance
-       is the whole peek surface), so we just rewrite the visible glyph by
-       hiding the original copy with text-indent and inserting via ::after.
-       Keeping this declarative rather than JS-driven so the open/closed
-       label stays in sync with the [data-icono-mobile-expanded] attribute
-       without extra wiring. */
-    text-indent: 100%;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
-    .icono-label-mobile-sleeve-pull::after {
-    content: "↓ tap to seal";
-    position: absolute;
-    inset: 0;
-    text-indent: 0;
-    text-align: center;
-  }
-
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell {
     min-height: 0;
     overflow: hidden;
-    padding-top: 0;
     background:
       radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 22%),
       linear-gradient(

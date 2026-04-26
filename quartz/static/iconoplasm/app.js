@@ -19,7 +19,7 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260310d"
-import "./generated/lit-archival-card.js?v=20260426a"
+import "./generated/lit-archival-card.js?v=20260426b"
 
 var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function () {
   return null
@@ -1920,11 +1920,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         metaHtml +
         "</div>" +
         "</a>"
-    var physicalSleeveOpen =
-      isArchivalVariant && !isImageOnlyVariant
-        ? '<div class="icono-label-mobile-physical-sleeve">'
-        : ""
-    var physicalSleeveClose = isArchivalVariant && !isImageOnlyVariant ? "</div>" : ""
     return (
       // Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Layout &
       // Space) + C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction States). Brick cards
@@ -1945,7 +1940,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ";--icono-card-accent:" +
       esc(g.color || "#888") +
       ';">' +
-      physicalSleeveOpen +
       (isImageOnlyVariant
         ? bodyHtml
         : isArchivalVariant
@@ -1994,7 +1988,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
             "</div>") +
       (isImageOnlyVariant ? "" : '<div class="iconoplasm-tooltip-body">' + bodyHtml + "</div>") +
-        physicalSleeveClose +
       (isLitCardVariant(cardVariant)
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
@@ -2635,18 +2628,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           ? event.target.closest("[data-icono-label-mobile-toggle]")
           : null
       if (!toggle) return
-      event.preventDefault()
-      if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
-      setMobileLabelExpanded(card, card.getAttribute("data-icono-mobile-expanded") !== "true")
-    })
-
-    card.addEventListener("keydown", function (event) {
-      var toggle =
-        event.target && event.target.closest
-          ? event.target.closest("[data-icono-label-mobile-toggle]")
-          : null
-      if (!toggle) return
-      if (event.key !== "Enter" && event.key !== " ") return
       event.preventDefault()
       if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
       setMobileLabelExpanded(card, card.getAttribute("data-icono-mobile-expanded") !== "true")
