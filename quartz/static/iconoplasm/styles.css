@@ -795,12 +795,26 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   margin: 0 auto 1.2rem;
 }
 
+/* B-457 #1: home toolbar actions used to be three disjointed pills (Sort
+   select, Discord Login link, Installed v0.4.x toggle) sitting at slightly
+   different heights with arbitrary 0.75rem gaps between them. Same failure
+   mode as the gene-page Edit-image / New-candidate split that B-472 fixed.
+   Consolidate into one bordered rail with hairline-separated segments — the
+   inner controls keep their semantics but lose redundant outer pill borders
+   so the eye reads ONE toolbar instead of three orphan widgets.
+
+   Mobile (<=600px) breakpoint already stacks these full-width, so we scope
+   the rail framing to wider viewports where horizontal alignment matters. */
 .icono-gallery-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-end;
-  gap: 0.75rem;
+  gap: 0;
   flex-wrap: wrap;
+  padding: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--dark) 12%, var(--ui-border) 88%);
+  border-radius: var(--icono-radius-pill);
+  background: color-mix(in srgb, var(--light) 92%, white 8%);
 }
 
 .icono-gallery-auth {
@@ -815,6 +829,43 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-gallery-auth[hidden] {
   display: none;
+}
+
+/* Segment dividers: thin vertical hairline between rail children. Skipped
+   on the first visible child and on hidden auth slot so we never render a
+   leading divider when only Sort + Install are present. */
+.icono-gallery-actions > .icono-gallery-order {
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+}
+.icono-gallery-actions > * + *:not([hidden]) {
+  border-left: 1px solid color-mix(in srgb, var(--dark) 10%, var(--ui-border) 90%);
+  margin-left: 0;
+  padding-left: 0.65rem;
+}
+
+/* Inside the rail, controls drop their own pill border + background so the
+   rail is the only frame. Focus/hover still reads via background tint. */
+.icono-gallery-actions .icono-gallery-order select {
+  border-color: transparent;
+  background: transparent;
+  min-height: 2.4rem;
+}
+.icono-gallery-actions .icono-gallery-order select:hover {
+  background: color-mix(in srgb, var(--light) 60%, white 40%);
+}
+.icono-gallery-actions .icono-install-toggle {
+  border-color: transparent;
+  background: transparent;
+  min-height: 2.4rem;
+}
+.icono-gallery-actions .icono-install-toggle:hover,
+.icono-gallery-actions .icono-install-toggle:focus-visible {
+  background: color-mix(in srgb, var(--light) 60%, white 40%);
+}
+.icono-gallery-actions .icono-toolbar-login {
+  padding: 0 0.55rem;
+  align-self: center;
 }
 
 .icono-install-toggle {
@@ -1800,6 +1851,18 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   width: 100%;
 }
 
+/* B-457 #2: paired with the next-milestone caption added in app.js. The
+   bar alone reads as 0.6% emptiness; the caption gives the eye a target
+   to grow toward ("Next milestone: 250 (132 to go)"). Kept subtle and
+   monospaced to match the existing label vocabulary on this card. */
+.icono-collection-progress-milestone {
+  margin-top: 0.4rem;
+  font-family: var(--codeFont, monospace);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--secondary, var(--darkgray));
+}
+
 .icono-collection-label,
 .icono-empty-kicker {
   font-family: var(--codeFont, monospace);
@@ -1964,6 +2027,21 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 .icono-gene-lead-card .iconoplasm-tooltip-portrait,
 .icono-gene-lead-card .iconoplasm-tooltip-body {
   min-height: 280px;
+}
+
+/* B-457 #3: on mobile (390x844 reference) the gene-page hero portrait
+   was rendering ~310px tall, eating ~46% of the viewport and pushing the
+   toolbar rail (Edit image / New candidate from B-472) below the fold.
+   The hero IS the page on mobile, but the portrait alone shouldn't be —
+   cap it so the first viewport shows the portrait + the start of the
+   dossier rows + at least the top of the toolbar rail. The cap only
+   applies when the hero is in mobile-review layout (peek tab present),
+   so desktop side-by-side portraits are untouched. */
+@media (max-width: 600px) {
+  .icono-gene-lead-card .icono-label-dossier-shell .iconoplasm-tooltip-portrait {
+    min-height: 0;
+    max-height: 240px;
+  }
 }
 
 .icono-gene-lead-card .iconoplasm-tooltip-header .icono-shared-card-header-row {
@@ -2576,6 +2654,25 @@ html[data-theme="dark"] .icono-card--brick {
 
   .icono-gallery-actions {
     justify-content: space-between;
+    /* Below 600px the rail dissolves: items stretch full-width and stack,
+       so the bordered container + vertical hairlines from the desktop rail
+       (B-457 #1) would render as crooked frames around stacked rows. Drop
+       the framing here and let the original full-width pills come back. */
+    border: 0;
+    background: transparent;
+    padding: 0;
+    gap: 0.5rem;
+  }
+
+  .icono-gallery-actions > * + *:not([hidden]) {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .icono-gallery-actions .icono-gallery-order select,
+  .icono-gallery-actions .icono-install-toggle {
+    border-color: var(--ui-border);
+    background: var(--light);
   }
 
   /* B-457: on phones the Discord login pill kept its intrinsic content width
