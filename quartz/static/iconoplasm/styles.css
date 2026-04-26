@@ -35,6 +35,21 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
   margin-top: 0;
 }
 
+/* B-457: the iconoplasm subdomain is the entire product surface, so we reclaim
+   the empty right sidebar column from Quartz's three-column desktop grid and
+   widen the center column. The left sidebar stays for cross-site navigation but
+   uses a narrower allocation so the gene browser stops feeling like an inset
+   document. Reverting these overrides will reintroduce the "narrow centered
+   strip with quiet margins" complaint logged in B-457. */
+@media (min-width: 1200px) {
+  body[data-slug="apps/iconoplasm"] #quartz-body {
+    grid-template-columns: 260px minmax(0, 1fr) 0 !important;
+  }
+}
+body[data-slug="apps/iconoplasm"] #iconoplasm-root {
+  max-width: 1180px;
+}
+
 /* Hide Quartz article siblings (HR, footer, etc.) until SPA content loads
    to prevent brief flashes of chrome below empty root */
 #iconoplasm-root:empty ~ * {
@@ -2483,16 +2498,20 @@ html[data-theme="dark"] .icono-card--brick {
     justify-content: space-between;
   }
 
-  .icono-gallery-auth {
-    flex: 1 1 100%;
-  }
-
+  /* B-457: on phones the Discord login pill kept its intrinsic content width
+     and overflowed the actions strip horizontally because flex items default
+     to min-width: auto. Forcing min-width: 0 + box-sizing: border-box stops
+     the link from pushing the row past the viewport edge. */
+  .icono-gallery-auth,
   .icono-gallery-install {
     flex: 1 1 100%;
+    min-width: 0;
   }
 
   .icono-toolbar-login {
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     justify-content: center;
   }
 
