@@ -49,6 +49,16 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
     grid-template-columns: 240px minmax(0, 1fr) 0 !important;
   }
 }
+/* B-457: on phones the Quartz mobile grid's `auto` track was sizing to the
+   widest min-content child inside the gene page (typically the lab specimen
+   table), which produced a track wider than the viewport and caused horizontal
+   scroll. Pin the single-column track to `minmax(0, 1fr)` on iconoplasm pages
+   so the column always fits the viewport and the children clip themselves. */
+@media (max-width: 800px) {
+  body[data-slug="apps/iconoplasm"] #quartz-body {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
 body[data-slug="apps/iconoplasm"] #iconoplasm-root {
   max-width: 1180px;
 }
