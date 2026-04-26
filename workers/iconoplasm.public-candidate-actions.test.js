@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -268,4 +269,16 @@ test("copy candidate endpoint adds target candidate and auto-checkmarks it", asy
   assert.equal(db.voteProjection.gene_symbol, "INS")
   assert.equal(db.voteProjection.vote_value, 1)
   assert.equal(payload.target_url, "/gene/INS")
+})
+
+test("candidate copy action stays in the compact candidate footer strip", () => {
+  const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+  const css = readFileSync(new URL("../quartz/static/iconoplasm/styles.css", import.meta.url), "utf8")
+
+  assert.match(app, /icono-candidate-secondary-actions/)
+  assert.match(app, /Copy to gene/)
+  assert.match(app, /Copy image/)
+  assert.doesNotMatch(app, /<summary>copy this image to another gene<\/summary>/)
+  assert.match(css, /\.icono-candidate-secondary-actions/)
+  assert.match(css, /\.icono-candidate-copy-panel\[open\]/)
 })

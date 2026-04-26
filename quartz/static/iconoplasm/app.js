@@ -2877,7 +2877,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             .finally(function () {
               if (submit) {
                 submit.disabled = false
-                submit.textContent = "copy this image to another gene"
+                submit.textContent = "Copy image"
               }
             })
         })
@@ -4536,10 +4536,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           : "") +
         '<div class="icono-candidate-footer">' +
         voteBoxMarkup(voteAttrs) +
+        '<div class="icono-candidate-secondary-actions">' +
         removeMarkup +
-        "</div>" +
         '<details class="icono-candidate-copy-panel">' +
-        '<summary>copy this image to another gene</summary>' +
+        '<summary aria-label="Copy this candidate image to another gene">Copy to gene</summary>' +
         '<form class="icono-request-form" data-icono-candidate-copy-form data-icono-source-symbol="' +
         esc(genePayload.symbol) +
         '" data-icono-asset-sha256="' +
@@ -4547,11 +4547,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '">' +
         '<input class="icono-search-input icono-request-picker-input" data-icono-candidate-copy-query type="text" autocomplete="off" placeholder="target gene symbol" aria-label="Target gene">' +
         '<input type="hidden" data-icono-candidate-copy-target value="">' +
-        '<button type="submit" class="icono-request-inline-submit">copy this image to another gene</button>' +
+        '<button type="submit" class="icono-request-inline-submit">Copy image</button>' +
         '<div class="icono-search-results icono-request-results" data-icono-candidate-copy-results hidden></div>' +
         '<div data-icono-candidate-copy-note hidden style="font-size:0.92rem;"></div>' +
         "</form>" +
         "</details>" +
+        "</div>" +
+        "</div>" +
         "</article>"
     }
     html += "</div>" + "</section>"
