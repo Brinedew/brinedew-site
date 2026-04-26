@@ -4995,6 +4995,51 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     navigateTo(href, link)
   })
 
+  /* B-470 — make the whole gene tile a tap target.
+     The grid tile only had a real link wrapping the gene symbol/name title. The rest of the
+     dossier (the lab card body, the portrait fields, the swipe area on mobile) was inert,
+     even though the user had every right to expect "tap the card → open the gene page". This
+     is a delegated click handler that fills the gap.
+     Scope is intentionally tight:
+       - Only runs for cards that live inside a gallery grid (.icono-grid). On the gene
+         detail page the same dossier markup is the page hero, and we don't want to make
+         that hero re-navigate to itself.
+       - Skips clicks on real interactive controls (links, buttons, summaries, inputs,
+         labels, the mobile peek toggle, the vote box, the portrait hotzone). Those have
+         their own click semantics and stay untouched.
+       - Skips clicks where the user is selecting text, so the dossier text stays readable
+         on long-press.
+   */
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented) return
+    if (e.button != null && e.button !== 0) return
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    var card = e.target && e.target.closest ? e.target.closest(".icono-card[data-icono-symbol]") : null
+    if (!card) return
+    if (!card.closest(".icono-grid")) return
+    if (
+      e.target.closest(
+        "a, button, summary, input, select, textarea, label, [role='button']," +
+          " [data-icono-vote-box], [data-icono-label-mobile-toggle], [data-no-navigate]," +
+          " .icono-label-specimen-viewport, .iconoplasm-tooltip-portrait-media," +
+          " .iconoplasm-tooltip-portrait-fallback",
+      )
+    ) {
+      return
+    }
+    try {
+      var sel = window.getSelection && window.getSelection()
+      if (sel && String(sel.toString() || "").length > 0) return
+    } catch (_err) {
+      /* selection API can throw in some embedded contexts; safe to ignore. */
+    }
+    var symbol = String(card.getAttribute("data-icono-symbol") || "").trim()
+    if (!symbol) return
+    var href = "/gene/" + encodeURIComponent(symbol)
+    e.preventDefault()
+    navigateTo(href, card)
+  })
+
   window.addEventListener("popstate", function () {
     render()
   })
