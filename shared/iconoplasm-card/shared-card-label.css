@@ -2779,23 +2779,193 @@
   }
 
   .icono-card--variant-neo-drab.icono-card--brick {
+    --icono-label-paper: #111813;
+    --icono-label-paper-2: #263342;
+    --icono-label-ink: #d7d2bd;
+    --icono-label-muted: rgba(215, 210, 189, 0.62);
+    --icono-label-rule: rgba(216, 182, 63, 0.2);
+    --icono-label-rule-strong: rgba(216, 182, 63, 0.38);
+    --icono-label-stamp: #b4633c;
+    --icono-label-pen: #d8b63f;
+    --icono-label-type: "IBM Plex Mono";
+    --icono-label-hand: "Special Elite";
+    --icono-label-mobile-peek-height: 6.9rem;
+    --icono-label-mobile-preview-height: 8.9rem;
+    --icono-label-mobile-tab-height: 2.56rem;
+    --icono-label-mobile-tab-width: 7.5rem;
+    --icono-label-mobile-typewriter-size: 0.62rem;
+    --icono-label-mobile-hand-size: 0.78rem;
     color: var(--icono-label-ink);
+    border-color: rgba(216, 182, 63, 0.44);
+    background:
+      radial-gradient(circle at 18% 0%, rgba(216, 182, 63, 0.16), transparent 28%),
+      linear-gradient(135deg, rgba(111, 125, 142, 0.18), transparent 42%),
+      #07090d;
+    box-shadow:
+      inset 0 0 0 1px rgba(215, 210, 189, 0.06),
+      0 1.2rem 2.8rem rgba(7, 9, 13, 0.42);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick::before {
+    content: "NEO-MOSKVA";
+    position: absolute;
+    inset-inline: 0.72rem;
+    top: 0.62rem;
+    z-index: 2;
+    color: rgba(111, 125, 142, 0.2);
+    font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+    font-size: clamp(2.2rem, 16vw, 4.6rem);
+    font-weight: 800;
+    line-height: 0.76;
+    letter-spacing: -0.07em;
+    text-transform: uppercase;
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    background:
+      repeating-linear-gradient(0deg, rgba(215, 210, 189, 0.035) 0 1px, transparent 1px 5px),
+      radial-gradient(circle at 80% 16%, rgba(216, 182, 63, 0.12), transparent 20%);
+    opacity: 0.9;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .iconoplasm-tooltip-portrait {
+    background:
+      linear-gradient(180deg, rgba(38, 51, 66, 0.58), rgba(7, 9, 13, 0.2) 42%),
+      #0b0e10;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-specimen-viewport {
+    border: 1px solid rgba(216, 182, 63, 0.34);
+    background:
+      linear-gradient(180deg, rgba(216, 182, 63, 0.1), transparent 22%),
+      linear-gradient(90deg, rgba(111, 125, 142, 0.15), transparent 32%),
+      #0b0e10;
+    box-shadow:
+      inset 0 0 0 1px rgba(215, 210, 189, 0.06),
+      0 0.42rem 1.4rem rgba(7, 9, 13, 0.28);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .iconoplasm-tooltip-portrait-img {
+    filter: saturate(0.72) contrast(1.16) sepia(0.08) brightness(0.9);
   }
 
   .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek {
     background:
-      linear-gradient(180deg, rgba(215, 182, 66, 0.08), transparent 38%),
-      #171a14;
+      linear-gradient(90deg, rgba(216, 182, 63, 0.94) 0 0.34rem, transparent 0.34rem 100%),
+      radial-gradient(circle at 84% 12%, rgba(216, 182, 63, 0.18), transparent 28%),
+      repeating-linear-gradient(0deg, rgba(215, 210, 189, 0.035) 0 1px, transparent 1px 5px),
+      linear-gradient(180deg, #141b19, #0b0f0d);
+    padding-top: 1.02rem;
+    border-top: 1px solid rgba(216, 182, 63, 0.48);
     box-shadow:
-      inset 0 1px 0 rgba(255, 238, 166, 0.09),
-      inset 0 -1px 0 rgba(215, 182, 66, 0.18);
+      inset 0 1px 0 rgba(215, 210, 189, 0.08),
+      inset 0 -1px 0 rgba(216, 182, 63, 0.26),
+      0 -0.5rem 1.2rem rgba(7, 9, 13, 0.34);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek::before {
+    content: "";
+    position: absolute;
+    left: 0.98rem;
+    right: 7.8rem;
+    top: 0.44rem;
+    border-top: 1px dashed rgba(216, 182, 63, 0.42);
+    pointer-events: none;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-tab {
+    right: 0.64rem;
+    filter: drop-shadow(0 0.42rem 0.42rem rgba(7, 9, 13, 0.3));
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-tab-fill {
+    fill: #d8b63f;
+    stroke: rgba(7, 9, 13, 0.68);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-tab-highlight {
+    stroke: rgba(255, 245, 179, 0.34);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-tab-symbol {
+    color: #07090d;
+    font-family: "Bahnschrift", "Arial Narrow", "League Spartan", sans-serif;
+    font-size: 0.92rem;
+    letter-spacing: 0.1em;
+    transform: translateY(0.62rem);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-kicker,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-instruction,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-swipe-stamp {
+    color: rgba(215, 210, 189, 0.78);
+    font-family: "Bahnschrift", "Arial Narrow", "IBM Plex Mono", sans-serif;
+    font-weight: 700;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-name {
+    color: rgba(215, 210, 189, 0.9);
+    font-family: "IBM Plex Mono";
+    text-transform: uppercase;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-mobile-peek-swipe-divider {
+    border-top-color: rgba(216, 182, 63, 0.26);
   }
 
   .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell {
     background:
-      linear-gradient(90deg, rgba(215, 182, 66, 0.05) 0 1px, transparent 1px 100%),
-      linear-gradient(180deg, #1b1f17, #15180f);
-    background-size: 19px 100%, auto;
+      linear-gradient(90deg, rgba(216, 182, 63, 0.08) 0 1px, transparent 1px 100%),
+      repeating-linear-gradient(0deg, rgba(215, 210, 189, 0.03) 0 1px, transparent 1px 6px),
+      linear-gradient(180deg, #141b19, #0d1210);
+    background-size: 17px 100%, auto, auto;
+    border-top-color: rgba(216, 182, 63, 0.42);
+    box-shadow: inset 0 0.42rem 0 rgba(216, 182, 63, 0.06);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-caption,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-row-label,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-qc-meta-item,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-note,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-metric {
+    color: rgba(215, 210, 189, 0.64);
+    font-family: "Bahnschrift", "Arial Narrow", "IBM Plex Mono", sans-serif;
+    font-weight: 700;
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-option-copy,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-typed-value,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-origin-text,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-serial,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-family,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-metric-value {
+    color: rgba(215, 210, 189, 0.95);
+    font-family: "IBM Plex Mono";
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-hand-note,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-qc-note,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-color-name,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-specimen-hand-analysis {
+    color: #d8b63f;
+    font-family: "Special Elite";
+    text-shadow: 0 0 0.5rem rgba(216, 182, 63, 0.18);
+  }
+
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-band-cell,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-filed-block,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-qc-block,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-style-row,
+  .icono-card--variant-neo-drab.icono-card--brick .icono-label-dossier-shell .icono-label-alignment-row {
+    border-color: rgba(216, 182, 63, 0.2);
   }
 
   .icono-card--variant-neo-drab.icono-card--brick .icono-vote-btn,
