@@ -1862,6 +1862,161 @@
     display: inline;
   }
 
+  /* B-458 archival sleeve.
+     Layout: the toggle button frames the card peek (symbol + full name).
+     Below it, the sleeve sits as a short kraft band with a thumb-cut on its
+     top edge. Card content sits ABOVE the sleeve in DOM order, so the sleeve
+     visually overlaps the bottom of the card via negative margin and z-index
+     to read as a real archival pocket. Single typewriter voice = IBM Plex
+     Mono everywhere on this peek; do not introduce a second display family
+     here. The thumb-cut is a decorative cream half-disc with an inset shadow
+     at its lower edge to suggest the sleeve's punched-out paper. The blot
+     debossing is the box-shadow on the outer .icono-label-mobile-peek
+     surface; the card-under-sleeve debossing is the inset shadow at the
+     sleeve seam. Do not move debossing onto the sleeve itself — the sleeve
+     is the thing pressing down, the card is the thing receiving the
+     impression. */
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-card {
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 0.18rem;
+    align-content: center;
+    justify-items: start;
+    padding: 0.7rem 0.9rem 0.5rem;
+    inline-size: 100%;
+    box-sizing: border-box;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-symbol {
+    font-family: var(--icono-label-type), "Special Elite", monospace;
+    font-weight: 700;
+    font-size: 1.6rem;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--icono-label-ink);
+    text-transform: uppercase;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-card
+    .icono-label-mobile-peek-name {
+    font-family: var(--icono-label-type), "Special Elite", monospace;
+    font-size: var(--icono-label-mobile-typewriter-size);
+    line-height: 1.18;
+    color: color-mix(in srgb, var(--icono-label-ink) 88%, transparent);
+    min-block-size: 0;
+    max-block-size: none;
+    overflow: visible;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve {
+    position: relative;
+    z-index: 2;
+    margin-top: -0.1rem;
+    padding: 0.55rem 0.78rem 0.62rem;
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0) 6%),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--icono-label-paper) 56%, #b89060 44%) 0%,
+        color-mix(in srgb, var(--icono-label-paper) 48%, #a8825a 52%) 100%
+      );
+    color: var(--icono-label-ink);
+    font-family: var(--icono-label-type), "Special Elite", monospace;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek {
+    /* Outer drop shadow debosses the whole peek into the blot below. */
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.32);
+    overflow: visible;
+  }
+
+  /* Thumb-cut: cream half-disc on the sleeve's top edge, off-center to the
+     right so it doesn't collide with the archive branding on the left. The
+     inset bottom-shadow simulates the deboss of the cut edge into the card
+     paper revealed inside it. Width tuned so a thumb fits comfortably. */
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-thumbcut {
+    position: absolute;
+    bottom: calc(100% - 0.02rem);
+    right: 1.4rem;
+    width: 5.4rem;
+    height: 1.6rem;
+    background: var(--icono-label-paper);
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    box-shadow:
+      inset 0 -3px 5px -1px rgba(0, 0, 0, 0.28),
+      inset 2px 0 4px -2px rgba(0, 0, 0, 0.22),
+      inset -2px 0 4px -2px rgba(0, 0, 0, 0.22);
+    pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-branding {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding-bottom: 0.34rem;
+    border-bottom: 1px dashed color-mix(in srgb, var(--icono-label-ink) 22%, transparent);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-archive {
+    font-family: var(--icono-label-type), "Special Elite", monospace;
+    font-weight: 700;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--icono-label-ink);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-serial {
+    font-family: var(--icono-label-type), "Special Elite", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    color: color-mix(in srgb, var(--icono-label-ink) 86%, transparent);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.34rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-pull {
+    font-family: var(--icono-label-type), "Special Elite", monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--icono-label-ink) 78%, transparent);
+    justify-self: end;
+    white-space: nowrap;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
+    .icono-label-mobile-sleeve-pull {
+    /* Expanded state: arrow flips. Text is decorative-only (real affordance
+       is the whole peek surface), so we just rewrite the visible glyph by
+       hiding the original copy with text-indent and inserting via ::after.
+       Keeping this declarative rather than JS-driven so the open/closed
+       label stays in sync with the [data-icono-mobile-expanded] attribute
+       without extra wiring. */
+    text-indent: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
+    .icono-label-mobile-sleeve-pull::after {
+    content: "↓ tap to seal";
+    position: absolute;
+    inset: 0;
+    text-indent: 0;
+    text-align: right;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell {
     min-height: 0;
     overflow: hidden;
