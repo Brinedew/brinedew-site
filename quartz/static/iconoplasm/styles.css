@@ -53,10 +53,16 @@ body[data-slug^="apps/iconoplasm"] .center > article.iconoplasm-page {
    widest min-content child inside the gene page (typically the lab specimen
    table), which produced a track wider than the viewport and caused horizontal
    scroll. Pin the single-column track to `minmax(0, 1fr)` on iconoplasm pages
-   so the column always fits the viewport and the children clip themselves. */
+   so the column always fits the viewport and the children clip themselves.
+   Also hide the Quartz left sidebar on phones — the iconoplasm subdomain is
+   self-contained and the sidebar's dark-mode/reader-mode toggles were the last
+   source of horizontal overflow. */
 @media (max-width: 800px) {
   body[data-slug^="apps/iconoplasm"] #quartz-body {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+  body[data-slug^="apps/iconoplasm"] #quartz-body > .sidebar.left {
+    display: none !important;
   }
 }
 body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
