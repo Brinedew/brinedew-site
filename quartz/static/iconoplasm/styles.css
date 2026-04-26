@@ -371,6 +371,15 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: none;
 }
 
+/* Same problem for the per-candidate copy popover, which lives inside a
+   <details>. UA stylesheet would normally hide non-summary children of a
+   closed <details>, but `.icono-request-form { display: grid }` above
+   wins on specificity. Each closed popover was contributing ~144px of
+   invisible height to its candidate row. */
+.icono-candidate-copy-panel:not([open]) > form.icono-candidate-copy-popover {
+  display: none;
+}
+
 .icono-request-picker {
   display: grid;
   gap: 0.75rem;
