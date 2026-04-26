@@ -2069,11 +2069,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         voteBoxMarkup("", { variant: isArchivalVariant ? "label" : "" }) +
         "</div>"
       : ""
+    // B-471: at narrow viewports the desktop "sheet" archival layout
+    // shrinks to ~7px field labels and is unreadable. Render the hero in
+    // the same brick + mobile-review mode the home grid uses on mobile,
+    // which gives big legible rows ("FULL NAME", "MISFIT/FIT", etc) plus
+    // a tap-to-open dossier sheet.
+    var heroMobileReview = isLitCardVariant(cardVariant) && isMobileLabelReviewEnabled()
+    var heroMode = heroMobileReview ? "brick" : "sheet"
     var bodyHtml = isLitCardVariant(cardVariant)
       ? buildArchivalBodyMarkup(detail || g, {
-          mode: "sheet",
+          mode: heroMode,
           layoutVariant: litLayoutVariantForCard(cardVariant),
-          mobileReview: false,
+          mobileReview: heroMobileReview,
           portraitAlt: g.symbol + " blot",
           portraitSrc: portraitUrl,
           voteHtml:
@@ -2100,7 +2107,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         mobileRowsHtml
 
     return (
-      '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card' +
+      // B-471: drop `brick-static` on mobile so wireMobileLabelCard
+      // can wire the peek/expand toggle. Static bricks are skipped by
+      // the mobile-label wiring on purpose for grid-context cards we
+      // don't want to expand; the hero is the page, so it should expand.
+      '<article class="icono-card icono-card--brick' +
+      (heroMobileReview ? "" : " icono-card--brick-static") +
+      ' icono-gene-lead-card' +
       archivalVariantClass(cardVariant) +
       '" style="--width:' +
       dims.width +
@@ -4744,6 +4757,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     wireCandidateVoteBoxes(container, g)
     wireCandidateRemoveButtons(container, g)
     wireCandidateCopyForms(container, g)
+    // B-471: wire the gene-lead hero into the mobile peek/expand pattern
+    // when at narrow viewport, then auto-expand it. The hero IS the page,
+    // so we don't make the user tap-to-open just to read the dossier.
+    var leadCard = container.querySelector(".icono-gene-lead-card")
+    if (leadCard && isMobileLabelReviewEnabled()) {
+      wireMobileLabelCard(leadCard)
+      try {
+        setMobileLabelExpanded(leadCard, true)
+      } catch (_err) {}
+    }
     applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
     refreshPortraitLightbox()
     var fullPortraitUrl = publishedPortraitUrl(g, "full")
