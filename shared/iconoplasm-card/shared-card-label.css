@@ -1862,37 +1862,61 @@
     display: inline;
   }
 
-  /* B-458 archival sleeve.
-     Layout: the toggle button frames the card peek (symbol + full name).
-     Below it, the sleeve sits as a short kraft band with a thumb-cut on its
-     top edge. Card content sits ABOVE the sleeve in DOM order, so the sleeve
-     visually overlaps the bottom of the card via negative margin and z-index
-     to read as a real archival pocket. Single typewriter voice = IBM Plex
-     Mono everywhere on this peek; do not introduce a second display family
-     here. The thumb-cut is a decorative cream half-disc with an inset shadow
-     at its lower edge to suggest the sleeve's punched-out paper. The blot
-     debossing is the box-shadow on the outer .icono-label-mobile-peek
-     surface; the card-under-sleeve debossing is the inset shadow at the
-     sleeve seam. Do not move debossing onto the sleeve itself — the sleeve
-     is the thing pressing down, the card is the thing receiving the
-     impression. */
+  /* B-458/B-474 archival sleeve. The peek represents a kraft archival
+     sleeve with a card tucked inside it. Z-stack from back to front:
+       (0) page background
+       (1) .icono-label-mobile-peek wrapper — cream paper card surface,
+           full height of the collapsed peek. Symbol/name sit in its top
+           portion; cream extends down behind the sleeve as the card "tail"
+           that's tucked inside the sleeve.
+       (2) .icono-label-mobile-sleeve — kraft front face overlaying the
+           lower portion of the card via negative margin-top + z-index,
+           so the card's lower edge is hidden BEHIND the sleeve front
+           face = card visually inside sleeve.
+       (3) .icono-label-mobile-sleeve-thumbcut — paper-colored U-cutout on
+           the sleeve's top edge, dome-DOWN into the kraft, with inset
+           shadow at the cut perimeter. Because its color matches the card
+           paper directly behind it, the cut reads as a real hole through
+           the sleeve front face revealing the card surface (geometrically
+           correct: cut middle overlaps card lower portion that's hidden
+           behind kraft elsewhere).
+     Geometric invariants future editors must preserve:
+       - Sleeve must overlap (not stack below) the card via negative
+         margin so the card has a visible "tail" behind the sleeve.
+       - Thumbcut color must equal --icono-label-paper (the card surface
+         color), not the kraft. A kraft-colored thumbcut destroys the
+         hole illusion.
+       - Thumbcut must dome DOWN from the sleeve top edge (border-radius
+         on its bottom corners) — a dome-up half-disc above the sleeve is
+         the old wrong "decal pasted onto sleeve top" model and is the
+         exact 3D-impossible composition this rewrite fixes.
+       - The sleeve outer width must be >= the card content width. Card
+         text gets padding-inline; sleeve fills full peek width so the
+         sleeve "frames" the card horizontally too. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-card {
     display: grid;
     grid-template-rows: auto auto;
     gap: 0.18rem;
-    align-content: center;
+    align-content: start;
     justify-items: start;
-    padding: 0.7rem 0.9rem 0.5rem;
+    /* Bottom padding extends the cream card surface down BEHIND the sleeve
+       front face. Without this tail there's no card to hide inside the
+       sleeve and the thumb-cut has nothing to expose. */
+    padding: 0.7rem 0.9rem 1.9rem;
     inline-size: 100%;
     box-sizing: border-box;
   }
 
+  /* Gene symbol convention: lit-archival uses League Spartan 800 for ALL symbol
+     occurrences (.icono-label-symbol line ~695, mobile-peek-tab-symbol line ~1601).
+     Do NOT replace with --icono-label-type (IBM Plex Mono); that is the typewriter
+     voice for body copy, not the display voice for symbols. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-symbol {
-    font-family: var(--icono-label-type), "Special Elite", monospace;
-    font-weight: 700;
-    font-size: 1.6rem;
-    line-height: 1;
-    letter-spacing: 0.02em;
+    font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+    font-weight: 800;
+    font-size: 1.7rem;
+    line-height: 0.95;
+    letter-spacing: 0.04em;
     color: var(--icono-label-ink);
     text-transform: uppercase;
   }
@@ -1911,10 +1935,17 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve {
     position: relative;
     z-index: 2;
-    margin-top: -0.1rem;
-    padding: 0.55rem 0.78rem 0.62rem;
+    /* Pull the sleeve UP over the card's cream tail so the card is visually
+       tucked inside it. Magnitude must be >= the cream tail beneath the
+       symbol/name (peek-card padding-bottom 1.9rem). The remaining sliver
+       of cream below the sleeve top edge reads as the card lower lip just
+       below the sleeve. */
+    margin-top: -1.55rem;
+    /* Top padding accommodates the thumbcut (1.6rem deep) so branding text
+       sits below the cut, not behind it. */
+    padding: 1.95rem 0.78rem 0.62rem;
     background:
-      linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0) 6%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0%, rgba(0, 0, 0, 0) 8%),
       linear-gradient(
         180deg,
         color-mix(in srgb, var(--icono-label-paper) 56%, #b89060 44%) 0%,
@@ -1922,8 +1953,11 @@
       );
     color: var(--icono-label-ink);
     font-family: var(--icono-label-type), "Special Elite", monospace;
+    /* Top inset shadow = the front-face plane casting a soft shadow onto the
+       card surface immediately behind it = depth cue. Bottom inset = sleeve
+       lower edge bevel. */
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      inset 0 2px 3px -1px rgba(0, 0, 0, 0.22),
       inset 0 -1px 0 rgba(0, 0, 0, 0.12);
   }
 
@@ -1933,20 +1967,28 @@
     overflow: visible;
   }
 
-  /* Thumb-cut: cream half-disc on the sleeve's top edge, off-center to the
-     right so it doesn't collide with the archive branding on the left. The
-     inset bottom-shadow simulates the deboss of the cut edge into the card
-     paper revealed inside it. Width tuned so a thumb fits comfortably. */
+  /* Thumb-cut: a real U-shaped hole through the sleeve's front face,
+     positioned at the sleeve's TOP edge dipping DOWN into the kraft.
+     Off-center to the right so it doesn't collide with the archive
+     branding on the left. Bg matches --icono-label-paper exactly so the
+     paper-colored thumbcut reads as the card surface visible through the
+     hole; the card cream tail is directly behind it in z-stack so the
+     illusion is geometrically grounded (it's not just a paper patch on
+     kraft — there is a real card behind, hidden by kraft elsewhere and
+     exposed here). Inset shadows at the cut perimeter simulate the kraft
+     thickness of the front face wrapping around the hole. */
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-sleeve-thumbcut {
     position: absolute;
-    bottom: calc(100% - 0.02rem);
+    top: 0;
     right: 1.4rem;
     width: 5.4rem;
     height: 1.6rem;
     background: var(--icono-label-paper);
-    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    /* Dome DOWN: rounded corners on the BOTTOM, flat top edge flush with
+       the sleeve's top edge. Old wrong design used dome-up; do not revert. */
+    border-radius: 0 0 50% 50% / 0 0 100% 100%;
     box-shadow:
-      inset 0 -3px 5px -1px rgba(0, 0, 0, 0.28),
+      inset 0 2px 3px -1px rgba(0, 0, 0, 0.32),
       inset 2px 0 4px -2px rgba(0, 0, 0, 0.22),
       inset -2px 0 4px -2px rgba(0, 0, 0, 0.22);
     pointer-events: none;

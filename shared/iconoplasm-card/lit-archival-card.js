@@ -329,16 +329,22 @@ function sheetTemplate(model) {
 
 function mobilePeekTemplate(model) {
   if (!(model.mode === "brick" && model.mobileReview)) return nothing
-  // B-458: archival sleeve with thumb-cut sits below the peeking card.
-  // Card peek (above sleeve) shows the symbol + full name; the sleeve at the
-  // bottom carries the archive branding, vote arrows, and the pull
-  // instruction. The thumb-cut is a decorative concave bite in the sleeve's
-  // top edge revealing the card paper behind it — the affordance that
-  // motivates the "tap to pull" gesture. The toggle button still wraps the
-  // card peek so a tap anywhere on the card body (or the thumb-cut, since it
-  // visually belongs to the card peek) expands the dossier. Vote buttons stay
-  // outside the toggle so taps on them dispatch their own handlers without
-  // toggling expansion.
+  // B-458/B-474: archival sleeve with a card tucked inside it.
+  // DOM is intentionally flat (toggle + sleeve as siblings inside .peek). The
+  // 3D illusion is built in CSS via z-stack:
+  //   peek wrapper = cream card surface (full collapsed height)
+  //   toggle/peek-card = symbol + name on top of the card
+  //   sleeve = kraft front face overlaying the LOWER portion of the card via
+  //     negative margin-top + z-index so the card has a real "tail" hidden
+  //     inside the sleeve
+  //   sleeve-thumbcut = paper-colored U-cut on the sleeve top edge revealing
+  //     the card surface directly behind it
+  // The toggle button wraps only the card peek so a tap on the symbol/name
+  // expands the dossier. Vote buttons live inside .sleeve (outside the toggle)
+  // so vote taps dispatch their own handlers without toggling expansion.
+  // See shared-card-label.css mobile sleeve block for the geometric invariants
+  // future editors must preserve (sleeve overlap, thumbcut color, dome-down
+  // direction, sleeve >= card width).
   return html`<div class="icono-label-mobile-peek">
     <button
       type="button"
