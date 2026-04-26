@@ -39,11 +39,14 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
    the empty right sidebar column from Quartz's three-column desktop grid and
    widen the center column. The left sidebar stays for cross-site navigation but
    uses a narrower allocation so the gene browser stops feeling like an inset
-   document. Reverting these overrides will reintroduce the "narrow centered
-   strip with quiet margins" complaint logged in B-457. */
-@media (min-width: 1200px) {
+   document. The override starts at 1024px to also catch Quartz's tablet grid
+   (800-1200px), which is two columns and was leaving the gene browser at the
+   default 320px sidebar + auto column. Reverting these overrides will
+   reintroduce the "narrow centered strip with quiet margins" complaint logged
+   in B-457. */
+@media (min-width: 1024px) {
   body[data-slug="apps/iconoplasm"] #quartz-body {
-    grid-template-columns: 260px minmax(0, 1fr) 0 !important;
+    grid-template-columns: 240px minmax(0, 1fr) 0 !important;
   }
 }
 body[data-slug="apps/iconoplasm"] #iconoplasm-root {
