@@ -329,39 +329,32 @@ function sheetTemplate(model) {
 
 function mobilePeekTemplate(model) {
   if (!(model.mode === "brick" && model.mobileReview)) return nothing
-  // B-458/B-474: archival sleeve with a card tucked inside it.
-  // DOM is intentionally flat (toggle + sleeve as siblings inside .peek). The
-  // 3D illusion is built in CSS via z-stack:
-  //   peek wrapper = cream card surface (full collapsed height)
-  //   toggle/peek-card = symbol + name on top of the card
-  //   sleeve = kraft front face overlaying the LOWER portion of the card via
-  //     negative margin-top + z-index so the card has a real "tail" hidden
-  //     inside the sleeve
-  //   sleeve-thumbcut = paper-colored U-cut on the sleeve top edge revealing
-  //     the card surface directly behind it
-  // The toggle button wraps only the card peek so a tap on the symbol/name
-  // expands the dossier. Vote buttons live inside .sleeve (outside the toggle)
-  // so vote taps dispatch their own handlers without toggling expansion.
-  // See shared-card-label.css mobile sleeve block for the geometric invariants
-  // future editors must preserve (sleeve overlap, thumbcut color, dome-down
-  // direction, sleeve >= card width).
   return html`<div class="icono-label-mobile-peek">
-    <button
-      type="button"
-      class="icono-label-mobile-peek-toggle"
-      data-icono-label-mobile-toggle
-      aria-expanded="false"
-    >
-      <span class="icono-label-mobile-peek-card" aria-hidden="false">
-        <span class="icono-label-mobile-peek-symbol">${model.symbol}</span>
-        <span class="icono-label-mobile-peek-name">${model.fullName}</span>
-      </span>
-    </button>
-    <div class="icono-label-mobile-sleeve" aria-hidden="false">
-      <span class="icono-label-mobile-sleeve-thumbcut" aria-hidden="true"></span>
-      <div class="icono-label-mobile-sleeve-branding">
-        <span class="icono-label-mobile-sleeve-archive">Iconoplasm Archive</span>
-        <span class="icono-label-mobile-sleeve-serial">№ ${model.serial || "00000"}</span>
+    <div class="icono-label-mobile-pocket">
+      <div class="icono-label-mobile-pocket-back" aria-hidden="true"></div>
+      <div class="icono-label-mobile-card-stack">
+        <div
+          class="icono-label-mobile-info-card"
+          data-icono-label-mobile-toggle
+          role="button"
+          tabindex="0"
+          aria-expanded="false"
+        >
+          <div class="icono-label-mobile-peek-card" aria-hidden="false">
+            <span class="icono-label-mobile-peek-symbol">${model.symbol}</span>
+            <span class="icono-label-mobile-peek-name">${model.fullName}</span>
+          </div>
+          <div class="icono-label-dossier-shell" data-icono-label-dossier-shell>
+            <div class="icono-label-dossier-sheet">${sheetTemplate(model)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="icono-label-mobile-pocket-front" aria-hidden="false">
+        <span class="icono-label-mobile-pocket-thumbcut" aria-hidden="true"></span>
+        <div class="icono-label-mobile-sleeve-branding">
+          <span class="icono-label-mobile-sleeve-archive">Iconoplasm Archive</span>
+          <span class="icono-label-mobile-sleeve-serial">№ ${model.serial || "00000"}</span>
+        </div>
       </div>
       <div class="icono-label-mobile-sleeve-actions">
         <div class="icono-label-mobile-peek-swipe icono-label-mobile-sleeve-vote">
@@ -378,10 +371,7 @@ function archivalTemplate(model) {
     return imageOnlyTemplate(model)
   }
   if (model.mode === "brick" && model.mobileReview) {
-    return html`${mobilePeekTemplate(model)}
-      <div class="icono-label-dossier-shell" data-icono-label-dossier-shell>
-        <div class="icono-label-dossier-sheet">${sheetTemplate(model)}</div>
-      </div>`
+    return mobilePeekTemplate(model)
   }
   return sheetTemplate(model)
 }

@@ -861,22 +861,31 @@ function sheetTemplate(model) {
 function mobilePeekTemplate(model) {
   if (!(model.mode === "brick" && model.mobileReview)) return A;
   return b2`<div class="icono-label-mobile-peek">
-    <button
-      type="button"
-      class="icono-label-mobile-peek-toggle"
-      data-icono-label-mobile-toggle
-      aria-expanded="false"
-    >
-      <span class="icono-label-mobile-peek-card" aria-hidden="false">
-        <span class="icono-label-mobile-peek-symbol">${model.symbol}</span>
-        <span class="icono-label-mobile-peek-name">${model.fullName}</span>
-      </span>
-    </button>
-    <div class="icono-label-mobile-sleeve" aria-hidden="false">
-      <span class="icono-label-mobile-sleeve-thumbcut" aria-hidden="true"></span>
-      <div class="icono-label-mobile-sleeve-branding">
-        <span class="icono-label-mobile-sleeve-archive">Iconoplasm Archive</span>
-        <span class="icono-label-mobile-sleeve-serial">№ ${model.serial || "00000"}</span>
+    <div class="icono-label-mobile-pocket">
+      <div class="icono-label-mobile-pocket-back" aria-hidden="true"></div>
+      <div class="icono-label-mobile-card-stack">
+        <div
+          class="icono-label-mobile-info-card"
+          data-icono-label-mobile-toggle
+          role="button"
+          tabindex="0"
+          aria-expanded="false"
+        >
+          <div class="icono-label-mobile-peek-card" aria-hidden="false">
+            <span class="icono-label-mobile-peek-symbol">${model.symbol}</span>
+            <span class="icono-label-mobile-peek-name">${model.fullName}</span>
+          </div>
+          <div class="icono-label-dossier-shell" data-icono-label-dossier-shell>
+            <div class="icono-label-dossier-sheet">${sheetTemplate(model)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="icono-label-mobile-pocket-front" aria-hidden="false">
+        <span class="icono-label-mobile-pocket-thumbcut" aria-hidden="true"></span>
+        <div class="icono-label-mobile-sleeve-branding">
+          <span class="icono-label-mobile-sleeve-archive">Iconoplasm Archive</span>
+          <span class="icono-label-mobile-sleeve-serial">№ ${model.serial || "00000"}</span>
+        </div>
       </div>
       <div class="icono-label-mobile-sleeve-actions">
         <div class="icono-label-mobile-peek-swipe icono-label-mobile-sleeve-vote">
@@ -892,10 +901,7 @@ function archivalTemplate(model) {
     return imageOnlyTemplate(model);
   }
   if (model.mode === "brick" && model.mobileReview) {
-    return b2`${mobilePeekTemplate(model)}
-      <div class="icono-label-dossier-shell" data-icono-label-dossier-shell>
-        <div class="icono-label-dossier-sheet">${sheetTemplate(model)}</div>
-      </div>`;
+    return mobilePeekTemplate(model);
   }
   return sheetTemplate(model);
 }
