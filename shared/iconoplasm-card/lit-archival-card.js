@@ -358,7 +358,9 @@ function mobilePeekTemplate(model) {
         <span class="icono-label-mobile-sleeve-serial">№ ${model.serial || "00000"}</span>
       </div>
       <div class="icono-label-mobile-sleeve-actions">
-        ${voteShellTemplate(model.voteHtml)}
+        <div class="icono-label-mobile-peek-swipe icono-label-mobile-sleeve-vote">
+          ${voteShellTemplate(model.voteHtml)}
+        </div>
         <span class="icono-label-mobile-sleeve-pull" aria-hidden="true">↑ tap to pull</span>
       </div>
     </div>
