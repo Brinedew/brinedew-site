@@ -344,6 +344,50 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-shadow: none;
 }
 
+/* B-472: unify the two action panels (Edit image + Random/New candidate)
+   under the canonical specimen image into one visual rail instead of two
+   stacked boxes. The wrapper owns the border + padding; the children are
+   flattened so they look like cells in one toolbar. On wide viewports
+   they sit side-by-side; on narrow they stack but stay inside one rail. */
+.icono-gene-toolbar-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.6rem 0.75rem;
+  margin-top: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--light) 96%, white 4%);
+  box-shadow: 0 6px 18px rgba(27, 18, 11, 0.04);
+}
+
+.icono-gene-toolbar-rail > .icono-gene-request-surface {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The "Edit image" trigger is its own cell on the left; the request shell
+   takes the remaining width so the search-pill stretches across the rail. */
+.icono-gene-toolbar-rail > .icono-gene-edit-panel {
+  flex: 0 0 auto;
+}
+
+.icono-gene-toolbar-rail > .icono-gene-request-panel {
+  flex: 1 1 240px;
+}
+
+/* When the edit form expands, let it claim the whole rail so the textarea
+   isn't squeezed against the request shell. */
+.icono-gene-toolbar-rail:has([data-icono-edit-image-form]:not([hidden])) > .icono-gene-edit-panel {
+  flex: 1 1 100%;
+}
+
 .icono-request-shell {
   display: grid;
   gap: 1rem;

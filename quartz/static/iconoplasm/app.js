@@ -4712,6 +4712,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
     html += renderPublishedEmulsionNotice(g)
+    // B-472: the "Edit image" panel and the "Random or X / New candidate"
+    // request shell used to render as two visually disjoint rounded boxes
+    // stacked on top of each other. The user reads them as one operation
+    // ("act on the canonical image"), so wrap them in a single toolbar rail
+    // and let CSS lay them out side-by-side on wide viewports, stacked but
+    // inside one bordered surface on narrow ones.
+    html += '<div class="icono-gene-toolbar-rail" data-icono-canonical-rail>'
     html += renderEditImageShellMarkup(g)
     // Chesterton fence: this shell must exist before any network round-trip.
     // The old blocking placeholder trained the codebase back toward a monolithic
@@ -4725,6 +4732,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       renderRequestShellMarkup(g.symbol) +
       "</div>" +
       "</section>"
+    html += "</div>"
     html += "</section>"
 
     html += renderCandidateGallery(g)
