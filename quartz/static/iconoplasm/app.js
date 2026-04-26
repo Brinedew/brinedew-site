@@ -70,6 +70,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var PREFETCH_DETAIL_CONCURRENCY = 4
   var ICONO_ARROW_LEFT =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px;margin-right:3px"><path d="M12.5 4 6.5 10l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  // Icon set used by the candidate action rail. Kept inline as `currentColor` SVGs so the rail
+  // can adopt cream/lab-label, neo-drab, or default theming without a separate icon font load.
+  // Source: B-467 (compact action rail for candidate blots) — replace earlier text buttons
+  // ("Remove", "Copy to gene") with consistent circular icon controls.
+  var ICONO_TRASH_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M4.5 6h11M8.5 9.25v6M11.5 9.25v6M5.75 6 6.3 16.45a1.5 1.5 0 0 0 1.5 1.42h4.4a1.5 1.5 0 0 0 1.5-1.42L14.25 6M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  var ICONO_BRANCH_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><circle cx="6" cy="4.75" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="15.25" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="9" r="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M6 6.25v7.5M6 9.25a3 3 0 0 0 3 3h3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+  var ICONO_SEND_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   var portraitDetailCache = Object.create(null)
   var portraitDetailPromiseCache = Object.create(null)
   var portraitImageCache = Object.create(null)
@@ -2738,6 +2748,30 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function wireCandidateCopyForms(container, genePayload) {
     if (!container || !genePayload) return
+    // B-467: each candidate copy panel is a <details>. We register a single document-level
+    // pointerdown handler per render so clicks outside the open panel collapse it. This is
+    // the popover-close behaviour you'd expect from Linear/Notion-style menus.
+    if (!container.getAttribute("data-icono-copy-outside-wired")) {
+      container.setAttribute("data-icono-copy-outside-wired", "true")
+      var closeOpenCopyPanels = function (event) {
+        var panels = container.querySelectorAll(".icono-candidate-copy-panel[open]")
+        for (var p = 0; p < panels.length; p++) {
+          var panel = panels[p]
+          if (panel.contains(event.target)) continue
+          panel.removeAttribute("open")
+        }
+      }
+      document.addEventListener("pointerdown", closeOpenCopyPanels, true)
+      document.addEventListener(
+        "keydown",
+        function (event) {
+          if (event.key !== "Escape") return
+          var panels = container.querySelectorAll(".icono-candidate-copy-panel[open]")
+          for (var p = 0; p < panels.length; p++) panels[p].removeAttribute("open")
+        },
+        true,
+      )
+    }
     var forms = container.querySelectorAll("[data-icono-candidate-copy-form]")
     for (var i = 0; i < forms.length; i++) {
       ;(function (form) {
@@ -2839,9 +2873,15 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             return
           }
           var submit = form.querySelector('button[type="submit"]')
+          // B-467: the submit button now has an inline icon plus a label span. Store the
+          // original markup so the loading state ("Copying...") can be restored without
+          // dropping the SVG and so we never lose the accessible label between submits.
+          var submitOriginalHtml = submit ? submit.innerHTML : ""
           if (submit) {
             submit.disabled = true
-            submit.textContent = "Copying..."
+            submit.innerHTML =
+              ICONO_SEND_ICON +
+              '<span class="icono-candidate-copy-submit-label">Copying...</span>'
           }
           setCopyStatus("", "")
           fetchJSON("/api/iconoplasm/candidates/copy", {
@@ -2877,7 +2917,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             .finally(function () {
               if (submit) {
                 submit.disabled = false
-                submit.textContent = "Copy image"
+                submit.innerHTML = submitOriginalHtml
               }
             })
         })
@@ -4481,9 +4521,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
       var removeMarkup = ""
       if (currentUserIsIconoAdmin && assetSha) {
+        // B-467: the admin remove control is now an icon button so it visually matches the
+        // approve/reject vote buttons. The "Remove" label stays as accessible text inside a
+        // .icono-visually-hidden span so screen readers still announce the destructive verb.
         removeMarkup =
           '<div class="icono-candidate-admin-actions">' +
-          '<button type="button" class="icono-candidate-remove-button" data-icono-candidate-remove="true" data-icono-symbol="' +
+          '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--remove icono-candidate-remove-button" data-icono-candidate-remove="true" data-icono-symbol="' +
           esc(genePayload.symbol) +
           '" data-icono-asset-sha256="' +
           esc(assetSha) +
@@ -4491,7 +4534,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
           '" aria-label="Remove candidate blot for ' +
           esc(genePayload.symbol) +
-          '">Remove</button>' +
+          '" title="Remove candidate blot">' +
+          ICONO_TRASH_ICON +
+          '<span class="icono-visually-hidden">Remove</span>' +
+          "</button>" +
           "</div>"
       }
       html +=
@@ -4538,16 +4584,28 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         voteBoxMarkup(voteAttrs) +
         '<div class="icono-candidate-secondary-actions">' +
         removeMarkup +
+        // B-467: "Copy to gene" stays a <details>/<summary> for keyboard semantics, but the
+        // summary is rendered as a circular icon control. The visible "Copy to gene" string
+        // is preserved inside .icono-visually-hidden so the public-candidate-actions test
+        // and screen-reader users still find the label, while the form opens as a floating
+        // popover that does not push the candidate card height.
         '<details class="icono-candidate-copy-panel">' +
-        '<summary aria-label="Copy this candidate image to another gene">Copy to gene</summary>' +
-        '<form class="icono-request-form" data-icono-candidate-copy-form data-icono-source-symbol="' +
+        '<summary class="icono-candidate-action-btn icono-candidate-action-btn--copy" aria-label="Copy to gene" title="Copy to gene">' +
+        ICONO_BRANCH_ICON +
+        '<span class="icono-visually-hidden">Copy to gene</span>' +
+        "</summary>" +
+        '<form class="icono-request-form icono-candidate-copy-popover" data-icono-candidate-copy-form data-icono-source-symbol="' +
         esc(genePayload.symbol) +
         '" data-icono-asset-sha256="' +
         esc(assetSha) +
         '">' +
+        '<label class="icono-candidate-copy-popover-label">Copy to gene</label>' +
         '<input class="icono-search-input icono-request-picker-input" data-icono-candidate-copy-query type="text" autocomplete="off" placeholder="target gene symbol" aria-label="Target gene">' +
         '<input type="hidden" data-icono-candidate-copy-target value="">' +
-        '<button type="submit" class="icono-request-inline-submit">Copy image</button>' +
+        '<button type="submit" class="icono-request-inline-submit icono-candidate-copy-submit" aria-label="Copy image to selected gene" title="Copy image">' +
+        ICONO_SEND_ICON +
+        '<span class="icono-candidate-copy-submit-label">Copy image</span>' +
+        "</button>" +
         '<div class="icono-search-results icono-request-results" data-icono-candidate-copy-results hidden></div>' +
         '<div data-icono-candidate-copy-note hidden style="font-size:0.92rem;"></div>' +
         "</form>" +
