@@ -1947,6 +1947,11 @@
     min-width: 0;
     color: inherit;
     cursor: pointer;
+    /* B-474 physical constraint: a sliding paper card cannot print outside its own edge.
+       Several handwritten tail fields intentionally overflow inside the desktop sheet,
+       but on mobile that leaked readable text past the sleeve lip/notch. Clip the moving
+       card before the kraft front masks it so the pocket stays physically plausible. */
+    overflow: clip;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-info-card:focus-visible {
