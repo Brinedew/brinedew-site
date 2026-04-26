@@ -2684,7 +2684,13 @@ html[data-theme="dark"] .icono-card--brick {
   }
 
   .icono-vote-box {
-    width: 100%;
+    /* Was `width: 100%`, which forced the secondary action rail (remove +
+       copy-to-gene) to wrap onto a second row on mobile. B-469 wants a
+       single rail. `flex: 1` makes the approve/reject pair stretch to
+       fill the leftover width while keeping the small icon trio inline. */
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
   }
 
   .icono-vote-box--brick {
