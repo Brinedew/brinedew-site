@@ -1672,7 +1672,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return (
       '<a class="icono-home-auth-link icono-toolbar-login" href="' +
       esc(voteLoginUrl()) +
-      '" aria-label="Discord login to rate gene bricks">Discord Login</a>'
+      // Keep vocabulary unified with vote buttons ("Approve blot" / "Reject blot")
+      // and the candidate-blots header. "gene bricks" was an orphan jargon term.
+      '" aria-label="Discord login to rate blots">Discord Login</a>'
     )
   }
 
@@ -3112,8 +3114,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderRequestFormMarkup(symbol, options) {
     var config = options || {}
     var disabledAttr = config.disabled ? ' disabled aria-disabled="true"' : ""
-    var submitLabel = String(config.submitLabel || "new candidate").trim() || "new candidate"
-    var placeholder = String(config.placeholder || "random or pick emulsion").trim() || "random or pick emulsion"
+    // Sentence-case the visible submit label so it sits next to the vote
+    // buttons (Approve / Reject / Remove) without looking like a typo.
+    // FAQ still reads naturally either way ("Tap New candidate to make...").
+    var submitLabel = String(config.submitLabel || "New candidate").trim() || "New candidate"
+    // Public visitors should see "style", not the internal "emulsion" workflow term.
+    var placeholder = String(config.placeholder || "Random or pick a style").trim() || "Random or pick a style"
     return (
       '<form data-icono-request-form class="icono-request-form">' +
       '<div class="icono-search icono-search--toolbar icono-request-search">' +
@@ -3124,7 +3130,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(placeholder) +
       '" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="icono-request-results-' +
       esc(symbol) +
-      '" aria-label="Search emulsion lane"' +
+      // Aria-label was "Search emulsion lane" — internal workflow jargon that
+      // confuses screen-reader users. Mirror the placeholder copy instead.
+      '" aria-label="Search styles for new candidate"' +
       disabledAttr +
       ">" +
       '<input type="hidden" data-icono-request-vision value="">' +
@@ -3172,7 +3180,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '">' +
       '<div class="icono-request-shell">' +
       '<div class="icono-request-actions">' +
-      '<button type="button" class="icono-request-inline-submit" data-icono-edit-image-toggle>edit image</button>' +
+      // Sentence-case to match the rest of the action vocabulary
+      // ("Approve blot" / "Reject blot" / "New candidate"). FAQ still reads
+      // naturally because we capitalize "Edit image" the same way mid-sentence.
+      '<button type="button" class="icono-request-inline-submit" data-icono-edit-image-toggle>Edit image</button>' +
       '<form class="icono-request-form" data-icono-edit-image-form hidden>' +
       '<label class="icono-request-option-copy" for="icono-edit-image-prompt-' +
       esc(symbol) +

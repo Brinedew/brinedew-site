@@ -363,6 +363,14 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   width: 100%;
 }
 
+/* Honor the HTML [hidden] attribute. Without this, `display: grid` above
+   overrides the browser-default `[hidden] { display: none }` and the
+   collapsed edit form leaves ~290px of dead air below the gene dossier
+   on every gene page (B-457 audit #7). */
+.icono-request-form[hidden] {
+  display: none;
+}
+
 .icono-request-picker {
   display: grid;
   gap: 0.75rem;
