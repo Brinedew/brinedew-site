@@ -78,7 +78,7 @@ draft: false
 
 1. **I noticed a candidate image that would better fit another gene.**
 
-    Open this image fullscreen, then click "copy this image to another gene". Then select the gene from the dropdown menu. This adds it as a new candidate image to that gene, and auto-checkmarks it.
+    On that candidate's row in the gene page, tap the copy icon (the one next to "Remove"). An inline form opens with a gene search box - type a gene symbol or name, pick the target from the matches, and confirm. The image is added as a new candidate to that other gene and auto-checkmarked there.
 
 1. **What images are not suitable for Iconoplasm?**
 
