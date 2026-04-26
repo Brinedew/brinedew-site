@@ -25,13 +25,13 @@
   --icono-ring-image: color-mix(in srgb, var(--light) 72%, var(--dark) 12%);
 }
 
-body[data-slug="apps/iconoplasm"] .page-header,
-body[data-slug="apps/iconoplasm"] .page-footer,
-body[data-slug="apps/iconoplasm"] hr {
+body[data-slug^="apps/iconoplasm"] .page-header,
+body[data-slug^="apps/iconoplasm"] .page-footer,
+body[data-slug^="apps/iconoplasm"] hr {
   display: none;
 }
 
-body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
+body[data-slug^="apps/iconoplasm"] .center > article.iconoplasm-page {
   margin-top: 0;
 }
 
@@ -45,7 +45,7 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
    reintroduce the "narrow centered strip with quiet margins" complaint logged
    in B-457. */
 @media (min-width: 1024px) {
-  body[data-slug="apps/iconoplasm"] #quartz-body {
+  body[data-slug^="apps/iconoplasm"] #quartz-body {
     grid-template-columns: 240px minmax(0, 1fr) 0 !important;
   }
 }
@@ -55,11 +55,11 @@ body[data-slug="apps/iconoplasm"] .center > article.iconoplasm-page {
    scroll. Pin the single-column track to `minmax(0, 1fr)` on iconoplasm pages
    so the column always fits the viewport and the children clip themselves. */
 @media (max-width: 800px) {
-  body[data-slug="apps/iconoplasm"] #quartz-body {
+  body[data-slug^="apps/iconoplasm"] #quartz-body {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
-body[data-slug="apps/iconoplasm"] #iconoplasm-root {
+body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   max-width: 1180px;
 }
 
@@ -1165,7 +1165,7 @@ body[data-slug="apps/iconoplasm"] #iconoplasm-root {
   font-variant-numeric: tabular-nums;
 }
 
-body[data-slug="apps/iconoplasm"] .brd-sidebar-row-value,
+body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 .icono-vote-stats,
 .pswp__counter,
 .iconoplasm-tooltip-meta-value,
