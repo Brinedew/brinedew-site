@@ -52,7 +52,7 @@ test("mobile archival sleeve has visible DOM nouns in physical z-order", async (
 
   assert.match(
     app,
-    /isArchivalVariant && isMobileLabelReviewEnabled\(\)[\s\S]*renderMobileArchivalPhysicalPocketHtml\(portraitHtml, infoHtml\)/,
+    /isArchivalVariant && isMobileLabelReviewEnabled\(\)[\s\S]*renderMobileArchivalPhysicalPocketHtml\(portraitHtml, infoHtml, \{/,
     "mobile archival cards must route portrait and info surfaces into the physical pocket",
   )
 })
@@ -74,5 +74,62 @@ test("mobile archival sleeve front is not a card pseudo-element decal", async ()
     css,
     /\.icono-card--variant-lab-label\.icono-card--brick \.icono-label-mobile-pocket-front::before/,
     "thumb-cut edge shadow must belong to the sleeve front layer, not to the card",
+  )
+})
+
+test("mobile archival sleeve owns review controls and visible archive metadata", async () => {
+  const app = await sourceText(appPath)
+  const lit = await sourceText(path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js"))
+  const css = await sourceText(cssPath)
+
+  assert.match(
+    app,
+    /renderMobileArchivalPhysicalPocketHtml\(portraitHtml, infoHtml, \{[\s\S]*voteHtml: labelVoteHtml/,
+    "brick mobile review votes must be passed to the physical sleeve front",
+  )
+  assert.match(
+    app,
+    /icono-label-mobile-pocket-name[\s\S]*esc\(fullName \|\| symbol\)/,
+    "the physical sleeve front must render the full gene name as sleeve metadata",
+  )
+  assert.match(
+    app,
+    /data-icono-mobile-sleeve-vote[\s\S]*voteHtml/,
+    "the physical sleeve front must own the live vote control slot",
+  )
+  assert.equal(
+    /icono-label-mobile-peek-swipe[\s\S]*voteShellTemplate\(model\.voteHtml\)/.test(lit),
+    false,
+    "mobile Lit info-card peek must not keep review votes on the sliding card sheet",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-control[\s\S]*pointer-events: auto/,
+    "sleeve-owned vote controls must remain clickable even though the sleeve front is an occluder",
+  )
+})
+
+test("mobile archival collapse and shadows encode physical receivers", async () => {
+  const css = await sourceText(cssPath)
+
+  assert.match(
+    css,
+    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% - 16\.2rem\)\)/,
+    "collapsed info card must put its tab behind the sleeve thumb cut without exposing the old card-mounted vote area",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-front \{[\s\S]*mask-image: url\("data:image\/svg\+xml/,
+    "thumb cut should use an irregular sleeve mask rather than a clean CSS ellipse",
+  )
+  assert.match(
+    css,
+    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*filter: drop-shadow/,
+    "the sliding info paper must cast contact shadow onto the layer behind it",
+  )
+  assert.match(
+    css,
+    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-portrait \{[\s\S]*filter: drop-shadow/,
+    "the portrait/blot card must have its own paper-depth shadow receiver instead of relying on sleeve self-shadow",
   )
 })

@@ -19,7 +19,7 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260310d"
-import "./generated/lit-archival-card.js?v=20260426b"
+import "./generated/lit-archival-card.js?v=20260427b475"
 
 var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function () {
   return null
@@ -1851,7 +1851,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml) {
+  function renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml, options) {
+    var opts = options || {}
+    var symbol = normalizedSymbol(opts.symbol || "")
+    var fullName = String(opts.fullName || symbol || "").trim()
+    var voteHtml = String(opts.voteHtml || "").trim()
     // B-474 guardrail: the mobile sleeve is a physical object, not a card-level decal.
     // Keep the noun stack visible in DOM so future edits can test it: sleeve back, two card
     // surfaces, then sleeve front with a real transparent thumb cut. If this becomes a
@@ -1864,9 +1868,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       portraitHtml +
       infoHtml +
       "</div>" +
-      '<div class="icono-label-mobile-pocket-front" aria-hidden="true">' +
-      '<div class="icono-label-mobile-pocket-stamp">ARCHIVE SLEEVE</div>' +
-      '<div class="icono-label-mobile-pocket-pull">tap to pull</div>' +
+      '<div class="icono-label-mobile-pocket-front">' +
+      '<div class="icono-label-mobile-pocket-label">' +
+      '<div class="icono-label-mobile-pocket-stamp">HUMAN GENE FILE</div>' +
+      '<div class="icono-label-mobile-pocket-name">' +
+      esc(fullName || symbol) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-pocket-control" data-icono-mobile-sleeve-vote>' +
+      voteHtml +
+      "</div>" +
+      '<div class="icono-label-mobile-pocket-pull">' +
+      (symbol ? esc(symbol) + " / " : "") +
+      "tap to pull</div>" +
       "</div>" +
       "</div>"
     )
@@ -1998,7 +2012,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         "</div>"
     var mobilePhysicalPocket =
       isArchivalVariant && isMobileLabelReviewEnabled()
-        ? renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml)
+        ? renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml, {
+            symbol: g.symbol,
+            fullName: g.full_name || g.symbol,
+            voteHtml: labelVoteHtml,
+          })
         : ""
     return (
       // Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Layout &
@@ -2191,6 +2209,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               'class="iconoplasm-tooltip-portrait icono-label-mobile-portrait-card',
             ),
             heroInfoMarkup,
+            {
+              symbol: g.symbol,
+              fullName: g.full_name || g.symbol,
+              voteHtml:
+                !isImageOnlyVariant && portraitAssetSha
+                  ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", { showArrows: false })
+                  : "",
+            },
           )
         : ""
 

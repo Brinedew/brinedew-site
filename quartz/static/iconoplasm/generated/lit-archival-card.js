@@ -900,7 +900,6 @@ function mobilePeekTemplate(model) {
         <span class="icono-label-mobile-peek-name">${model.fullName}</span>
       </span>
     </button>
-    <div class="icono-label-mobile-peek-swipe">${voteShellTemplate(model.voteHtml)}</div>
   </div>`;
 }
 function archivalTemplate(model) {
