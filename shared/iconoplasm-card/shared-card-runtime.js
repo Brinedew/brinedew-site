@@ -358,18 +358,18 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var fullName = String(opts.fullName || symbol || "").trim()
     var voteHtml = String(opts.voteHtml || "").trim()
     return (
-      '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket data-icono-physical-noun="sleeve">' +
-      '<div class="icono-label-mobile-pocket-back" data-icono-physical-noun="sleeve-back" aria-hidden="true"></div>' +
-      '<div class="icono-label-mobile-card-stack" data-icono-physical-noun="card-stack">' +
-      '<div class="icono-label-mobile-portrait-surface" data-icono-physical-noun="portrait-card">' +
+      '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket data-icono-physical-noun="sleeve" data-icono-sleeve-kinematics="fixed-cards-moving-envelope">' +
+      '<div class="icono-label-mobile-pocket-back" data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope" aria-hidden="true"></div>' +
+      '<div class="icono-label-mobile-card-stack" data-icono-physical-noun="card-stack" data-icono-kinematic-role="fixed-card-stack">' +
+      '<div class="icono-label-mobile-portrait-surface" data-icono-physical-noun="portrait-card" data-icono-kinematic-role="fixed-portrait-card">' +
       String(portraitHtml || "") +
       "</div>" +
-      '<div class="icono-label-mobile-info-surface" data-icono-physical-noun="info-card">' +
+      '<div class="icono-label-mobile-info-surface" data-icono-physical-noun="info-card" data-icono-kinematic-role="fixed-info-card">' +
       String(infoHtml || "") +
       "</div>" +
       "</div>" +
-      '<div class="icono-label-mobile-pocket-front" data-icono-physical-noun="sleeve-front">' +
-      '<div class="icono-label-mobile-thumb-cut" data-icono-physical-noun="thumb-cut" aria-hidden="true"></div>' +
+      '<div class="icono-label-mobile-pocket-front" data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope">' +
+      '<div class="icono-label-mobile-thumb-cut" data-icono-physical-noun="thumb-cut" data-icono-kinematic-role="transparent-aperture" aria-hidden="true"></div>' +
       '<div class="icono-label-mobile-pocket-label">' +
       '<div class="icono-label-mobile-pocket-stamp">HUMAN GENE FILE</div>' +
       '<div class="icono-label-mobile-pocket-name">' +
@@ -1604,6 +1604,20 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         "</span>" +
         iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject")
       : ICONO_CROSS_ICON
+    var firstButton = isLabel
+      ? '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' +
+        rejectInner +
+        "</button>"
+      : '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' +
+        approveInner +
+        "</button>"
+    var secondButton = isLabel
+      ? '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' +
+        approveInner +
+        "</button>"
+      : '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' +
+        rejectInner +
+        "</button>"
     return (
       '<div class="icono-vote-box' +
       (isBrick ? " icono-vote-box--brick" : "") +
@@ -1611,12 +1625,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '" data-icono-vote-box' +
       attrs +
       ">" +
-      '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' +
-      approveInner +
-      "</button>" +
-      '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' +
-      rejectInner +
-      "</button>" +
+      firstButton +
+      secondButton +
       "</div>"
     )
   }

@@ -2471,10 +2471,21 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function alignExpandedMobileLabelCard(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
-    // The mobile archival sheet is now positioned entirely by CSS. Do not re-introduce
-    // measurement-driven inline offsets here; they break the one-physical-card illusion and
-    // produce false positives in DOM-only validation.
+    // B-476 kinematics: thumbs hold the portrait/info cards fixed while the kraft envelope
+    // slides downward. The viewport follows the envelope edge; do not reintroduce inline
+    // dossier offsets that make the info card itself do the moving.
     card.style.removeProperty("--icono-label-mobile-dossier-top")
+    if (card.getAttribute("data-icono-mobile-expanded") !== "true") return
+    var sleeveFront = card.querySelector('[data-icono-kinematic-role="sliding-envelope"]')
+    if (!sleeveFront || typeof sleeveFront.getBoundingClientRect !== "function") return
+    window.requestAnimationFrame(function () {
+      var rect = sleeveFront.getBoundingClientRect()
+      var targetTop = Math.round(window.innerHeight * 0.58)
+      var delta = rect.top - targetTop
+      if (delta > 8) {
+        window.scrollBy({ top: delta, left: 0, behavior: "smooth" })
+      }
+    })
   }
 
   function syncMobileLabelDossierContent(card) {

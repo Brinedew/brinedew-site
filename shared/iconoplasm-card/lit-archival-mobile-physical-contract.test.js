@@ -24,6 +24,16 @@ function assertInOrder(text, labels) {
   }
 }
 
+function cssBlockFor(css, selector) {
+  const start = css.indexOf(selector)
+  assert.notEqual(start, -1, `missing CSS selector ${selector}`)
+  const open = css.indexOf("{", start)
+  assert.notEqual(open, -1, `missing CSS block for ${selector}`)
+  const close = css.indexOf("}", open)
+  assert.notEqual(close, -1, `unclosed CSS block for ${selector}`)
+  return css.slice(open + 1, close)
+}
+
 test("iconoplasm app script still parses after mobile sleeve edits", () => {
   const result = spawnSync(process.execPath, ["--check", appPath], {
     cwd: repoRoot,
@@ -57,13 +67,13 @@ test("mobile archival sleeve has visible DOM nouns in physical z-order", async (
   const renderer = runtime.slice(rendererStart, rendererEnd)
 
   assertInOrder(renderer, [
-    'data-icono-physical-noun="sleeve"',
-    'data-icono-physical-noun="sleeve-back"',
-    'data-icono-physical-noun="card-stack"',
-    'data-icono-physical-noun="portrait-card"',
-    'data-icono-physical-noun="info-card"',
-    'data-icono-physical-noun="sleeve-front"',
-    'data-icono-physical-noun="thumb-cut"',
+    'data-icono-sleeve-kinematics="fixed-cards-moving-envelope"',
+    'data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope"',
+    'data-icono-physical-noun="card-stack" data-icono-kinematic-role="fixed-card-stack"',
+    'data-icono-physical-noun="portrait-card" data-icono-kinematic-role="fixed-portrait-card"',
+    'data-icono-physical-noun="info-card" data-icono-kinematic-role="fixed-info-card"',
+    'data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope"',
+    'data-icono-physical-noun="thumb-cut" data-icono-kinematic-role="transparent-aperture"',
   ])
   assert.match(
     runtime,
@@ -99,9 +109,9 @@ test("shared physical sleeve renderer emits nested escaped physical surfaces", a
   )
 
   assertInOrder(html, [
-    'data-icono-physical-noun="sleeve"',
-    'data-icono-physical-noun="sleeve-back"',
-    'data-icono-physical-noun="card-stack"',
+    'data-icono-sleeve-kinematics="fixed-cards-moving-envelope"',
+    'data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope"',
+    'data-icono-physical-noun="card-stack" data-icono-kinematic-role="fixed-card-stack"',
     'data-icono-physical-noun="portrait-card"',
     'data-test-surface="portrait"',
     'data-icono-physical-noun="info-card"',
@@ -167,6 +177,46 @@ test("mobile archival sleeve owns review controls and visible archive metadata",
   )
 })
 
+test("mobile archival sleeve review buttons read MISFIT left and FIT right", async () => {
+  delete globalThis.IconoplasmCardShared
+  await import(pathToFileURL(runtimePath).href + "?vote-order=" + Date.now())
+  const shared = globalThis.IconoplasmCardShared
+  const html = shared.voteBoxMarkup('data-icono-brick-vote-box="asset"', {
+    variant: "label",
+    showArrows: true,
+  })
+
+  assert.ok(
+    html.indexOf("data-icono-vote-down") < html.indexOf("data-icono-vote-up"),
+    "label review voting must put MISFIT/reject on the left and FIT/approve on the right",
+  )
+  assert.ok(
+    html.indexOf("MISFIT") < html.indexOf("FIT"),
+    "visible label review copy must read MISFIT before FIT",
+  )
+})
+
+test("mobile archival expansion follows envelope edge instead of measuring dossier offsets", async () => {
+  const app = await sourceText(appPath)
+  const alignStart = app.indexOf("function alignExpandedMobileLabelCard")
+  assert.notEqual(alignStart, -1, "mobile expansion alignment helper must exist")
+  const alignEnd = app.indexOf("function syncMobileLabelDossierContent", alignStart)
+  assert.notEqual(alignEnd, -1, "alignment helper must end before content sync helper")
+  const helper = app.slice(alignStart, alignEnd)
+
+  assert.match(
+    helper,
+    /data-icono-kinematic-role=\"sliding-envelope\"/,
+    "expanded viewport follow should anchor to the moving envelope edge",
+  )
+  assert.match(helper, /window\.scrollBy\(\{ top: delta/, "expanded state should slide viewport down")
+  assert.equal(
+    /setProperty\("--icono-label-mobile-dossier-top"/.test(helper),
+    false,
+    "expansion must not reintroduce measurement-driven dossier offsets",
+  )
+})
+
 test("mobile archival collapse and shadows encode physical receivers", async () => {
   const css = await sourceText(cssPath)
 
@@ -178,13 +228,28 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
 
   assert.match(
     css,
-    /--icono-label-info-card-collapsed-y: calc\(100% - 16\.2rem\)[\s\S]*--icono-label-info-card-pull-y: var\(--icono-label-info-card-collapsed-y\)/,
-    "collapsed info card must put its tab behind the sleeve thumb cut without exposing the old card-mounted vote area",
+    /--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: calc\(var\(--icono-label-pocket-front-height\) - 1\.8rem\)/,
+    "B-476 motion must use a positive envelope-frame travel distance instead of the old info-card offset",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-back,[\s\S]*\.icono-label-mobile-pocket-front \{[\s\S]*transform: translateY\(var\(--icono-label-envelope-pull-y\)\)/,
+    "sleeve back and front must share the same moving-envelope transform",
+  )
+  assert.match(
+    css,
+    /icono-card--mobile-physical-pocket\[data-icono-mobile-expanded="true"\][\s\S]*\.icono-label-mobile-pocket \{[\s\S]*--icono-label-envelope-pull-y: var\(--icono-label-envelope-expanded-y\)/,
+    "expanded state must slide the envelope down while cards remain fixed",
   )
   assert.match(
     css,
     /\.icono-label-mobile-info-surface \{[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*z-index: 3;/,
     "info-card physical noun must have a real sliding surface box instead of a zero-height wrapper",
+  )
+  assert.match(
+    css,
+    /--icono-label-thumb-cut-left: calc\(100% - 5\.24rem\);[\s\S]*--icono-label-thumb-cut-width: 4\.88rem;[\s\S]*\.icono-label-mobile-pocket-pull \{[\s\S]*left: var\(--icono-label-thumb-cut-left\);[\s\S]*inline-size: var\(--icono-label-thumb-cut-width\)/,
+    "visible gene pull label must share the thumb-cut mouth geometry instead of drifting independently",
   )
   assert.equal(
     /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% -/.test(
@@ -195,8 +260,23 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /\.icono-label-mobile-pocket-front \{[\s\S]*mask-image: url\("data:image\/svg\+xml/,
-    "thumb cut should use an irregular sleeve mask rather than a clean CSS ellipse",
+    /\.icono-label-mobile-pocket-front \{[\s\S]*mask-image: url\("data:image\/svg\+xml[\s\S]*M704 0 L862 0 C854 30/,
+    "thumb cut must use the named asymmetric archival punch mask rather than a clean CSS ellipse",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M0 0 L78 0 C75 12/,
+    "visible thumb-cut edge must use the same punched silhouette as the transparent aperture",
+  )
+  assert.equal(
+    /border-radius:/.test(cssBlockFor(css, ".icono-label-mobile-thumb-cut")),
+    false,
+    "thumb-cut edge must not regress to a computer-clean elliptical border-radius",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-front \{[\s\S]*filter:[\s\S]*drop-shadow/,
+    "envelope front must use shape-aware drop-shadow so the thumb hole affects the cast shadow",
   )
   assert.match(
     css,

@@ -1370,6 +1370,10 @@
     --icono-label-pocket-front-height: 14rem;
     --icono-label-pocket-mouth-x: calc(100% - 4.28rem);
     --icono-label-info-card-collapsed-y: calc(100% - 16.2rem);
+    --icono-label-envelope-pull-y: 0px;
+    --icono-label-envelope-expanded-y: calc(var(--icono-label-pocket-front-height) - 1.8rem);
+    --icono-label-thumb-cut-left: calc(100% - 5.24rem);
+    --icono-label-thumb-cut-width: 4.88rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket {
@@ -1390,6 +1394,8 @@
     inset-inline: 0;
     bottom: 0;
     pointer-events: none;
+    transform: translateY(var(--icono-label-envelope-pull-y));
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
     background:
       radial-gradient(circle at 18% 34%, rgba(255, 255, 255, 0.24), transparent 28%),
       linear-gradient(
@@ -1438,23 +1444,25 @@
     line-height: 1;
     text-transform: uppercase;
     pointer-events: none;
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Crect width='1000' height='420' fill='white'/%3E%3Cpath fill='black' d='M706 0 C713 53 735 82 782 84 C830 86 855 55 863 0 Z'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Crect width='1000' height='420' fill='white'/%3E%3Cpath fill='black' d='M706 0 C713 53 735 82 782 84 C830 86 855 55 863 0 Z'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Crect width='1000' height='420' fill='white'/%3E%3Cpath fill='black' d='M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Crect width='1000' height='420' fill='white'/%3E%3Cpath fill='black' d='M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
+    filter:
+      drop-shadow(0 -0.2rem 0.18rem rgba(38, 22, 8, 0.3))
+      drop-shadow(0 -0.52rem 0.58rem rgba(38, 22, 8, 0.18));
     box-shadow:
       inset 0 0.62rem 0.72rem -0.28rem rgba(42, 24, 7, 0.42),
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      0 -0.42rem 0.95rem -0.52rem rgba(38, 22, 8, 0.74);
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-thumb-cut {
     position: absolute;
-    left: calc(100% - 5.24rem);
+    left: var(--icono-label-thumb-cut-left);
     top: -0.02rem;
-    inline-size: 4.88rem;
+    inline-size: var(--icono-label-thumb-cut-width);
     block-size: 1.86rem;
-    border-radius: 0 0 47% 53% / 0 0 70% 82%;
+    clip-path: path("M0 0 L78 0 C75 12 70 22 61 28 C50 36 33 36 20 29 C10 24 4 14 0 0 Z");
     box-shadow:
       inset 0 0.4rem 0.42rem rgba(31, 18, 7, 0.44),
       inset 0 -0.08rem 0.16rem rgba(255, 244, 220, 0.18),
@@ -1522,8 +1530,11 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-pull {
-    grid-column: 1 / -1;
-    justify-self: end;
+    position: absolute;
+    left: var(--icono-label-thumb-cut-left);
+    top: 0.36rem;
+    inline-size: var(--icono-label-thumb-cut-width);
+    text-align: center;
     color: color-mix(in srgb, var(--icono-label-ink) 48%, transparent);
   }
 
@@ -1627,7 +1638,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket
     .iconoplasm-tooltip-body {
-    --icono-label-info-card-pull-y: var(--icono-label-info-card-collapsed-y);
+    --icono-label-info-card-pull-y: 0px;
     filter: drop-shadow(0 -0.34rem 0.42rem rgba(42, 25, 9, 0.18));
   }
 
@@ -1639,6 +1650,11 @@
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
     .iconoplasm-tooltip-body {
     --icono-label-info-card-pull-y: 0px;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket[data-icono-mobile-expanded="true"]
+    .icono-label-mobile-pocket {
+    --icono-label-envelope-pull-y: var(--icono-label-envelope-expanded-y);
   }
 
   .icono-card--variant-lab-label.icono-card--brick {
@@ -1761,7 +1777,7 @@
        - no floating gap, no downward overlap into the slider, and no off-frame overhang
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
-    right: 0.82rem;
+    right: calc(100% - var(--icono-label-thumb-cut-left) - var(--icono-label-thumb-cut-width));
     bottom: 100%;
     z-index: 1;
     display: grid;
