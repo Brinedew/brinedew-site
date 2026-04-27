@@ -181,6 +181,11 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     /--icono-label-info-card-collapsed-y: calc\(100% - 16\.2rem\)[\s\S]*--icono-label-info-card-pull-y: var\(--icono-label-info-card-collapsed-y\)/,
     "collapsed info card must put its tab behind the sleeve thumb cut without exposing the old card-mounted vote area",
   )
+  assert.match(
+    css,
+    /\.icono-label-mobile-info-surface \{[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*z-index: 3;/,
+    "info-card physical noun must have a real sliding surface box instead of a zero-height wrapper",
+  )
   assert.equal(
     /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% -/.test(
       css,

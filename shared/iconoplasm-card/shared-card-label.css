@@ -1412,6 +1412,15 @@
     z-index: 1;
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-info-surface {
+    /* The info-card noun must be the physical sliding surface, not a zero-height wrapper
+       around an absolutely positioned dossier. Live B-475 probes check this box because a
+       named layer with no dimensions is just another sticker pretending to be a card. */
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front {
     z-index: 4;
     block-size: var(--icono-label-pocket-front-height);
