@@ -211,8 +211,8 @@ test("mobile archival expansion follows envelope edge instead of measuring dossi
 
   assert.match(
     helper,
-    /data-icono-kinematic-role=\"sliding-envelope\"/,
-    "expanded viewport follow should anchor to the moving envelope edge",
+    /data-icono-physical-noun=\"sleeve-front\"/,
+    "expanded viewport follow should anchor to the visible moving sleeve-front edge",
   )
   assert.match(helper, /window\.scrollBy\(\{ top: delta/, "expanded state should slide viewport down")
   assert.match(

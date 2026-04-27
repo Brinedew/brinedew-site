@@ -2476,7 +2476,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     // dossier offsets that make the info card itself do the moving.
     card.style.removeProperty("--icono-label-mobile-dossier-top")
     if (card.getAttribute("data-icono-mobile-expanded") !== "true") return
-    var sleeveFront = card.querySelector('[data-icono-kinematic-role="sliding-envelope"]')
+    var sleeveFront = card.querySelector('[data-icono-physical-noun="sleeve-front"]')
     if (!sleeveFront || typeof sleeveFront.getBoundingClientRect !== "function") return
     var followEnvelopeEdge = function (behavior) {
       var rect = sleeveFront.getBoundingClientRect()
