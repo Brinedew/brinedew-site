@@ -15,7 +15,7 @@ But having ability to proliferate is also very risky. Proliferative licensing is
 
 When I look at how multicellular organisms manage proliferation in somatic tissues, I see three broad strategies.
 
-1) **Frozen soma** - functionally load-bearing cell types are terminally differentiated and long-living, they can't divide to replenish the ranks. Heart, brain. The organ is resistant to cancer, but can't regenerate damage. 
+1) **Frozen soma** - functionally load-bearing cell types are terminally differentiated and long-living, they can't divide to replenish the ranks. Heart, brain. The organ is resistant to cancer, but can't regenerate damage. This brings heart disease and brain disease to the top of the old-age mortality causes, alongside cancer.
 2) **Boiling soma** - there's a small long-living stem cell niche that are licensed to constantly divide, and all their progeny are transit amplifying cells destined for quick death. Skin, gut. The organ can regenerate damage, but stem cells are cancer-prone.
 3) **Liquid soma** - the tissue is normally non-proliferative, but all of the cells in the tissue maintain the ability to proliferate upon organ damage. This is what the liver does.
 
