@@ -2478,13 +2478,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (card.getAttribute("data-icono-mobile-expanded") !== "true") return
     var sleeveFront = card.querySelector('[data-icono-kinematic-role="sliding-envelope"]')
     if (!sleeveFront || typeof sleeveFront.getBoundingClientRect !== "function") return
-    window.requestAnimationFrame(function () {
+    var followEnvelopeEdge = function (behavior) {
       var rect = sleeveFront.getBoundingClientRect()
       var targetTop = Math.round(window.innerHeight * 0.58)
       var delta = rect.top - targetTop
       if (delta > 8) {
-        window.scrollBy({ top: delta, left: 0, behavior: "smooth" })
+        window.scrollBy({ top: delta, left: 0, behavior: behavior })
       }
+    }
+    window.requestAnimationFrame(function () {
+      followEnvelopeEdge("smooth")
+      window.setTimeout(function () {
+        followEnvelopeEdge("smooth")
+      }, 320)
     })
   }
 

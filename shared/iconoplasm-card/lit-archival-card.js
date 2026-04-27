@@ -357,13 +357,6 @@ function mobilePeekTemplate(model) {
       </span>
       <span class="icono-label-mobile-peek-topline">
         <span class="icono-label-mobile-peek-kicker">full name</span>
-        <span
-          class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--closed"
-          >tap to open</span
-        >
-        <span class="icono-label-mobile-peek-instruction icono-label-mobile-peek-instruction--open"
-          >tap to close</span
-        >
       </span>
       <span class="icono-label-mobile-peek-summary">
         <span class="icono-label-mobile-peek-name">${model.fullName}</span>

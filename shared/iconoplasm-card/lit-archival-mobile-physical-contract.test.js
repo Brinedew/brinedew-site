@@ -170,6 +170,11 @@ test("mobile archival sleeve owns review controls and visible archive metadata",
     false,
     "mobile Lit info-card peek must not keep review votes on the sliding card sheet",
   )
+  assert.equal(
+    /tap to open|tap to close/i.test(lit),
+    false,
+    "mobile info-card text must not contain mutable tap-open/tap-close instructions; that copy belongs to the sleeve",
+  )
   assert.match(
     css,
     /\.icono-label-mobile-pocket-control[\s\S]*pointer-events: auto/,
@@ -210,6 +215,11 @@ test("mobile archival expansion follows envelope edge instead of measuring dossi
     "expanded viewport follow should anchor to the moving envelope edge",
   )
   assert.match(helper, /window\.scrollBy\(\{ top: delta/, "expanded state should slide viewport down")
+  assert.match(
+    helper,
+    /window\.setTimeout\(function \(\) \{[\s\S]*followEnvelopeEdge\("smooth"\)[\s\S]*\}, 320\)/,
+    "expanded viewport follow must re-measure after the moving envelope finishes its CSS transition",
+  )
   assert.equal(
     /setProperty\("--icono-label-mobile-dossier-top"/.test(helper),
     false,
@@ -228,7 +238,7 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
 
   assert.match(
     css,
-    /--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: calc\(var\(--icono-label-pocket-front-height\) - 1\.8rem\)/,
+    /--icono-label-pocket-front-height: 16\.4rem;[\s\S]*--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: calc\(var\(--icono-label-pocket-front-height\) - 1\.95rem\)/,
     "B-476 motion must use a positive envelope-frame travel distance instead of the old info-card offset",
   )
   assert.match(
@@ -263,7 +273,7 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /--icono-label-thumb-cut-left: calc\(100% - 5\.24rem\);[\s\S]*--icono-label-thumb-cut-width: 4\.88rem;[\s\S]*\.icono-label-mobile-pocket-pull \{[\s\S]*left: var\(--icono-label-thumb-cut-left\);[\s\S]*inline-size: var\(--icono-label-thumb-cut-width\)/,
+    /--icono-label-thumb-cut-left: calc\(100% - 6\.8rem\);[\s\S]*--icono-label-thumb-cut-width: 4\.88rem;[\s\S]*\.icono-label-mobile-pocket-pull \{[\s\S]*left: var\(--icono-label-thumb-cut-left\);[\s\S]*inline-size: var\(--icono-label-thumb-cut-width\)/,
     "visible gene pull label must share the thumb-cut mouth geometry instead of drifting independently",
   )
   assert.equal(
