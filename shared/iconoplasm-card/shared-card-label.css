@@ -52,6 +52,12 @@
   font-display: block;
 }
 
+@property --icono-label-info-card-pull-y {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 .icono-card--variant-lab-label,
 .iconoplasm-tooltip--variant-lab-label,
 .icono-card--variant-image-only,
@@ -1363,6 +1369,7 @@
     pointer-events: auto;
     --icono-label-pocket-front-height: 14rem;
     --icono-label-pocket-mouth-x: calc(100% - 4.28rem);
+    --icono-label-info-card-collapsed-y: calc(100% - 16.2rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket {
@@ -1432,8 +1439,7 @@
       0 -0.42rem 0.95rem -0.52rem rgba(38, 22, 8, 0.74);
   }
 
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front::before {
-    content: "";
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-thumb-cut {
     position: absolute;
     left: calc(100% - 5.24rem);
     top: -0.02rem;
@@ -1602,19 +1608,18 @@
     background: transparent;
     overflow: visible;
     overflow-anchor: none;
-    transform: translateY(
-      calc(
-        100% - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-preview-height) -
-          var(--icono-label-mobile-collapse-lift)
-      )
+    --icono-label-info-card-pull-y: calc(
+      100% - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-preview-height) -
+        var(--icono-label-mobile-collapse-lift)
     );
+    transform: translateY(var(--icono-label-info-card-pull-y));
     transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket
     .iconoplasm-tooltip-body {
+    --icono-label-info-card-pull-y: var(--icono-label-info-card-collapsed-y);
     filter: drop-shadow(0 -0.34rem 0.42rem rgba(42, 25, 9, 0.18));
-    transform: translateY(calc(100% - 16.2rem));
   }
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket
@@ -1624,7 +1629,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
     .iconoplasm-tooltip-body {
-    transform: translateY(0);
+    --icono-label-info-card-pull-y: 0px;
   }
 
   .icono-card--variant-lab-label.icono-card--brick {

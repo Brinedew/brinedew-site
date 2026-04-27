@@ -3,11 +3,12 @@ import { spawnSync } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import test from "node:test"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const appPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js")
 const cssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css")
+const runtimePath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js")
 
 async function sourceText(filePath) {
   return readFile(filePath, "utf8")
@@ -37,24 +38,80 @@ test("iconoplasm app script still parses after mobile sleeve edits", () => {
 
 test("mobile archival sleeve has visible DOM nouns in physical z-order", async () => {
   const app = await sourceText(appPath)
+  const runtime = await sourceText(runtimePath)
   const helperStart = app.indexOf("function renderMobileArchivalPhysicalPocketHtml")
   assert.notEqual(helperStart, -1, "mobile physical pocket helper must exist")
   const helperEnd = app.indexOf("function buildBrickCardMarkup", helperStart)
   assert.notEqual(helperEnd, -1, "physical pocket helper must sit before brick markup")
   const helper = app.slice(helperStart, helperEnd)
+  assert.match(
+    helper,
+    /IconoCardShared\.renderMobileArchivalPhysicalSleeveHtml\(portraitHtml, infoHtml, options\)/,
+    "app helper must delegate the physical object contract to the shared card runtime",
+  )
 
-  assertInOrder(helper, [
-    "icono-label-mobile-pocket",
-    "icono-label-mobile-pocket-back",
-    "icono-label-mobile-card-stack",
-    "icono-label-mobile-pocket-front",
+  const rendererStart = runtime.indexOf("function renderMobileArchivalPhysicalSleeveHtml")
+  assert.notEqual(rendererStart, -1, "shared runtime must own the physical sleeve renderer")
+  const rendererEnd = runtime.indexOf("function jsonScriptSafeString", rendererStart)
+  assert.notEqual(rendererEnd, -1, "physical sleeve renderer must sit near shared HTML helpers")
+  const renderer = runtime.slice(rendererStart, rendererEnd)
+
+  assertInOrder(renderer, [
+    'data-icono-physical-noun="sleeve"',
+    'data-icono-physical-noun="sleeve-back"',
+    'data-icono-physical-noun="card-stack"',
+    'data-icono-physical-noun="portrait-card"',
+    'data-icono-physical-noun="info-card"',
+    'data-icono-physical-noun="sleeve-front"',
+    'data-icono-physical-noun="thumb-cut"',
   ])
+  assert.match(
+    runtime,
+    /renderMobileArchivalPhysicalSleeveHtml: renderMobileArchivalPhysicalSleeveHtml/,
+    "shared runtime must export the physical sleeve renderer as a reusable component contract",
+  )
 
   assert.match(
     app,
     /isArchivalVariant && isMobileLabelReviewEnabled\(\)[\s\S]*renderMobileArchivalPhysicalPocketHtml\(portraitHtml, infoHtml, \{/,
     "mobile archival cards must route portrait and info surfaces into the physical pocket",
   )
+})
+
+test("shared physical sleeve renderer emits nested escaped physical surfaces", async () => {
+  delete globalThis.IconoplasmCardShared
+  await import(pathToFileURL(runtimePath).href + "?physical-contract=" + Date.now())
+  const shared = globalThis.IconoplasmCardShared
+  assert.equal(
+    typeof shared.renderMobileArchivalPhysicalSleeveHtml,
+    "function",
+    "shared runtime must expose an executable mobile physical sleeve renderer",
+  )
+
+  const html = shared.renderMobileArchivalPhysicalSleeveHtml(
+    '<div data-test-surface="portrait">portrait</div>',
+    '<div data-test-surface="info">info</div>',
+    {
+      symbol: "ERBB2",
+      fullName: "erb-b2 <unsafe> receptor",
+      voteHtml: '<button type="button">FIT</button>',
+    },
+  )
+
+  assertInOrder(html, [
+    'data-icono-physical-noun="sleeve"',
+    'data-icono-physical-noun="sleeve-back"',
+    'data-icono-physical-noun="card-stack"',
+    'data-icono-physical-noun="portrait-card"',
+    'data-test-surface="portrait"',
+    'data-icono-physical-noun="info-card"',
+    'data-test-surface="info"',
+    'data-icono-physical-noun="sleeve-front"',
+    'data-icono-physical-noun="thumb-cut"',
+    'data-icono-mobile-sleeve-vote',
+  ])
+  assert.match(html, /erb-b2 &lt;unsafe&gt; receptor/, "full gene name must be escaped")
+  assert.match(html, /ERBB2 \/ tap to pull/, "symbol pull affordance must render on sleeve")
 })
 
 test("mobile archival sleeve front is not a card pseudo-element decal", async () => {
@@ -72,13 +129,14 @@ test("mobile archival sleeve front is not a card pseudo-element decal", async ()
   )
   assert.match(
     css,
-    /\.icono-card--variant-lab-label\.icono-card--brick \.icono-label-mobile-pocket-front::before/,
-    "thumb-cut edge shadow must belong to the sleeve front layer, not to the card",
+    /\.icono-card--variant-lab-label\.icono-card--brick \.icono-label-mobile-thumb-cut/,
+    "thumb-cut edge shadow must belong to the explicit thumb-cut noun, not a card pseudo-element",
   )
 })
 
 test("mobile archival sleeve owns review controls and visible archive metadata", async () => {
   const app = await sourceText(appPath)
+  const runtime = await sourceText(runtimePath)
   const lit = await sourceText(path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js"))
   const css = await sourceText(cssPath)
 
@@ -88,12 +146,12 @@ test("mobile archival sleeve owns review controls and visible archive metadata",
     "brick mobile review votes must be passed to the physical sleeve front",
   )
   assert.match(
-    app,
-    /icono-label-mobile-pocket-name[\s\S]*esc\(fullName \|\| symbol\)/,
+    runtime,
+    /icono-label-mobile-pocket-name[\s\S]*escapeHtml\(fullName \|\| symbol\)/,
     "the physical sleeve front must render the full gene name as sleeve metadata",
   )
   assert.match(
-    app,
+    runtime,
     /data-icono-mobile-sleeve-vote[\s\S]*voteHtml/,
     "the physical sleeve front must own the live vote control slot",
   )
@@ -114,8 +172,21 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
 
   assert.match(
     css,
-    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% - 16\.2rem\)\)/,
+    /@property --icono-label-info-card-pull-y[\s\S]*syntax: "<length-percentage>"/,
+    "mobile info-card motion must use a registered tactile pull variable, not ad-hoc transform overrides",
+  )
+
+  assert.match(
+    css,
+    /--icono-label-info-card-collapsed-y: calc\(100% - 16\.2rem\)[\s\S]*--icono-label-info-card-pull-y: var\(--icono-label-info-card-collapsed-y\)/,
     "collapsed info card must put its tab behind the sleeve thumb cut without exposing the old card-mounted vote area",
+  )
+  assert.equal(
+    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% -/.test(
+      css,
+    ),
+    false,
+    "physical-pocket state must not bypass the pull-variable framework with direct transform math",
   )
   assert.match(
     css,

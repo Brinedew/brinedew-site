@@ -1852,38 +1852,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml, options) {
-    var opts = options || {}
-    var symbol = normalizedSymbol(opts.symbol || "")
-    var fullName = String(opts.fullName || symbol || "").trim()
-    var voteHtml = String(opts.voteHtml || "").trim()
     // B-474 guardrail: the mobile sleeve is a physical object, not a card-level decal.
     // Keep the noun stack visible in DOM so future edits can test it: sleeve back, two card
     // surfaces, then sleeve front with a real transparent thumb cut. If this becomes a
     // pseudo-element again, the hole cannot prove what is behind it and the old fake geometry
     // comes right back wearing a different beige hat.
-    return (
-      '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket>' +
-      '<div class="icono-label-mobile-pocket-back" aria-hidden="true"></div>' +
-      '<div class="icono-label-mobile-card-stack">' +
-      portraitHtml +
-      infoHtml +
-      "</div>" +
-      '<div class="icono-label-mobile-pocket-front">' +
-      '<div class="icono-label-mobile-pocket-label">' +
-      '<div class="icono-label-mobile-pocket-stamp">HUMAN GENE FILE</div>' +
-      '<div class="icono-label-mobile-pocket-name">' +
-      esc(fullName || symbol) +
-      "</div>" +
-      "</div>" +
-      '<div class="icono-label-mobile-pocket-control" data-icono-mobile-sleeve-vote>' +
-      voteHtml +
-      "</div>" +
-      '<div class="icono-label-mobile-pocket-pull">' +
-      (symbol ? esc(symbol) + " / " : "") +
-      "tap to pull</div>" +
-      "</div>" +
-      "</div>"
-    )
+    return IconoCardShared.renderMobileArchivalPhysicalSleeveHtml(portraitHtml, infoHtml, options)
   }
 
   function buildBrickCardMarkup(g, cardIndex) {

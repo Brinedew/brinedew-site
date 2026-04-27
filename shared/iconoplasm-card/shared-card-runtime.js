@@ -352,6 +352,41 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       .replace(/'/g, "&#39;")
   }
 
+  function renderMobileArchivalPhysicalSleeveHtml(portraitHtml, infoHtml, options) {
+    var opts = options || {}
+    var symbol = normalizedSymbol(opts.symbol || "")
+    var fullName = String(opts.fullName || symbol || "").trim()
+    var voteHtml = String(opts.voteHtml || "").trim()
+    return (
+      '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket data-icono-physical-noun="sleeve">' +
+      '<div class="icono-label-mobile-pocket-back" data-icono-physical-noun="sleeve-back" aria-hidden="true"></div>' +
+      '<div class="icono-label-mobile-card-stack" data-icono-physical-noun="card-stack">' +
+      '<div class="icono-label-mobile-portrait-surface" data-icono-physical-noun="portrait-card">' +
+      String(portraitHtml || "") +
+      "</div>" +
+      '<div class="icono-label-mobile-info-surface" data-icono-physical-noun="info-card">' +
+      String(infoHtml || "") +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-pocket-front" data-icono-physical-noun="sleeve-front">' +
+      '<div class="icono-label-mobile-thumb-cut" data-icono-physical-noun="thumb-cut" aria-hidden="true"></div>' +
+      '<div class="icono-label-mobile-pocket-label">' +
+      '<div class="icono-label-mobile-pocket-stamp">HUMAN GENE FILE</div>' +
+      '<div class="icono-label-mobile-pocket-name">' +
+      escapeHtml(fullName || symbol) +
+      "</div>" +
+      "</div>" +
+      '<div class="icono-label-mobile-pocket-control" data-icono-mobile-sleeve-vote>' +
+      voteHtml +
+      "</div>" +
+      '<div class="icono-label-mobile-pocket-pull">' +
+      (symbol ? escapeHtml(symbol) + " / " : "") +
+      "tap to pull</div>" +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function jsonScriptSafeString(value) {
     return JSON.stringify(value)
       .replace(/</g, "\\u003c")
@@ -1872,6 +1907,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     renderLabLabelPortraitMediaHtml: renderLabLabelPortraitMediaHtml,
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
     renderLabLabelSpecimenRailHtml: renderLabLabelSpecimenRailHtml,
+    renderMobileArchivalPhysicalSleeveHtml: renderMobileArchivalPhysicalSleeveHtml,
     renderLabLabelCardHtml: renderLabLabelCardHtml,
     renderLitArchivalCardHtml: renderLitArchivalCardHtml,
     renderTooltipMetaRowsHtml: renderTooltipMetaRowsHtml,
