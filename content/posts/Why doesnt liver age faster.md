@@ -41,9 +41,28 @@ As I'm writing this, I don't know the answer yet. But some hypotheses come to mi
 1) perhaps liver is accumulating mutations slower than other organs?
 2) perhaps the rulebook of liver proliferation is actually more restrictive in some sense?
 
+**Basics of liver anatomy**
+{write 5 paragraphs of anatomical and histological detail}
 
 **Hepatostat feedback**
+{write 5 paragraphs of molecular control feedback loop detail}
 
+Polyploidy as a proliferation regulator
+{write 5 paragraphs about how liver cell lineages have semi-finite length, as opposed to stem cell niches, ploidy conveyor model}
+![[image-2.png|Ploidy conveyor model. Source: https://www.nature.com/articles/nature09414]]
+
+Frozen soma has long-lived differentiated cells. Boiling soma has long-lived stem cell niche cells. But liquid soma doesn't have long-lived cells at all! Hepatocytes are under a continuous turnover, and the average replacement time seems to be around 3 years, in both young and old people.
+
+Why is it designed like that? One speculation is that the lack of a long-lived cell niche is helpful when you're doing work in the body's toxic waste dump. This makes it so that no privileged lineage can keep accumulating oncogenic mutations for very long.
+
+
+III.
+
+Basically, a toxin-clearing organ can't have the architecture of a frozen soma type, since the wear and tear pressure would gradually cull the non-dividing cellular population.
+
+And it can't have the architecture of a boiling soma type, since it's a highly spiky mutagenic pressure that would break the proliferation locks on any "privileged" cell niche.
+
+So the design that works is the liquid soma one: conditional regeneration
 
 
 Here's what chatgpt says: 
