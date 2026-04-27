@@ -1427,6 +1427,7 @@
     position: absolute;
     inset: 0;
     z-index: 3;
+    pointer-events: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front {
@@ -1629,6 +1630,7 @@
     border: 0;
     background: transparent;
     overflow: visible;
+    pointer-events: auto;
     overflow-anchor: none;
     --icono-label-info-card-pull-y: calc(
       100% - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-preview-height) -
@@ -1640,6 +1642,9 @@
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket
     .iconoplasm-tooltip-body {
+    top: calc(
+      100% - var(--icono-label-pocket-front-height) - var(--icono-label-mobile-tab-height)
+    );
     --icono-label-info-card-pull-y: 0px;
     filter: drop-shadow(0 -0.34rem 0.42rem rgba(42, 25, 9, 0.18));
   }

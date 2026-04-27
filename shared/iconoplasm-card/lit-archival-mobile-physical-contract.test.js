@@ -248,6 +248,21 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
+    /\.icono-label-mobile-info-surface \{[\s\S]*pointer-events: none;/,
+    "transparent info-card wrapper must not hide the portrait window in hit-test based probes",
+  )
+  assert.match(
+    css,
+    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*top: calc\([\s\S]*100% - var\(--icono-label-pocket-front-height\) - var\(--icono-label-mobile-tab-height\)/,
+    "collapsed physical pocket must reserve a real portrait window before the fixed info sheet begins",
+  )
+  assert.match(
+    css,
+    /\.iconoplasm-tooltip-body \{[\s\S]*pointer-events: auto;/,
+    "the actual info sheet must remain interactive after the transparent wrapper stops catching probes",
+  )
+  assert.match(
+    css,
     /--icono-label-thumb-cut-left: calc\(100% - 5\.24rem\);[\s\S]*--icono-label-thumb-cut-width: 4\.88rem;[\s\S]*\.icono-label-mobile-pocket-pull \{[\s\S]*left: var\(--icono-label-thumb-cut-left\);[\s\S]*inline-size: var\(--icono-label-thumb-cut-width\)/,
     "visible gene pull label must share the thumb-cut mouth geometry instead of drifting independently",
   )
