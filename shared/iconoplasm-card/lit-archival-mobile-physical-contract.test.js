@@ -263,8 +263,8 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*top: calc\([\s\S]*100% - var\(--icono-label-pocket-front-height\) - var\(--icono-label-mobile-tab-height\)/,
-    "collapsed physical pocket must reserve a real portrait window before the fixed info sheet begins",
+    /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*top: calc\(100% - var\(--icono-label-pocket-front-height\)\)/,
+    "collapsed physical pocket must start the fixed info sheet at the sleeve edge so dossier content is covered",
   )
   assert.match(
     css,

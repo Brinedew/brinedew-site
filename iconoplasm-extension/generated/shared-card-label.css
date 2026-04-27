@@ -1660,9 +1660,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket
     .iconoplasm-tooltip-body {
-    top: calc(
-      100% - var(--icono-label-pocket-front-height) - var(--icono-label-mobile-tab-height)
-    );
+    top: calc(100% - var(--icono-label-pocket-front-height));
     --icono-label-info-card-pull-y: 0px;
     filter: drop-shadow(0 -0.34rem 0.42rem rgba(42, 25, 9, 0.18));
   }
