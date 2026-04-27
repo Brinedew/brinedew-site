@@ -1851,6 +1851,27 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
+  function renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml) {
+    // B-474 guardrail: the mobile sleeve is a physical object, not a card-level decal.
+    // Keep the noun stack visible in DOM so future edits can test it: sleeve back, two card
+    // surfaces, then sleeve front with a real transparent thumb cut. If this becomes a
+    // pseudo-element again, the hole cannot prove what is behind it and the old fake geometry
+    // comes right back wearing a different beige hat.
+    return (
+      '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket>' +
+      '<div class="icono-label-mobile-pocket-back" aria-hidden="true"></div>' +
+      '<div class="icono-label-mobile-card-stack">' +
+      portraitHtml +
+      infoHtml +
+      "</div>" +
+      '<div class="icono-label-mobile-pocket-front" aria-hidden="true">' +
+      '<div class="icono-label-mobile-pocket-stamp">ARCHIVE SLEEVE</div>' +
+      '<div class="icono-label-mobile-pocket-pull">tap to pull</div>' +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function buildBrickCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
@@ -1920,12 +1941,72 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         metaHtml +
         "</div>" +
         "</a>"
+    var portraitHtml = isImageOnlyVariant
+      ? ""
+      : isArchivalVariant
+        ? '<div class="' +
+          portraitStateClass +
+          ' icono-label-mobile-portrait-card' +
+          (portraitUrl ? '" data-icono-lightbox>' : '">') +
+          IconoCardShared.renderLabLabelSpecimenRailHtml(labelPortraitHtml, detail || g) +
+          "</div>"
+        : '<div class="' +
+          portraitStateClass +
+          ' icono-brick-media-link"' +
+          (portraitUrl ? " data-icono-lightbox>" : ">") +
+          (portraitUrl
+            ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
+              esc(portraitFullUrl) +
+              '" data-icono-pswp-alt="' +
+              esc(g.symbol) +
+              ' blot" data-pswp-width="' +
+              dims.width +
+              '" data-pswp-height="' +
+              dims.height +
+              '" aria-label="Open full-size blot for ' +
+              esc(g.symbol) +
+              '">' +
+              '<img class="iconoplasm-tooltip-portrait-img" src="' +
+              esc(portraitUrl) +
+              '" alt="' +
+              esc(g.symbol) +
+              // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
+              // scroll show empty portrait boxes for a beat before the browser picked them up.
+              ' blot" loading="eager" decoding="async" fetchpriority="' +
+              (cardIndex < 6 ? "high" : "low") +
+              '" width="' +
+              dims.width +
+              '" height="' +
+              dims.height +
+              '">' +
+              "</button>"
+            : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
+          '<div class="iconoplasm-tooltip-portrait-fallback">' +
+          '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
+          '<div class="iconoplasm-tooltip-portrait-symbol">' +
+          esc(g.symbol) +
+          "</div>" +
+          "</div>" +
+          '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
+          "</div>"
+    var infoHtml = isImageOnlyVariant
+      ? ""
+      : '<div class="iconoplasm-tooltip-body' +
+        (isArchivalVariant ? " icono-label-mobile-info-card" : "") +
+        '">' +
+        bodyHtml +
+        "</div>"
+    var mobilePhysicalPocket =
+      isArchivalVariant && isMobileLabelReviewEnabled()
+        ? renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml)
+        : ""
     return (
       // Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Layout &
       // Space) + C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction States). Brick cards
       // are no longer one giant anchor because the compact vote control needs to be a real,
       // keyboard-focusable control instead of an invalid nested button inside a link.
       '<article class="icono-card icono-card--brick' +
+      (mobilePhysicalPocket ? " icono-card--mobile-physical-pocket" : "") +
       archivalVariantClass(cardVariant) +
       '" data-icono-index="' +
       cardIndex +
@@ -1942,52 +2023,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ';">' +
       (isImageOnlyVariant
         ? bodyHtml
-        : isArchivalVariant
-          ? '<div class="' +
-            portraitStateClass +
-            (portraitUrl ? '" data-icono-lightbox>' : '">') +
-            IconoCardShared.renderLabLabelSpecimenRailHtml(labelPortraitHtml, detail || g) +
-            "</div>"
-          : '<div class="' +
-            portraitStateClass +
-            ' icono-brick-media-link"' +
-            (portraitUrl ? " data-icono-lightbox>" : ">") +
-            (portraitUrl
-              ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
-                esc(portraitFullUrl) +
-                '" data-icono-pswp-alt="' +
-                esc(g.symbol) +
-                ' blot" data-pswp-width="' +
-                dims.width +
-                '" data-pswp-height="' +
-                dims.height +
-                '" aria-label="Open full-size blot for ' +
-                esc(g.symbol) +
-                '">' +
-                '<img class="iconoplasm-tooltip-portrait-img" src="' +
-                esc(portraitUrl) +
-                '" alt="' +
-                esc(g.symbol) +
-                // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
-                // scroll show empty portrait boxes for a beat before the browser picked them up.
-                ' blot" loading="eager" decoding="async" fetchpriority="' +
-                (cardIndex < 6 ? "high" : "low") +
-                '" width="' +
-                dims.width +
-                '" height="' +
-                dims.height +
-                '">' +
-                "</button>"
-              : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
-            '<div class="iconoplasm-tooltip-portrait-fallback">' +
-            '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
-            '<div class="iconoplasm-tooltip-portrait-symbol">' +
-            esc(g.symbol) +
-            "</div>" +
-            "</div>" +
-            '<div class="iconoplasm-tooltip-portrait-fade"></div>' +
-            "</div>") +
-      (isImageOnlyVariant ? "" : '<div class="iconoplasm-tooltip-body">' + bodyHtml + "</div>") +
+        : mobilePhysicalPocket || portraitHtml + infoHtml) +
       (isLitCardVariant(cardVariant)
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
@@ -2142,6 +2178,21 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         "</div>" +
         "</div>" +
         mobileRowsHtml
+    var heroInfoMarkup = '<div class="iconoplasm-tooltip-body' +
+      (isArchivalVariant ? " icono-label-mobile-info-card" : "") +
+      '">' +
+      bodyHtml +
+      "</div>"
+    var heroPhysicalPocket =
+      heroMobileReview && isArchivalVariant
+        ? renderMobileArchivalPhysicalPocketHtml(
+            portraitMarkup.replace(
+              'class="iconoplasm-tooltip-portrait',
+              'class="iconoplasm-tooltip-portrait icono-label-mobile-portrait-card',
+            ),
+            heroInfoMarkup,
+          )
+        : ""
 
     return (
       // B-471: drop `brick-static` on mobile so wireMobileLabelCard
@@ -2150,6 +2201,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       // don't want to expand; the hero is the page, so it should expand.
       '<article class="icono-card icono-card--brick' +
       (heroMobileReview ? "" : " icono-card--brick-static") +
+      (heroPhysicalPocket ? " icono-card--mobile-physical-pocket" : "") +
       ' icono-gene-lead-card' +
       archivalVariantClass(cardVariant) +
       '" style="--width:' +
@@ -2163,7 +2215,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '">' +
       (isImageOnlyVariant
         ? bodyHtml
-        : portraitMarkup + '<div class="iconoplasm-tooltip-body">' + bodyHtml + "</div>") +
+        : heroPhysicalPocket || portraitMarkup + heroInfoMarkup) +
       "</article>"
     )
   }

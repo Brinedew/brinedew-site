@@ -1353,27 +1353,73 @@
       rotate(var(--icono-label-mobile-swipe-rotate, 0deg));
   }
 
-  .icono-card--variant-lab-label.icono-card--brick::after {
-    /* B-474 physical model: this is the fixed kraft sleeve front, not a second
-       card. The existing dossier remains one printed paper surface and slides behind
-       this layer. The notch is transparent sleeve material, so the paper/card beneath
-       is what appears inside the thumb hole. Do not move this onto
-       .iconoplasm-tooltip-body; that would make the sleeve slide with the card again. */
-    content: "";
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket {
+    /* B-474 physical contract: page background < sleeve back < portrait/info cards < sleeve
+       front. Do not replace this with .icono-card::after or a decorative kraft blob; tests rely
+       on these visible nouns because screenshot vibes already failed this design twice. */
     position: absolute;
-    z-index: 4;
+    inset: 0;
+    z-index: 1;
+    overflow: clip;
+    isolation: isolate;
+    pointer-events: auto;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket {
+    block-size: calc(100dvh - 1.25rem);
+    max-block-size: calc(100dvh - 1.25rem);
+    padding-bottom: 0;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket
+    .icono-label-mobile-pocket {
+    block-size: calc(100dvh - 1.25rem);
+    max-block-size: calc(100dvh - 1.25rem);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-back,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front {
+    position: absolute;
     inset-inline: 0;
     bottom: 0;
-    block-size: 2.62rem;
     pointer-events: none;
     background:
-      linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.06) 15%, transparent 32%),
       radial-gradient(circle at 18% 34%, rgba(255, 255, 255, 0.24), transparent 28%),
       linear-gradient(
         180deg,
         color-mix(in srgb, var(--icono-label-paper) 48%, #bd9366 52%) 0%,
         color-mix(in srgb, var(--icono-label-paper) 42%, #aa8059 58%) 100%
       );
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-back {
+    z-index: 0;
+    top: calc(var(--icono-label-mobile-portrait-pad) + 0.72rem);
+    opacity: 0.72;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-card-stack {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front {
+    z-index: 4;
+    block-size: 2.62rem;
+    padding: 0.42rem 0.82rem 0.36rem;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: end;
+    gap: 0.8rem;
+    color: color-mix(in srgb, var(--icono-label-ink) 52%, transparent);
+    font-family: var(--icono-label-type);
+    font-size: 0.46rem;
+    letter-spacing: 0.14em;
+    line-height: 1;
+    text-transform: uppercase;
     -webkit-mask-image: radial-gradient(
       ellipse 2.28rem 0.82rem at calc(100% - 2.7rem) 0,
       transparent 0 96%,
@@ -1388,6 +1434,29 @@
       inset 0 3px 5px -1px rgba(0, 0, 0, 0.34),
       inset 0 1px 0 rgba(255, 255, 255, 0.16),
       0 -0.22rem 0.72rem -0.42rem rgba(0, 0, 0, 0.64);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front::before {
+    content: "";
+    position: absolute;
+    left: calc(100% - 4.98rem);
+    top: -0.08rem;
+    inline-size: 4.56rem;
+    block-size: 1.64rem;
+    border-radius: 0 0 999px 999px;
+    box-shadow:
+      inset 0 0.28rem 0.34rem rgba(35, 20, 8, 0.34),
+      0 0.04rem 0 rgba(255, 244, 220, 0.24);
+    pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-stamp,
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-pull {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"] {
