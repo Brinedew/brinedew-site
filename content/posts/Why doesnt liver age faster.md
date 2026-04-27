@@ -42,6 +42,10 @@ As I'm writing this, I don't know the answer yet. But some hypotheses come to mi
 2) perhaps the rulebook of liver proliferation is actually more restrictive in some sense?
 
 
+**Hepatostat feedback**
+
+
+
 Here's what chatgpt says: 
 The liver is not immortal. It loses volume, blood flow, drug-metabolism capacity, bile handling, and regenerative speed with age. But compared with blood/immune system, skin, gut, skeletal muscle, kidney, ovary/testis, thymus, and probably pancreas, its **fold-collapse in useful function is unusually small**. Older donor livers regenerate worse than young donor livers, but not catastrophically: in one 2025 living-donor hepatectomy cohort, younger donors recovered about 95.8% of original liver volume by 6 months, while donors ≥55 averaged about 87.9%. That is impaired, but the ratio is not “organ system fell off a cliff.” ([astr.or.kr](https://www.astr.or.kr/DOIx.php?id=10.4174%2Fastr.2025.109.1.27 ":: astr.or.kr :: Annals of Surgical Treatment and Research"))
 
