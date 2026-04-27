@@ -276,6 +276,11 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     /--icono-label-thumb-cut-left: calc\(100% - 6\.8rem\);[\s\S]*--icono-label-thumb-cut-width: 4\.88rem;[\s\S]*\.icono-label-mobile-pocket-pull \{[\s\S]*left: var\(--icono-label-thumb-cut-left\);[\s\S]*inline-size: var\(--icono-label-thumb-cut-width\)/,
     "visible gene pull label must share the thumb-cut mouth geometry instead of drifting independently",
   )
+  assert.match(
+    css,
+    /\.icono-label-mobile-peek-tab \{[\s\S]*right: calc\([\s\S]*100% - var\(--icono-label-thumb-cut-left\) - var\(--icono-label-thumb-cut-width\) - 1\.56rem[\s\S]*\)/,
+    "visible gene tab must share the thumb-cut center rather than matching the aperture's right edge",
+  )
   assert.equal(
     /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% -/.test(
       css,

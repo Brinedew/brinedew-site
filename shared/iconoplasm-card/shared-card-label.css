@@ -1798,7 +1798,9 @@
        - no floating gap, no downward overlap into the slider, and no off-frame overhang
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
-    right: calc(100% - var(--icono-label-thumb-cut-left) - var(--icono-label-thumb-cut-width));
+    right: calc(
+      100% - var(--icono-label-thumb-cut-left) - var(--icono-label-thumb-cut-width) - 1.56rem
+    );
     bottom: 100%;
     z-index: 1;
     display: grid;
