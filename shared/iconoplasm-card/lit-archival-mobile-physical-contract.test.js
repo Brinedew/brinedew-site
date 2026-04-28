@@ -290,8 +290,8 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /\.icono-label-mobile-pocket-front \{[\s\S]*mask-image: url\("data:image\/svg\+xml[\s\S]*fill-rule='evenodd'[\s\S]*M0 0 H1000 V420 H0 Z M704 0 L862 0 C854 30/,
-    "thumb cut must be a real alpha cutout in the sleeve mask, not a black shape that can render opaque",
+    /\.icono-label-mobile-pocket-front \{[\s\S]*mask-image: url\("data:image\/svg\+xml[\s\S]*viewBox='0 0 247 262'[\s\S]*fill-rule='evenodd'[\s\S]*M0 0 H247 V262 H0 Z M139 0 L217 0 C214 12/,
+    "thumb cut must be a real alpha cutout matched to the rendered sleeve geometry, not an over-scaled gouge",
   )
   assert.match(
     css,

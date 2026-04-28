@@ -1457,8 +1457,8 @@
         color-mix(in srgb, var(--icono-label-paper) 22%, #b18458 78%) 0%,
         color-mix(in srgb, var(--icono-label-paper) 18%, #9f744d 82%) 100%
       );
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H1000 V420 H0 Z M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H1000 V420 H0 Z M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 247 262' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H247 V262 H0 Z M139 0 L217 0 C214 12 209 23 200 29 C189 37 172 37 159 30 C149 25 143 14 139 0 Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 247 262' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H247 V262 H0 Z M139 0 L217 0 C214 12 209 23 200 29 C189 37 172 37 159 30 C149 25 143 14 139 0 Z'/%3E%3C/svg%3E");
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
     filter:
