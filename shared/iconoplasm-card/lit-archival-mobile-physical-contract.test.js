@@ -238,8 +238,8 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
 
   assert.match(
     css,
-    /--icono-label-pocket-front-height: 16\.4rem;[\s\S]*--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: calc\(var\(--icono-label-pocket-front-height\) - 1\.95rem\)/,
-    "B-476 motion must use a positive envelope-frame travel distance instead of the old info-card offset",
+    /--icono-label-pocket-front-height: 16\.4rem;[\s\S]*--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: var\(--icono-label-pocket-front-height\)/,
+    "B-476 motion must slide the envelope fully below the fixed info sheet instead of stopping short",
   )
   assert.match(
     css,
@@ -305,8 +305,23 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /\.icono-label-mobile-pocket-front \{[\s\S]*filter:[\s\S]*drop-shadow/,
-    "envelope front must use shape-aware drop-shadow so the thumb hole affects the cast shadow",
+    /\.icono-label-mobile-pocket-front \{[\s\S]*filter:[\s\S]*drop-shadow\(0 0\.24rem[\s\S]*drop-shadow\(0 0\.82rem/,
+    "envelope front must cast a positive-y shape-aware shadow onto lower layers, not upward onto itself",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-front \{[\s\S]*box-shadow: none;/,
+    "the envelope face must not use inset/self shadow chrome when the physical shadow belongs on lower layers",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-thumb-cut \{[\s\S]*box-shadow: none;/,
+    "the thumb aperture must not paint a fake filled cutout over the transparent mask hole",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-control[\s\S]*\.icono-vote-btn \{[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*box-shadow: none;/,
+    "sleeve votes must read as printed review marks rather than boxed web controls",
   )
   assert.match(
     css,

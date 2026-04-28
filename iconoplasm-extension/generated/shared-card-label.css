@@ -1373,7 +1373,7 @@
     --icono-label-pocket-mouth-x: calc(100% - 4.28rem);
     --icono-label-info-card-collapsed-y: calc(100% - 16.2rem);
     --icono-label-envelope-pull-y: 0px;
-    --icono-label-envelope-expanded-y: calc(var(--icono-label-pocket-front-height) - 1.95rem);
+    --icono-label-envelope-expanded-y: var(--icono-label-pocket-front-height);
     --icono-label-thumb-cut-left: calc(100% - 6.8rem);
     --icono-label-thumb-cut-width: 4.88rem;
   }
@@ -1437,7 +1437,7 @@
     box-sizing: border-box;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: min-content 1fr min-content;
+    grid-template-rows: min-content min-content 1fr;
     align-items: start;
     gap: 0.34rem;
     color: color-mix(in srgb, var(--icono-label-ink) 52%, transparent);
@@ -1452,11 +1452,9 @@
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
     filter:
-      drop-shadow(0 -0.28rem 0.16rem rgba(38, 22, 8, 0.34))
-      drop-shadow(0 -0.72rem 0.62rem rgba(38, 22, 8, 0.2));
-    box-shadow:
-      inset 0 0.62rem 0.72rem -0.28rem rgba(42, 24, 7, 0.42),
-      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      drop-shadow(0 0.24rem 0.18rem rgba(38, 22, 8, 0.32))
+      drop-shadow(0 0.82rem 0.7rem rgba(38, 22, 8, 0.18));
+    box-shadow: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-thumb-cut {
@@ -1466,10 +1464,7 @@
     inline-size: var(--icono-label-thumb-cut-width);
     block-size: 1.86rem;
     clip-path: path("M0 0 L78 0 C75 12 70 22 61 28 C50 36 33 36 20 29 C10 24 4 14 0 0 Z");
-    box-shadow:
-      inset 0 0.4rem 0.42rem rgba(31, 18, 7, 0.44),
-      inset 0 -0.08rem 0.16rem rgba(255, 244, 220, 0.18),
-      0 0.06rem 0 rgba(255, 244, 220, 0.22);
+    box-shadow: none;
     pointer-events: none;
   }
 
@@ -1524,7 +1519,8 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-control {
     justify-self: stretch;
-    align-self: end;
+    align-self: start;
+    margin-top: 0.26rem;
     min-width: 0;
     pointer-events: auto;
     position: relative;
@@ -1574,16 +1570,17 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-mobile-pocket-control
     .icono-vote-btn {
-    min-height: 1.22rem;
-    padding: 0.12rem 0.28rem 0.04rem;
-    border: 1px solid color-mix(in srgb, var(--icono-label-ink) 24%, transparent);
-    background: color-mix(in srgb, var(--icono-label-paper) 36%, transparent);
+    min-height: 0.96rem;
+    padding: 0.08rem 0.18rem 0.02rem;
+    border: 0;
+    background: transparent;
     color: color-mix(in srgb, var(--icono-label-ink) 86%, transparent);
     font-size: 0.56rem;
     letter-spacing: 0.14em;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 246, 224, 0.24),
-      0 0.06rem 0.12rem rgba(54, 32, 12, 0.12);
+    box-shadow: none;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.14rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"] {
