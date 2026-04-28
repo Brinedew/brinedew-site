@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
+import { existsSync, statSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import test from "node:test"
@@ -254,6 +255,7 @@ test("mobile archival expansion follows envelope edge instead of measuring dossi
 test("mobile archival collapse and shadows encode physical receivers", async () => {
   const css = await sourceText(cssPath)
   const runtime = await sourceText(runtimePath)
+  const atlasDir = path.join(repoRoot, "quartz", "static", "iconoplasm", "materials", "mobile-pocket")
 
   assert.match(
     css,
@@ -323,20 +325,57 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     false,
     "physical-pocket state must not bypass the pull-variable framework with direct transform math",
   )
-  assert.match(
-    runtime,
-    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 24 C34 18 76 23 116 13/,
-    "sleeve face must be an inline SVG paper asset with procedural grain and a soft slanted pocket mouth",
-  )
-  assert.match(
-    runtime,
-    /M247 128 C232 134 226 148 226 162 C226 178 234 189 247 194 Z/,
-    "soft pocket must cut the thumb affordance from the right edge, not place rails over the portrait",
+  assert.match(runtime, /data-icono-material-system="baked-paper-atlas"/, "sleeve face must use a baked material atlas, not runtime SVG filter chrome")
+  for (const asset of [
+    "pocket-card-contact-shadow.png",
+    "pocket-lip-shadow.png",
+    "pocket-front-albedo.webp",
+    "pocket-front-ao.webp",
+    "pocket-front-edgewear.png",
+    "pocket-front-stains.webp",
+    "thumb-hole-inner-shadow.png",
+  ]) {
+    assert.match(runtime, new RegExp(`/static/iconoplasm/materials/mobile-pocket/${asset}`), `${asset} must be a runtime material layer`)
+  }
+  assert.equal(
+    /icono-label-mobile-pocket-paper|feTurbulence|feDisplacementMap/.test(runtime + css),
+    false,
+    "mobile pocket material must not regress to inline SVG turbulence or the old paper-box class",
   )
   assert.equal(
     /icono-label-mobile-pocket-rail/.test(runtime + css),
     false,
     "side rails must not exist; they can layer above the portrait and break the soft-pocket metaphor",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-material \{[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*pointer-events: none;/,
+    "baked material atlas must sit as a non-interactive physical layer inside the sleeve front",
+  )
+  assert.match(
+    css,
+    /\.icono-pocket-layer \{[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*object-fit: fill;/,
+    "material atlas layers must share one exact sleeve geometry instead of independently measured decals",
+  )
+  assert.match(
+    css,
+    /\.icono-pocket-card-contact-shadow \{[\s\S]*z-index: 0;[\s\S]*mix-blend-mode: multiply;/,
+    "card receiver shadow must live below the visible paper layer",
+  )
+  assert.match(
+    css,
+    /\.icono-pocket-lip-shadow \{[\s\S]*z-index: 1;[\s\S]*mix-blend-mode: multiply;/,
+    "mouth contact shadow must live below the albedo layer so it reads as occlusion, not cream outline",
+  )
+  assert.match(
+    css,
+    /\.icono-pocket-albedo \{[\s\S]*z-index: 3;/,
+    "paper albedo must be the base visible material layer above receiver shadows",
+  )
+  assert.match(
+    css,
+    /\.icono-pocket-hole-shadow \{[\s\S]*z-index: 7;/,
+    "thumb-hole inner shadow must be the top material channel for the cut edge",
   )
   assert.match(
     css,
@@ -349,9 +388,9 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     "thumb-cut edge must not regress to a computer-clean elliptical border-radius",
   )
   assert.match(
-    css,
-    /\.icono-label-mobile-pocket-paper \{[\s\S]*filter:[\s\S]*drop-shadow\(0\.1rem 0\.22rem[\s\S]*drop-shadow\(0\.24rem 0\.78rem/,
-    "the SVG sleeve asset must cast a positive-y shape-aware shadow onto lower layers, not upward onto itself",
+    runtime,
+    /icono-pocket-card-contact-shadow[\s\S]*pocket-card-contact-shadow\.png/,
+    "the material atlas must include an explicit lower-layer receiver shadow instead of sleeve self-shadow",
   )
   assert.match(
     css,
@@ -388,4 +427,20 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-portrait \{[\s\S]*filter: drop-shadow/,
     "the portrait/blot card must have its own paper-depth shadow receiver instead of relying on sleeve self-shadow",
   )
+  for (const asset of [
+    "pocket-front-albedo.webp",
+    "pocket-front-alpha.png",
+    "pocket-front-height.png",
+    "pocket-front-ao.webp",
+    "pocket-front-edgewear.png",
+    "pocket-front-stains.webp",
+    "pocket-lip-shadow.png",
+    "pocket-card-contact-shadow.png",
+    "thumb-hole-inner-shadow.png",
+    "pocket-debug-contact-zones.png",
+  ]) {
+    const assetPath = path.join(atlasDir, asset)
+    assert.ok(existsSync(assetPath), `${asset} must be generated into the public material atlas`)
+    assert.ok(statSync(assetPath).size > 120, `${asset} must be a non-empty generated material asset`)
+  }
 })
