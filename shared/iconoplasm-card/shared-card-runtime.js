@@ -357,6 +357,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var symbol = normalizedSymbol(opts.symbol || "")
     var fullName = String(opts.fullName || symbol || "").trim()
     var voteHtml = String(opts.voteHtml || "").trim()
+    var materialId = "icono-mobile-sleeve-paper-" + (symbol || "gene").toLowerCase().replace(/[^a-z0-9_-]/g, "-")
     return (
       '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket data-icono-physical-noun="sleeve" data-icono-sleeve-kinematics="fixed-cards-moving-envelope">' +
       '<div class="icono-label-mobile-pocket-back" data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope" aria-hidden="true"></div>' +
@@ -369,6 +370,21 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       "</div>" +
       "</div>" +
       '<div class="icono-label-mobile-pocket-front" data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope">' +
+      '<svg class="icono-label-mobile-pocket-paper" viewBox="0 0 247 262" preserveAspectRatio="none" focusable="false" aria-hidden="true">' +
+      '<defs><filter id="' +
+      materialId +
+      '" x="-6%" y="-6%" width="112%" height="118%" color-interpolation-filters="sRGB">' +
+      '<feTurbulence type="fractalNoise" baseFrequency="0.72 0.18" numOctaves="4" seed="17" result="grain"></feTurbulence>' +
+      '<feColorMatrix in="grain" type="matrix" values="0.22 0 0 0 0.68 0 0.2 0 0 0.5 0 0 0.16 0 0.32 0 0 0 0.24 0" result="paperNoise"></feColorMatrix>' +
+      '<feBlend in="SourceGraphic" in2="paperNoise" mode="multiply" result="paperTexture"></feBlend>' +
+      '<feTurbulence type="turbulence" baseFrequency="0.018 0.12" numOctaves="2" seed="31" result="warp"></feTurbulence>' +
+      '<feDisplacementMap in="paperTexture" in2="warp" scale="0.75" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>' +
+      '</filter></defs>' +
+      '<path class="icono-label-mobile-pocket-paper-face" fill-rule="evenodd" d="M0 0 H247 V262 H0 Z M149 0 L205 0 C203 8 199 14 193 17 C183 22 169 21 159 16 C154 12 150 7 149 0 Z" filter="url(#' +
+      materialId +
+      ')"></path>' +
+      '<path class="icono-label-mobile-pocket-paper-lip" d="M6 14 C52 10 101 12 145 9 C179 7 214 9 241 13"></path>' +
+      '</svg>' +
       '<div class="icono-label-mobile-thumb-cut" data-icono-physical-noun="thumb-cut" data-icono-kinematic-role="transparent-aperture" aria-hidden="true"></div>' +
       '<div class="icono-label-mobile-pocket-label">' +
       '<div class="icono-label-mobile-pocket-stamp">HUMAN GENE FILE</div>' +

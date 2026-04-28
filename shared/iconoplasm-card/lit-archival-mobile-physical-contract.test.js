@@ -229,6 +229,7 @@ test("mobile archival expansion follows envelope edge instead of measuring dossi
 
 test("mobile archival collapse and shadows encode physical receivers", async () => {
   const css = await sourceText(cssPath)
+  const runtime = await sourceText(runtimePath)
 
   assert.match(
     css,
@@ -289,13 +290,13 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     "physical-pocket state must not bypass the pull-variable framework with direct transform math",
   )
   assert.match(
-    css,
-    /\.icono-label-mobile-pocket-front \{[\s\S]*mask-image: url\("data:image\/svg\+xml[\s\S]*viewBox='0 0 247 262'[\s\S]*fill-rule='evenodd'[\s\S]*M0 0 H247 V262 H0 Z M139 0 L217 0 C214 12/,
-    "thumb cut must be a real alpha cutout matched to the rendered sleeve geometry, not an over-scaled gouge",
+    runtime,
+    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 0 H247 V262 H0 Z M149 0 L205 0 C203 8/,
+    "sleeve face must be an inline SVG paper asset with procedural grain and a real even-odd punched aperture",
   )
   assert.match(
     css,
-    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M0 0 L78 0 C75 12/,
+    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M10 0 L66 0 C64 8/,
     "visible thumb-cut edge must use the same punched silhouette as the transparent aperture",
   )
   assert.equal(
@@ -305,8 +306,8 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /\.icono-label-mobile-pocket-front \{[\s\S]*filter:[\s\S]*drop-shadow\(0 0\.24rem[\s\S]*drop-shadow\(0 0\.82rem/,
-    "envelope front must cast a positive-y shape-aware shadow onto lower layers, not upward onto itself",
+    /\.icono-label-mobile-pocket-paper \{[\s\S]*filter:[\s\S]*drop-shadow\(0\.1rem 0\.22rem[\s\S]*drop-shadow\(0\.24rem 0\.78rem/,
+    "the SVG sleeve asset must cast a positive-y shape-aware shadow onto lower layers, not upward onto itself",
   )
   assert.match(
     css,

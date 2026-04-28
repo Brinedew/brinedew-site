@@ -1447,26 +1447,38 @@
     line-height: 1;
     text-transform: uppercase;
     pointer-events: none;
-    background:
-      repeating-linear-gradient(
-        92deg,
-        rgba(72, 43, 18, 0.08) 0 1px,
-        transparent 1px 9px
-      ),
-      radial-gradient(circle at 18% 34%, rgba(255, 255, 255, 0.18), transparent 28%),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--icono-label-paper) 22%, #b18458 78%) 0%,
-        color-mix(in srgb, var(--icono-label-paper) 18%, #9f744d 82%) 100%
-      );
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 247 262' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H247 V262 H0 Z M139 0 L217 0 C214 12 209 23 200 29 C189 37 172 37 159 30 C149 25 143 14 139 0 Z'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 247 262' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H247 V262 H0 Z M139 0 L217 0 C214 12 209 23 200 29 C189 37 172 37 159 30 C149 25 143 14 139 0 Z'/%3E%3C/svg%3E");
-    -webkit-mask-size: 100% 100%;
-    mask-size: 100% 100%;
-    filter:
-      drop-shadow(0 0.24rem 0.18rem rgba(38, 22, 8, 0.32))
-      drop-shadow(0 0.82rem 0.7rem rgba(38, 22, 8, 0.18));
+    background: transparent;
+    filter: none;
     box-shadow: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-paper {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    overflow: visible;
+    color: color-mix(in srgb, var(--icono-label-paper) 18%, #a8794d 82%);
+    filter:
+      drop-shadow(0.1rem 0.22rem 0.2rem rgba(63, 38, 16, 0.28))
+      drop-shadow(0.24rem 0.78rem 0.78rem rgba(63, 38, 16, 0.16));
+    pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-paper-face {
+    fill: currentColor;
+    stroke: rgba(72, 43, 18, 0.18);
+    stroke-width: 0.8;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-paper-lip {
+    fill: none;
+    stroke: rgba(255, 246, 224, 0.28);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-thumb-cut {
@@ -1475,35 +1487,22 @@
     top: -0.02rem;
     inline-size: var(--icono-label-thumb-cut-width);
     block-size: 1.86rem;
-    clip-path: path("M0 0 L78 0 C75 12 70 22 61 28 C50 36 33 36 20 29 C10 24 4 14 0 0 Z");
+    clip-path: path("M10 0 L66 0 C64 8 60 14 54 17 C44 22 30 21 20 16 C15 12 11 7 10 0 Z");
     box-shadow: none;
     pointer-events: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front::before {
-    content: "";
-    position: absolute;
-    inset-inline: 0.46rem;
-    top: 0.28rem;
-    block-size: 0.72rem;
-    border-block-start: 1px solid rgba(255, 246, 224, 0.28);
-    border-block-end: 1px solid rgba(55, 32, 12, 0.16);
-    box-shadow: 0 0.28rem 0.28rem rgba(42, 24, 7, 0.12);
-    opacity: 0.9;
-    pointer-events: none;
+    content: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-front::after {
-    content: "";
-    position: absolute;
-    inset: 2.1rem 0.72rem 0.72rem;
-    border-block-start: 1px dashed color-mix(in srgb, var(--icono-label-ink) 16%, transparent);
-    border-block-end: 1px dashed color-mix(in srgb, var(--icono-label-ink) 10%, transparent);
-    opacity: 0.48;
-    pointer-events: none;
+    content: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-label {
+    position: relative;
+    z-index: 1;
     display: block;
     justify-self: start;
     align-self: start;
