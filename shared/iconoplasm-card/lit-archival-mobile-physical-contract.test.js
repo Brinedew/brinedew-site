@@ -111,6 +111,8 @@ test("shared physical sleeve renderer emits nested escaped physical surfaces", a
   assertInOrder(html, [
     'data-icono-sleeve-kinematics="fixed-cards-moving-envelope"',
     'data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope"',
+    'icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--left',
+    'icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--right',
     'data-icono-physical-noun="card-stack" data-icono-kinematic-role="fixed-card-stack"',
     'data-icono-physical-noun="portrait-card"',
     'data-test-surface="portrait"',
@@ -307,8 +309,13 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /\.icono-label-mobile-peek-tab-symbol \{[\s\S]*transform: translateY\(1\.92rem\);/,
-    "visible gene symbol must sit optically inside the thumb aperture, not above the punched opening",
+    /\.icono-label-mobile-peek-tab \{[\s\S]*bottom: calc\(100% - 1\.04rem\);/,
+    "gene tab must tuck behind the sleeve lip instead of floating above the aperture",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-peek-tab-symbol \{[\s\S]*transform: translateY\(0\.78rem\);/,
+    "visible gene symbol must sit on the tucked tab card, not be dragged down as loose text",
   )
   assert.equal(
     /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% -/.test(
@@ -319,13 +326,23 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     runtime,
-    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 0 H247 V262 H0 Z M145 0 C147 6/,
-    "sleeve face must be an inline SVG paper asset with procedural grain and a real even-odd punched aperture",
+    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 0 H247 V262 H0 Z M126 0 C131 24 145 36/,
+    "sleeve face must be an inline SVG paper asset with procedural grain and a deep circular punched aperture",
+  )
+  assert.match(
+    runtime,
+    /icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--left[\s\S]*icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--right/,
+    "physical pocket must include side rails; the reference is a sleeve holder, not a flat bottom overlay",
   )
   assert.match(
     css,
-    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M4 0 C6 6/,
-    "visible thumb-cut edge must use the same punched silhouette as the transparent aperture",
+    /\.icono-label-mobile-pocket-rail \{[\s\S]*transform: translateY\(var\(--icono-label-envelope-pull-y\)\)/,
+    "side rails must move with the envelope instead of becoming static decorative borders",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M0 0 C6 24/,
+    "visible thumb-cut edge must use the same deep circular scoop as the transparent aperture",
   )
   assert.equal(
     /border-radius:/.test(cssBlockFor(css, ".icono-label-mobile-thumb-cut")),
