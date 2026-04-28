@@ -380,7 +380,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '<feTurbulence type="turbulence" baseFrequency="0.018 0.12" numOctaves="2" seed="31" result="warp"></feTurbulence>' +
       '<feDisplacementMap in="paperTexture" in2="warp" scale="0.75" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>' +
       '</filter></defs>' +
-      '<path class="icono-label-mobile-pocket-paper-face" fill-rule="evenodd" d="M0 0 H247 V262 H0 Z M149 0 L205 0 C203 8 199 14 193 17 C183 22 169 21 159 16 C154 12 150 7 149 0 Z" filter="url(#' +
+      '<path class="icono-label-mobile-pocket-paper-face" fill-rule="evenodd" d="M0 0 H247 V262 H0 Z M145 0 C147 6 151 11 157 14 C168 19 185 20 196 14 C204 10 209 5 211 0 Z" filter="url(#' +
       materialId +
       ')"></path>' +
       '<path class="icono-label-mobile-pocket-paper-lip" d="M6 14 C52 10 101 12 145 9 C179 7 214 9 241 13"></path>' +

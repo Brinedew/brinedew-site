@@ -1369,13 +1369,13 @@
     overflow: clip;
     isolation: isolate;
     pointer-events: auto;
-    --icono-label-pocket-front-height: 16.4rem;
+    --icono-label-pocket-front-height: 15.8rem;
     --icono-label-pocket-mouth-x: calc(100% - 4.28rem);
     --icono-label-info-card-collapsed-y: calc(100% - 16.2rem);
     --icono-label-envelope-pull-y: 0px;
     --icono-label-envelope-expanded-y: var(--icono-label-pocket-front-height);
-    --icono-label-thumb-cut-left: calc(100% - 6.8rem);
-    --icono-label-thumb-cut-width: 4.88rem;
+    --icono-label-thumb-cut-left: calc(100% - 6.6rem);
+    --icono-label-thumb-cut-width: 4.72rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket {
@@ -1487,8 +1487,8 @@
     left: var(--icono-label-thumb-cut-left);
     top: -0.02rem;
     inline-size: var(--icono-label-thumb-cut-width);
-    block-size: 1.86rem;
-    clip-path: path("M10 0 L66 0 C64 8 60 14 54 17 C44 22 30 21 20 16 C15 12 11 7 10 0 Z");
+    block-size: 1.42rem;
+    clip-path: path("M4 0 C6 6 10 11 16 14 C27 19 44 20 55 14 C63 10 68 5 70 0 Z");
     box-shadow: none;
     pointer-events: none;
   }
@@ -1509,7 +1509,7 @@
     align-self: start;
     max-width: calc(100% - 0.8rem);
     min-width: 0;
-    margin-top: 3.06rem;
+    margin-top: 1.64rem;
     padding: 0.1rem 0.12rem 0.02rem;
     border: 0;
     background: transparent;
@@ -1532,7 +1532,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-control {
     justify-self: stretch;
     align-self: start;
-    margin-top: 0.26rem;
+    margin-top: 0.18rem;
     min-width: 0;
     pointer-events: auto;
     position: relative;
@@ -1559,8 +1559,8 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-pull {
     position: absolute;
-    right: 0.96rem;
-    bottom: 0.74rem;
+    right: 0.88rem;
+    bottom: 0.58rem;
     inline-size: min(9.8rem, calc(100% - 1.92rem));
     text-align: right;
     color: color-mix(in srgb, var(--icono-label-ink) 34%, transparent);
@@ -1586,7 +1586,7 @@
     border: 0;
     background: transparent;
     color: color-mix(in srgb, var(--icono-label-ink) 86%, transparent);
-    font-size: 0.56rem;
+    font-size: 0.52rem;
     letter-spacing: 0.14em;
     box-shadow: none;
     text-decoration: underline;

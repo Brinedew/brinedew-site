@@ -250,8 +250,8 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
 
   assert.match(
     css,
-    /--icono-label-pocket-front-height: 16\.4rem;[\s\S]*--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: var\(--icono-label-pocket-front-height\)/,
-    "B-476 motion must slide the envelope fully below the fixed info sheet instead of stopping short",
+    /--icono-label-pocket-front-height: 15\.8rem;[\s\S]*--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: var\(--icono-label-pocket-front-height\)/,
+    "B-476 motion must slide the envelope fully below the fixed info sheet without locking in the old oversized 16.4rem blank slab",
   )
   assert.match(
     css,
@@ -285,7 +285,7 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /\.icono-label-mobile-pocket-pull \{[\s\S]*right: 0\.96rem;[\s\S]*bottom: 0\.74rem;[\s\S]*text-align: right/,
+    /\.icono-label-mobile-pocket-pull \{[\s\S]*right: 0\.88rem;[\s\S]*bottom: 0\.58rem;[\s\S]*text-align: right/,
     "printed pull cue must stay on the sleeve paper, not across the transparent thumb aperture",
   )
   assert.match(
@@ -302,12 +302,12 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     runtime,
-    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 0 H247 V262 H0 Z M149 0 L205 0 C203 8/,
+    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 0 H247 V262 H0 Z M145 0 C147 6/,
     "sleeve face must be an inline SVG paper asset with procedural grain and a real even-odd punched aperture",
   )
   assert.match(
     css,
-    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M10 0 L66 0 C64 8/,
+    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M4 0 C6 6/,
     "visible thumb-cut edge must use the same punched silhouette as the transparent aperture",
   )
   assert.equal(
