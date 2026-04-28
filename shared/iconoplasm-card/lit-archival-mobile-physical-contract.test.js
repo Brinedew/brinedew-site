@@ -305,6 +305,11 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     /\.icono-label-mobile-peek-tab \{[\s\S]*right: calc\([\s\S]*100% - var\(--icono-label-thumb-cut-left\) - var\(--icono-label-thumb-cut-width\) - 1\.56rem[\s\S]*\)/,
     "visible gene tab must share the thumb-cut center rather than matching the aperture's right edge",
   )
+  assert.match(
+    css,
+    /\.icono-label-mobile-peek-tab-symbol \{[\s\S]*transform: translateY\(1\.92rem\);/,
+    "visible gene symbol must sit optically inside the thumb aperture, not above the punched opening",
+  )
   assert.equal(
     /icono-card--mobile-physical-pocket[\s\S]*\.iconoplasm-tooltip-body \{[\s\S]*transform: translateY\(calc\(100% -/.test(
       css,
