@@ -369,7 +369,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       String(infoHtml || "") +
       "</div>" +
       "</div>" +
-      '<div class="icono-label-mobile-pocket-front" data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope">' +
+      '<div class="icono-label-mobile-pocket-front" data-icono-label-mobile-toggle data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope">' +
       '<svg class="icono-label-mobile-pocket-paper" viewBox="0 0 247 262" preserveAspectRatio="none" focusable="false" aria-hidden="true">' +
       '<defs><filter id="' +
       materialId +

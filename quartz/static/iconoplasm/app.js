@@ -2692,6 +2692,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
 
     card.addEventListener("click", function (event) {
+      if (
+        event.target &&
+        event.target.closest &&
+        event.target.closest("[data-icono-vote-box], [data-icono-brick-vote-box], [data-icono-gene-vote-box]")
+      ) {
+        return
+      }
       var toggle =
         event.target && event.target.closest
           ? event.target.closest("[data-icono-label-mobile-toggle]")

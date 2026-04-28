@@ -116,6 +116,7 @@ test("shared physical sleeve renderer emits nested escaped physical surfaces", a
     'data-test-surface="portrait"',
     'data-icono-physical-noun="info-card"',
     'data-test-surface="info"',
+    'data-icono-label-mobile-toggle data-icono-physical-noun="sleeve-front"',
     'data-icono-physical-noun="sleeve-front"',
     'data-icono-physical-noun="thumb-cut"',
     'data-icono-mobile-sleeve-vote',
@@ -165,6 +166,11 @@ test("mobile archival sleeve owns review controls and visible archive metadata",
     /data-icono-mobile-sleeve-vote[\s\S]*voteHtml/,
     "the physical sleeve front must own the live vote control slot",
   )
+  assert.match(
+    app,
+    /event\.target\.closest\("\[data-icono-vote-box\], \[data-icono-brick-vote-box\], \[data-icono-gene-vote-box\]"\)[\s\S]*return[\s\S]*event\.target\.closest\("\[data-icono-label-mobile-toggle\]"\)/,
+    "mobile sleeve toggle handling must leave sleeve-owned vote controls alone",
+  )
   assert.equal(
     /icono-label-mobile-peek-swipe[\s\S]*voteShellTemplate\(model\.voteHtml\)/.test(lit),
     false,
@@ -174,6 +180,11 @@ test("mobile archival sleeve owns review controls and visible archive metadata",
     /tap to open|tap to close/i.test(lit),
     false,
     "mobile info-card text must not contain mutable tap-open/tap-close instructions; that copy belongs to the sleeve",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-front \{[\s\S]*pointer-events: auto/,
+    "the physical sleeve front must be tappable instead of letting the underlying card link steal taps",
   )
   assert.match(
     css,
@@ -274,8 +285,8 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /--icono-label-thumb-cut-left: calc\(100% - 6\.8rem\);[\s\S]*--icono-label-thumb-cut-width: 4\.88rem;[\s\S]*\.icono-label-mobile-pocket-pull \{[\s\S]*left: var\(--icono-label-thumb-cut-left\);[\s\S]*inline-size: var\(--icono-label-thumb-cut-width\)/,
-    "visible gene pull label must share the thumb-cut mouth geometry instead of drifting independently",
+    /\.icono-label-mobile-pocket-pull \{[\s\S]*right: 0\.96rem;[\s\S]*bottom: 0\.74rem;[\s\S]*text-align: right/,
+    "printed pull cue must stay on the sleeve paper, not across the transparent thumb aperture",
   )
   assert.match(
     css,

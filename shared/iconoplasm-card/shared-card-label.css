@@ -1444,7 +1444,8 @@
     letter-spacing: 0.14em;
     line-height: 1;
     text-transform: uppercase;
-    pointer-events: none;
+    cursor: pointer;
+    pointer-events: auto;
     background: transparent;
     filter: none;
     box-shadow: none;
@@ -1506,7 +1507,7 @@
     align-self: start;
     max-width: calc(100% - 0.8rem);
     min-width: 0;
-    margin-top: 2.1rem;
+    margin-top: 3.06rem;
     padding: 0.1rem 0.12rem 0.02rem;
     border: 0;
     background: transparent;
@@ -1546,9 +1547,8 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-stamp {
-    position: absolute;
-    right: 0.96rem;
-    bottom: 5.15rem;
+    display: block;
+    margin-bottom: 0.34rem;
     color: color-mix(in srgb, var(--icono-label-ink) 42%, transparent);
     font-size: 0.48rem;
     letter-spacing: 0.2em;
@@ -1557,11 +1557,11 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-pull {
     position: absolute;
-    left: var(--icono-label-thumb-cut-left);
-    top: 0.38rem;
-    inline-size: var(--icono-label-thumb-cut-width);
-    text-align: center;
-    color: color-mix(in srgb, var(--icono-label-ink) 48%, transparent);
+    right: 0.96rem;
+    bottom: 0.74rem;
+    inline-size: min(9.8rem, calc(100% - 1.92rem));
+    text-align: right;
+    color: color-mix(in srgb, var(--icono-label-ink) 34%, transparent);
   }
 
   .icono-card--variant-lab-label.icono-card--brick
