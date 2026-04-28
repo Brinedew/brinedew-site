@@ -1374,10 +1374,10 @@
     --icono-label-info-card-collapsed-y: calc(100% - 16.2rem);
     --icono-label-envelope-pull-y: 0px;
     --icono-label-envelope-expanded-y: var(--icono-label-pocket-front-height);
-    --icono-label-thumb-cut-left: calc(100% - 7.4rem);
-    --icono-label-thumb-cut-width: 5.88rem;
-    --icono-label-thumb-cut-depth: 2.28rem;
-    --icono-label-pocket-rail-width: 1.28rem;
+    --icono-label-pocket-mouth-rise: 1.5rem;
+    --icono-label-thumb-cut-top: calc(100% - 8.4rem);
+    --icono-label-thumb-cut-width: 2.2rem;
+    --icono-label-thumb-cut-depth: 4.24rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick.icono-card--mobile-physical-pocket {
@@ -1414,31 +1414,6 @@
     top: calc(var(--icono-label-mobile-portrait-pad) + 0.72rem);
     opacity: 0.72;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-rail {
-    position: absolute;
-    top: calc(var(--icono-label-mobile-portrait-pad) + 0.6rem);
-    bottom: 0.42rem;
-    z-index: 2;
-    inline-size: var(--icono-label-pocket-rail-width);
-    pointer-events: none;
-    transform: translateY(var(--icono-label-envelope-pull-y));
-    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-    background:
-      linear-gradient(90deg, rgba(72, 43, 18, 0.28), rgba(255, 244, 219, 0.1) 42%, rgba(65, 38, 15, 0.24)),
-      color-mix(in srgb, var(--icono-label-paper) 24%, #8f653f 76%);
-    filter: drop-shadow(0.12rem 0.32rem 0.32rem rgba(43, 26, 10, 0.24));
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-rail--left {
-    left: 0.12rem;
-    border-radius: 0.16rem 0.04rem 0 0;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-rail--right {
-    right: 0.12rem;
-    border-radius: 0.04rem 0.16rem 0 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-card-stack {
@@ -1503,21 +1478,21 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-hit-zone--left {
     left: 0;
     top: 0;
-    right: calc(100% - var(--icono-label-thumb-cut-left));
+    right: var(--icono-label-thumb-cut-width);
     bottom: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-hit-zone--right {
-    left: calc(var(--icono-label-thumb-cut-left) + var(--icono-label-thumb-cut-width));
+    left: calc(100% - var(--icono-label-thumb-cut-width));
     top: 0;
     right: 0;
-    bottom: 0;
+    bottom: calc(100% - var(--icono-label-thumb-cut-top));
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-hit-zone--body {
     left: 0;
-    top: var(--icono-label-thumb-cut-depth);
-    right: 0;
+    top: var(--icono-label-pocket-mouth-rise);
+    right: var(--icono-label-thumb-cut-width);
     bottom: 0;
   }
 
@@ -1538,11 +1513,11 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-thumb-cut {
     position: absolute;
-    left: var(--icono-label-thumb-cut-left);
-    top: -0.02rem;
+    right: -0.02rem;
+    top: var(--icono-label-thumb-cut-top);
     inline-size: var(--icono-label-thumb-cut-width);
     block-size: var(--icono-label-thumb-cut-depth);
-    clip-path: path("M0 0 C6 24 27 36 47 36 C68 36 88 23 94 0 Z");
+    clip-path: path("M36 0 C12 9 2 31 5 55 C7 78 18 95 36 102 Z");
     box-shadow: none;
     pointer-events: none;
   }
@@ -1563,7 +1538,7 @@
     align-self: start;
     max-width: calc(100% - 0.8rem);
     min-width: 0;
-    margin-top: calc(var(--icono-label-thumb-cut-depth) + 0.46rem);
+    margin-top: 3.7rem;
     padding: 0.1rem 0.12rem 0.02rem;
     border: 0;
     background: transparent;
@@ -1576,7 +1551,7 @@
     overflow: hidden;
     color: color-mix(in srgb, var(--icono-label-ink) 88%, transparent);
     font-family: "Special Elite";
-    font-size: 0.72rem;
+    font-size: 0.86rem;
     letter-spacing: 0.04em;
     line-height: 1.05;
     text-overflow: ellipsis;
@@ -1587,7 +1562,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-control {
     justify-self: stretch;
     align-self: start;
-    margin-top: 0.18rem;
+    margin-top: 1.22rem;
     min-width: 0;
     pointer-events: auto;
     position: relative;
@@ -1631,19 +1606,19 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     width: 100%;
-    gap: 0.36rem;
+    gap: 1.2rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-mobile-pocket-control
     .icono-vote-btn {
     min-height: 0.96rem;
-    padding: 0.08rem 0.18rem 0.02rem;
+    padding: 0.08rem 0.12rem 0.02rem;
     border: 0;
     background: transparent;
     color: color-mix(in srgb, var(--icono-label-ink) 86%, transparent);
-    font-size: 0.52rem;
-    letter-spacing: 0.14em;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
     box-shadow: none;
     text-decoration: underline;
     text-decoration-thickness: 1px;
@@ -1864,16 +1839,14 @@
        - no floating gap, no downward overlap into the slider, and no off-frame overhang
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
-    right: calc(
-      100% - var(--icono-label-thumb-cut-left) - var(--icono-label-thumb-cut-width) - 1.56rem
-    );
-    bottom: calc(100% - 1.04rem);
+    right: 0.42rem;
+    bottom: calc(100% - 1.72rem);
     z-index: 1;
     display: grid;
     place-items: center;
-    inline-size: var(--icono-label-mobile-tab-width);
+    inline-size: calc(var(--icono-label-mobile-tab-width) + 1.36rem);
     block-size: var(--icono-label-mobile-tab-height);
-    padding: 0 0.72rem 0.1rem;
+    padding: 0 0.58rem 0.1rem;
     border: 0;
     background: transparent;
     overflow: visible;
@@ -1917,10 +1890,10 @@
     white-space: nowrap;
     color: var(--icono-label-ink);
     font-family: "League Spartan";
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     font-weight: 800;
     line-height: 1;
-    letter-spacing: 0.09em;
+    letter-spacing: 0.08em;
     transform: translateY(0.78rem);
   }
 

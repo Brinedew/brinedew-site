@@ -111,8 +111,6 @@ test("shared physical sleeve renderer emits nested escaped physical surfaces", a
   assertInOrder(html, [
     'data-icono-sleeve-kinematics="fixed-cards-moving-envelope"',
     'data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope"',
-    'icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--left',
-    'icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--right',
     'data-icono-physical-noun="card-stack" data-icono-kinematic-role="fixed-card-stack"',
     'data-icono-physical-noun="portrait-card"',
     'data-test-surface="portrait"',
@@ -126,7 +124,8 @@ test("shared physical sleeve renderer emits nested escaped physical surfaces", a
     'data-icono-mobile-sleeve-vote',
   ])
   assert.match(html, /erb-b2 &lt;unsafe&gt; receptor/, "full gene name must be escaped")
-  assert.match(html, /ERBB2 \/ tap to pull/, "symbol pull affordance must render on sleeve")
+  assert.match(html, /<div class="icono-label-mobile-pocket-pull">ERBB2<\/div>/, "sleeve may print the symbol but must not add UI instruction copy")
+  assert.equal(/tap to pull/i.test(html), false, "physical sleeve print must not include app-instruction copy")
 })
 
 test("mobile archival sleeve front is not a card pseudo-element decal", async () => {
@@ -304,12 +303,12 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     css,
-    /\.icono-label-mobile-peek-tab \{[\s\S]*right: calc\([\s\S]*100% - var\(--icono-label-thumb-cut-left\) - var\(--icono-label-thumb-cut-width\) - 1\.56rem[\s\S]*\)/,
-    "visible gene tab must share the thumb-cut center rather than matching the aperture's right edge",
+    /\.icono-label-mobile-peek-tab \{[\s\S]*right: 0\.42rem;/,
+    "visible gene tab must tuck into the right side of the soft pocket mouth, not float over a top scoop",
   )
   assert.match(
     css,
-    /\.icono-label-mobile-peek-tab \{[\s\S]*bottom: calc\(100% - 1\.04rem\);/,
+    /\.icono-label-mobile-peek-tab \{[\s\S]*bottom: calc\(100% - 1\.72rem\);/,
     "gene tab must tuck behind the sleeve lip instead of floating above the aperture",
   )
   assert.match(
@@ -326,23 +325,23 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
   )
   assert.match(
     runtime,
-    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 0 H247 V262 H0 Z M126 0 C131 24 145 36/,
-    "sleeve face must be an inline SVG paper asset with procedural grain and a deep circular punched aperture",
+    /icono-label-mobile-pocket-paper[\s\S]*feTurbulence type="fractalNoise"[\s\S]*feDisplacementMap[\s\S]*fill-rule="evenodd"[\s\S]*M0 24 C34 18 76 23 116 13/,
+    "sleeve face must be an inline SVG paper asset with procedural grain and a soft slanted pocket mouth",
   )
   assert.match(
     runtime,
-    /icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--left[\s\S]*icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--right/,
-    "physical pocket must include side rails; the reference is a sleeve holder, not a flat bottom overlay",
+    /M247 128 C232 134 226 148 226 162 C226 178 234 189 247 194 Z/,
+    "soft pocket must cut the thumb affordance from the right edge, not place rails over the portrait",
+  )
+  assert.equal(
+    /icono-label-mobile-pocket-rail/.test(runtime + css),
+    false,
+    "side rails must not exist; they can layer above the portrait and break the soft-pocket metaphor",
   )
   assert.match(
     css,
-    /\.icono-label-mobile-pocket-rail \{[\s\S]*transform: translateY\(var\(--icono-label-envelope-pull-y\)\)/,
-    "side rails must move with the envelope instead of becoming static decorative borders",
-  )
-  assert.match(
-    css,
-    /\.icono-label-mobile-thumb-cut \{[\s\S]*clip-path: path\("M0 0 C6 24/,
-    "visible thumb-cut edge must use the same deep circular scoop as the transparent aperture",
+    /\.icono-label-mobile-thumb-cut \{[\s\S]*right: -0\.02rem;[\s\S]*clip-path: path\("M36 0 C12 9/,
+    "visible thumb-cut edge must use the same right-edge soft pocket notch as the transparent aperture",
   )
   assert.equal(
     /border-radius:/.test(cssBlockFor(css, ".icono-label-mobile-thumb-cut")),
@@ -368,6 +367,16 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
     css,
     /\.icono-label-mobile-pocket-control[\s\S]*\.icono-vote-btn \{[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*box-shadow: none;/,
     "sleeve votes must read as printed review marks rather than boxed web controls",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-control \{[\s\S]*margin-top: 1\.22rem;/,
+    "review marks must sit as a deliberate printed row below the name, not collapse into web-toolbar spacing",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-control[\s\S]*\.icono-vote-btn \{[\s\S]*font-size: 0\.7rem;[\s\S]*letter-spacing: 0\.18em;/,
+    "review mark typography must be legible archival print, not tiny web text",
   )
   assert.match(
     css,

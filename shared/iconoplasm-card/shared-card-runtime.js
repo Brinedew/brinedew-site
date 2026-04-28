@@ -361,8 +361,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     return (
       '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket data-icono-physical-noun="sleeve" data-icono-sleeve-kinematics="fixed-cards-moving-envelope">' +
       '<div class="icono-label-mobile-pocket-back" data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope" aria-hidden="true"></div>' +
-      '<div class="icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--left" data-icono-physical-noun="sleeve-rail" data-icono-kinematic-role="sliding-envelope" aria-hidden="true"></div>' +
-      '<div class="icono-label-mobile-pocket-rail icono-label-mobile-pocket-rail--right" data-icono-physical-noun="sleeve-rail" data-icono-kinematic-role="sliding-envelope" aria-hidden="true"></div>' +
       '<div class="icono-label-mobile-card-stack" data-icono-physical-noun="card-stack" data-icono-kinematic-role="fixed-card-stack">' +
       '<div class="icono-label-mobile-portrait-surface" data-icono-physical-noun="portrait-card" data-icono-kinematic-role="fixed-portrait-card">' +
       String(portraitHtml || "") +
@@ -382,10 +380,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '<feTurbulence type="turbulence" baseFrequency="0.018 0.12" numOctaves="2" seed="31" result="warp"></feTurbulence>' +
       '<feDisplacementMap in="paperTexture" in2="warp" scale="0.75" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>' +
       '</filter></defs>' +
-      '<path class="icono-label-mobile-pocket-paper-face" fill-rule="evenodd" d="M0 0 H247 V262 H0 Z M126 0 C131 24 145 36 164 36 C184 36 201 22 207 0 Z" filter="url(#' +
+      '<path class="icono-label-mobile-pocket-paper-face" fill-rule="evenodd" d="M0 24 C34 18 76 23 116 13 C158 3 203 7 247 0 V262 H0 Z M247 128 C232 134 226 148 226 162 C226 178 234 189 247 194 Z" filter="url(#' +
       materialId +
       ')"></path>' +
-      '<path class="icono-label-mobile-pocket-paper-lip" d="M6 14 C48 10 88 11 123 10 M208 10 C221 10 235 12 241 14"></path>' +
+      '<path class="icono-label-mobile-pocket-paper-lip" d="M6 25 C42 20 77 23 116 13 C158 3 202 7 241 2"></path>' +
       '</svg>' +
       '<div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--left" data-icono-label-mobile-toggle aria-hidden="true"></div>' +
       '<div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--right" data-icono-label-mobile-toggle aria-hidden="true"></div>' +
@@ -401,8 +399,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       voteHtml +
       "</div>" +
       '<div class="icono-label-mobile-pocket-pull">' +
-      (symbol ? escapeHtml(symbol) + " / " : "") +
-      "tap to pull</div>" +
+      (symbol ? escapeHtml(symbol) : "") +
+      "</div>" +
       "</div>" +
       "</div>"
     )
