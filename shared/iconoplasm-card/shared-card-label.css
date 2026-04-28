@@ -1445,8 +1445,20 @@
     line-height: 1;
     text-transform: uppercase;
     pointer-events: none;
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Crect width='1000' height='420' fill='white'/%3E%3Cpath fill='black' d='M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Crect width='1000' height='420' fill='white'/%3E%3Cpath fill='black' d='M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
+    background:
+      repeating-linear-gradient(
+        92deg,
+        rgba(72, 43, 18, 0.08) 0 1px,
+        transparent 1px 9px
+      ),
+      radial-gradient(circle at 18% 34%, rgba(255, 255, 255, 0.18), transparent 28%),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--icono-label-paper) 22%, #b18458 78%) 0%,
+        color-mix(in srgb, var(--icono-label-paper) 18%, #9f744d 82%) 100%
+      );
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H1000 V420 H0 Z M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 420' preserveAspectRatio='none'%3E%3Cpath fill='white' fill-rule='evenodd' d='M0 0 H1000 V420 H0 Z M704 0 L862 0 C854 30 839 55 815 70 C781 91 732 88 709 61 C696 45 690 25 704 0 Z'/%3E%3C/svg%3E");
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
     filter:
