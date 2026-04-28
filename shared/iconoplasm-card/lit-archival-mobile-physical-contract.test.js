@@ -116,8 +116,10 @@ test("shared physical sleeve renderer emits nested escaped physical surfaces", a
     'data-test-surface="portrait"',
     'data-icono-physical-noun="info-card"',
     'data-test-surface="info"',
-    'data-icono-label-mobile-toggle data-icono-physical-noun="sleeve-front"',
     'data-icono-physical-noun="sleeve-front"',
+    'icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--left" data-icono-label-mobile-toggle',
+    'icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--right" data-icono-label-mobile-toggle',
+    'icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--body" data-icono-label-mobile-toggle',
     'data-icono-physical-noun="thumb-cut"',
     'data-icono-mobile-sleeve-vote',
   ])
@@ -183,8 +185,18 @@ test("mobile archival sleeve owns review controls and visible archive metadata",
   )
   assert.match(
     css,
-    /\.icono-label-mobile-pocket-front \{[\s\S]*pointer-events: auto/,
-    "the physical sleeve front must be tappable instead of letting the underlying card link steal taps",
+    /\.icono-label-mobile-pocket-front \{[\s\S]*pointer-events: none/,
+    "the sleeve front must not be one full invisible hit sheet over the transparent aperture",
+  )
+  assert.equal(
+    /icono-label-mobile-pocket-front"[^>]*data-icono-label-mobile-toggle/.test(runtime),
+    false,
+    "the sleeve front itself must never own the tap toggle; that turns the punched aperture back into a fake overlay",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-pocket-hit-zone[\s\S]*pointer-events: auto/,
+    "tapping the sleeve must be owned by material hit zones that can exclude the aperture",
   )
   assert.match(
     css,
@@ -250,8 +262,8 @@ test("mobile archival collapse and shadows encode physical receivers", async () 
 
   assert.match(
     css,
-    /--icono-label-pocket-front-height: 15\.8rem;[\s\S]*--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: var\(--icono-label-pocket-front-height\)/,
-    "B-476 motion must slide the envelope fully below the fixed info sheet without locking in the old oversized 16.4rem blank slab",
+    /--icono-label-pocket-front-height: 20\.7rem;[\s\S]*--icono-label-envelope-pull-y: 0px;[\s\S]*--icono-label-envelope-expanded-y: var\(--icono-label-pocket-front-height\)/,
+    "B-476 motion must bring the sleeve mouth up to the portrait edge instead of leaving a visible cream gap",
   )
   assert.match(
     css,

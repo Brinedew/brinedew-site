@@ -1367,7 +1367,7 @@
     overflow: clip;
     isolation: isolate;
     pointer-events: auto;
-    --icono-label-pocket-front-height: 15.8rem;
+    --icono-label-pocket-front-height: 20.7rem;
     --icono-label-pocket-mouth-x: calc(100% - 4.28rem);
     --icono-label-info-card-collapsed-y: calc(100% - 16.2rem);
     --icono-label-envelope-pull-y: 0px;
@@ -1444,8 +1444,7 @@
     letter-spacing: 0.14em;
     line-height: 1;
     text-transform: uppercase;
-    cursor: pointer;
-    pointer-events: auto;
+    pointer-events: none;
     background: transparent;
     filter: none;
     box-shadow: none;
@@ -1463,6 +1462,34 @@
       drop-shadow(0.1rem 0.22rem 0.2rem rgba(63, 38, 16, 0.28))
       drop-shadow(0.24rem 0.78rem 0.78rem rgba(63, 38, 16, 0.16));
     pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-hit-zone {
+    position: absolute;
+    z-index: 2;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-hit-zone--left {
+    left: 0;
+    top: 0;
+    right: calc(100% - var(--icono-label-thumb-cut-left));
+    bottom: 0;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-hit-zone--right {
+    left: calc(var(--icono-label-thumb-cut-left) + var(--icono-label-thumb-cut-width));
+    top: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-hit-zone--body {
+    left: 0;
+    top: 1.42rem;
+    right: 0;
+    bottom: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-paper-face {
@@ -1513,6 +1540,7 @@
     background: transparent;
     box-shadow: none;
     transform: rotate(-0.7deg);
+    pointer-events: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-pocket-name {
@@ -1562,6 +1590,7 @@
     inline-size: min(9.8rem, calc(100% - 1.92rem));
     text-align: right;
     color: color-mix(in srgb, var(--icono-label-ink) 34%, transparent);
+    pointer-events: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick

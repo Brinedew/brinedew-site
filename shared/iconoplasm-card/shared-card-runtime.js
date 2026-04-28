@@ -369,7 +369,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       String(infoHtml || "") +
       "</div>" +
       "</div>" +
-      '<div class="icono-label-mobile-pocket-front" data-icono-label-mobile-toggle data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope">' +
+      '<div class="icono-label-mobile-pocket-front" data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope">' +
       '<svg class="icono-label-mobile-pocket-paper" viewBox="0 0 247 262" preserveAspectRatio="none" focusable="false" aria-hidden="true">' +
       '<defs><filter id="' +
       materialId +
@@ -385,6 +385,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       ')"></path>' +
       '<path class="icono-label-mobile-pocket-paper-lip" d="M6 14 C52 10 101 12 145 9 C179 7 214 9 241 13"></path>' +
       '</svg>' +
+      '<div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--left" data-icono-label-mobile-toggle aria-hidden="true"></div>' +
+      '<div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--right" data-icono-label-mobile-toggle aria-hidden="true"></div>' +
+      '<div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--body" data-icono-label-mobile-toggle aria-hidden="true"></div>' +
       '<div class="icono-label-mobile-thumb-cut" data-icono-physical-noun="thumb-cut" data-icono-kinematic-role="transparent-aperture" aria-hidden="true"></div>' +
       '<div class="icono-label-mobile-pocket-label">' +
       '<div class="icono-label-mobile-pocket-stamp">HUMAN GENE FILE</div>' +
