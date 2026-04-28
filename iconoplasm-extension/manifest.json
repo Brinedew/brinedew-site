@@ -14,7 +14,6 @@
     }
   },
   "background": {
-    "scripts": ["service-worker.js"],
     "service_worker": "service-worker.js"
   },
   "content_scripts": [
