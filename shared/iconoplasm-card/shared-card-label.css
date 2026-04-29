@@ -1304,7 +1304,7 @@
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-physical-width: 23.4rem;
     --icono-label-mobile-portrait-pad: 0.936rem;
-    --icono-label-mobile-peek-height: 6.7rem;
+    --icono-label-mobile-peek-height: 6rem;
     --icono-label-mobile-preview-height: 0rem;
     --icono-label-mobile-tab-height: 2.328rem;
     /* B-479: current public catalog max gene-symbol length is 14 chars
@@ -1317,8 +1317,8 @@
     --icono-label-mobile-viewport-height: auto;
     --icono-label-mobile-band-row-height: 4.6rem;
     --icono-label-mobile-header-row-height: 2.16rem;
-    --icono-label-mobile-style-row-height: 7.55rem;
-    --icono-label-mobile-alignment-row-height: 11.55rem;
+    --icono-label-mobile-style-row-height: 7.2rem;
+    --icono-label-mobile-alignment-row-height: 11.1rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -2667,9 +2667,11 @@
     .icono-label-style-pair
     .icono-label-hand-note--style {
     justify-self: end;
-    max-width: 9.6rem;
+    width: max-content;
+    max-width: none;
     line-height: 0.9;
     text-align: right;
+    white-space: nowrap;
     transform: rotate(-3deg);
   }
 
