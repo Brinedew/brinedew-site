@@ -419,12 +419,47 @@ test("mobile infocard gestures keep voting and navigation isolated from the view
   assert.match(
     app,
     /target\.closest\(\s*"\[data-icono-label-mobile-toggle\], \[data-icono-vote-box\], \[data-icono-nav\], a"/,
-    "swipe gesture setup must exclude toggle, vote, nav, and link controls",
+    "swipe gesture setup must exclude explicit controls, while keeping the blot surface swipeable like a Tinder card",
+  )
+  assert.doesNotMatch(
+    app,
+    /pointerdown[\s\S]*target\.closest\(\s*"\[data-icono-label-mobile-toggle\], \[data-icono-vote-box\], \[data-icono-nav\], \[data-icono-pswp\], a, button"/,
+    "the visible blot lightbox button must remain part of the swipe surface; only a non-drag tap should open full-size",
   )
   assert.match(
     app,
     /"a, button, summary, input, select, textarea, label,[\s\S]*\[data-icono-vote-box\], \[data-icono-label-mobile-toggle\], \[data-no-navigate\],[\s\S]*\.icono-label-specimen-viewport/,
     "grid-card navigation must still exclude mobile infocard toggles and voting controls",
+  )
+})
+
+test("portrait lightbox is delegated so mobile object wrappers cannot orphan the blot action", async () => {
+  const app = await sourceText(appPath)
+  const start = app.indexOf("function refreshPortraitLightbox")
+  const end = app.indexOf("function fetchGeneDetail", start)
+  assert.notEqual(start, -1, "missing portrait lightbox refresh helper")
+  assert.notEqual(end, -1, "missing helper boundary after portrait lightbox refresh")
+  const helper = app.slice(start, end)
+
+  assert.match(
+    helper,
+    /document\.addEventListener\("click",\s*handler/,
+    "full-size blot viewing must be delegated from the document, not stranded on a stale gallery wrapper",
+  )
+  assert.match(
+    helper,
+    /trigger\.closest\("\[data-icono-lightbox\]"\)/,
+    "delegated lightbox clicks must scope the gallery from the clicked blot trigger",
+  )
+  assert.match(
+    helper,
+    /querySelectorAll\("\[data-icono-pswp\]"\)/,
+    "the selected gallery still owns its own ordered image list",
+  )
+  assert.doesNotMatch(
+    helper,
+    /gallery\.addEventListener\("click"/,
+    "per-gallery listeners are too brittle for mobile wrapper swaps and SPA rerenders",
   )
 })
 

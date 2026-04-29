@@ -501,63 +501,56 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       portraitLightboxCleanup = null
     }
     if (!document.querySelector("[data-icono-lightbox] [data-icono-pswp]")) return
-    var cleanups = []
-    var galleries = document.querySelectorAll("[data-icono-lightbox]")
-    for (var i = 0; i < galleries.length; i++) {
-      ;(function (gallery) {
-        var handler = function (event) {
-          var trigger =
-            event.target && event.target.closest ? event.target.closest("[data-icono-pswp]") : null
-          if (!trigger || !gallery.contains(trigger)) return
-          event.preventDefault()
-          var links = gallery.querySelectorAll("[data-icono-pswp]")
-          var items = []
-          var index = 0
-          for (var j = 0; j < links.length; j++) {
-            var link = links[j]
-            var width = Number(link.getAttribute("data-pswp-width") || 0) || 1
-            var height = Number(link.getAttribute("data-pswp-height") || 0) || 1
-            items.push({
-              src: link.getAttribute("data-icono-pswp-src"),
-              width: width,
-              height: height,
-              alt:
-                link.getAttribute("data-icono-pswp-alt") || link.getAttribute("aria-label") || "",
-            })
-            if (link === trigger) index = j
-          }
-          void ensurePhotoSwipe()
-            .then(function (PhotoSwipe) {
-              var pswp = new PhotoSwipe({
-                dataSource: items,
-                index: index,
-                bgOpacity: 0.92,
-                spacing: 0.12,
-                wheelToZoom: true,
-                mouseMovePan: true,
-                loop: false,
-                imageClickAction: "zoom",
-                tapAction: "toggle-controls",
-                bgClickAction: "close",
-                showHideAnimationType: "fade",
-                paddingFn: function () {
-                  return { top: 28, bottom: 28, left: 28, right: 28 }
-                },
-              })
-              pswp.init()
-            })
-            .catch(function (error) {
-              console.error("[Iconoplasm] failed to load PhotoSwipe:", error)
-            })
-        }
-        gallery.addEventListener("click", handler)
-        cleanups.push(function () {
-          gallery.removeEventListener("click", handler)
+    var handler = function (event) {
+      var trigger =
+        event.target && event.target.closest ? event.target.closest("[data-icono-pswp]") : null
+      if (!trigger) return
+      var gallery = trigger.closest("[data-icono-lightbox]")
+      if (!gallery || !document.documentElement.contains(gallery)) return
+      event.preventDefault()
+      event.stopPropagation()
+      var links = gallery.querySelectorAll("[data-icono-pswp]")
+      var items = []
+      var index = 0
+      for (var j = 0; j < links.length; j++) {
+        var link = links[j]
+        var width = Number(link.getAttribute("data-pswp-width") || 0) || 1
+        var height = Number(link.getAttribute("data-pswp-height") || 0) || 1
+        items.push({
+          src: link.getAttribute("data-icono-pswp-src"),
+          width: width,
+          height: height,
+          alt: link.getAttribute("data-icono-pswp-alt") || link.getAttribute("aria-label") || "",
         })
-      })(galleries[i])
+        if (link === trigger) index = j
+      }
+      void ensurePhotoSwipe()
+        .then(function (PhotoSwipe) {
+          var pswp = new PhotoSwipe({
+            dataSource: items,
+            index: index,
+            bgOpacity: 0.92,
+            spacing: 0.12,
+            wheelToZoom: true,
+            mouseMovePan: true,
+            loop: false,
+            imageClickAction: "zoom",
+            tapAction: "toggle-controls",
+            bgClickAction: "close",
+            showHideAnimationType: "fade",
+            paddingFn: function () {
+              return { top: 28, bottom: 28, left: 28, right: 28 }
+            },
+          })
+          pswp.init()
+        })
+        .catch(function (error) {
+          console.error("[Iconoplasm] failed to load PhotoSwipe:", error)
+        })
     }
+    document.addEventListener("click", handler, true)
     portraitLightboxCleanup = function () {
-      for (var i = 0; i < cleanups.length; i++) cleanups[i]()
+      document.removeEventListener("click", handler, true)
     }
   }
 
