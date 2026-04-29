@@ -467,20 +467,31 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-line",
   )
-  assert.match(massLineBlock, /align-items:\s*start;/)
+  assert.match(massLineBlock, /align-items:\s*center;/)
   const massFillBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-fill",
   )
-  assert.match(massFillBlock, /align-items:\s*start;/)
+  assert.match(massFillBlock, /align-items:\s*center;/)
   const massUnitStackBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-unit-stack",
   )
-  assert.match(
+  assert.match(massUnitStackBlock, /position:\s*relative;/)
+  assert.match(massUnitStackBlock, /block-size:\s*1em;/)
+  assert.doesNotMatch(
     massUnitStackBlock,
-    /gap:\s*0\.24rem;/,
-    "the handwritten kg correction should remain attached to kDa without overlapping the typed unit",
+    /gap:/,
+    "the handwritten kg correction must not create a second layout row that fattens the field-notes band",
+  )
+  const massUnitHandBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-unit-stack\n    .icono-label-hand-note--unit",
+  )
+  assert.match(
+    massUnitHandBlock,
+    /position:\s*absolute;/,
+    "the handwritten kg correction should be a paper annotation, not a grid row that increases the printed lane height",
   )
 })
 
