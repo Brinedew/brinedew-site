@@ -1,0 +1,188 @@
+name: Publish Iconoplasm Edge extension
+
+# Store publish is deliberately workflow_dispatch-only. The supported trigger
+# surface is the local Iconoplasm GUI's human release gate, not pushes, cron, or
+# unattended LLM/CLI automation.
+on:
+  workflow_dispatch:
+    inputs:
+      human_confirmation:
+        description: "Type exactly: YES, I AM A HUMAN, PUBLISH ICONOPLASM"
+        required: true
+        type: string
+      expected_version:
+        description: Expected iconoplasm-extension manifest version
+        required: true
+        type: string
+      certification_notes:
+        description: Notes for Microsoft Edge Add-ons certification
+        required: false
+        default: "Iconoplasm extension update submitted from the Iconoplasm GUI human release gate."
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-edge:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: .
+    env:
+      EDGE_PRODUCT_ID: b8547df3-4156-4b56-b7dc-3752347b6794
+      EDGE_API_ROOT: https://api.addons.microsoftedge.microsoft.com
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Confirm human publish intent
+        env:
+          HUMAN_CONFIRMATION: ${{ inputs.human_confirmation }}
+        run: |
+          if ($env:HUMAN_CONFIRMATION -ne "YES, I AM A HUMAN, PUBLISH ICONOPLASM") {
+            throw "Edge store publish requires the exact human confirmation phrase from the Iconoplasm GUI."
+          }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Check Edge API secrets
+        run: |
+          if (-not "${{ secrets.EDGE_ADDONS_CLIENT_ID }}") {
+            throw 'Missing GitHub secret EDGE_ADDONS_CLIENT_ID'
+          }
+          if (-not "${{ secrets.EDGE_ADDONS_API_KEY }}") {
+            throw 'Missing GitHub secret EDGE_ADDONS_API_KEY'
+          }
+
+      - name: Check requested version
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          $manifest = Get-Content iconoplasm-extension/manifest.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $env:EXPECTED_VERSION) {
+            throw "Expected Iconoplasm extension version $env:EXPECTED_VERSION, got $($manifest.version)"
+          }
+          if ($manifest.background.scripts) {
+            throw "Edge MV3 packages must use background.service_worker, not background.scripts."
+          }
+          if (-not $manifest.background.service_worker) {
+            throw "Edge MV3 package is missing background.service_worker."
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package Chromium extension payload
+        run: npm run package:iconoplasm-extension
+
+      - name: Submit package to Edge Add-ons draft
+        id: edge_upload
+        env:
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_ADDONS_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_ADDONS_API_KEY }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          $headers = @{
+            Authorization = "ApiKey $env:EDGE_API_KEY"
+            'X-ClientID' = $env:EDGE_CLIENT_ID
+            'Content-Type' = 'application/zip'
+          }
+          $zipPath = "iconoplasm-extension/dist/iconoplasm-extension-v$env:EXPECTED_VERSION.zip"
+          if (-not (Test-Path $zipPath)) {
+            throw "Expected Edge package does not exist: $zipPath"
+          }
+          $response = Invoke-WebRequest `
+            -Uri "$env:EDGE_API_ROOT/v1/products/$env:EDGE_PRODUCT_ID/submissions/draft/package" `
+            -Method Post `
+            -Headers $headers `
+            -InFile $zipPath
+          if ($response.StatusCode -ne 202) {
+            throw "Edge package upload returned HTTP $($response.StatusCode)."
+          }
+          $operationLocation = [string]$response.Headers.Location
+          if (-not $operationLocation) {
+            throw "Edge package upload did not return an operation Location header."
+          }
+          "operation_location=$operationLocation" >> $env:GITHUB_OUTPUT
+
+      - name: Wait for Edge package validation
+        env:
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_ADDONS_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_ADDONS_API_KEY }}
+          OPERATION_LOCATION: ${{ steps.edge_upload.outputs.operation_location }}
+        run: |
+          $headers = @{
+            Authorization = "ApiKey $env:EDGE_API_KEY"
+            'X-ClientID' = $env:EDGE_CLIENT_ID
+          }
+          for ($i = 0; $i -lt 60; $i++) {
+            $status = Invoke-RestMethod -Uri $env:OPERATION_LOCATION -Headers $headers -Method Get
+            $state = [string]($status.status ?? $status.Status ?? $status.operationStatus ?? '')
+            $json = $status | ConvertTo-Json -Depth 20
+            Write-Host $json
+            if ($state -match '^(Succeeded|succeeded|Success|success|Completed|completed)$') { exit 0 }
+            if ($state -match '^(Failed|failed|Error|error)$') { throw "Edge package validation failed: $json" }
+            Start-Sleep -Seconds 10
+          }
+          throw "Timed out waiting for Edge package validation."
+
+      - name: Publish Edge draft submission
+        id: edge_publish
+        env:
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_ADDONS_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_ADDONS_API_KEY }}
+          CERTIFICATION_NOTES: ${{ inputs.certification_notes }}
+        run: |
+          $headers = @{
+            Authorization = "ApiKey $env:EDGE_API_KEY"
+            'X-ClientID' = $env:EDGE_CLIENT_ID
+            'Content-Type' = 'text/plain'
+          }
+          $response = Invoke-WebRequest `
+            -Uri "$env:EDGE_API_ROOT/v1/products/$env:EDGE_PRODUCT_ID/submissions" `
+            -Method Post `
+            -Headers $headers `
+            -Body $env:CERTIFICATION_NOTES
+          if ($response.StatusCode -ne 202) {
+            throw "Edge publish returned HTTP $($response.StatusCode)."
+          }
+          $operationLocation = [string]$response.Headers.Location
+          if (-not $operationLocation) {
+            throw "Edge publish did not return an operation Location header."
+          }
+          "operation_location=$operationLocation" >> $env:GITHUB_OUTPUT
+
+      - name: Wait for Edge publish operation
+        env:
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_ADDONS_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_ADDONS_API_KEY }}
+          OPERATION_LOCATION: ${{ steps.edge_publish.outputs.operation_location }}
+        run: |
+          $headers = @{
+            Authorization = "ApiKey $env:EDGE_API_KEY"
+            'X-ClientID' = $env:EDGE_CLIENT_ID
+          }
+          for ($i = 0; $i -lt 60; $i++) {
+            $status = Invoke-RestMethod -Uri $env:OPERATION_LOCATION -Headers $headers -Method Get
+            $state = [string]($status.status ?? $status.Status ?? $status.operationStatus ?? '')
+            $json = $status | ConvertTo-Json -Depth 20
+            Write-Host $json
+            if ($state -match '^(Succeeded|succeeded|Success|success|Completed|completed)$') { exit 0 }
+            if ($state -match '^(Failed|failed|Error|error)$') { throw "Edge publish failed: $json" }
+            Start-Sleep -Seconds 10
+          }
+          throw "Timed out waiting for Edge publish operation."
+
+      - name: Upload Edge zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: iconoplasm-edge-package
+          path: iconoplasm-extension/dist/iconoplasm-extension-v*.zip
+          if-no-files-found: error

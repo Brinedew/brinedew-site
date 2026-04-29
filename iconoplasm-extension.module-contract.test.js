@@ -78,6 +78,21 @@ test("DO NOT DELETE: Firefox release packaging is a first-class path", () => {
   }
 })
 
+test("DO NOT DELETE: Chromium and Edge packages keep the MV3 service worker shape", () => {
+  const manifest = JSON.parse(readUtf8("./iconoplasm-extension/manifest.json"))
+  assert.equal(manifest.background.service_worker, "service-worker.js")
+  assert.equal(manifest.background.scripts, undefined)
+})
+
+test("DO NOT DELETE: extension version bumps have explicit npm entrypoints", () => {
+  const packageJson = JSON.parse(readUtf8("./package.json"))
+  assert.equal(
+    packageJson.scripts["version:iconoplasm-extension:patch"],
+    "node ./scripts/bump-iconoplasm-extension-version.mjs --patch",
+  )
+  assert.match(readUtf8("./scripts/bump-iconoplasm-extension-version.mjs"), /--set=/)
+})
+
 test("DO NOT DELETE: content.js delegates split responsibilities to extension modules", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   const requiredGlobals = [

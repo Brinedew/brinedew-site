@@ -48,42 +48,52 @@ That writes:
 
 - `iconoplasm-extension/dist/iconoplasm-firefox-source-v<version>.zip`
 
-## Firefox publishing
+## Store publishing
 
-The local Iconoplasm GUI owns the human release trigger. The GitHub workflow is the execution target after a person confirms the publish from Website Ops.
+The local Iconoplasm GUI owns the human release trigger. GitHub Actions workflows are the execution targets after a person confirms the publish from Website Ops.
 
 Canonical path:
 
 - GUI surface: `D:\Coding\Iconoplasm` -> Website Ops -> Store publish
 - GitHub Actions workflow: `.github/workflows/publish-iconoplasm-firefox.yml`
+- GitHub Actions workflow: `.github/workflows/publish-iconoplasm-edge.yml`
 
-What it does:
+What the GUI-confirmed Firefox + Edge release does:
 
-- installs website dependencies
+- bumps `iconoplasm-extension/manifest.json` to the next requested version
+- commits only the manifest version bump
+- pushes the version bump to `main`
+- dispatches the Firefox workflow against that committed version
+- dispatches the Edge workflow against that committed version
 - builds the clean Firefox extension payload with `npm run package:iconoplasm-firefox`
-- runs `web-ext lint` against the staged runtime folder
-- submits the extension to AMO for signing/review
-- uploads the signed Firefox artifact back to the workflow run
+- builds the clean Chromium/Edge payload with `npm run package:iconoplasm-extension`
+- submits Firefox to AMO for signing/review
+- submits Edge to Microsoft Edge Add-ons for package validation and review
+- uploads store package artifacts back to the workflow runs
 
 Publish guard:
 
 - the workflow is `workflow_dispatch` only
 - the workflow requires the exact phrase `YES, I AM A HUMAN, PUBLISH ICONOPLASM`
-- the supported trigger is the Iconoplasm GUI button labeled `Yes, I'm a human, publish Firefox`
-- do not trigger store publish from unattended CLI, LLM, scheduled job, or website deploy automation
+- the supported trigger is the Iconoplasm GUI button labeled for the next version and `Firefox + Edge`
+- do not trigger store publish from unattended CLI, LLM, scheduled job, website deploy automation, push, or cron
 
 Required GitHub repository secrets:
 
 - `AMO_JWT_ISSUER`
 - `AMO_JWT_SECRET`
+- `EDGE_ADDONS_CLIENT_ID`
+- `EDGE_ADDONS_API_KEY`
 
 Notes:
 
 - `manifest.json` now carries the Gecko ID `iconoplasm@brinedew.bio`, which Firefox signing requires
-- the workflow is manual on purpose so a website push does not accidentally submit a store build
+- Edge Product ID is `b8547df3-4156-4b56-b7dc-3752347b6794`
+- the workflows are manual on purpose so a website push does not accidentally submit a store build
 - before this workflow existed, there was no Firefox store automation in this repo at all
+- before the Edge product was created in Partner Center, the Edge API could not publish Iconoplasm because Microsoft only exposes update APIs for existing products
 
-Chrome Web Store publishing is still human-dashboard only. Package with `npm run package:iconoplasm-extension`, then use the Chrome Web Store dashboard as a person; there is no automated Chrome publish runner here.
+Chrome Web Store publishing remains human-dashboard only. Package with `npm run package:iconoplasm-extension`, then use the Chrome Web Store dashboard as a person; there is no automated Chrome publish runner here.
 
 AMO-specific listing copy lives in:
 
