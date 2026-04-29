@@ -116,9 +116,15 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
     "closed viewport edge must be the actual clipped edge, not a painted zigzag on a straight crop",
   )
   assert.match(cardBlock, /100% 98\.5%,\s*98\.9% 99\.2%/)
+  assert.match(
+    cardBlock,
+    /filter:\s*[\s\S]*drop-shadow\(0 0\.045rem 0 color-mix\(in srgb, var\(--icono-label-rule-strong\) 58%, transparent\)\)[\s\S]*drop-shadow\(0 0\.16rem 0\.18rem rgba\(53, 38, 27, 0\.16\)\)/,
+    "closed clipped viewport needs a visible edge treatment that follows the actual clip-path geometry",
+  )
 
   const expandedBlock = cssBlockFor(css, '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]')
   assert.match(expandedBlock, /clip-path:\s*inset\(0\);/, "jagged crop must disappear when the viewport is fully open")
+  assert.match(expandedBlock, /filter:\s*none;/, "open state must remove the visible torn cutoff edge")
   const peekAfterBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after",

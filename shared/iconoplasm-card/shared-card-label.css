@@ -1351,10 +1351,17 @@
     transition:
       block-size 260ms cubic-bezier(0.22, 1, 0.36, 1),
       clip-path 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      filter 220ms cubic-bezier(0.22, 1, 0.36, 1),
       transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
       opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
     transform: translate3d(var(--icono-label-mobile-swipe-offset, 0px), 0, 0)
       rotate(var(--icono-label-mobile-swipe-rotate, 0deg));
+    /* The viewport edge must be visible because the clipped card is the physical cutoff.
+       A drop-shadow follows the clip-path geometry; a pseudo-element would be another
+       painted stripe and would hide this failure mode again. */
+    filter:
+      drop-shadow(0 0.045rem 0 color-mix(in srgb, var(--icono-label-rule-strong) 58%, transparent))
+      drop-shadow(0 0.16rem 0.18rem rgba(53, 38, 27, 0.16));
     clip-path: polygon(
       0 0,
       100% 0,
@@ -1455,6 +1462,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] {
     clip-path: inset(0);
+    filter: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"] {
