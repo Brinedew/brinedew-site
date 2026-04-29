@@ -1298,7 +1298,10 @@
     --icono-label-mobile-peek-height: 8.2rem;
     --icono-label-mobile-preview-height: 0rem;
     --icono-label-mobile-tab-height: 2.328rem;
-    --icono-label-mobile-tab-width: 6.6rem;
+    /* B-479: current public catalog max gene-symbol length is 14 chars
+       (`EEF1AKMT4-ECE2`). Size the tab to character capacity, not a guessed rem. */
+    --icono-label-mobile-tab-symbol-capacity: 14ch;
+    --icono-label-mobile-tab-width: var(--icono-label-mobile-tab-symbol-capacity);
     --icono-label-mobile-sheet-preview-offset: 0rem;
     --icono-label-mobile-collapse-lift: 3.672rem;
     --icono-label-mobile-viewport-height: auto;
@@ -1631,6 +1634,8 @@
     block-size: var(--icono-label-mobile-tab-height);
     pointer-events: none;
     z-index: -1;
+    font-family: "League Spartan";
+    font-size: 0.76rem;
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--icono-label-paper) 96%, #eadfce 4%) 0%,
@@ -1695,6 +1700,8 @@
     border: 0;
     background: transparent;
     overflow: visible;
+    font-family: "League Spartan";
+    font-size: 0.76rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before,

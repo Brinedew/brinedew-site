@@ -153,6 +153,21 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     false,
     "the gene tab must not be a separate SVG badge that can visually detach from the sheet",
   )
+  assert.match(
+    css,
+    /current public catalog max gene-symbol length is 14 chars[\s\S]*`EEF1AKMT4-ECE2`/,
+    "mobile tab sizing must be documented against the actual longest catalog symbol, not a guessed short example",
+  )
+  assert.match(
+    css,
+    /--icono-label-mobile-tab-symbol-capacity:\s*14ch;/,
+    "mobile tab must fit the longest current catalog gene symbol on one row",
+  )
+  assert.match(
+    css,
+    /--icono-label-mobile-tab-width:\s*var\(--icono-label-mobile-tab-symbol-capacity\);/,
+    "tab width must be a character-capacity contract",
+  )
 
   const peekBeforeBlock = cssBlockFor(
     css,
@@ -161,6 +176,8 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(peekBeforeBlock, /bottom:\s*calc\(100% - 0\.08rem\);/)
   assert.match(peekBeforeBlock, /border-bottom:\s*0;/)
   assert.match(peekBeforeBlock, /border-radius:\s*1\.16rem 1\.16rem 0 0/)
+  assert.match(peekBeforeBlock, /font-family:\s*"League Spartan";/)
+  assert.match(peekBeforeBlock, /font-size:\s*0\.76rem;/)
 
   const tabBlock = cssBlockFor(
     css,
@@ -176,6 +193,9 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     /visible tab material is owned by `\.icono-label-mobile-peek::before`/,
     "the tab text container must not own separate material/border geometry",
   )
+  assert.match(tabBlock, /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/)
+  assert.match(tabBlock, /font-family:\s*"League Spartan";/)
+  assert.match(tabBlock, /font-size:\s*0\.76rem;/)
 
   const symbolBlock = cssBlockFor(
     css,
