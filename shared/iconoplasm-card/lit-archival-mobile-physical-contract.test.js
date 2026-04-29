@@ -193,9 +193,31 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.notEqual(geometryEnd, -1, "fit-scale setup should happen before portrait measurement")
   const setupBlock = app.slice(geometryStart, geometryEnd)
   assert.match(setupBlock, /card\.scrollWidth\s*\|\|\s*card\.offsetWidth/)
+  assert.match(setupBlock, /--icono-label-mobile-physical-width/)
   assert.match(setupBlock, /cardParent\.clientWidth/)
-  assert.match(setupBlock, /Math\.min\(1,\s*Math\.max\(0\.78,\s*\(availableWidth - 16\) \/ physicalWidth\)\)/)
+  assert.match(setupBlock, /document\.documentElement\.clientWidth/)
+  assert.match(
+    setupBlock,
+    /Math\.min\(1\.36,\s*Math\.max\(0\.78,\s*\(availableWidth - 16\) \/ physicalWidth\)\)/,
+    "mobile card must zoom both down and up to fit the live browser edge, not freeze at 1x",
+  )
   assert.match(setupBlock, /--icono-label-mobile-fit-scale/)
+})
+
+test("mobile card recomputes fit scale on same-breakpoint browser resizing", async () => {
+  const app = await sourceText(appPath)
+  const reconcileStart = app.indexOf("function reconcileMobileLabelBreakpoint")
+  const reconcileEnd = app.indexOf("function queueMobileLabelBreakpointRefresh", reconcileStart)
+  assert.notEqual(reconcileStart, -1, "missing mobile breakpoint reconciliation")
+  assert.notEqual(reconcileEnd, -1, "missing mobile breakpoint refresh queue")
+  const reconcileBlock = app.slice(reconcileStart, reconcileEnd)
+  assert.match(reconcileBlock, /nextMode === mobileLabelReviewMode/)
+  assert.match(reconcileBlock, /querySelectorAll\(\s*["']\.icono-card--variant-lab-label\.icono-card--brick/)
+  assert.match(
+    reconcileBlock,
+    /syncMobileLabelViewportGeometry\(mobileCards\[i\]\)/,
+    "dragging the browser edge inside mobile mode must recompute card zoom instead of leaving a side gap",
+  )
 })
 
 test("mobile infocard tab is part of the sheet surface and casts a shadow over the blot card", async () => {

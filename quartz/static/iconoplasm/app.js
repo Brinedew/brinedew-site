@@ -2449,11 +2449,30 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function syncMobileLabelViewportGeometry(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
     var cardParent = card.parentElement
-    var physicalWidth = card.scrollWidth || card.offsetWidth || 0
+    var computedCard = typeof window.getComputedStyle === "function" ? window.getComputedStyle(card) : null
+    var rootFontSize =
+      typeof document !== "undefined" && document.documentElement
+        ? parseFloat(window.getComputedStyle(document.documentElement).fontSize || "16")
+        : 16
+    var physicalWidthToken = computedCard
+      ? String(computedCard.getPropertyValue("--icono-label-mobile-physical-width") || "").trim()
+      : ""
+    var physicalWidth = 0
+    if (/rem$/.test(physicalWidthToken)) {
+      physicalWidth = parseFloat(physicalWidthToken) * rootFontSize
+    } else if (/px$/.test(physicalWidthToken)) {
+      physicalWidth = parseFloat(physicalWidthToken)
+    }
+    if (!(physicalWidth > 0)) physicalWidth = card.scrollWidth || card.offsetWidth || 0
     var availableWidth =
-      cardParent && cardParent.clientWidth ? cardParent.clientWidth : document.documentElement.clientWidth || window.innerWidth
+      Math.min(
+        cardParent && cardParent.clientWidth ? cardParent.clientWidth : Number.POSITIVE_INFINITY,
+        document.documentElement && document.documentElement.clientWidth
+          ? document.documentElement.clientWidth
+          : window.innerWidth,
+      ) || window.innerWidth
     if (physicalWidth > 0 && availableWidth > 0) {
-      var fitScale = Math.min(1, Math.max(0.78, (availableWidth - 16) / physicalWidth))
+      var fitScale = Math.min(1.36, Math.max(0.78, (availableWidth - 16) / physicalWidth))
       card.style.setProperty("--icono-label-mobile-fit-scale", fitScale.toFixed(4))
     }
 
@@ -5035,7 +5054,15 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function reconcileMobileLabelBreakpoint() {
     if (typeof window === "undefined") return
     var nextMode = isMobileLabelReviewEnabled()
-    if (nextMode === mobileLabelReviewMode) return
+    if (nextMode === mobileLabelReviewMode) {
+      var mobileCards = document.querySelectorAll(
+        ".icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-review-active='true']",
+      )
+      for (var i = 0; i < mobileCards.length; i += 1) {
+        syncMobileLabelViewportGeometry(mobileCards[i])
+      }
+      return
+    }
     mobileLabelReviewMode = nextMode
     var route = getRoute()
     if (route.page === "home") {
