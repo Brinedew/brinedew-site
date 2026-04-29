@@ -408,6 +408,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (!family || family === "non_iconoplasm") return "non_iconoplasm"
   if (family.startsWith("public_")) return "public_read"
   if (family === "site_gene_detail") return "first_party_read"
+  if (family === "mobile_card_manifest") return "first_party_read"
   if (family.startsWith("discoveries_")) return "first_party_write"
   if (family.startsWith("gene_request_")) return "first_party_request"
   if (family === "candidate_copy") return "first_party_write"

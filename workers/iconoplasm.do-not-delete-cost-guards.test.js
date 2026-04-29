@@ -229,6 +229,8 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
   assert.match(runtime, /return "gene_request_summary"/, "request summary route should have its own named cost bucket")
   assert.match(runtime, /return "gene_request_options"/, "request options route should have its own named cost bucket")
   assert.match(runtime, /return "gene_request_submit"/, "request submit route should have its own named cost bucket")
+  assert.match(runtime, /return "mobile_card_manifest"/, "mobile card manifest should have its own named cost bucket")
+  assert.match(runtime, /family === "mobile_card_manifest"\) return "first_party_read"/, "mobile card manifest should stay in the first-party read budget class")
   assert.match(runtime, /return "admin_overview"/, "admin overview should not disappear into admin_other")
   assert.match(runtime, /return "admin_coverage"/, "admin coverage should not disappear into admin_other")
   assert.match(runtime, /return "admin_requests_open"/, "admin request queue should not disappear into admin_other")
