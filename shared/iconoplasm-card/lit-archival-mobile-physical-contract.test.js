@@ -156,6 +156,11 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
     /voteHtml:\s*!isImageOnlyVariant\s*\?\s*labelVoteBoxMarkup\(g, "data-icono-gene-vote-box", \{\s*showArrows: isMobileLabelReviewEnabled\(\),\s*\}\)\s*:\s*""/,
     "the gene lead info-card must receive voting controls even when the portrait asset sha is absent from the first render",
   )
+  assert.match(
+    app,
+    /generated\/lit-archival-card\.js\?v=20260429b476infocard/,
+    "the live page must cache-bust the Lit archival component after changing mobile infocard markup",
+  )
   assert.equal(
     /!isImageOnlyVariant && portraitAssetSha[\s\S]*labelVoteBoxMarkup\(g, "data-icono-gene-vote-box"/.test(
       app,
