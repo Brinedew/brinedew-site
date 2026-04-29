@@ -361,6 +361,7 @@ function mobilePeekTemplate(model) {
       <span class="icono-label-mobile-peek-summary">
         <span class="icono-label-mobile-peek-name">${model.fullName}</span>
       </span>
+      <span class="icono-label-mobile-peek-swipe">${voteShellTemplate(model.voteHtml)}</span>
     </button>
   </div>`
 }

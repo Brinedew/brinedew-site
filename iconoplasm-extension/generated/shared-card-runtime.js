@@ -9601,13 +9601,6 @@
     function escapeHtml(value) {
       return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
-    function renderMobileArchivalPhysicalSleeveHtml(portraitHtml, infoHtml, options) {
-      var opts = options || {};
-      var symbol = normalizedSymbol(opts.symbol || "");
-      var fullName = String(opts.fullName || symbol || "").trim();
-      var voteHtml = String(opts.voteHtml || "").trim();
-      return '<div class="icono-label-mobile-pocket" data-icono-mobile-physical-pocket data-icono-physical-noun="sleeve" data-icono-sleeve-kinematics="fixed-cards-moving-envelope"><div class="icono-label-mobile-pocket-back" data-icono-physical-noun="sleeve-back" data-icono-kinematic-role="sliding-envelope" aria-hidden="true"></div><div class="icono-label-mobile-card-stack" data-icono-physical-noun="card-stack" data-icono-kinematic-role="fixed-card-stack"><div class="icono-label-mobile-portrait-surface" data-icono-physical-noun="portrait-card" data-icono-kinematic-role="fixed-portrait-card">' + String(portraitHtml || "") + '</div><div class="icono-label-mobile-info-surface" data-icono-physical-noun="info-card" data-icono-kinematic-role="fixed-info-card">' + String(infoHtml || "") + '</div></div><div class="icono-label-mobile-pocket-front" data-icono-physical-noun="sleeve-front" data-icono-kinematic-role="sliding-envelope"><div class="icono-label-mobile-pocket-material" data-icono-material-system="baked-paper-atlas" aria-hidden="true"><img class="icono-pocket-layer icono-pocket-card-contact-shadow" alt="" src="/static/iconoplasm/materials/mobile-pocket/pocket-card-contact-shadow.png"><img class="icono-pocket-layer icono-pocket-lip-shadow" alt="" src="/static/iconoplasm/materials/mobile-pocket/pocket-lip-shadow.png"><img class="icono-pocket-layer icono-pocket-albedo" alt="" src="/static/iconoplasm/materials/mobile-pocket/pocket-front-albedo.webp"><img class="icono-pocket-layer icono-pocket-ao" alt="" src="/static/iconoplasm/materials/mobile-pocket/pocket-front-ao.webp"><img class="icono-pocket-layer icono-pocket-edgewear" alt="" src="/static/iconoplasm/materials/mobile-pocket/pocket-front-edgewear.png"><img class="icono-pocket-layer icono-pocket-stains" alt="" src="/static/iconoplasm/materials/mobile-pocket/pocket-front-stains.webp"><img class="icono-pocket-layer icono-pocket-hole-shadow" alt="" src="/static/iconoplasm/materials/mobile-pocket/thumb-hole-inner-shadow.png"></div><div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--left" data-icono-label-mobile-toggle aria-hidden="true"></div><div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--right" data-icono-label-mobile-toggle aria-hidden="true"></div><div class="icono-label-mobile-pocket-hit-zone icono-label-mobile-pocket-hit-zone--body" data-icono-label-mobile-toggle aria-hidden="true"></div><div class="icono-label-mobile-thumb-cut" data-icono-physical-noun="thumb-cut" data-icono-kinematic-role="transparent-aperture" aria-hidden="true"></div><div class="icono-label-mobile-pocket-label"><div class="icono-label-mobile-pocket-stamp">HUMAN GENE FILE</div><div class="icono-label-mobile-pocket-name">' + escapeHtml(fullName || symbol) + '</div></div><div class="icono-label-mobile-pocket-control" data-icono-mobile-sleeve-vote>' + voteHtml + '</div><div class="icono-label-mobile-pocket-pull">' + (symbol ? escapeHtml(symbol) : "") + "</div></div></div>";
-    }
     function jsonScriptSafeString(value) {
       return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
     }
@@ -10496,7 +10489,6 @@
       renderLabLabelPortraitMediaHtml,
       renderLabLabelSpecimenFooterHtml,
       renderLabLabelSpecimenRailHtml,
-      renderMobileArchivalPhysicalSleeveHtml,
       renderLabLabelCardHtml,
       renderLitArchivalCardHtml,
       renderTooltipMetaRowsHtml,

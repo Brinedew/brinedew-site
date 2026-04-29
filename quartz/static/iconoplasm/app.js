@@ -1851,15 +1851,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml, options) {
-    // B-474 guardrail: the mobile sleeve is a physical object, not a card-level decal.
-    // Keep the noun stack visible in DOM so future edits can test it: sleeve back, two card
-    // surfaces, then sleeve front with a real transparent thumb cut. If this becomes a
-    // pseudo-element again, the hole cannot prove what is behind it and the old fake geometry
-    // comes right back wearing a different beige hat.
-    return IconoCardShared.renderMobileArchivalPhysicalSleeveHtml(portraitHtml, infoHtml, options)
-  }
-
   function buildBrickCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
@@ -1984,21 +1975,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '">' +
         bodyHtml +
         "</div>"
-    var mobilePhysicalPocket =
-      isArchivalVariant && isMobileLabelReviewEnabled()
-        ? renderMobileArchivalPhysicalPocketHtml(portraitHtml, infoHtml, {
-            symbol: g.symbol,
-            fullName: g.full_name || g.symbol,
-            voteHtml: labelVoteHtml,
-          })
-        : ""
     return (
       // Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Interaction, Layout &
       // Space) + C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction States). Brick cards
       // are no longer one giant anchor because the compact vote control needs to be a real,
       // keyboard-focusable control instead of an invalid nested button inside a link.
       '<article class="icono-card icono-card--brick' +
-      (mobilePhysicalPocket ? " icono-card--mobile-physical-pocket" : "") +
       archivalVariantClass(cardVariant) +
       '" data-icono-index="' +
       cardIndex +
@@ -2015,7 +1997,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ';">' +
       (isImageOnlyVariant
         ? bodyHtml
-        : mobilePhysicalPocket || portraitHtml + infoHtml) +
+        : portraitHtml + infoHtml) +
       (isLitCardVariant(cardVariant)
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
@@ -2175,25 +2157,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '">' +
       bodyHtml +
       "</div>"
-    var heroPhysicalPocket =
-      heroMobileReview && isArchivalVariant
-        ? renderMobileArchivalPhysicalPocketHtml(
-            portraitMarkup.replace(
-              'class="iconoplasm-tooltip-portrait',
-              'class="iconoplasm-tooltip-portrait icono-label-mobile-portrait-card',
-            ),
-            heroInfoMarkup,
-            {
-              symbol: g.symbol,
-              fullName: g.full_name || g.symbol,
-              voteHtml:
-                !isImageOnlyVariant && portraitAssetSha
-                  ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", { showArrows: false })
-                  : "",
-            },
-          )
-        : ""
-
     return (
       // B-471: drop `brick-static` on mobile so wireMobileLabelCard
       // can wire the peek/expand toggle. Static bricks are skipped by
@@ -2201,7 +2164,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       // don't want to expand; the hero is the page, so it should expand.
       '<article class="icono-card icono-card--brick' +
       (heroMobileReview ? "" : " icono-card--brick-static") +
-      (heroPhysicalPocket ? " icono-card--mobile-physical-pocket" : "") +
       ' icono-gene-lead-card' +
       archivalVariantClass(cardVariant) +
       '" style="--width:' +
@@ -2215,7 +2177,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '">' +
       (isImageOnlyVariant
         ? bodyHtml
-        : heroPhysicalPocket || portraitMarkup + heroInfoMarkup) +
+        : portraitMarkup + heroInfoMarkup) +
       "</article>"
     )
   }
@@ -2471,26 +2433,30 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function alignExpandedMobileLabelCard(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
-    // B-476 kinematics: thumbs hold the portrait/info cards fixed while the kraft envelope
-    // slides downward. The viewport follows the envelope edge; do not reintroduce inline
-    // dossier offsets that make the info card itself do the moving.
+    // B-476 pivot: the page follows the single info card as it opens, so the reveal is one
+    // coherent sheet instead of an extra material wrapper.
     card.style.removeProperty("--icono-label-mobile-dossier-top")
     if (card.getAttribute("data-icono-mobile-expanded") !== "true") return
-    var sleeveFront = card.querySelector('[data-icono-physical-noun="sleeve-front"]')
-    if (!sleeveFront || typeof sleeveFront.getBoundingClientRect !== "function") return
-    var followEnvelopeEdge = function (behavior) {
-      var rect = sleeveFront.getBoundingClientRect()
-      var targetTop = Math.round(window.innerHeight * 0.58)
-      var delta = rect.top - targetTop
+    var infoCard = card.querySelector(".iconoplasm-tooltip-body")
+    if (!infoCard || typeof infoCard.getBoundingClientRect !== "function") return
+    var followInfoCard = function (behavior) {
+      var rect = infoCard.getBoundingClientRect()
+      var targetTop = Math.round(window.innerHeight * 0.16)
+      var targetBottom = window.innerHeight - 18
+      var delta = 0
+      if (rect.top > targetTop) {
+        delta = rect.top - targetTop
+      } else if (rect.bottom > targetBottom && rect.top > targetTop - 12) {
+        delta = Math.min(rect.bottom - targetBottom, rect.top - targetTop + 12)
+      }
       if (delta > 8) {
         window.scrollBy({ top: delta, left: 0, behavior: behavior })
       }
     }
     window.requestAnimationFrame(function () {
-      followEnvelopeEdge("smooth")
       window.setTimeout(function () {
-        followEnvelopeEdge("smooth")
-      }, 320)
+        followInfoCard("smooth")
+      }, 280)
     })
   }
 
