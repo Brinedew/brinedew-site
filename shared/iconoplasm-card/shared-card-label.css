@@ -2523,24 +2523,6 @@
 
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
-    .icono-label-category-option
-    .icono-label-option-loop {
-    display: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick
-    .icono-label-dossier-shell
-    .icono-label-category-option
-    .icono-label-option.is-selected
-    .icono-label-option-copy {
-    text-decoration: underline;
-    text-decoration-color: color-mix(in srgb, var(--icono-label-pen) 88%, transparent);
-    text-decoration-thickness: 1.4px;
-    text-underline-offset: 0.1em;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick
-    .icono-label-dossier-shell
     .icono-label-category-option--transmembrane,
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
