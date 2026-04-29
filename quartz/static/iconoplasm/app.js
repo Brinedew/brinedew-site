@@ -2461,7 +2461,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
     var isExpanded = card.getAttribute("data-icono-mobile-expanded") === "true"
     var closedBottom = voteRect ? voteRect.bottom - cardRect.top + 8 : dossierTop + peekRect.height + 6
-    var openBottom = dossierTop + infoRect.height + 8
+    var fullInfoHeight = Math.max(infoRect.height, infoCard.scrollHeight || 0, infoCard.offsetHeight || 0)
+    var openBottom = dossierTop + fullInfoHeight + 8
     var viewportHeight = Math.ceil(isExpanded ? openBottom : closedBottom)
     card.style.setProperty("--icono-label-mobile-viewport-height", viewportHeight + "px")
   }
@@ -4854,15 +4855,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     wireCandidateVoteBoxes(container, g)
     wireCandidateRemoveButtons(container, g)
     wireCandidateCopyForms(container, g)
-    // B-471: wire the gene-lead hero into the mobile peek/expand pattern
-    // when at narrow viewport, then auto-expand it. The hero IS the page,
-    // so we don't make the user tap-to-open just to read the dossier.
+    // B-476: the gene-lead mobile card starts closed. The portrait and infocard
+    // stay physically fixed; tapping expands only the viewport crop downward.
     var leadCard = container.querySelector(".icono-gene-lead-card")
     if (leadCard && isMobileLabelReviewEnabled()) {
       wireMobileLabelCard(leadCard)
-      try {
-        setMobileLabelExpanded(leadCard, true)
-      } catch (_err) {}
     }
     applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
     refreshPortraitLightbox()

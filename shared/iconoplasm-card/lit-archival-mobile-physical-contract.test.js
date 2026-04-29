@@ -150,10 +150,16 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
   assert.match(geometry, /--icono-label-mobile-dossier-top/)
   assert.match(geometry, /--icono-label-mobile-viewport-height/)
   assert.match(geometry, /voteRect \? voteRect\.bottom/)
-  assert.match(geometry, /dossierTop \+ infoRect\.height/)
+  assert.match(geometry, /fullInfoHeight = Math\.max\(infoRect\.height, infoCard\.scrollHeight/)
+  assert.match(geometry, /dossierTop \+ fullInfoHeight/)
   assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 320\)/)
   assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 720\)/)
   assert.equal(/scrollBy|scrollIntoView|translateY|sleeve|envelope|sleeve-front|physical-noun/.test(geometry), false)
+  assert.doesNotMatch(
+    app,
+    /setMobileLabelExpanded\(leadCard,\s*true\)/,
+    "the gene page must not auto-expand; closed state should show the top infocard until the viewport is tapped",
+  )
 })
 
 test("mobile collapsed voting remains in the top infocard, not in a separate pocket", async () => {
