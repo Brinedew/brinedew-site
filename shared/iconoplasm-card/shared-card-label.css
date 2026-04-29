@@ -1729,7 +1729,7 @@
     justify-items: center;
     inline-size: calc(var(--icono-label-mobile-tab-width) + 1.36rem);
     block-size: var(--icono-label-mobile-tab-height);
-    padding: 0 0.58rem 0.34rem;
+    padding: 0 0.58rem 0.02rem;
     border: 0;
     background: transparent;
     overflow: visible;

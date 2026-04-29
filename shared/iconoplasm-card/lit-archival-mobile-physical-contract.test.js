@@ -383,7 +383,11 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(tabBlock, /font-family:\s*"League Spartan";/)
   assert.match(tabBlock, /font-size:\s*0\.76rem;/)
   assert.match(tabBlock, /align-items:\s*end;/, "tab symbol should align to the lower printed baseline")
-  assert.match(tabBlock, /padding:\s*0 0\.58rem 0\.34rem;/)
+  assert.match(
+    tabBlock,
+    /padding:\s*0 0\.58rem 0\.02rem;/,
+    "the printed symbol must sit in the visible lower part of the tab, not the portion tucked behind the portrait",
+  )
 
   const symbolBlock = cssBlockFor(
     css,
