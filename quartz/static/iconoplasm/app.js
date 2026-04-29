@@ -1213,6 +1213,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return IconoCardShared.renderLitArchivalCardHtml(genePayload, options || {})
   }
 
+  function mobileArchivalObjectMarkup(portraitHtml, infoHtml) {
+    return (
+      '<div class="icono-mobile-card-aperture" data-icono-mobile-aperture>' +
+      '<div class="icono-mobile-card-physical-object" data-icono-mobile-physical-object>' +
+      portraitHtml +
+      infoHtml +
+      "</div>" +
+      "</div>"
+    )
+  }
+
   function iconoRowMarkup(label, value) {
     return (
       '<div class="brd-sidebar-row">' +
@@ -1997,7 +2008,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ';">' +
       (isImageOnlyVariant
         ? bodyHtml
-        : portraitHtml + infoHtml) +
+        : isArchivalVariant
+          ? mobileArchivalObjectMarkup(portraitHtml, infoHtml)
+          : portraitHtml + infoHtml) +
       (isLitCardVariant(cardVariant)
         ? ""
         : '<a class="icono-brick-mobile-link" href="' +
@@ -2178,7 +2191,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '">' +
       (isImageOnlyVariant
         ? bodyHtml
-        : portraitMarkup + heroInfoMarkup) +
+        : isArchivalVariant
+          ? mobileArchivalObjectMarkup(portraitMarkup, heroInfoMarkup)
+          : portraitMarkup + heroInfoMarkup) +
       "</article>"
     )
   }

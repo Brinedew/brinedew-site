@@ -53,11 +53,15 @@ test("mobile archival renderer is infocard-only and has no sleeve or material at
     assert.equal(combined.includes(forbidden), false, `${forbidden} must not survive the pivot`)
   }
 
-  assert.match(app, /\? bodyHtml\s*:\s*portraitHtml \+ infoHtml/, "brick markup should use the canonical info card")
   assert.match(
     app,
-    /\? bodyHtml\s*:\s*portraitMarkup \+ heroInfoMarkup/,
-    "gene lead markup should use the canonical info card",
+    /mobileArchivalObjectMarkup\(portraitHtml, infoHtml\)/,
+    "brick markup should wrap the canonical portrait and info card in the physical-object/aperture model",
+  )
+  assert.match(
+    app,
+    /mobileArchivalObjectMarkup\(portraitMarkup, heroInfoMarkup\)/,
+    "gene lead markup should wrap the canonical portrait and info card in the physical-object/aperture model",
   )
 
   const shared = await import(pathToFileURL(runtimePath).href)
@@ -112,8 +116,8 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
   const cardBlock = css.slice(mobileCardStart, mobileCardEnd)
   assert.match(
     cardBlock,
-    /clip-path:\s*polygon\(/,
-    "closed viewport edge must be the actual clipped edge, not a painted zigzag on a straight crop",
+    /\.icono-mobile-card-aperture[\s\S]*clip-path:\s*polygon\(/,
+    "closed viewport edge must be owned by the aperture, not by a painted zigzag or root-card crop",
   )
   assert.match(
     cardBlock,
@@ -127,7 +131,10 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
     "closed clipped viewport needs a visible edge treatment that follows the actual clip-path geometry",
   )
 
-  const expandedBlock = cssBlockFor(css, '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]')
+  const expandedBlock = cssBlockFor(
+    css,
+    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]\n    .icono-mobile-card-aperture',
+  )
   assert.match(expandedBlock, /clip-path:\s*inset\(0\);/, "jagged crop must disappear when the viewport is fully open")
   assert.match(expandedBlock, /filter:\s*none;/, "open state must remove the visible torn cutoff edge")
   const peekAfterBlock = cssBlockFor(
@@ -168,11 +175,17 @@ test("mobile archival card keeps one physical width instead of reflowing with th
   assert.match(cardBlock, /max-inline-size:\s*none;/)
   assert.match(
     cardBlock,
+    /\.icono-mobile-card-aperture[\s\S]*inline-size:\s*100%;/,
+    "the aperture can fill the fixed physical card; the card itself owns the physical width",
+  )
+  assert.match(
+    cardBlock,
     /zoom:\s*var\(--icono-label-mobile-fit-scale,\s*1\);/,
     "mobile archival card should optically fit by scaling the physical object, not by cropping sideways",
   )
+  const rootMobileCardBlock = cardBlock.slice(0, cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture"))
   assert.doesNotMatch(
-    cardBlock,
+    rootMobileCardBlock,
     /inline-size:\s*100%;/,
     "mobile archival card must not resize its internal geometry to the browser width",
   )
@@ -274,15 +287,22 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     "tab width must be a character-capacity contract",
   )
 
-  const peekBeforeBlock = cssBlockFor(
+  const bodyBeforeBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body::before",
+  )
+  assert.match(bodyBeforeBlock, /bottom:\s*calc\(100% - 0\.08rem\);/)
+  assert.match(bodyBeforeBlock, /border-bottom:\s*0;/)
+  assert.match(bodyBeforeBlock, /border-radius:\s*1\.16rem 1\.16rem 0 0/)
+  const oldPeekBeforeBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::before",
   )
-  assert.match(peekBeforeBlock, /bottom:\s*calc\(100% - 0\.08rem\);/)
-  assert.match(peekBeforeBlock, /border-bottom:\s*0;/)
-  assert.match(peekBeforeBlock, /border-radius:\s*1\.16rem 1\.16rem 0 0/)
-  assert.match(peekBeforeBlock, /font-family:\s*"League Spartan";/)
-  assert.match(peekBeforeBlock, /font-size:\s*0\.76rem;/)
+  assert.match(
+    oldPeekBeforeBlock,
+    /content:\s*none;/,
+    "the peek strip must not own tab material after the compound-surface refactor",
+  )
 
   const tabBlock = cssBlockFor(
     css,
@@ -295,7 +315,7 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   )
   assert.match(
     tabBlock,
-    /visible tab material is owned by `\.icono-label-mobile-peek::before`/,
+    /visible tab material is owned by the infocard body's compound surface/,
     "the tab text container must not own separate material/border geometry",
   )
   assert.match(tabBlock, /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/)
