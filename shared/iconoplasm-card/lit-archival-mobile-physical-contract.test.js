@@ -217,11 +217,17 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /availableWidth \/ physicalWidth/)
   assert.doesNotMatch(
     setupBlock,
-    /availableHeight|closedPhysicalHeight/,
-    "mobile optical fit must not be height-capped; the aperture owns vertical reveal while width owns browser-edge fit",
+    /closedPhysicalHeight/,
+    "mobile optical fit must not be height-capped by the old whole-card estimate; the aperture owns vertical reveal while width owns browser-edge fit",
   )
   assert.match(setupBlock, /Math\.min\(1\.9,\s*availableWidth \/ physicalWidth\)/)
   assert.match(setupBlock, /Math\.max\(0\.78,\s*fitScale\)/)
+  assert.match(
+    setupBlock,
+    /--icono-label-mobile-portrait-max-height/,
+    "wide-mobile width fitting must also cap the portrait in physical pixels so the closed vote/toggle area remains reachable",
+  )
+  assert.match(setupBlock, /availableHeight \/ activeFitScale - 112/)
   assert.match(
     setupBlock,
     /function \(value\) \{\s*return value \/ activeFitScale\s*\}/,
@@ -254,6 +260,7 @@ test("mobile card recomputes fit scale on same-breakpoint browser resizing", asy
     /syncMobileLabelViewportGeometry\(mobileCards\[i\]\)/,
     "dragging the browser edge inside mobile mode must recompute card zoom instead of leaving a side gap",
   )
+  assert.match(app, /--icono-label-mobile-portrait-max-height/)
 })
 
 test("mobile infocard tab is part of the sheet surface and casts a shadow over the blot card", async () => {

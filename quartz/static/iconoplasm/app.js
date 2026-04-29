@@ -2501,6 +2501,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var toPhysicalCardPx = function (value) {
       return value / activeFitScale
     }
+    var availableHeight =
+      Math.max(
+        0,
+        (document.documentElement && document.documentElement.clientHeight
+          ? document.documentElement.clientHeight
+          : window.innerHeight) - 72,
+      ) || window.innerHeight
+    var portraitMaxPhysicalHeight = Math.max(304, Math.min(462, availableHeight / activeFitScale - 112))
+    card.style.setProperty(
+      "--icono-label-mobile-portrait-max-height",
+      portraitMaxPhysicalHeight.toFixed(2) + "px",
+    )
 
     var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
     var infoCard = card.querySelector(".iconoplasm-tooltip-body")
