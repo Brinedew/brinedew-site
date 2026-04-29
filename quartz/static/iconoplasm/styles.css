@@ -36,17 +36,15 @@ body[data-slug^="apps/iconoplasm"] .center > article.iconoplasm-page {
 }
 
 /* B-457: the iconoplasm subdomain is the entire product surface, so we reclaim
-   the empty right sidebar column from Quartz's three-column desktop grid and
-   widen the center column. The left sidebar stays for cross-site navigation but
-   uses a narrower allocation so the gene browser stops feeling like an inset
-   document. The override starts at 1024px to also catch Quartz's tablet grid
-   (800-1200px), which is two columns and was leaving the gene browser at the
-   default 320px sidebar + auto column. Reverting these overrides will
-   reintroduce the "narrow centered strip with quiet margins" complaint logged
-   in B-457. */
+   the sidebars from Quartz's default 320px allocation while keeping the
+   product sidebar usable. The left sidebar stays for cross-site navigation and
+   the right sidebar stays wide enough for Iconoplasm status/actions instead of
+   collapsing into a 64px sliver. The override starts at 1024px to also catch
+   Quartz's tablet grid (800-1200px), which is two columns and was leaving the
+   gene browser at the default 320px sidebar + auto column. */
 @media (min-width: 1024px) {
   body[data-slug^="apps/iconoplasm"] #quartz-body {
-    grid-template-columns: 240px minmax(0, 1fr) 0 !important;
+    grid-template-columns: 240px minmax(0, 1fr) minmax(220px, 250px) !important;
   }
 }
 /* B-457: on phones the Quartz mobile grid's `auto` track was sizing to the
