@@ -2472,12 +2472,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       physicalWidth = parseFloat(physicalWidthToken)
     }
     if (!(physicalWidth > 0)) physicalWidth = card.scrollWidth || card.offsetWidth || 0
+    var viewportWidth =
+      document.documentElement && document.documentElement.clientWidth
+        ? document.documentElement.clientWidth
+        : window.innerWidth
+    var parentRect =
+      cardParent && typeof cardParent.getBoundingClientRect === "function"
+        ? cardParent.getBoundingClientRect()
+        : null
+    var parentInset = parentRect ? Math.max(0, parentRect.left, viewportWidth - parentRect.right) : 0
     var availableWidth =
       Math.min(
         cardParent && cardParent.clientWidth ? cardParent.clientWidth : Number.POSITIVE_INFINITY,
-        document.documentElement && document.documentElement.clientWidth
-          ? document.documentElement.clientWidth
-          : window.innerWidth,
+        Math.max(1, viewportWidth - parentInset * 2),
       ) || window.innerWidth
     if (physicalWidth > 0 && availableWidth > 0) {
       var fitScale = Math.min(1.9, availableWidth / physicalWidth)

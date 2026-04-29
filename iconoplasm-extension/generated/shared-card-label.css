@@ -1313,6 +1313,7 @@
        (`EEF1AKMT4-ECE2`). Size the tab to character capacity, not a guessed rem. */
     --icono-label-mobile-tab-symbol-capacity: 14ch;
     --icono-label-mobile-tab-width: var(--icono-label-mobile-tab-symbol-capacity);
+    --icono-label-mobile-tab-safe-inset: 0.92rem;
     --icono-label-mobile-sheet-preview-offset: 0rem;
     --icono-label-mobile-collapse-lift: 3.672rem;
     --icono-label-mobile-viewport-height: auto;
@@ -1571,7 +1572,7 @@
   .icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body::before {
     content: "";
     position: absolute;
-    right: 0.42rem;
+    right: var(--icono-label-mobile-tab-safe-inset);
     bottom: calc(100% - 0.08rem);
     inline-size: calc(var(--icono-label-mobile-tab-width) + 1.36rem);
     block-size: var(--icono-label-mobile-tab-height);
@@ -1688,7 +1689,7 @@
     pointer-events: none;
     z-index: 0;
     inset-block-end: calc(100% + 0.28rem);
-    right: calc(0.42rem + 0.7rem);
+    right: calc(var(--icono-label-mobile-tab-safe-inset) + 0.7rem);
     inline-size: calc(var(--icono-label-mobile-tab-width) - 0.04rem);
     block-size: 1px;
     background: color-mix(in srgb, white 64%, transparent);
@@ -1722,7 +1723,7 @@
        This span only positions the gene symbol, so the tab no longer behaves like
        a separate child badge glued onto the peek strip. */
     position: absolute;
-    right: 0.42rem;
+    right: var(--icono-label-mobile-tab-safe-inset);
     bottom: calc(100% - 0.08rem);
     z-index: 2;
     display: grid;

@@ -256,6 +256,11 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /--icono-label-mobile-physical-width/)
   assert.match(setupBlock, /cardParent\.clientWidth/)
   assert.match(setupBlock, /document\.documentElement\.clientWidth/)
+  assert.match(
+    setupBlock,
+    /parentInset[\s\S]*viewportWidth - parentInset \* 2/,
+    "mobile fit scale must account for the parent column inset so the card does not crop off one browser edge",
+  )
   assert.match(setupBlock, /availableWidth \/ physicalWidth/)
   assert.doesNotMatch(
     setupBlock,
@@ -335,11 +340,17 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     /--icono-label-mobile-tab-width:\s*var\(--icono-label-mobile-tab-symbol-capacity\);/,
     "tab width must be a character-capacity contract",
   )
+  assert.match(
+    css,
+    /--icono-label-mobile-tab-safe-inset:\s*0\.92rem;/,
+    "tab needs a safe inset so the symbol stays visible when the mobile card fits inside an inset page column",
+  )
 
   const bodyBeforeBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body::before",
   )
+  assert.match(bodyBeforeBlock, /right:\s*var\(--icono-label-mobile-tab-safe-inset\);/)
   assert.match(bodyBeforeBlock, /bottom:\s*calc\(100% - 0\.08rem\);/)
   assert.match(bodyBeforeBlock, /border-bottom:\s*0;/)
   assert.match(bodyBeforeBlock, /border-radius:\s*1\.16rem 1\.16rem 0 0/)
@@ -362,6 +373,7 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     /bottom:\s*calc\(100% - 0\.08rem\);/,
     "the gene symbol tab must seat on the infocard top edge instead of sagging into the sheet",
   )
+  assert.match(tabBlock, /right:\s*var\(--icono-label-mobile-tab-safe-inset\);/)
   assert.match(
     tabBlock,
     /visible tab material is owned by the infocard body's compound surface/,
