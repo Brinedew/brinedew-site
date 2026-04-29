@@ -69,6 +69,9 @@ body[data-slug^="apps/iconoplasm"] .center > article.iconoplasm-page {
   body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
     padding-inline: 0;
   }
+  body[data-slug^="apps/iconoplasm"] .icono-gene-lead {
+    align-items: center;
+  }
 }
 body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   max-width: 1180px;

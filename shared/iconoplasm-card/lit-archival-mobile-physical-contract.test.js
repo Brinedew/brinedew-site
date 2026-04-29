@@ -214,6 +214,11 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
 test("mobile Iconoplasm page removes nested padding that creates dead card gutters", async () => {
   const styles = await sourceText(path.join(repoRoot, "quartz/static/iconoplasm/styles.css"))
   assert.match(styles, /@media \(max-width:\s*720px\)[\s\S]*#iconoplasm-root[\s\S]*padding-inline:\s*0;/)
+  assert.match(
+    styles,
+    /@media \(max-width:\s*720px\)[\s\S]*\.icono-gene-lead[\s\S]*align-items:\s*center;/,
+    "when height limits mobile zoom, the physical card must stay centered instead of leaving a one-sided gutter",
+  )
 })
 
 test("mobile card recomputes fit scale on same-breakpoint browser resizing", async () => {
