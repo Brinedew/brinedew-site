@@ -401,6 +401,11 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
 
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {
   const app = await sourceText(appPath)
+  assert.doesNotMatch(
+    app,
+    /portraitHotzone|icono-label-specimen-viewport,\s*\.iconoplasm-tooltip-portrait-media[\s\S]*setMobileLabelExpanded\(card,\s*true\)/,
+    "clicking the visible blot must keep opening the full-size blot viewer; portrait clicks must not be captured to expand the infocard",
+  )
   assert.match(
     app,
     /event\.target\.closest\("\[data-icono-vote-box\], \[data-icono-brick-vote-box\], \[data-icono-gene-vote-box\]"\)[\s\S]*return/,

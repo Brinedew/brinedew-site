@@ -2754,28 +2754,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
     }
 
-    card.addEventListener(
-      "click",
-      function (event) {
-        if (!isMobileLabelReviewEnabled()) return
-        var portraitHotzone =
-          event.target && event.target.closest
-            ? event.target.closest(
-                ".icono-label-specimen-viewport, .iconoplasm-tooltip-portrait-media, .iconoplasm-tooltip-portrait-fallback",
-              )
-            : null
-        if (portraitHotzone && card.contains(portraitHotzone)) {
-          event.preventDefault()
-          event.stopPropagation()
-          if (card.getAttribute("data-icono-mobile-expanded") !== "true") {
-            setMobileLabelExpanded(card, true)
-          }
-          return
-        }
-      },
-      true,
-    )
-
     card.addEventListener("click", function (event) {
       if (
         event.target &&
