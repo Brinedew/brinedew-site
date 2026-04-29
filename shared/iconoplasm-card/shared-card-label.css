@@ -1304,7 +1304,7 @@
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-physical-width: 23.4rem;
     --icono-label-mobile-portrait-pad: 0.936rem;
-    --icono-label-mobile-peek-height: 6rem;
+    --icono-label-mobile-peek-height: 5.5rem;
     --icono-label-mobile-preview-height: 0rem;
     --icono-label-mobile-tab-height: 2.328rem;
     /* B-479: current public catalog max gene-symbol length is 14 chars
@@ -2681,9 +2681,9 @@
     .icono-label-alignment-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 2.48rem min-content;
+    grid-template-rows: 2rem min-content;
     align-content: start;
-    padding: 0.42rem 0.8rem 0.44rem;
+    padding: 0.26rem 0.8rem 0.44rem;
     overflow: visible;
   }
 
@@ -2692,9 +2692,9 @@
     .icono-label-alignment-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 1.1rem 1.1rem;
-    min-block-size: 2.48rem;
-    block-size: 2.48rem;
+    grid-template-rows: 0.96rem 0.96rem;
+    min-block-size: 2rem;
+    block-size: 2rem;
     align-content: start;
     gap: 0.12rem;
     position: relative;
