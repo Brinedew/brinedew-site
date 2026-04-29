@@ -381,7 +381,7 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   )
   assert.match(tabBlock, /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/)
   assert.match(tabBlock, /font-family:\s*"League Spartan";/)
-  assert.match(tabBlock, /font-size:\s*0\.76rem;/)
+  assert.match(tabBlock, /font-size:\s*1\.14rem;/, "B-483 requires the mobile gene symbol scale to be bumped")
   assert.match(tabBlock, /align-items:\s*end;/, "tab symbol should align to the lower printed baseline")
   assert.match(
     tabBlock,
@@ -430,6 +430,18 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
     /setMobileLabelExpanded\(leadCard,\s*true\)/,
     "the gene page must not auto-expand; closed state should show the top infocard until the viewport is tapped",
   )
+})
+
+test("mobile card uses the larger B-483 type scale instead of the tiny draft scale", async () => {
+  const css = await sourceText(cssPath)
+  const cardStart = css.indexOf(".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has only two writing systems:")
+  assert.notEqual(cardStart, -1, "missing mobile typography token block")
+  const cardEnd = css.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name", cardStart)
+  assert.notEqual(cardEnd, -1, "missing mobile typography token block end")
+  const tokenBlock = css.slice(cardStart, cardEnd)
+  assert.match(tokenBlock, /--icono-label-mobile-typewriter-size:\s*1\.008rem;/)
+  assert.match(tokenBlock, /--icono-label-mobile-hand-size:\s*1\.8rem;/)
+  assert.doesNotMatch(tokenBlock, /--icono-label-mobile-typewriter-size:\s*0\.672rem;/)
 })
 
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {

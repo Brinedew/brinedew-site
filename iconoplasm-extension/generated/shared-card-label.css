@@ -1597,8 +1597,8 @@
        - one handwritten voice
        Do not reintroduce per-field font sizing/spacing drift here; only the small sans
        captions may vary independently. */
-    --icono-label-mobile-typewriter-size: 0.672rem;
-    --icono-label-mobile-hand-size: 1.2rem;
+    --icono-label-mobile-typewriter-size: 1.008rem;
+    --icono-label-mobile-hand-size: 1.8rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name,
@@ -1736,7 +1736,7 @@
     background: transparent;
     overflow: visible;
     font-family: "League Spartan";
-    font-size: 0.76rem;
+    font-size: 1.14rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before,
@@ -1754,7 +1754,7 @@
     white-space: nowrap;
     color: var(--icono-label-ink);
     font-family: "League Spartan";
-    font-size: 0.76rem;
+    font-size: 1.14rem;
     font-weight: 800;
     line-height: 0.86;
     letter-spacing: 0.08em;
