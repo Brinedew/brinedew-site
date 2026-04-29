@@ -1848,12 +1848,12 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn {
     position: relative;
-    min-height: 0.9rem;
+    min-height: 1.24rem;
     display: block;
     width: 100%;
     min-width: 0;
     padding: 0 0 0.01rem;
-    font-size: 0.52rem;
+    font-size: 0.78rem;
     line-height: 1;
     letter-spacing: 0.08em;
   }
@@ -1945,8 +1945,8 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-mobile-peek-swipe
     .icono-vote-btn-arrow {
-    inline-size: 0.96rem;
-    block-size: 0.66rem;
+    inline-size: 1.44rem;
+    block-size: 0.99rem;
     display: block;
     align-self: center;
     overflow: visible;

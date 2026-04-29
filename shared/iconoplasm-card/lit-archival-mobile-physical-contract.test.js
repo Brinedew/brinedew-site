@@ -442,6 +442,18 @@ test("mobile card uses the larger B-483 type scale instead of the tiny draft sca
   assert.match(tokenBlock, /--icono-label-mobile-typewriter-size:\s*1\.008rem;/)
   assert.match(tokenBlock, /--icono-label-mobile-hand-size:\s*1\.8rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-typewriter-size:\s*0\.672rem;/)
+  const voteButtonBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn",
+  )
+  assert.match(voteButtonBlock, /font-size:\s*0\.78rem;/)
+  assert.match(voteButtonBlock, /min-height:\s*1\.24rem;/)
+  assert.doesNotMatch(voteButtonBlock, /font-size:\s*0\.52rem;/)
+  const voteArrowBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-mobile-peek-swipe\n    .icono-vote-btn-arrow",
+  )
+  assert.match(voteArrowBlock, /inline-size:\s*1\.44rem;/)
 })
 
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {
@@ -607,8 +619,8 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   assert.match(css, /\.icono-label-mobile-peek-swipe[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/)
   assert.match(
     css,
-    /\.icono-label-mobile-peek-swipe[\s\S]*\.icono-vote-btn-arrow[\s\S]*inline-size:\s*0\.96rem/,
-    "collapsed voting arrows must stay compact enough that MISFIT and FIT both fit on narrow mobile viewports",
+    /\.icono-label-mobile-peek-swipe[\s\S]*\.icono-vote-btn-arrow[\s\S]*inline-size:\s*1\.44rem/,
+    "collapsed voting arrows should follow the larger B-483 mobile vote scale while MISFIT and FIT stay in two fixed columns",
   )
   assert.match(
     css,
