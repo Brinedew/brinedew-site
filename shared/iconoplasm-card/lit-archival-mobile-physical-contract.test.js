@@ -482,6 +482,20 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     /gap:\s*0\.24rem;/,
     "the handwritten kg correction should remain attached to kDa without overlapping the typed unit",
   )
+  const categoryOptionBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-category-option\n    .icono-label-option-loop",
+  )
+  assert.match(
+    categoryOptionBlock,
+    /display:\s*none;/,
+    "mobile category selection cannot use an oversized rough SVG loop that cuts through adjacent printed lanes",
+  )
+  assert.match(
+    css,
+    /\.icono-label-category-option\s*\n\s*\.icono-label-option\.is-selected\s*\n\s*\.icono-label-option-copy\s*\{[\s\S]*text-decoration:\s*underline;/,
+    "mobile category selection should stay inside the typed word's own lane",
+  )
 })
 
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {
