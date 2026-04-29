@@ -201,6 +201,11 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
     /Math\.min\(1\.72,\s*Math\.max\(0\.78,\s*availableWidth \/ physicalWidth\)\)/,
     "mobile card must zoom both down and up to fit the live browser edge, not freeze at 1x",
   )
+  assert.match(
+    setupBlock,
+    /function \(value\) \{\s*return value \/ activeFitScale\s*\}/,
+    "geometry measured after CSS zoom must be normalized back into physical card pixels before writing CSS vars",
+  )
   assert.match(setupBlock, /--icono-label-mobile-fit-scale/)
 })
 
@@ -302,10 +307,10 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
 
   assert.match(geometry, /--icono-label-mobile-dossier-top/)
   assert.match(geometry, /--icono-label-mobile-viewport-height/)
-  assert.match(geometry, /voteRect \? voteRect\.bottom - cardRect\.top \+ 16/)
-  assert.match(geometry, /fullInfoHeight = Math\.max\(peekRect\.height/)
+  assert.match(geometry, /voteRect[\s\S]*\? toPhysicalCardPx\(voteRect\.bottom - cardRect\.top\) \+ 16/)
+  assert.match(geometry, /fullInfoHeight = Math\.max\(toPhysicalCardPx\(peekRect\.height\)/)
   assert.match(geometry, /measuredContent = infoCard\.querySelectorAll/)
-  assert.match(geometry, /measuredRect\.bottom - infoRect\.top/)
+  assert.match(geometry, /toPhysicalCardPx\(measuredRect\.bottom - infoRect\.top\)/)
   assert.match(geometry, /dossierTop \+ fullInfoHeight/)
   assert.doesNotMatch(
     geometry,

@@ -2475,6 +2475,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var fitScale = Math.min(1.72, Math.max(0.78, availableWidth / physicalWidth))
       card.style.setProperty("--icono-label-mobile-fit-scale", fitScale.toFixed(4))
     }
+    var activeFitScale =
+      typeof fitScale === "number" && fitScale > 0
+        ? fitScale
+        : computedCard && computedCard.getPropertyValue("--icono-label-mobile-fit-scale")
+        ? parseFloat(computedCard.getPropertyValue("--icono-label-mobile-fit-scale"))
+        : 1
+    if (!(activeFitScale > 0)) activeFitScale = 1
+    var toPhysicalCardPx = function (value) {
+      return value / activeFitScale
+    }
 
     var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
     var infoCard = card.querySelector(".iconoplasm-tooltip-body")
@@ -2497,12 +2507,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       voteBox && typeof voteBox.getBoundingClientRect === "function"
         ? voteBox.getBoundingClientRect()
         : null
-    var dossierTop = Math.max(0, portraitRect.bottom - cardRect.top)
+    var dossierTop = Math.max(0, toPhysicalCardPx(portraitRect.bottom - cardRect.top))
     card.style.setProperty("--icono-label-mobile-dossier-top", dossierTop.toFixed(2) + "px")
 
     var isExpanded = card.getAttribute("data-icono-mobile-expanded") === "true"
-    var closedBottom = voteRect ? voteRect.bottom - cardRect.top + 16 : dossierTop + peekRect.height + 12
-    var fullInfoHeight = Math.max(peekRect.height)
+    var closedBottom = voteRect
+      ? toPhysicalCardPx(voteRect.bottom - cardRect.top) + 16
+      : dossierTop + toPhysicalCardPx(peekRect.height) + 12
+    var fullInfoHeight = Math.max(toPhysicalCardPx(peekRect.height))
     var measuredContent = infoCard.querySelectorAll(
       [
         ".icono-label-mobile-peek",
@@ -2517,7 +2529,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var measuredNode = measuredContent[i]
       if (!measuredNode || typeof measuredNode.getBoundingClientRect !== "function") continue
       var measuredRect = measuredNode.getBoundingClientRect()
-      fullInfoHeight = Math.max(fullInfoHeight, measuredRect.bottom - infoRect.top)
+      fullInfoHeight = Math.max(fullInfoHeight, toPhysicalCardPx(measuredRect.bottom - infoRect.top))
     }
     var openBottom = dossierTop + fullInfoHeight + 8
     var viewportHeight = Math.ceil(isExpanded ? openBottom : closedBottom)
