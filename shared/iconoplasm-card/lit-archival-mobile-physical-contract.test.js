@@ -119,21 +119,42 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
 
   const expandedBlock = cssBlockFor(css, '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]')
   assert.match(expandedBlock, /clip-path:\s*inset\(0\);/, "jagged crop must disappear when the viewport is fully open")
+  const peekAfterBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after",
+  )
   assert.equal(
     /icono-card--variant-lab-label\.icono-card--brick::after[\s\S]*linear-gradient/.test(css) ||
-      css.includes(".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after"),
+      /linear-gradient/.test(peekAfterBlock),
     false,
     "the rip edge must not be a painted pseudo-element overlay on the card or peek",
   )
 })
 
-test("mobile infocard tab seats on the sheet and casts a shadow over the blot card", async () => {
+test("mobile infocard tab is part of the sheet surface and casts a shadow over the blot card", async () => {
   const css = await sourceText(cssPath)
+  const litCard = await sourceText(litCardPath)
   assert.match(
     css,
     /filter:\s*drop-shadow\(0 -0\.24rem 0\.28rem rgba\(53, 38, 27, 0\.16\)\)/,
     "the moving info card needs an upward shadow onto the portrait/blot card",
   )
+
+  assert.equal(
+    /icono-label-mobile-peek-tab-art|icono-label-mobile-peek-tab-fill|icono-label-mobile-peek-tab-highlight/.test(
+      litCard,
+    ),
+    false,
+    "the gene tab must not be a separate SVG badge that can visually detach from the sheet",
+  )
+
+  const peekBeforeBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::before",
+  )
+  assert.match(peekBeforeBlock, /bottom:\s*calc\(100% - 0\.08rem\);/)
+  assert.match(peekBeforeBlock, /border-bottom:\s*0;/)
+  assert.match(peekBeforeBlock, /border-radius:\s*1\.16rem 1\.16rem 0 0/)
 
   const tabBlock = cssBlockFor(
     css,
@@ -143,6 +164,11 @@ test("mobile infocard tab seats on the sheet and casts a shadow over the blot ca
     tabBlock,
     /bottom:\s*calc\(100% - 0\.08rem\);/,
     "the gene symbol tab must seat on the infocard top edge instead of sagging into the sheet",
+  )
+  assert.match(
+    tabBlock,
+    /visible tab material is owned by `\.icono-label-mobile-peek::before`/,
+    "the tab text container must not own separate material/border geometry",
   )
 
   const symbolBlock = cssBlockFor(

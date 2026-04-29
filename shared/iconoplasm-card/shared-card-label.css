@@ -1614,6 +1614,40 @@
       inset 0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 38%, transparent);
   }
 
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::before {
+    content: "";
+    position: absolute;
+    right: 0.42rem;
+    bottom: calc(100% - 0.08rem);
+    inline-size: calc(var(--icono-label-mobile-tab-width) + 1.36rem);
+    block-size: var(--icono-label-mobile-tab-height);
+    pointer-events: none;
+    z-index: -1;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--icono-label-paper) 96%, #eadfce 4%) 0%,
+      color-mix(in srgb, var(--icono-label-paper) 91%, #e7dccb 9%) 100%
+    );
+    border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 72%, transparent);
+    border-bottom: 0;
+    border-radius: 1.16rem 1.16rem 0 0 / 1rem 1rem 0 0;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 58%, transparent),
+      0 -0.18rem 0.28rem rgba(53, 38, 27, 0.1);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+    inset-block-end: calc(100% + 0.28rem);
+    right: calc(0.42rem + 0.7rem);
+    inline-size: calc(var(--icono-label-mobile-tab-width) - 0.04rem);
+    block-size: 1px;
+    background: color-mix(in srgb, white 64%, transparent);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-toggle {
     display: grid;
     grid-template-rows: min-content min-content;
@@ -1638,17 +1672,13 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab {
-    /* Stitch is only the tab-object reference. In production it must still obey the site rules:
-       - no angular / asymmetric / homemade office-tab geometry
-       - soft archival rounding with symmetric shoulders, using a real vector tab asset
-       - bottom edge seated exactly on the dossier seam
-       - expanded state must keep the entire collapse affordance inside the viewport
-       - no floating gap, no downward overlap into the slider, and no off-frame overhang
-       - desktop symbol typography voice ("League Spartan"), not the mono registry face */
+    /* The visible tab material is owned by `.icono-label-mobile-peek::before`.
+       This span only positions the gene symbol so the tab cannot visually detach
+       as an independent badge. */
     position: absolute;
     right: 0.42rem;
     bottom: calc(100% - 0.08rem);
-    z-index: 1;
+    z-index: 2;
     display: grid;
     place-items: center;
     inline-size: calc(var(--icono-label-mobile-tab-width) + 1.36rem);
@@ -1662,29 +1692,6 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before,
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::after {
     content: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-art {
-    position: absolute;
-    inset: 0;
-    inline-size: 100%;
-    block-size: 100%;
-    pointer-events: none;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-fill {
-    fill: color-mix(in srgb, var(--icono-label-paper) 95%, #eadfce 5%);
-    stroke: color-mix(in srgb, var(--icono-label-rule-strong) 82%, transparent);
-    stroke-width: 1;
-    vector-effect: non-scaling-stroke;
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-highlight {
-    fill: none;
-    stroke: color-mix(in srgb, rgba(255, 255, 255, 0.78) 58%, transparent);
-    stroke-width: 0.8;
-    stroke-linecap: round;
-    vector-effect: non-scaling-stroke;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol {

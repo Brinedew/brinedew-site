@@ -338,22 +338,6 @@ function mobilePeekTemplate(model) {
       aria-expanded="false"
     >
       <span class="icono-label-mobile-peek-tab" aria-hidden="true">
-        <svg
-          class="icono-label-mobile-peek-tab-art"
-          viewBox="0 0 188 72"
-          preserveAspectRatio="none"
-          focusable="false"
-          aria-hidden="true"
-        >
-          <path
-            class="icono-label-mobile-peek-tab-fill"
-            d="M6 72V44C6 39.6 9.6 36 14 36H51.4C58.6 36 64.7 31.3 69.1 22.1C73.1 13.8 79.6 8 94 8C108.4 8 114.9 13.8 118.9 22.1C123.3 31.3 129.4 36 136.6 36H174C178.4 36 182 39.6 182 44V72H6Z"
-          ></path>
-          <path
-            class="icono-label-mobile-peek-tab-highlight"
-            d="M17 42.6H50.2C61.5 42.6 70.8 34.9 76.5 22.8C80.1 15.1 84.8 11.8 94 11.8C103.2 11.8 107.9 15.1 111.5 22.8C117.2 34.9 126.5 42.6 137.8 42.6H171"
-          ></path>
-        </svg>
         <span class="icono-label-mobile-peek-tab-symbol">${model.symbol}</span>
       </span>
       <span class="icono-label-mobile-peek-topline">
