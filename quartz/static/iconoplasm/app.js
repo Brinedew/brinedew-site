@@ -2130,10 +2130,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           mobileReview: heroMobileReview,
           portraitAlt: g.symbol + " blot",
           portraitSrc: portraitUrl,
-          voteHtml:
-            !isImageOnlyVariant && portraitAssetSha
-              ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", { showArrows: false })
-              : "",
+          voteHtml: !isImageOnlyVariant
+            ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", {
+                showArrows: isMobileLabelReviewEnabled(),
+              })
+            : "",
         })
       : '<div class="iconoplasm-tooltip-header">' +
         '<div class="icono-shared-card-header-row">' +
