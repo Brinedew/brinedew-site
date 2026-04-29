@@ -232,6 +232,51 @@ test("mobile infocard gestures keep voting and navigation isolated from the view
   )
 })
 
+test("mobile swipe voting keeps feedback alive until the vote component settles", async () => {
+  const app = await sourceText(appPath)
+
+  assert.match(
+    app,
+    /function mobileLabelVoteBox\(card\)[\s\S]*\.icono-label-mobile-peek-swipe \[data-icono-brick-vote-box\][\s\S]*\[data-icono-brick-vote-box\]/,
+    "swipe voting must drive the visible mobile peek vote box before falling back to a generic brick vote box",
+  )
+  assert.match(
+    app,
+    /function commitMobileLabelSwipe\(card, direction\)[\s\S]*var box = mobileLabelVoteBox\(card\)/,
+    "swipe commit must not query the first generic vote box directly",
+  )
+  assert.match(
+    app,
+    /card\.setAttribute\("data-icono-mobile-swipe-committed", "true"\)/,
+    "released swipe feedback must remain in a committed visual state while vote snapshot and POST settle",
+  )
+  assert.match(
+    app,
+    /card\.__iconoMobileSwipeFallbackTimer = window\.setTimeout\([\s\S]*clearMobileLabelSwipeState\(card\)[\s\S]*2600\)/,
+    "fallback cleanup must be long enough for deferred snapshot voting instead of blindly clearing after 320ms",
+  )
+  assert.doesNotMatch(
+    app,
+    /function commitMobileLabelSwipe\(card, direction\)[\s\S]*clearMobileLabelSwipeState\(card\)\s*\n\s*}, 320\)/,
+    "committed swipes must not erase feedback before the deferred vote UI can render",
+  )
+  assert.match(
+    app,
+    /onVoteCommitted: function \(\) \{\s*clearMobileLabelSwipeState\(brickCard\)\s*\}/,
+    "the shared vote component must clear mobile swipe state after the vote commit callback",
+  )
+  assert.match(
+    app,
+    /onError: function \(\) \{\s*clearMobileLabelSwipeState\(brickCard\)\s*\}/,
+    "vote errors must also release mobile swipe pending state",
+  )
+  assert.match(
+    app,
+    /if \(typeof opts\.onError === "function"\) \{\s*opts\.onError\(phase, err\)\s*\}/,
+    "the page-level vote wrapper must forward shared vote errors to mobile swipe cleanup",
+  )
+})
+
 test("mobile collapsed voting remains in the top infocard, not in a separate pocket", async () => {
   const app = await sourceText(appPath)
   const css = await sourceText(cssPath)

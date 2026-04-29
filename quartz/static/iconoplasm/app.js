@@ -2382,6 +2382,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       },
       onError: function (phase, err) {
         console.error("[Iconoplasm] vote " + phase + " error:", err)
+        if (typeof opts.onError === "function") {
+          opts.onError(phase, err)
+        }
       },
     })
   }
@@ -2402,16 +2405,24 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (!card || !card.classList || !card.classList.contains("icono-card--brick")) continue
       var box = card.querySelector("[data-icono-brick-vote-box]")
       if (!box) continue
-      wireVoteBox(
-        box,
-        card.getAttribute("data-icono-symbol"),
-        box.getAttribute("data-icono-brick-vote-box"),
-        {
-          deferSnapshot: true,
-          visionId: box.getAttribute("data-icono-vision-id") || "",
-          candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
-        },
-      )
+      ;(function (brickCard, voteBox) {
+        wireVoteBox(
+          voteBox,
+          brickCard.getAttribute("data-icono-symbol"),
+          voteBox.getAttribute("data-icono-brick-vote-box"),
+          {
+            deferSnapshot: true,
+            visionId: voteBox.getAttribute("data-icono-vision-id") || "",
+            candidateImageId: voteBox.getAttribute("data-icono-candidate-image-id") || 0,
+            onVoteCommitted: function () {
+              clearMobileLabelSwipeState(brickCard)
+            },
+            onError: function () {
+              clearMobileLabelSwipeState(brickCard)
+            },
+          },
+        )
+      })(card, box)
     }
   }
 
@@ -2427,6 +2438,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     card.removeAttribute("data-icono-mobile-swiping")
     card.removeAttribute("data-icono-mobile-swipe-pending")
     card.removeAttribute("data-icono-mobile-swipe-dir")
+    card.removeAttribute("data-icono-mobile-swipe-committed")
     card.style.removeProperty("--icono-label-mobile-swipe-offset")
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
     card.style.removeProperty("--icono-label-mobile-dossier-top")
@@ -2564,13 +2576,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function clearMobileLabelSwipeState(card) {
     if (!card) return
+    var timer = card.__iconoMobileSwipeFallbackTimer
+    if (timer) {
+      window.clearTimeout(timer)
+      card.__iconoMobileSwipeFallbackTimer = null
+    }
     card.removeAttribute("data-icono-mobile-swiping")
     card.removeAttribute("data-icono-mobile-swipe-pending")
     card.removeAttribute("data-icono-mobile-swipe-dir")
+    card.removeAttribute("data-icono-mobile-swipe-committed")
     card.style.removeProperty("--icono-label-mobile-swipe-offset")
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
     card.style.removeProperty("--icono-label-mobile-reject-circle-opacity")
     card.style.removeProperty("--icono-label-mobile-approve-circle-opacity")
+  }
+
+  function mobileLabelVoteBox(card) {
+    if (!card || typeof card.querySelector !== "function") return null
+    return card.querySelector(
+      ".icono-label-mobile-peek-swipe [data-icono-brick-vote-box], .icono-label-mobile-peek-swipe [data-icono-vote-box], .icono-label-mobile-peek-swipe .icono-vote-box--label, [data-icono-brick-vote-box]",
+    )
   }
 
   function updateMobileLabelSwipeDirection(card, dx) {
@@ -2598,7 +2623,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function commitMobileLabelSwipe(card, direction) {
     if (!card) return
     if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
-    var box = card.querySelector("[data-icono-brick-vote-box]")
+    var box = mobileLabelVoteBox(card)
     var button = box
       ? box.querySelector(direction > 0 ? "[data-icono-vote-up]" : "[data-icono-vote-down]")
       : null
@@ -2607,6 +2632,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       return
     }
     card.setAttribute("data-icono-mobile-swipe-pending", "true")
+    card.setAttribute("data-icono-mobile-swipe-committed", "true")
     card.setAttribute("data-icono-mobile-swipe-dir", direction > 0 ? "right" : "left")
     card.style.setProperty(
       "--icono-label-mobile-swipe-offset",
@@ -2628,9 +2654,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     } else {
       setMobileLabelQcCopy(card, "pending review")
     }
-    window.setTimeout(function () {
+    card.__iconoMobileSwipeFallbackTimer = window.setTimeout(function () {
+      card.__iconoMobileSwipeFallbackTimer = null
       clearMobileLabelSwipeState(card)
-    }, 320)
+    }, 2600)
   }
 
   function wireMobileLabelCard(card) {
