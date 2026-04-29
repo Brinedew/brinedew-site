@@ -929,9 +929,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function fallbackDiscoveredGene(entry) {
     var symbol = normalizedSymbol(entry && entry.gene_symbol)
+    var fullName = String((entry && entry.full_name) || "").trim()
     return {
       symbol: symbol,
-      full_name: symbol || "Unknown gene",
+      full_name: fullName || symbol || "Unknown gene",
       color: "#857565",
       portrait: { status: "pending" },
       portrait_candidates: [],
@@ -4092,18 +4093,24 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       // settings host on brinedew.bio. Wait for that first sync before the initial
       // discoveries request, otherwise a fresh load can race ahead with stale defaults
       // and silently drop admin-only flags like show_all=1.
-      galleryState.readyPromise = Promise.all([
-        initialSharedSettingsPromise,
-        fetchHomeCollectionCounts(),
-      ])
-        .then(function (results) {
+      galleryState.readyPromise = initialSharedSettingsPromise
+        .then(function () {
           if (renderDisposed) return { discoveryData: {}, countData: {} }
-          var countData = results[1] || {}
+          fetchHomeCollectionCounts().then(function (countData) {
+            if (renderDisposed || !galleryState.ready) return
+            galleryState.total = Math.max(0, Number((countData && countData.total) || 0) || 0)
+            galleryState.publishedTotal = Math.max(
+              0,
+              Number((countData && countData.publishedTotal) || 0) || 0,
+            )
+            syncHeroCount()
+            renderCollectionChrome()
+          })
           return fetchDiscoveryState(galleryState.order, galleryState.seed).then(
             function (discoveryData) {
               return {
                 discoveryData: discoveryData || {},
-                countData: countData,
+                countData: {},
               }
             },
           )
@@ -4390,57 +4397,54 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             maybeRestoreHomeScroll()
             return
           }
-          return Promise.all(
-            pageEntries.map(function (entry) {
-              return loadDiscoveredGeneCardData(entry)
-            }),
-          ).then(function (items) {
-            if (renderDisposed || requestId !== activeGalleryRequest) return
-            var resolvedItems = (Array.isArray(items) ? items : []).filter(Boolean)
-            if (isFirstPage) {
-              grid.innerHTML = ""
-              grid.setAttribute("data-layout", homeLayout)
-              grid.setAttribute("aria-busy", "false")
-            }
-            if (resolvedItems.length) {
-              var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
-              galleryState.items = galleryState.items.concat(resolvedItems)
-              galleryState.offset += pageEntries.length
-              if (homeLayout === "masonry") {
-                applyHomeMasonry(grid, newCards)
-                setupOrderedPortraitPrefetch(grid, galleryState.items)
-              } else {
-                destroyHomeMasonry()
-                warmBrickCardImages(resolvedItems)
-                wireBrickVoteBoxes(newCards)
-                wireMobileLabelCards(newCards)
-                refreshPortraitLightbox()
-                void hydrateBrickCards(newCards)
-              }
-              if (
-                isFirstPage &&
-                galleryState.offset < galleryState.prefillTarget &&
-                galleryState.hasMore
-              ) {
-                clearBackgroundPrefill()
-                backgroundPrefillTimer = window.setTimeout(function () {
-                  backgroundPrefillTimer = null
-                  loadNextGalleryPage()
-                }, 140)
-              }
-            } else {
-              galleryState.offset += pageEntries.length
-            }
-            renderCollectionChrome()
-            syncHeroCount()
-            updateSentinelObserver()
-            setLoadingState("", false)
-            syncHomeHistoryState(false)
-            maybeRestoreHomeScroll()
-            if (orderEl && orderEl.value !== galleryState.order) {
-              orderEl.value = galleryState.order
-            }
+          var immediateItems = pageEntries.map(function (entry) {
+            return fallbackDiscoveredGene(entry)
           })
+          var resolvedItems = immediateItems.filter(Boolean)
+          if (isFirstPage) {
+            grid.innerHTML = ""
+            grid.setAttribute("data-layout", homeLayout)
+            grid.setAttribute("aria-busy", "false")
+          }
+          if (resolvedItems.length) {
+            var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
+            galleryState.items = galleryState.items.concat(resolvedItems)
+            galleryState.offset += pageEntries.length
+            if (homeLayout === "masonry") {
+              applyHomeMasonry(grid, newCards)
+              setupOrderedPortraitPrefetch(grid, galleryState.items)
+            } else {
+              destroyHomeMasonry()
+              wireBrickVoteBoxes(newCards)
+              wireMobileLabelCards(newCards)
+              refreshPortraitLightbox()
+              void hydrateBrickCards(newCards).then(function () {
+                warmBrickCardImages(galleryState.items)
+              })
+            }
+            if (
+              isFirstPage &&
+              galleryState.offset < galleryState.prefillTarget &&
+              galleryState.hasMore
+            ) {
+              clearBackgroundPrefill()
+              backgroundPrefillTimer = window.setTimeout(function () {
+                backgroundPrefillTimer = null
+                loadNextGalleryPage()
+              }, 140)
+            }
+          } else {
+            galleryState.offset += pageEntries.length
+          }
+          renderCollectionChrome()
+          syncHeroCount()
+          updateSentinelObserver()
+          setLoadingState("", false)
+          syncHomeHistoryState(false)
+          maybeRestoreHomeScroll()
+          if (orderEl && orderEl.value !== galleryState.order) {
+            orderEl.value = galleryState.order
+          }
         })
         .catch(function (err) {
           if (renderDisposed || requestId !== activeGalleryRequest) return
