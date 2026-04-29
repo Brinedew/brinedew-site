@@ -159,10 +159,10 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
   )
   assert.match(
     cardBlock,
-    /100% 97\.4%,\s*98\.9% 99\.8%/,
-    "the real clipped edge must have enough amplitude to be visible, not a nearly-straight micro-zigzag",
+    /100% 96\.7%,\s*96\.8% 99\.9%/,
+    "the real clipped edge must use broad enough teeth to read as torn at mobile size, not a dense line that visually averages straight",
   )
-  assert.match(cardBlock, /50\.5% 99\.9%/)
+  assert.match(cardBlock, /51\.2% 99\.9%/)
   assert.match(
     cardBlock,
     /filter:\s*[\s\S]*drop-shadow\(0 0\.045rem 0 color-mix\(in srgb, var\(--icono-label-rule-strong\) 58%, transparent\)\)[\s\S]*drop-shadow\(0 0\.16rem 0\.18rem rgba\(53, 38, 27, 0\.16\)\)/,
