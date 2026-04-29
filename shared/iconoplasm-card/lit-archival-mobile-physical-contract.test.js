@@ -191,6 +191,11 @@ test("mobile infocard gestures keep voting and navigation isolated from the view
   )
   assert.match(
     app,
+    /card\.addEventListener\("keydown"[\s\S]*event\.key !== "Enter" && event\.key !== " "[\s\S]*setMobileLabelExpanded/,
+    "the non-button mobile peek toggle must keep keyboard activation",
+  )
+  assert.match(
+    app,
     /target\.closest\(\s*"\[data-icono-label-mobile-toggle\], \[data-icono-vote-box\], \[data-icono-nav\], a"/,
     "swipe gesture setup must exclude toggle, vote, nav, and link controls",
   )
@@ -229,6 +234,16 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
     litCard,
     /class="icono-label-mobile-peek-swipe"\>\$\{voteShellTemplate\(model\.voteHtml\)\}/,
     "the closed top infocard must include voting, not hide it in the expanded sheet",
+  )
+  assert.match(
+    litCard,
+    /<div[\s\S]*role="button"[\s\S]*data-icono-label-mobile-toggle/,
+    "the mobile peek toggle must be a non-button interactive region so it can legally contain vote buttons",
+  )
+  assert.equal(
+    /<button[\s\S]*data-icono-label-mobile-toggle/.test(litCard),
+    false,
+    "the mobile peek toggle must not be a button containing nested vote buttons",
   )
   assert.match(
     litCard,

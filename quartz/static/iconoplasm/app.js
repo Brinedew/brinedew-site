@@ -2710,6 +2710,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       setMobileLabelExpanded(card, card.getAttribute("data-icono-mobile-expanded") !== "true")
     })
 
+    card.addEventListener("keydown", function (event) {
+      if (!event || (event.key !== "Enter" && event.key !== " ")) return
+      if (
+        event.target &&
+        event.target.closest &&
+        event.target.closest("[data-icono-vote-box], [data-icono-brick-vote-box], [data-icono-gene-vote-box]")
+      ) {
+        return
+      }
+      var toggle =
+        event.target && event.target.closest
+          ? event.target.closest("[data-icono-label-mobile-toggle]")
+          : null
+      if (!toggle) return
+      event.preventDefault()
+      if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return
+      setMobileLabelExpanded(card, card.getAttribute("data-icono-mobile-expanded") !== "true")
+    })
+
     card.addEventListener("pointerdown", function (event) {
       if (!isMobileLabelReviewEnabled()) return
       if (card.getAttribute("data-icono-mobile-swipe-pending") === "true") return

@@ -861,8 +861,9 @@ function sheetTemplate(model) {
 function mobilePeekTemplate(model) {
   if (!(model.mode === "brick" && model.mobileReview)) return A;
   return b2`<div class="icono-label-mobile-peek">
-    <button
-      type="button"
+    <div
+      role="button"
+      tabindex="0"
       class="icono-label-mobile-peek-toggle"
       data-icono-label-mobile-toggle
       aria-expanded="false"
@@ -893,7 +894,7 @@ function mobilePeekTemplate(model) {
         <span class="icono-label-mobile-peek-name">${model.fullName}</span>
       </span>
       <span class="icono-label-mobile-peek-swipe">${voteShellTemplate(model.voteHtml)}</span>
-    </button>
+    </div>
   </div>`;
 }
 function archivalTemplate(model) {
