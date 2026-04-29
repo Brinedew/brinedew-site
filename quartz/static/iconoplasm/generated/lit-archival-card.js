@@ -760,7 +760,7 @@ function footerTemplate(model) {
   </div>`;
 }
 function sheetTemplate(model) {
-  var sheetVoteHtml = model.mode === "brick" && model.mobileReview ? "" : model.voteHtml;
+  var sheetVoteHtml = model.voteHtml;
   return b2`<div class="icono-label-sheet-body">
     <div class="icono-label-header-row">
       ${titleTemplate(model)}

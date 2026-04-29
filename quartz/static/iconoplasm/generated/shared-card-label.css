@@ -1357,6 +1357,24 @@
       rotate(var(--icono-label-mobile-swipe-rotate, 0deg));
   }
 
+  .icono-card--variant-lab-label.icono-card--brick::after {
+    content: "";
+    position: absolute;
+    left: 0.82rem;
+    right: 0.82rem;
+    bottom: 0.26rem;
+    z-index: 6;
+    height: 0.48rem;
+    pointer-events: none;
+    opacity: 0.58;
+    background:
+      linear-gradient(135deg, transparent 0 43%, var(--icono-label-rule-strong) 44% 52%, transparent 53% 100%)
+        left top / 0.64rem 0.48rem repeat-x,
+      linear-gradient(225deg, transparent 0 43%, var(--icono-label-rule-strong) 44% 52%, transparent 53% 100%)
+        left top / 0.64rem 0.48rem repeat-x;
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"] {
     transition: none;
   }
@@ -1421,6 +1439,7 @@
     overflow: visible;
     pointer-events: auto;
     overflow-anchor: none;
+    filter: drop-shadow(0 -0.24rem 0.28rem rgba(53, 38, 27, 0.16));
     --icono-label-info-card-pull-y: calc(
       100% - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-collapse-lift)
     );
@@ -1521,24 +1540,6 @@
       inset 0 -1px 0 color-mix(in srgb, var(--icono-label-rule) 38%, transparent);
   }
 
-  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after {
-    content: "";
-    position: absolute;
-    left: 0.82rem;
-    right: 0.82rem;
-    bottom: -0.42rem;
-    z-index: 2;
-    height: 0.48rem;
-    pointer-events: none;
-    opacity: 0.58;
-    background:
-      linear-gradient(135deg, transparent 0 43%, var(--icono-label-rule-strong) 44% 52%, transparent 53% 100%)
-        left top / 0.64rem 0.48rem repeat-x,
-      linear-gradient(225deg, transparent 0 43%, var(--icono-label-rule-strong) 44% 52%, transparent 53% 100%)
-        left top / 0.64rem 0.48rem repeat-x;
-    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-  }
-
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-toggle {
     display: grid;
     grid-template-rows: min-content min-content;
@@ -1572,7 +1573,7 @@
        - desktop symbol typography voice ("League Spartan"), not the mono registry face */
     position: absolute;
     right: 0.42rem;
-    bottom: calc(100% - 1.72rem);
+    bottom: calc(100% - 0.08rem);
     z-index: 1;
     display: grid;
     place-items: center;
@@ -1626,7 +1627,7 @@
     font-weight: 800;
     line-height: 1;
     letter-spacing: 0.08em;
-    transform: translateY(0.78rem);
+    transform: translateY(0.18rem);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {

@@ -228,7 +228,7 @@ function footerTemplate(model) {
 }
 
 function sheetTemplate(model) {
-  var sheetVoteHtml = model.mode === "brick" && model.mobileReview ? "" : model.voteHtml
+  var sheetVoteHtml = model.voteHtml
   return html`<div class="icono-label-sheet-body">
     <div class="icono-label-header-row">
       ${titleTemplate(model)}

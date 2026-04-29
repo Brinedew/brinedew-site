@@ -69,7 +69,7 @@ test("mobile archival renderer is infocard-only and has no sleeve or material at
   )
 })
 
-test("mobile infocard closed state only peeks the top sheet and draws a zigzag cutoff", async () => {
+test("mobile infocard closed state only peeks the top sheet and draws a viewport-owned zigzag cutoff", async () => {
   const css = await sourceText(cssPath)
   assert.match(
     css,
@@ -95,14 +95,41 @@ test("mobile infocard closed state only peeks the top sheet and draws a zigzag c
   )
   assert.match(expandedBlock, /--icono-label-info-card-pull-y:\s*0px;/)
 
-  const zigzagBlock = cssBlockFor(
-    css,
-    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after",
-  )
+  const zigzagBlock = cssBlockFor(css, ".icono-card--variant-lab-label.icono-card--brick::after")
   assert.match(zigzagBlock, /linear-gradient\(135deg/)
   assert.match(zigzagBlock, /linear-gradient\(225deg/)
   assert.match(zigzagBlock, /repeat-x/)
   assert.match(zigzagBlock, /mask-image:/)
+  assert.equal(
+    css.includes(".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after"),
+    false,
+    "zigzag cutoff belongs to the viewport/card boundary, not the moving info-card peek",
+  )
+})
+
+test("mobile infocard tab seats on the sheet and casts a shadow over the blot card", async () => {
+  const css = await sourceText(cssPath)
+  assert.match(
+    css,
+    /filter:\s*drop-shadow\(0 -0\.24rem 0\.28rem rgba\(53, 38, 27, 0\.16\)\)/,
+    "the moving info card needs an upward shadow onto the portrait/blot card",
+  )
+
+  const tabBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab",
+  )
+  assert.match(
+    tabBlock,
+    /bottom:\s*calc\(100% - 0\.08rem\);/,
+    "the gene symbol tab must seat on the infocard top edge instead of sagging into the sheet",
+  )
+
+  const symbolBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol",
+  )
+  assert.match(symbolBlock, /transform:\s*translateY\(0\.18rem\);/)
 })
 
 test("expanded mobile viewport follows the infocard, not a removed sleeve layer", async () => {
@@ -128,6 +155,18 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
     litCard,
     /class="icono-label-mobile-peek-swipe"\>\$\{voteShellTemplate\(model\.voteHtml\)\}/,
     "the closed top infocard must include voting, not hide it in the expanded sheet",
+  )
+  assert.match(
+    litCard,
+    /var sheetVoteHtml = model\.voteHtml/,
+    "the expanded info-card QC block must keep the same voting controls as the old infocard-only design",
+  )
+  assert.equal(
+    /var sheetVoteHtml = model\.mode === "brick" && model\.mobileReview \? "" : model\.voteHtml/.test(
+      litCard,
+    ),
+    false,
+    "mobile review must not blank the info-card voting controls",
   )
   assert.match(css, /\.icono-label-mobile-peek-swipe[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/)
   assert.equal(/data-icono-mobile-sleeve-vote|icono-label-mobile-pocket-control/.test(app + css), false)
