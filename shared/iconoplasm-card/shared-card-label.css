@@ -1430,7 +1430,7 @@
     position: absolute;
     inset-inline: 0;
     top: var(--icono-label-mobile-dossier-top);
-    bottom: 0;
+    bottom: auto;
     z-index: 3;
     display: grid;
     grid-template-columns: minmax(0, 1fr);

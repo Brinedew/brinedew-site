@@ -87,6 +87,11 @@ test("mobile infocard closed state only peeks the top sheet and draws a viewport
     /--icono-label-info-card-pull-y:\s*0px;/,
     "the infocard should stay in place; the viewport changes height instead",
   )
+  assert.match(
+    css,
+    /bottom:\s*auto;/,
+    "the absolute infocard must measure its full content height; bottom: 0 clips the open viewport before the color breakdown",
+  )
   assert.match(css, /transform:\s*none;/)
   assert.equal(
     /transform:\s*translateY\(var\(--icono-label-info-card-pull-y\)\)/.test(css),
