@@ -2612,9 +2612,11 @@
     .icono-label-dossier-shell
     .icono-label-mass-unit-stack {
     position: relative;
-    display: inline-block;
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: baseline;
+    gap: 0.18rem;
     inline-size: max-content;
-    block-size: 1em;
     line-height: 1;
   }
 
@@ -2622,9 +2624,8 @@
     .icono-label-dossier-shell
     .icono-label-mass-unit-stack
     .icono-label-hand-note--unit {
-    position: absolute;
-    left: 0.02rem;
-    top: 1.04rem;
+    position: relative;
+    top: 0.02rem;
     z-index: 2;
     pointer-events: none;
   }
