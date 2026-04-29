@@ -765,3 +765,23 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   )
   assert.equal(/data-icono-mobile-sleeve-vote|icono-label-mobile-pocket-control/.test(app + css), false)
 })
+
+test("mobile infocard fixed fields render compact fallback content instead of blank holes", async () => {
+  const runtime = await sourceText(runtimePath)
+
+  assert.match(
+    runtime,
+    /displayedFamilyFeature = String\(Math\.round\(familyMembers\)\) \+ "-member lineage"/,
+    "family trait should show a compact lineage fallback when the payload has a family but no trait text",
+  )
+  assert.match(
+    runtime,
+    /displayedFamilyFeature = "lineage note pending"/,
+    "family trait should not render as an empty archival field for real families with missing notes",
+  )
+  assert.match(
+    runtime,
+    /politicsDisplay\.character \|\| \(politicsDisplay\.isNeutral \? "neutral" : "unclassified"\)/,
+    "alignment note should show an explicit neutral/unclassified fallback instead of looking unloaded",
+  )
+})

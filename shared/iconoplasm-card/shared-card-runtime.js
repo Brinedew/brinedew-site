@@ -1169,7 +1169,14 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       (Number.isFinite(familyMembers) && familyMembers > 1) ||
       (!Number.isFinite(familyMembers) && family && family.toUpperCase() !== symbol)
     var displayedFamily = hasRealFamily ? family : ""
-    var displayedFamilyFeature = hasRealFamily ? familyFeature : ""
+    var displayedFamilyFeature = ""
+    if (hasRealFamily && familyFeature) {
+      displayedFamilyFeature = familyFeature
+    } else if (hasRealFamily && Number.isFinite(familyMembers) && familyMembers > 1) {
+      displayedFamilyFeature = String(Math.round(familyMembers)) + "-member lineage"
+    } else if (hasRealFamily) {
+      displayedFamilyFeature = "lineage note pending"
+    }
     var sexOriginValues = uniqueDisplayValues(
       safeEssence.sex_origin ||
         safeEssence.gender_origin ||
@@ -1232,7 +1239,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       molecularAlignment: String(politicsDisplay.molecular || "")
         .trim()
         .toLowerCase(),
-      politicalNote: normalizeHandwrittenText(politicsDisplay.character),
+      politicalNote: normalizeHandwrittenText(
+        politicsDisplay.character || (politicsDisplay.isNeutral ? "neutral" : "unclassified"),
+      ),
       portraitAlt:
         String(opts.portraitAlt || "").trim() || (symbol ? symbol + " blot" : "Gene blot"),
       portraitDimensions: portraitDimensions(

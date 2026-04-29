@@ -10105,7 +10105,14 @@
       var familyMembers = Number(safeEssence.family_members);
       var hasRealFamily = Number.isFinite(familyMembers) && familyMembers > 1 || !Number.isFinite(familyMembers) && family && family.toUpperCase() !== symbol;
       var displayedFamily = hasRealFamily ? family : "";
-      var displayedFamilyFeature = hasRealFamily ? familyFeature : "";
+      var displayedFamilyFeature = "";
+      if (hasRealFamily && familyFeature) {
+        displayedFamilyFeature = familyFeature;
+      } else if (hasRealFamily && Number.isFinite(familyMembers) && familyMembers > 1) {
+        displayedFamilyFeature = String(Math.round(familyMembers)) + "-member lineage";
+      } else if (hasRealFamily) {
+        displayedFamilyFeature = "lineage note pending";
+      }
       var sexOriginValues = uniqueDisplayValues(
         safeEssence.sex_origin || safeEssence.gender_origin || safeGeneDetail.sex_origin || safeGeneDetail.gender_origin,
         2
@@ -10151,7 +10158,9 @@
         mobileReview: !!opts.mobileReview,
         mode: mode === "brick" ? "brick" : "sheet",
         molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
-        politicalNote: normalizeHandwrittenText(politicsDisplay.character),
+        politicalNote: normalizeHandwrittenText(
+          politicsDisplay.character || (politicsDisplay.isNeutral ? "neutral" : "unclassified")
+        ),
         portraitAlt: String(opts.portraitAlt || "").trim() || (symbol ? symbol + " blot" : "Gene blot"),
         portraitDimensions: portraitDimensions(
           Object.keys(safePortrait).length ? safeGeneDetail : Object.assign({}, safeGeneDetail, { portrait: {} })
