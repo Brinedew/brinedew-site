@@ -463,6 +463,18 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     /\.icono-label-band-cell--category\s*\n\s*\.icono-label-band-secondary\s*\{[\s\S]*top:\s*-1\.04rem;/,
     "category handwriting may spill upward, but it must not sit on top of the typewritten TRANSMEMBRANE/SOLUBLE lane",
   )
+  assert.match(css, /--icono-label-mobile-peek-height:\s*6\.7rem;/)
+  assert.match(css, /--icono-label-mobile-style-row-height:\s*7\.55rem;/)
+  assert.match(css, /--icono-label-mobile-alignment-row-height:\s*11\.55rem;/)
+  const mobilePeekSummaryBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-summary",
+  )
+  assert.match(
+    mobilePeekSummaryBlock,
+    /grid-template-rows:\s*calc\(var\(--icono-label-mobile-typewriter-size\) \* 1\.14 \* 2\);/,
+    "closed/open mobile peek must not leave a third blank typewriter line under voting",
+  )
   const massLineBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-line",
@@ -489,6 +501,25 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     massUnitHandBlock,
     /position:\s*relative;/,
     "mobile mass correction belongs on the same row as kDa, not stacked below it",
+  )
+  const stylePairBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-style-pair",
+  )
+  assert.match(stylePairBlock, /grid-template-columns:\s*minmax\(0,\s*1fr\) max-content;/)
+  const alignmentGridBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-grid",
+  )
+  assert.match(alignmentGridBlock, /grid-template-rows:\s*1\.1rem 1\.1rem;/)
+  const politicsBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-grid\n    .icono-label-hand-note--politics",
+  )
+  assert.match(
+    politicsBlock,
+    /position:\s*static;/,
+    "alignment verdict handwriting must be in its own row, not absolutely crossing both typewritten options",
   )
 })
 
