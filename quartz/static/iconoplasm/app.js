@@ -2460,10 +2460,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     card.style.setProperty("--icono-label-mobile-dossier-top", dossierTop.toFixed(2) + "px")
 
     var isExpanded = card.getAttribute("data-icono-mobile-expanded") === "true"
-    var closedBottom = voteRect ? voteRect.bottom - cardRect.top + 8 : dossierTop + peekRect.height + 6
-    var fullInfoHeight = Math.max(peekRect.height, infoCard.scrollHeight || 0, infoCard.offsetHeight || 0)
+    var closedBottom = voteRect ? voteRect.bottom - cardRect.top + 16 : dossierTop + peekRect.height + 12
+    var fullInfoHeight = Math.max(peekRect.height)
     var measuredContent = infoCard.querySelectorAll(
-      ".icono-label-mobile-peek, .icono-label-dossier-shell, .icono-label-dossier-sheet, .icono-label-specimen-footer",
+      [
+        ".icono-label-mobile-peek",
+        ".icono-label-header-row",
+        ".icono-label-band-row",
+        ".icono-label-style-row",
+        ".icono-label-alignment-row",
+        ".icono-label-specimen-footer",
+      ].join(", "),
     )
     for (var i = 0; i < measuredContent.length; i += 1) {
       var measuredNode = measuredContent[i]

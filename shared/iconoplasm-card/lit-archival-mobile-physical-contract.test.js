@@ -69,7 +69,7 @@ test("mobile archival renderer is infocard-only and has no sleeve or material at
   )
 })
 
-test("mobile infocard closed state only peeks the top sheet and draws a viewport-owned zigzag cutoff", async () => {
+test("mobile infocard closed state only peeks the top sheet and uses a real jagged viewport cutoff", async () => {
   const css = await sourceText(cssPath)
   assert.match(
     css,
@@ -99,18 +99,31 @@ test("mobile infocard closed state only peeks the top sheet and draws a viewport
     "mobile infocard must not be pulled upward or downward by transform",
   )
 
-  const expandedBlock = cssBlockFor(css, '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]::after')
-  assert.match(expandedBlock, /content:\s*none;/, "zigzag must disappear when the viewport is fully open")
+  const mobileCardStart = css.lastIndexOf(
+    ".icono-card--variant-lab-label.icono-card--brick {",
+    css.indexOf("--icono-label-mobile-portrait-pad"),
+  )
+  assert.notEqual(mobileCardStart, -1, "missing mobile card viewport block")
+  const mobileCardEnd = css.indexOf(
+    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]',
+    mobileCardStart,
+  )
+  assert.notEqual(mobileCardEnd, -1, "missing expanded mobile card block")
+  const cardBlock = css.slice(mobileCardStart, mobileCardEnd)
+  assert.match(
+    cardBlock,
+    /clip-path:\s*polygon\(/,
+    "closed viewport edge must be the actual clipped edge, not a painted zigzag on a straight crop",
+  )
+  assert.match(cardBlock, /100% 98\.5%,\s*98\.9% 99\.2%/)
 
-  const zigzagBlock = cssBlockFor(css, ".icono-card--variant-lab-label.icono-card--brick::after")
-  assert.match(zigzagBlock, /linear-gradient\(135deg/)
-  assert.match(zigzagBlock, /linear-gradient\(225deg/)
-  assert.match(zigzagBlock, /repeat-x/)
-  assert.match(zigzagBlock, /mask-image:/)
+  const expandedBlock = cssBlockFor(css, '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]')
+  assert.match(expandedBlock, /clip-path:\s*inset\(0\);/, "jagged crop must disappear when the viewport is fully open")
   assert.equal(
-    css.includes(".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after"),
+    /icono-card--variant-lab-label\.icono-card--brick::after[\s\S]*linear-gradient/.test(css) ||
+      css.includes(".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after"),
     false,
-    "zigzag cutoff belongs to the viewport/card boundary, not the moving info-card peek",
+    "the rip edge must not be a painted pseudo-element overlay on the card or peek",
   )
 })
 
@@ -149,11 +162,16 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
 
   assert.match(geometry, /--icono-label-mobile-dossier-top/)
   assert.match(geometry, /--icono-label-mobile-viewport-height/)
-  assert.match(geometry, /voteRect \? voteRect\.bottom/)
-  assert.match(geometry, /fullInfoHeight = Math\.max\(peekRect\.height, infoCard\.scrollHeight/)
+  assert.match(geometry, /voteRect \? voteRect\.bottom - cardRect\.top \+ 16/)
+  assert.match(geometry, /fullInfoHeight = Math\.max\(peekRect\.height/)
   assert.match(geometry, /measuredContent = infoCard\.querySelectorAll/)
   assert.match(geometry, /measuredRect\.bottom - infoRect\.top/)
   assert.match(geometry, /dossierTop \+ fullInfoHeight/)
+  assert.doesNotMatch(
+    geometry,
+    /infoCard\.scrollHeight|infoCard\.offsetHeight|icono-label-dossier-shell|icono-label-dossier-sheet/,
+    "open viewport height must follow meaningful content endpoints, not stretching grid shells",
+  )
   assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 320\)/)
   assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 720\)/)
   assert.equal(/scrollBy|scrollIntoView|translateY|sleeve|envelope|sleeve-front|physical-noun/.test(geometry), false)
@@ -161,6 +179,25 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
     app,
     /setMobileLabelExpanded\(leadCard,\s*true\)/,
     "the gene page must not auto-expand; closed state should show the top infocard until the viewport is tapped",
+  )
+})
+
+test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {
+  const app = await sourceText(appPath)
+  assert.match(
+    app,
+    /event\.target\.closest\("\[data-icono-vote-box\], \[data-icono-brick-vote-box\], \[data-icono-gene-vote-box\]"\)[\s\S]*return/,
+    "vote clicks must not toggle the infocard viewport",
+  )
+  assert.match(
+    app,
+    /target\.closest\(\s*"\[data-icono-label-mobile-toggle\], \[data-icono-vote-box\], \[data-icono-nav\], a"/,
+    "swipe gesture setup must exclude toggle, vote, nav, and link controls",
+  )
+  assert.match(
+    app,
+    /"a, button, summary, input, select, textarea, label,[\s\S]*\[data-icono-vote-box\], \[data-icono-label-mobile-toggle\], \[data-no-navigate\],[\s\S]*\.icono-label-specimen-viewport/,
+    "grid-card navigation must still exclude mobile infocard toggles and voting controls",
   )
 })
 

@@ -1352,32 +1352,111 @@
     user-select: none;
     transition:
       block-size 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      clip-path 260ms cubic-bezier(0.22, 1, 0.36, 1),
       transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
       opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
     transform: translate3d(var(--icono-label-mobile-swipe-offset, 0px), 0, 0)
       rotate(var(--icono-label-mobile-swipe-rotate, 0deg));
+    clip-path: polygon(
+      0 0,
+      100% 0,
+      100% 98.5%,
+      98.9% 99.2%,
+      97.8% 98.5%,
+      96.7% 99.2%,
+      95.6% 98.5%,
+      94.5% 99.2%,
+      93.4% 98.5%,
+      92.3% 99.2%,
+      91.2% 98.5%,
+      90.1% 99.2%,
+      89% 98.5%,
+      87.9% 99.2%,
+      86.8% 98.5%,
+      85.7% 99.2%,
+      84.6% 98.5%,
+      83.5% 99.2%,
+      82.4% 98.5%,
+      81.3% 99.2%,
+      80.2% 98.5%,
+      79.1% 99.2%,
+      78% 98.5%,
+      76.9% 99.2%,
+      75.8% 98.5%,
+      74.7% 99.2%,
+      73.6% 98.5%,
+      72.5% 99.2%,
+      71.4% 98.5%,
+      70.3% 99.2%,
+      69.2% 98.5%,
+      68.1% 99.2%,
+      67% 98.5%,
+      65.9% 99.2%,
+      64.8% 98.5%,
+      63.7% 99.2%,
+      62.6% 98.5%,
+      61.5% 99.2%,
+      60.4% 98.5%,
+      59.3% 99.2%,
+      58.2% 98.5%,
+      57.1% 99.2%,
+      56% 98.5%,
+      54.9% 99.2%,
+      53.8% 98.5%,
+      52.7% 99.2%,
+      51.6% 98.5%,
+      50.5% 99.2%,
+      49.4% 98.5%,
+      48.3% 99.2%,
+      47.2% 98.5%,
+      46.1% 99.2%,
+      45% 98.5%,
+      43.9% 99.2%,
+      42.8% 98.5%,
+      41.7% 99.2%,
+      40.6% 98.5%,
+      39.5% 99.2%,
+      38.4% 98.5%,
+      37.3% 99.2%,
+      36.2% 98.5%,
+      35.1% 99.2%,
+      34% 98.5%,
+      32.9% 99.2%,
+      31.8% 98.5%,
+      30.7% 99.2%,
+      29.6% 98.5%,
+      28.5% 99.2%,
+      27.4% 98.5%,
+      26.3% 99.2%,
+      25.2% 98.5%,
+      24.1% 99.2%,
+      23% 98.5%,
+      21.9% 99.2%,
+      20.8% 98.5%,
+      19.7% 99.2%,
+      18.6% 98.5%,
+      17.5% 99.2%,
+      16.4% 98.5%,
+      15.3% 99.2%,
+      14.2% 98.5%,
+      13.1% 99.2%,
+      12% 98.5%,
+      10.9% 99.2%,
+      9.8% 98.5%,
+      8.7% 99.2%,
+      7.6% 98.5%,
+      6.5% 99.2%,
+      5.4% 98.5%,
+      4.3% 99.2%,
+      3.2% 98.5%,
+      2.1% 99.2%,
+      1% 98.5%,
+      0 99.2%
+    );
   }
 
-  .icono-card--variant-lab-label.icono-card--brick::after {
-    content: "";
-    position: absolute;
-    left: 0.82rem;
-    right: 0.82rem;
-    bottom: 0.26rem;
-    z-index: 6;
-    height: 0.48rem;
-    pointer-events: none;
-    opacity: 0.58;
-    background:
-      linear-gradient(135deg, transparent 0 43%, var(--icono-label-rule-strong) 44% 52%, transparent 53% 100%)
-        left top / 0.64rem 0.48rem repeat-x,
-      linear-gradient(225deg, transparent 0 43%, var(--icono-label-rule-strong) 44% 52%, transparent 53% 100%)
-        left top / 0.64rem 0.48rem repeat-x;
-    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]::after {
-    content: none;
+  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] {
+    clip-path: inset(0);
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"] {
