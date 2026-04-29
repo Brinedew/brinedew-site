@@ -14559,7 +14559,10 @@ async function handleMobileCardManifest(request, env) {
   }
   const versionInfo = await currentMobileCardSnapshotVersion(env)
   const requestedVersion = sanitizeText(body.version || "", 128)
-  const snapshotVersion = requestedVersion || versionInfo.current
+  const snapshotVersion =
+    requestedVersion && (requestedVersion === versionInfo.current || requestedVersion === versionInfo.previous)
+      ? requestedVersion
+      : versionInfo.current
   if (!symbols.length) {
     return json(
       {

@@ -64,6 +64,17 @@ class FakeIconoplasmDb {
           aliases_json: "[]",
         },
       ],
+      [
+        "INS",
+        {
+          gene_symbol: "INS",
+          full_name: "insulin",
+          uniprot: "",
+          color_hex: "#B0304A",
+          tmh: 0,
+          aliases_json: "[]",
+        },
+      ],
     ])
     this.published = new Map([
       [
@@ -75,6 +86,17 @@ class FakeIconoplasmDb {
           vision_id: "artist-random-v1",
           candidate_image_id: 5423,
           emulsion_id: "A1-5423",
+        },
+      ],
+      [
+        "INS",
+        {
+          asset_sha256: "9c".repeat(32),
+          width: 768,
+          height: 1024,
+          vision_id: "artist-random-v1",
+          candidate_image_id: 4352,
+          emulsion_id: "A1-4352",
         },
       ],
     ])
@@ -103,6 +125,30 @@ class FakeIconoplasmDb {
           politics_origin_json: JSON.stringify(["oncogene"]),
           family_surname: "ERBB",
           family_members: 3,
+          family_feature: "",
+          manifestation: "",
+        },
+      ],
+      [
+        "INS",
+        {
+          full_name: "insulin",
+          weight_kg: null,
+          height_cm: null,
+          sex: "female",
+          age: null,
+          age_years: 61,
+          faction: "",
+          skin_hex: "#B0304A",
+          skin_name: "Ruby",
+          tissue_tau: 0.11,
+          loeuf: 0.9,
+          constraint_percentile: null,
+          aesthetics_json: JSON.stringify(["Sweet Lolita"]),
+          aesthetics_origin_json: JSON.stringify(["Insulin"]),
+          politics_origin_json: JSON.stringify([]),
+          family_surname: "INS",
+          family_members: 1,
           family_feature: "",
           manifestation: "",
         },
@@ -162,29 +208,28 @@ test("mobile card manifest returns complete VMs without pending portrait placeho
 
 test("mobile card manifest writes and reads versioned KV VMs before touching D1", async () => {
   const kvStore = new Map()
-  const version = `kv-vm-version-${crypto.randomUUID()}`
   const first = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"], version }),
+      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
     }),
-    buildEnv({ kvStore, version }),
+    buildEnv({ kvStore }),
   )
   assert.equal(first.status, 200)
   const firstPayload = await first.json()
   assert.equal(firstPayload.data_source, "request_composed")
   assert.equal(firstPayload.diagnostics.kv_keys_missing, 1)
   assert.equal(firstPayload.diagnostics.d1_composed, 1)
-  assert.ok(kvStore.has(`iconoplasm:mobile-card-vm:${version}:ERBB2`))
+  assert.ok(kvStore.has("iconoplasm:mobile-card-vm:test-vm-version:INS"))
 
   const second = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"], version }),
+      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
     }),
-    buildEnv({ kvStore, db: null, version }),
+    buildEnv({ kvStore, db: null }),
   )
   assert.equal(second.status, 200)
   assert.equal(second.headers.get("X-Iconoplasm-Data-Source"), "kv-snapshot")
@@ -195,6 +240,7 @@ test("mobile card manifest writes and reads versioned KV VMs before touching D1"
   assert.equal(secondPayload.diagnostics.d1_composed, 0)
   assert.deepEqual(secondPayload.missing, [])
   assert.equal(secondPayload.cards[0].data_source, "kv_snapshot")
+  assert.equal(secondPayload.cards[0].symbol, "INS")
 })
 
 test("mobile manifest route is wired before the generic /api/iconoplasm proxy", () => {
