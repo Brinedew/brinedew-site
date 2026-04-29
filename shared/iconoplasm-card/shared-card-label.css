@@ -1521,10 +1521,7 @@
     display: block;
     aspect-ratio: var(--width) / var(--height);
     min-height: 0;
-    max-height: calc(
-      100dvh - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-preview-height) -
-        3.25rem
-    );
+    max-height: none;
     border: 0;
     background: transparent;
   }

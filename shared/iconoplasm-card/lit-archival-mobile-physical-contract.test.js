@@ -197,6 +197,20 @@ test("mobile archival card keeps one physical width instead of reflowing with th
     /zoom:\s*var\(--icono-label-mobile-fit-scale/,
     "do not use CSS zoom; it couples layout measurement to scaling and encourages variable child geometry",
   )
+  const portraitViewportBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-specimen-viewport",
+  )
+  assert.match(
+    portraitViewportBlock,
+    /max-height:\s*none;/,
+    "the blot holder is part of the physical card and must not be height-squeezed by browser viewport math",
+  )
+  assert.doesNotMatch(
+    portraitViewportBlock,
+    /100dvh|--icono-label-mobile-peek-height/,
+    "browser viewport math belongs to the aperture, not the physical blot holder",
+  )
   const rootMobileCardBlock = cardBlock.slice(0, cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture"))
   assert.doesNotMatch(
     rootMobileCardBlock,
