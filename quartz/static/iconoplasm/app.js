@@ -2293,8 +2293,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           dims,
           "low",
         )
-        if (portraitUrl) portraitShell.setAttribute("data-icono-lightbox", "")
-        else portraitShell.removeAttribute("data-icono-lightbox")
+        card.style.setProperty("--width", String(dims.width))
+        card.style.setProperty("--height", String(dims.height))
+        card.style.setProperty("--icono-card-accent", String((genePayload && genePayload.color) || "#888"))
+        if (portraitUrl) {
+          portraitShell.classList.remove("iconoplasm-tooltip-portrait-missing")
+          portraitShell.classList.add("iconoplasm-tooltip-portrait--ready")
+          portraitShell.setAttribute("data-icono-lightbox", "")
+        } else {
+          portraitShell.classList.remove("iconoplasm-tooltip-portrait--ready")
+          portraitShell.classList.add("iconoplasm-tooltip-portrait-missing")
+          portraitShell.removeAttribute("data-icono-lightbox")
+        }
         portraitShell.innerHTML = IconoCardShared.renderLabLabelSpecimenRailHtml(
           labelPortraitHtml,
           genePayload,
@@ -4331,6 +4341,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               if (homeLayout === "masonry") {
                 applyHomeMasonry(grid, newCards)
                 setupOrderedPortraitPrefetch(grid, galleryState.items)
+                void hydrateBrickCards(newCards).then(function () {
+                  warmBrickCardImages(galleryState.items)
+                  applyHomeMasonry(grid, newCards)
+                })
               } else {
                 destroyHomeMasonry()
                 warmBrickCardImages(items)
@@ -4413,6 +4427,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             if (homeLayout === "masonry") {
               applyHomeMasonry(grid, newCards)
               setupOrderedPortraitPrefetch(grid, galleryState.items)
+              void hydrateBrickCards(newCards).then(function () {
+                warmBrickCardImages(galleryState.items)
+                applyHomeMasonry(grid, newCards)
+              })
             } else {
               destroyHomeMasonry()
               wireBrickVoteBoxes(newCards)

@@ -52,4 +52,49 @@ test("home collection first paint uses discovery rows before rich detail hydrati
     /void hydrateBrickCards\(newCards\)/,
     "rich card detail should still hydrate after first paint",
   )
+  assert.match(
+    block,
+    /if \(homeLayout === "masonry"\)[\s\S]*void hydrateBrickCards\(newCards\)[\s\S]*} else \{[\s\S]*void hydrateBrickCards\(newCards\)/,
+    "both desktop masonry and mobile/non-masonry home layouts must hydrate fallback cards after first paint",
+  )
+  const hydrateCalls = block.match(/void hydrateBrickCards\(newCards\)/g) || []
+  assert.ok(
+    hydrateCalls.length >= 2,
+    "both public/gallery masonry and personalized collection masonry paths must hydrate fallback cards",
+  )
+})
+
+test("archival fallback cards clear missing portrait state during hydration", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function hydrateBrickCard(card, genePayload)")
+  const end = app.indexOf("function hydrateBrickCards(cards)", start)
+  assert.notEqual(start, -1, "missing hydrateBrickCard")
+  assert.notEqual(end, -1, "missing hydrateBrickCard boundary")
+  const block = app.slice(start, end)
+
+  assert.match(
+    block,
+    /portraitShell\.classList\.remove\("iconoplasm-tooltip-portrait-missing"\)/,
+    "archival hydration must remove the missing state after a real portrait arrives",
+  )
+  assert.match(
+    block,
+    /portraitShell\.classList\.add\("iconoplasm-tooltip-portrait--ready"\)/,
+    "archival hydration must mark the portrait shell ready, not only inject an image",
+  )
+  assert.match(
+    block,
+    /card\.style\.setProperty\("--width", String\(dims\.width\)\)/,
+    "archival hydration must replace fallback square dimensions with the real portrait width",
+  )
+  assert.match(
+    block,
+    /card\.style\.setProperty\("--icono-card-accent", String\(\(genePayload && genePayload\.color\) \|\| "#888"\)\)/,
+    "archival hydration must restore the card accent from rich gene data",
+  )
+  assert.doesNotMatch(
+    block,
+    /geneAccentColor\(/,
+    "archival hydration must not call undefined helper names that only fail in the live browser",
+  )
 })
