@@ -2430,35 +2430,40 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     card.style.removeProperty("--icono-label-mobile-swipe-offset")
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
     card.style.removeProperty("--icono-label-mobile-dossier-top")
+    card.style.removeProperty("--icono-label-mobile-viewport-height")
   }
 
-  function alignExpandedMobileLabelCard(card) {
+  function syncMobileLabelViewportGeometry(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
-    // B-476 pivot: the page follows the single info card as it opens, so the reveal is one
-    // coherent sheet instead of an extra material wrapper.
-    card.style.removeProperty("--icono-label-mobile-dossier-top")
-    if (card.getAttribute("data-icono-mobile-expanded") !== "true") return
+    var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
     var infoCard = card.querySelector(".iconoplasm-tooltip-body")
-    if (!infoCard || typeof infoCard.getBoundingClientRect !== "function") return
-    var followInfoCard = function (behavior) {
-      var rect = infoCard.getBoundingClientRect()
-      var targetTop = Math.round(window.innerHeight * 0.16)
-      var targetBottom = window.innerHeight - 18
-      var delta = 0
-      if (rect.top > targetTop) {
-        delta = rect.top - targetTop
-      } else if (rect.bottom > targetBottom && rect.top > targetTop - 12) {
-        delta = Math.min(rect.bottom - targetBottom, rect.top - targetTop + 12)
-      }
-      if (delta > 8) {
-        window.scrollBy({ top: delta, left: 0, behavior: behavior })
-      }
-    }
-    window.requestAnimationFrame(function () {
-      window.setTimeout(function () {
-        followInfoCard("smooth")
-      }, 280)
-    })
+    var peek = card.querySelector(".icono-label-mobile-peek")
+    var voteBox = card.querySelector(".icono-label-mobile-peek-swipe [data-icono-vote-box], .icono-label-mobile-peek-swipe .icono-vote-box--label")
+    if (
+      !portrait ||
+      !infoCard ||
+      !peek ||
+      typeof portrait.getBoundingClientRect !== "function" ||
+      typeof infoCard.getBoundingClientRect !== "function" ||
+      typeof peek.getBoundingClientRect !== "function"
+    )
+      return
+    var cardRect = card.getBoundingClientRect()
+    var portraitRect = portrait.getBoundingClientRect()
+    var infoRect = infoCard.getBoundingClientRect()
+    var peekRect = peek.getBoundingClientRect()
+    var voteRect =
+      voteBox && typeof voteBox.getBoundingClientRect === "function"
+        ? voteBox.getBoundingClientRect()
+        : null
+    var dossierTop = Math.max(0, portraitRect.bottom - cardRect.top)
+    card.style.setProperty("--icono-label-mobile-dossier-top", dossierTop.toFixed(2) + "px")
+
+    var isExpanded = card.getAttribute("data-icono-mobile-expanded") === "true"
+    var closedBottom = voteRect ? voteRect.bottom - cardRect.top + 8 : dossierTop + peekRect.height + 6
+    var openBottom = dossierTop + infoRect.height + 8
+    var viewportHeight = Math.ceil(isExpanded ? openBottom : closedBottom)
+    card.style.setProperty("--icono-label-mobile-viewport-height", viewportHeight + "px")
   }
 
   function syncMobileLabelDossierContent(card) {
@@ -2501,7 +2506,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
-    alignExpandedMobileLabelCard(card)
+    syncMobileLabelViewportGeometry(card)
+    window.requestAnimationFrame(function () {
+      syncMobileLabelViewportGeometry(card)
+    })
   }
 
   function setMobileLabelQcCopy(card, copy) {
@@ -2614,6 +2622,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     card.setAttribute("data-icono-mobile-label-wired", "true")
     syncMobileLabelDossierContent(card)
     setMobileLabelExpanded(card, false)
+    window.setTimeout(function () {
+      syncMobileLabelViewportGeometry(card)
+    }, 180)
 
     var gesture = {
       pointerId: null,

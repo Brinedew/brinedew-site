@@ -1301,6 +1301,7 @@
     --icono-label-mobile-tab-width: 6.6rem;
     --icono-label-mobile-sheet-preview-offset: 0rem;
     --icono-label-mobile-collapse-lift: 3.672rem;
+    --icono-label-mobile-viewport-height: auto;
     --icono-label-mobile-band-row-height: 4.6rem;
     --icono-label-mobile-header-row-height: 2.16rem;
     --icono-label-mobile-style-row-height: 9.32rem;
@@ -1335,10 +1336,10 @@
     display: block;
     position: relative;
     aspect-ratio: auto;
-    block-size: auto;
+    block-size: var(--icono-label-mobile-viewport-height);
     min-block-size: 0;
-    max-block-size: calc(100dvh - 1.25rem);
-    padding-bottom: calc(var(--icono-label-mobile-peek-height) + 0.72rem);
+    max-block-size: none;
+    padding-bottom: 0;
     overflow: clip;
     scroll-snap-align: start;
     scroll-snap-stop: always;
@@ -1348,7 +1349,7 @@
     touch-action: pan-y pinch-zoom;
     user-select: none;
     transition:
-      grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      block-size 260ms cubic-bezier(0.22, 1, 0.36, 1),
       transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
       opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
     transform: translate3d(var(--icono-label-mobile-swipe-offset, 0px), 0, 0)
@@ -1371,6 +1372,10 @@
       linear-gradient(225deg, transparent 0 43%, var(--icono-label-rule-strong) 44% 52%, transparent 53% 100%)
         left top / 0.64rem 0.48rem repeat-x;
     mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]::after {
+    content: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"] {
@@ -1438,16 +1443,8 @@
     pointer-events: auto;
     overflow-anchor: none;
     filter: drop-shadow(0 -0.24rem 0.28rem rgba(53, 38, 27, 0.16));
-    --icono-label-info-card-pull-y: calc(
-      100% - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-collapse-lift)
-    );
-    transform: translateY(var(--icono-label-info-card-pull-y));
-    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
-    .iconoplasm-tooltip-body {
     --icono-label-info-card-pull-y: 0px;
+    transform: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick {

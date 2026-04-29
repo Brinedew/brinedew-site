@@ -78,22 +78,24 @@ test("mobile infocard closed state only peeks the top sheet and draws a viewport
   )
   assert.match(
     css,
-    /padding-bottom:\s*calc\(var\(--icono-label-mobile-peek-height\) \+ 0\.72rem\);/,
-    "collapsed viewport should reserve only the visible top infocard plus cutoff breathing room",
+    /block-size:\s*var\(--icono-label-mobile-viewport-height\);/,
+    "the card viewport height, not the infocard transform, should control the crop",
   )
 
   assert.match(
     css,
-    /--icono-label-info-card-pull-y:\s*calc\(\s*100% - var\(--icono-label-mobile-peek-height\) - var\(--icono-label-mobile-collapse-lift\)\s*\);/,
-    "the closed pull distance should be governed by the top infocard strip, not an old sleeve preview",
+    /--icono-label-info-card-pull-y:\s*0px;/,
+    "the infocard should stay in place; the viewport changes height instead",
   )
-  assert.match(css, /transform:\s*translateY\(var\(--icono-label-info-card-pull-y\)\)/)
+  assert.match(css, /transform:\s*none;/)
+  assert.equal(
+    /transform:\s*translateY\(var\(--icono-label-info-card-pull-y\)\)/.test(css),
+    false,
+    "mobile infocard must not be pulled upward or downward by transform",
+  )
 
-  const expandedBlock = cssBlockFor(
-    css,
-    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]\n    .iconoplasm-tooltip-body',
-  )
-  assert.match(expandedBlock, /--icono-label-info-card-pull-y:\s*0px;/)
+  const expandedBlock = cssBlockFor(css, '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]::after')
+  assert.match(expandedBlock, /content:\s*none;/, "zigzag must disappear when the viewport is fully open")
 
   const zigzagBlock = cssBlockFor(css, ".icono-card--variant-lab-label.icono-card--brick::after")
   assert.match(zigzagBlock, /linear-gradient\(135deg/)
@@ -132,17 +134,19 @@ test("mobile infocard tab seats on the sheet and casts a shadow over the blot ca
   assert.match(symbolBlock, /transform:\s*translateY\(0\.18rem\);/)
 })
 
-test("expanded mobile viewport follows the infocard, not a removed sleeve layer", async () => {
+test("expanded mobile viewport grows downward instead of moving the infocard or scrolling the page", async () => {
   const app = await sourceText(appPath)
-  const alignStart = app.indexOf("function alignExpandedMobileLabelCard")
-  assert.notEqual(alignStart, -1, "missing expanded viewport follow helper")
-  const alignEnd = app.indexOf("function syncMobileLabelDossierContent", alignStart)
-  assert.notEqual(alignEnd, -1, "expanded viewport follow helper should precede dossier sync")
-  const align = app.slice(alignStart, alignEnd)
+  const geometryStart = app.indexOf("function syncMobileLabelViewportGeometry")
+  assert.notEqual(geometryStart, -1, "missing viewport geometry helper")
+  const geometryEnd = app.indexOf("function syncMobileLabelDossierContent", geometryStart)
+  assert.notEqual(geometryEnd, -1, "viewport geometry helper should precede dossier sync")
+  const geometry = app.slice(geometryStart, geometryEnd)
 
-  assert.match(align, /\.iconoplasm-tooltip-body/)
-  assert.match(align, /window\.scrollBy\(\{ top: delta/)
-  assert.equal(/sleeve|envelope|sleeve-front|physical-noun/.test(align), false)
+  assert.match(geometry, /--icono-label-mobile-dossier-top/)
+  assert.match(geometry, /--icono-label-mobile-viewport-height/)
+  assert.match(geometry, /voteRect \? voteRect\.bottom/)
+  assert.match(geometry, /dossierTop \+ infoRect\.height/)
+  assert.equal(/scrollBy|scrollIntoView|translateY|sleeve|envelope|sleeve-front|physical-noun/.test(geometry), false)
 })
 
 test("mobile collapsed voting remains in the top infocard, not in a separate pocket", async () => {
