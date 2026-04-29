@@ -19,7 +19,7 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260310d"
-import "./generated/lit-archival-card.js?v=20260429b477viewport"
+import "./generated/lit-archival-card.js?v=20260429b477attachedtab"
 
 var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function () {
   return null

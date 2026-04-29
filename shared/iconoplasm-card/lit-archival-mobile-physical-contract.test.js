@@ -245,10 +245,10 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   )
   assert.match(
     app,
-    /generated\/lit-archival-card\.js\?v=20260429b477viewport/,
-    "the live page must cache-bust the Lit archival component after changing the mobile viewport/toggle contract",
+    /generated\/lit-archival-card\.js\?v=20260429b477attachedtab/,
+    "the live page must cache-bust the Lit archival component after changing the mobile tab markup contract",
   )
-  assert.doesNotMatch(app, /generated\/lit-archival-card\.js\?v=20260429b476infocard/)
+  assert.doesNotMatch(app, /generated\/lit-archival-card\.js\?v=20260429b47(6infocard|7viewport)/)
   assert.equal(
     /!isImageOnlyVariant && portraitAssetSha[\s\S]*labelVoteBoxMarkup\(g, "data-icono-gene-vote-box"/.test(
       app,
