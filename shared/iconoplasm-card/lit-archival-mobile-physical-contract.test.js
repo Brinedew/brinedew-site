@@ -214,12 +214,13 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /--icono-label-mobile-physical-width/)
   assert.match(setupBlock, /cardParent\.clientWidth/)
   assert.match(setupBlock, /document\.documentElement\.clientWidth/)
-  assert.match(
-    setupBlock,
-    /availableHeight \/ closedPhysicalHeight/,
-    "mobile card zoom must fit the live browser height too, so voting does not fall below the first viewport at wide mobile widths",
-  )
   assert.match(setupBlock, /availableWidth \/ physicalWidth/)
+  assert.doesNotMatch(
+    setupBlock,
+    /availableHeight|closedPhysicalHeight/,
+    "mobile optical fit must not be height-capped; the aperture owns vertical reveal while width owns browser-edge fit",
+  )
+  assert.match(setupBlock, /Math\.min\(1\.9,\s*availableWidth \/ physicalWidth\)/)
   assert.match(setupBlock, /Math\.max\(0\.78,\s*fitScale\)/)
   assert.match(
     setupBlock,

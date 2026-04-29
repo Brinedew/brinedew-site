@@ -2486,20 +2486,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           ? document.documentElement.clientWidth
           : window.innerWidth,
       ) || window.innerWidth
-    var closedPhysicalHeight = 36 * rootFontSize
-    var availableHeight =
-      Math.max(
-        0,
-        (document.documentElement && document.documentElement.clientHeight
-          ? document.documentElement.clientHeight
-          : window.innerHeight) - 48,
-      ) || window.innerHeight
     if (physicalWidth > 0 && availableWidth > 0) {
-      var fitScale = Math.min(
-        1.72,
-        availableWidth / physicalWidth,
-        closedPhysicalHeight > 0 ? availableHeight / closedPhysicalHeight : 1.72,
-      )
+      var fitScale = Math.min(1.9, availableWidth / physicalWidth)
       fitScale = Math.max(0.78, fitScale)
       card.style.setProperty("--icono-label-mobile-fit-scale", fitScale.toFixed(4))
     }
