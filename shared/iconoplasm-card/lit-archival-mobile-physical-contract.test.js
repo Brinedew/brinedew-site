@@ -460,8 +460,8 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   const css = await sourceText(cssPath)
   assert.match(
     css,
-    /\.icono-label-band-cell--category\s*\n\s*\.icono-label-band-secondary\s*\{[\s\S]*top:\s*-1\.04rem;/,
-    "category handwriting may spill upward, but it must not sit on top of the typewritten TRANSMEMBRANE/SOLUBLE lane",
+    /\.icono-label-band-cell--category\s*\n\s*\.icono-label-band-secondary\s*\{[\s\S]*top:\s*-1\.48rem;/,
+    "category handwriting may spill upward into its own lane, but it must not sit on top of the category caption or typewritten options",
   )
   const massLineBlock = cssBlockFor(
     css,
