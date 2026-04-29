@@ -2403,7 +2403,7 @@
     .icono-label-band-secondary {
     position: absolute;
     left: 50%;
-    top: -1.48rem;
+    top: -1.04rem;
     z-index: 2;
     width: max-content;
     transform: translateX(-50%);
