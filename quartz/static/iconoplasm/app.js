@@ -947,6 +947,77 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
   }
 
+  function assertCompleteMobileCardVM(card) {
+    if (!card || card.__complete !== true) {
+      throw new Error("Attempted to render mobile dossier from an incomplete card VM")
+    }
+    if (card.schema_version !== "iconoplasm.mobileCard.v1") {
+      throw new Error("Mobile card VM schema mismatch")
+    }
+    if (!normalizedSymbol(card.symbol) || !card.full_name || !card.payload) {
+      throw new Error("Mobile card VM failed required identity contract")
+    }
+    if (!card.portrait || !card.field_status || card.portrait.status === "pending") {
+      throw new Error("Mobile card VM failed portrait/field-status contract")
+    }
+    return card
+  }
+
+  function mobileCardPayloadFromVM(card) {
+    var vm = assertCompleteMobileCardVM(card)
+    var payload = vm.payload
+    payload.mobile_card_vm = {
+      schema_version: vm.schema_version,
+      snapshot_version: vm.snapshot_version,
+      data_source: vm.data_source,
+      field_status: vm.field_status,
+    }
+    portraitDetailCache[normalizedSymbol(payload.symbol)] = payload
+    return payload
+  }
+
+  function loadMobileCardPageVM(pageEntries) {
+    var symbols = []
+    var seen = Object.create(null)
+    for (var i = 0; i < pageEntries.length; i++) {
+      var symbol = normalizedSymbol(pageEntries[i] && pageEntries[i].gene_symbol)
+      if (!symbol || seen[symbol]) continue
+      seen[symbol] = true
+      symbols.push(symbol)
+    }
+    if (!symbols.length) return Promise.resolve({ cards: [], failures: [] })
+    return fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        layout: "mobile-dossier-v1",
+        symbols: symbols,
+      }),
+    }).then(function (manifest) {
+      if (!manifest || manifest.schema !== "iconoplasm.mobileCardManifest.v1") {
+        throw new Error("Mobile card manifest schema mismatch")
+      }
+      var bySymbol = Object.create(null)
+      var cards = Array.isArray(manifest.cards) ? manifest.cards : []
+      for (var i = 0; i < cards.length; i++) {
+        var vm = assertCompleteMobileCardVM(cards[i])
+        bySymbol[normalizedSymbol(vm.symbol)] = vm
+      }
+      var ordered = []
+      var failures = Array.isArray(manifest.missing)
+        ? manifest.missing.map(function (symbol) {
+            return { symbol: normalizedSymbol(symbol), reason: "snapshot_missing" }
+          })
+        : []
+      for (var j = 0; j < symbols.length; j++) {
+        var card = bySymbol[symbols[j]]
+        if (card) ordered.push(mobileCardPayloadFromVM(card))
+        else failures.push({ symbol: symbols[j], reason: "manifest_missing" })
+      }
+      return { cards: ordered, failures: failures }
+    })
+  }
+
   function nextArchiveMilestone(discoveredCount, totalCount) {
     // B-457 #2: progress bar was emotionally flat — at 0.6% of 19k, the user
     // sees a tiny sliver and no sense of trajectory. Pick the nearest forward
@@ -4466,12 +4537,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             })
             appendResolvedItems(immediateItems.filter(Boolean))
           } else {
-            return Promise.all(
-              pageEntries.map(function (entry) {
-                return loadDiscoveredGeneCardData(entry)
-              }),
-            ).then(function (richItems) {
+            return loadMobileCardPageVM(pageEntries).then(function (result) {
+              var richItems = Array.isArray(result && result.cards) ? result.cards : []
+              var failures = Array.isArray(result && result.failures) ? result.failures : []
               appendResolvedItems(richItems.filter(Boolean))
+              if (failures.length) {
+                console.error("[Iconoplasm] mobile card manifest failures:", failures)
+                setLoadingState("Some dossiers failed to resolve from the card manifest.", true)
+              }
             })
           }
         })

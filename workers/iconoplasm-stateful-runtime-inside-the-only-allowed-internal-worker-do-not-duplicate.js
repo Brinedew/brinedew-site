@@ -44,6 +44,9 @@ const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-
 const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
 const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
+const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
+const MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
+const MOBILE_CARD_LAYOUT = "mobile-dossier-v1"
 const PUBLIC_DUMP_PREFIX = "public-dumps"
 const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
@@ -316,6 +319,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === publicApiPath("/gallery")) return "public_gallery"
   if (path === publicApiPath("/genes/search")) return "public_gene_search"
   if (path === publicApiPath("/genes/batch")) return "public_gene_batch"
+  if (path === "/api/iconoplasm/mobile-card-manifest") return "mobile_card_manifest"
   if (path.startsWith(publicApiPath("/genes/"))) return "public_gene_detail"
   if (path === publicApiPath("/resolve")) return "public_resolve"
   if (path === publicApiPath("/changes")) return "public_changes"
@@ -4380,6 +4384,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === publicApiPath("/gallery")) return true
   if (path === publicApiPath("/genes/search")) return true
   if (path === publicApiPath("/genes/batch")) return requestMethod === "POST"
+  if (path === "/api/iconoplasm/mobile-card-manifest") return requestMethod === "POST"
   if (path.startsWith(publicApiPath("/genes/"))) return true
   if (path === publicApiPath("/resolve")) return true
   if (path === publicApiPath("/changes")) return true
@@ -13365,6 +13370,21 @@ async function currentGalleryVersion(env) {
   return galleryVersionCache.value || "0"
 }
 
+async function currentMobileCardSnapshotVersion(env) {
+  const value = await currentGalleryVersion(env)
+  if (value && typeof value === "object") {
+    const current = String(value.current || "").trim()
+    const previous = String(value.previous || "").trim()
+    return {
+      current: current || "0",
+      previous: previous && previous !== current ? previous : null,
+      raw: value,
+    }
+  }
+  const current = String(value || "").trim() || "0"
+  return { current, previous: null, raw: value }
+}
+
 async function bumpGalleryVersion(env) {
   const next = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
   galleryVersionCache.value = next
@@ -14417,6 +14437,166 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
+function mobileCardFieldStatusForGeneRecord(record) {
+  const essence = record?.essence && typeof record.essence === "object" ? record.essence : {}
+  const portrait = record?.portrait && typeof record.portrait === "object" ? record.portrait : null
+  const status = {
+    symbol: record?.symbol ? "present" : "failed_to_resolve",
+    full_name: record?.full_name ? "present" : "known_absent",
+    color: record?.color ? "present" : "known_absent",
+    portrait:
+      portrait && String(portrait.status || "").trim()
+        ? String(portrait.status) === "published"
+          ? "present"
+          : "known_absent"
+        : "known_absent",
+    family: essence.family_surname ? "present" : "known_absent",
+    family_feature: essence.family_feature ? "present" : "known_absent",
+    category: record?.protein_length_aa != null || record?.molecular_weight_kda != null ? "present" : "known_absent",
+    age: record?.first_publication_year != null || essence.age_years != null || essence.age ? "present" : "known_absent",
+    weight: record?.molecular_weight_kda != null || record?.weight_kg != null ? "present" : "known_absent",
+    pfam_clans: Array.isArray(essence.aesthetics_origin) && essence.aesthetics_origin.length ? "present" : "known_absent",
+    style_notes: Array.isArray(essence.aesthetics) && essence.aesthetics.length ? "present" : "known_absent",
+    alignment:
+      Array.isArray(essence.politics_origin) && essence.politics_origin.length ? "present" : "known_absent",
+    political_note: essence.politics || essence.faction ? "present" : "known_absent",
+    color_breakdown:
+      record?.tissue_tau != null || record?.loeuf != null || record?.constraint_percentile != null
+        ? "present"
+        : "known_absent",
+  }
+  return status
+}
+
+function buildMobileCardVMFromGeneRecord(record, { snapshotVersion = "0", source = "request_composed" } = {}) {
+  const symbol = normalizeSymbol(record?.symbol || record?.canonical_symbol || "")
+  if (!symbol) return null
+  const fullName = sanitizeText(record?.full_name || "", 255) || symbol
+  const portrait = record?.portrait && typeof record.portrait === "object" ? record.portrait : {}
+  const portraitStatus = String(portrait.status || "").trim() || "missing"
+  return {
+    __complete: true,
+    schema_version: MOBILE_CARD_VM_SCHEMA,
+    snapshot_version: String(snapshotVersion || "0"),
+    data_source: source,
+    symbol,
+    full_name: fullName,
+    display_color: normalizeHexColor(record?.color || "") || "#888",
+    portrait: {
+      status: portraitStatus === "pending" ? "missing" : portraitStatus,
+      url: portrait.medium_url || portrait.hero_url || portrait.thumb_url || null,
+      full_url: portrait.hero_url || portrait.medium_url || portrait.thumb_url || null,
+      thumb_url: portrait.thumb_url || null,
+      width: optionalInt(portrait.width),
+      height: optionalInt(portrait.height),
+      asset_sha256: normalizeSha256(portrait.asset_sha256 || "") || null,
+      candidate_image_id: optionalInt(portrait.candidate_image_id),
+      vision_id: sanitizeText(portrait.vision_id || "", 128) || null,
+      emulsion_id: sanitizeText(portrait.emulsion_id || portrait.emulsion_label || "", 128) || null,
+    },
+    field_status: mobileCardFieldStatusForGeneRecord(record),
+    payload: record,
+  }
+}
+
+function assertCompleteMobileCardVM(vm) {
+  if (!vm || typeof vm !== "object") return false
+  if (vm.__complete !== true) return false
+  if (vm.schema_version !== MOBILE_CARD_VM_SCHEMA) return false
+  if (!normalizeSymbol(vm.symbol || "")) return false
+  if (!vm.full_name) return false
+  if (!vm.portrait || typeof vm.portrait !== "object") return false
+  if (!vm.field_status || typeof vm.field_status !== "object") return false
+  if (String(vm.portrait.status || "").trim() === "pending") return false
+  return true
+}
+
+async function handleMobileCardManifest(request, env) {
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405)
+  const body = await parseJsonBody(request)
+  const symbols = normalizeRequestedSymbols(body.symbols || [], 100)
+  const layout = sanitizeText(body.layout || MOBILE_CARD_LAYOUT, 64) || MOBILE_CARD_LAYOUT
+  if (layout !== MOBILE_CARD_LAYOUT) {
+    return json({ error: "Unsupported mobile card layout", layout }, 400, { "Cache-Control": "no-store" })
+  }
+  const versionInfo = await currentMobileCardSnapshotVersion(env)
+  const requestedVersion = sanitizeText(body.version || "", 128)
+  const snapshotVersion =
+    requestedVersion && requestedVersion === versionInfo.current ? requestedVersion : versionInfo.current
+  if (!symbols.length) {
+    return json(
+      {
+        schema: MOBILE_CARD_MANIFEST_SCHEMA,
+        snapshot_version: snapshotVersion,
+        data_source: "request_composed",
+        cards: [],
+        missing: [],
+        diagnostics: {
+          fallback_version_used: null,
+          kv_keys_missing: 0,
+          layout,
+        },
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    )
+  }
+
+  const url = new URL(request.url)
+  const fields = [
+    "symbol",
+    "full_name",
+    "color",
+    "portrait",
+    "essence",
+    "manifestation",
+    "weight_kg",
+    "protein_length_aa",
+    "molecular_weight_kda",
+    "first_publication_year",
+    "tissue_tau",
+    "loeuf",
+    "constraint_percentile",
+  ].join(",")
+  const cards = []
+  const missing = []
+  for (const symbol of symbols) {
+    const record = await geneRecord(env, url, symbol, { fields })
+    const projected = projectGeneRecord(record, fields)
+    const vm = buildMobileCardVMFromGeneRecord(projected, {
+      snapshotVersion,
+      source: "request_composed",
+    })
+    if (!assertCompleteMobileCardVM(vm)) {
+      missing.push(symbol)
+      continue
+    }
+    cards.push(vm)
+  }
+
+  return json(
+    {
+      schema: MOBILE_CARD_MANIFEST_SCHEMA,
+      snapshot_version: snapshotVersion,
+      data_source: "request_composed",
+      cards: cards.sort((left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol)),
+      missing,
+      diagnostics: {
+        fallback_version_used: null,
+        kv_keys_missing: 0,
+        layout,
+      },
+    },
+    200,
+    {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-VM-Version": snapshotVersion,
+      "X-Iconoplasm-Data-Source": "request-composed",
+      "X-Iconoplasm-Snapshot-State": "request-composed",
+    },
+  )
+}
+
 async function handlePublicResolve(request, env) {
   const body = await parseJsonBody(request)
   const identifiers = Array.isArray(body.identifiers)
@@ -14843,6 +15023,11 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     }
     if (path === publicApiPath("/genes/batch")) {
       const response = await handlePublicGeneBatch(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
+    if (path === "/api/iconoplasm/mobile-card-manifest") {
+      const response = await handleMobileCardManifest(request, meteredEnv)
       responseStatus = response.status
       return response
     }

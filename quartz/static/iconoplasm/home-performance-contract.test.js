@@ -67,13 +67,18 @@ test("mobile home collection infocards wait for rich detail instead of fallback 
 
   assert.match(
     collectionBlock,
-    /if \(homeLayout === "masonry"\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return Promise\.all\(\s*pageEntries\.map\(function \(entry\) \{\s*return loadDiscoveredGeneCardData\(entry\)/,
-    "mobile/non-masonry infocards must be built from rich gene detail, not partial discovery fallback records",
+    /if \(homeLayout === "masonry"\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
+    "mobile/non-masonry infocards must be built from the strict mobile card manifest, not partial discovery fallback records",
   )
   assert.doesNotMatch(
     collectionBlock,
     /\} else \{[\s\S]{0,900}void hydrateBrickCards\(newCards\)/,
     "mobile/non-masonry infocards should not paint partial cards and rely on later hydration to become complete",
+  )
+  assert.doesNotMatch(
+    collectionBlock,
+    /\} else \{[\s\S]{0,900}loadDiscoveredGeneCardData\(entry\)/,
+    "mobile/non-masonry infocards should use one manifest request, not a per-gene detail waterfall",
   )
 })
 
