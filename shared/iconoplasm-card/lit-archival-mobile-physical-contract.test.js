@@ -456,6 +456,34 @@ test("mobile card uses the larger B-483 type scale instead of the tiny draft sca
   assert.match(voteArrowBlock, /inline-size:\s*1\.44rem;/)
 })
 
+test("mobile open-state handwritten annotations do not cover fixed typewriter lanes", async () => {
+  const css = await sourceText(cssPath)
+  assert.match(
+    css,
+    /\.icono-label-band-cell--category\s*\n\s*\.icono-label-band-secondary\s*\{[\s\S]*top:\s*-1\.04rem;/,
+    "category handwriting may spill upward, but it must not sit on top of the typewritten TRANSMEMBRANE/SOLUBLE lane",
+  )
+  const massLineBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-line",
+  )
+  assert.match(massLineBlock, /align-items:\s*start;/)
+  const massFillBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-fill",
+  )
+  assert.match(massFillBlock, /align-items:\s*start;/)
+  const massUnitStackBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-mass-unit-stack",
+  )
+  assert.match(
+    massUnitStackBlock,
+    /gap:\s*0\.24rem;/,
+    "the handwritten kg correction should remain attached to kDa without overlapping the typed unit",
+  )
+})
+
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {
   const app = await sourceText(appPath)
   assert.doesNotMatch(
