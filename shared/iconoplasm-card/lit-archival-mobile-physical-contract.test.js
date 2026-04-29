@@ -464,7 +464,7 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     "category handwriting may spill upward, but it must not sit on top of the typewritten TRANSMEMBRANE/SOLUBLE lane",
   )
   assert.match(css, /--icono-label-mobile-peek-height:\s*6rem;/)
-  assert.match(css, /--icono-label-mobile-style-row-height:\s*7\.2rem;/)
+  assert.match(css, /--icono-label-mobile-style-row-height:\s*8\.15rem;/)
   assert.match(css, /--icono-label-mobile-alignment-row-height:\s*11\.1rem;/)
   const mobilePeekSummaryBlock = cssBlockFor(
     css,
@@ -507,6 +507,11 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-style-pair",
   )
   assert.match(stylePairBlock, /grid-template-columns:\s*minmax\(0,\s*1fr\) max-content;/)
+  assert.match(
+    stylePairBlock,
+    /min-block-size:\s*2\.1rem;/,
+    "PFAM style pairs need fixed lane height so wrapped typewritten origins do not collide with the next handwritten style",
+  )
   const styleHandBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-style-pair\n    .icono-label-hand-note--style",
