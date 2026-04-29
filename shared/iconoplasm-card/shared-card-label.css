@@ -1292,7 +1292,7 @@
   .icono-grid[data-layout="bricks"] {
     scroll-snap-type: y proximity;
     justify-items: center;
-    overflow-x: auto;
+    overflow-x: visible;
     overflow-y: visible;
   }
 
@@ -1341,6 +1341,7 @@
     );
     inline-size: var(--icono-label-mobile-physical-width);
     max-inline-size: none;
+    zoom: var(--icono-label-mobile-fit-scale, 1);
     display: block;
     position: relative;
     aspect-ratio: auto;

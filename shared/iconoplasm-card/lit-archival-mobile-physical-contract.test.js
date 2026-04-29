@@ -141,7 +141,7 @@ test("mobile archival card keeps one physical width instead of reflowing with th
   const css = await sourceText(cssPath)
   const mobileGridBlock = cssBlockFor(css, '.icono-grid[data-layout="bricks"]')
   assert.match(mobileGridBlock, /justify-items:\s*center;/)
-  assert.match(mobileGridBlock, /overflow-x:\s*auto;/)
+  assert.match(mobileGridBlock, /overflow-x:\s*visible;/)
 
   const mobileCardStart = css.lastIndexOf(
     ".icono-card--variant-lab-label.icono-card--brick {",
@@ -161,11 +161,41 @@ test("mobile archival card keeps one physical width instead of reflowing with th
   )
   assert.match(cardBlock, /inline-size:\s*var\(--icono-label-mobile-physical-width\);/)
   assert.match(cardBlock, /max-inline-size:\s*none;/)
+  assert.match(
+    cardBlock,
+    /zoom:\s*var\(--icono-label-mobile-fit-scale,\s*1\);/,
+    "mobile archival card should optically fit by scaling the physical object, not by cropping sideways",
+  )
   assert.doesNotMatch(
     cardBlock,
     /inline-size:\s*100%;/,
     "mobile archival card must not resize its internal geometry to the browser width",
   )
+  assert.doesNotMatch(
+    mobileGridBlock,
+    /overflow-x:\s*auto;/,
+    "the physical-width repair must not make narrow phones inspect a sideways-cropped card",
+  )
+})
+
+test("mobile viewport geometry computes a fit scale before measuring the sheet", async () => {
+  const app = await sourceText(appPath)
+  const resetStart = app.indexOf("function resetMobileLabelCardState")
+  const resetEnd = app.indexOf("function syncMobileLabelViewportGeometry", resetStart)
+  assert.notEqual(resetStart, -1, "missing mobile reset helper")
+  assert.notEqual(resetEnd, -1, "missing mobile viewport geometry helper")
+  const resetBlock = app.slice(resetStart, resetEnd)
+  assert.match(resetBlock, /--icono-label-mobile-fit-scale/)
+
+  const geometryStart = app.indexOf("function syncMobileLabelViewportGeometry")
+  const geometryEnd = app.indexOf("var portrait = card.querySelector", geometryStart)
+  assert.notEqual(geometryStart, -1, "missing mobile viewport geometry helper")
+  assert.notEqual(geometryEnd, -1, "fit-scale setup should happen before portrait measurement")
+  const setupBlock = app.slice(geometryStart, geometryEnd)
+  assert.match(setupBlock, /card\.scrollWidth\s*\|\|\s*card\.offsetWidth/)
+  assert.match(setupBlock, /cardParent\.clientWidth/)
+  assert.match(setupBlock, /Math\.min\(1,\s*Math\.max\(0\.78,\s*\(availableWidth - 16\) \/ physicalWidth\)\)/)
+  assert.match(setupBlock, /--icono-label-mobile-fit-scale/)
 })
 
 test("mobile infocard tab is part of the sheet surface and casts a shadow over the blot card", async () => {

@@ -2443,10 +2443,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
     card.style.removeProperty("--icono-label-mobile-dossier-top")
     card.style.removeProperty("--icono-label-mobile-viewport-height")
+    card.style.removeProperty("--icono-label-mobile-fit-scale")
   }
 
   function syncMobileLabelViewportGeometry(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
+    var cardParent = card.parentElement
+    var physicalWidth = card.scrollWidth || card.offsetWidth || 0
+    var availableWidth =
+      cardParent && cardParent.clientWidth ? cardParent.clientWidth : document.documentElement.clientWidth || window.innerWidth
+    if (physicalWidth > 0 && availableWidth > 0) {
+      var fitScale = Math.min(1, Math.max(0.78, (availableWidth - 16) / physicalWidth))
+      card.style.setProperty("--icono-label-mobile-fit-scale", fitScale.toFixed(4))
+    }
+
     var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
     var infoCard = card.querySelector(".iconoplasm-tooltip-body")
     var peek = card.querySelector(".icono-label-mobile-peek")
