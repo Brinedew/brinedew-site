@@ -171,17 +171,31 @@ test("mobile archival card keeps one physical width instead of reflowing with th
     /--icono-label-mobile-physical-width:\s*23\.4rem;/,
     "mobile card needs one physical design width instead of width-by-viewport reflow",
   )
-  assert.match(cardBlock, /inline-size:\s*var\(--icono-label-mobile-physical-width\);/)
+  assert.match(
+    cardBlock,
+    /inline-size:\s*calc\(var\(--icono-label-mobile-physical-width\) \* var\(--icono-label-mobile-fit-scale,\s*1\)\);/,
+    "the root card is a layout box that reserves the scaled physical width",
+  )
   assert.match(cardBlock, /max-inline-size:\s*none;/)
   assert.match(
     cardBlock,
-    /\.icono-mobile-card-aperture[\s\S]*inline-size:\s*100%;/,
-    "the aperture can fill the fixed physical card; the card itself owns the physical width",
+    /block-size:\s*calc\(var\(--icono-label-mobile-viewport-height\) \* var\(--icono-label-mobile-fit-scale,\s*1\)\);/,
+    "the root card should reserve the scaled aperture height instead of relying on CSS zoom",
   )
   assert.match(
     cardBlock,
-    /zoom:\s*var\(--icono-label-mobile-fit-scale,\s*1\);/,
-    "mobile archival card should optically fit by scaling the physical object, not by cropping sideways",
+    /\.icono-mobile-card-aperture[\s\S]*inline-size:\s*var\(--icono-label-mobile-physical-width\);/,
+    "the aperture remains the unscaled physical object width",
+  )
+  assert.match(
+    cardBlock,
+    /\.icono-mobile-card-aperture[\s\S]*transform:\s*scale\(var\(--icono-label-mobile-fit-scale,\s*1\)\);/,
+    "mobile archival card should optically fit by scaling the aperture shell, not by changing the blot geometry",
+  )
+  assert.doesNotMatch(
+    cardBlock,
+    /zoom:\s*var\(--icono-label-mobile-fit-scale/,
+    "do not use CSS zoom; it couples layout measurement to scaling and encourages variable child geometry",
   )
   const rootMobileCardBlock = cardBlock.slice(0, cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture"))
   assert.doesNotMatch(
@@ -222,12 +236,11 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   )
   assert.match(setupBlock, /Math\.min\(1\.9,\s*availableWidth \/ physicalWidth\)/)
   assert.match(setupBlock, /Math\.max\(0\.78,\s*fitScale\)/)
-  assert.match(
+  assert.doesNotMatch(
     setupBlock,
-    /--icono-label-mobile-portrait-max-height/,
-    "wide-mobile width fitting must also cap the portrait in physical pixels so the closed vote/toggle area remains reachable",
+    /--icono-label-mobile-portrait-max-height|availableHeight \/ activeFitScale/,
+    "the geometry controller must not vary the blot/portrait holder to fix browser fit; it should scale the whole physical object",
   )
-  assert.match(setupBlock, /availableHeight \/ activeFitScale - 112/)
   assert.match(
     setupBlock,
     /function \(value\) \{\s*return value \/ activeFitScale\s*\}/,
@@ -258,9 +271,9 @@ test("mobile card recomputes fit scale on same-breakpoint browser resizing", asy
   assert.match(
     reconcileBlock,
     /syncMobileLabelViewportGeometry\(mobileCards\[i\]\)/,
-    "dragging the browser edge inside mobile mode must recompute card zoom instead of leaving a side gap",
+    "dragging the browser edge inside mobile mode must recompute card scale instead of leaving a side gap",
   )
-  assert.match(app, /--icono-label-mobile-portrait-max-height/)
+  assert.doesNotMatch(app, /--icono-label-mobile-portrait-max-height/)
 })
 
 test("mobile infocard tab is part of the sheet surface and casts a shadow over the blot card", async () => {

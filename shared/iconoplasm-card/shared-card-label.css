@@ -1307,7 +1307,6 @@
     --icono-label-mobile-peek-height: 8.2rem;
     --icono-label-mobile-preview-height: 0rem;
     --icono-label-mobile-tab-height: 2.328rem;
-    --icono-label-mobile-portrait-max-height: 28.875rem;
     /* B-479: current public catalog max gene-symbol length is 14 chars
        (`EEF1AKMT4-ECE2`). Size the tab to character capacity, not a guessed rem. */
     --icono-label-mobile-tab-symbol-capacity: 14ch;
@@ -1345,13 +1344,12 @@
     --icono-label-mobile-dossier-top: calc(
       var(--icono-label-mobile-portrait-pad) + var(--icono-label-mobile-tab-height) - 1px
     );
-    inline-size: var(--icono-label-mobile-physical-width);
+    inline-size: calc(var(--icono-label-mobile-physical-width) * var(--icono-label-mobile-fit-scale, 1));
     max-inline-size: none;
-    zoom: var(--icono-label-mobile-fit-scale, 1);
     display: block;
     position: relative;
     aspect-ratio: auto;
-    block-size: var(--icono-label-mobile-viewport-height);
+    block-size: calc(var(--icono-label-mobile-viewport-height) * var(--icono-label-mobile-fit-scale, 1));
     min-block-size: 0;
     max-block-size: none;
     padding-bottom: 0;
@@ -1374,10 +1372,12 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture {
     position: relative;
     display: block;
-    inline-size: 100%;
-    block-size: 100%;
+    inline-size: var(--icono-label-mobile-physical-width);
+    block-size: var(--icono-label-mobile-viewport-height);
     min-block-size: 0;
     overflow: clip;
+    transform: scale(var(--icono-label-mobile-fit-scale, 1));
+    transform-origin: top left;
     transition:
       clip-path 260ms cubic-bezier(0.22, 1, 0.36, 1),
       filter 220ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1521,7 +1521,10 @@
     display: block;
     aspect-ratio: var(--width) / var(--height);
     min-height: 0;
-    max-height: var(--icono-label-mobile-portrait-max-height);
+    max-height: calc(
+      100dvh - var(--icono-label-mobile-peek-height) - var(--icono-label-mobile-preview-height) -
+        3.25rem
+    );
     border: 0;
     background: transparent;
   }
