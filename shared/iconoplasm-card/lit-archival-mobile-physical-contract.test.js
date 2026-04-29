@@ -211,6 +211,11 @@ test("mobile archival card keeps one physical width instead of reflowing with th
     /100dvh|--icono-label-mobile-peek-height/,
     "browser viewport math belongs to the aperture, not the physical blot holder",
   )
+  assert.doesNotMatch(
+    cardBlock,
+    /\.icono-label-specimen-viewport[\s\S]*\.icono-brick-media-link[\s\S]*pointer-events:\s*none;/,
+    "the visible blot must remain clickable for full-screen viewing; only the infocard surface owns the open/closed toggle",
+  )
   const rootMobileCardBlock = cardBlock.slice(0, cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture"))
   assert.doesNotMatch(
     rootMobileCardBlock,
