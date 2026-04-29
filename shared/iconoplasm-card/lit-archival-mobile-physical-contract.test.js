@@ -119,6 +119,15 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
     /\.icono-mobile-card-aperture[\s\S]*clip-path:\s*polygon\(/,
     "closed viewport edge must be owned by the aperture, not by a painted zigzag or root-card crop",
   )
+  const rootCardBlock = cardBlock.slice(
+    0,
+    cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture"),
+  )
+  assert.match(
+    rootCardBlock,
+    /overflow:\s*visible;/,
+    "the root layout box must not clip the aperture's jagged edge shadow",
+  )
   assert.match(
     cardBlock,
     /100% 97\.4%,\s*98\.9% 99\.8%/,
@@ -361,12 +370,20 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(tabBlock, /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/)
   assert.match(tabBlock, /font-family:\s*"League Spartan";/)
   assert.match(tabBlock, /font-size:\s*0\.76rem;/)
+  assert.match(tabBlock, /align-items:\s*end;/, "tab symbol should align to the lower printed baseline")
+  assert.match(tabBlock, /padding:\s*0 0\.58rem 0\.34rem;/)
 
   const symbolBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol",
   )
-  assert.match(symbolBlock, /transform:\s*translateY\(0\.18rem\);/)
+  assert.match(symbolBlock, /line-height:\s*0\.86;/)
+  assert.match(symbolBlock, /transform:\s*none;/)
+  assert.doesNotMatch(
+    symbolBlock,
+    /translateY/,
+    "tab symbol vertical position should come from the tab layout, not a brittle nudge",
+  )
 })
 
 test("expanded mobile viewport grows downward instead of moving the infocard or scrolling the page", async () => {

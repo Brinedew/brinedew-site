@@ -1353,7 +1353,9 @@
     min-block-size: 0;
     max-block-size: none;
     padding-bottom: 0;
-    overflow: clip;
+    /* The aperture owns the crop. The root is a scaled layout box and must not clip the
+       jagged edge shadow, or the closed viewport reads as a flat/missing cutoff. */
+    overflow: visible;
     scroll-snap-align: start;
     scroll-snap-stop: always;
     /* Opening the mobile dossier should move only the physical card sheet, not trigger browser
@@ -1722,10 +1724,11 @@
     bottom: calc(100% - 0.08rem);
     z-index: 2;
     display: grid;
-    place-items: center;
+    align-items: end;
+    justify-items: center;
     inline-size: calc(var(--icono-label-mobile-tab-width) + 1.36rem);
     block-size: var(--icono-label-mobile-tab-height);
-    padding: 0 0.58rem 0.1rem;
+    padding: 0 0.58rem 0.34rem;
     border: 0;
     background: transparent;
     overflow: visible;
@@ -1750,9 +1753,9 @@
     font-family: "League Spartan";
     font-size: 0.76rem;
     font-weight: 800;
-    line-height: 1;
+    line-height: 0.86;
     letter-spacing: 0.08em;
-    transform: translateY(0.18rem);
+    transform: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {
