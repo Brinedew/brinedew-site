@@ -2624,7 +2624,7 @@
     .icono-label-hand-note--unit {
     position: absolute;
     left: 0.02rem;
-    top: 0.72rem;
+    top: 1.04rem;
     z-index: 2;
     pointer-events: none;
   }

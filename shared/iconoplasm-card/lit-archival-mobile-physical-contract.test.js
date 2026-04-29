@@ -493,6 +493,11 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     /position:\s*absolute;/,
     "the handwritten kg correction should be a paper annotation, not a grid row that increases the printed lane height",
   )
+  assert.match(
+    massUnitHandBlock,
+    /top:\s*1\.04rem;/,
+    "the handwritten kg correction must clear the typed kDa lane while still staying physically attached to it",
+  )
 })
 
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {
