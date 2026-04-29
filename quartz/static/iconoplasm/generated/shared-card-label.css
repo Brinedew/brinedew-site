@@ -1293,9 +1293,13 @@
      Do not introduce a separate phone-only card renderer in CSS or JS. */
   .icono-grid[data-layout="bricks"] {
     scroll-snap-type: y proximity;
+    justify-items: center;
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   .icono-card--variant-lab-label.icono-card--brick {
+    --icono-label-mobile-physical-width: 23.4rem;
     --icono-label-mobile-portrait-pad: 0.936rem;
     --icono-label-mobile-peek-height: 8.2rem;
     --icono-label-mobile-preview-height: 0rem;
@@ -1337,7 +1341,8 @@
     --icono-label-mobile-dossier-top: calc(
       var(--icono-label-mobile-portrait-pad) + var(--icono-label-mobile-tab-height) - 1px
     );
-    inline-size: 100%;
+    inline-size: var(--icono-label-mobile-physical-width);
+    max-inline-size: none;
     display: block;
     position: relative;
     aspect-ratio: auto;

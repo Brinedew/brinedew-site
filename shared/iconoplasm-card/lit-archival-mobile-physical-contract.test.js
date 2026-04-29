@@ -137,6 +137,37 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
   )
 })
 
+test("mobile archival card keeps one physical width instead of reflowing with the browser", async () => {
+  const css = await sourceText(cssPath)
+  const mobileGridBlock = cssBlockFor(css, '.icono-grid[data-layout="bricks"]')
+  assert.match(mobileGridBlock, /justify-items:\s*center;/)
+  assert.match(mobileGridBlock, /overflow-x:\s*auto;/)
+
+  const mobileCardStart = css.lastIndexOf(
+    ".icono-card--variant-lab-label.icono-card--brick {",
+    css.indexOf("--icono-label-mobile-portrait-pad"),
+  )
+  assert.notEqual(mobileCardStart, -1, "missing mobile physical card block")
+  const mobileCardEnd = css.indexOf(
+    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]',
+    mobileCardStart,
+  )
+  assert.notEqual(mobileCardEnd, -1, "missing expanded mobile card block")
+  const cardBlock = css.slice(mobileCardStart, mobileCardEnd)
+  assert.match(
+    cardBlock,
+    /--icono-label-mobile-physical-width:\s*23\.4rem;/,
+    "mobile card needs one physical design width instead of width-by-viewport reflow",
+  )
+  assert.match(cardBlock, /inline-size:\s*var\(--icono-label-mobile-physical-width\);/)
+  assert.match(cardBlock, /max-inline-size:\s*none;/)
+  assert.doesNotMatch(
+    cardBlock,
+    /inline-size:\s*100%;/,
+    "mobile archival card must not resize its internal geometry to the browser width",
+  )
+})
+
 test("mobile infocard tab is part of the sheet surface and casts a shadow over the blot card", async () => {
   const css = await sourceText(cssPath)
   const litCard = await sourceText(litCardPath)
