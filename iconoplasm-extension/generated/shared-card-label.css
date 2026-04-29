@@ -1596,7 +1596,7 @@
     inline-size: 100%;
     max-inline-size: 100%;
     min-height: var(--icono-label-mobile-peek-height);
-    padding: 0.46rem 0.96rem 0.12rem;
+    padding: 0.46rem 0.72rem 0.12rem;
     box-sizing: border-box;
     border: 0;
     border-radius: 0;
@@ -1635,8 +1635,8 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-toggle:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--icono-label-pen) 64%, white 36%);
-    outline-offset: -2px;
+    outline: 1px dashed color-mix(in srgb, var(--icono-label-pen) 34%, transparent);
+    outline-offset: -1px;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab {
@@ -1722,6 +1722,7 @@
     align-items: stretch;
     grid-template-columns: minmax(0, 1fr);
     gap: 0.04rem;
+    min-width: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-kicker,
@@ -1786,6 +1787,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: none;
     width: 100%;
+    min-width: 0;
     gap: 0;
     align-items: end;
     justify-items: stretch;
@@ -1796,10 +1798,11 @@
     min-height: 0.9rem;
     display: block;
     width: 100%;
+    min-width: 0;
     padding: 0 0 0.01rem;
-    font-size: 0.56rem;
+    font-size: 0.52rem;
     line-height: 1;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -1808,6 +1811,7 @@
     display: block;
     position: relative;
     line-height: 1;
+    white-space: nowrap;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -1871,7 +1875,7 @@
     .icono-label-mobile-peek-swipe
     .icono-vote-btn--reject
     .icono-vote-btn-copy-stack {
-    grid-template-columns: 2.18rem minmax(0, 1fr);
+    grid-template-columns: 1.02rem minmax(0, 1fr);
     align-items: center;
     justify-self: stretch;
   }
@@ -1880,7 +1884,7 @@
     .icono-label-mobile-peek-swipe
     .icono-vote-btn--approve
     .icono-vote-btn-copy-stack {
-    grid-template-columns: minmax(0, 1fr) 2.18rem;
+    grid-template-columns: minmax(0, 1fr) 1.02rem;
     align-items: center;
     justify-self: stretch;
   }
@@ -1888,7 +1892,7 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-mobile-peek-swipe
     .icono-vote-btn-arrow {
-    inline-size: 2.12rem;
+    inline-size: 0.96rem;
     block-size: 0.66rem;
     display: block;
     align-self: center;

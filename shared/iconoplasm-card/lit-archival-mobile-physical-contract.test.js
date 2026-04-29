@@ -258,5 +258,15 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
     "mobile review must not blank the info-card voting controls",
   )
   assert.match(css, /\.icono-label-mobile-peek-swipe[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/)
+  assert.match(
+    css,
+    /\.icono-label-mobile-peek-swipe[\s\S]*\.icono-vote-btn-arrow[\s\S]*inline-size:\s*0\.96rem/,
+    "collapsed voting arrows must stay compact enough that MISFIT and FIT both fit on narrow mobile viewports",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-peek-toggle:focus-visible[\s\S]*outline:\s*1px dashed/,
+    "click/focus treatment must not draw a bright boxed artifact over the infocard",
+  )
   assert.equal(/data-icono-mobile-sleeve-vote|icono-label-mobile-pocket-control/.test(app + css), false)
 })
