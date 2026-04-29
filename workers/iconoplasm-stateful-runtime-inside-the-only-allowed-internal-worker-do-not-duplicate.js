@@ -44,6 +44,7 @@ const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-
 const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
 const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
+const KV_MOBILE_CARD_VM_PREFIX = "iconoplasm:mobile-card-vm:"
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
 const MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
 const MOBILE_CARD_LAYOUT = "mobile-dossier-v1"
@@ -146,6 +147,7 @@ const hydratedCatalogArtifactCache = {
   key: null,
   value: null,
 }
+const mobileCardVMCache = new Map()
 const ADMIN_DASHBOARD_SUMMARY_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS = "symbols"
@@ -14512,6 +14514,41 @@ function assertCompleteMobileCardVM(vm) {
   return true
 }
 
+function mobileCardVMSharedCacheKey(snapshotVersion, symbol) {
+  const version = String(snapshotVersion || "").trim()
+  const normalized = normalizeSymbol(symbol || "")
+  if (!version || !normalized) return ""
+  return `${KV_MOBILE_CARD_VM_PREFIX}${version}:${normalized}`
+}
+
+async function readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol) {
+  const key = mobileCardVMSharedCacheKey(snapshotVersion, symbol)
+  if (!key) return null
+  const memory = mobileCardVMCache.get(key)
+  if (assertCompleteMobileCardVM(memory)) return memory
+  const cached = await readVersionedSharedJson(env, `${KV_MOBILE_CARD_VM_PREFIX}${snapshotVersion}:`, normalizeSymbol(symbol || ""))
+  if (!assertCompleteMobileCardVM(cached)) return null
+  mobileCardVMCache.set(key, cached)
+  return cached
+}
+
+async function writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm) {
+  const key = mobileCardVMSharedCacheKey(snapshotVersion, vm?.symbol)
+  if (!key || !assertCompleteMobileCardVM(vm)) return
+  const snapshotVM = {
+    ...vm,
+    snapshot_version: String(snapshotVersion || vm.snapshot_version || "0"),
+    data_source: "kv_snapshot",
+  }
+  mobileCardVMCache.set(key, snapshotVM)
+  await writeVersionedSharedJson(
+    env,
+    `${KV_MOBILE_CARD_VM_PREFIX}${snapshotVersion}:`,
+    normalizeSymbol(vm.symbol || ""),
+    snapshotVM,
+  )
+}
+
 async function handleMobileCardManifest(request, env) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405)
   const body = await parseJsonBody(request)
@@ -14522,8 +14559,7 @@ async function handleMobileCardManifest(request, env) {
   }
   const versionInfo = await currentMobileCardSnapshotVersion(env)
   const requestedVersion = sanitizeText(body.version || "", 128)
-  const snapshotVersion =
-    requestedVersion && requestedVersion === versionInfo.current ? requestedVersion : versionInfo.current
+  const snapshotVersion = requestedVersion || versionInfo.current
   if (!symbols.length) {
     return json(
       {
@@ -14561,7 +14597,17 @@ async function handleMobileCardManifest(request, env) {
   ].join(",")
   const cards = []
   const missing = []
+  let kvKeysMissing = 0
+  let d1Composed = 0
+  let kvSnapshotHits = 0
   for (const symbol of symbols) {
+    const cachedVM = await readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol)
+    if (cachedVM) {
+      kvSnapshotHits += 1
+      cards.push(cachedVM)
+      continue
+    }
+    kvKeysMissing += 1
     const record = await geneRecord(env, url, symbol, { fields })
     const projected = projectGeneRecord(record, fields)
     const vm = buildMobileCardVMFromGeneRecord(projected, {
@@ -14572,19 +14618,29 @@ async function handleMobileCardManifest(request, env) {
       missing.push(symbol)
       continue
     }
+    d1Composed += 1
+    await writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm)
     cards.push(vm)
   }
+  const dataSource =
+    cards.length > 0 && kvSnapshotHits === cards.length
+      ? "kv_snapshot"
+      : kvSnapshotHits > 0
+        ? "mixed"
+        : "request_composed"
 
   return json(
     {
       schema: MOBILE_CARD_MANIFEST_SCHEMA,
       snapshot_version: snapshotVersion,
-      data_source: "request_composed",
+      data_source: dataSource,
       cards: cards.sort((left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol)),
       missing,
       diagnostics: {
         fallback_version_used: null,
-        kv_keys_missing: 0,
+        kv_keys_missing: kvKeysMissing,
+        kv_snapshot_hits: kvSnapshotHits,
+        d1_composed: d1Composed,
         layout,
       },
     },
@@ -14592,8 +14648,8 @@ async function handleMobileCardManifest(request, env) {
     {
       "Cache-Control": "no-store",
       "X-Iconoplasm-VM-Version": snapshotVersion,
-      "X-Iconoplasm-Data-Source": "request-composed",
-      "X-Iconoplasm-Snapshot-State": "request-composed",
+      "X-Iconoplasm-Data-Source": dataSource.replaceAll("_", "-"),
+      "X-Iconoplasm-Snapshot-State": dataSource === "request_composed" ? "request-composed" : "versioned-kv",
     },
   )
 }

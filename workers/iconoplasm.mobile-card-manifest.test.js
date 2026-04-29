@@ -115,13 +115,16 @@ class FakeIconoplasmDb {
   }
 }
 
-function buildEnv() {
+function buildEnv({ kvStore = new Map(), db = new FakeIconoplasmDb(), version = "test-vm-version" } = {}) {
   return {
-    ICONOPLASM_DB: new FakeIconoplasmDb(),
+    ICONOPLASM_DB: db,
     KV: {
       async get(key) {
-        if (key === "iconoplasm:gallery-version") return "test-vm-version"
-        return null
+        if (key === "iconoplasm:gallery-version") return version
+        return kvStore.get(key) || null
+      },
+      async put(key, value) {
+        kvStore.set(key, value)
       },
     },
     ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
@@ -157,6 +160,43 @@ test("mobile card manifest returns complete VMs without pending portrait placeho
   assert.equal(card.payload.essence.faction, "pro-growth")
 })
 
+test("mobile card manifest writes and reads versioned KV VMs before touching D1", async () => {
+  const kvStore = new Map()
+  const version = `kv-vm-version-${crypto.randomUUID()}`
+  const first = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"], version }),
+    }),
+    buildEnv({ kvStore, version }),
+  )
+  assert.equal(first.status, 200)
+  const firstPayload = await first.json()
+  assert.equal(firstPayload.data_source, "request_composed")
+  assert.equal(firstPayload.diagnostics.kv_keys_missing, 1)
+  assert.equal(firstPayload.diagnostics.d1_composed, 1)
+  assert.ok(kvStore.has(`iconoplasm:mobile-card-vm:${version}:ERBB2`))
+
+  const second = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"], version }),
+    }),
+    buildEnv({ kvStore, db: null, version }),
+  )
+  assert.equal(second.status, 200)
+  assert.equal(second.headers.get("X-Iconoplasm-Data-Source"), "kv-snapshot")
+  assert.equal(second.headers.get("X-Iconoplasm-Snapshot-State"), "versioned-kv")
+  const secondPayload = await second.json()
+  assert.equal(secondPayload.data_source, "kv_snapshot")
+  assert.equal(secondPayload.diagnostics.kv_snapshot_hits, 1)
+  assert.equal(secondPayload.diagnostics.d1_composed, 0)
+  assert.deepEqual(secondPayload.missing, [])
+  assert.equal(secondPayload.cards[0].data_source, "kv_snapshot")
+})
+
 test("mobile manifest route is wired before the generic /api/iconoplasm proxy", () => {
   const start = source.indexOf('if (path === "/api/iconoplasm/mobile-card-manifest")')
   const generic = source.indexOf('if (path.startsWith("/api/iconoplasm/"))')
@@ -169,6 +209,9 @@ test("frontend mobile path uses card VM manifest and rejects fallback records", 
   assert.match(appSource, /function assertCompleteMobileCardVM\(card\)/)
   assert.match(appSource, /\/api\/iconoplasm\/mobile-card-manifest/)
   assert.match(appSource, /card\.__complete !== true/)
+  assert.match(source, /KV_MOBILE_CARD_VM_PREFIX/)
+  assert.match(source, /readMobileCardVMFromSharedSnapshot/)
+  assert.match(source, /writeMobileCardVMToSharedSnapshot/)
   const mobileBranch = appSource.slice(
     appSource.indexOf("return loadMobileCardPageVM(pageEntries)"),
     appSource.indexOf("if (orderEl)", appSource.indexOf("return loadMobileCardPageVM(pageEntries)")),
