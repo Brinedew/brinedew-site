@@ -2510,6 +2510,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     window.requestAnimationFrame(function () {
       syncMobileLabelViewportGeometry(card)
     })
+    window.setTimeout(function () {
+      syncMobileLabelViewportGeometry(card)
+    }, 320)
+    window.setTimeout(function () {
+      syncMobileLabelViewportGeometry(card)
+    }, 720)
   }
 
   function setMobileLabelQcCopy(card, copy) {

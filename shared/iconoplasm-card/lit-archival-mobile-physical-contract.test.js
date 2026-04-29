@@ -151,6 +151,8 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
   assert.match(geometry, /--icono-label-mobile-viewport-height/)
   assert.match(geometry, /voteRect \? voteRect\.bottom/)
   assert.match(geometry, /dossierTop \+ infoRect\.height/)
+  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 320\)/)
+  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 720\)/)
   assert.equal(/scrollBy|scrollIntoView|translateY|sleeve|envelope|sleeve-front|physical-noun/.test(geometry), false)
 })
 
