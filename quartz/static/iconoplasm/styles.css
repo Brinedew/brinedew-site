@@ -350,20 +350,26 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
    flattened so they look like cells in one toolbar. On wide viewports
    they sit side-by-side; on narrow they stack but stay inside one rail. */
 .icono-gene-toolbar-rail {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: max-content minmax(11rem, 1fr);
   align-items: center;
-  gap: 0.75rem 1rem;
+  gap: 0.75rem;
   padding: 0.6rem 0.75rem;
   margin-top: 0.75rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
   border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
   border-radius: var(--icono-radius-lg);
   background: color-mix(in srgb, var(--light) 96%, white 4%);
   box-shadow: 0 6px 18px rgba(27, 18, 11, 0.04);
 }
 
+.icono-gene-toolbar-rail::-webkit-scrollbar {
+  display: none;
+}
+
 .icono-gene-toolbar-rail > .icono-gene-request-surface {
-  flex: 1 1 auto;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -375,17 +381,22 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 /* The "Edit image" trigger is its own cell on the left; the request shell
    takes the remaining width so the search-pill stretches across the rail. */
 .icono-gene-toolbar-rail > .icono-gene-edit-panel {
-  flex: 0 0 auto;
+  width: max-content;
 }
 
 .icono-gene-toolbar-rail > .icono-gene-request-panel {
-  flex: 1 1 240px;
+  min-width: 11rem;
 }
 
 /* When the edit form expands, let it claim the whole rail so the textarea
    isn't squeezed against the request shell. */
+.icono-gene-toolbar-rail:has([data-icono-edit-image-form]:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .icono-gene-toolbar-rail:has([data-icono-edit-image-form]:not([hidden])) > .icono-gene-edit-panel {
-  flex: 1 1 100%;
+  width: 100%;
+  grid-column: 1 / -1;
 }
 
 .icono-request-shell {
@@ -1823,10 +1834,19 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-collection-card--archive {
-  padding-top: 0.9rem;
-  padding-bottom: 0.9rem;
-  gap: 0.32rem;
-  align-content: start;
+  display: grid;
+  grid-template-columns: max-content max-content max-content minmax(8rem, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+  min-width: min(100%, 38rem);
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.icono-collection-card--archive::-webkit-scrollbar {
+  display: none;
 }
 
 .icono-collection-label--archive {
@@ -1835,16 +1855,19 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-collection-copy {
   font-size: 0.98rem;
-  line-height: 1.3;
+  line-height: 1;
   color: var(--secondary, var(--darkgray));
-  text-wrap: pretty;
+  white-space: nowrap;
 }
 
 .icono-collection-progress-inline {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) max-content;
+  align-items: center;
+  gap: 0.55rem;
   width: 100%;
   min-width: 0;
-  margin-top: 0.12rem;
+  margin-top: 0;
 }
 
 .icono-collection-progress-inline .icono-collection-progress-track {
@@ -1856,11 +1879,12 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
    to grow toward ("Next milestone: 250 (132 to go)"). Kept subtle and
    monospaced to match the existing label vocabulary on this card. */
 .icono-collection-progress-milestone {
-  margin-top: 0.4rem;
+  margin-top: 0;
   font-family: var(--codeFont, monospace);
   font-size: 0.78rem;
   letter-spacing: 0.04em;
   color: var(--secondary, var(--darkgray));
+  white-space: nowrap;
 }
 
 .icono-collection-label,
@@ -1873,8 +1897,8 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-collection-value {
-  font-size: clamp(2rem, 5vw, 2.8rem);
-  line-height: 0.92;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  line-height: 1;
   font-weight: 460;
   letter-spacing: -0.05em;
   color: color-mix(in oklch, var(--dark) 94%, var(--accent) 6%);
