@@ -29,7 +29,7 @@ test("home collection cards do not wait for public gallery counts before loading
   )
 })
 
-test("home collection first paint uses discovery rows before rich detail hydration", async () => {
+test("desktop home collection masonry paints discovery rows before rich detail hydration", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadNextGalleryPage()")
   const end = app.indexOf("if (orderEl)", start)
@@ -37,15 +37,10 @@ test("home collection first paint uses discovery rows before rich detail hydrati
   assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
   const block = app.slice(start, end)
 
-  assert.doesNotMatch(
-    block,
-    /Promise\.all\(\s*pageEntries\.map\(function \(entry\) \{\s*return loadDiscoveredGeneCardData\(entry\)/,
-    "the first personalized grid paint must not wait for one rich detail request per visible gene",
-  )
   assert.match(
     block,
-    /var immediateItems = pageEntries\.map\(function \(entry\) \{\s*return fallbackDiscoveredGene\(entry\)/,
-    "discovery rows should create immediate real cards while rich gene details hydrate afterward",
+    /if \(homeLayout === "masonry"\) \{\s*var immediateItems = pageEntries\.map\(function \(entry\) \{\s*return fallbackDiscoveredGene\(entry\)/,
+    "desktop masonry may create immediate discovery-row cards while rich gene details hydrate afterward",
   )
   assert.match(
     block,
@@ -54,13 +49,31 @@ test("home collection first paint uses discovery rows before rich detail hydrati
   )
   assert.match(
     block,
-    /if \(homeLayout === "masonry"\)[\s\S]*void hydrateBrickCards\(newCards\)[\s\S]*} else \{[\s\S]*void hydrateBrickCards\(newCards\)/,
-    "both desktop masonry and mobile/non-masonry home layouts must hydrate fallback cards after first paint",
+    /if \(homeLayout === "masonry"\)[\s\S]*void hydrateBrickCards\(newCards\)/,
+    "desktop masonry fallback cards must hydrate after first paint",
   )
-  const hydrateCalls = block.match(/void hydrateBrickCards\(newCards\)/g) || []
-  assert.ok(
-    hydrateCalls.length >= 2,
-    "both public/gallery masonry and personalized collection masonry paths must hydrate fallback cards",
+})
+
+test("mobile home collection infocards wait for rich detail instead of fallback records", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function loadNextGalleryPage()")
+  const end = app.indexOf("if (orderEl)", start)
+  assert.notEqual(start, -1, "missing loadNextGalleryPage")
+  assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
+  const block = app.slice(start, end)
+  const collectionStart = block.indexOf("ensureCollectionReady()")
+  assert.notEqual(collectionStart, -1, "missing personalized collection branch")
+  const collectionBlock = block.slice(collectionStart)
+
+  assert.match(
+    collectionBlock,
+    /if \(homeLayout === "masonry"\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return Promise\.all\(\s*pageEntries\.map\(function \(entry\) \{\s*return loadDiscoveredGeneCardData\(entry\)/,
+    "mobile/non-masonry infocards must be built from rich gene detail, not partial discovery fallback records",
+  )
+  assert.doesNotMatch(
+    collectionBlock,
+    /\} else \{[\s\S]{0,900}void hydrateBrickCards\(newCards\)/,
+    "mobile/non-masonry infocards should not paint partial cards and rely on later hydration to become complete",
   )
 })
 

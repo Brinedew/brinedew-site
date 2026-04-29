@@ -4411,57 +4411,68 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             maybeRestoreHomeScroll()
             return
           }
-          var immediateItems = pageEntries.map(function (entry) {
-            return fallbackDiscoveredGene(entry)
-          })
-          var resolvedItems = immediateItems.filter(Boolean)
-          if (isFirstPage) {
-            grid.innerHTML = ""
-            grid.setAttribute("data-layout", homeLayout)
-            grid.setAttribute("aria-busy", "false")
-          }
-          if (resolvedItems.length) {
-            var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
-            galleryState.items = galleryState.items.concat(resolvedItems)
-            galleryState.offset += pageEntries.length
-            if (homeLayout === "masonry") {
-              applyHomeMasonry(grid, newCards)
-              setupOrderedPortraitPrefetch(grid, galleryState.items)
-              void hydrateBrickCards(newCards).then(function () {
-                warmBrickCardImages(galleryState.items)
+          var appendResolvedItems = function (resolvedItems) {
+            if (renderDisposed || requestId !== activeGalleryRequest) return
+            if (isFirstPage) {
+              grid.innerHTML = ""
+              grid.setAttribute("data-layout", homeLayout)
+              grid.setAttribute("aria-busy", "false")
+            }
+            if (resolvedItems.length) {
+              var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
+              galleryState.items = galleryState.items.concat(resolvedItems)
+              galleryState.offset += pageEntries.length
+              if (homeLayout === "masonry") {
                 applyHomeMasonry(grid, newCards)
-              })
-            } else {
-              destroyHomeMasonry()
-              wireBrickVoteBoxes(newCards)
-              wireMobileLabelCards(newCards)
-              refreshPortraitLightbox()
-              void hydrateBrickCards(newCards).then(function () {
+                setupOrderedPortraitPrefetch(grid, galleryState.items)
+                void hydrateBrickCards(newCards).then(function () {
+                  warmBrickCardImages(galleryState.items)
+                  applyHomeMasonry(grid, newCards)
+                })
+              } else {
+                destroyHomeMasonry()
                 warmBrickCardImages(galleryState.items)
-              })
+                wireBrickVoteBoxes(newCards)
+                wireMobileLabelCards(newCards)
+                refreshPortraitLightbox()
+              }
+              if (
+                isFirstPage &&
+                galleryState.offset < galleryState.prefillTarget &&
+                galleryState.hasMore
+              ) {
+                clearBackgroundPrefill()
+                backgroundPrefillTimer = window.setTimeout(function () {
+                  backgroundPrefillTimer = null
+                  loadNextGalleryPage()
+                }, 140)
+              }
+            } else {
+              galleryState.offset += pageEntries.length
             }
-            if (
-              isFirstPage &&
-              galleryState.offset < galleryState.prefillTarget &&
-              galleryState.hasMore
-            ) {
-              clearBackgroundPrefill()
-              backgroundPrefillTimer = window.setTimeout(function () {
-                backgroundPrefillTimer = null
-                loadNextGalleryPage()
-              }, 140)
+            renderCollectionChrome()
+            syncHeroCount()
+            updateSentinelObserver()
+            setLoadingState("", false)
+            syncHomeHistoryState(false)
+            maybeRestoreHomeScroll()
+            if (orderEl && orderEl.value !== galleryState.order) {
+              orderEl.value = galleryState.order
             }
-          } else {
-            galleryState.offset += pageEntries.length
           }
-          renderCollectionChrome()
-          syncHeroCount()
-          updateSentinelObserver()
-          setLoadingState("", false)
-          syncHomeHistoryState(false)
-          maybeRestoreHomeScroll()
-          if (orderEl && orderEl.value !== galleryState.order) {
-            orderEl.value = galleryState.order
+          if (homeLayout === "masonry") {
+            var immediateItems = pageEntries.map(function (entry) {
+              return fallbackDiscoveredGene(entry)
+            })
+            appendResolvedItems(immediateItems.filter(Boolean))
+          } else {
+            return Promise.all(
+              pageEntries.map(function (entry) {
+                return loadDiscoveredGeneCardData(entry)
+              }),
+            ).then(function (richItems) {
+              appendResolvedItems(richItems.filter(Boolean))
+            })
           }
         })
         .catch(function (err) {
