@@ -1208,11 +1208,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function mobileArchivalObjectMarkup(portraitHtml, infoHtml) {
     return (
-      '<div class="icono-mobile-card-aperture" data-icono-mobile-aperture>' +
       '<div class="icono-mobile-card-physical-object" data-icono-mobile-physical-object>' +
       portraitHtml +
       infoHtml +
-      "</div>" +
       "</div>"
     )
   }
@@ -2587,20 +2585,35 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function setMobileLabelExpanded(card, expanded) {
     if (!card) return
+    var anchorTop =
+      typeof card.getBoundingClientRect === "function" ? card.getBoundingClientRect().top : null
+    var restoreCardTop = function () {
+      if (anchorTop == null || typeof window === "undefined") return
+      if (typeof card.getBoundingClientRect !== "function") return
+      var nextTop = card.getBoundingClientRect().top
+      var delta = nextTop - anchorTop
+      if (Math.abs(delta) > 1 && typeof window.scrollBy === "function") {
+        window.scrollBy(0, delta)
+      }
+    }
     syncMobileLabelDossierContent(card)
     var resolved = !!expanded
     card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
     var toggle = card.querySelector("[data-icono-label-mobile-toggle]")
     if (toggle) toggle.setAttribute("aria-expanded", resolved ? "true" : "false")
     syncMobileLabelViewportGeometry(card)
+    restoreCardTop()
     window.requestAnimationFrame(function () {
       syncMobileLabelViewportGeometry(card)
+      restoreCardTop()
     })
     window.setTimeout(function () {
       syncMobileLabelViewportGeometry(card)
+      restoreCardTop()
     }, 320)
     window.setTimeout(function () {
       syncMobileLabelViewportGeometry(card)
+      restoreCardTop()
     }, 720)
   }
 

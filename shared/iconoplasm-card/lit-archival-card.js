@@ -35,15 +35,14 @@ function normalizeCardModelHandwriting(payload) {
   normalized.handwrittenWeight = normalizeHandwrittenText(safePayload.handwrittenWeight)
   normalized.politicalNote = normalizeHandwrittenText(safePayload.politicalNote)
   normalized.sexNote = normalizeHandwrittenText(safePayload.sexNote)
-  normalized.stylePairs = Array.isArray(safePayload.stylePairs)
-    ? safePayload.stylePairs.map(function (pair) {
-        var safePair = asObject(pair)
-        return {
-          origin: blankFallback(safePair.origin),
-          note: normalizeHandwrittenText(safePair.note),
-        }
-      })
-    : []
+  var rawStylePairs = Array.isArray(safePayload.stylePairs) ? safePayload.stylePairs : []
+  normalized.stylePairs = [0, 1, 2, 3, 4].map(function (index) {
+    var safePair = asObject(rawStylePairs[index])
+    return {
+      origin: blankFallback(safePair.origin),
+      note: normalizeHandwrittenText(safePair.note),
+    }
+  })
   return normalized
 }
 

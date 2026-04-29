@@ -36,6 +36,7 @@ test("iconoplasm app script still parses after infocard-only mobile pivot", () =
 
 test("mobile archival renderer is infocard-only and has no sleeve or material atlas path", async () => {
   const app = await sourceText(appPath)
+  const css = await sourceText(cssPath)
   const runtime = await sourceText(runtimePath)
   const sync = await sourceText(syncPath)
   const combined = `${app}\n${runtime}\n${sync}`
@@ -56,12 +57,17 @@ test("mobile archival renderer is infocard-only and has no sleeve or material at
   assert.match(
     app,
     /mobileArchivalObjectMarkup\(portraitHtml, infoHtml\)/,
-    "brick markup should wrap the canonical portrait and info card in the physical-object/aperture model",
+    "brick markup should wrap the canonical portrait and info card in one physical card object",
   )
   assert.match(
     app,
     /mobileArchivalObjectMarkup\(portraitMarkup, heroInfoMarkup\)/,
-    "gene lead markup should wrap the canonical portrait and info card in the physical-object/aperture model",
+    "gene lead markup should wrap the canonical portrait and info card in one physical card object",
+  )
+  assert.doesNotMatch(
+    `${app}\n${css}`,
+    /icono-mobile-card-aperture/,
+    "mobile card code must not reintroduce a separate aperture object around the physical card",
   )
 
   const shared = await import(pathToFileURL(runtimePath).href)
@@ -70,6 +76,33 @@ test("mobile archival renderer is infocard-only and has no sleeve or material at
     Object.hasOwn(sharedRuntime, "renderMobileArchivalPhysicalSleeveHtml"),
     false,
     "shared runtime must not export the removed sleeve renderer",
+  )
+})
+
+test("mobile infocard projects five fixed PFAM clan lanes without overflow summaries", async () => {
+  const shared = await import(pathToFileURL(runtimePath).href)
+  const sharedRuntime = shared.IconoCardShared || globalThis.IconoplasmCardShared
+  const model = sharedRuntime.resolveArchivalCardModel({
+    symbol: "FIVE",
+    full_name: "five clan test",
+    essence: {
+      aesthetics_origin: ["Clan A", "Clan B", "Clan C", "Clan D", "Clan E"],
+      aesthetics: ["alpha", "beta", "gamma", "delta", "epsilon"],
+    },
+  })
+  assert.equal(model.stylePairs.length, 5, "mobile and Lit cards need five fixed clan lanes")
+  assert.deepEqual(
+    model.stylePairs.map((pair) => pair.origin),
+    ["Clan A", "Clan B", "Clan C", "Clan D", "Clan E"],
+  )
+  assert.deepEqual(
+    model.stylePairs.map((pair) => pair.note),
+    ["alpha", "beta", "gamma", "delta", "epsilon"],
+  )
+  assert.equal(
+    model.stylePairs.some((pair) => /\+\d|more clans|mixed/i.test(`${pair.origin} ${pair.note}`)),
+    false,
+    "five-clan genes should show the five lanes directly, not a lossy overflow summary",
   )
 })
 
@@ -82,8 +115,8 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
   )
   assert.match(
     css,
-    /block-size:\s*var\(--icono-label-mobile-viewport-height\);/,
-    "the card viewport height, not the infocard transform, should control the crop",
+    /block-size:\s*calc\(var\(--icono-label-mobile-viewport-height\) \* var\(--icono-label-mobile-fit-scale,\s*1\)\);/,
+    "the card body's scaled viewport height, not an inner infocard transform, should control the crop",
   )
 
   assert.match(
@@ -109,24 +142,20 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
   )
   assert.notEqual(mobileCardStart, -1, "missing mobile card viewport block")
   const mobileCardEnd = css.indexOf(
-    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]',
+    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"]',
     mobileCardStart,
   )
-  assert.notEqual(mobileCardEnd, -1, "missing expanded mobile card block")
+  assert.notEqual(mobileCardEnd, -1, "missing swiping mobile card block")
   const cardBlock = css.slice(mobileCardStart, mobileCardEnd)
   assert.match(
     cardBlock,
-    /\.icono-mobile-card-aperture[\s\S]*clip-path:\s*polygon\(/,
-    "closed viewport edge must be owned by the aperture, not by a painted zigzag or root-card crop",
-  )
-  const rootCardBlock = cardBlock.slice(
-    0,
-    cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture"),
+    /clip-path:\s*polygon\(/,
+    "closed viewport edge must be the card body's own crop geometry, not a separate viewport widget",
   )
   assert.match(
-    rootCardBlock,
-    /overflow:\s*visible;/,
-    "the root layout box must not clip the aperture's jagged edge shadow",
+    cardBlock,
+    /overflow:\s*clip;/,
+    "the root physical card must own the crop instead of delegating it to an aperture shell",
   )
   assert.match(
     cardBlock,
@@ -142,7 +171,7 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
 
   const expandedBlock = cssBlockFor(
     css,
-    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]\n    .icono-mobile-card-aperture',
+    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]',
   )
   assert.match(expandedBlock, /clip-path:\s*inset\(0\);/, "jagged crop must disappear when the viewport is fully open")
   assert.match(expandedBlock, /filter:\s*none;/, "open state must remove the visible torn cutoff edge")
@@ -150,6 +179,7 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after",
   )
+  assert.match(peekAfterBlock, /content:\s*none;/, "the tab must not have a fake footer separator line")
   assert.equal(
     /icono-card--variant-lab-label\.icono-card--brick::after[\s\S]*linear-gradient/.test(css) ||
       /linear-gradient/.test(peekAfterBlock),
@@ -170,10 +200,10 @@ test("mobile archival card keeps one physical width instead of reflowing with th
   )
   assert.notEqual(mobileCardStart, -1, "missing mobile physical card block")
   const mobileCardEnd = css.indexOf(
-    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]',
+    '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-swiping="true"]',
     mobileCardStart,
   )
-  assert.notEqual(mobileCardEnd, -1, "missing expanded mobile card block")
+  assert.notEqual(mobileCardEnd, -1, "missing swiping mobile card block")
   const cardBlock = css.slice(mobileCardStart, mobileCardEnd)
   assert.match(
     cardBlock,
@@ -189,17 +219,17 @@ test("mobile archival card keeps one physical width instead of reflowing with th
   assert.match(
     cardBlock,
     /block-size:\s*calc\(var\(--icono-label-mobile-viewport-height\) \* var\(--icono-label-mobile-fit-scale,\s*1\)\);/,
-    "the root card should reserve the scaled aperture height instead of relying on CSS zoom",
+    "the root card should reserve the scaled physical card height instead of relying on CSS zoom",
   )
   assert.match(
     cardBlock,
-    /\.icono-mobile-card-aperture[\s\S]*inline-size:\s*var\(--icono-label-mobile-physical-width\);/,
-    "the aperture remains the unscaled physical object width",
+    /\.icono-mobile-card-physical-object[\s\S]*inline-size:\s*var\(--icono-label-mobile-physical-width\);/,
+    "the physical object remains the unscaled card width",
   )
   assert.match(
     cardBlock,
-    /\.icono-mobile-card-aperture[\s\S]*transform:\s*scale\(var\(--icono-label-mobile-fit-scale,\s*1\)\);/,
-    "mobile archival card should optically fit by scaling the aperture shell, not by changing the blot geometry",
+    /\.icono-mobile-card-physical-object[\s\S]*transform:\s*scale\(var\(--icono-label-mobile-fit-scale,\s*1\)\);/,
+    "mobile archival card should optically fit by scaling the physical object, not by changing blot geometry",
   )
   assert.doesNotMatch(
     cardBlock,
@@ -218,14 +248,14 @@ test("mobile archival card keeps one physical width instead of reflowing with th
   assert.doesNotMatch(
     portraitViewportBlock,
     /100dvh|--icono-label-mobile-peek-height/,
-    "browser viewport math belongs to the aperture, not the physical blot holder",
+    "browser viewport math belongs to the whole card scale, not the physical blot holder",
   )
   assert.doesNotMatch(
     cardBlock,
     /\.icono-label-specimen-viewport[\s\S]*\.icono-brick-media-link[\s\S]*pointer-events:\s*none;/,
     "the visible blot must remain clickable for full-screen viewing; only the infocard surface owns the open/closed toggle",
   )
-  const rootMobileCardBlock = cardBlock.slice(0, cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-aperture"))
+  const rootMobileCardBlock = cardBlock.slice(0, cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-physical-object"))
   assert.doesNotMatch(
     rootMobileCardBlock,
     /inline-size:\s*100%;/,
@@ -265,7 +295,7 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.doesNotMatch(
     setupBlock,
     /closedPhysicalHeight/,
-    "mobile optical fit must not be height-capped by the old whole-card estimate; the aperture owns vertical reveal while width owns browser-edge fit",
+    "mobile optical fit must not be height-capped by the old whole-card estimate; width owns browser-edge fit",
   )
   assert.match(setupBlock, /Math\.min\(1\.9,\s*availableWidth \/ physicalWidth\)/)
   assert.match(setupBlock, /Math\.max\(0\.78,\s*fitScale\)/)
@@ -370,8 +400,8 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   )
   assert.match(
     tabBlock,
-    /bottom:\s*calc\(100% - 0\.08rem\);/,
-    "the gene symbol tab must seat on the infocard top edge instead of sagging into the sheet",
+    /bottom:\s*calc\(100% \+ 0\.02rem\);/,
+    "the gene symbol tab text must seat above the infocard top edge instead of clipping through the sheet",
   )
   assert.match(tabBlock, /right:\s*var\(--icono-label-mobile-tab-safe-inset\);/)
   assert.match(
@@ -382,18 +412,18 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(tabBlock, /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/)
   assert.match(tabBlock, /font-family:\s*"League Spartan";/)
   assert.match(tabBlock, /font-size:\s*1\.14rem;/, "B-483 requires the mobile gene symbol scale to be bumped")
-  assert.match(tabBlock, /align-items:\s*end;/, "tab symbol should align to the lower printed baseline")
+  assert.match(tabBlock, /align-items:\s*center;/, "tab symbol should sit optically centered in the tab face")
   assert.match(
     tabBlock,
-    /padding:\s*0 0\.58rem 0\.02rem;/,
-    "the printed symbol must sit in the visible lower part of the tab, not the portion tucked behind the portrait",
+    /padding:\s*0\.05rem 0\.58rem 0;/,
+    "the printed symbol must stay clear of the tab footer edge",
   )
 
   const symbolBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol",
   )
-  assert.match(symbolBlock, /line-height:\s*0\.86;/)
+  assert.match(symbolBlock, /line-height:\s*0\.96;/)
   assert.match(symbolBlock, /transform:\s*none;/)
   assert.doesNotMatch(
     symbolBlock,
@@ -422,9 +452,20 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
     /infoCard\.scrollHeight|infoCard\.offsetHeight|icono-label-dossier-shell|icono-label-dossier-sheet/,
     "open viewport height must follow meaningful content endpoints, not stretching grid shells",
   )
-  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 320\)/)
-  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)\s*\}, 720\)/)
+  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 320\)/)
+  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 720\)/)
   assert.equal(/scrollBy|scrollIntoView|translateY|sleeve|envelope|sleeve-front|physical-noun/.test(geometry), false)
+  const expansionStart = app.indexOf("function setMobileLabelExpanded")
+  const expansionEnd = app.indexOf("function setMobileLabelQcCopy", expansionStart)
+  assert.notEqual(expansionStart, -1, "missing mobile expansion helper")
+  assert.notEqual(expansionEnd, -1, "missing mobile expansion helper end")
+  const expansionBlock = app.slice(expansionStart, expansionEnd)
+  assert.match(
+    expansionBlock,
+    /anchorTop[\s\S]*restoreCardTop[\s\S]*window\.scrollBy\(0,\s*delta\)/,
+    "expanding the viewport must preserve the card's visual top so browser scroll anchoring cannot make the card jump upward",
+  )
+  assert.match(expansionBlock, /requestAnimationFrame[\s\S]*restoreCardTop\(\)/)
   assert.doesNotMatch(
     app,
     /setMobileLabelExpanded\(leadCard,\s*true\)/,
@@ -464,7 +505,7 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     "category handwriting may spill upward, but it must not sit on top of the typewritten TRANSMEMBRANE/SOLUBLE lane",
   )
   assert.match(css, /--icono-label-mobile-peek-height:\s*5\.25rem;/)
-  assert.match(css, /--icono-label-mobile-style-row-height:\s*8\.35rem;/)
+  assert.match(css, /--icono-label-mobile-style-row-height:\s*17\.8rem;/)
   assert.match(css, /--icono-label-mobile-alignment-row-height:\s*10\.7rem;/)
   const mobilePeekSummaryBlock = cssBlockFor(
     css,
@@ -506,12 +547,19 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-style-pair",
   )
-  assert.match(stylePairBlock, /grid-template-columns:\s*minmax\(0,\s*1fr\) max-content;/)
+  assert.match(stylePairBlock, /grid-template-columns:\s*minmax\(0,\s*1\.18fr\) minmax\(5\.9rem,\s*0\.82fr\);/)
   assert.match(
     stylePairBlock,
-    /min-block-size:\s*2\.1rem;/,
-    "PFAM style pairs need fixed lane height so wrapped typewritten origins do not collide with the next handwritten style",
+    /min-block-size:\s*3\.12rem;/,
+    "PFAM style pairs need fixed five-lane height with real vertical space, not ellipsis compression",
   )
+  const styleOriginBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-style-pair\n    .icono-label-origin-text",
+  )
+  assert.match(styleOriginBlock, /white-space:\s*normal;/)
+  assert.match(styleOriginBlock, /overflow:\s*visible;/)
+  assert.match(styleOriginBlock, /text-overflow:\s*clip;/)
   const styleHandBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-style-pair\n    .icono-label-hand-note--style",
@@ -520,6 +568,13 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     styleHandBlock,
     /white-space:\s*nowrap;/,
     "handwritten style labels must remain single annotations, not wrap into blocks that cover neighboring PFAM rows",
+  )
+  assert.match(styleHandBlock, /overflow:\s*visible;/)
+  assert.match(styleHandBlock, /text-overflow:\s*clip;/)
+  assert.doesNotMatch(
+    `${styleOriginBlock}\n${styleHandBlock}`,
+    /ellipsis/,
+    "PFAM clan lanes must not hide content behind ellipses",
   )
   const alignmentGridBlock = cssBlockFor(
     css,

@@ -10122,14 +10122,15 @@
       }
       var weightKg = Number(safeEssence.weight_kg);
       var handwrittenWeight = Number.isFinite(weightKg) && weightKg > 0 ? String(Math.round(weightKg)) : "";
-      var aesthetics = uniqueDisplayValues(safeEssence.aesthetics, 4);
-      var aestheticsOrigin = uniqueDisplayValues(safeEssence.aesthetics_origin, 4);
-      var maxStyleRows = Math.max(aesthetics.length, aestheticsOrigin.length, 3);
+      var aesthetics = uniqueDisplayValues(safeEssence.aesthetics, 5);
+      var aestheticsOrigin = uniqueDisplayValues(safeEssence.aesthetics_origin, 5);
       var stylePairs = [];
-      for (var i = 0; i < maxStyleRows; i++) {
+      for (var i = 0; i < 5; i++) {
+        var origin = aestheticsOrigin[i];
+        var note = aesthetics[i];
         stylePairs.push({
-          origin: blankFallback(aestheticsOrigin[i]),
-          note: normalizeHandwrittenText(aesthetics[i])
+          origin: blankFallback(origin),
+          note: normalizeHandwrittenText(note)
         });
       }
       var politicsDisplay = normalizePoliticsDisplay(
