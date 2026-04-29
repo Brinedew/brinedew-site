@@ -13352,48 +13352,65 @@ function gallerySnapshotMaxAgeMs(order) {
 }
 
 async function currentGalleryVersion(env) {
-  const now = Date.now()
-  if (
-    galleryVersionCache.loadedAt > 0 &&
-    now - galleryVersionCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS
-  ) {
-    return galleryVersionCache.value || "0"
-  }
-  if (!env.KV) {
-    galleryVersionCache.loadedAt = now
-    return galleryVersionCache.value || "0"
-  }
-  try {
-    const raw = await env.KV.get(KV_GALLERY_VERSION)
-    galleryVersionCache.value = String(raw || "0").trim() || "0"
-  } catch {
-    galleryVersionCache.value = galleryVersionCache.value || "0"
-  }
-  galleryVersionCache.loadedAt = now
-  return galleryVersionCache.value || "0"
+  const barrier = await currentGalleryVersionBarrier(env)
+  return barrier.current
 }
 
-async function currentMobileCardSnapshotVersion(env) {
-  const value = await currentGalleryVersion(env)
+function normalizeGalleryVersionBarrierValue(value) {
   if (value && typeof value === "object") {
-    const current = String(value.current || "").trim()
+    const current = String(value.current || "").trim() || "0"
     const previous = String(value.previous || "").trim()
     return {
-      current: current || "0",
+      current,
       previous: previous && previous !== current ? previous : null,
       raw: value,
     }
   }
-  const current = String(value || "").trim() || "0"
-  return { current, previous: null, raw: value }
+  const current = String(value || "0").trim() || "0"
+  return { current, previous: null, raw: value || "0" }
+}
+
+async function currentGalleryVersionBarrier(env) {
+  const now = Date.now()
+  if (!env.KV) {
+    galleryVersionCache.loadedAt = now
+    return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
+  }
+  try {
+    const raw = await env.KV.get(KV_GALLERY_VERSION)
+    let value = null
+    try {
+      value = raw ? JSON.parse(raw) : null
+    } catch {
+      value = null
+    }
+    galleryVersionCache.value = value && typeof value === "object" ? value : String(raw || "0").trim() || "0"
+  } catch {
+    galleryVersionCache.value = galleryVersionCache.value || "0"
+  }
+  galleryVersionCache.loadedAt = now
+  return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
+}
+
+async function currentMobileCardSnapshotVersion(env) {
+  return currentGalleryVersionBarrier(env)
 }
 
 async function bumpGalleryVersion(env) {
+  const previousBarrier = await currentGalleryVersionBarrier(env)
+  const previous = String(previousBarrier.current || "").trim()
   const next = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
-  galleryVersionCache.value = next
+  const barrier = {
+    current: next,
+    previous: previous && previous !== next && previous !== "0" ? previous : null,
+    schema: MOBILE_CARD_VM_SCHEMA,
+    published_at: new Date().toISOString(),
+    status: "active",
+  }
+  galleryVersionCache.value = barrier
   galleryVersionCache.loadedAt = Date.now()
   if (env.KV) {
-    await env.KV.put(KV_GALLERY_VERSION, next)
+    await env.KV.put(KV_GALLERY_VERSION, JSON.stringify(barrier))
   }
   return next
 }
@@ -13401,7 +13418,7 @@ async function bumpGalleryVersion(env) {
 async function invalidateGalleryCache(env) {
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
-  await bumpGalleryVersion(env)
+  return bumpGalleryVersion(env)
 }
 
 async function syncAdminReadModelsAndInvalidateGallery(
@@ -13431,8 +13448,26 @@ async function syncAdminReadModelsAndInvalidateGallery(
     skipVisionRollups,
     skipDashboard,
   })
-  await invalidateGalleryCache(env)
-  return result
+  const nextVersion = await invalidateGalleryCache(env)
+  const warmedSymbols = Array.from(new Set(symbols.map((value) => normalizeSymbol(value)).filter(Boolean)))
+  let mobileCardVMs = { warmed: 0, missing: 0, version: nextVersion }
+  if (!result?.partial && warmedSymbols.length) {
+    let warmed = 0
+    let missing = 0
+    for (let index = 0; index < warmedSymbols.length; index += 100) {
+      const chunk = warmedSymbols.slice(index, index + 100)
+      const prewarm = await composeAndCacheMobileCardVMs(
+        env,
+        "https://iconoplasm.brinedew.bio/",
+        chunk,
+        nextVersion,
+      )
+      warmed += prewarm.cards.length
+      missing += prewarm.missing.length
+    }
+    mobileCardVMs = { warmed, missing, version: nextVersion }
+  }
+  return { ...result, mobile_card_vms: mobileCardVMs }
 }
 
 function galleryCanUseEdgeCache(url) {
@@ -14582,7 +14617,77 @@ async function handleMobileCardManifest(request, env) {
     )
   }
 
-  const url = new URL(request.url)
+  const cards = []
+  const missing = []
+  let kvKeysMissing = 0
+  let kvSnapshotHits = 0
+  let previousSnapshotHits = 0
+  const currentMissing = []
+  for (const symbol of symbols) {
+    const cachedVM = await readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol)
+    if (cachedVM) {
+      kvSnapshotHits += 1
+      cards.push(cachedVM)
+      continue
+    }
+    kvKeysMissing += 1
+    currentMissing.push(symbol)
+  }
+  if (currentMissing.length && versionInfo.previous) {
+    for (const symbol of currentMissing) {
+      const previousVM = await readMobileCardVMFromSharedSnapshot(env, versionInfo.previous, symbol)
+      if (previousVM) {
+        previousSnapshotHits += 1
+        cards.push({
+          ...previousVM,
+          data_source: "kv_previous",
+        })
+      } else {
+        missing.push(symbol)
+      }
+    }
+  } else {
+    for (const symbol of currentMissing) {
+      missing.push(symbol)
+    }
+  }
+  let dataSource = "snapshot_missing"
+  if (cards.length > 0) {
+    if (kvSnapshotHits === cards.length) dataSource = "kv_snapshot"
+    else if (previousSnapshotHits === cards.length) dataSource = "kv_previous"
+    else dataSource = "mixed"
+  }
+  const fallbackVersionUsed = previousSnapshotHits > 0 ? versionInfo.previous : null
+
+  return json(
+    {
+      schema: MOBILE_CARD_MANIFEST_SCHEMA,
+      snapshot_version: snapshotVersion,
+      data_source: dataSource,
+      cards: cards.sort((left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol)),
+      missing,
+      diagnostics: {
+        fallback_version_used: fallbackVersionUsed,
+        kv_keys_missing: kvKeysMissing,
+        kv_snapshot_hits: kvSnapshotHits,
+        kv_previous_hits: previousSnapshotHits,
+        d1_composed: 0,
+        layout,
+      },
+    },
+    200,
+    {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-VM-Version": snapshotVersion,
+      "X-Iconoplasm-Data-Source": dataSource.replaceAll("_", "-"),
+      "X-Iconoplasm-Snapshot-State":
+        dataSource === "snapshot_missing" ? "snapshot-missing" : "versioned-kv",
+    },
+  )
+}
+
+async function composeAndCacheMobileCardVMs(env, requestUrl, symbols, snapshotVersion) {
+  const url = new URL(requestUrl || "https://iconoplasm.brinedew.bio/")
   const fields = [
     "symbol",
     "full_name",
@@ -14600,17 +14705,7 @@ async function handleMobileCardManifest(request, env) {
   ].join(",")
   const cards = []
   const missing = []
-  let kvKeysMissing = 0
-  let d1Composed = 0
-  let kvSnapshotHits = 0
-  for (const symbol of symbols) {
-    const cachedVM = await readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol)
-    if (cachedVM) {
-      kvSnapshotHits += 1
-      cards.push(cachedVM)
-      continue
-    }
-    kvKeysMissing += 1
+  for (const symbol of normalizeRequestedSymbols(symbols, 100)) {
     const record = await geneRecord(env, url, symbol, { fields })
     const projected = projectGeneRecord(record, fields)
     const vm = buildMobileCardVMFromGeneRecord(projected, {
@@ -14621,40 +14716,10 @@ async function handleMobileCardManifest(request, env) {
       missing.push(symbol)
       continue
     }
-    d1Composed += 1
     await writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm)
     cards.push(vm)
   }
-  const dataSource =
-    cards.length > 0 && kvSnapshotHits === cards.length
-      ? "kv_snapshot"
-      : kvSnapshotHits > 0
-        ? "mixed"
-        : "request_composed"
-
-  return json(
-    {
-      schema: MOBILE_CARD_MANIFEST_SCHEMA,
-      snapshot_version: snapshotVersion,
-      data_source: dataSource,
-      cards: cards.sort((left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol)),
-      missing,
-      diagnostics: {
-        fallback_version_used: null,
-        kv_keys_missing: kvKeysMissing,
-        kv_snapshot_hits: kvSnapshotHits,
-        d1_composed: d1Composed,
-        layout,
-      },
-    },
-    200,
-    {
-      "Cache-Control": "no-store",
-      "X-Iconoplasm-VM-Version": snapshotVersion,
-      "X-Iconoplasm-Data-Source": dataSource.replaceAll("_", "-"),
-      "X-Iconoplasm-Snapshot-State": dataSource === "request_composed" ? "request-composed" : "versioned-kv",
-    },
-  )
+  return { cards, missing }
 }
 
 async function handlePublicResolve(request, env) {

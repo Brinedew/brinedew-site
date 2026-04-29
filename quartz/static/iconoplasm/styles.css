@@ -1957,6 +1957,45 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   font-size: 0.95rem;
 }
 
+.icono-mobile-data-failure-card {
+  display: grid;
+  gap: 0.55rem;
+  width: min(100%, 360px);
+  min-height: 220px;
+  margin: 0 auto 1rem;
+  padding: 1.2rem 1.1rem;
+  border: 1px solid color-mix(in srgb, #8f1d2c 42%, var(--ui-border) 58%);
+  border-radius: var(--icono-radius-lg);
+  background:
+    linear-gradient(180deg, rgba(143, 29, 44, 0.07), rgba(143, 29, 44, 0.02)),
+    color-mix(in srgb, var(--light) 96%, #fff1f1 4%);
+  color: var(--dark);
+  box-shadow: 0 14px 32px rgba(56, 28, 24, 0.12);
+}
+
+.icono-mobile-data-failure-kicker {
+  font-family: var(--bodyFont);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #8f1d2c 72%, var(--dark) 28%);
+}
+
+.icono-mobile-data-failure-symbol {
+  font-family: var(--headerFont);
+  font-size: 1.65rem;
+  line-height: 1;
+  font-weight: 760;
+}
+
+.icono-mobile-data-failure-copy {
+  max-width: 28ch;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--dark) 78%, var(--gray) 22%);
+}
+
 .icono-empty {
   text-align: center;
   padding: 3rem 1rem;

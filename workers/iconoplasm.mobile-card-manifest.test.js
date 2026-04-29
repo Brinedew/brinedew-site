@@ -177,18 +177,65 @@ function buildEnv({ kvStore = new Map(), db = new FakeIconoplasmDb(), version = 
   }
 }
 
-test("mobile card manifest returns complete VMs without pending portrait placeholders", async () => {
+function completeMobileCardVM(symbol = "ERBB2", version = "test-vm-version", dataSource = "kv_snapshot") {
+  const normalized = String(symbol || "ERBB2").toUpperCase()
+  const fullName = normalized === "INS" ? "insulin" : "erb-b2 receptor tyrosine kinase 2"
+  return {
+    __complete: true,
+    schema_version: "iconoplasm.mobileCard.v1",
+    snapshot_version: version,
+    data_source: dataSource,
+    symbol: normalized,
+    full_name: fullName,
+    display_color: normalized === "INS" ? "#B0304A" : "#423D37",
+    portrait: {
+      status: "published",
+      url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
+      full_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
+      thumb_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
+      width: 768,
+      height: 1024,
+      asset_sha256: normalized === "INS" ? "9c".repeat(32) : "7b".repeat(32),
+      candidate_image_id: normalized === "INS" ? 4352 : 5423,
+      vision_id: "artist-random-v1",
+      emulsion_id: normalized === "INS" ? "A1-4352" : "A1-5423",
+    },
+    field_status: {
+      symbol: "present",
+      full_name: "present",
+      color: "present",
+      portrait: "present",
+      family: "present",
+      family_feature: "known_absent",
+    },
+    payload: {
+      symbol: normalized,
+      full_name: fullName,
+      color: normalized === "INS" ? "#B0304A" : "#423D37",
+      portrait: { status: "published" },
+      essence: { faction: normalized === "INS" ? "" : "pro-growth" },
+    },
+  }
+}
+
+test("mobile card manifest returns complete VMs from KV without pending portrait placeholders", async () => {
+  const kvStore = new Map([
+    [
+      "iconoplasm:mobile-card-vm:test-vm-version:ERBB2",
+      JSON.stringify(completeMobileCardVM("ERBB2")),
+    ],
+  ])
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"] }),
     }),
-    buildEnv(),
+    buildEnv({ kvStore, db: null }),
   )
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "request-composed")
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "kv-snapshot")
   const payload = await response.json()
   assert.equal(payload.schema, "iconoplasm.mobileCardManifest.v1")
   assert.equal(payload.snapshot_version, "test-vm-version")
@@ -206,41 +253,58 @@ test("mobile card manifest returns complete VMs without pending portrait placeho
   assert.equal(card.payload.essence.faction, "pro-growth")
 })
 
-test("mobile card manifest writes and reads versioned KV VMs before touching D1", async () => {
-  const kvStore = new Map()
-  const first = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+test("mobile card manifest never composes missing public cards from D1", async () => {
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
     }),
-    buildEnv({ kvStore }),
+    buildEnv({ kvStore: new Map(), db: new FakeIconoplasmDb() }),
   )
-  assert.equal(first.status, 200)
-  const firstPayload = await first.json()
-  assert.equal(firstPayload.data_source, "request_composed")
-  assert.equal(firstPayload.diagnostics.kv_keys_missing, 1)
-  assert.equal(firstPayload.diagnostics.d1_composed, 1)
-  assert.ok(kvStore.has("iconoplasm:mobile-card-vm:test-vm-version:INS"))
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "snapshot-missing")
+  assert.equal(response.headers.get("X-Iconoplasm-Snapshot-State"), "snapshot-missing")
+  const payload = await response.json()
+  assert.equal(payload.data_source, "snapshot_missing")
+  assert.deepEqual(payload.missing, ["INS"])
+  assert.equal(payload.cards.length, 0)
+  assert.equal(payload.diagnostics.d1_composed, 0)
+})
 
-  const second = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+test("mobile card manifest falls back to previous version without D1", async () => {
+  const kvStore = new Map([
+    [
+      "iconoplasm:mobile-card-vm:previous-vm-version:INS",
+      JSON.stringify(completeMobileCardVM("INS", "previous-vm-version")),
+    ],
+  ])
+  const barrier = JSON.stringify({
+    current: "current-vm-version",
+    previous: "previous-vm-version",
+    schema: "iconoplasm.mobileCard.v1",
+    status: "active",
+  })
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
     }),
-    buildEnv({ kvStore, db: null }),
+    buildEnv({ kvStore, db: null, version: barrier }),
   )
-  assert.equal(second.status, 200)
-  assert.equal(second.headers.get("X-Iconoplasm-Data-Source"), "kv-snapshot")
-  assert.equal(second.headers.get("X-Iconoplasm-Snapshot-State"), "versioned-kv")
-  const secondPayload = await second.json()
-  assert.equal(secondPayload.data_source, "kv_snapshot")
-  assert.equal(secondPayload.diagnostics.kv_snapshot_hits, 1)
-  assert.equal(secondPayload.diagnostics.d1_composed, 0)
-  assert.deepEqual(secondPayload.missing, [])
-  assert.equal(secondPayload.cards[0].data_source, "kv_snapshot")
-  assert.equal(secondPayload.cards[0].symbol, "INS")
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "kv-previous")
+  const payload = await response.json()
+  assert.equal(payload.snapshot_version, "current-vm-version")
+  assert.equal(payload.data_source, "kv_previous")
+  assert.equal(payload.diagnostics.fallback_version_used, "previous-vm-version")
+  assert.equal(payload.diagnostics.kv_keys_missing, 1)
+  assert.equal(payload.diagnostics.kv_previous_hits, 1)
+  assert.equal(payload.diagnostics.d1_composed, 0)
+  assert.deepEqual(payload.missing, [])
+  assert.equal(payload.cards[0].symbol, "INS")
+  assert.equal(payload.cards[0].data_source, "kv_previous")
 })
 
 test("mobile manifest route is wired before the generic /api/iconoplasm proxy", () => {

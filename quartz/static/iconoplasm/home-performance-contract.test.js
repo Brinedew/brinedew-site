@@ -82,6 +82,44 @@ test("mobile home collection infocards wait for rich detail instead of fallback 
   )
 })
 
+test("mobile home collection renders manifest failures as visible data failure cards", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function loadNextGalleryPage()")
+  const end = app.indexOf("if (orderEl)", start)
+  assert.notEqual(start, -1, "missing loadNextGalleryPage")
+  assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
+  const block = app.slice(start, end)
+
+  assert.match(app, /function appendMobileDataFailureTiles\(container, failures\)/)
+  assert.match(app, /icono-mobile-data-failure-card/)
+  assert.match(
+    block,
+    /var failureTiles = appendMobileDataFailureTiles\(grid, failures\)/,
+    "mobile manifest failures should become visible failure cards, not hidden console-only errors",
+  )
+  assert.doesNotMatch(
+    block,
+    /failures\.length[\s\S]{0,500}fallbackDiscoveredGene/,
+    "mobile manifest failures must not be converted into fake fallback dossiers",
+  )
+})
+
+test("mobile home collection caches card VMs in IndexedDB and prewarms the next page", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function loadMobileCardPageVM(pageEntries)")
+  const end = app.indexOf("function prewarmMobileCardPageVM(pageEntries)", start)
+  assert.notEqual(start, -1, "missing loadMobileCardPageVM")
+  assert.notEqual(end, -1, "missing prewarmMobileCardPageVM boundary")
+  const block = app.slice(start, end)
+
+  assert.match(app, /var MOBILE_CARD_VM_IDB_NAME = "iconoplasm-mobile-card-vms"/)
+  assert.match(app, /function mobileCardCacheGetMany\(version, symbols\)/)
+  assert.match(app, /function mobileCardCacheSetMany\(version, cards\)/)
+  assert.match(block, /mobileCardCacheGetMany\(knownVersion, symbols\)/)
+  assert.match(block, /mobileCardCacheSetMany\(manifest\.snapshot_version, cards\)/)
+  assert.match(app, /prewarmMobileCardPageVM\(\s*galleryState\.sortedDiscoveries\.slice/)
+})
+
 test("archival fallback cards clear missing portrait state during hydration", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function hydrateBrickCard(card, genePayload)")

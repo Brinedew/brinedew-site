@@ -976,6 +976,111 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return payload
   }
 
+  var MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
+  var MOBILE_CARD_VM_IDB_NAME = "iconoplasm-mobile-card-vms"
+  var MOBILE_CARD_VM_IDB_STORE = "card_vms"
+  var MOBILE_CARD_VM_LAST_VERSION_KEY = "iconoplasm.mobileCardVM.lastVersion"
+  var mobileCardVMDbPromise = null
+
+  function mobileCardCacheKey(version, symbol) {
+    return [MOBILE_CARD_VM_SCHEMA, String(version || ""), normalizedSymbol(symbol)].join(":")
+  }
+
+  function openMobileCardVMDb() {
+    if (!("indexedDB" in window)) return Promise.resolve(null)
+    if (mobileCardVMDbPromise) return mobileCardVMDbPromise
+    mobileCardVMDbPromise = new Promise(function (resolve) {
+      var request = indexedDB.open(MOBILE_CARD_VM_IDB_NAME, 1)
+      request.onupgradeneeded = function () {
+        var db = request.result
+        if (!db.objectStoreNames.contains(MOBILE_CARD_VM_IDB_STORE)) {
+          db.createObjectStore(MOBILE_CARD_VM_IDB_STORE)
+        }
+      }
+      request.onsuccess = function () {
+        resolve(request.result)
+      }
+      request.onerror = function () {
+        resolve(null)
+      }
+      request.onblocked = function () {
+        resolve(null)
+      }
+    })
+    return mobileCardVMDbPromise
+  }
+
+  function mobileCardCacheGetMany(version, symbols) {
+    if (!version || !Array.isArray(symbols) || !symbols.length) return Promise.resolve(new Map())
+    return openMobileCardVMDb().then(function (db) {
+      if (!db) return new Map()
+      return new Promise(function (resolve) {
+        var out = new Map()
+        var transaction = db.transaction(MOBILE_CARD_VM_IDB_STORE, "readonly")
+        var store = transaction.objectStore(MOBILE_CARD_VM_IDB_STORE)
+        var pending = symbols.length
+        function finish() {
+          pending -= 1
+          if (pending <= 0) resolve(out)
+        }
+        for (var i = 0; i < symbols.length; i++) {
+          var symbol = symbols[i]
+          var request = store.get(mobileCardCacheKey(version, symbol))
+          request.onsuccess = function (event) {
+            var card = event.target && event.target.result
+            try {
+              if (card) out.set(normalizedSymbol(card.symbol), assertCompleteMobileCardVM(card))
+            } catch (_) {}
+            finish()
+          }
+          request.onerror = finish
+        }
+      })
+    })
+  }
+
+  function mobileCardCacheSetMany(version, cards) {
+    if (!version || !Array.isArray(cards) || !cards.length) return Promise.resolve()
+    return openMobileCardVMDb().then(function (db) {
+      if (!db) return
+      return new Promise(function (resolve) {
+        var transaction = db.transaction(MOBILE_CARD_VM_IDB_STORE, "readwrite")
+        var store = transaction.objectStore(MOBILE_CARD_VM_IDB_STORE)
+        for (var i = 0; i < cards.length; i++) {
+          try {
+            var card = assertCompleteMobileCardVM(cards[i])
+            store.put(card, mobileCardCacheKey(version, card.symbol))
+          } catch (_) {}
+        }
+        transaction.oncomplete = function () {
+          resolve()
+        }
+        transaction.onerror = function () {
+          resolve()
+        }
+        transaction.onabort = function () {
+          resolve()
+        }
+      })
+    })
+  }
+
+  function lastMobileCardVMVersion() {
+    try {
+      return String(window.localStorage.getItem(MOBILE_CARD_VM_LAST_VERSION_KEY) || "").trim()
+    } catch (_) {
+      return ""
+    }
+  }
+
+  function rememberMobileCardVMVersion(version) {
+    var value = String(version || "").trim()
+    if (!value) return
+    try {
+      window.localStorage.setItem(MOBILE_CARD_VM_LAST_VERSION_KEY, value)
+    } catch (_) {}
+  }
+
   function loadMobileCardPageVM(pageEntries) {
     var symbols = []
     var seen = Object.create(null)
@@ -986,23 +1091,43 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       symbols.push(symbol)
     }
     if (!symbols.length) return Promise.resolve({ cards: [], failures: [] })
-    return fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        layout: "mobile-dossier-v1",
-        symbols: symbols,
-      }),
+    var knownVersion = lastMobileCardVMVersion()
+    var cachedBySymbol = new Map()
+    return mobileCardCacheGetMany(knownVersion, symbols).then(function (cached) {
+      cachedBySymbol = cached
+      var missingSymbols = symbols.filter(function (symbol) {
+        return !cached.has(symbol)
+      })
+      if (!missingSymbols.length) {
+        var cachedCards = symbols.map(function (symbol) {
+          return mobileCardPayloadFromVM(cached.get(symbol))
+        })
+        return { __mobileCardPageResult: true, cards: cachedCards, failures: [] }
+      }
+      return fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: knownVersion || undefined,
+          layout: "mobile-dossier-v1",
+          symbols: missingSymbols,
+        }),
+      })
     }).then(function (manifest) {
+      if (manifest && manifest.__mobileCardPageResult === true) {
+        return manifest
+      }
       if (!manifest || manifest.schema !== "iconoplasm.mobileCardManifest.v1") {
         throw new Error("Mobile card manifest schema mismatch")
       }
+      rememberMobileCardVMVersion(manifest.snapshot_version)
       var bySymbol = Object.create(null)
       var cards = Array.isArray(manifest.cards) ? manifest.cards : []
       for (var i = 0; i < cards.length; i++) {
         var vm = assertCompleteMobileCardVM(cards[i])
         bySymbol[normalizedSymbol(vm.symbol)] = vm
       }
+      void mobileCardCacheSetMany(manifest.snapshot_version, cards)
       var ordered = []
       var failures = Array.isArray(manifest.missing)
         ? manifest.missing.map(function (symbol) {
@@ -1010,12 +1135,58 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           })
         : []
       for (var j = 0; j < symbols.length; j++) {
-        var card = bySymbol[symbols[j]]
+        var card = bySymbol[symbols[j]] || cachedBySymbol.get(symbols[j])
         if (card) ordered.push(mobileCardPayloadFromVM(card))
         else failures.push({ symbol: symbols[j], reason: "manifest_missing" })
       }
       return { cards: ordered, failures: failures }
     })
+  }
+
+  function prewarmMobileCardPageVM(pageEntries) {
+    if (!Array.isArray(pageEntries) || !pageEntries.length) return
+    void loadMobileCardPageVM(pageEntries).catch(function (error) {
+      console.warn(
+        "[Iconoplasm] mobile card prewarm failed:",
+        String((error && error.message) || error || "unknown"),
+      )
+    })
+  }
+
+  function buildMobileDataFailureMarkup(failures) {
+    var items = Array.isArray(failures) ? failures : []
+    var html = ""
+    for (var i = 0; i < items.length; i++) {
+      var symbol = normalizedSymbol(items[i] && items[i].symbol)
+      if (!symbol) continue
+      var reason = String((items[i] && items[i].reason) || "snapshot_missing").trim()
+      html +=
+        '<article class="icono-mobile-data-failure-card" data-icono-mobile-data-failure="' +
+        esc(symbol) +
+        '">' +
+        '<div class="icono-mobile-data-failure-kicker">dossier unavailable</div>' +
+        '<div class="icono-mobile-data-failure-symbol">' +
+        esc(symbol) +
+        "</div>" +
+        '<div class="icono-mobile-data-failure-copy">Snapshot data failed to resolve. Reason: ' +
+        esc(reason || "snapshot_missing") +
+        ".</div>" +
+        "</article>"
+    }
+    return html
+  }
+
+  function appendMobileDataFailureTiles(container, failures) {
+    if (!container) return []
+    var html = buildMobileDataFailureMarkup(failures)
+    if (!html) return []
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    var newElements = Array.prototype.slice.call(wrapper.children)
+    for (var i = 0; i < newElements.length; i++) {
+      container.appendChild(newElements[i])
+    }
+    return newElements
   }
 
   function nextArchiveMilestone(discoveredCount, totalCount) {
@@ -4506,6 +4677,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
                 wireBrickVoteBoxes(newCards)
                 wireMobileLabelCards(newCards)
                 refreshPortraitLightbox()
+                prewarmMobileCardPageVM(
+                  galleryState.sortedDiscoveries.slice(
+                    galleryState.offset,
+                    galleryState.offset + currentGalleryLimit(),
+                  ),
+                )
               }
               if (
                 isFirstPage &&
@@ -4543,7 +4720,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               appendResolvedItems(richItems.filter(Boolean))
               if (failures.length) {
                 console.error("[Iconoplasm] mobile card manifest failures:", failures)
-                setLoadingState("Some dossiers failed to resolve from the card manifest.", true)
+                var failureTiles = appendMobileDataFailureTiles(grid, failures)
+                if (failureTiles.length) {
+                  grid.setAttribute("aria-busy", "false")
+                }
+                renderCollectionChrome()
+                syncHeroCount()
+                updateSentinelObserver()
+                setLoadingState("", false)
               }
             })
           }
