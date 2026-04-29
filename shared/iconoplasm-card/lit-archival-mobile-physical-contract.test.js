@@ -198,9 +198,11 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /document\.documentElement\.clientWidth/)
   assert.match(
     setupBlock,
-    /Math\.min\(1\.72,\s*Math\.max\(0\.78,\s*availableWidth \/ physicalWidth\)\)/,
-    "mobile card must zoom both down and up to fit the live browser edge, not freeze at 1x",
+    /availableHeight \/ closedPhysicalHeight/,
+    "mobile card zoom must fit the live browser height too, so voting does not fall below the first viewport at wide mobile widths",
   )
+  assert.match(setupBlock, /availableWidth \/ physicalWidth/)
+  assert.match(setupBlock, /Math\.max\(0\.78,\s*fitScale\)/)
   assert.match(
     setupBlock,
     /function \(value\) \{\s*return value \/ activeFitScale\s*\}/,
