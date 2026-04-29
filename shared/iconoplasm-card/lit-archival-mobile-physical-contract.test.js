@@ -198,10 +198,15 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /document\.documentElement\.clientWidth/)
   assert.match(
     setupBlock,
-    /Math\.min\(1\.36,\s*Math\.max\(0\.78,\s*\(availableWidth - 16\) \/ physicalWidth\)\)/,
+    /Math\.min\(1\.72,\s*Math\.max\(0\.78,\s*availableWidth \/ physicalWidth\)\)/,
     "mobile card must zoom both down and up to fit the live browser edge, not freeze at 1x",
   )
   assert.match(setupBlock, /--icono-label-mobile-fit-scale/)
+})
+
+test("mobile Iconoplasm page removes nested padding that creates dead card gutters", async () => {
+  const styles = await sourceText(path.join(repoRoot, "quartz/static/iconoplasm/styles.css"))
+  assert.match(styles, /@media \(max-width:\s*720px\)[\s\S]*#iconoplasm-root[\s\S]*padding-inline:\s*0;/)
 })
 
 test("mobile card recomputes fit scale on same-breakpoint browser resizing", async () => {

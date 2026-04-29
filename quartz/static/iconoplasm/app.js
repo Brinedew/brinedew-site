@@ -2472,7 +2472,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           : window.innerWidth,
       ) || window.innerWidth
     if (physicalWidth > 0 && availableWidth > 0) {
-      var fitScale = Math.min(1.36, Math.max(0.78, (availableWidth - 16) / physicalWidth))
+      var fitScale = Math.min(1.72, Math.max(0.78, availableWidth / physicalWidth))
       card.style.setProperty("--icono-label-mobile-fit-scale", fitScale.toFixed(4))
     }
 

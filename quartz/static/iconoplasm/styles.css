@@ -65,6 +65,11 @@ body[data-slug^="apps/iconoplasm"] .center > article.iconoplasm-page {
     display: none !important;
   }
 }
+@media (max-width: 720px) {
+  body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
+    padding-inline: 0;
+  }
+}
 body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   max-width: 1180px;
 }
