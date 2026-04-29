@@ -463,9 +463,9 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     /\.icono-label-band-cell--category\s*\n\s*\.icono-label-band-secondary\s*\{[\s\S]*top:\s*-1\.04rem;/,
     "category handwriting may spill upward, but it must not sit on top of the typewritten TRANSMEMBRANE/SOLUBLE lane",
   )
-  assert.match(css, /--icono-label-mobile-peek-height:\s*5\.5rem;/)
-  assert.match(css, /--icono-label-mobile-style-row-height:\s*8\.15rem;/)
-  assert.match(css, /--icono-label-mobile-alignment-row-height:\s*11\.1rem;/)
+  assert.match(css, /--icono-label-mobile-peek-height:\s*5\.25rem;/)
+  assert.match(css, /--icono-label-mobile-style-row-height:\s*8\.35rem;/)
+  assert.match(css, /--icono-label-mobile-alignment-row-height:\s*10\.7rem;/)
   const mobilePeekSummaryBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-summary",
@@ -525,7 +525,7 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-grid",
   )
-  assert.match(alignmentGridBlock, /grid-template-rows:\s*0\.96rem 0\.96rem;/)
+  assert.match(alignmentGridBlock, /grid-template-rows:\s*0\.86rem 0\.86rem;/)
   const politicsBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-grid\n    .icono-label-hand-note--politics",

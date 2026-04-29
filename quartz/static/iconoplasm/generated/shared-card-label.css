@@ -1306,7 +1306,7 @@
   .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-physical-width: 23.4rem;
     --icono-label-mobile-portrait-pad: 0.936rem;
-    --icono-label-mobile-peek-height: 5.5rem;
+    --icono-label-mobile-peek-height: 5.25rem;
     --icono-label-mobile-preview-height: 0rem;
     --icono-label-mobile-tab-height: 2.328rem;
     /* B-479: current public catalog max gene-symbol length is 14 chars
@@ -1319,8 +1319,8 @@
     --icono-label-mobile-viewport-height: auto;
     --icono-label-mobile-band-row-height: 4.6rem;
     --icono-label-mobile-header-row-height: 2.16rem;
-    --icono-label-mobile-style-row-height: 8.15rem;
-    --icono-label-mobile-alignment-row-height: 11.1rem;
+    --icono-label-mobile-style-row-height: 8.35rem;
+    --icono-label-mobile-alignment-row-height: 10.7rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -2637,7 +2637,7 @@
     .icono-label-style-stack {
     display: grid;
     grid-template-rows: repeat(3, 2.1rem);
-    gap: 0.12rem;
+    gap: 0.28rem;
     padding: 0.38rem 0.8rem 0.42rem;
     min-block-size: calc(var(--icono-label-mobile-style-row-height) - 1.16rem);
     block-size: calc(var(--icono-label-mobile-style-row-height) - 1.16rem);
@@ -2683,7 +2683,7 @@
     .icono-label-alignment-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 2rem min-content;
+    grid-template-rows: 1.8rem min-content;
     align-content: start;
     padding: 0.26rem 0.8rem 0.44rem;
     overflow: visible;
@@ -2694,9 +2694,9 @@
     .icono-label-alignment-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 0.96rem 0.96rem;
-    min-block-size: 2rem;
-    block-size: 2rem;
+    grid-template-rows: 0.86rem 0.86rem;
+    min-block-size: 1.8rem;
+    block-size: 1.8rem;
     align-content: start;
     gap: 0.12rem;
     position: relative;
