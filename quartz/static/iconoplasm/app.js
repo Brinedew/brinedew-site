@@ -2461,7 +2461,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
     var isExpanded = card.getAttribute("data-icono-mobile-expanded") === "true"
     var closedBottom = voteRect ? voteRect.bottom - cardRect.top + 8 : dossierTop + peekRect.height + 6
-    var fullInfoHeight = Math.max(infoRect.height, infoCard.scrollHeight || 0, infoCard.offsetHeight || 0)
+    var fullInfoHeight = Math.max(peekRect.height, infoCard.scrollHeight || 0, infoCard.offsetHeight || 0)
+    var measuredContent = infoCard.querySelectorAll(
+      ".icono-label-mobile-peek, .icono-label-dossier-shell, .icono-label-dossier-sheet, .icono-label-specimen-footer",
+    )
+    for (var i = 0; i < measuredContent.length; i += 1) {
+      var measuredNode = measuredContent[i]
+      if (!measuredNode || typeof measuredNode.getBoundingClientRect !== "function") continue
+      var measuredRect = measuredNode.getBoundingClientRect()
+      fullInfoHeight = Math.max(fullInfoHeight, measuredRect.bottom - infoRect.top)
+    }
     var openBottom = dossierTop + fullInfoHeight + 8
     var viewportHeight = Math.ceil(isExpanded ? openBottom : closedBottom)
     card.style.setProperty("--icono-label-mobile-viewport-height", viewportHeight + "px")
