@@ -518,42 +518,6 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
   )
 })
 
-test("mobile archive opens from the top instead of restoring stale deep scroll", async () => {
-  const app = await sourceText(appPath)
-  const restoreStart = app.indexOf("function readHomeRestoreState")
-  const restoreEnd = app.indexOf("function captureHomeAnchor", restoreStart)
-  assert.notEqual(restoreStart, -1, "missing home restore helper")
-  assert.notEqual(restoreEnd, -1, "missing restore helper boundary")
-  const restoreBlock = app.slice(restoreStart, restoreEnd)
-
-  assert.match(
-    restoreBlock,
-    /return null/,
-    "home archive renders must ignore stale persisted scroll state instead of reopening deep in the card stack",
-  )
-  assert.doesNotMatch(
-    restoreBlock,
-    /scrollY|loadedCount|focusSymbol|focusTop/,
-    "startup restore must not replay old archive camera coordinates",
-  )
-
-  const navigationStart = app.indexOf("function buildNavigationState")
-  const navigationEnd = app.indexOf("function navigateTo", navigationStart)
-  assert.notEqual(navigationStart, -1, "missing navigation-state helper")
-  assert.notEqual(navigationEnd, -1, "missing navigation-state helper boundary")
-  const navigationBlock = app.slice(navigationStart, navigationEnd)
-  assert.match(navigationBlock, /iconoplasmHome = null/)
-  assert.doesNotMatch(navigationBlock, /carriedHomeState/)
-
-  const initStart = app.indexOf("function init()")
-  const initEnd = app.indexOf("// Quartz uses SPA navigation", initStart)
-  assert.notEqual(initStart, -1, "missing init helper")
-  assert.notEqual(initEnd, -1, "missing init helper boundary")
-  const initBlock = app.slice(initStart, initEnd)
-  assert.match(initBlock, /scrollRestoration[\s\S]*manual/)
-  assert.match(initBlock, /replaceHistoryStatePatch\(\{ iconoplasmHome: null \}\)/)
-})
-
 test("mobile card uses the larger B-483 type scale instead of the tiny draft scale", async () => {
   const css = await sourceText(cssPath)
   const cardStart = css.indexOf(".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has four text voices")

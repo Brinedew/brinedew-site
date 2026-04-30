@@ -5554,10 +5554,24 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function readHomeRestoreState() {
-    // B-490: the archive is a live browsing surface, not a camera timeline.
-    // Persisted history scroll made fresh mobile visits reopen deep in the card stack.
-    // Keep home renders deterministic: load the archive from the top.
-    return null
+    var state = readHistoryState()
+    if (!state || state.iconoplasmPage !== "home") return null
+    var home = state.iconoplasmHome
+    if (!home || typeof home !== "object") return null
+    var order = normalizeHomeCollectionOrder(home.order || HOME_COLLECTION_DEFAULT_ORDER)
+    var loadedCount = Number(home.loadedCount || 0)
+    var scrollY = Number(home.scrollY || 0)
+    if (!(loadedCount > 0 || scrollY > 0)) return null
+    return {
+      order: order,
+      seed: String(home.seed || ""),
+      loadedCount: Number.isFinite(loadedCount) ? Math.max(0, Math.round(loadedCount)) : 0,
+      scrollY: Number.isFinite(scrollY) ? Math.max(0, Math.round(scrollY)) : 0,
+      focusSymbol: String(home.focusSymbol || ""),
+      focusTop: Number.isFinite(Number(home.focusTop || 0))
+        ? Math.round(Number(home.focusTop || 0))
+        : 0,
+    }
   }
 
   function captureHomeAnchor(link) {
@@ -5579,10 +5593,22 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function buildNavigationState(path) {
     var nextState = { iconoplasm: true }
+    var currentState = readHistoryState()
+    var carriedHomeState =
+      currentState && currentState.iconoplasmHome && typeof currentState.iconoplasmHome === "object"
+        ? currentState.iconoplasmHome
+        : null
     if (path === "/" || path === "") {
-      nextState.iconoplasmPage = "home"
-      nextState.iconoplasmHome = null
+      if (carriedHomeState) {
+        nextState.iconoplasmPage = "home"
+        nextState.iconoplasmHome = carriedHomeState
+      }
       return nextState
+    }
+    // Carry the current home snapshot into gene routes so returning through "All genes" restores
+    // the deep gallery position instead of constructing a fresh blank home history entry.
+    if (carriedHomeState) {
+      nextState.iconoplasmHome = carriedHomeState
     }
     return nextState
   }
@@ -5706,12 +5732,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
-    if (window.history && "scrollRestoration" in window.history) {
-      window.history.scrollRestoration = "manual"
-    }
     startMobileLabelBreakpointObserver()
     startSharedIconoplasmSettingsAutoSync()
-    replaceHistoryStatePatch({ iconoplasmHome: null })
+    replaceHistoryStatePatch({})
     render()
     void refreshSharedUserState()
   }
