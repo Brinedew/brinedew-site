@@ -617,6 +617,11 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   )
   assert.match(footerRowBlock, /grid-row:\s*5;/)
   assert.match(footerRowBlock, /block-size:\s*var\(--icono-label-mobile-footer-row-height\);/)
+  assert.match(
+    css,
+    /\.icono-card--variant-lab-label\.icono-card--brick \.icono-label-dossier-shell\s*\{[\s\S]*height:\s*auto;[\s\S]*min-block-size:\s*var\(--icono-label-mobile-dossier-height\);[\s\S]*overflow:\s*visible;/,
+    "mobile dossier shell must not keep the desktop overflow hidden crop that clipped everything after PFAM",
+  )
 })
 
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {

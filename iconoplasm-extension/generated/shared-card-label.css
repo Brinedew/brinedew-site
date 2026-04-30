@@ -1931,8 +1931,11 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell {
+    block-size: auto;
+    height: auto;
     min-height: 0;
-    overflow: hidden;
+    min-block-size: var(--icono-label-mobile-dossier-height);
+    overflow: visible;
     background:
       radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 22%),
       linear-gradient(
@@ -1948,7 +1951,7 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-sheet-body {
-    height: 100%;
+    height: auto;
     min-height: 0;
   }
 
