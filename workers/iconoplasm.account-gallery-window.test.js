@@ -293,3 +293,8 @@ test("account gallery endpoint block does not sort a bounded discovery slice for
   assert.match(block, /ORDER_INDEX_NOT_READY/)
   assert.match(block, /ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS/)
 })
+
+test("account gallery endpoint has an explicit budget class", () => {
+  assert.match(source, /if \(path === "\/api\/iconoplasm\/account-gallery-window"\) return "account_gallery_window"/)
+  assert.match(source, /if \(family === "account_gallery_window"\) return "first_party_read"/)
+})
