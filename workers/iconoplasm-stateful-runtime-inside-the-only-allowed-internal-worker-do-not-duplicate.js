@@ -351,6 +351,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
   if (path === "/api/iconoplasm/admin/canon-audit") return "admin_canon_audit"
   if (path === "/api/iconoplasm/admin/read-models/bootstrap") return "admin_read_models_bootstrap"
+  if (path === "/api/iconoplasm/admin/card-vms/warm") return "admin_card_vms_warm"
   if (path.startsWith("/api/iconoplasm/admin/catalog/")) return "admin_catalog"
   if (path.startsWith("/api/iconoplasm/admin/essence/")) return "admin_essence"
   if (path.startsWith("/api/iconoplasm/admin/read-models/")) return "admin_read_models"
@@ -429,6 +430,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_reconcile" ||
     family === "admin_read_models" ||
     family === "admin_read_models_bootstrap" ||
+    family === "admin_card_vms_warm" ||
     family === "admin_finalization_enqueue" ||
     family === "admin_finalization_process" ||
     family === "admin_catalog" ||
