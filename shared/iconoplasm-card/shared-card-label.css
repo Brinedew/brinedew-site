@@ -1510,10 +1510,11 @@
     /* Mobile archival card has only two writing systems:
        - one typewriter voice
        - one handwritten voice
-       Do not reintroduce per-field font sizing/spacing drift here; only the small sans
+       Both voices use the same mobile size; handwriting may float, rotate, and spill, but it
+       must not become a different scale or decide the section height. Only the small sans
        captions may vary independently. */
     --icono-label-mobile-typewriter-size: 1.008rem;
-    --icono-label-mobile-hand-size: 1.8rem;
+    --icono-label-mobile-hand-size: var(--icono-label-mobile-typewriter-size);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name,

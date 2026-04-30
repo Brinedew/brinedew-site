@@ -487,8 +487,13 @@ test("mobile card uses the larger B-483 type scale instead of the tiny draft sca
   assert.notEqual(cardEnd, -1, "missing mobile typography token block end")
   const tokenBlock = css.slice(cardStart, cardEnd)
   assert.match(tokenBlock, /--icono-label-mobile-typewriter-size:\s*1\.008rem;/)
-  assert.match(tokenBlock, /--icono-label-mobile-hand-size:\s*1\.8rem;/)
+  assert.match(
+    tokenBlock,
+    /--icono-label-mobile-hand-size:\s*var\(--icono-label-mobile-typewriter-size\);/,
+    "mobile handwriting and typewriting share one card text size; only voice/rotation differs",
+  )
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-typewriter-size:\s*0\.672rem;/)
+  assert.doesNotMatch(tokenBlock, /--icono-label-mobile-hand-size:\s*1\.8rem;/)
   const voteButtonBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn",
