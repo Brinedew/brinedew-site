@@ -13467,7 +13467,6 @@ async function syncAdminReadModelsAndInvalidateGallery(
 }
 
 async function catalogSymbolsForMobileCardSnapshotWarm(env, { after = "", limit = 500 } = {}) {
-  if (!env.ICONOPLASM_DB) return []
   const cleanedLimit = Math.max(
     1,
     Math.min(
@@ -13476,34 +13475,12 @@ async function catalogSymbolsForMobileCardSnapshotWarm(env, { after = "", limit 
         MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
     ),
   )
-  const symbols = []
-  let cursor = normalizeSymbol(after || "")
-  while (symbols.length < cleanedLimit && symbols.length < MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT) {
-    const requestLimit = Math.min(
-      MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH,
-      cleanedLimit - symbols.length,
-    )
-    const rows = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol
-         FROM icono_gene_catalog
-        WHERE gene_symbol > ?
-        ORDER BY gene_symbol ASC
-        LIMIT ?`,
-    )
-      .bind(cursor, requestLimit)
-      .all()
-    const batch = (Array.isArray(rows?.results) ? rows.results : [])
-      .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-      .filter(Boolean)
-    if (!batch.length) break
-    for (const symbol of batch) {
-      symbols.push(symbol)
-      cursor = symbol
-      if (symbols.length >= cleanedLimit) break
-    }
-    if (batch.length < requestLimit) break
-  }
-  return symbols
+  await warmCatalogCache(env)
+  const cursor = normalizeSymbol(after || "")
+  return Array.from(catalogCache.bySymbol.keys())
+    .filter((symbol) => !cursor || symbol > cursor)
+    .sort()
+    .slice(0, cleanedLimit)
 }
 
 async function mobileCardSnapshotWarmSymbolsForInvalidation(

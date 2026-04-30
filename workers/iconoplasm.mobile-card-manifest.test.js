@@ -322,7 +322,7 @@ test("mobile card manifest falls back to previous version without D1", async () 
   assert.equal(payload.cards[0].data_source, "kv_previous")
 })
 
-test("admin card VM warm endpoint fills bounded catalog chunks", async () => {
+test("admin card VM warm endpoint fills bounded symbol chunks", async () => {
   const kvStore = new Map()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
@@ -331,14 +331,14 @@ test("admin card VM warm endpoint fills bounded catalog chunks", async () => {
         Authorization: "Bearer secret-admin-token",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ scope: "catalog", limit: 1 }),
+      body: JSON.stringify({ symbols: ["ERBB2"] }),
     }),
     buildEnv({ kvStore }),
   )
   assert.equal(response.status, 200)
   const payload = await response.json()
   assert.equal(payload.ok, true)
-  assert.equal(payload.scope, "catalog")
+  assert.equal(payload.scope, "symbols")
   assert.equal(payload.requested, 1)
   assert.equal(payload.warmed, 1)
   assert.equal(payload.missing, 0)
@@ -403,10 +403,8 @@ test("gallery invalidation warms a real shared card VM snapshot instead of an em
   assert.match(source, /async function warmMobileCardSnapshotSymbols/)
   assert.match(source, /ICONOPLASM_STARTER_GENE_SYMBOLS/)
   assert.match(source, /\/api\/iconoplasm\/admin\/card-vms\/warm/)
-  assert.match(
-    source,
-    /SELECT gene_symbol\s+FROM icono_gene_catalog\s+WHERE gene_symbol > \?\s+ORDER BY gene_symbol ASC\s+LIMIT \?/,
-  )
+  assert.match(source, /await warmCatalogCache\(env\)/)
+  assert.match(source, /Array\.from\(catalogCache\.bySymbol\.keys\(\)\)/)
   assert.match(source, /const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation/)
   assert.match(source, /scope === "catalog"/)
   assert.match(source, /mobile_card_vms:/)
