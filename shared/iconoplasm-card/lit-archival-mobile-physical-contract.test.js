@@ -540,7 +540,7 @@ test("mobile archive restoration is scoped to the current SPA session", async ()
   )
   assert.match(
     head,
-    /iconoplasmFreshState\.iconoplasmHome = null[\s\S]*window\.history\.replaceState\(iconoplasmFreshState[\s\S]*window\.scrollTo\(0, 0\)[\s\S]*document\.documentElement\.scrollTop = 0/,
+    /iconoplasmFreshState\.iconoplasmHome = null[\s\S]*window\.history\.replaceState\(iconoplasmFreshState[\s\S]*window\.scrollTo\(\{ left: 0, top: 0, behavior: "instant" \}\)[\s\S]*document\.documentElement\.scrollTop = 0/,
     "a fresh home page load should clear stale archive camera state in the earliest bootstrap, before async card layout can inherit it",
   )
 
@@ -606,6 +606,11 @@ test("same-session archive return reuses the live home view instead of rebuildin
   assert.notEqual(renderStart, -1, "missing render helper")
 
   const cacheBlock = app.slice(cacheStart, discardStart)
+  assert.match(
+    app,
+    /function scrollWindowInstantly[\s\S]*behavior: "instant"/,
+    "programmatic archive restoration must bypass the site's global smooth-scroll CSS",
+  )
   assert.doesNotMatch(
     cacheBlock,
     /syncHomeHistoryState\(true\)/,
@@ -622,7 +627,7 @@ test("same-session archive return reuses the live home view instead of rebuildin
   assert.match(restoreBlock, /root\.appendChild\(cachedHomeView\.fragment\)/)
   assert.match(restoreBlock, /activeHomeHistorySnapshot = cachedHomeView\.snapshot/)
   assert.match(restoreBlock, /activeHomeRenderCleanup = cachedHomeView\.cleanup/)
-  assert.match(restoreBlock, /window\.scrollTo\(0, targetY\)/)
+  assert.match(restoreBlock, /scrollWindowInstantly\(0, targetY\)/)
   assert.doesNotMatch(
     restoreBlock,
     /renderHome\(root, restoreState\)|loadNextGalleryPage\(/,

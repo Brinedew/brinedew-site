@@ -62,7 +62,11 @@ export default (() => {
     }
     iconoplasmFreshState.iconoplasmHome = null
     window.history.replaceState(iconoplasmFreshState, "", window.location.href)
-    window.scrollTo(0, 0)
+    try {
+      window.scrollTo({ left: 0, top: 0, behavior: "instant" })
+    } catch (_iconoScrollError) {
+      window.scrollTo(0, 0)
+    }
     document.documentElement.scrollTop = 0
   }
   window.__iconoSiteOwnsSharedRuntime = true

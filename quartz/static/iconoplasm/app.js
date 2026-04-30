@@ -4461,7 +4461,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       scrollRestored = true
       var targetY = Math.max(0, Number(activeRestoreState.scrollY || 0) || 0)
       window.requestAnimationFrame(function () {
-        window.scrollTo(0, targetY)
+        scrollWindowInstantly(0, targetY)
         if (activeRestoreState.focusSymbol) {
           window.requestAnimationFrame(function () {
             var cards = grid.querySelectorAll(".icono-card[data-icono-symbol]")
@@ -4567,7 +4567,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       renderCollectionChrome()
       updateSentinelObserver()
       if (!restoreConfig) {
-        window.scrollTo(0, 0)
+        scrollWindowInstantly(0, 0)
       }
       syncHomeHistoryState(false)
       loadNextGalleryPage()
@@ -5448,6 +5448,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return state && typeof state === "object" ? state : {}
   }
 
+  function scrollWindowInstantly(x, y) {
+    try {
+      window.scrollTo({ left: x, top: y, behavior: "instant" })
+    } catch (_err) {
+      window.scrollTo(x, y)
+    }
+  }
+
   function replaceHistoryStatePatch(patch) {
     var prev = readHistoryState()
     var next = {}
@@ -5543,7 +5551,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     iconoSidebarState.page = "home"
     renderIconoplasmSidebar()
     refreshPortraitLightbox()
-    window.scrollTo(0, targetY)
+    scrollWindowInstantly(0, targetY)
     syncHomeHistoryState(false)
     return true
   }
@@ -5711,10 +5719,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       renderHome(root, homeRestoreState)
       refreshPortraitLightbox()
     } else if (route.page === "gene") {
-      window.scrollTo(0, 0)
+      scrollWindowInstantly(0, 0)
       renderGene(root, route.symbol)
     } else {
-      window.scrollTo(0, 0)
+      scrollWindowInstantly(0, 0)
       render404(root)
       refreshPortraitLightbox()
     }
