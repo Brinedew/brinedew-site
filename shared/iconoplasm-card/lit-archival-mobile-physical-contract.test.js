@@ -435,8 +435,8 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(symbolBlock, /overflow:\s*visible;/)
   assert.match(
     symbolBlock,
-    /inline-size:\s*var\(--icono-label-mobile-tab-symbol-measured-width,\s*auto\);/,
-    "the printed symbol box should be centered from Pretext's measured text width, not from a guessed DOM box",
+    /inline-size:\s*max-content;/,
+    "the printed symbol box should size to the actual rendered string plus its optical spacer",
   )
   assert.match(
     symbolBlock,
@@ -460,14 +460,14 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   )
 
   assert.match(
-    litCard,
-    /@chenglou\/pretext/,
-    "mobile tab text should use Pretext the normal way: measure text before layout instead of eyeballing a fixed DOM width",
+    css,
+    /\.icono-card--variant-lab-label\.icono-card--brick \.icono-label-mobile-peek-tab-symbol::before[\s\S]*content:\s*"0";[\s\S]*visibility:\s*hidden;/,
+    "mobile tab optical centering should use a hidden left spacer, not a measured or visible glyph",
   )
-  assert.match(
+  assert.doesNotMatch(
     litCard,
-    /--icono-label-mobile-tab-symbol-measured-width/,
-    "the Pretext measurement must feed the centered symbol box, not move the physical tab",
+    /@chenglou\/pretext|measureNaturalWidth|prepareWithSegments/,
+    "B-479 should not depend on a text-layout library when a simple invisible spacer solves the optical padding",
   )
 })
 

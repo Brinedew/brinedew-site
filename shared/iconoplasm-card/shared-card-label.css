@@ -1663,7 +1663,7 @@
     position: relative;
     z-index: 1;
     max-width: none;
-    inline-size: var(--icono-label-mobile-tab-symbol-measured-width, auto);
+    inline-size: max-content;
     overflow: visible;
     text-overflow: clip;
     white-space: nowrap;
@@ -1675,6 +1675,11 @@
     letter-spacing: 0.08em;
     text-indent: 0.08em;
     transform: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol::before {
+    content: "0";
+    visibility: hidden;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {

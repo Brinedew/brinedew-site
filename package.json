@@ -46,7 +46,6 @@
     "quartz": "./quartz/bootstrap-cli.mjs"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.6",
     "@clack/prompts": "^1.0.0",
     "@floating-ui/dom": "^1.7.5",
     "@masonry-grid/vanilla": "^1.1.0",
