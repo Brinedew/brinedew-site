@@ -1331,6 +1331,7 @@
        - expanded state must not repeat the gene symbol already carried by the tab
        - expanded layout must be sized against measured live collisions, not eyeballed compression
        - the tab bottom must seat onto the slider seam instead of sinking into the card body
+       - the physical tab position is fixed by the archival sheet design; center the text inside it, do not move the tab
        - tab border language must match the dossier border language; no stronger, darker, or separate object outline
        - the symbol must sit optically centered in the tab, not crowd the top edge
        - rigid symbol test: tab symbol top inset must stay positive and tab symbol bottom gap must stay positive
@@ -1668,7 +1669,7 @@
     font-weight: 800;
     line-height: 0.96;
     letter-spacing: 0.08em;
-    transform: translateX(0.12em);
+    transform: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {

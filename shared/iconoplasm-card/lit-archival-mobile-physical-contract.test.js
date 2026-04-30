@@ -373,14 +373,15 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(
     css,
     /--icono-label-mobile-tab-safe-inset:\s*0\.92rem;/,
-    "tab needs a safe inset so the symbol stays visible when the mobile card fits inside an inset page column",
+    "the physical tab anchor is part of the existing sheet design and must not be moved to fake text centering",
   )
-
   const bodyBeforeBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body::before",
   )
   assert.match(bodyBeforeBlock, /right:\s*var\(--icono-label-mobile-tab-safe-inset\);/)
+  assert.doesNotMatch(bodyBeforeBlock, /left:\s*50%;/, "do not move the tab material to fake text centering")
+  assert.doesNotMatch(bodyBeforeBlock, /translateX\(-50%\);/, "do not move the tab material to fake text centering")
   assert.match(bodyBeforeBlock, /bottom:\s*calc\(100% - 0\.08rem\);/)
   assert.match(bodyBeforeBlock, /border-bottom:\s*0;/)
   assert.match(bodyBeforeBlock, /border-radius:\s*1\.16rem 1\.16rem 0 0/)
@@ -404,6 +405,8 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     "the gene symbol tab text must seat above the infocard top edge instead of clipping through the sheet",
   )
   assert.match(tabBlock, /right:\s*var\(--icono-label-mobile-tab-safe-inset\);/)
+  assert.doesNotMatch(tabBlock, /left:\s*50%;/, "do not move the tab text container to fake text centering")
+  assert.doesNotMatch(tabBlock, /translateX\(-50%\);/, "do not move the tab text container to fake text centering")
   assert.match(
     tabBlock,
     /visible tab material is owned by the infocard body's compound surface/,
@@ -430,8 +433,8 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(symbolBlock, /line-height:\s*0\.96;/)
   assert.match(
     symbolBlock,
-    /transform:\s*translateX\(0\.12em\);/,
-    "the offside archival tab stays put; only the printed symbol gets a small optical centering correction",
+    /transform:\s*none;/,
+    "the printed symbol must be centered by the tab layout, not by a horizontal nudge",
   )
   assert.doesNotMatch(
     symbolBlock,
