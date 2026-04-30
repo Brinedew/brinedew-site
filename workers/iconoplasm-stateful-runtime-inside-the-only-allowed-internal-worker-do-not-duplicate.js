@@ -45,6 +45,8 @@ const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
 const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
 const KV_MOBILE_CARD_VM_PREFIX = "iconoplasm:mobile-card-vm:"
+const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
+const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH = 1000
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
 const MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
 const MOBILE_CARD_LAYOUT = "mobile-dossier-v1"
@@ -13449,7 +13451,10 @@ async function syncAdminReadModelsAndInvalidateGallery(
     skipDashboard,
   })
   const nextVersion = await invalidateGalleryCache(env)
-  const warmedSymbols = Array.from(new Set(symbols.map((value) => normalizeSymbol(value)).filter(Boolean)))
+  const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation(env, {
+    symbols,
+    fullRebuild,
+  })
   let mobileCardVMs = { warmed: 0, missing: 0, version: nextVersion }
   if (!result?.partial && warmedSymbols.length) {
     let warmed = 0
@@ -13468,6 +13473,55 @@ async function syncAdminReadModelsAndInvalidateGallery(
     mobileCardVMs = { warmed, missing, version: nextVersion }
   }
   return { ...result, mobile_card_vms: mobileCardVMs }
+}
+
+async function fullCatalogSymbolsForMobileCardSnapshotWarm(env) {
+  if (!env.ICONOPLASM_DB) return []
+  const symbols = []
+  let cursor = ""
+  while (symbols.length < MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT) {
+    const rows = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol
+         FROM icono_gene_catalog
+        WHERE gene_symbol > ?
+        ORDER BY gene_symbol ASC
+        LIMIT ?`,
+    )
+      .bind(cursor, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH)
+      .all()
+    const batch = (Array.isArray(rows?.results) ? rows.results : [])
+      .map((row) => normalizeSymbol(row?.gene_symbol || ""))
+      .filter(Boolean)
+    if (!batch.length) break
+    for (const symbol of batch) {
+      symbols.push(symbol)
+      cursor = symbol
+      if (symbols.length >= MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT) break
+    }
+    if (batch.length < MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH) break
+  }
+  return symbols
+}
+
+async function mobileCardSnapshotWarmSymbolsForInvalidation(
+  env,
+  { symbols = [], fullRebuild = false } = {},
+) {
+  const warmSet = new Set()
+  for (const symbol of ICONOPLASM_STARTER_GENE_SYMBOLS) {
+    const normalized = normalizeSymbol(symbol)
+    if (normalized) warmSet.add(normalized)
+  }
+  for (const symbol of symbols) {
+    const normalized = normalizeSymbol(symbol)
+    if (normalized) warmSet.add(normalized)
+  }
+  if (fullRebuild) {
+    for (const symbol of await fullCatalogSymbolsForMobileCardSnapshotWarm(env)) {
+      if (symbol) warmSet.add(symbol)
+    }
+  }
+  return Array.from(warmSet)
 }
 
 function galleryCanUseEdgeCache(url) {
@@ -17800,6 +17854,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             skip_gene_rollups: skipGeneRollups,
             skip_vision_rollups: skipVisionRollups,
             skip_dashboard: skipDashboard,
+            mobile_card_vms:
+              result?.mobile_card_vms && typeof result.mobile_card_vms === "object"
+                ? {
+                    warmed: Math.max(0, Number(result.mobile_card_vms.warmed || 0) || 0),
+                    missing: Math.max(0, Number(result.mobile_card_vms.missing || 0) || 0),
+                    version: sanitizeText(result.mobile_card_vms.version || "", 128) || null,
+                  }
+                : null,
           },
           200,
           { "Cache-Control": "no-store" },

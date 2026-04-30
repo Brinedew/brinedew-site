@@ -332,3 +332,20 @@ test("frontend mobile path uses card VM manifest and rejects fallback records", 
     "mobile collection branch must not render fallback cards or rely on later card hydration",
   )
 })
+
+test("gallery invalidation warms a real shared card VM snapshot instead of an empty version", () => {
+  assert.match(source, /async function mobileCardSnapshotWarmSymbolsForInvalidation/)
+  assert.match(source, /ICONOPLASM_STARTER_GENE_SYMBOLS/)
+  assert.match(source, /fullRebuild/)
+  assert.match(
+    source,
+    /SELECT gene_symbol\s+FROM icono_gene_catalog\s+WHERE gene_symbol > \?\s+ORDER BY gene_symbol ASC\s+LIMIT \?/,
+  )
+  assert.match(source, /const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation/)
+  assert.match(source, /mobile_card_vms:/)
+  assert.doesNotMatch(
+    source,
+    /const warmedSymbols = Array\.from\(new Set\(symbols\.map/,
+    "snapshot warm set must not be only the narrow touched-symbol array",
+  )
+})

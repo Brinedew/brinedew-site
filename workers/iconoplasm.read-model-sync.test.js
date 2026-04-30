@@ -94,6 +94,9 @@ test("admin read-model sync with invalidate_gallery still honors skip flags", as
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
+  assert.equal(payload?.mobile_card_vms?.warmed, 0)
+  assert.equal(payload?.mobile_card_vms?.missing >= 1, true)
+  assert.equal(typeof payload?.mobile_card_vms?.version, "string")
 
   // This regression matters because the workstation uses skip flags to split a
   // 1,000-item Website sync into smaller durable phases. If the invalidate-
