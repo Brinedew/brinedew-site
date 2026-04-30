@@ -76,3 +76,29 @@ test("Iconoplasm archive progress summary is one compact status rail", async () 
   assert.match(progressBlock, /display:\s*grid;/)
   assert.match(progressBlock, /grid-template-columns:\s*minmax\(0, 1fr\);/)
 })
+
+test("Iconoplasm collection summary has no duplicate hero count plaque", async () => {
+  const app = await sourceText(appPath)
+  const syncStart = app.indexOf("function syncHeroCount()")
+  const syncEnd = app.indexOf("function renderCollectionChrome()", syncStart)
+  assert.notEqual(syncStart, -1, "missing syncHeroCount")
+  assert.notEqual(syncEnd, -1, "missing syncHeroCount boundary")
+  const syncBlock = app.slice(syncStart, syncEnd)
+
+  assert.doesNotMatch(
+    app,
+    /id="icono-gene-count"/,
+    "the home hero must not keep a second collection counter above the archive rail",
+  )
+  assert.doesNotMatch(
+    syncBlock,
+    /function syncHeroCount\(\) \{\s*if \(!countEl\) return/,
+    "removing the hero count must not short-circuit sidebar state updates",
+  )
+  assert.match(
+    syncBlock,
+    /renderIconoplasmSidebar\(\)[\s\S]{0,80}if \(!countEl\) return/,
+    "removing the hero count must not remove sidebar state updates",
+  )
+  assert.match(app, /genes found out of/, "the archive rail remains the single visible collection counter")
+})

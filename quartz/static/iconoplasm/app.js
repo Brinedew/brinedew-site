@@ -1355,7 +1355,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-hero">' +
       '<div class="icono-hero-title">Iconoplasm</div>' +
       '<p class="tagline">Mnemonics for genes - <a class="internal" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">read FAQ</a></p>' +
-      '<span class="stat" id="icono-gene-count">...</span>' +
       "</div>" +
       '<div class="icono-gallery-toolbar">' +
       '<div class="icono-search icono-search--toolbar">' +
@@ -4266,13 +4265,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
 
     function syncHeroCount() {
-      if (!countEl) return
       if (useClassicGallery) {
         var galleryPublishedCount = Number(galleryState.publishedTotal || 0)
         var galleryTotalCount = Number(galleryState.total || 0)
         iconoSidebarState.total = galleryTotalCount
         iconoSidebarState.publishedTotal = galleryPublishedCount
         renderIconoplasmSidebar()
+        if (!countEl) return
         if (!galleryTotalCount && !galleryPublishedCount) {
           countEl.textContent = "Loading gallery..."
           return
@@ -4285,7 +4284,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return
       }
       if (!galleryState.ready) {
-        countEl.textContent = "Loading your collection..."
+        if (countEl) countEl.textContent = "Loading your collection..."
         return
       }
       var discoveredCount = Number(galleryState.discoveryEntries.length || 0)
@@ -4295,6 +4294,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       iconoSidebarState.total = discoveredCount
       iconoSidebarState.publishedTotal = totalCount
       renderIconoplasmSidebar()
+      if (!countEl) return
       if (totalCount > 0) {
         countEl.textContent =
           discoveredCount.toLocaleString() +
