@@ -1,5 +1,6 @@
 import { html, nothing, render } from "lit"
 import { unsafeHTML } from "lit/directives/unsafe-html.js"
+import { measureNaturalWidth, prepareWithSegments } from "@chenglou/pretext"
 
 var MODEL_ATTR = "data-icono-lit-archival-model"
 var MODEL_SELECTOR = 'script[type="application/json"][data-icono-lit-archival-model]'
@@ -62,6 +63,34 @@ function resolveCardModel(payload) {
 
 function modelOpensInNewTab(model) {
   return String((model && model.titleLinkAttrs) || "").indexOf('target="_blank"') >= 0
+}
+
+function pxFromComputedLength(value) {
+  var parsed = Number.parseFloat(String(value || ""))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function computedCanvasFont(style) {
+  var fontStyle = style.fontStyle && style.fontStyle !== "normal" ? style.fontStyle + " " : ""
+  var fontVariant = style.fontVariant && style.fontVariant !== "normal" ? style.fontVariant + " " : ""
+  var fontWeight = style.fontWeight && style.fontWeight !== "normal" ? style.fontWeight + " " : ""
+  return fontStyle + fontVariant + fontWeight + style.fontSize + " " + style.fontFamily
+}
+
+function syncMeasuredMobileTabSymbol(host, model) {
+  var symbolNode = host.querySelector(".icono-label-mobile-peek-tab-symbol")
+  if (!symbolNode || !model || !model.symbol) return
+  var style = getComputedStyle(symbolNode)
+  try {
+    var measured = measureNaturalWidth(
+      prepareWithSegments(String(model.symbol), computedCanvasFont(style), {
+        letterSpacing: pxFromComputedLength(style.letterSpacing),
+      }),
+    )
+    host.style.setProperty("--icono-label-mobile-tab-symbol-measured-width", Math.ceil(measured) + "px")
+  } catch (error) {
+    console.warn("[Iconoplasm] Pretext mobile tab measurement failed:", error)
+  }
 }
 
 function penLoopFallbackMarkup() {
@@ -449,6 +478,10 @@ class IconoLitArchivalCard extends HTMLElement {
   render() {
     if (!this._model) return
     render(archivalTemplate(this._model), this)
+    syncMeasuredMobileTabSymbol(this, this._model)
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => syncMeasuredMobileTabSymbol(this, this._model))
+    }
     var shared = sharedCardRuntime()
     if (shared && typeof shared.hydrateRoughLoops === "function") {
       shared.hydrateRoughLoops(this, true)

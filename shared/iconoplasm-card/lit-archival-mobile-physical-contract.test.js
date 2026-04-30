@@ -435,6 +435,11 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(symbolBlock, /overflow:\s*visible;/)
   assert.match(
     symbolBlock,
+    /inline-size:\s*var\(--icono-label-mobile-tab-symbol-measured-width,\s*auto\);/,
+    "the printed symbol box should be centered from Pretext's measured text width, not from a guessed DOM box",
+  )
+  assert.match(
+    symbolBlock,
     /text-overflow:\s*clip;/,
     "gene-symbol IDs must not ellipsize; widen the tab runway instead of clipping identifiers",
   )
@@ -452,6 +457,17 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     symbolBlock,
     /translateY/,
     "tab symbol vertical position should come from the tab layout, not a brittle vertical nudge",
+  )
+
+  assert.match(
+    litCard,
+    /@chenglou\/pretext/,
+    "mobile tab text should use Pretext the normal way: measure text before layout instead of eyeballing a fixed DOM width",
+  )
+  assert.match(
+    litCard,
+    /--icono-label-mobile-tab-symbol-measured-width/,
+    "the Pretext measurement must feed the centered symbol box, not move the physical tab",
   )
 })
 

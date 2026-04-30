@@ -1665,6 +1665,7 @@
     position: relative;
     z-index: 1;
     max-width: none;
+    inline-size: var(--icono-label-mobile-tab-symbol-measured-width, auto);
     overflow: visible;
     text-overflow: clip;
     white-space: nowrap;
