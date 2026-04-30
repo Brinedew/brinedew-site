@@ -428,11 +428,15 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol",
   )
   assert.match(symbolBlock, /line-height:\s*0\.96;/)
-  assert.match(symbolBlock, /transform:\s*none;/)
+  assert.match(
+    symbolBlock,
+    /transform:\s*translateX\(0\.12em\);/,
+    "the offside archival tab stays put; only the printed symbol gets a small optical centering correction",
+  )
   assert.doesNotMatch(
     symbolBlock,
     /translateY/,
-    "tab symbol vertical position should come from the tab layout, not a brittle nudge",
+    "tab symbol vertical position should come from the tab layout, not a brittle vertical nudge",
   )
 })
 

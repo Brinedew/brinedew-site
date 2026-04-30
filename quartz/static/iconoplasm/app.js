@@ -1231,26 +1231,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return newElements
   }
 
-  function nextArchiveMilestone(discoveredCount, totalCount) {
-    // B-457 #2: progress bar was emotionally flat — at 0.6% of 19k, the user
-    // sees a tiny sliver and no sense of trajectory. Pick the nearest forward
-    // milestone (rounder than the literal next integer) so the caption gives
-    // a tangible "next thing to celebrate" framing. Stops once we've passed
-    // every interim milestone and just shows the catalog total.
-    var stops = [100, 250, 500, 1000, 2500, 5000, 10000, 19023]
-    if (totalCount > 0) {
-      // Make sure the catalog total is always the final stop, even if it
-      // changes from 19023 in the future.
-      stops[stops.length - 1] = totalCount
-    }
-    for (var i = 0; i < stops.length; i++) {
-      if (stops[i] > discoveredCount) {
-        return { target: stops[i], remaining: stops[i] - discoveredCount }
-      }
-    }
-    return null
-  }
-
   function buildCollectionSummaryMarkup(collectionState) {
     var discoveredCount =
       Math.max(0, Number(collectionState && collectionState.discoveredCount) || 0) ||
@@ -1261,28 +1241,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = progressPct
     var totalCopy = totalCount > 0 ? totalCount.toLocaleString() : "the catalog"
-    var milestone = nextArchiveMilestone(discoveredCount, totalCount)
-    var milestoneCopy = ""
-    if (milestone && milestone.target > 0) {
-      // Distinguish the "approaching the catalog ceiling" case so the copy
-      // doesn't read as if the catalog itself were just another stop.
-      var isCatalogCap = milestone.target === totalCount && totalCount > 0
-      milestoneCopy = isCatalogCap
-        ? "Catalog complete in " + milestone.remaining.toLocaleString() + " more"
-        : "Next milestone: " +
-          milestone.target.toLocaleString() +
-          " (" +
-          milestone.remaining.toLocaleString() +
-          " to go)"
-    }
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
       '<article class="icono-collection-card icono-collection-card--archive">' +
-      '<div class="icono-collection-label icono-collection-label--archive">Archive</div>' +
-      '<div class="icono-collection-value">' +
+      '<div class="icono-collection-copy">' +
       esc(discoveredCount.toLocaleString()) +
-      "</div>" +
-      '<div class="icono-collection-copy">recorded out of ' +
+      " genes found out of " +
       esc(totalCopy) +
       "</div>" +
       '<div class="icono-collection-progress-inline">' +
@@ -1291,9 +1255,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(progressWidth.toFixed(1)) +
       '%"></span>' +
       "</div>" +
-      (milestoneCopy
-        ? '<div class="icono-collection-progress-milestone">' + esc(milestoneCopy) + "</div>"
-        : "") +
       "</div>" +
       "</article>" +
       "</section>"

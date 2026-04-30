@@ -1841,36 +1841,30 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-collection-card--archive {
   display: grid;
-  grid-template-columns: max-content max-content max-content minmax(8rem, 1fr);
-  align-items: center;
-  gap: 0.55rem;
-  min-width: min(100%, 38rem);
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.icono-collection-card--archive::-webkit-scrollbar {
-  display: none;
-}
-
-.icono-collection-label--archive {
-  color: var(--secondary, var(--darkgray));
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.58rem;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  padding-top: 0.82rem;
+  padding-bottom: 0.82rem;
+  overflow: hidden;
 }
 
 .icono-collection-copy {
-  font-size: 0.98rem;
-  line-height: 1;
+  font-family: var(--codeFont, monospace);
+  font-size: clamp(0.78rem, 2.8vw, 0.95rem);
+  line-height: 1.24;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--secondary, var(--darkgray));
-  white-space: nowrap;
+  text-wrap: balance;
 }
 
 .icono-collection-progress-inline {
   display: grid;
-  grid-template-columns: minmax(7rem, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 0.55rem;
   width: 100%;
   min-width: 0;
   margin-top: 0;
@@ -1878,19 +1872,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-collection-progress-inline .icono-collection-progress-track {
   width: 100%;
-}
-
-/* B-457 #2: paired with the next-milestone caption added in app.js. The
-   bar alone reads as 0.6% emptiness; the caption gives the eye a target
-   to grow toward ("Next milestone: 250 (132 to go)"). Kept subtle and
-   monospaced to match the existing label vocabulary on this card. */
-.icono-collection-progress-milestone {
-  margin-top: 0;
-  font-family: var(--codeFont, monospace);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  color: var(--secondary, var(--darkgray));
-  white-space: nowrap;
 }
 
 .icono-collection-label,

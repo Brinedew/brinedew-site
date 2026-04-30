@@ -1668,7 +1668,7 @@
     font-weight: 800;
     line-height: 0.96;
     letter-spacing: 0.08em;
-    transform: none;
+    transform: translateX(0.12em);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-topline {

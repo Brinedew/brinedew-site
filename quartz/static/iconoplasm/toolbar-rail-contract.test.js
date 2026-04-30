@@ -48,25 +48,31 @@ test("Iconoplasm archive progress summary is one compact status rail", async () 
   const css = await sourceText(cssPath)
 
   assert.match(app, /icono-collection-card icono-collection-card--archive/)
-  assert.match(app, /icono-collection-label icono-collection-label--archive/)
-  assert.match(app, /icono-collection-value/)
   assert.match(app, /icono-collection-copy/)
+  assert.match(app, /genes found out of/)
   assert.match(app, /icono-collection-progress-inline/)
+  assert.doesNotMatch(app, /Next milestone:/)
+  assert.doesNotMatch(app, /icono-collection-progress-milestone/)
+  assert.doesNotMatch(app, /icono-collection-label icono-collection-label--archive/)
+  assert.doesNotMatch(app, />Archive<\/div>/)
 
   const archiveBlock = cssBlockFor(css, ".icono-collection-card--archive")
   assert.match(archiveBlock, /display:\s*grid;/)
   assert.match(
     archiveBlock,
-    /grid-template-columns:\s*max-content max-content max-content minmax\(8rem, 1fr\);/,
+    /grid-template-columns:\s*minmax\(0, 1fr\);/,
   )
-  assert.match(archiveBlock, /align-items:\s*center;/)
-  assert.match(archiveBlock, /overflow-x:\s*auto;/)
+  assert.match(archiveBlock, /align-items:\s*stretch;/)
+  assert.match(archiveBlock, /max-inline-size:\s*100%;/)
+  assert.match(archiveBlock, /overflow:\s*hidden;/)
+  assert.doesNotMatch(archiveBlock, /overflow-x:\s*auto;/)
   assert.doesNotMatch(archiveBlock, /align-content:\s*start/)
 
   const copyBlock = cssBlockFor(css, ".icono-collection-copy")
-  assert.match(copyBlock, /white-space:\s*nowrap;/)
+  assert.match(copyBlock, /text-wrap:\s*balance;/)
+  assert.doesNotMatch(copyBlock, /white-space:\s*nowrap;/)
 
   const progressBlock = cssBlockFor(css, ".icono-collection-progress-inline")
   assert.match(progressBlock, /display:\s*grid;/)
-  assert.match(progressBlock, /grid-template-columns:\s*minmax\(7rem, 1fr\) max-content;/)
+  assert.match(progressBlock, /grid-template-columns:\s*minmax\(0, 1fr\);/)
 })
