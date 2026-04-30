@@ -47,6 +47,7 @@ const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifac
 const KV_MOBILE_CARD_VM_PREFIX = "iconoplasm:mobile-card-vm:"
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH = 1000
+const MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX = 500
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
 const MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
 const MOBILE_CARD_LAYOUT = "mobile-dossier-v1"
@@ -4440,6 +4441,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/read-models/sync") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/card-vms/warm") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/read-models/bootstrap") return true
   if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
     return requestMethod === "GET" || requestMethod === "HEAD"
@@ -13457,29 +13459,28 @@ async function syncAdminReadModelsAndInvalidateGallery(
   })
   let mobileCardVMs = { warmed: 0, missing: 0, version: nextVersion }
   if (!result?.partial && warmedSymbols.length) {
-    let warmed = 0
-    let missing = 0
-    for (let index = 0; index < warmedSymbols.length; index += 100) {
-      const chunk = warmedSymbols.slice(index, index + 100)
-      const prewarm = await composeAndCacheMobileCardVMs(
-        env,
-        "https://iconoplasm.brinedew.bio/",
-        chunk,
-        nextVersion,
-      )
-      warmed += prewarm.cards.length
-      missing += prewarm.missing.length
-    }
-    mobileCardVMs = { warmed, missing, version: nextVersion }
+    mobileCardVMs = await warmMobileCardSnapshotSymbols(env, warmedSymbols, nextVersion)
   }
   return { ...result, mobile_card_vms: mobileCardVMs }
 }
 
-async function fullCatalogSymbolsForMobileCardSnapshotWarm(env) {
+async function catalogSymbolsForMobileCardSnapshotWarm(env, { after = "", limit = 500 } = {}) {
   if (!env.ICONOPLASM_DB) return []
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(
+      MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
+      Number.parseInt(String(limit || MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX), 10) ||
+        MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
+    ),
+  )
   const symbols = []
-  let cursor = ""
-  while (symbols.length < MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT) {
+  let cursor = normalizeSymbol(after || "")
+  while (symbols.length < cleanedLimit && symbols.length < MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT) {
+    const requestLimit = Math.min(
+      MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH,
+      cleanedLimit - symbols.length,
+    )
     const rows = await env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol
          FROM icono_gene_catalog
@@ -13487,7 +13488,7 @@ async function fullCatalogSymbolsForMobileCardSnapshotWarm(env) {
         ORDER BY gene_symbol ASC
         LIMIT ?`,
     )
-      .bind(cursor, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH)
+      .bind(cursor, requestLimit)
       .all()
     const batch = (Array.isArray(rows?.results) ? rows.results : [])
       .map((row) => normalizeSymbol(row?.gene_symbol || ""))
@@ -13496,9 +13497,9 @@ async function fullCatalogSymbolsForMobileCardSnapshotWarm(env) {
     for (const symbol of batch) {
       symbols.push(symbol)
       cursor = symbol
-      if (symbols.length >= MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT) break
+      if (symbols.length >= cleanedLimit) break
     }
-    if (batch.length < MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH) break
+    if (batch.length < requestLimit) break
   }
   return symbols
 }
@@ -13516,12 +13517,33 @@ async function mobileCardSnapshotWarmSymbolsForInvalidation(
     const normalized = normalizeSymbol(symbol)
     if (normalized) warmSet.add(normalized)
   }
-  if (fullRebuild) {
-    for (const symbol of await fullCatalogSymbolsForMobileCardSnapshotWarm(env)) {
-      if (symbol) warmSet.add(symbol)
-    }
-  }
+  // Full-catalog VM warming is intentionally chunked through the authenticated
+  // admin warm endpoint below. Doing 10k+ gene VM builds synchronously inside
+  // read-model sync can overrun the service-binding request and publish no
+  // useful operator result.
+  void fullRebuild
   return Array.from(warmSet)
+}
+
+async function warmMobileCardSnapshotSymbols(env, symbols, snapshotVersion) {
+  const warmedSymbols = normalizeRequestedSymbols(
+    symbols,
+    MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
+  )
+  let warmed = 0
+  let missing = 0
+  for (let index = 0; index < warmedSymbols.length; index += 100) {
+    const chunk = warmedSymbols.slice(index, index + 100)
+    const prewarm = await composeAndCacheMobileCardVMs(
+      env,
+      "https://iconoplasm.brinedew.bio/",
+      chunk,
+      snapshotVersion,
+    )
+    warmed += prewarm.cards.length
+    missing += prewarm.missing.length
+  }
+  return { warmed, missing, requested: warmedSymbols.length, version: snapshotVersion }
 }
 
 function galleryCanUseEdgeCache(url) {
@@ -17862,6 +17884,68 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                     version: sanitizeText(result.mobile_card_vms.version || "", 128) || null,
                   }
                 : null,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/card-vms/warm" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_card_vms_warm_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_card_vms_warm_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      let p = {}
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_card_vms_warm_400", json({ error: "Invalid JSON" }, 400))
+      }
+
+      const versionInfo = await currentMobileCardSnapshotVersion(env)
+      const snapshotVersion =
+        sanitizeText(p?.version || "", 128) === versionInfo.previous
+          ? versionInfo.previous
+          : versionInfo.current
+      const scope = String(p?.scope || "").trim().toLowerCase()
+      const requestedLimit = Math.max(
+        1,
+        Math.min(
+          MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
+          Number.parseInt(String(p?.limit || MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX), 10) ||
+            MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
+        ),
+      )
+      const symbols =
+        scope === "catalog"
+          ? await catalogSymbolsForMobileCardSnapshotWarm(env, {
+              after: p?.after || p?.cursor || "",
+              limit: requestedLimit,
+            })
+          : normalizeRequestedSymbols(
+              Array.isArray(p?.symbols) ? p.symbols : [],
+              MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
+            )
+      const warmResult = await warmMobileCardSnapshotSymbols(env, symbols, snapshotVersion)
+      const nextCursor = symbols.length ? symbols[symbols.length - 1] : sanitizeText(p?.after || p?.cursor || "", 64)
+      return done(
+        "admin_card_vms_warm",
+        json(
+          {
+            ok: true,
+            scope: scope === "catalog" ? "catalog" : "symbols",
+            version: snapshotVersion,
+            after: sanitizeText(p?.after || p?.cursor || "", 64) || "",
+            next_cursor: nextCursor || "",
+            done: scope === "catalog" ? symbols.length < requestedLimit : true,
+            requested: warmResult.requested,
+            warmed: warmResult.warmed,
+            missing: warmResult.missing,
           },
           200,
           { "Cache-Control": "no-store" },

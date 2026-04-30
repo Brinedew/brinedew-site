@@ -42,6 +42,20 @@ class FakeStatement {
   }
 
   async all() {
+    if (
+      this.sql.includes("SELECT gene_symbol") &&
+      this.sql.includes("FROM icono_gene_catalog") &&
+      this.sql.includes("WHERE gene_symbol > ?")
+    ) {
+      const cursor = String(this.args[0] || "").trim().toUpperCase()
+      const limit = Number(this.args[1] || 1000)
+      const rows = Array.from(this.db.catalog.keys())
+        .filter((symbol) => symbol > cursor)
+        .sort()
+        .slice(0, limit)
+        .map((gene_symbol) => ({ gene_symbol }))
+      return { results: rows }
+    }
     return { results: [] }
   }
 
@@ -164,6 +178,7 @@ class FakeIconoplasmDb {
 function buildEnv({ kvStore = new Map(), db = new FakeIconoplasmDb(), version = "test-vm-version" } = {}) {
   return {
     ICONOPLASM_DB: db,
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     KV: {
       async get(key) {
         if (key === "iconoplasm:gallery-version") return version
@@ -307,6 +322,56 @@ test("mobile card manifest falls back to previous version without D1", async () 
   assert.equal(payload.cards[0].data_source, "kv_previous")
 })
 
+test("admin card VM warm endpoint fills bounded catalog chunks", async () => {
+  const kvStore = new Map()
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ scope: "catalog", limit: 1 }),
+    }),
+    buildEnv({ kvStore }),
+  )
+  assert.equal(response.status, 200)
+  const payload = await response.json()
+  assert.equal(payload.ok, true)
+  assert.equal(payload.scope, "catalog")
+  assert.equal(payload.requested, 1)
+  assert.equal(payload.warmed, 1)
+  assert.equal(payload.missing, 0)
+  assert.equal(payload.next_cursor, "ERBB2")
+  const manifestResponse = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"] }),
+    }),
+    buildEnv({ kvStore }),
+  )
+  const manifest = await manifestResponse.json()
+  assert.deepEqual(manifest.missing, [])
+  assert.equal(manifest.cards.length, 1)
+  assert.deepEqual(
+    manifest.cards.map((card) => card.symbol),
+    ["ERBB2"],
+  )
+})
+
+test("admin card VM warm endpoint keeps catalog warming behind admin auth", async () => {
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "catalog", limit: 2 }),
+    }),
+    buildEnv(),
+  )
+  assert.equal(response.status, 403)
+})
+
 test("mobile manifest route is wired before the generic /api/iconoplasm proxy", () => {
   const start = source.indexOf('if (path === "/api/iconoplasm/mobile-card-manifest")')
   const generic = source.indexOf('if (path.startsWith("/api/iconoplasm/"))')
@@ -335,13 +400,15 @@ test("frontend mobile path uses card VM manifest and rejects fallback records", 
 
 test("gallery invalidation warms a real shared card VM snapshot instead of an empty version", () => {
   assert.match(source, /async function mobileCardSnapshotWarmSymbolsForInvalidation/)
+  assert.match(source, /async function warmMobileCardSnapshotSymbols/)
   assert.match(source, /ICONOPLASM_STARTER_GENE_SYMBOLS/)
-  assert.match(source, /fullRebuild/)
+  assert.match(source, /\/api\/iconoplasm\/admin\/card-vms\/warm/)
   assert.match(
     source,
     /SELECT gene_symbol\s+FROM icono_gene_catalog\s+WHERE gene_symbol > \?\s+ORDER BY gene_symbol ASC\s+LIMIT \?/,
   )
   assert.match(source, /const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation/)
+  assert.match(source, /scope === "catalog"/)
   assert.match(source, /mobile_card_vms:/)
   assert.doesNotMatch(
     source,
