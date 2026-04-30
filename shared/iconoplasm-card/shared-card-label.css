@@ -2991,6 +2991,7 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-footer-line--caption {
+    font-family: var(--icono-label-type);
     font-size: var(--icono-label-mobile-label-size);
     line-height: 1.08;
     letter-spacing: 0.07em;

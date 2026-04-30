@@ -714,6 +714,16 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-footer-copy",
   )
   assert.match(footerCopyBlock, /grid-row:\s*3;/)
+  const footerLineBlock = css.match(
+    /\.icono-card--variant-lab-label\.icono-card--brick\s*\.icono-label-dossier-shell\s*\.icono-label-footer-line--typed,[\s\S]*?\.icono-label-footer-line--caption\s*\{[\s\S]*?\}/,
+  )
+  assert.ok(footerLineBlock, "missing mobile footer small-print typography block")
+  assert.match(
+    footerLineBlock[0],
+    /font-family:\s*var\(--icono-label-type\);/,
+    "footer small print belongs to the IBM label/caption voice, not a second Special Elite size",
+  )
+  assert.match(footerLineBlock[0], /font-size:\s*var\(--icono-label-mobile-label-size\);/)
   assert.match(
     css,
     /\.icono-card--variant-lab-label\.icono-card--brick \.icono-label-dossier-shell\s*\{[\s\S]*height:\s*auto;[\s\S]*min-block-size:\s*var\(--icono-label-mobile-dossier-height\);[\s\S]*overflow:\s*visible;/,
