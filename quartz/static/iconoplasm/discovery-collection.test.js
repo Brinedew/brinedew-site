@@ -13,6 +13,10 @@ test("home collection orders include shortest-name sorting", () => {
   assert.ok(HOME_COLLECTION_ORDERS.some((option) => option.value === "votes"))
   assert.equal(normalizeHomeCollectionOrder("shortest"), "shortest")
   assert.equal(normalizeHomeCollectionOrder("recent"), "newest")
+  assert.deepEqual(
+    HOME_COLLECTION_ORDERS.find((option) => option.value === "newest"),
+    { value: "newest", label: "Recently discovered" },
+  )
 })
 
 test("normalize discovery entries keeps full names and de-duplicates by symbol", () => {
@@ -44,5 +48,39 @@ test("shortest-name sorting uses full-name length then stable tie-breaks", () =>
   assert.deepEqual(
     sorted.map((entry) => entry.gene_symbol),
     ["ABCD", "FURIN", "NRM", "OCA2", "PLXNB3"],
+  )
+})
+
+test("newest sorting is the user's discovery log, not gene age or portrait freshness", () => {
+  const sorted = sortDiscoveryEntries(
+    normalizeDiscoveryEntries([
+      {
+        gene_symbol: "OLDGENE",
+        full_name: "Old organismal gene",
+        age_years: 900,
+        last_encountered_at: "2026-04-29T12:00:00.000Z",
+        published_at: "2026-04-29T12:00:00.000Z",
+      },
+      {
+        gene_symbol: "NEW101",
+        full_name: "The one hundred and first discovery",
+        age_years: 1,
+        last_encountered_at: "2026-04-30T12:00:00.000Z",
+        published_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        gene_symbol: "YOUNG",
+        full_name: "Young gene characteristic",
+        age_years: 1,
+        last_encountered_at: "2026-04-28T12:00:00.000Z",
+        published_at: "2026-04-30T12:00:00.000Z",
+      },
+    ]),
+    "newest",
+  )
+
+  assert.deepEqual(
+    sorted.map((entry) => entry.gene_symbol),
+    ["NEW101", "OLDGENE", "YOUNG"],
   )
 })

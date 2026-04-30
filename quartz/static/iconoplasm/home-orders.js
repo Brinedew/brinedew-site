@@ -2,7 +2,7 @@ export var ICONOPLASM_DISCOVERY_DEFAULT_ORDER = "newest"
 export var ICONOPLASM_GALLERY_DEFAULT_ORDER = "votes"
 
 export var ICONOPLASM_HOME_ORDERS = [
-  { value: "newest", label: "Newest" },
+  { value: "newest", label: "Recently discovered" },
   { value: "symbol", label: "A–Z" },
   { value: "shortest", label: "Shortest name first" },
   { value: "votes", label: "Votes" },

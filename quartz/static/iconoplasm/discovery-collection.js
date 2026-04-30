@@ -187,8 +187,8 @@ export function sortDiscoveryEntries(entries, order) {
     if (resolvedOrder === "random") {
       return randomRank(a.random_seed || "iconoplasm", a.gene_symbol) - randomRank(b.random_seed || "iconoplasm", b.gene_symbol) || compareTextAsc(a.gene_symbol, b.gene_symbol)
     }
-    var aTime = parseIsoTimestamp(a.published_at || a.asset_created_at || a.last_encountered_at || a.first_discovered_at)
-    var bTime = parseIsoTimestamp(b.published_at || b.asset_created_at || b.last_encountered_at || b.first_discovered_at)
+    var aTime = parseIsoTimestamp(a.last_encountered_at || a.first_discovered_at)
+    var bTime = parseIsoTimestamp(b.last_encountered_at || b.first_discovered_at)
     if (aTime !== bTime) return bTime - aTime
     return compareTextAsc(a.gene_symbol, b.gene_symbol)
   })

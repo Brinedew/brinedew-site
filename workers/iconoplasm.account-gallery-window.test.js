@@ -240,6 +240,43 @@ test("account gallery window returns strict rich cards for newest without full s
   )
 })
 
+test("account gallery newest window puts the newly discovered 101st gene first", async () => {
+  const db = new FakeDb()
+  db.rows = ["INS", "RHO", "PRL"].map((symbol, index) =>
+    db.row("user-123", symbol, `2026-04-29T00:0${index}:00Z`, index),
+  )
+  db.rows = db.rows.concat(Array.from({ length: 97 }, (_, index) => {
+    const number = String(index + 1).padStart(3, "0")
+    return db.row("user-123", `G${number}`, `2026-04-29T00:${number.slice(1)}:00Z`, index)
+  }))
+  db.rows.push(db.row("user-123", "NEW101", "2026-04-30T00:00:00Z", 0))
+  const env = buildEnv({ db })
+  env.KV.put(
+    "iconoplasm:mobile-card-vm:test-vm-version:NEW101",
+    JSON.stringify(completeMobileCardVM("NEW101")),
+  )
+  for (let i = 1; i <= 100; i += 1) {
+    const symbol = `G${String(i).padStart(3, "0")}`
+    env.KV.put(
+      `iconoplasm:mobile-card-vm:test-vm-version:${symbol}`,
+      JSON.stringify(completeMobileCardVM(symbol)),
+    )
+  }
+
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3", {
+      headers: { Cookie: "session=abc" },
+    }),
+    env,
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.discovered_count, 101)
+  assert.equal(payload.cards[0]?.symbol, "NEW101")
+  assert.equal(payload.items[0]?.discovery?.last_encountered_at, "2026-04-30T00:00:00Z")
+})
+
 test("account gallery window paginates symbol order with a stable cursor", async () => {
   const env = buildEnv()
   const first = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
