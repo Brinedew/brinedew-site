@@ -1317,8 +1317,8 @@
     --icono-label-mobile-band-row-height: 4.6rem;
     --icono-label-mobile-header-row-height: 2.16rem;
     --icono-label-mobile-style-row-height: 17.8rem;
-    --icono-label-mobile-alignment-row-height: 4.9rem;
-    --icono-label-mobile-footer-row-height: 13.3rem;
+    --icono-label-mobile-alignment-row-height: 2.9rem;
+    --icono-label-mobile-footer-row-height: 15.6rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -2620,9 +2620,9 @@
     .icono-label-alignment-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 1.8rem min-content;
+    grid-template-rows: 0.86rem;
     align-content: start;
-    padding: 0.26rem 0.8rem 0.44rem;
+    padding: 0.18rem 0.8rem 0.22rem;
     overflow: visible;
   }
 
@@ -2631,9 +2631,9 @@
     .icono-label-alignment-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 0.86rem 0.86rem;
-    min-block-size: 1.8rem;
-    block-size: 1.8rem;
+    grid-template-rows: 0.86rem;
+    min-block-size: 0.86rem;
+    block-size: 0.86rem;
     align-content: start;
     gap: 0.12rem;
     position: relative;
@@ -2660,12 +2660,19 @@
     .icono-label-dossier-shell
     .icono-label-alignment-grid
     .icono-label-hand-note--politics {
-    position: static;
+    position: absolute;
+    left: 50%;
+    top: -0.42rem;
+    z-index: 2;
     justify-self: center;
     align-self: start;
     width: max-content;
-    max-width: 100%;
-    transform: rotate(-4deg);
+    max-width: calc(100% + 2.4rem);
+    margin-left: 0;
+    text-align: center;
+    transform: translateX(-50%) rotate(-4deg);
+    transform-origin: center top;
+    pointer-events: none;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -2717,10 +2724,11 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-note {
-    font-size: 0.36rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1.08;
-    letter-spacing: 0.1em;
-    white-space: nowrap;
+    letter-spacing: 0.03em;
+    max-width: 100%;
+    white-space: normal;
     overflow-wrap: break-word;
   }
 

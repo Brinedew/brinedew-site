@@ -514,13 +514,13 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   assert.match(css, /--icono-label-mobile-style-row-height:\s*17\.8rem;/)
   assert.match(
     css,
-    /--icono-label-mobile-alignment-row-height:\s*4\.9rem;/,
-    "alignment is a compact printed field, not a tall blank tab",
+    /--icono-label-mobile-alignment-row-height:\s*2\.9rem;/,
+    "alignment row height must conform to the typewritten lane, not the handwritten overlay",
   )
   assert.match(
     css,
-    /--icono-label-mobile-footer-row-height:\s*13\.3rem;/,
-    "expanded mobile cards must reserve a compact real printed row for remarks/color breakdown after alignment",
+    /--icono-label-mobile-footer-row-height:\s*15\.6rem;/,
+    "expanded mobile cards must reserve enough typewriter-scale space for color analysis and remarks",
   )
   assert.match(
     css,
@@ -600,7 +600,13 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-grid",
   )
-  assert.match(alignmentGridBlock, /grid-template-rows:\s*0\.86rem 0\.86rem;/)
+  assert.match(
+    alignmentGridBlock,
+    /grid-template-rows:\s*0\.86rem;/,
+    "alignment sizing follows only the printed ONCOGENE/TUMOR SUPPRESSOR lane",
+  )
+  assert.match(alignmentGridBlock, /min-block-size:\s*0\.86rem;/)
+  assert.match(alignmentGridBlock, /block-size:\s*0\.86rem;/)
   const alignmentRowBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-row",
@@ -617,8 +623,8 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   )
   assert.match(
     politicsBlock,
-    /position:\s*static;/,
-    "alignment verdict handwriting must be in its own row, not absolutely crossing both typewritten options",
+    /position:\s*absolute;/,
+    "alignment verdict handwriting is an overlay and must not create row height",
   )
   const footerRowBlock = cssBlockFor(
     css,
@@ -641,6 +647,19 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     "the emulsion/color analysis field must not stretch to fill a tall blank footer tab",
   )
   assert.match(footerRowBlock, /block-size:\s*var\(--icono-label-mobile-footer-row-height\);/)
+  const specimenNoteMatch = css.match(
+    /\.icono-card--variant-lab-label\.icono-card--brick\s*\.icono-label-dossier-shell\s*\.icono-label-specimen-footer\[data-icono-mobile-footer-relocated="true"\]\s*\.icono-label-specimen-note\s*\{[\s\S]*?\}/,
+  )
+  assert.ok(specimenNoteMatch, "missing mobile emulsion note typography block")
+  const specimenNoteBlock = specimenNoteMatch[0]
+  assert.match(
+    specimenNoteBlock,
+    /font-size:\s*var\(--icono-label-mobile-typewriter-size\);/,
+    "emulsion note is typewritten card text and must not use a smaller web-label size",
+  )
+  assert.match(specimenNoteBlock, /white-space:\s*normal;/)
+  assert.match(specimenNoteBlock, /max-width:\s*100%;/)
+  assert.doesNotMatch(specimenNoteBlock, /font-size:\s*0\.36rem;/)
   assert.match(
     css,
     /\.icono-card--variant-lab-label\.icono-card--brick\s*\.icono-label-dossier-shell\s*\.icono-label-specimen-footer\[data-icono-mobile-footer-relocated="true"\]\s*\{[\s\S]*--icono-label-specimen-hand-col:\s*minmax\(8\.6rem,\s*1fr\);[\s\S]*--icono-label-specimen-row-gap:\s*0\.34rem;[\s\S]*grid-row:\s*1;[\s\S]*display:\s*grid;/,
