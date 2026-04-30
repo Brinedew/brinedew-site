@@ -2680,13 +2680,22 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"] {
-    --icono-label-specimen-metric-col: 5.6rem;
-    --icono-label-specimen-value-col: 2.6rem;
-    --icono-label-specimen-column-gap: 0.58rem;
-    --icono-label-specimen-row-gap: 0.46rem;
+    --icono-label-specimen-metric-col: 5.35rem;
+    --icono-label-specimen-value-col: 3.1rem;
+    --icono-label-specimen-hand-col: minmax(8.6rem, 1fr);
+    --icono-label-specimen-column-gap: 0.52rem;
+    --icono-label-specimen-row-gap: 0.34rem;
     grid-row: 1;
+    display: grid;
+    grid-template-columns:
+      var(--icono-label-specimen-metric-col)
+      var(--icono-label-specimen-value-col)
+      var(--icono-label-specimen-hand-col);
+    grid-template-rows: min-content min-content;
+    align-content: start;
     margin-top: 0;
-    gap: 0.54rem;
+    column-gap: var(--icono-label-specimen-column-gap);
+    row-gap: 0.52rem;
     padding: 0.42rem 0.62rem 0.56rem;
     border-top: 1px solid color-mix(in srgb, var(--icono-label-rule) 78%, transparent);
   }
@@ -2695,7 +2704,10 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-notes {
-    gap: calc(3 / 1220 * 100cqw);
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    gap: 0.12rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -2713,7 +2725,7 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-micro {
-    gap: 0.42rem;
+    display: contents;
   }
 
   /* Mobile must keep the archival card as a fixed paper grid. Do not use flex layouts
@@ -2723,10 +2735,15 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-color-row {
+    grid-column: 1 / -1;
+    grid-row: 1;
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: start;
-    gap: calc(6 / 1220 * 100cqw);
+    grid-template-columns:
+      var(--icono-label-specimen-metric-col)
+      var(--icono-label-specimen-value-col)
+      var(--icono-label-specimen-hand-col);
+    align-items: baseline;
+    column-gap: var(--icono-label-specimen-column-gap);
     min-width: 0;
   }
 
@@ -2781,25 +2798,29 @@
     grid-auto-flow: column;
     align-items: center;
     gap: calc(4 / 1220 * 100cqw);
-    font-size: 0.42rem;
+    font-size: 0.58rem;
     line-height: 1.08;
+    grid-column: 1 / span 2;
+    justify-self: start;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-swatch {
-    inline-size: calc(16 / 1220 * 100cqw);
-    block-size: calc(16 / 1220 * 100cqw);
+    inline-size: 0.48rem;
+    block-size: 0.48rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-color-name {
-    font-size: 1.16rem;
-    line-height: 0.88;
-    transform: translateY(calc(1 / 1220 * 100cqw)) rotate(-2.5deg);
+    grid-column: 3;
+    justify-self: start;
+    font-size: 1.28rem;
+    line-height: 0.9;
+    transform: translateY(-0.02rem) rotate(-2.5deg);
     transform-origin: left top;
     min-width: 0;
     white-space: nowrap;
@@ -2810,12 +2831,13 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-decomposition {
+    display: contents;
     grid-template-columns:
       var(--icono-label-specimen-metric-col)
       var(--icono-label-specimen-value-col)
-      minmax(max-content, 1fr);
-    column-gap: var(--icono-label-specimen-column-gap);
-    row-gap: var(--icono-label-specimen-row-gap);
+      var(--icono-label-specimen-hand-col);
+    column-gap: 0;
+    row-gap: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -2823,9 +2845,10 @@
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-cell {
     display: grid;
-    align-items: start;
+    align-items: baseline;
     min-width: 0;
-    align-content: start;
+    align-content: center;
+    min-block-size: 1.34rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -2846,15 +2869,15 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-cell--hand {
-    justify-items: end;
-    min-width: max-content;
+    justify-items: start;
+    min-width: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-metric {
-    font-size: 0.36rem;
+    font-size: 0.52rem;
     line-height: 1.08;
   }
 
@@ -2862,7 +2885,7 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-metric-value {
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     line-height: 1.08;
     text-align: center;
   }
@@ -2871,12 +2894,13 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-hand-analysis {
-    font-size: 1.16rem;
-    line-height: 0.88;
+    font-size: 1.24rem;
+    line-height: 0.9;
     margin-inline-end: 0;
-    transform: translateY(calc(-1 / 1220 * 100cqw)) rotate(-2.5deg);
-    transform-origin: right top;
-    align-self: start;
+    transform: translateY(-0.04rem) rotate(-2.5deg);
+    transform-origin: left center;
+    align-self: baseline;
+    text-align: left;
   }
 
   .icono-card--variant-lab-label.icono-card--brick

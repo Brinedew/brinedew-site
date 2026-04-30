@@ -624,8 +624,18 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   assert.match(footerRowBlock, /block-size:\s*var\(--icono-label-mobile-footer-row-height\);/)
   assert.match(
     css,
-    /\.icono-card--variant-lab-label\.icono-card--brick\s*\.icono-label-dossier-shell\s*\.icono-label-specimen-footer\[data-icono-mobile-footer-relocated="true"\]\s*\{[\s\S]*--icono-label-specimen-row-gap:\s*0\.46rem;[\s\S]*grid-row:\s*1;/,
+    /\.icono-card--variant-lab-label\.icono-card--brick\s*\.icono-label-dossier-shell\s*\.icono-label-specimen-footer\[data-icono-mobile-footer-relocated="true"\]\s*\{[\s\S]*--icono-label-specimen-hand-col:\s*minmax\(8\.6rem,\s*1fr\);[\s\S]*--icono-label-specimen-row-gap:\s*0\.34rem;[\s\S]*grid-row:\s*1;[\s\S]*display:\s*grid;/,
     "color analysis footer must occupy the first post-clan tail track; remarks belong at the bottom",
+  )
+  assert.match(
+    css,
+    /\.icono-label-specimen-color-row\s*\{[\s\S]*grid-template-columns:[\s\S]*var\(--icono-label-specimen-metric-col\)[\s\S]*var\(--icono-label-specimen-value-col\)[\s\S]*var\(--icono-label-specimen-hand-col\)/,
+    "mobile color analysis must use the same three columns for swatch/hex/name as the metric rows",
+  )
+  assert.match(
+    css,
+    /\.icono-label-specimen-decomposition\s*\{[\s\S]*display:\s*contents;/,
+    "mobile color decomposition rows should participate in the parent table grid instead of nesting a misaligned table",
   )
   const footerCopyBlock = cssBlockFor(
     css,
