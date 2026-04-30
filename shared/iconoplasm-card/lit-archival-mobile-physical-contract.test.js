@@ -515,7 +515,7 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   assert.match(css, /--icono-label-mobile-alignment-row-height:\s*10\.7rem;/)
   assert.match(
     css,
-    /--icono-label-mobile-footer-row-height:\s*8\.2rem;/,
+    /--icono-label-mobile-footer-row-height:\s*17\.2rem;/,
     "expanded mobile cards must reserve a real printed row for remarks/color breakdown after alignment",
   )
   assert.match(
@@ -616,7 +616,22 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     "mobile must not hide the remarks/color breakdown row after alignment",
   )
   assert.match(footerRowBlock, /grid-row:\s*5;/)
+  assert.match(
+    footerRowBlock,
+    /grid-template-rows:\s*minmax\(0,\s*1fr\) min-content 3\.72rem;/,
+    "post-clan mobile footer must show color analysis first and keep remarks on the bottom of the card",
+  )
   assert.match(footerRowBlock, /block-size:\s*var\(--icono-label-mobile-footer-row-height\);/)
+  assert.match(
+    css,
+    /\.icono-card--variant-lab-label\.icono-card--brick\s*\.icono-label-dossier-shell\s*\.icono-label-specimen-footer\[data-icono-mobile-footer-relocated="true"\]\s*\{[\s\S]*--icono-label-specimen-row-gap:\s*0\.46rem;[\s\S]*grid-row:\s*1;/,
+    "color analysis footer must occupy the first post-clan tail track; remarks belong at the bottom",
+  )
+  const footerCopyBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-footer-copy",
+  )
+  assert.match(footerCopyBlock, /grid-row:\s*3;/)
   assert.match(
     css,
     /\.icono-card--variant-lab-label\.icono-card--brick \.icono-label-dossier-shell\s*\{[\s\S]*height:\s*auto;[\s\S]*min-block-size:\s*var\(--icono-label-mobile-dossier-height\);[\s\S]*overflow:\s*visible;/,
