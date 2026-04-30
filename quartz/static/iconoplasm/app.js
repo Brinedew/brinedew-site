@@ -5506,7 +5506,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function cacheActiveHomeView(root) {
     if (!root || !activeHomeHistorySnapshot || !root.querySelector("#icono-grid")) return false
-    syncHomeHistoryState(true)
     var fragment = document.createDocumentFragment()
     while (root.firstChild) {
       fragment.appendChild(root.firstChild)

@@ -606,6 +606,11 @@ test("same-session archive return reuses the live home view instead of rebuildin
   assert.notEqual(renderStart, -1, "missing render helper")
 
   const cacheBlock = app.slice(cacheStart, discardStart)
+  assert.doesNotMatch(
+    cacheBlock,
+    /syncHomeHistoryState\(true\)/,
+    "caching the home view happens after the URL has changed to the gene route, so it must not stamp home state onto the gene history entry",
+  )
   assert.match(cacheBlock, /document\.createDocumentFragment\(\)/)
   assert.match(cacheBlock, /while \(root\.firstChild\)[\s\S]*fragment\.appendChild\(root\.firstChild\)/)
   assert.match(cacheBlock, /snapshot: activeHomeHistorySnapshot/)
