@@ -2811,7 +2811,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
     var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
     var footer = card.querySelector(".icono-label-specimen-footer")
-    var alignmentBody = card.querySelector(".icono-label-dossier-shell .icono-label-alignment-body")
+    var footerRow = card.querySelector(".icono-label-dossier-shell .icono-label-footer-row")
     if (!footer || !portrait) return
 
     var footerAnchor = portrait.querySelector("[data-icono-specimen-footer-anchor]")
@@ -2822,10 +2822,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       portrait.insertBefore(footerAnchor, footer)
     }
 
-    if (isMobileReview && alignmentBody) {
-      // Mobile keeps one canonical footer node, but relocates it below Alignment so all
-      // color/decomposition material lives in the dossier tail instead of the portrait rail.
-      if (footer.parentElement !== alignmentBody) alignmentBody.appendChild(footer)
+    if (isMobileReview && footerRow) {
+      // Mobile keeps one canonical footer node, but it must remain a real printed sheet row.
+      // Relocating it inside Alignment made everything after PFAM/aesthetics visually vanish
+      // behind the fixed mobile grid.
+      if (footer.parentElement !== footerRow) footerRow.appendChild(footer)
       footer.setAttribute("data-icono-mobile-footer-relocated", "true")
       return
     }

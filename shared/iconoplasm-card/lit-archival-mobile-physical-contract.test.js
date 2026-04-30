@@ -507,6 +507,16 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   assert.match(css, /--icono-label-mobile-peek-height:\s*5\.25rem;/)
   assert.match(css, /--icono-label-mobile-style-row-height:\s*17\.8rem;/)
   assert.match(css, /--icono-label-mobile-alignment-row-height:\s*10\.7rem;/)
+  assert.match(
+    css,
+    /--icono-label-mobile-footer-row-height:\s*8\.2rem;/,
+    "expanded mobile cards must reserve a real printed row for remarks/color breakdown after alignment",
+  )
+  assert.match(
+    css,
+    /--icono-label-mobile-dossier-height:\s*calc\([\s\S]*var\(--icono-label-mobile-footer-row-height\)/,
+    "mobile dossier height must include the footer row; otherwise everything after PFAM/aesthetics can be clipped visually",
+  )
   const mobilePeekSummaryBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-summary",
@@ -590,10 +600,31 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     /position:\s*static;/,
     "alignment verdict handwriting must be in its own row, not absolutely crossing both typewritten options",
   )
+  const footerRowBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-footer-row",
+  )
+  assert.doesNotMatch(
+    footerRowBlock,
+    /display:\s*none;/,
+    "mobile must not hide the remarks/color breakdown row after alignment",
+  )
+  assert.match(footerRowBlock, /grid-row:\s*5;/)
+  assert.match(footerRowBlock, /block-size:\s*var\(--icono-label-mobile-footer-row-height\);/)
 })
 
 test("mobile infocard gestures keep voting and navigation isolated from the viewport toggle", async () => {
   const app = await sourceText(appPath)
+  assert.doesNotMatch(
+    app,
+    /alignmentBody\.appendChild\(footer\)/,
+    "mobile must not hide the footer inside the alignment block; the color breakdown needs its own visible printed row",
+  )
+  assert.match(
+    app,
+    /footerRow\.appendChild\(footer\)/,
+    "mobile should seat the canonical footer in the sheet footer row",
+  )
   assert.doesNotMatch(
     app,
     /portraitHotzone|icono-label-specimen-viewport,\s*\.iconoplasm-tooltip-portrait-media[\s\S]*setMobileLabelExpanded\(card,\s*true\)/,
