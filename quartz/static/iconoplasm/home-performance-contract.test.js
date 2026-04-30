@@ -29,6 +29,42 @@ test("home collection cards do not wait for public gallery counts before loading
   )
 })
 
+test("account collection first-card path uses a bounded gallery window for supported orders", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function loadNextGalleryPage()")
+  const end = app.indexOf("ensureCollectionReady()", start)
+  assert.notEqual(start, -1, "missing loadNextGalleryPage")
+  assert.notEqual(end, -1, "missing legacy collection branch boundary")
+  const firstWindowBlock = app.slice(start, end)
+
+  assert.match(app, /function fetchAccountGalleryWindow\(order, cursor, limit\)/)
+  assert.match(app, /\/api\/iconoplasm\/account-gallery-window\?order=/)
+  assert.match(firstWindowBlock, /accountGalleryWindowOrderSupported\(galleryState\.order\)/)
+  assert.match(firstWindowBlock, /fetchAccountGalleryWindow\(/)
+  assert.doesNotMatch(
+    firstWindowBlock,
+    /fetchHomeCollectionCounts\(\)/,
+    "first account window cards must not compete with public gallery count work",
+  )
+  assert.doesNotMatch(
+    firstWindowBlock,
+    /fetchDiscoveryState\(galleryState\.order, galleryState\.seed\)/,
+    "supported account-window orders should not fetch the whole discovery shelf before first cards",
+  )
+})
+
+test("account collection single-flights duplicate window requests", async () => {
+  const app = await readFile(appPath, "utf8")
+
+  assert.match(app, /var iconoplasmQueryInflight = new Map\(\)/)
+  assert.match(app, /function singleFlightQuery\(key, producer\)/)
+  assert.match(
+    app,
+    /singleFlightQuery\(\s*\["account-gallery-window", resolvedOrder, resolvedCursor, resolvedLimit\]\.join\(":\"\)/,
+    "account window requests need a stable same-key in-flight dedupe barrier",
+  )
+})
+
 test("desktop home collection masonry paints discovery rows before rich detail hydration", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadNextGalleryPage()")

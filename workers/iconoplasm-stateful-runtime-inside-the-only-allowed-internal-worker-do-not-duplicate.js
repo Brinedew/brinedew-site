@@ -332,6 +332,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return "site_gene_detail"
   if (path === "/api/iconoplasm/discoveries/encounter") return "discoveries_encounter"
   if (path === "/api/iconoplasm/discoveries/me") return "discoveries_me"
+  if (path === "/api/iconoplasm/account-gallery-window") return "account_gallery_window"
   if (path === "/api/iconoplasm/discoveries/merge") return "discoveries_merge"
   if (path === "/api/iconoplasm/requests") return "gene_request_submit"
   if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
@@ -3268,6 +3269,160 @@ async function listUserGeneDiscoveries(env, { userId, limit = 5000, order = "new
   )
 }
 
+const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v1"
+const ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = 48
+const ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS = new Set(["newest", "symbol"])
+
+function encodeAccountGalleryCursor(cursor) {
+  if (!cursor || typeof cursor !== "object") return ""
+  try {
+    return btoa(JSON.stringify(cursor))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/g, "")
+  } catch {
+    return ""
+  }
+}
+
+function decodeAccountGalleryCursor(raw) {
+  const value = sanitizeText(raw || "", 2048)
+  if (!value) return null
+  try {
+    const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(
+      Math.ceil(value.length / 4) * 4,
+      "=",
+    )
+    const parsed = JSON.parse(atob(padded))
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function accountGalleryWindowCursorForRow(row, order) {
+  const symbol = normalizeSymbol(row?.gene_symbol || "")
+  if (!symbol) return null
+  if (order === "symbol") {
+    return {
+      order,
+      symbol,
+    }
+  }
+  return {
+    order: "newest",
+    last_encountered_at: sanitizeText(row?.last_encountered_at || row?.first_discovered_at || "", 64) || "",
+    symbol,
+  }
+}
+
+async function listUserGeneDiscoveryWindow(
+  env,
+  { userId, limit = 24, order = "newest", cursor = null } = {},
+) {
+  if (!env.ICONOPLASM_DB) return { rows: [], hasMore: false, nextCursor: "" }
+  const userIdNorm = normalizeUserId(userId || "")
+  if (!userIdNorm || isGuestUserId(userIdNorm)) {
+    return { rows: [], hasMore: false, nextCursor: "" }
+  }
+  const resolvedOrder = normalizeIconoplasmHomeOrder(order, "newest")
+  if (!ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS.has(resolvedOrder)) {
+    return {
+      rows: [],
+      hasMore: false,
+      nextCursor: "",
+      unsupportedOrder: resolvedOrder,
+    }
+  }
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
+  )
+  const fetchLimit = cleanedLimit + 1
+  const decodedCursor = decodeAccountGalleryCursor(cursor)
+  const selectSql = `SELECT
+       d.*,
+       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name,
+       ge.weight_kg,
+       ge.age_years,
+       ge.leakage_percent AS uniqueness_rank,
+       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
+       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
+       COALESCE(gr.live_score, 0) AS image_score,
+       gr.live_created_at AS published_at,
+       gr.live_created_at AS asset_created_at
+     FROM icono_gene_discoveries d
+     LEFT JOIN icono_gene_essence ge
+       ON ge.gene_symbol = d.gene_symbol
+     LEFT JOIN icono_gene_catalog gc
+       ON gc.gene_symbol = d.gene_symbol
+     LEFT JOIN icono_admin_gene_rollup gr
+       ON gr.gene_symbol = d.gene_symbol
+     WHERE d.user_id = ?`
+  let rowsResult
+  if (resolvedOrder === "symbol") {
+    const cursorSymbol =
+      decodedCursor && decodedCursor.order === "symbol"
+        ? normalizeSymbol(decodedCursor.symbol || "")
+        : ""
+    const whereCursor = cursorSymbol ? " AND d.gene_symbol > ?" : ""
+    const sql = `${selectSql}${whereCursor}
+     ORDER BY d.gene_symbol ASC
+     LIMIT ?`
+    const statement = env.ICONOPLASM_DB.prepare(sql)
+    rowsResult = cursorSymbol
+      ? await statement.bind(userIdNorm, cursorSymbol, fetchLimit).all()
+      : await statement.bind(userIdNorm, fetchLimit).all()
+  } else {
+    const cursorTime =
+      decodedCursor && decodedCursor.order === "newest"
+        ? sanitizeText(decodedCursor.last_encountered_at || "", 64)
+        : ""
+    const cursorSymbol =
+      decodedCursor && decodedCursor.order === "newest"
+        ? normalizeSymbol(decodedCursor.symbol || "")
+        : ""
+    const whereCursor =
+      cursorTime && cursorSymbol
+        ? " AND (d.last_encountered_at < ? OR (d.last_encountered_at = ? AND d.gene_symbol > ?))"
+        : ""
+    const sql = `${selectSql}${whereCursor}
+     ORDER BY d.last_encountered_at DESC, d.gene_symbol ASC
+     LIMIT ?`
+    const statement = env.ICONOPLASM_DB.prepare(sql)
+    rowsResult =
+      cursorTime && cursorSymbol
+        ? await statement.bind(userIdNorm, cursorTime, cursorTime, cursorSymbol, fetchLimit).all()
+        : await statement.bind(userIdNorm, fetchLimit).all()
+  }
+  const allRows = (Array.isArray(rowsResult?.results) ? rowsResult.results : []).map(
+    mapGeneDiscoveryRow,
+  )
+  const pageRows = allRows.slice(0, cleanedLimit)
+  const hasMore = allRows.length > cleanedLimit
+  const lastRow = pageRows[pageRows.length - 1] || null
+  return {
+    rows: pageRows,
+    hasMore,
+    nextCursor: hasMore ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(lastRow, resolvedOrder)) : "",
+    unsupportedOrder: "",
+  }
+}
+
+async function countUserGeneDiscoveries(env, { userId } = {}) {
+  if (!env.ICONOPLASM_DB) return 0
+  const userIdNorm = normalizeUserId(userId || "")
+  if (!userIdNorm || isGuestUserId(userIdNorm)) return 0
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT COUNT(*) AS discovered_count
+     FROM icono_gene_discoveries
+     WHERE user_id = ?`,
+  )
+    .bind(userIdNorm)
+    .first()
+  return Math.max(0, Number(row?.discovered_count || 0) || 0)
+}
+
 async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000, order = "newest", seed = null } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
@@ -4402,6 +4557,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/votes/me") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/discoveries/encounter") return requestMethod === "POST"
   if (path === "/api/iconoplasm/discoveries/me") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/account-gallery-window") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/discoveries/merge") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/me") return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
@@ -16023,6 +16179,167 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           },
           200,
           { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/account-gallery-window" && request.method === "GET") {
+      if (!env.ICONOPLASM_DB) {
+        return done(
+          "account_gallery_window_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      }
+      const requestedOrder = normalizeIconoplasmHomeOrder(url.searchParams.get("order"), "newest")
+      if (!ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS.has(requestedOrder)) {
+        return done(
+          "account_gallery_window_order_409",
+          json(
+            {
+              ok: false,
+              code: "ORDER_INDEX_NOT_READY",
+              error:
+                "This order needs a per-user order index before it can be served as a bounded account gallery window.",
+              order: requestedOrder,
+              supported_orders: Array.from(ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS),
+            },
+            409,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "account_gallery_window_guest",
+          json(
+            {
+              ok: true,
+              schema: ACCOUNT_GALLERY_WINDOW_SCHEMA,
+              authenticated: false,
+              user: null,
+              order: requestedOrder,
+              vm_version: "",
+              items: [],
+              cards: [],
+              missing: [],
+              has_more: false,
+              next_cursor: "",
+              diagnostics: {
+                d1_composed: 0,
+                d1_window_rows: 0,
+                kv_snapshot_hits: 0,
+                kv_previous_hits: 0,
+                kv_keys_missing: 0,
+              },
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      const userId = normalizeUserId(sessionUser.user_id)
+      await ensureStarterGeneDiscoveries(env, { userId })
+      const cleanedLimit = Math.max(
+        1,
+        Math.min(
+          ACCOUNT_GALLERY_WINDOW_LIMIT_MAX,
+          Number.parseInt(String(url.searchParams.get("limit") || "24"), 10) || 24,
+        ),
+      )
+      const windowData = await listUserGeneDiscoveryWindow(env, {
+        userId,
+        order: requestedOrder,
+        limit: cleanedLimit,
+        cursor: url.searchParams.get("cursor") || "",
+      })
+      const discoveredCount = await countUserGeneDiscoveries(env, { userId })
+      const versionInfo = await currentMobileCardSnapshotVersion(env)
+      const snapshotVersion = versionInfo.current
+      const symbols = windowData.rows.map((row) => normalizeSymbol(row.gene_symbol || "")).filter(Boolean)
+      const vmResults = await Promise.all(
+        symbols.map(async (symbol) => {
+          const current = await readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol)
+          if (current) return { symbol, vm: current, source: "kv_snapshot" }
+          const previousVersion = versionInfo.previous
+          if (previousVersion) {
+            const previous = await readMobileCardVMFromSharedSnapshot(env, previousVersion, symbol)
+            if (previous) {
+              return {
+                symbol,
+                vm: {
+                  ...previous,
+                  data_source: "kv_previous",
+                },
+                source: "kv_previous",
+              }
+            }
+          }
+          return { symbol, vm: null, source: "missing" }
+        }),
+      )
+      const vmBySymbol = new Map()
+      let kvSnapshotHits = 0
+      let kvPreviousHits = 0
+      let kvKeysMissing = 0
+      const missing = []
+      for (const result of vmResults) {
+        if (result.vm) {
+          vmBySymbol.set(result.symbol, result.vm)
+          if (result.source === "kv_previous") kvPreviousHits += 1
+          else kvSnapshotHits += 1
+        } else {
+          kvKeysMissing += 1
+          missing.push(result.symbol)
+        }
+      }
+      const cards = []
+      const items = []
+      for (const row of windowData.rows) {
+        const symbol = normalizeSymbol(row.gene_symbol || "")
+        const vm = vmBySymbol.get(symbol)
+        if (vm) cards.push(vm)
+        items.push({
+          symbol,
+          discovery: row,
+          card: vm || null,
+        })
+      }
+      return done(
+        "account_gallery_window",
+        json(
+          {
+            ok: true,
+            schema: ACCOUNT_GALLERY_WINDOW_SCHEMA,
+            authenticated: true,
+            user: {
+              id: userId,
+              username: sessionUser.username || null,
+            },
+            order: requestedOrder,
+            discovered_count: discoveredCount,
+            vm_version: snapshotVersion,
+            items,
+            cards,
+            missing,
+            has_more: !!windowData.hasMore,
+            next_cursor: windowData.nextCursor || "",
+            diagnostics: {
+              d1_composed: 0,
+              d1_window_rows: windowData.rows.length,
+              requested_limit: cleanedLimit,
+              kv_snapshot_hits: kvSnapshotHits,
+              kv_previous_hits: kvPreviousHits,
+              kv_keys_missing: kvKeysMissing,
+              supported_orders: Array.from(ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS),
+            },
+          },
+          200,
+          {
+            "Cache-Control": "no-store",
+            "X-Iconoplasm-VM-Version": snapshotVersion,
+            "X-Iconoplasm-Data-Source": missing.length ? "mixed-or-missing" : "kv-snapshot",
+          },
         ),
       )
     }

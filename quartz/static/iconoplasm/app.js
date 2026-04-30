@@ -152,6 +152,23 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return fetchJSON(path, requestInit)
   }
 
+  var iconoplasmQueryInflight = new Map()
+
+  function singleFlightQuery(key, producer) {
+    var resolvedKey = String(key || "").trim()
+    if (!resolvedKey) return producer()
+    if (iconoplasmQueryInflight.has(resolvedKey)) {
+      return iconoplasmQueryInflight.get(resolvedKey)
+    }
+    var promise = Promise.resolve()
+      .then(producer)
+      .finally(function () {
+        iconoplasmQueryInflight.delete(resolvedKey)
+      })
+    iconoplasmQueryInflight.set(resolvedKey, promise)
+    return promise
+  }
+
   function fetchIconoplasmAdminState() {
     return fetch(API + "/api/iconoplasm/admin/me", {
       credentials: "include",
@@ -208,6 +225,31 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .catch(function () {
         return { total: 0, publishedTotal: 0 }
       })
+  }
+
+  function accountGalleryWindowOrderSupported(order) {
+    var resolved = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
+    return resolved === "newest" || resolved === "symbol"
+  }
+
+  function fetchAccountGalleryWindow(order, cursor, limit) {
+    var resolvedOrder = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
+    var resolvedCursor = String(cursor || "").trim()
+    var resolvedLimit = Math.max(1, Math.min(48, Number(limit || 24) || 24))
+    var path =
+      "/api/iconoplasm/account-gallery-window?order=" +
+      encodeURIComponent(resolvedOrder) +
+      "&limit=" +
+      encodeURIComponent(String(resolvedLimit))
+    if (resolvedCursor) {
+      path += "&cursor=" + encodeURIComponent(resolvedCursor)
+    }
+    return singleFlightQuery(
+      ["account-gallery-window", resolvedOrder, resolvedCursor, resolvedLimit].join(":"),
+      function () {
+        return fetchAuthedJSON(path)
+      },
+    )
   }
 
   /* ─── Utility ─── */
@@ -1210,7 +1252,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function buildCollectionSummaryMarkup(collectionState) {
-    var discoveredCount = Number(collectionState && collectionState.discoveryEntries.length) || 0
+    var discoveredCount =
+      Math.max(0, Number(collectionState && collectionState.discoveredCount) || 0) ||
+      Number(collectionState && collectionState.discoveryEntries.length) ||
+      0
     var totalCount = Math.max(0, Number((collectionState && collectionState.total) || 0) || 0)
     var progressPct =
       totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
@@ -4175,6 +4220,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       hasMore: false,
       seed: "",
       items: [],
+      windowCursor: "",
+      discoveredCount: 0,
       prefillTarget: HOME_COLLECTION_PAGE_SIZE,
       ready: false,
       readyPromise: null,
@@ -4237,6 +4284,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         }
         return GALLERY_PAGE_SIZE
       }
+      if (accountGalleryWindowOrderSupported(galleryState.order)) {
+        if (galleryState.offset === 0) {
+          return window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 12 : 24
+        }
+        return 48
+      }
       if (galleryState.offset === 0) return HOME_COLLECTION_INITIAL_PAGE_SIZE
       if (galleryState.offset < galleryState.prefillTarget) {
         return Math.max(1, galleryState.prefillTarget - galleryState.offset)
@@ -4274,6 +4327,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return
       }
       var discoveredCount = Number(galleryState.discoveryEntries.length || 0)
+      if (!discoveredCount) discoveredCount = Number(galleryState.discoveredCount || 0)
       var publishedCount = Number(galleryState.publishedTotal || 0)
       var totalCount = Number(galleryState.total || 0)
       iconoSidebarState.total = discoveredCount
@@ -4320,7 +4374,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           summaryEl.innerHTML = buildCollectionSummaryMarkup(galleryState)
         }
       }
-      var hasItems = !!galleryState.sortedDiscoveries.length
+      var hasItems =
+        !!galleryState.sortedDiscoveries.length ||
+        !!galleryState.items.length ||
+        Number(galleryState.discoveredCount || 0) > 0
       if (emptyEl) {
         if (!galleryState.ready || hasItems) {
           emptyEl.hidden = true
@@ -4333,7 +4390,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (grid) grid.hidden = galleryState.ready && !hasItems
       if (sentinelEl) sentinelEl.hidden = !galleryState.hasMore
       if (orderEl)
-        orderEl.disabled = !galleryState.ready || galleryState.sortedDiscoveries.length < 2
+        orderEl.disabled =
+          !galleryState.ready ||
+          Math.max(
+            Number(galleryState.discoveredCount || 0) || 0,
+            galleryState.sortedDiscoveries.length,
+            galleryState.items.length,
+          ) < 2
     }
 
     function ensureCollectionReady() {
@@ -4501,8 +4564,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             : newRandomSeed()
           : ""
       galleryState.items = []
+      galleryState.windowCursor = ""
+      galleryState.discoveredCount = 0
       galleryState.prefillTarget = Math.max(
-        useClassicGallery ? GALLERY_PAGE_SIZE : HOME_COLLECTION_PAGE_SIZE,
+        useClassicGallery
+          ? GALLERY_PAGE_SIZE
+          : accountGalleryWindowOrderSupported(resolvedOrder)
+            ? currentGalleryLimit() + 48
+            : HOME_COLLECTION_PAGE_SIZE,
         Number((restoreConfig && restoreConfig.loadedCount) || 0) || 0,
       )
       clearBackgroundPrefill()
@@ -4627,6 +4696,105 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             grid.setAttribute("aria-busy", "false")
             setLoadingState("Failed to load portraits.", true)
             console.error("[Iconoplasm] gallery load error:", err)
+          })
+          .finally(function () {
+            if (!renderDisposed && requestId === activeGalleryRequest) {
+              galleryState.loading = false
+            }
+        })
+        return
+      }
+      if (accountGalleryWindowOrderSupported(galleryState.order)) {
+        initialSharedSettingsPromise
+          .then(function () {
+            if (renderDisposed || requestId !== activeGalleryRequest) return null
+            return fetchAccountGalleryWindow(
+              galleryState.order,
+              galleryState.windowCursor,
+              pageLimit,
+            )
+          })
+          .then(function (data) {
+            if (!data || renderDisposed || requestId !== activeGalleryRequest) return
+            var isFirstPage = galleryState.offset === 0
+            var cards = Array.isArray(data && data.cards)
+              ? data.cards.map(function (vm) {
+                  return mobileCardPayloadFromVM(vm)
+                })
+              : []
+            var failures = Array.isArray(data && data.missing)
+              ? data.missing.map(function (symbol) {
+                  return { symbol: normalizedSymbol(symbol), reason: "manifest_missing" }
+                })
+              : []
+            var itemRows = Array.isArray(data && data.items) ? data.items : []
+            var discoveryRows = []
+            for (var i = 0; i < itemRows.length; i++) {
+              if (itemRows[i] && itemRows[i].discovery) discoveryRows.push(itemRows[i].discovery)
+            }
+            galleryState.ready = true
+            galleryState.authenticated = !!data.authenticated
+            galleryState.order = normalizeHomeCollectionOrder(data.order || galleryState.order)
+            galleryState.discoveredCount = Math.max(
+              0,
+              Number((data && data.discovered_count) || galleryState.discoveredCount || 0) || 0,
+            )
+            if (isFirstPage) {
+              galleryState.discoveryEntries = discoveryRows.slice()
+              galleryState.sortedDiscoveries = discoveryRows.slice()
+              grid.innerHTML = ""
+              grid.setAttribute("data-layout", homeLayout)
+              grid.setAttribute("aria-busy", "false")
+            } else {
+              galleryState.discoveryEntries = galleryState.discoveryEntries.concat(discoveryRows)
+              galleryState.sortedDiscoveries = galleryState.sortedDiscoveries.concat(discoveryRows)
+            }
+            galleryState.hasMore = !!(data && data.has_more)
+            galleryState.windowCursor = String((data && data.next_cursor) || "")
+            if (cards.length) {
+              var newCards = appendGrid(grid, cards, galleryState.items.length, homeLayout)
+              galleryState.items = galleryState.items.concat(cards)
+              destroyHomeMasonry()
+              warmBrickCardImages(galleryState.items)
+              wireBrickVoteBoxes(newCards)
+              wireMobileLabelCards(newCards)
+              refreshPortraitLightbox()
+            }
+            if (failures.length) {
+              console.error("[Iconoplasm] account gallery window VM failures:", failures)
+              appendMobileDataFailureTiles(grid, failures)
+            }
+            galleryState.offset += Math.max(itemRows.length, cards.length + failures.length)
+            if (
+              isFirstPage &&
+              galleryState.offset < galleryState.prefillTarget &&
+              galleryState.hasMore
+            ) {
+              clearBackgroundPrefill()
+              backgroundPrefillTimer = window.setTimeout(function () {
+                backgroundPrefillTimer = null
+                loadNextGalleryPage()
+              }, 140)
+            }
+            renderCollectionChrome()
+            syncHeroCount()
+            updateSentinelObserver()
+            setLoadingState("", false)
+            syncHomeHistoryState(false)
+            maybeRestoreHomeScroll()
+            if (orderEl && orderEl.value !== galleryState.order) {
+              orderEl.value = galleryState.order
+            }
+          })
+          .catch(function (err) {
+            if (renderDisposed || requestId !== activeGalleryRequest) return
+            grid.setAttribute("aria-busy", "false")
+            if (err && err.status === 409) {
+              setLoadingState("This sort needs a prepared account order index.", true)
+            } else {
+              setLoadingState("Failed to load your collection window.", true)
+            }
+            console.error("[Iconoplasm] account gallery window load error:", err)
           })
           .finally(function () {
             if (!renderDisposed && requestId === activeGalleryRequest) {
