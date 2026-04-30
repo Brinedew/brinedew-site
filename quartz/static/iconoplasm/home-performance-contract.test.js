@@ -65,6 +65,23 @@ test("account collection single-flights duplicate window requests", async () => 
   )
 })
 
+test("account collection does not immediately prefetch a second rich window", async () => {
+  const app = await readFile(appPath, "utf8")
+  const resetStart = app.indexOf("function resetGallery(order)")
+  const resetEnd = app.indexOf("function loadNextGalleryPage()", resetStart)
+  assert.notEqual(resetStart, -1, "missing resetGallery")
+  assert.notEqual(resetEnd, -1, "missing loadNextGalleryPage")
+  const resetBlock = app.slice(resetStart, resetEnd)
+
+  assert.match(resetBlock, /currentAccountGalleryWindowLimit\(\)/)
+  assert.doesNotMatch(
+    resetBlock,
+    /currentGalleryLimit\(\) \+ 48/,
+    "account-window first load must not schedule a hidden 48-card prefetch burst",
+  )
+  assert.match(app, /function currentAccountGalleryWindowLimit\(\)/)
+})
+
 test("desktop home collection masonry paints discovery rows before rich detail hydration", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadNextGalleryPage()")

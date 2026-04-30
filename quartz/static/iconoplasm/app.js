@@ -4276,6 +4276,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
     syncHomeModeChrome()
 
+    function currentAccountGalleryWindowLimit() {
+      return window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 12 : 24
+    }
+
     function currentGalleryLimit() {
       if (useClassicGallery) {
         if (galleryState.offset === 0) return GALLERY_INITIAL_PAGE_SIZE
@@ -4285,10 +4289,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return GALLERY_PAGE_SIZE
       }
       if (accountGalleryWindowOrderSupported(galleryState.order)) {
-        if (galleryState.offset === 0) {
-          return window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 12 : 24
-        }
-        return 48
+        return currentAccountGalleryWindowLimit()
       }
       if (galleryState.offset === 0) return HOME_COLLECTION_INITIAL_PAGE_SIZE
       if (galleryState.offset < galleryState.prefillTarget) {
@@ -4570,7 +4571,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         useClassicGallery
           ? GALLERY_PAGE_SIZE
           : accountGalleryWindowOrderSupported(resolvedOrder)
-            ? currentGalleryLimit() + 48
+            ? currentAccountGalleryWindowLimit()
             : HOME_COLLECTION_PAGE_SIZE,
         Number((restoreConfig && restoreConfig.loadedCount) || 0) || 0,
       )
