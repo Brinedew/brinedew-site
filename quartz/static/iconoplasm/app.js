@@ -27,6 +27,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 ;(function () {
   "use strict"
 
+  var ICONO_ARCHIVE_RESTORE_SESSION =
+    Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+  if (window.history && "scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual"
+  }
+
   var IconoCardShared = globalThis.IconoplasmCardShared
   if (!IconoCardShared) {
     throw new Error("[Iconoplasm] shared card runtime missing: load shared-card-runtime.js first")
@@ -4480,6 +4486,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     function snapshotHomeState() {
       return {
         order: galleryState.order,
+        restoreSession: ICONO_ARCHIVE_RESTORE_SESSION,
         seed: galleryState.seed,
         loadedCount: galleryState.offset,
         scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
@@ -5558,12 +5565,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!state || state.iconoplasmPage !== "home") return null
     var home = state.iconoplasmHome
     if (!home || typeof home !== "object") return null
+    if (home.restoreSession !== ICONO_ARCHIVE_RESTORE_SESSION) return null
     var order = normalizeHomeCollectionOrder(home.order || HOME_COLLECTION_DEFAULT_ORDER)
     var loadedCount = Number(home.loadedCount || 0)
     var scrollY = Number(home.scrollY || 0)
     if (!(loadedCount > 0 || scrollY > 0)) return null
     return {
       order: order,
+      restoreSession: ICONO_ARCHIVE_RESTORE_SESSION,
       seed: String(home.seed || ""),
       loadedCount: Number.isFinite(loadedCount) ? Math.max(0, Math.round(loadedCount)) : 0,
       scrollY: Number.isFinite(scrollY) ? Math.max(0, Math.round(scrollY)) : 0,
@@ -5595,7 +5604,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var nextState = { iconoplasm: true }
     var currentState = readHistoryState()
     var carriedHomeState =
-      currentState && currentState.iconoplasmHome && typeof currentState.iconoplasmHome === "object"
+      currentState &&
+      currentState.iconoplasmHome &&
+      typeof currentState.iconoplasmHome === "object" &&
+      currentState.iconoplasmHome.restoreSession === ICONO_ARCHIVE_RESTORE_SESSION
         ? currentState.iconoplasmHome
         : null
     if (path === "/" || path === "") {
@@ -5734,7 +5746,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!root) return
     startMobileLabelBreakpointObserver()
     startSharedIconoplasmSettingsAutoSync()
-    replaceHistoryStatePatch({})
+    var currentState = readHistoryState()
+    if (
+      currentState &&
+      currentState.iconoplasmHome &&
+      currentState.iconoplasmHome.restoreSession !== ICONO_ARCHIVE_RESTORE_SESSION
+    ) {
+      replaceHistoryStatePatch({ iconoplasmHome: null })
+    } else {
+      replaceHistoryStatePatch({})
+    }
     render()
     void refreshSharedUserState()
   }

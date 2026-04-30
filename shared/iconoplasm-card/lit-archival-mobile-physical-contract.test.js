@@ -518,6 +518,63 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
   )
 })
 
+test("mobile archive restoration is scoped to the current SPA session", async () => {
+  const app = await sourceText(appPath)
+
+  assert.match(
+    app,
+    /var ICONO_ARCHIVE_RESTORE_SESSION =[\s\S]*Date\.now\(\)\.toString\(36\)[\s\S]*Math\.random\(\)\.toString\(36\)/,
+    "archive scroll restoration needs a runtime-only session key so reloads cannot replay old card-stack camera state",
+  )
+  assert.match(
+    app,
+    /history\.scrollRestoration = "manual"/,
+    "the app should own restoration policy instead of letting the browser resurrect stale deep scroll on reload",
+  )
+
+  const snapshotStart = app.indexOf("function snapshotHomeState")
+  const snapshotEnd = app.indexOf("function resetGallery", snapshotStart)
+  assert.notEqual(snapshotStart, -1, "missing home snapshot helper")
+  assert.notEqual(snapshotEnd, -1, "missing home snapshot helper boundary")
+  const snapshotBlock = app.slice(snapshotStart, snapshotEnd)
+  assert.match(snapshotBlock, /restoreSession: ICONO_ARCHIVE_RESTORE_SESSION/)
+  assert.match(snapshotBlock, /loadedCount: galleryState\.offset/)
+  assert.match(snapshotBlock, /scrollY: Math\.max/)
+
+  const restoreStart = app.indexOf("function readHomeRestoreState")
+  const restoreEnd = app.indexOf("function captureHomeAnchor", restoreStart)
+  assert.notEqual(restoreStart, -1, "missing home restore helper")
+  assert.notEqual(restoreEnd, -1, "missing home restore helper boundary")
+  const restoreBlock = app.slice(restoreStart, restoreEnd)
+  assert.match(
+    restoreBlock,
+    /home\.restoreSession !== ICONO_ARCHIVE_RESTORE_SESSION\) return null/,
+    "fresh reloads must reject old persisted scroll state, while same-session Back can still restore",
+  )
+  assert.match(restoreBlock, /loadedCount/)
+  assert.match(restoreBlock, /scrollY/)
+
+  const navigationStart = app.indexOf("function buildNavigationState")
+  const navigationEnd = app.indexOf("function navigateTo", navigationStart)
+  assert.notEqual(navigationStart, -1, "missing navigation-state helper")
+  assert.notEqual(navigationEnd, -1, "missing navigation-state helper boundary")
+  const navigationBlock = app.slice(navigationStart, navigationEnd)
+  assert.match(navigationBlock, /restoreSession === ICONO_ARCHIVE_RESTORE_SESSION/)
+  assert.match(navigationBlock, /nextState\.iconoplasmHome = carriedHomeState/)
+  assert.doesNotMatch(navigationBlock, /iconoplasmHome = null/)
+
+  const initStart = app.indexOf("function init()")
+  const initEnd = app.indexOf("// Quartz uses SPA navigation", initStart)
+  assert.notEqual(initStart, -1, "missing init helper")
+  assert.notEqual(initEnd, -1, "missing init helper boundary")
+  const initBlock = app.slice(initStart, initEnd)
+  assert.match(
+    initBlock,
+    /currentState\.iconoplasmHome\.restoreSession !== ICONO_ARCHIVE_RESTORE_SESSION[\s\S]*replaceHistoryStatePatch\(\{ iconoplasmHome: null \}\)/,
+    "stale history-state scroll should be cleared on normal startup, not replayed through async archive loading",
+  )
+})
+
 test("mobile card uses the larger B-483 type scale instead of the tiny draft scale", async () => {
   const css = await sourceText(cssPath)
   const cardStart = css.indexOf(".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has four text voices")
