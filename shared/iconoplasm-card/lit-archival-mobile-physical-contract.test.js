@@ -494,12 +494,13 @@ test("mobile card uses the larger B-483 type scale instead of the tiny draft sca
   assert.match(tokenBlock, /--icono-label-mobile-typewriter-size:\s*1\.008rem;/)
   assert.match(
     tokenBlock,
-    /--icono-label-mobile-hand-size:\s*var\(--icono-label-mobile-typewriter-size\);/,
-    "mobile handwriting and typewriting share one card text size; only voice/rotation differs",
+    /--icono-label-mobile-hand-size:\s*1\.28rem;/,
+    "mobile handwriting needs one readable Caveat size; it must not be collapsed to the typewriter size",
   )
   assert.match(tokenBlock, /--icono-label-mobile-label-size:\s*0\.52rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-typewriter-size:\s*0\.672rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-hand-size:\s*1\.8rem;/)
+  assert.doesNotMatch(tokenBlock, /--icono-label-mobile-hand-size:\s*var\(--icono-label-mobile-typewriter-size\);/)
   const labMobileEnd = css.indexOf(".icono-card--variant-neo-drab.icono-card--brick", cardEnd)
   assert.notEqual(labMobileEnd, -1, "missing lab mobile typography block end")
   const labMobileTypography = css.slice(cardEnd, labMobileEnd)
