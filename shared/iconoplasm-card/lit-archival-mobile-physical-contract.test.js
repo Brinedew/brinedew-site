@@ -587,6 +587,54 @@ test("mobile archive restoration is scoped to the current SPA session", async ()
   )
 })
 
+test("same-session archive return reuses the live home view instead of rebuilding before scroll", async () => {
+  const app = await sourceText(appPath)
+
+  assert.match(
+    app,
+    /var cachedHomeView = null/,
+    "same-session gene returns need an in-memory home view cache, not just saved scroll numbers",
+  )
+
+  const cacheStart = app.indexOf("function cacheActiveHomeView")
+  const discardStart = app.indexOf("function discardCachedHomeView", cacheStart)
+  const restoreStart = app.indexOf("function restoreCachedHomeView", discardStart)
+  const renderStart = app.indexOf("function render()", restoreStart)
+  assert.notEqual(cacheStart, -1, "missing home-view cache helper")
+  assert.notEqual(discardStart, -1, "missing cached home discard helper")
+  assert.notEqual(restoreStart, -1, "missing cached home restore helper")
+  assert.notEqual(renderStart, -1, "missing render helper")
+
+  const cacheBlock = app.slice(cacheStart, discardStart)
+  assert.match(cacheBlock, /document\.createDocumentFragment\(\)/)
+  assert.match(cacheBlock, /while \(root\.firstChild\)[\s\S]*fragment\.appendChild\(root\.firstChild\)/)
+  assert.match(cacheBlock, /snapshot: activeHomeHistorySnapshot/)
+  assert.match(cacheBlock, /cleanup: activeHomeRenderCleanup/)
+  assert.match(cacheBlock, /activeHomeHistorySnapshot = null/)
+  assert.match(cacheBlock, /activeHomeRenderCleanup = null/)
+
+  const restoreBlock = app.slice(restoreStart, renderStart)
+  assert.match(restoreBlock, /root\.appendChild\(cachedHomeView\.fragment\)/)
+  assert.match(restoreBlock, /activeHomeHistorySnapshot = cachedHomeView\.snapshot/)
+  assert.match(restoreBlock, /activeHomeRenderCleanup = cachedHomeView\.cleanup/)
+  assert.match(restoreBlock, /window\.scrollTo\(0, targetY\)/)
+  assert.doesNotMatch(
+    restoreBlock,
+    /renderHome\(root, restoreState\)|loadNextGalleryPage\(/,
+    "restoring the cached archive should not refetch/rebuild before the scroll position exists",
+  )
+
+  const renderEnd = app.indexOf("/* ─── Event delegation for internal links ─── */", renderStart)
+  const renderBlock = app.slice(renderStart, renderEnd)
+  assert.match(
+    renderBlock,
+    /route\.page === "home" && restoreCachedHomeView\(root, homeRestoreState\)[\s\S]*return/,
+    "Back to the archive should reattach the preserved view before the normal home rebuild path",
+  )
+  assert.match(renderBlock, /route\.page !== "home" \? cacheActiveHomeView\(root\) : false/)
+  assert.match(renderBlock, /if \(!cachedCurrentHome\)[\s\S]*clearActiveHomeRenderState\(\)/)
+})
+
 test("mobile card uses the larger B-483 type scale instead of the tiny draft scale", async () => {
   const css = await sourceText(cssPath)
   const cardStart = css.indexOf(".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has four text voices")

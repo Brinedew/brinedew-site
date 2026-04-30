@@ -5438,6 +5438,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var activeHomeRenderCleanup = null
   var queuedHomeHistorySync = null
   var pendingHomeAnchor = null
+  var cachedHomeView = null
   var mobileLabelReviewMode = false
   var mobileLabelBreakpointObserverStarted = false
   var queuedMobileLabelBreakpointRefresh = false
@@ -5501,6 +5502,51 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       activeHomeRenderCleanup = null
       cleanup()
     }
+  }
+
+  function cacheActiveHomeView(root) {
+    if (!root || !activeHomeHistorySnapshot || !root.querySelector("#icono-grid")) return false
+    syncHomeHistoryState(true)
+    var fragment = document.createDocumentFragment()
+    while (root.firstChild) {
+      fragment.appendChild(root.firstChild)
+    }
+    cachedHomeView = {
+      fragment: fragment,
+      cleanup: activeHomeRenderCleanup,
+      snapshot: activeHomeHistorySnapshot,
+      scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
+    }
+    activeHomeHistorySnapshot = null
+    activeHomeRenderCleanup = null
+    return true
+  }
+
+  function discardCachedHomeView() {
+    if (!cachedHomeView) return
+    var cleanup = cachedHomeView.cleanup
+    cachedHomeView = null
+    if (typeof cleanup === "function") {
+      cleanup()
+    }
+  }
+
+  function restoreCachedHomeView(root, restoreState) {
+    if (!root || !cachedHomeView || !restoreState) return false
+    destroyCandidateMasonry()
+    root.textContent = ""
+    root.appendChild(cachedHomeView.fragment)
+    activeHomeHistorySnapshot = cachedHomeView.snapshot
+    activeHomeRenderCleanup = cachedHomeView.cleanup
+    var targetY = Math.max(0, Number(restoreState.scrollY || cachedHomeView.scrollY || 0) || 0)
+    cachedHomeView = null
+    lastRenderedPath = window.location.pathname + window.location.search
+    iconoSidebarState.page = "home"
+    renderIconoplasmSidebar()
+    refreshPortraitLightbox()
+    window.scrollTo(0, targetY)
+    syncHomeHistoryState(false)
+    return true
   }
 
   function reconcileMobileLabelBreakpoint() {
@@ -5637,12 +5683,22 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var root = document.getElementById(ROOT_ID)
     if (!root) return
     mobileLabelReviewMode = isMobileLabelReviewEnabled()
-    clearActiveHomeRenderState()
-    lastRenderedPath = window.location.pathname + window.location.search
-    destroyHomeMasonry()
-    destroyCandidateMasonry()
     var route = getRoute()
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
+    if (route.page === "home" && restoreCachedHomeView(root, homeRestoreState)) {
+      document.title = "Iconoplasm - Mnemonics for genes"
+      return
+    }
+    if (route.page === "home" && cachedHomeView && !homeRestoreState) {
+      discardCachedHomeView()
+    }
+    var cachedCurrentHome = route.page !== "home" ? cacheActiveHomeView(root) : false
+    if (!cachedCurrentHome) {
+      clearActiveHomeRenderState()
+      destroyHomeMasonry()
+    }
+    lastRenderedPath = window.location.pathname + window.location.search
+    destroyCandidateMasonry()
     // Update page title
     if (route.page === "home") {
       document.title = "Iconoplasm - Mnemonics for genes"
