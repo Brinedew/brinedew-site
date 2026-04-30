@@ -411,7 +411,11 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   )
   assert.match(tabBlock, /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/)
   assert.match(tabBlock, /font-family:\s*"League Spartan";/)
-  assert.match(tabBlock, /font-size:\s*1\.14rem;/, "B-483 requires the mobile gene symbol scale to be bumped")
+  assert.match(
+    tabBlock,
+    /font-size:\s*var\(--icono-label-mobile-tab-symbol-size\);/,
+    "mobile gene symbol scale must come from the tab typography token",
+  )
   assert.match(tabBlock, /align-items:\s*center;/, "tab symbol should sit optically centered in the tab face")
   assert.match(
     tabBlock,
@@ -481,24 +485,34 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
 
 test("mobile card uses the larger B-483 type scale instead of the tiny draft scale", async () => {
   const css = await sourceText(cssPath)
-  const cardStart = css.indexOf(".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has only two writing systems:")
+  const cardStart = css.indexOf(".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has four text voices")
   assert.notEqual(cardStart, -1, "missing mobile typography token block")
   const cardEnd = css.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name", cardStart)
   assert.notEqual(cardEnd, -1, "missing mobile typography token block end")
   const tokenBlock = css.slice(cardStart, cardEnd)
+  assert.match(tokenBlock, /--icono-label-mobile-tab-symbol-size:\s*1\.14rem;/)
   assert.match(tokenBlock, /--icono-label-mobile-typewriter-size:\s*1\.008rem;/)
   assert.match(
     tokenBlock,
     /--icono-label-mobile-hand-size:\s*var\(--icono-label-mobile-typewriter-size\);/,
     "mobile handwriting and typewriting share one card text size; only voice/rotation differs",
   )
+  assert.match(tokenBlock, /--icono-label-mobile-label-size:\s*0\.52rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-typewriter-size:\s*0\.672rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-hand-size:\s*1\.8rem;/)
+  const labMobileEnd = css.indexOf(".icono-card--variant-neo-drab.icono-card--brick", cardEnd)
+  assert.notEqual(labMobileEnd, -1, "missing lab mobile typography block end")
+  const labMobileTypography = css.slice(cardEnd, labMobileEnd)
+  assert.doesNotMatch(
+    labMobileTypography,
+    /font-size:\s*(?:0\.33|0\.36|0\.38|0\.46|0\.52|0\.58|0\.61|0\.78|0\.88|1\.14|1\.24|1\.28)rem;/,
+    "mobile lab-label card text must use the four typography tokens instead of local font-size exceptions",
+  )
   const voteButtonBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn",
   )
-  assert.match(voteButtonBlock, /font-size:\s*0\.78rem;/)
+  assert.match(voteButtonBlock, /font-size:\s*var\(--icono-label-mobile-typewriter-size\);/)
   assert.match(voteButtonBlock, /min-height:\s*1\.24rem;/)
   assert.doesNotMatch(voteButtonBlock, /font-size:\s*0\.52rem;/)
   const voteArrowBlock = cssBlockFor(
@@ -659,8 +673,8 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   const specimenNoteBlock = specimenNoteMatch[0]
   assert.match(
     specimenNoteBlock,
-    /font-size:\s*var\(--icono-label-mobile-typewriter-size\);/,
-    "emulsion note is typewritten card text and must not use a smaller web-label size",
+    /font-size:\s*var\(--icono-label-mobile-label-size\);/,
+    "emulsion note is an IBM label/caption and must use the one mobile label size",
   )
   assert.match(specimenNoteBlock, /white-space:\s*normal;/)
   assert.match(specimenNoteBlock, /max-width:\s*100%;/)

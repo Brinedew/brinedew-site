@@ -1507,14 +1507,16 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick {
-    /* Mobile archival card has only two writing systems:
-       - one typewriter voice
-       - one handwritten voice
-       Both voices use the same mobile size; handwriting may float, rotate, and spill, but it
-       must not become a different scale or decide the section height. Only the small sans
-       captions may vary independently. */
+    /* Mobile archival card has four text voices, each with one size:
+       - tab symbol: League Spartan
+       - typewritten values: Special Elite
+       - handwritten annotations: Caveat
+       - labels/captions: IBM Plex Mono
+       Do not reintroduce per-field font-size drift inside those voices. */
+    --icono-label-mobile-tab-symbol-size: 1.14rem;
     --icono-label-mobile-typewriter-size: 1.008rem;
     --icono-label-mobile-hand-size: var(--icono-label-mobile-typewriter-size);
+    --icono-label-mobile-label-size: 0.52rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name,
@@ -1644,7 +1646,7 @@
     background: transparent;
     overflow: visible;
     font-family: "League Spartan";
-    font-size: 1.14rem;
+    font-size: var(--icono-label-mobile-tab-symbol-size);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab::before,
@@ -1662,7 +1664,7 @@
     white-space: nowrap;
     color: var(--icono-label-ink);
     font-family: "League Spartan";
-    font-size: 1.14rem;
+    font-size: var(--icono-label-mobile-tab-symbol-size);
     font-weight: 800;
     line-height: 0.96;
     letter-spacing: 0.08em;
@@ -1693,7 +1695,7 @@
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe-stamp {
     color: color-mix(in srgb, var(--icono-label-ink) 70%, transparent);
     font-family: var(--icono-label-type);
-    font-size: 0.61rem;
+    font-size: var(--icono-label-mobile-label-size);
     letter-spacing: 0.14em;
     line-height: 1.05;
     text-transform: uppercase;
@@ -1763,7 +1765,7 @@
     width: 100%;
     min-width: 0;
     padding: 0 0 0.01rem;
-    font-size: 0.78rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1;
     letter-spacing: 0.08em;
   }
@@ -2076,7 +2078,7 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-row-label {
-    font-size: 0.38rem;
+    font-size: var(--icono-label-mobile-label-size);
     letter-spacing: 0.16em;
     line-height: 1.12;
   }
@@ -2102,7 +2104,7 @@
     .icono-label-dossier-shell
     .icono-label-registry-line {
     margin-top: 0.12rem;
-    font-size: 0.33rem;
+    font-size: var(--icono-label-mobile-label-size);
     line-height: 1.2;
   }
 
@@ -2223,7 +2225,7 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-qc-meta-item {
-    font-size: 0.46rem;
+    font-size: var(--icono-label-mobile-label-size);
     letter-spacing: 0.12em;
   }
 
@@ -2681,7 +2683,7 @@
     .icono-label-inline-note--spectral {
     padding-top: 0.28rem;
     border-top: 1px dashed color-mix(in srgb, var(--icono-label-ink) 22%, transparent);
-    font-size: 0.46rem;
+    font-size: var(--icono-label-mobile-label-size);
     line-height: 1.22;
   }
 
@@ -2725,7 +2727,7 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-note {
-    font-size: var(--icono-label-mobile-typewriter-size);
+    font-size: var(--icono-label-mobile-label-size);
     line-height: 1.08;
     letter-spacing: 0.03em;
     max-width: 100%;
@@ -2810,7 +2812,7 @@
     grid-auto-flow: column;
     align-items: center;
     gap: calc(4 / 1220 * 100cqw);
-    font-size: 0.58rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1.08;
     grid-column: 1 / span 2;
     justify-self: start;
@@ -2830,7 +2832,7 @@
     .icono-label-specimen-color-name {
     grid-column: 3;
     justify-self: start;
-    font-size: 1.28rem;
+    font-size: var(--icono-label-mobile-hand-size);
     line-height: 0.9;
     transform: translateY(-0.02rem) rotate(-2.5deg);
     transform-origin: left top;
@@ -2910,7 +2912,7 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-metric {
-    font-size: 0.52rem;
+    font-size: var(--icono-label-mobile-label-size);
     line-height: 1.08;
   }
 
@@ -2918,7 +2920,7 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-metric-value {
-    font-size: 0.88rem;
+    font-size: var(--icono-label-mobile-typewriter-size);
     line-height: 1.08;
     text-align: center;
   }
@@ -2927,7 +2929,7 @@
     .icono-label-dossier-shell
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-hand-analysis {
-    font-size: 1.24rem;
+    font-size: var(--icono-label-mobile-hand-size);
     line-height: 0.9;
     margin-inline-end: 0;
     transform: translateY(-0.04rem) rotate(-2.5deg);
@@ -2989,7 +2991,7 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-footer-line--caption {
-    font-size: 0.38rem;
+    font-size: var(--icono-label-mobile-label-size);
     line-height: 1.08;
     letter-spacing: 0.07em;
   }
