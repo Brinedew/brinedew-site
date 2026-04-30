@@ -494,8 +494,8 @@ test("mobile card uses the larger B-483 type scale instead of the tiny draft sca
   assert.match(tokenBlock, /--icono-label-mobile-typewriter-size:\s*1\.008rem;/)
   assert.match(
     tokenBlock,
-    /--icono-label-mobile-hand-size:\s*1\.28rem;/,
-    "mobile handwriting needs one readable Caveat size; it must not be collapsed to the typewriter size",
+    /--icono-label-mobile-hand-size:\s*1\.55rem;/,
+    "mobile handwriting needs one readable Caveat display size; it must not be collapsed toward the typewriter size",
   )
   assert.match(tokenBlock, /--icono-label-mobile-label-size:\s*0\.52rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-typewriter-size:\s*0\.672rem;/)
