@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const appPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js")
+const headPath = path.join(repoRoot, "quartz", "components", "Head.tsx")
 const cssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css")
 const runtimePath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js")
 const litCardPath = path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js")
@@ -520,6 +521,7 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
 
 test("mobile archive restoration is scoped to the current SPA session", async () => {
   const app = await sourceText(appPath)
+  const head = await sourceText(headPath)
 
   assert.match(
     app,
@@ -529,7 +531,17 @@ test("mobile archive restoration is scoped to the current SPA session", async ()
   assert.match(
     app,
     /history\.scrollRestoration = "manual"/,
-    "the app should own restoration policy instead of letting the browser resurrect stale deep scroll on reload",
+    "the app bundle should keep owning restoration policy for SPA rerenders",
+  )
+  assert.match(
+    head,
+    /iconoplasmBootstrapScript[\s\S]*history\.scrollRestoration = "manual"/,
+    "the head bootstrap must disable browser auto scroll restoration before the late app bundle can run",
+  )
+  assert.match(
+    head,
+    /iconoplasmFreshState\.iconoplasmHome = null[\s\S]*window\.history\.replaceState\(iconoplasmFreshState[\s\S]*window\.scrollTo\(0, 0\)[\s\S]*document\.documentElement\.scrollTop = 0/,
+    "a fresh home page load should clear stale archive camera state in the earliest bootstrap, before async card layout can inherit it",
   )
 
   const snapshotStart = app.indexOf("function snapshotHomeState")

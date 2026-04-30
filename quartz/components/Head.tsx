@@ -40,6 +40,31 @@ export default (() => {
     const iconoplasmBootstrapScript = isIconoplasm
       ? `(() => {
   if (typeof window === "undefined" || window.__iconoplasmBootstrap) return
+  if (window.history && "scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual"
+  }
+  var iconoplasmStartupPath = window.location.pathname || "/"
+  var iconoplasmStartupState =
+    window.history && window.history.state && typeof window.history.state === "object"
+      ? window.history.state
+      : null
+  if (
+    (iconoplasmStartupPath === "/" || iconoplasmStartupPath === "") &&
+    iconoplasmStartupState &&
+    iconoplasmStartupState.iconoplasmPage === "home" &&
+    iconoplasmStartupState.iconoplasmHome
+  ) {
+    var iconoplasmFreshState = {}
+    for (var iconoplasmStateKey in iconoplasmStartupState) {
+      if (Object.prototype.hasOwnProperty.call(iconoplasmStartupState, iconoplasmStateKey)) {
+        iconoplasmFreshState[iconoplasmStateKey] = iconoplasmStartupState[iconoplasmStateKey]
+      }
+    }
+    iconoplasmFreshState.iconoplasmHome = null
+    window.history.replaceState(iconoplasmFreshState, "", window.location.href)
+    window.scrollTo(0, 0)
+    document.documentElement.scrollTop = 0
+  }
   window.__iconoSiteOwnsSharedRuntime = true
   if (
     window.IconoplasmCardShared &&
