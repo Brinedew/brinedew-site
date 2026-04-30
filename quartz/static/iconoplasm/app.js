@@ -2782,6 +2782,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ? toPhysicalCardPx(voteRect.bottom - cardRect.top) + 16
       : dossierTop + toPhysicalCardPx(peekRect.height) + 12
     var fullInfoHeight = Math.max(toPhysicalCardPx(peekRect.height))
+    if (infoCard.scrollHeight) {
+      fullInfoHeight = Math.max(fullInfoHeight, toPhysicalCardPx(infoCard.scrollHeight))
+    }
     var measuredContent = infoCard.querySelectorAll(
       [
         ".icono-label-mobile-peek",
@@ -2789,6 +2792,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         ".icono-label-band-row",
         ".icono-label-style-row",
         ".icono-label-alignment-row",
+        ".icono-label-footer-row",
         ".icono-label-specimen-footer",
       ].join(", "),
     )

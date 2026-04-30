@@ -444,13 +444,19 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
   assert.match(geometry, /--icono-label-mobile-viewport-height/)
   assert.match(geometry, /voteRect[\s\S]*\? toPhysicalCardPx\(voteRect\.bottom - cardRect\.top\) \+ 16/)
   assert.match(geometry, /fullInfoHeight = Math\.max\(toPhysicalCardPx\(peekRect\.height\)/)
+  assert.match(
+    geometry,
+    /infoCard\.scrollHeight[\s\S]*fullInfoHeight = Math\.max\(fullInfoHeight, toPhysicalCardPx\(infoCard\.scrollHeight\)\)/,
+    "open viewport must include the full rendered sheet height; selector-only endpoint checks missed the visible tail clipping",
+  )
   assert.match(geometry, /measuredContent = infoCard\.querySelectorAll/)
+  assert.match(geometry, /\.icono-label-footer-row/)
   assert.match(geometry, /toPhysicalCardPx\(measuredRect\.bottom - infoRect\.top\)/)
   assert.match(geometry, /dossierTop \+ fullInfoHeight/)
   assert.doesNotMatch(
     geometry,
-    /infoCard\.scrollHeight|infoCard\.offsetHeight|icono-label-dossier-shell|icono-label-dossier-sheet/,
-    "open viewport height must follow meaningful content endpoints, not stretching grid shells",
+    /infoCard\.offsetHeight|icono-label-dossier-shell|icono-label-dossier-sheet/,
+    "open viewport height must not follow stretching grid shells",
   )
   assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 320\)/)
   assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 720\)/)
