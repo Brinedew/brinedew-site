@@ -1317,8 +1317,8 @@
     --icono-label-mobile-band-row-height: 4.6rem;
     --icono-label-mobile-header-row-height: 2.16rem;
     --icono-label-mobile-style-row-height: 17.8rem;
-    --icono-label-mobile-alignment-row-height: 10.7rem;
-    --icono-label-mobile-footer-row-height: 17.2rem;
+    --icono-label-mobile-alignment-row-height: 4.9rem;
+    --icono-label-mobile-footer-row-height: 13.3rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
        - the tab must not read as angular, asymmetric, or "windows 98"; it needs the same softer archival taste as the desktop card
@@ -2001,6 +2001,8 @@
     .icono-label-dossier-shell
     .icono-label-alignment-row {
     grid-row: 4;
+    grid-template-rows: min-content min-content;
+    align-content: start;
     min-block-size: var(--icono-label-mobile-alignment-row-height);
     block-size: var(--icono-label-mobile-alignment-row-height);
     overflow: visible;
@@ -2025,7 +2027,8 @@
     grid-row: 5;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) min-content 3.72rem;
+    grid-template-rows: min-content min-content 3.72rem;
+    align-content: start;
     min-block-size: var(--icono-label-mobile-footer-row-height);
     block-size: var(--icono-label-mobile-footer-row-height);
     overflow: visible;

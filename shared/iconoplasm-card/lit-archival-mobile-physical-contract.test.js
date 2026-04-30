@@ -512,11 +512,15 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   )
   assert.match(css, /--icono-label-mobile-peek-height:\s*5\.25rem;/)
   assert.match(css, /--icono-label-mobile-style-row-height:\s*17\.8rem;/)
-  assert.match(css, /--icono-label-mobile-alignment-row-height:\s*10\.7rem;/)
   assert.match(
     css,
-    /--icono-label-mobile-footer-row-height:\s*17\.2rem;/,
-    "expanded mobile cards must reserve a real printed row for remarks/color breakdown after alignment",
+    /--icono-label-mobile-alignment-row-height:\s*4\.9rem;/,
+    "alignment is a compact printed field, not a tall blank tab",
+  )
+  assert.match(
+    css,
+    /--icono-label-mobile-footer-row-height:\s*13\.3rem;/,
+    "expanded mobile cards must reserve a compact real printed row for remarks/color breakdown after alignment",
   )
   assert.match(
     css,
@@ -597,6 +601,16 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-grid",
   )
   assert.match(alignmentGridBlock, /grid-template-rows:\s*0\.86rem 0\.86rem;/)
+  const alignmentRowBlock = cssBlockFor(
+    css,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-row",
+  )
+  assert.match(
+    alignmentRowBlock,
+    /grid-template-rows:\s*min-content min-content;/,
+    "alignment label/body rows must not stretch into giant blank tabs",
+  )
+  assert.match(alignmentRowBlock, /align-content:\s*start;/)
   const politicsBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-alignment-grid\n    .icono-label-hand-note--politics",
@@ -618,8 +632,13 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   assert.match(footerRowBlock, /grid-row:\s*5;/)
   assert.match(
     footerRowBlock,
-    /grid-template-rows:\s*minmax\(0,\s*1fr\) min-content 3\.72rem;/,
+    /grid-template-rows:\s*min-content min-content 3\.72rem;/,
     "post-clan mobile footer must show color analysis first and keep remarks on the bottom of the card",
+  )
+  assert.match(
+    footerRowBlock,
+    /align-content:\s*start;/,
+    "the emulsion/color analysis field must not stretch to fill a tall blank footer tab",
   )
   assert.match(footerRowBlock, /block-size:\s*var\(--icono-label-mobile-footer-row-height\);/)
   assert.match(
