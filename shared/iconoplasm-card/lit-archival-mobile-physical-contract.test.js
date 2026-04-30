@@ -634,8 +634,23 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
   )
   assert.match(
     css,
+    /\.icono-label-specimen-notes\s*\{[\s\S]*grid-row:\s*1;/,
+    "mobile color-analysis header must sit above the swatch and metric rows",
+  )
+  assert.match(
+    css,
+    /\.icono-label-specimen-color-row\s*\{[\s\S]*grid-row:\s*2;/,
+    "mobile swatch/hex/name row must sit directly below the color-analysis header",
+  )
+  assert.match(
+    css,
     /\.icono-label-specimen-decomposition\s*\{[\s\S]*display:\s*contents;/,
     "mobile color decomposition rows should participate in the parent table grid instead of nesting a misaligned table",
+  )
+  assert.match(
+    css,
+    /\.icono-label-specimen-cell--row-1\s*\{[\s\S]*grid-row:\s*3;/,
+    "first metric row must start below the swatch row",
   )
   const footerCopyBlock = cssBlockFor(
     css,

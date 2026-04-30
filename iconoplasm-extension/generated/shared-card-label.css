@@ -2693,7 +2693,7 @@
       var(--icono-label-specimen-metric-col)
       var(--icono-label-specimen-value-col)
       var(--icono-label-specimen-hand-col);
-    grid-template-rows: min-content min-content;
+    grid-template-rows: min-content min-content repeat(3, min-content);
     align-content: start;
     margin-top: 0;
     column-gap: var(--icono-label-specimen-column-gap);
@@ -2707,7 +2707,7 @@
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-notes {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 1;
     display: grid;
     gap: 0.12rem;
   }
@@ -2738,7 +2738,7 @@
     .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
     .icono-label-specimen-color-row {
     grid-column: 1 / -1;
-    grid-row: 1;
+    grid-row: 2;
     display: grid;
     grid-template-columns:
       var(--icono-label-specimen-metric-col)
@@ -2851,6 +2851,27 @@
     min-width: 0;
     align-content: center;
     min-block-size: 1.34rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell
+    .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
+    .icono-label-specimen-cell--row-1 {
+    grid-row: 3;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell
+    .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
+    .icono-label-specimen-cell--row-2 {
+    grid-row: 4;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell
+    .icono-label-specimen-footer[data-icono-mobile-footer-relocated="true"]
+    .icono-label-specimen-cell--row-3 {
+    grid-row: 5;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
