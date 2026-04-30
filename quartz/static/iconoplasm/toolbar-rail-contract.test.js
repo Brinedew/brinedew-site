@@ -49,7 +49,9 @@ test("Iconoplasm archive progress summary is one compact status rail", async () 
 
   assert.match(app, /icono-collection-card icono-collection-card--archive/)
   assert.match(app, /icono-collection-copy/)
+  assert.match(app, /ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT = 19023/)
   assert.match(app, /genes found out of/)
+  assert.doesNotMatch(app, /the catalog/)
   assert.match(app, /icono-collection-progress-inline/)
   assert.doesNotMatch(app, /Next milestone:/)
   assert.doesNotMatch(app, /icono-collection-progress-milestone/)
@@ -101,4 +103,5 @@ test("Iconoplasm collection summary has no duplicate hero count plaque", async (
     "removing the hero count must not remove sidebar state updates",
   )
   assert.match(app, /genes found out of/, "the archive rail remains the single visible collection counter")
+  assert.doesNotMatch(app, /the catalog/, "the archive rail must use the fixed library size, not vague catalog copy")
 })

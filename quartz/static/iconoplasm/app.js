@@ -41,6 +41,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var HOME_COLLECTION_PAGE_SIZE = 24
   var HOME_COLLECTION_INITIAL_PAGE_SIZE = 12
   var HOME_COLLECTION_DEFAULT_ORDER = ICONOPLASM_DISCOVERY_DEFAULT_ORDER
+  var ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT = 19023
   var GUEST_STARTER_GENES = [
     {
       gene_symbol: "INS",
@@ -1236,11 +1237,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       Math.max(0, Number(collectionState && collectionState.discoveredCount) || 0) ||
       Number(collectionState && collectionState.discoveryEntries.length) ||
       0
-    var totalCount = Math.max(0, Number((collectionState && collectionState.total) || 0) || 0)
+    var totalCount = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT
     var progressPct =
       totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = progressPct
-    var totalCopy = totalCount > 0 ? totalCount.toLocaleString() : "the catalog"
+    var totalCopy = totalCount.toLocaleString()
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
       '<article class="icono-collection-card icono-collection-card--archive">' +
