@@ -433,6 +433,11 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   assert.match(symbolBlock, /line-height:\s*0\.96;/)
   assert.match(
     symbolBlock,
+    /letter-spacing:\s*0\.08em;[\s\S]*text-indent:\s*0\.08em;/,
+    "tracked tab text must balance the browser's trailing letter-spacing so visual ink, not the DOM text box, is centered",
+  )
+  assert.match(
+    symbolBlock,
     /transform:\s*none;/,
     "the printed symbol must be centered by the tab layout, not by a horizontal nudge",
   )
