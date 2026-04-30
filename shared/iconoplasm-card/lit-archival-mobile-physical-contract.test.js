@@ -362,8 +362,8 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
   )
   assert.match(
     css,
-    /--icono-label-mobile-tab-symbol-capacity:\s*14ch;/,
-    "mobile tab must fit the longest current catalog gene symbol on one row",
+    /--icono-label-mobile-tab-symbol-capacity:\s*17ch;/,
+    "mobile tab must fit the longest current catalog gene symbol on one row with optical centering runway",
   )
   assert.match(
     css,
@@ -431,6 +431,13 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-tab-symbol",
   )
   assert.match(symbolBlock, /line-height:\s*0\.96;/)
+  assert.match(symbolBlock, /max-width:\s*none;/)
+  assert.match(symbolBlock, /overflow:\s*visible;/)
+  assert.match(
+    symbolBlock,
+    /text-overflow:\s*clip;/,
+    "gene-symbol IDs must not ellipsize; widen the tab runway instead of clipping identifiers",
+  )
   assert.match(
     symbolBlock,
     /letter-spacing:\s*0\.08em;[\s\S]*text-indent:\s*0\.08em;/,

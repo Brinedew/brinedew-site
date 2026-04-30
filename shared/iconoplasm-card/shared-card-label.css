@@ -1307,8 +1307,9 @@
     --icono-label-mobile-preview-height: 0rem;
     --icono-label-mobile-tab-height: 2.328rem;
     /* B-479: current public catalog max gene-symbol length is 14 chars
-       (`EEF1AKMT4-ECE2`). Size the tab to character capacity, not a guessed rem. */
-    --icono-label-mobile-tab-symbol-capacity: 14ch;
+       (`EEF1AKMT4-ECE2`). Give the printed ID a little runway so it never ellipsizes
+       while being optically centered inside the fixed right-anchored tab. */
+    --icono-label-mobile-tab-symbol-capacity: 17ch;
     --icono-label-mobile-tab-width: var(--icono-label-mobile-tab-symbol-capacity);
     --icono-label-mobile-tab-safe-inset: 0.92rem;
     --icono-label-mobile-sheet-preview-offset: 0rem;
@@ -1332,6 +1333,7 @@
        - expanded layout must be sized against measured live collisions, not eyeballed compression
        - the tab bottom must seat onto the slider seam instead of sinking into the card body
        - the physical tab position is fixed by the archival sheet design; center the text inside it, do not move the tab
+       - gene-symbol IDs must not ellipsize; widen the text runway instead of clipping the identifier
        - tracked text must compensate for the browser's trailing letter-spacing; DOM box centering is not visual ink centering
        - tab border language must match the dossier border language; no stronger, darker, or separate object outline
        - the symbol must sit optically centered in the tab, not crowd the top edge
@@ -1660,9 +1662,9 @@
     display: block;
     position: relative;
     z-index: 1;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
     white-space: nowrap;
     color: var(--icono-label-ink);
     font-family: "League Spartan";
