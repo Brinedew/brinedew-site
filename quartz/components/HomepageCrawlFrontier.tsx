@@ -15,6 +15,8 @@ const sectionLimits = {
   wiki: 4,
 }
 
+const sectionIndexSlugs = new Set(["posts/index", "wiki/index", "apps/index"])
+
 const summarize = (description: unknown): string | null => {
   if (typeof description !== "string") return null
   const compact = description.replace(/\s+/g, " ").trim()
@@ -46,7 +48,12 @@ export default (() => {
     if (fileData.slug !== "index") return null
 
     const sorted = allFiles
-      .filter((file) => isCrawlableFile(file) && file.slug !== "index")
+      .filter(
+        (file) =>
+          isCrawlableFile(file) &&
+          file.slug !== "index" &&
+          !sectionIndexSlugs.has(String(file.slug)),
+      )
       .sort(byDateAndAlphabetical(cfg))
 
     const sections = {
