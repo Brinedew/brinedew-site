@@ -56,6 +56,22 @@ class_name = "IconoplasmVoteCoordinator"
 name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
 class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
 
+[[durable_objects.bindings]]
+name = "ICONOPLASM_SYNC_GOVERNOR"
+class_name = "IconoplasmSyncGovernor"
+
+[[queues.producers]]
+binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
+queue = "iconoplasm-sync-finalization"
+
+[[queues.consumers]]
+queue = "iconoplasm-sync-finalization"
+dead_letter_queue = "iconoplasm-sync-dlq"
+max_batch_size = 100
+max_batch_timeout = 1
+max_retries = 5
+retry_delay = 30
+
 # Production account reality fence:
 # Cloudflare currently rejects production deploys for this account with
 # API code 10089 unless Analytics Engine is explicitly enabled server-side.
@@ -77,6 +93,10 @@ new_sqlite_classes = ["IconoplasmVoteCoordinator"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["IconoplasmSyncGovernor"]
 
 [vars]
 # Billing guardrail model:
@@ -147,6 +167,22 @@ class_name = "IconoplasmVoteCoordinator"
 name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
 class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
 
+[[env.staging.durable_objects.bindings]]
+name = "ICONOPLASM_SYNC_GOVERNOR"
+class_name = "IconoplasmSyncGovernor"
+
+[[env.staging.queues.producers]]
+binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
+queue = "iconoplasm-sync-finalization-staging"
+
+[[env.staging.queues.consumers]]
+queue = "iconoplasm-sync-finalization-staging"
+dead_letter_queue = "iconoplasm-sync-staging-dlq"
+max_batch_size = 100
+max_batch_timeout = 1
+max_retries = 5
+retry_delay = 30
+
 [[env.staging.analytics_engine_datasets]]
 binding = "ICONOPLASM_BUDGET_ATTRIBUTION_ANALYTICS"
 dataset = "iconoplasm_budget_attribution_staging"
@@ -162,6 +198,10 @@ new_sqlite_classes = ["IconoplasmVoteCoordinator"]
 [[env.staging.migrations]]
 tag = "v3"
 new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
+
+[[env.staging.migrations]]
+tag = "v4"
+new_sqlite_classes = ["IconoplasmSyncGovernor"]
 
 [env.staging.vars]
 ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "500000000"

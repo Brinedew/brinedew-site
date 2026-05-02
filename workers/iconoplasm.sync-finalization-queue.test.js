@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  handleIconoplasmSyncFinalizationQueue,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function finalizationPhasePriority(phase) {
   const value = String(phase || "").trim().toLowerCase()
@@ -120,6 +123,11 @@ class FakeStatement {
 
   async first() {
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
+    if (this.sql.includes("SELECT *") && this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE gene_symbol = ?")) {
+      const symbol = String(this.args[0] || "").trim().toUpperCase()
+      const row = this.db.jobs.get(symbol)
+      return row ? { ...row } : null
+    }
     if (this.sql.includes("SELECT MAX(completed_at) AS completed_at") && this.sql.includes("FROM icono_sync_finalization_jobs")) {
       const [status] = this.args
       const completedValues = [...this.db.jobs.values()]
@@ -314,6 +322,15 @@ function buildEnv({ jobs = [] } = {}, { bindGateway = true } = {}) {
   return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
+function buildFakeQueue() {
+  return {
+    sent: [],
+    async send(message) {
+      this.sent.push(message)
+    },
+  }
+}
+
 test("admin finalization pending exposes queued, retrying, and pending-finalize jobs", async () => {
   const env = buildEnv({
     jobs: [
@@ -439,6 +456,20 @@ test("admin finalization pending can scope the snapshot to selected symbols", as
 
 test("admin finalization enqueue stores normalized durable job rows", async () => {
   const env = buildEnv()
+  const queue = buildFakeQueue()
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+          ICONOPLASM_DB: env.gatewayDb,
+          ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
 
   const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
@@ -473,7 +504,17 @@ test("admin finalization enqueue stores normalized durable job rows", async () =
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
   assert.equal(payload?.queued, 1)
+  assert.equal(payload?.queue_enabled, true)
+  assert.equal(payload?.queue_messages, 1)
   assert.deepEqual(payload?.symbols, ["TP53"])
+  assert.deepEqual(queue.sent, [
+    {
+      kind: "drain_finalization_ledger",
+      run_id: "pytest_sync_finalization",
+      symbols: ["TP53"],
+      idempotency_key: "pytest_sync_finalization:drain:1:TP53:TP53",
+    },
+  ])
   assert.equal(stored?.phase, "gene_rollups")
   assert.equal(stored?.status, "queued")
   assert.deepEqual(JSON.parse(String(stored?.keep_assets_json || "[]")), [{ symbol: "TP53", asset_sha256: "a".repeat(64) }])
@@ -509,9 +550,11 @@ test("admin finalization enqueue returns current mutation-limiter telemetry for 
     },
   }
   const gatewayDb = new FakeIconoplasmDb()
+  const queue = buildFakeQueue()
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
     ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
     ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "1000",
@@ -554,9 +597,11 @@ test("admin finalization enqueue returns current mutation-limiter telemetry for 
   assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, 90)
   assert.equal(payload?.mutation_limiter?.rows_written_target_remaining, 66)
   assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, 24)
+  assert.equal(payload?.queue_enabled, true)
+  assert.equal(payload?.queue_messages, 1)
 })
 
-test("admin finalization process advances reconcile jobs to the next durable phase", async () => {
+test("admin finalization process route fails loud because finalization must use the Queue", async () => {
   const env = buildEnv({
     jobs: [
       {
@@ -589,237 +634,262 @@ test("admin finalization process advances reconcile jobs to the next durable pha
   )
   const payload = await response.json()
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.processed, 1)
-  assert.equal(payload?.failed, 0)
-  assert.equal(payload?.finalized, 0)
-  assert.equal(payload?.remaining, 1)
-  assert.equal(payload?.results?.[0]?.phase, "reconcile")
-  assert.equal(payload?.results?.[0]?.next_phase, "vote_summaries")
-
-  // Chesterton's fence: the whole point of this queue is fail-loud late-stage
-  // progress. If process() can return success without moving the stored job
-  // state forward, the ops GUI will look calm while sync is secretly stalled.
+  assert.equal(response.status, 410)
+  assert.equal(payload?.ok, false)
+  assert.equal(payload?.code, "QUEUE_PATH_REQUIRED")
+  assert.match(String(payload?.error || ""), /Cloudflare Queue drain path/)
   const stored = env.gatewayDb.jobs.get("TP53")
   assert.equal(stored?.status, "queued")
-  assert.equal(stored?.phase, "vote_summaries")
+  assert.equal(stored?.phase, "reconcile")
 })
 
-test("admin finalization process reclaims stale running jobs before draining the queue", async () => {
-  const env = buildEnv({
-    jobs: [
-      {
-        gene_symbol: "TP53",
-        status: "running",
-        phase: "reconcile",
-        keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
-        legacy_assets_json: JSON.stringify([]),
-        vision_ids_json: JSON.stringify(["anima-v1-1"]),
-        requested_at: "2026-04-16T00:00:00.000Z",
-        last_attempt_at: "2026-04-16T00:00:00.000Z",
-        next_attempt_at: "2026-04-16T00:00:00.000Z",
-      },
-    ],
-  })
-
-  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer secret-admin-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        limit: 25,
-        finalize_if_drained: false,
-      }),
+test("queue finalization consumer rejects the old per-symbol message path", async () => {
+  const queue = buildFakeQueue()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [
+        {
+          gene_symbol: "TP53",
+          status: "queued",
+          phase: "gene_rollups",
+          keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
+          legacy_assets_json: JSON.stringify([]),
+          vision_ids_json: JSON.stringify(["anima-v1-1"]),
+          requested_at: "2026-04-16T00:00:00.000Z",
+          next_attempt_at: "2026-04-16T00:00:00.000Z",
+        },
+      ],
     }),
-    env,
-    {},
-  )
-  const payload = await response.json()
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+  let acknowledged = false
+  let retried = false
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.recovered_stale_running, 1)
-  assert.equal(payload?.processed, 1)
-  assert.equal(payload?.failed, 0)
-  assert.equal(payload?.results?.[0]?.symbol, "TP53")
-  assert.equal(payload?.results?.[0]?.phase, "reconcile")
-  assert.equal(payload?.results?.[0]?.next_phase, "vote_summaries")
-
-  const stored = env.gatewayDb.jobs.get("TP53")
-  assert.equal(stored?.status, "queued")
-  assert.equal(stored?.phase, "vote_summaries")
-})
-
-test("admin finalization process honors scoped symbol filters", async () => {
-  const env = buildEnv({
-    jobs: [
-      {
-        gene_symbol: "TP53",
-        status: "queued",
-        phase: "reconcile",
-        keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
-        legacy_assets_json: JSON.stringify([]),
-        vision_ids_json: JSON.stringify(["anima-v1-1"]),
-        requested_at: "2026-04-16T00:00:00.000Z",
-        next_attempt_at: "2026-04-16T00:00:00.000Z",
-      },
-      {
-        gene_symbol: "BRCA1",
-        status: "queued",
-        phase: "reconcile",
-        keep_assets_json: JSON.stringify([{ symbol: "BRCA1", asset_sha256: "b".repeat(64) }]),
-        legacy_assets_json: JSON.stringify([]),
-        vision_ids_json: JSON.stringify(["anima-v1-2"]),
-        requested_at: "2026-04-16T00:01:00.000Z",
-        next_attempt_at: "2026-04-16T00:01:00.000Z",
-      },
-    ],
-  })
-
-  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer secret-admin-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        limit: 25,
-        symbols: ["brca1"],
-        finalize_if_drained: false,
-      }),
-    }),
-    env,
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.processed, 1)
-  assert.equal(payload?.failed, 0)
-  assert.equal(payload?.remaining, 1)
-  assert.equal(payload?.results?.[0]?.symbol, "BRCA1")
-  assert.equal(payload?.results?.[0]?.phase, "reconcile")
-  assert.equal(payload?.results?.[0]?.next_phase, "vote_summaries")
-
-  const untouched = env.gatewayDb.jobs.get("TP53")
-  const advanced = env.gatewayDb.jobs.get("BRCA1")
-  assert.equal(untouched?.phase, "reconcile")
-  assert.equal(advanced?.phase, "vote_summaries")
-})
-
-test("admin finalization process prioritizes later-phase jobs before earlier-phase rows", async () => {
-  const env = buildEnv({
-    jobs: [
-      {
-        gene_symbol: "TP53",
-        status: "queued",
-        phase: "reconcile",
-        keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
-        legacy_assets_json: JSON.stringify([]),
-        vision_ids_json: JSON.stringify(["anima-v1-1"]),
-        requested_at: "2026-04-16T00:00:00.000Z",
-        next_attempt_at: "2026-04-16T00:00:00.000Z",
-      },
-      {
-        gene_symbol: "BRCA1",
-        status: "queued",
-        phase: "gene_rollups",
-        keep_assets_json: JSON.stringify([{ symbol: "BRCA1", asset_sha256: "b".repeat(64) }]),
-        legacy_assets_json: JSON.stringify([]),
-        vision_ids_json: JSON.stringify([]),
-        requested_at: "2026-04-16T00:01:00.000Z",
-        next_attempt_at: "2026-04-16T00:01:00.000Z",
-      },
-    ],
-  })
-
-  const response = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer secret-admin-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        limit: 1,
-        finalize_if_drained: false,
-      }),
-    }),
-    env,
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.processed, 1)
-  assert.equal(payload?.results?.[0]?.symbol, "BRCA1")
-  assert.equal(payload?.results?.[0]?.phase, "gene_rollups")
-  assert.equal(payload?.results?.[0]?.next_phase, "completed_pending_finalize")
-  assert.equal(env.gatewayDb.jobs.get("BRCA1")?.phase, "completed_pending_finalize")
-  assert.equal(env.gatewayDb.jobs.get("TP53")?.phase, "reconcile")
-})
-
-test("internal finalization process route preserves symbol scope instead of draining unrelated jobs", async () => {
-  const gatewayDb = new FakeIconoplasmDb({
-    jobs: [
-      {
-        gene_symbol: "TP53",
-        status: "queued",
-        phase: "reconcile",
-        keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
-        legacy_assets_json: JSON.stringify([]),
-        vision_ids_json: JSON.stringify(["anima-v1-1"]),
-        requested_at: "2026-04-16T00:00:00.000Z",
-        next_attempt_at: "2026-04-16T00:00:00.000Z",
-      },
-      {
-        gene_symbol: "BRCA1",
-        status: "queued",
-        phase: "reconcile",
-        keep_assets_json: JSON.stringify([{ symbol: "BRCA1", asset_sha256: "b".repeat(64) }]),
-        legacy_assets_json: JSON.stringify([]),
-        vision_ids_json: JSON.stringify(["anima-v1-2"]),
-        requested_at: "2026-04-16T00:01:00.000Z",
-        next_attempt_at: "2026-04-16T00:01:00.000Z",
-      },
-    ],
-  })
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer secret-admin-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        limit: 5,
-        symbols: ["TP53"],
-        finalize_if_drained: false,
-      }),
-    }),
+  const result = await handleIconoplasmSyncFinalizationQueue(
     {
-      ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-      ICONOPLASM_DB: gatewayDb,
+      messages: [
+        {
+          body: {
+            run_id: "sync-test",
+            gene_symbol: "TP53",
+            phase: "vote_summaries",
+            attempt: 0,
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry() {
+            retried = true
+          },
+        },
+      ],
     },
+    env,
     { waitUntil() {} },
   )
-  const payload = await response.json()
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.processed, 1)
-  assert.equal(payload?.failed, 0)
-  assert.equal(payload?.remaining, 1)
-  assert.equal(payload?.results?.[0]?.symbol, "TP53")
-  assert.equal(payload?.results?.[0]?.phase, "reconcile")
-  assert.equal(payload?.results?.[0]?.next_phase, "vote_summaries")
-  assert.equal(gatewayDb.jobs.get("TP53")?.phase, "vote_summaries")
-  assert.equal(gatewayDb.jobs.get("BRCA1")?.phase, "reconcile")
+  assert.equal(result.ok, false)
+  assert.equal(result.processed, 0)
+  assert.equal(result.failed, 1)
+  assert.equal(result.retrying, 1)
+  assert.equal(acknowledged, false)
+  assert.equal(retried, true)
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "gene_rollups")
+  assert.deepEqual(queue.sent, [])
+})
+
+test("queue drain message processes durable ledger batches without per-symbol phase fan-out", async () => {
+  const queue = buildFakeQueue()
+  const symbols = ["TP53", "BRCA1"]
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: symbols.map((symbol) => ({
+        gene_symbol: symbol,
+        status: "queued",
+        phase: "reconcile",
+        keep_assets_json: JSON.stringify([{ symbol, asset_sha256: "a".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      })),
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+  let acknowledged = false
+  const retries = []
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols,
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry(options) {
+            retries.push(options)
+          },
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.processed, 2)
+  assert.equal(acknowledged, true)
+  assert.deepEqual(retries, [])
+  assert.deepEqual(
+    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
+    ["vote_summaries", "vote_summaries"],
+  )
+  assert.deepEqual(queue.sent, [
+    {
+      kind: "drain_finalization_ledger",
+      run_id: "sync-test",
+      symbols,
+      idempotency_key: "sync-test:drain:2:TP53:BRCA1",
+    },
+  ])
+})
+
+test("queue drain consumer does not retry a delivered drain message just because the governor grants fewer permits than processed jobs", async () => {
+  const queue = buildFakeQueue()
+  const symbols = ["TP53", "BRCA1", "EGFR"]
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: symbols.map((symbol) => ({
+        gene_symbol: symbol,
+        status: "queued",
+        phase: "reconcile",
+        keep_assets_json: JSON.stringify([{ symbol, asset_sha256: "a".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      })),
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_SYNC_GOVERNOR: {
+      idFromName(name) {
+        return String(name || "")
+      },
+      get() {
+        return {
+          fetch: async (request) => {
+            const url = new URL(request.url)
+            if (url.pathname === "/permit") {
+              return new Response(JSON.stringify({ ok: true, granted: 1 }), {
+                headers: { "Content-Type": "application/json" },
+              })
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { "Content-Type": "application/json" },
+            })
+          },
+        }
+      },
+    },
+  }
+  let acknowledged = false
+  const retries = []
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols,
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry(options) {
+            retries.push(options)
+          },
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.processed, 3)
+  assert.equal(result.permit_granted, 1)
+  assert.equal(result.granted, 1)
+  assert.equal(acknowledged, true)
+  assert.deepEqual(retries, [])
+  assert.deepEqual(
+    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
+    ["vote_summaries", "vote_summaries", "vote_summaries"],
+  )
+  assert.equal(queue.sent.length, 1)
+})
+
+test("queue finalization consumer fails loud when Queue path is disabled", async () => {
+  const queue = buildFakeQueue()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [
+        {
+          gene_symbol: "TP53",
+          status: "queued",
+          phase: "reconcile",
+          keep_assets_json: JSON.stringify([{ symbol: "TP53", asset_sha256: "a".repeat(64) }]),
+          legacy_assets_json: JSON.stringify([]),
+          vision_ids_json: JSON.stringify(["anima-v1-1"]),
+          requested_at: "2026-04-16T00:00:00.000Z",
+          next_attempt_at: "2026-04-16T00:00:00.000Z",
+        },
+      ],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED: "1",
+  }
+  let acknowledged = false
+  let retried = false
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            run_id: "sync-test",
+            gene_symbol: "TP53",
+            phase: "reconcile",
+            attempt: 0,
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry() {
+            retried = true
+          },
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, false)
+  assert.equal(result.skipped_disabled, 1)
+  assert.equal(result.processed, 0)
+  assert.equal(acknowledged, false)
+  assert.equal(retried, true)
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "reconcile")
+  assert.deepEqual(queue.sent, [])
 })

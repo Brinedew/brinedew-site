@@ -64,6 +64,12 @@ const DISCOVERY_TRIGGER_STARTER_SEED = "starter_seed"
 const ICONOPLASM_STARTER_GENE_SYMBOLS = ["INS", "RHO", "PRL"]
 const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_BINDING_DO_NOT_DUPLICATE =
   "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
+const ICONOPLASM_SYNC_FINALIZATION_QUEUE_BINDING = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
+const ICONOPLASM_SYNC_GOVERNOR_BINDING = "ICONOPLASM_SYNC_GOVERNOR"
+const ICONOPLASM_SYNC_GOVERNOR_ID = "global"
+const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED_ENV =
+  "ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED"
+const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT = 10_000
 const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
@@ -85,6 +91,9 @@ const ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH = Symbol(
 )
 const ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_DO_NOT_SET_CASUALLY"
+const ICONOPLASM_SYNC_GOVERNOR_TARGET_UTILIZATION = 0.93
+const ICONOPLASM_SYNC_GOVERNOR_MIN_BATCH_PERMITS = 1
+const ICONOPLASM_SYNC_GOVERNOR_MAX_BATCH_PERMITS = 250
 
 const catalogCache = {
   hash: null,
@@ -8253,6 +8262,139 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
   }
 }
 
+function clampIconoplasmSyncGovernorPermits(value) {
+  const parsed = Number.parseInt(String(value || 0), 10)
+  if (!Number.isFinite(parsed)) return ICONOPLASM_SYNC_GOVERNOR_MIN_BATCH_PERMITS
+  return Math.max(
+    ICONOPLASM_SYNC_GOVERNOR_MIN_BATCH_PERMITS,
+    Math.min(ICONOPLASM_SYNC_GOVERNOR_MAX_BATCH_PERMITS, parsed),
+  )
+}
+
+function iconoplasmSyncGovernorDefaultState() {
+  return {
+    batch_permits: 8,
+    target_utilization: ICONOPLASM_SYNC_GOVERNOR_TARGET_UTILIZATION,
+    observed_utilization: 0,
+    current_bottleneck: "warming_up",
+    active_consumers: 0,
+    last_error_rate: 0,
+    last_latency_ms: 0,
+    public_health: "unknown",
+    updated_at: new Date().toISOString(),
+  }
+}
+
+function iconoplasmSyncGovernorStateFromRaw(raw) {
+  const base = iconoplasmSyncGovernorDefaultState()
+  if (!raw || typeof raw !== "object") return base
+  return {
+    ...base,
+    ...raw,
+    batch_permits: clampIconoplasmSyncGovernorPermits(raw.batch_permits ?? base.batch_permits),
+    target_utilization: Number(raw.target_utilization || base.target_utilization) || base.target_utilization,
+    observed_utilization: Math.max(0, Math.min(1, Number(raw.observed_utilization || 0) || 0)),
+    active_consumers: Math.max(0, Number.parseInt(String(raw.active_consumers || 0), 10) || 0),
+    updated_at: String(raw.updated_at || base.updated_at),
+  }
+}
+
+export class IconoplasmSyncGovernor {
+  constructor(state, env) {
+    this.state = state
+    this.env = env
+  }
+
+  async storedState() {
+    const raw = await this.state.storage.get("state")
+    return iconoplasmSyncGovernorStateFromRaw(raw)
+  }
+
+  async persistState(state) {
+    const next = iconoplasmSyncGovernorStateFromRaw({
+      ...state,
+      updated_at: new Date().toISOString(),
+    })
+    await this.state.storage.put("state", next)
+    return next
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url)
+    if (request.method === "POST" && url.pathname === "/permit") {
+      const stored = await this.storedState()
+      const requestedRaw = Number(url.searchParams.get("requested") || "1") || 1
+      const requested = Math.max(1, Math.min(100, Math.floor(requestedRaw)))
+      const updatedAtMs = Date.parse(String(stored.updated_at || ""))
+      const staleMs = Number.isFinite(updatedAtMs) ? Date.now() - updatedAtMs : Number.POSITIVE_INFINITY
+      const stalePublicBrake = stored.public_health !== "healthy" && staleMs > 60_000
+      const state = stalePublicBrake
+        ? {
+            ...stored,
+            batch_permits: Math.max(4, Number(stored.batch_permits || 0) || 0),
+            current_bottleneck: "cloudflare_queue_consumer",
+            public_health: "healthy",
+          }
+        : stored
+      const granted = Math.max(1, Math.min(requested, state.batch_permits))
+      const next = await this.persistState({
+        ...state,
+        active_consumers: Math.max(0, Number(state.active_consumers || 0) + 1),
+        observed_utilization: Math.min(1, Math.max(state.observed_utilization || 0, granted / Math.max(1, requested))),
+      })
+      return Response.json({ ok: true, granted, governor: next })
+    }
+    if (request.method === "POST" && url.pathname === "/release") {
+      const payload = await request.json().catch(() => ({}))
+      const state = await this.storedState()
+      const processed = Math.max(0, Number(payload?.processed || 0) || 0)
+      const failed = Math.max(0, Number(payload?.failed || 0) || 0)
+      const retrying = Math.max(0, Number(payload?.retrying || 0) || 0)
+      const latencyMs = Math.max(0, Number(payload?.latency_ms || payload?.latencyMs || 0) || 0)
+      const publicHealth = String(payload?.public_health || "healthy").trim() || "healthy"
+      const total = Math.max(1, processed + failed + retrying)
+      const errorRate = Math.min(1, (failed + retrying) / total)
+      let permits = clampIconoplasmSyncGovernorPermits(state.batch_permits)
+      let bottleneck = "cloudflare_queue_consumer"
+      if (publicHealth !== "healthy") {
+        permits = Math.max(1, Math.floor(permits / 2))
+        bottleneck = "public_health"
+      } else if (errorRate > 0.05) {
+        permits = Math.max(1, Math.floor(permits / 2))
+        bottleneck = "worker_errors"
+      } else if (latencyMs > 25000) {
+        permits = Math.max(1, Math.floor(permits / 2))
+        bottleneck = "d1_query_latency"
+      } else if (processed > 0 && errorRate === 0) {
+        permits = clampIconoplasmSyncGovernorPermits(permits + 1)
+        bottleneck = "seeking_bottleneck"
+      }
+      const next = await this.persistState({
+        ...state,
+        batch_permits: permits,
+        current_bottleneck: bottleneck,
+        active_consumers: Math.max(0, Number(state.active_consumers || 0) - 1),
+        observed_utilization: Math.min(1, Math.max(0, processed / total)),
+        last_error_rate: errorRate,
+        last_latency_ms: latencyMs,
+        public_health: publicHealth,
+      })
+      return Response.json({ ok: true, governor: next })
+    }
+    if (request.method === "POST" && url.pathname === "/cancel") {
+      const payload = await request.json().catch(() => ({}))
+      const state = await this.storedState()
+      const next = await this.persistState({
+        ...state,
+        cancelled_run_id: String(payload?.run_id || payload?.runId || "").trim(),
+        current_bottleneck: "operator_cancelled",
+      })
+      return Response.json({ ok: true, governor: next })
+    }
+    return Response.json({ ok: true, governor: await this.storedState() })
+  }
+}
+
 function voteDeltaFromTransition(currentVoteValue, nextVoteValue) {
   const current = Number(currentVoteValue || 0)
   const next = Number(nextVoteValue || 0)
@@ -10733,6 +10875,83 @@ function mapSyncFinalizationJobRow(row) {
   }
 }
 
+function iconoplasmSyncFinalizationQueueBinding(env) {
+  if (iconoplasmSyncFinalizationQueueDisabled(env)) return null
+  const queue = env?.[ICONOPLASM_SYNC_FINALIZATION_QUEUE_BINDING]
+  return queue && typeof queue.send === "function" ? queue : null
+}
+
+function iconoplasmSyncFinalizationQueueDisabled(env) {
+  const disabled = String(env?.[ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED_ENV] || "")
+    .trim()
+    .toLowerCase()
+  return disabled === "1" || disabled === "true" || disabled === "yes" || disabled === "on"
+}
+
+function iconoplasmSyncGovernorStub(env) {
+  const namespace = env?.[ICONOPLASM_SYNC_GOVERNOR_BINDING]
+  if (!namespace || typeof namespace.idFromName !== "function" || typeof namespace.get !== "function") {
+    return null
+  }
+  return namespace.get(namespace.idFromName(ICONOPLASM_SYNC_GOVERNOR_ID))
+}
+
+async function iconoplasmSyncGovernorJson(env, path, payload = {}) {
+  const stub = iconoplasmSyncGovernorStub(env)
+  if (!stub || typeof stub.fetch !== "function") {
+    return {
+      ok: true,
+      granted: Math.max(1, Number(payload?.requested || payload?.messages || 1) || 1),
+      governor: iconoplasmSyncGovernorDefaultState(),
+      unavailable: true,
+    }
+  }
+  const response = await stub.fetch(
+    new Request(`https://iconoplasm-sync-governor${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    }),
+  )
+  if (!response.ok) {
+    return {
+      ok: false,
+      granted: 1,
+      governor: iconoplasmSyncGovernorDefaultState(),
+      unavailable: true,
+    }
+  }
+  return response.json()
+}
+
+function buildSyncFinalizationDrainQueueMessage({ runId = "", symbols = [], reason = "" } = {}) {
+  const safeRunId = sanitizeText(runId || reason || "", 128) || "manual"
+  const safeSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
+  return {
+    kind: "drain_finalization_ledger",
+    run_id: safeRunId,
+    symbols: safeSymbols,
+    idempotency_key: `${safeRunId}:drain:${safeSymbols.length}:${safeSymbols[0] || "all"}:${safeSymbols.at(-1) || "all"}`,
+  }
+}
+
+async function sendSyncFinalizationDrainQueueMessage(env, message) {
+  const queue = iconoplasmSyncFinalizationQueueBinding(env)
+  if (!queue) return false
+  const safeMessage = buildSyncFinalizationDrainQueueMessage(message)
+  try {
+    await queue.send(safeMessage)
+    return true
+  } catch (error) {
+    console.warn("Iconoplasm sync finalization drain queue send failed; durable ledger remains authoritative", {
+      run_id: safeMessage.run_id,
+      symbols: safeMessage.symbols.length,
+      error: String(error?.message || error || ""),
+    })
+    return false
+  }
+}
+
 async function ensureSyncFinalizationJobsTable(env) {
   if (!env?.ICONOPLASM_DB) return false
   await env.ICONOPLASM_DB.prepare(
@@ -10767,7 +10986,7 @@ async function ensureSyncFinalizationJobsTable(env) {
 
 async function enqueueSyncFinalizationJobs(
   env,
-  { rows = [], actorId = "workstation_sync", reason = "sync_finalization" } = {},
+  { rows = [], actorId = "workstation_sync", reason = "sync_finalization", runId = "" } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB", queued: 0 }
   await ensureSyncFinalizationJobsTable(env)
@@ -10775,7 +10994,10 @@ async function enqueueSyncFinalizationJobs(
   const safeReason = sanitizeText(reason || "", 2000) || "sync_finalization"
   const nowIso = new Date().toISOString()
   let queued = 0
+  let queueMessages = 0
+  let queueSendFailures = 0
   const symbols = []
+  const safeRunId = sanitizeText(runId || reason || "manual", 128) || "manual"
   for (const rawRow of Array.isArray(rows) ? rows : []) {
     const symbol = normalizeSymbol(rawRow?.symbol || rawRow?.gene_symbol || "")
     if (!symbol) continue
@@ -10841,9 +11063,36 @@ async function enqueueSyncFinalizationJobs(
     queued += 1
     symbols.push(symbol)
   }
+  if (queued > 0) {
+    const sentQueueMessage = await sendSyncFinalizationDrainQueueMessage(env, {
+      runId: safeRunId,
+      reason: safeReason,
+      symbols,
+    })
+    if (sentQueueMessage) {
+      queueMessages += 1
+    } else if (iconoplasmSyncFinalizationQueueBinding(env)) {
+      queueSendFailures += 1
+    }
+  }
+  if (queued > 0 && queueMessages <= 0) {
+    return {
+      ok: false,
+      code: "QUEUE_MESSAGE_REQUIRED",
+      error: "Iconoplasm finalization requires the Cloudflare Queue path; queued D1 ledger rows without a Queue message are not a valid sync path.",
+      queued,
+      queue_messages: queueMessages,
+      queue_send_failures: queueSendFailures,
+      queue_enabled: false,
+      symbols,
+    }
+  }
   return {
     ok: true,
     queued,
+    queue_messages: queueMessages,
+    queue_send_failures: queueSendFailures,
+    queue_enabled: Boolean(iconoplasmSyncFinalizationQueueBinding(env)) && queueSendFailures <= 0,
     symbols,
   }
 }
@@ -11357,6 +11606,109 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     finalized: pendingFinalizeCount,
     remaining: 0,
   }
+}
+
+async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, skipped: true, reason: "NO_DB" }
+  await ensureSyncFinalizationJobsTable(env)
+  const body = rawMessage && typeof rawMessage === "object" ? rawMessage : {}
+  const kind = sanitizeText(body.kind || "", 80)
+  if (kind === "drain_finalization_ledger") {
+    const runId = sanitizeText(body.run_id || body.runId || "", 128) || "manual"
+    const symbols = normalizeSyncFinalizationJobSymbols(body.symbols, { maxItems: 5000 })
+    const drainResult = await processPendingSyncFinalizationJobs(env, ctx, {
+      limit: 100,
+      finalizeIfDrained: true,
+      symbols,
+    })
+    const remaining = Math.max(0, Number(drainResult?.remaining || 0) || 0)
+    let sentNext = false
+    if (remaining > 0) {
+      sentNext = await sendSyncFinalizationDrainQueueMessage(env, {
+        runId,
+        symbols,
+      })
+    }
+    return {
+      ok: true,
+      kind,
+      processed: Math.max(0, Number(drainResult?.processed || 0) || 0),
+      failed: Math.max(0, Number(drainResult?.failed || 0) || 0),
+      finalized: Math.max(0, Number(drainResult?.finalized || 0) || 0),
+      remaining,
+      queue_message_sent: sentNext,
+      result: drainResult,
+    }
+  }
+  throw new Error(
+    "Unsupported Iconoplasm sync finalization Queue message. The only supported Queue path is drain_finalization_ledger.",
+  )
+}
+
+export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
+  const messages = Array.isArray(batch?.messages) ? batch.messages : []
+  if (iconoplasmSyncFinalizationQueueDisabled(env)) {
+    for (const message of messages) {
+      if (typeof message?.retry === "function") message.retry({ delaySeconds: 300 })
+    }
+    return {
+      ok: false,
+      processed: 0,
+      failed: 0,
+      retrying: messages.length,
+      finalized: 0,
+      granted: 0,
+      skipped_disabled: messages.length,
+      error: "Iconoplasm finalization Queue path is disabled; refusing to ack without processing.",
+    }
+  }
+  const permit = await iconoplasmSyncGovernorJson(
+    env,
+    `/permit?requested=${encodeURIComponent(String(messages.length || 1))}`,
+    { requested: messages.length || 1 },
+  )
+  const permitGranted = Math.max(0, Math.min(messages.length || 0, Number(permit?.granted || 0) || 0))
+  const started = Date.now()
+  let processed = 0
+  let failed = 0
+  let retrying = 0
+  for (const message of messages) {
+    try {
+      const result = await processSyncFinalizationQueueMessage(env, ctx, message?.body)
+      if (result?.kind === "drain_finalization_ledger") {
+        processed += Math.max(0, Number(result?.processed || 0) || 0)
+        failed += Math.max(0, Number(result?.failed || 0) || 0)
+      } else if (!result?.skipped) {
+        processed += 1
+      }
+      if (typeof message?.ack === "function") message.ack()
+    } catch (error) {
+      failed += 1
+      retrying += 1
+      if (typeof message?.retry === "function") {
+        message.retry({ delaySeconds: 30 })
+      } else {
+        throw error
+      }
+    }
+  }
+  let finalized = 0
+  if (processed > 0) {
+    const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: null })
+    finalized = Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
+  }
+  await iconoplasmSyncGovernorJson(env, "/release", {
+    processed,
+    failed,
+    retrying,
+    latency_ms: Date.now() - started,
+    // Queue message failures are retry pressure, not public-route health.
+    // The workstation and live probes report public health separately; feeding
+    // retry pressure into this field parks the whole factory even when public
+    // routes are responding normally.
+    public_health: "healthy",
+  })
+  return { ok: failed <= 0, processed, failed, retrying, finalized, granted: messages.length, permit_granted: permitGranted }
 }
 
 async function processPendingSyncFinalizationJobs(
@@ -16586,7 +16938,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!sessionUser?.user_id) {
         return done(
           "candidate_copy_401",
-          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first to copy a candidate image." }, 401, {
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first to copy a candidate blot." }, 401, {
             "Cache-Control": "no-store",
           }),
         )
@@ -16607,7 +16959,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!copyResult.ok) {
         return done(
           "candidate_copy_400",
-          json({ ok: false, error: String(copyResult.error || "Could not copy candidate image") }, 400, {
+          json({ ok: false, error: String(copyResult.error || "Could not copy candidate blot") }, 400, {
             "Cache-Control": "no-store",
           }),
         )
@@ -17913,6 +18265,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             .first(),
         ])
       const latestCompletedAt = sanitizeText(latestCompletedRow?.completed_at || "", 64) || ""
+      const governorStatus = await iconoplasmSyncGovernorJson(env, "/status", {})
 
       return done(
         "admin_finalization_pending",
@@ -17921,6 +18274,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ok: true,
             count: jobs.length,
             jobs,
+            queue: {
+              enabled: Boolean(iconoplasmSyncFinalizationQueueBinding(env)),
+              disabled: iconoplasmSyncFinalizationQueueDisabled(env),
+              disabled_reason: iconoplasmSyncFinalizationQueueDisabled(env)
+                ? "cloudflare_queue_operations_budget_exhausted"
+                : "",
+              operations_daily_limit: ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT,
+              operations_usage_known: false,
+              queued: queuedCount,
+              in_flight: runningCount,
+              completed: completedCount,
+              retrying: retryingCount,
+              dlq: null,
+              active_consumers: Number(governorStatus?.governor?.active_consumers || 0) || 0,
+              current_bottleneck: String(governorStatus?.governor?.current_bottleneck || "unknown"),
+              target_utilization: Number(governorStatus?.governor?.target_utilization || ICONOPLASM_SYNC_GOVERNOR_TARGET_UTILIZATION),
+              observed_utilization: Number(governorStatus?.governor?.observed_utilization || 0) || 0,
+              public_health: String(governorStatus?.governor?.public_health || "unknown"),
+            },
             summary: {
               queued: queuedCount,
               running: runningCount,
@@ -17976,20 +18348,35 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         rows,
         actorId,
         reason,
+        runId: p?.run_id ?? p?.runId ?? reason,
       })
 
-      let processResult = null
-      // Chesterton's fence: operators use enqueue + bounded process steps instead
-      // of one gigantic late-stage sync blast because that old shape is exactly
-      // what made the pipeline stall near the finish line.
       if (coerceBoolean(p?.process_now ?? p?.processNow, false)) {
-        processResult = await processPendingSyncFinalizationJobs(env, ctx, {
-          limit: p?.process_limit ?? p?.processLimit,
-          finalizeIfDrained: coerceBoolean(
-            p?.finalize_if_drained ?? p?.finalizeIfDrained,
-            true,
+        return done(
+          "admin_finalization_enqueue_process_now_410",
+          json(
+            {
+              ok: false,
+              code: "QUEUE_PATH_REQUIRED",
+              error: "process_now is no longer supported. Iconoplasm finalization must run through the Cloudflare Queue drain path.",
+            },
+            410,
+            { "Cache-Control": "no-store" },
           ),
-        })
+        )
+      }
+      if (!enqueueResult?.ok) {
+        return done(
+          "admin_finalization_enqueue_queue_required",
+          json(
+            {
+              ...enqueueResult,
+              mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
+            },
+            503,
+            { "Cache-Control": "no-store" },
+          ),
+        )
       }
 
       return done(
@@ -17998,9 +18385,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           {
             ok: true,
             queued: Number(enqueueResult?.queued || 0),
+            queue_enabled: Boolean(enqueueResult?.queue_enabled),
+            queue_messages: Number(enqueueResult?.queue_messages || 0),
+            queue_send_failures: Number(enqueueResult?.queue_send_failures || 0),
             symbols: Array.isArray(enqueueResult?.symbols) ? enqueueResult.symbols : [],
             mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
-            process: processResult,
+            process: null,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -18011,36 +18401,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/finalization/process" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_finalization_process_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_finalization_process_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      let p = {}
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_finalization_process_400", json({ error: "Invalid JSON" }, 400))
-      }
-
-      const result = await processPendingSyncFinalizationJobs(env, ctx, {
-        limit: p?.limit,
-        symbols: p?.symbols,
-        finalizeIfDrained: coerceBoolean(
-          p?.finalize_if_drained ?? p?.finalizeIfDrained,
-          true,
-        ),
-      })
-
       return done(
-        "admin_finalization_process",
+        "admin_finalization_process_410",
         json(
           {
-            ...result,
-            mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
+            ok: false,
+            code: "QUEUE_PATH_REQUIRED",
+            error: "Direct finalization processing is no longer supported. Iconoplasm finalization must run through the Cloudflare Queue drain path.",
           },
-          200,
+          410,
           { "Cache-Control": "no-store" },
         ),
       )
@@ -19422,17 +19791,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         if (coerceBoolean(item?.force_upload ?? item?.forceUpload, false)) return true
         return !coerceBoolean(item?.remote_known, false)
       }).length
-      // B-437 / live GUI sync hardening: workstation repair runs spend most of
-      // their time on metadata-only ingest, i.e. D1 upserts with no portrait
-      // uploads. Running 12 of those in parallel inside one stateful worker
-      // request turned out to be the wrong shape: the public edge kept seeing
-      // "the only allowed stateful worker is unavailable" after a fixed number
-      // of ingest requests, even after batch size dropped from 500 to 100. The
-      // request count stayed suspiciously similar while the per-request fan-out
-      // stayed constant, which points at worker-local concurrency pressure, not
-      // the outer batch size. Keep binary-upload requests moderately parallel,
-      // but serialize metadata-only repair traffic much more aggressively.
-      const ingestConcurrency = dryRun ? 8 : binaryUploadLikelyItemCount > 0 ? 6 : 1
+      // B-437 / live GUI sync hardening: each binary item can fan out into
+      // full/medium/thumb portrait PUTs. Cloudflare Workers allow only a small
+      // number of simultaneous outgoing connections per request, so keep one
+      // request to at most two binary assets and let the workstation feed more
+      // Worker invocations concurrently instead.
+      const ingestConcurrency = dryRun ? 8 : binaryUploadLikelyItemCount > 0 ? 2 : 1
 
       const ingestOne = async (rawItem) => {
         try {
@@ -20552,7 +20916,16 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       throw e
     }
     console.error("[Iconoplasm] Unhandled request error:", e)
-    const out = json({ error: "Internal server error" }, 500)
+    const adminToken = String(env?.ICONOPLASM_ADMIN_TOKEN || "").trim()
+    const requestAdminToken = String(request.headers.get("X-Iconoplasm-Admin-Token") || "").trim()
+    const adminErrorDetail =
+      adminToken && requestAdminToken && requestAdminToken === adminToken
+        ? {
+            code: "ICONOPLASM_ADMIN_UNHANDLED_ERROR",
+            detail: String(e?.message || e || "Internal server error").slice(0, 2000),
+          }
+        : {}
+    const out = json({ error: "Internal server error", ...adminErrorDetail }, 500)
     await logReq("error", request, 500, started, null)
     return asHead(request, out)
   }

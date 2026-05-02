@@ -51,6 +51,7 @@ Production usually deploys through the `Deploy Production (Cloudflare Pages + Wo
 
 - Normal release: push `main`
 - Manual re-run of the same path: `powershell -File scripts/deploy-cloudflare-prod.ps1`
+- Deploy credentials: see `docs/ICONOPLASM_DEPLOY_CREDENTIALS.md`. GitHub repository secrets are the durable Cloudflare deploy credential path; local Cloudflare tokens are diagnostic unless a deploy proves otherwise.
 
 For Iconoplasm worker-only hotfixes and live debugging, there is also a verified direct worker path from `d:\Coding\Website`:
 
