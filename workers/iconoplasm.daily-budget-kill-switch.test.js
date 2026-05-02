@@ -507,9 +507,14 @@ test("admin mutation limiter policy reports the live limiter basis so Website Op
   assert.equal(payload?.mutation_limiter?.active, true)
   assert.equal(payload?.mutation_limiter?.budget_basis, "d1_rows_written_daily_smart_limit")
   assert.equal(payload?.mutation_limiter?.target_daily_percent, 90)
+  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit > 0, true)
+  assert.equal(
+    payload?.mutation_limiter?.target_rows_written_ceiling,
+    Math.floor(payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit * 0.9),
+  )
   assert.equal(payload?.mutation_limiter?.explains_do_cap, false)
   assert.match(String(payload?.mutation_limiter?.explanation || ""), /not the Cloudflare Durable Objects rows_written daily cap/i)
-  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), [])
+  assert.deepEqual(budgetNamespace.calls.map((call) => call.pathname), ["/snapshot"])
 })
 
 test("daily budget durable object rebuilds legacy attribution schema before reporting", async () => {

@@ -1146,6 +1146,55 @@ function iconoplasmAdminMutationLimiterPolicyFromEnv(env) {
   }
 }
 
+async function iconoplasmAdminMutationLimiterPolicyWithSnapshotFromEnv(env) {
+  const policy = iconoplasmAdminMutationLimiterPolicyFromEnv(env)
+  const budgets = iconoplasmD1BudgetConfigFromEnv(env)
+  const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
+  if (!budgets || !stub) return policy
+
+  let snapshot = null
+  let telemetryLocked = false
+  let telemetryLockedReason = ""
+  try {
+    snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(stub, "/snapshot", {
+      day_key: budgets.cycleInfo.dayKey,
+      cycle_key: budgets.cycleInfo.cycleKey,
+      budgets,
+      days_remaining_in_cycle: budgets.cycleInfo.daysRemainingInCycle,
+    })
+  } catch (error) {
+    if (!isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)) {
+      throw error
+    }
+    const saturated = iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)
+    snapshot = saturated?.snapshot || null
+    telemetryLocked = true
+    telemetryLockedReason = saturated?.telemetry_locked_reason || iconoplasmBudgetTelemetryLockedReason()
+  }
+
+  const state = {
+    rawEnv: env,
+    lastSnapshot: snapshot,
+    mutationLimiter: {
+      active: true,
+      targetDailyPercent: iconoplasmMutationLimiterTargetDailyPercent(env),
+      targetRowsWrittenCeiling: iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env),
+    },
+  }
+  const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state, snapshot)
+  return {
+    ...policy,
+    active: true,
+    target_daily_percent: budgetStatus.target_daily_percent || policy.target_daily_percent,
+    target_rows_written_ceiling: budgetStatus.target_rows_written_ceiling,
+    rows_written_target_remaining: budgetStatus.rows_written_target_remaining,
+    target_cap_reached: budgetStatus.target_cap_reached,
+    budget_snapshot: budgetStatus.snapshot || snapshot || null,
+    telemetry_locked: telemetryLocked,
+    telemetry_locked_reason: telemetryLocked ? telemetryLockedReason : null,
+  }
+}
+
 function iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets) {
   const dayKey = String(budgets?.cycleInfo?.dayKey || "")
   const cycleKey = String(budgets?.cycleInfo?.cycleKey || dayKey)
@@ -18753,7 +18802,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         json(
           {
             ok: true,
-            mutation_limiter: iconoplasmAdminMutationLimiterPolicyFromEnv(env),
+            mutation_limiter: await iconoplasmAdminMutationLimiterPolicyWithSnapshotFromEnv(env),
           },
           200,
           { "Cache-Control": "no-store" },
