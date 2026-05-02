@@ -80,3 +80,14 @@ jobs:
             -H "Content-Type: application/json" \
             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/queues/${ICONOPLASM_FINALIZATION_QUEUE_ID}/metrics" \
             | python -m json.tool
+
+      - name: Inspect durable finalization ledger
+        run: |
+          set -euo pipefail
+          wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "
+            SELECT gene_symbol, status, phase, attempts, requested_at, last_attempt_at, next_attempt_at, last_error
+            FROM icono_sync_finalization_jobs
+            WHERE status IN ('running', 'retrying')
+            ORDER BY status, COALESCE(NULLIF(last_attempt_at, ''), requested_at), gene_symbol
+            LIMIT 25;
+          "
