@@ -5,7 +5,7 @@ import * as Component from "./quartz/components"
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [Component.ViewTransitions()],
+  afterBody: [Component.HomepageCrawlFrontier(), Component.ViewTransitions()],
   footer: Component.Footer({
     links: {
       // Use an absolute link so it doesn't change based on current page depth
@@ -29,7 +29,6 @@ export const defaultContentPageLayout: PageLayout = {
     // Component.ContentMeta(),
     Component.ProteinInfobox(),
     Component.ProteinGallery(),
-    Component.HomepageCrawlFrontier(),
   ],
   left: [
     Component.MobileOnly(Component.PageTitle()),
