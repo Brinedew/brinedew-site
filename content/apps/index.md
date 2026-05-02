@@ -16,27 +16,6 @@ Daily protein guessing game. Infer today's target from function, domains, and ti
 - **Gameplay:** 6 guesses, progressive hints, Tradle-style feedback
 - **Status:** Fully static, new puzzle daily
 
-## [Protein Gallery](/apps/proteins/)
+## [Iconoplasm](/apps/iconoplasm/)
 
-Browse all protein personas with sortable gallery view and colored placeholders.
-
-- **Data:** Features and persona attributes from Cellulore
-- **Sorting:** By name, lightness, or age
-- **Status:** Static display with CSV-based updates
-
-## [Scriptotic Transcript Generator](/apps/scriptotic/)
-
-Convert YouTube videos to text transcripts using advanced AI transcription.
-
-- **Powered by:** Voxtral Mini 3B model  
-- **Features:** Speaker detection, multiple output formats, automatic language detection
-- **Use case:** When your friends demand transcripts instead of watching videos
-- **Status:** Backend runs intermittently from personal hardware
-
----
-
-*These apps combine static frontends (always available) with dynamic backends (available when hardware is online).*
-
-
-
-
+Browse gene personas and visual identities for human protein-coding genes.

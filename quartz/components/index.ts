@@ -29,7 +29,6 @@ import PageTags from "./PageTags"
 import TagSections from "./TagSections"
 import MobileMenu from "./MobileMenu"
 import ProteinInfobox from "./ProteinInfobox"
-import ProteinGallery from "./ProteinGallery"
 import HomepageCrawlFrontier from "./HomepageCrawlFrontier"
 
 export {
@@ -64,6 +63,5 @@ export {
   TagSections,
   MobileMenu,
   ProteinInfobox,
-  ProteinGallery,
   HomepageCrawlFrontier,
 }

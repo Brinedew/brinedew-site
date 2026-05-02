@@ -28,7 +28,6 @@ export const defaultContentPageLayout: PageLayout = {
     // MINIMALISM: Content meta (date, reading time) commented out for cleaner design
     // Component.ContentMeta(),
     Component.ProteinInfobox(),
-    Component.ProteinGallery(),
   ],
   left: [
     Component.MobileOnly(Component.PageTitle()),
@@ -70,8 +69,6 @@ export const defaultListPageLayout: PageLayout = {
     // Component.Breadcrumbs(),
     // Component.ArticleTitle(),
     // Component.ContentMeta()
-    // Render the protein gallery only on /apps/proteins/index
-    Component.ProteinGallery(),
   ],
   left: [
     Component.MobileOnly(Component.PageTitle()),

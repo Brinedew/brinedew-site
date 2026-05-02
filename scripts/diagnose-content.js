@@ -17,10 +17,6 @@ function checkFile(filepath) {
     issues.push(`${relativePath}: Contains Obsidian comments %%...%%`)
   }
 
-  if (content.includes("<iframe") && content.includes("scriptotic")) {
-    issues.push(`${relativePath}: Contains iframe (might need HTML escape)`)
-  }
-
   if (!content.startsWith("---")) {
     issues.push(`${relativePath}: Missing frontmatter`)
   }

@@ -319,9 +319,6 @@ export default (() => {
           }
 
           const root = pathToRoot(slugValue as FullSlug)
-          const isScriptotic =
-            normalizedSlug === "apps/scriptotic" ||
-            fileData.frontmatter?.title === "Scriptotic — YouTube Transcript Generator"
           const isGeneguessr =
             normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr"
           const isIconoplasm =
@@ -331,24 +328,12 @@ export default (() => {
           const isSettings =
             normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
 
-          if (!isScriptotic && !isGeneguessr && !isIconoplasm && !isSettings) {
+          if (!isGeneguessr && !isIconoplasm && !isSettings) {
             return null
           }
 
           return (
             <>
-              {isScriptotic && (
-                <>
-                  <link
-                    rel="stylesheet"
-                    href={joinSegments(root, "static", `apps/scriptotic/app.css?v=${CACHE_BUST}`)}
-                  />
-                  <script
-                    defer
-                    src={joinSegments(root, "static", `apps/scriptotic/app.js?v=${CACHE_BUST}`)}
-                  ></script>
-                </>
-              )}
               {isGeneguessr && (
                 <>
                   <link

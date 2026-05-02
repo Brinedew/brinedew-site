@@ -10,8 +10,7 @@ $contentFiles = Get-ChildItem -Path "content" -Include "*.md" -Recurse | Where-O
     $_.Name -ne "CLAUDE.md" -and
     # Exclude these files that should stay published (site structure)
     $_.Name -notin @("index.md", "About.md") -and
-    $_.FullName -notmatch "apps[/\\]index\.md" -and
-    $_.FullName -notmatch "apps[/\\]scriptotic[/\\]index\.md"
+    $_.FullName -notmatch "apps[/\\]index\.md"
 }
 
 Write-Host "Found $($contentFiles.Count) content files to update"

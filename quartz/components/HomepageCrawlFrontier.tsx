@@ -5,9 +5,9 @@ import style from "./styles/homepageCrawlFrontier.scss"
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 
 const sectionTitles = {
-  posts: "Latest writing",
-  apps: "Tools",
-  wiki: "Reference",
+  posts: "Posts",
+  apps: "Apps",
+  wiki: "Wiki",
 }
 
 const sectionLimits = {
@@ -34,16 +34,6 @@ const homepageApps = [
     slug: "apps/geneguessr/index" as FullSlug,
     title: "GeneGuessr",
     description: "A daily protein guessing game built from structure and function clues.",
-  },
-  {
-    slug: "apps/scriptotic/index" as FullSlug,
-    title: "Scriptotic",
-    description: "A transcript generator for turning videos into readable text.",
-  },
-  {
-    slug: "apps/proteins/index" as FullSlug,
-    title: "Protein Gallery",
-    description: "A sortable gallery of protein personas and attributes.",
   },
 ]
 
@@ -72,10 +62,13 @@ export default (() => {
       <nav class="homepage-crawl-frontier" aria-label="Site index">
         <div class="homepage-crawl-frontier__primary-links">
           <a class="internal" href={resolveRelative(fileData.slug!, "posts/index" as FullSlug)}>
-            Writing
+            Posts
           </a>
           <a class="internal" href={resolveRelative(fileData.slug!, "wiki/index" as FullSlug)}>
             Wiki
+          </a>
+          <a class="internal" href={resolveRelative(fileData.slug!, "apps/index" as FullSlug)}>
+            Apps
           </a>
         </div>
         <div class="homepage-crawl-frontier__sections">
@@ -110,15 +103,6 @@ export default (() => {
               ))}
             </ul>
           </section>
-        </div>
-        <div class="homepage-crawl-frontier__machine-links" aria-label="Machine-readable indexes">
-          <span>Machine-readable:</span>
-          <a href="/sitemap.xml">sitemap</a>
-          <a href="/index.xml">rss</a>
-          <a href="/llms.txt">llms.txt</a>
-          <a class="internal" href={resolveRelative(fileData.slug!, "tags/index" as FullSlug)}>
-            tags
-          </a>
         </div>
       </nav>
     )

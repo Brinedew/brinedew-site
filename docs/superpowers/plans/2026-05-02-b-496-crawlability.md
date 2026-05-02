@@ -419,7 +419,6 @@ Modify `D:\Coding\Website\quartz.layout.ts` in `defaultContentPageLayout.beforeB
 
 ```ts
 Component.ProteinInfobox(),
-Component.ProteinGallery(),
 Component.HomepageCrawlFrontier(),
 ```
 
