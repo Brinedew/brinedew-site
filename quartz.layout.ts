@@ -29,6 +29,7 @@ export const defaultContentPageLayout: PageLayout = {
     // Component.ContentMeta(),
     Component.ProteinInfobox(),
     Component.ProteinGallery(),
+    Component.HomepageCrawlFrontier(),
   ],
   left: [
     Component.MobileOnly(Component.PageTitle()),

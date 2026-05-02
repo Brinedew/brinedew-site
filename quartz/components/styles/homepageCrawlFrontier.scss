@@ -1,0 +1,38 @@
+.homepage-crawl-frontier {
+  margin-top: 2rem;
+}
+
+.homepage-crawl-frontier__quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1.5rem;
+}
+
+.homepage-crawl-frontier__sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1.5rem;
+}
+
+.homepage-crawl-frontier h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.5rem;
+}
+
+.homepage-crawl-frontier ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.homepage-crawl-frontier li {
+  margin: 0.35rem 0;
+}
+
+.homepage-crawl-frontier small {
+  color: var(--gray);
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}

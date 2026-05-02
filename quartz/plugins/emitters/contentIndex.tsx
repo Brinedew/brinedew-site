@@ -2,12 +2,12 @@ import { Root } from "hast"
 import { GlobalConfiguration } from "../../cfg"
 import { getDate } from "../../components/Date"
 import { escapeHTML } from "../../util/escape"
-import { FilePath, FullSlug, SimpleSlug, joinSegments, simplifySlug } from "../../util/path"
+import { FilePath, FullSlug, SimpleSlug, joinSegments } from "../../util/path"
 import { QuartzEmitterPlugin } from "../types"
 import { toHtml } from "hast-util-to-html"
 import { write } from "./helpers"
 import { i18n } from "../../i18n"
-import { QuartzPluginData } from "../vfile"
+import { getPublicUrlForSlug, isCrawlableFile } from "../../util/crawlability"
 
 export type ContentIndexMap = Map<FullSlug, ContentDetails>
 export type ContentDetails = {
@@ -40,42 +40,15 @@ const defaultOptions: Options = {
   includeEmptyFiles: true,
 }
 
-// Map of path prefixes to their subdomain equivalents
-// URLs starting with these prefixes will use the subdomain instead
-const subdomainMappings: Record<string, string> = {
-  "apps/geneguessr": "geneguessr.brinedew.bio",
-}
-
-function isDraftFile(file: QuartzPluginData): boolean {
-  return file.frontmatter?.draft === true || file.frontmatter?.draft === "true"
-}
-
 function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
   const base = cfg.baseUrl ?? ""
 
-  const getUrlForSlug = (slug: SimpleSlug): string => {
-    // Check if this slug should be mapped to a subdomain
-    for (const [pathPrefix, subdomain] of Object.entries(subdomainMappings)) {
-      if (slug === pathPrefix || slug.startsWith(pathPrefix + "/")) {
-        // For exact match (apps/geneguessr), use subdomain root
-        if (slug === pathPrefix) {
-          return `https://${subdomain}/`
-        }
-        // For nested paths, append the remainder after the prefix
-        const remainder = slug.slice(pathPrefix.length)
-        return `https://${subdomain}${remainder}`
-      }
-    }
-    // Default: use base URL
-    return `https://${joinSegments(base, encodeURI(slug))}`
-  }
-
-  const createURLEntry = (slug: SimpleSlug, content: ContentDetails): string => `<url>
-    <loc>${getUrlForSlug(slug)}</loc>
+  const createURLEntry = (slug: FullSlug, content: ContentDetails): string => `<url>
+    <loc>${getPublicUrlForSlug(base, slug)}</loc>
     ${content.date && `<lastmod>${content.date.toISOString()}</lastmod>`}
   </url>`
   const urls = Array.from(idx)
-    .map(([slug, content]) => createURLEntry(simplifySlug(slug), content))
+    .map(([slug, content]) => createURLEntry(slug, content))
     .join("")
   return `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${urls}</urlset>`
 }
@@ -83,13 +56,16 @@ function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string
 function generateRSSFeed(cfg: GlobalConfiguration, idx: ContentIndexMap, limit?: number): string {
   const base = cfg.baseUrl ?? ""
 
-  const createURLEntry = (slug: SimpleSlug, content: ContentDetails): string => `<item>
+  const createURLEntry = (slug: FullSlug, content: ContentDetails): string => {
+    const href = getPublicUrlForSlug(base, slug)
+    return `<item>
     <title>${escapeHTML(content.title)}</title>
-    <link>https://${joinSegments(base, encodeURI(slug))}</link>
-    <guid>https://${joinSegments(base, encodeURI(slug))}</guid>
+    <link>${href}</link>
+    <guid>${href}</guid>
     <description><![CDATA[ ${content.richContent ?? content.description} ]]></description>
     <pubDate>${content.date?.toUTCString()}</pubDate>
   </item>`
+  }
 
   const items = Array.from(idx)
     .sort(([_, f1], [__, f2]) => {
@@ -103,7 +79,7 @@ function generateRSSFeed(cfg: GlobalConfiguration, idx: ContentIndexMap, limit?:
 
       return f1.title.localeCompare(f2.title)
     })
-    .map(([slug, content]) => createURLEntry(simplifySlug(slug), content))
+    .map(([slug, content]) => createURLEntry(slug, content))
     .slice(0, limit ?? idx.size)
     .join("")
 
@@ -121,6 +97,53 @@ function generateRSSFeed(cfg: GlobalConfiguration, idx: ContentIndexMap, limit?:
   </rss>`
 }
 
+function sectionRank(slug: FullSlug): number {
+  if (slug.startsWith("apps/")) return 0
+  if (slug.startsWith("posts/")) return 1
+  if (slug.startsWith("wiki/")) return 2
+  return 3
+}
+
+function generateLlmsTxt(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
+  const base = cfg.baseUrl ?? ""
+  const rows = Array.from(idx)
+    .filter(([slug]) => slug !== "index")
+    .sort(([aSlug, a], [bSlug, b]) => {
+      const aRank = sectionRank(aSlug)
+      const bRank = sectionRank(bSlug)
+      if (aRank !== bRank) return aRank - bRank
+      if (a.date && b.date) return b.date.getTime() - a.date.getTime()
+      return a.title.localeCompare(b.title)
+    })
+
+  const lines = [
+    "# Brinedew.bio",
+    "",
+    "Research notes on molecular cell biology through the lens of agents, altruism, and defection.",
+    "",
+    "This file is generated from the public Obsidian/Quartz content at build time.",
+    "",
+    "## Core indexes",
+    "",
+    `- [Homepage](https://${base}/): Site entry point`,
+    `- [Sitemap](https://${base}/sitemap.xml): XML sitemap`,
+    `- [RSS](https://${base}/index.xml): Recent public updates`,
+    `- [Tags](https://${base}/tags): Generated tag index`,
+    "",
+    "## Public content",
+    "",
+    ...rows.map(([slug, content]) => {
+      const description = content.description
+        ? ` - ${content.description.replace(/\s+/g, " ").trim()}`
+        : ""
+      return `- [${content.title}](${getPublicUrlForSlug(base, slug)})${description}`
+    }),
+    "",
+  ]
+
+  return lines.join("\n")
+}
+
 export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
   opts = { ...defaultOptions, ...opts }
   return {
@@ -129,7 +152,7 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
       const cfg = ctx.cfg.configuration
       const linkIndex: ContentIndexMap = new Map()
       for (const [tree, file] of content) {
-        if (isDraftFile(file.data)) {
+        if (!isCrawlableFile(file.data)) {
           continue
         }
         const slug = file.data.slug!
@@ -168,6 +191,13 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
           ext: ".xml",
         })
       }
+
+      yield write({
+        ctx,
+        content: generateLlmsTxt(cfg, linkIndex),
+        slug: "llms" as FullSlug,
+        ext: ".txt",
+      })
 
       const fp = joinSegments("static", "contentIndex") as FullSlug
       const simplifiedIndex = Object.fromEntries(

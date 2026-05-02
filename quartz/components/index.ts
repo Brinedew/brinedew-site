@@ -30,6 +30,7 @@ import TagSections from "./TagSections"
 import MobileMenu from "./MobileMenu"
 import ProteinInfobox from "./ProteinInfobox"
 import ProteinGallery from "./ProteinGallery"
+import HomepageCrawlFrontier from "./HomepageCrawlFrontier"
 
 export {
   ArticleTitle,
@@ -64,4 +65,5 @@ export {
   MobileMenu,
   ProteinInfobox,
   ProteinGallery,
+  HomepageCrawlFrontier,
 }

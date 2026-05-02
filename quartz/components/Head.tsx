@@ -5,6 +5,7 @@ import { googleFontHref, googleFontSubsetHref } from "../util/theme"
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { unescapeHTML } from "../util/escape"
 import { CustomOgImagesEmitterName } from "../plugins/emitters/ogImage"
+import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 
 // Build-time cache buster - always include a fresh timestamp so production HTML
 // points at the latest static assets even when environment-level cache vars linger.
@@ -156,11 +157,14 @@ export default (() => {
 
     // Url of current page
     const socialUrl =
-      fileData.slug === "404" ? url.toString() : joinSegments(url.toString(), fileData.slug!)
+      fileData.slug === "404"
+        ? url.toString()
+        : getPublicUrlForSlug(cfg.baseUrl ?? "example.com", fileData.slug!)
     const canonicalUrl =
       typeof fileData.frontmatter?.canonicalUrl === "string"
         ? fileData.frontmatter.canonicalUrl
         : socialUrl
+    const robotsDirective = isNoIndexFile(fileData) ? "noindex,nofollow,noarchive" : "index,follow"
 
     const usesCustomOgImage = ctx.cfg.plugins.emitters.some(
       (e) => e.name === CustomOgImagesEmitterName,
@@ -230,6 +234,7 @@ export default (() => {
           href={joinSegments(baseDir, "static/apple-touch-icon.png")}
         />
         <meta name="description" content={description} />
+        <meta name="robots" content={robotsDirective} />
 
         {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
         <script
