@@ -2,6 +2,16 @@ name: Iconoplasm Queue Diagnostics
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: "What to do with the finalization queue"
+        required: true
+        default: "inspect"
+        type: choice
+        options:
+          - inspect
+          - kick
+          - full
 
 permissions:
   contents: read
@@ -32,8 +42,31 @@ jobs:
             echo "Missing Cloudflare credentials." >&2
             exit 1
           fi
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            | python -m json.tool
+
+      - name: Inspect Cloudflare account auth surface
+        run: |
+          set -euo pipefail
+          for path in \
+            "accounts/${CLOUDFLARE_ACCOUNT_ID}/queues" \
+            "accounts/${CLOUDFLARE_ACCOUNT_ID}/billing/profile" \
+            "accounts/${CLOUDFLARE_ACCOUNT_ID}/subscriptions" \
+            "accounts/${CLOUDFLARE_ACCOUNT_ID}/billing/usage/paygo"
+          do
+            echo "::group::GET /${path}"
+            curl -sS \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/${path}" \
+              | python -m json.tool
+            echo "::endgroup::"
+          done
 
       - name: Resume finalization queue delivery
+        if: ${{ inputs.action == 'kick' || inputs.action == 'full' }}
         run: |
           set -euo pipefail
           wrangler queues resume-delivery iconoplasm-sync-finalization || true
@@ -55,6 +88,7 @@ jobs:
             | python -m json.tool
 
       - name: Push one canonical drain message and capture worker tail
+        if: ${{ inputs.action == 'kick' || inputs.action == 'full' }}
         run: |
           set -euo pipefail
           timeout 75s wrangler tail geneguessr-api --format pretty > /tmp/iconoplasm-worker-tail.log 2>&1 &
@@ -73,6 +107,7 @@ jobs:
           cat /tmp/iconoplasm-worker-tail.log
 
       - name: Inspect queue after diagnostic message
+        if: ${{ inputs.action == 'kick' || inputs.action == 'full' }}
         run: |
           set -euo pipefail
           curl -fsS \
@@ -82,6 +117,7 @@ jobs:
             | python -m json.tool
 
       - name: Inspect durable finalization ledger
+        if: ${{ inputs.action == 'full' }}
         run: |
           set -euo pipefail
           wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "
