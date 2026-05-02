@@ -1,11 +1,11 @@
 ---
-title: Why would senescence promote DNA damage
+title: Why does DNA Damage Response damage DNA
 tags:
   - content/post
 date: 2026-05-02
 draft: true
 ---
-# Why would senescence promote DNA damage
+# Why does DNA Damage Response damage DNA?
 
 on the first glance, senescence activating ROS doesn't make sense - that just makes a damaged cell even more damaged. 
 
