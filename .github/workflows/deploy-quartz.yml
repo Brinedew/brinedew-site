@@ -119,6 +119,18 @@ jobs:
       - name: Deploy the only allowed internal stateful worker (production)
         run: wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
+      - name: Ensure Iconoplasm finalization Queue consumer is bound
+        run: |
+          set -euo pipefail
+          output="$(wrangler queues consumer worker add iconoplasm-sync-finalization geneguessr-api 2>&1)" || {
+            echo "$output"
+            if echo "$output" | grep -Eiq "already exists|already.*consumer|duplicate"; then
+              exit 0
+            fi
+            exit 1
+          }
+          echo "$output"
+
       - name: Upload public edge worker script without routes (production)
         run: wrangler deploy --config wrangler.the-only-allowed-public-edge-worker-upload-only.toml
 
