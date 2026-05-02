@@ -7,9 +7,9 @@ draft: true
 ---
 # Pathway macrostates
 
-https://sci-bot.ru/make-me-a-table-of-676b
 
 Mammalian Cell Signaling Pathway Macrostates: Discrete, Named, Experimentally Interpretable Operating Regimes
+
 The table below catalogs major mammalian signaling pathways by their experimentally observable macrostate(s) — the coarse-grained, discrete operating regimes that go beyond simple "pathway is on/off" and are distinguished by measurable dynamical signatures. For each, I describe the recognizable states and the experimental readout used to discriminate them.
 
 Summary Table of Discrete Signaling Macrostates
