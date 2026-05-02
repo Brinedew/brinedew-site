@@ -9043,7 +9043,16 @@ async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
      LEFT JOIN icono_image_votes iv
        ON iv.gene_symbol = pa.gene_symbol
       AND iv.asset_sha256 = pa.asset_sha256
-     GROUP BY pa.gene_symbol, pa.asset_sha256`,
+     GROUP BY pa.gene_symbol, pa.asset_sha256
+     ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+       candidate_ref = excluded.candidate_ref,
+       vision_id = excluded.vision_id,
+       candidate_image_id = excluded.candidate_image_id,
+       upvotes = excluded.upvotes,
+       downvotes = excluded.downvotes,
+       score = excluded.score,
+       vote_count = excluded.vote_count,
+       updated_at = CURRENT_TIMESTAMP`,
   )
     .bind(symbolsJson)
     .run()
@@ -9277,7 +9286,42 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        ON la.gene_symbol = pi.gene_symbol
      WHERE COALESCE(NULLIF(TRIM(pi.full_name), ''), '') <> ''
         OR COALESCE(ac.total_assets, 0) > 0
-        OR NULLIF(pi.current_asset_sha256, '') IS NOT NULL`,
+        OR NULLIF(pi.current_asset_sha256, '') IS NOT NULL
+     ON CONFLICT(gene_symbol) DO UPDATE SET
+       full_name = excluded.full_name,
+       manifestation = excluded.manifestation,
+       current_asset_sha256 = excluded.current_asset_sha256,
+       current_asset_missing = excluded.current_asset_missing,
+       admin_override = excluded.admin_override,
+       total_assets = excluded.total_assets,
+       candidate_count = excluded.candidate_count,
+       approved_count = excluded.approved_count,
+       rejected_count = excluded.rejected_count,
+       stale_count = excluded.stale_count,
+       legacy_count = excluded.legacy_count,
+       last_asset_at = excluded.last_asset_at,
+       live_status = excluded.live_status,
+       live_is_stale = excluded.live_is_stale,
+       live_is_legacy = excluded.live_is_legacy,
+       live_autopick_eligible = excluded.live_autopick_eligible,
+       live_vision_id = excluded.live_vision_id,
+       live_emulsion_id = excluded.live_emulsion_id,
+       live_artist_tag = excluded.live_artist_tag,
+       live_artist_name = excluded.live_artist_name,
+       live_upvotes = excluded.live_upvotes,
+       live_downvotes = excluded.live_downvotes,
+       live_score = excluded.live_score,
+       live_created_at = excluded.live_created_at,
+       leader_asset_sha256 = excluded.leader_asset_sha256,
+       leader_vision_id = excluded.leader_vision_id,
+       leader_emulsion_id = excluded.leader_emulsion_id,
+       leader_artist_tag = excluded.leader_artist_tag,
+       leader_artist_name = excluded.leader_artist_name,
+       leader_upvotes = excluded.leader_upvotes,
+       leader_downvotes = excluded.leader_downvotes,
+       leader_score = excluded.leader_score,
+       leader_created_at = excluded.leader_created_at,
+       updated_at = CURRENT_TIMESTAMP`,
   )
     .bind(symbolsJson)
     .run()
@@ -9372,7 +9416,27 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
        ON ps.gene_symbol = pa.gene_symbol
      LEFT JOIN icono_artist_style_blacklist bl
        ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
-     GROUP BY pa.vision_id`,
+     GROUP BY pa.vision_id
+     ON CONFLICT(vision_id) DO UPDATE SET
+       emulsion_id = excluded.emulsion_id,
+       workflow_id = excluded.workflow_id,
+       workflow_label = excluded.workflow_label,
+       prompt_version = excluded.prompt_version,
+       variant_slot = excluded.variant_slot,
+       artist_tag = excluded.artist_tag,
+       artist_name = excluded.artist_name,
+       image_count = excluded.image_count,
+       avg_vote = excluded.avg_vote,
+       rejected_count = excluded.rejected_count,
+       rejection_rate = excluded.rejection_rate,
+       upvotes = excluded.upvotes,
+       downvotes = excluded.downvotes,
+       score = excluded.score,
+       live_count = excluded.live_count,
+       blacklisted = excluded.blacklisted,
+       blacklist_reason = excluded.blacklist_reason,
+       blacklist_updated_at = excluded.blacklist_updated_at,
+       updated_at = CURRENT_TIMESTAMP`,
   )
     .bind(visionIdsJson)
     .run()
