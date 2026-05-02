@@ -243,6 +243,7 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
 
 test("DO NOT DELETE: Iconoplasm sync finalization must not regain crutch control planes", () => {
   const runtime = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js")
+  const entrypoint = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js")
   const deployCredentials = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../docs/ICONOPLASM_DEPLOY_CREDENTIALS.md")
   const queueDiagnosticsWorkflow = new URL("../.github/workflows/iconoplasm-queue-diagnostics.yml", import.meta.url)
 
@@ -266,6 +267,11 @@ test("DO NOT DELETE: Iconoplasm sync finalization must not regain crutch control
     runtime,
     /admin_finalization_process_410/,
     "direct process route should remain a loud tombstone",
+  )
+  assert.match(
+    entrypoint,
+    /handleIconoplasmSyncFinalizationQueue/,
+    "the deployed geneguessr-api entrypoint must import the Iconoplasm finalization Queue consumer",
   )
   assert.doesNotMatch(
     runtime,

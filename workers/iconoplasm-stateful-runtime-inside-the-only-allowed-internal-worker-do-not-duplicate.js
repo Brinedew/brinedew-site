@@ -11053,18 +11053,30 @@ function buildSyncFinalizationDrainQueueMessage({ runId = "", symbols = [], reas
 
 async function sendSyncFinalizationDrainQueueMessage(env, message) {
   const queue = iconoplasmSyncFinalizationQueueBinding(env)
-  if (!queue) return false
+  if (!queue) {
+    return {
+      ok: false,
+      code: "QUEUE_BINDING_MISSING",
+      error: "ICONOPLASM_SYNC_FINALIZATION_QUEUE binding is missing or disabled.",
+    }
+  }
   const safeMessage = buildSyncFinalizationDrainQueueMessage(message)
   try {
     await queue.send(safeMessage)
-    return true
+    return { ok: true, message: safeMessage }
   } catch (error) {
+    const detail = String(error?.message || error || "").slice(0, 2000)
     console.warn("Iconoplasm sync finalization drain queue send failed; durable ledger remains authoritative", {
       run_id: safeMessage.run_id,
       symbols: safeMessage.symbols.length,
-      error: String(error?.message || error || ""),
+      error: detail,
     })
-    return false
+    return {
+      ok: false,
+      code: "QUEUE_SEND_FAILED",
+      error: "Cloudflare rejected the sync finalization Queue message.",
+      detail,
+    }
   }
 }
 
@@ -11192,17 +11204,20 @@ async function enqueueSyncFinalizationJobs(
       reason: safeReason,
       symbols,
     })
-    if (sentQueueMessage) {
+    if (sentQueueMessage?.ok) {
       queueMessages += 1
     } else if (iconoplasmSyncFinalizationQueueBinding(env)) {
       queueSendFailures += 1
     }
+    var queueSendError = sentQueueMessage?.ok ? null : sentQueueMessage
   }
   if (queued > 0 && queueMessages <= 0) {
     return {
       ok: false,
-      code: "QUEUE_MESSAGE_REQUIRED",
-      error: "Iconoplasm finalization requires the Cloudflare Queue path; queued D1 ledger rows without a Queue message are not a valid sync path.",
+      code: queueSendError?.code || "QUEUE_MESSAGE_REQUIRED",
+      error: queueSendError?.error ||
+        "Iconoplasm finalization requires the Cloudflare Queue path; queued D1 ledger rows without a Queue message are not a valid sync path.",
+      queue_send_error: queueSendError || null,
       queued,
       queue_messages: queueMessages,
       queue_send_failures: queueSendFailures,
@@ -18584,14 +18599,16 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         reason: p?.reason ?? "admin_finalization_kick",
         symbols: Array.isArray(p?.symbols) ? p.symbols : [],
       })
-      if (!sentQueueMessage) {
+      if (!sentQueueMessage?.ok) {
         return done(
           "admin_finalization_kick_queue_required",
           json(
             {
               ok: false,
-              code: "QUEUE_MESSAGE_REQUIRED",
-              error: "Iconoplasm finalization has one processing path: Cloudflare Queue drain messages. The worker could not enqueue a drain message.",
+              code: sentQueueMessage?.code || "QUEUE_MESSAGE_REQUIRED",
+              error: sentQueueMessage?.error ||
+                "Iconoplasm finalization has one processing path: Cloudflare Queue drain messages. The worker could not enqueue a drain message.",
+              queue_send_error: sentQueueMessage || null,
             },
             503,
             { "Cache-Control": "no-store" },

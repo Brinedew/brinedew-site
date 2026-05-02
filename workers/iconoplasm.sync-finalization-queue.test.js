@@ -322,10 +322,11 @@ function buildEnv({ jobs = [] } = {}, { bindGateway = true } = {}) {
   return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
-function buildFakeQueue() {
+function buildFakeQueue({ failMessage = "" } = {}) {
   return {
     sent: [],
     async send(message) {
+      if (failMessage) throw new Error(failMessage)
       this.sent.push(message)
     },
   }
@@ -629,6 +630,35 @@ test("admin finalization kick only enqueues the canonical Queue drain message", 
   assert.equal(payload?.process, null)
   assert.equal(queue.sent.length, 1)
   assert.equal(queue.sent[0]?.kind, "drain_finalization_ledger")
+})
+
+test("admin finalization kick fails loud with the Cloudflare Queue send error", async () => {
+  const queue = buildFakeQueue({ failMessage: "Cloudflare API error: 429: daily Queue operations limit exceeded" })
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
+      method: "POST",
+      headers: {
+        "x-iconoplasm-admin-token": "secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        run_id: "pytest-run",
+        reason: "pytest-kick",
+      }),
+    }),
+    {
+      ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+      ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 503)
+  assert.equal(payload?.ok, false)
+  assert.equal(payload?.code, "QUEUE_SEND_FAILED")
+  assert.match(payload?.queue_send_error?.detail || "", /daily Queue operations limit exceeded/)
+  assert.deepEqual(queue.sent, [])
 })
 
 test("admin finalization process route fails loud because finalization must use the Queue", async () => {
