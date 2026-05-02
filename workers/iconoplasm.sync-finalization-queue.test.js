@@ -774,12 +774,12 @@ test("queue drain message processes durable ledger batches without per-symbol ph
   )
 
   assert.equal(result.ok, true)
-  assert.equal(result.processed, 2)
+  assert.equal(result.processed, 1)
   assert.equal(acknowledged, true)
   assert.deepEqual(retries, [])
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
-    ["vote_summaries", "vote_summaries"],
+    ["reconcile", "vote_summaries"],
   )
   assert.deepEqual(queue.sent, [
     {
@@ -791,7 +791,7 @@ test("queue drain message processes durable ledger batches without per-symbol ph
   ])
 })
 
-test("queue drain consumer does not retry a delivered drain message just because the governor grants fewer permits than processed jobs", async () => {
+test("queue drain consumer honors permits and one-ledger-row drain batches", async () => {
   const queue = buildFakeQueue()
   const symbols = ["TP53", "BRCA1", "EGFR"]
   const env = {
@@ -856,14 +856,14 @@ test("queue drain consumer does not retry a delivered drain message just because
   )
 
   assert.equal(result.ok, true)
-  assert.equal(result.processed, 3)
+  assert.equal(result.processed, 1)
   assert.equal(result.permit_granted, 1)
   assert.equal(result.granted, 1)
   assert.equal(acknowledged, true)
   assert.deepEqual(retries, [])
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
-    ["vote_summaries", "vote_summaries", "vote_summaries"],
+    ["reconcile", "vote_summaries", "reconcile"],
   )
   assert.equal(queue.sent.length, 1)
 })

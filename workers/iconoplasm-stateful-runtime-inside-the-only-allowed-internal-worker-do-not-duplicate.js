@@ -70,6 +70,7 @@ const ICONOPLASM_SYNC_GOVERNOR_ID = "global"
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED_ENV =
   "ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED"
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT = 10_000
+const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DRAIN_BATCH_LIMIT = 1
 const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
@@ -11273,7 +11274,7 @@ async function recordSyncFinalizationJobFailure(
   return true
 }
 
-const ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES = 15
+const ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES = 2
 const ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT = 250
 
 async function recoverStaleRunningSyncFinalizationJobs(
@@ -11285,7 +11286,7 @@ async function recoverStaleRunningSyncFinalizationJobs(
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
-  const safeMinutes = Math.max(5, Math.min(240, Number(staleAfterMinutes || 0) || 15))
+  const safeMinutes = Math.max(1, Math.min(240, Number(staleAfterMinutes || 0) || 2))
   const cutoffIso = new Date(Date.now() - safeMinutes * 60 * 1000).toISOString()
   const retryAtIso = new Date().toISOString()
   const recoveredError =
@@ -11668,7 +11669,7 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
     const runId = sanitizeText(body.run_id || body.runId || "", 128) || "manual"
     const symbols = normalizeSyncFinalizationJobSymbols(body.symbols, { maxItems: 5000 })
     const drainResult = await processPendingSyncFinalizationJobs(env, ctx, {
-      limit: 100,
+      limit: ICONOPLASM_SYNC_FINALIZATION_QUEUE_DRAIN_BATCH_LIMIT,
       finalizeIfDrained: true,
       symbols,
     })
@@ -11719,11 +11720,30 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     { requested: messages.length || 1 },
   )
   const permitGranted = Math.max(0, Math.min(messages.length || 0, Number(permit?.granted || 0) || 0))
+  let retrying = 0
+  const permittedMessages = messages.slice(0, permitGranted)
+  const delayedMessages = messages.slice(permitGranted)
+  for (const message of delayedMessages) {
+    retrying += 1
+    if (typeof message?.retry === "function") message.retry({ delaySeconds: 30 })
+  }
+  if (permitGranted <= 0) {
+    return {
+      ok: false,
+      processed: 0,
+      failed: 0,
+      retrying,
+      finalized: 0,
+      granted: 0,
+      permit_granted: permitGranted,
+      error: "Iconoplasm sync governor granted no Queue finalization permits.",
+    }
+  }
   const started = Date.now()
   let processed = 0
   let failed = 0
-  let retrying = 0
-  for (const message of messages) {
+  let finalized = 0
+  for (const message of permittedMessages) {
     try {
       const result = await processSyncFinalizationQueueMessage(env, ctx, message?.body)
       if (result?.kind === "drain_finalization_ledger") {
@@ -11743,7 +11763,6 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
       }
     }
   }
-  let finalized = 0
   if (processed > 0) {
     const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: null })
     finalized = Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
@@ -11759,7 +11778,7 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     // routes are responding normally.
     public_health: "healthy",
   })
-  return { ok: failed <= 0, processed, failed, retrying, finalized, granted: messages.length, permit_granted: permitGranted }
+  return { ok: failed <= 0, processed, failed, retrying, finalized, granted: permitGranted, permit_granted: permitGranted }
 }
 
 async function processPendingSyncFinalizationJobs(
@@ -11828,6 +11847,11 @@ async function processPendingSyncFinalizationJobs(
   let partialBudget = null
   for (const job of rows) {
     const attemptCount = Math.max(0, Number(job?.attempts || 0) || 0)
+    console.log("[Iconoplasm] finalization Queue job start", {
+      symbol: job.symbol,
+      phase: job.phase,
+      attempts: attemptCount,
+    })
     await writeSyncFinalizationJobState(env, {
       symbol: job.symbol,
       status: ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
@@ -11884,6 +11908,11 @@ async function processPendingSyncFinalizationJobs(
             : null,
       })
       processed += 1
+      console.log("[Iconoplasm] finalization Queue job advanced", {
+        symbol: job.symbol,
+        phase: job.phase,
+        next_phase: phaseResult.next_phase,
+      })
       results.push({
         ok: true,
         symbol: job.symbol,
@@ -11893,6 +11922,11 @@ async function processPendingSyncFinalizationJobs(
       })
     } catch (error) {
       failed += 1
+      console.error("[Iconoplasm] finalization Queue job failed", {
+        symbol: job.symbol,
+        phase: job.phase,
+        error: sanitizeText(String(error?.message || error || "sync finalization failed"), 500),
+      })
       await recordSyncFinalizationJobFailure(env, {
         symbol: job.symbol,
         error,
