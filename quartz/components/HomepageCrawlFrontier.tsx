@@ -10,6 +10,12 @@ const sectionTitles = {
   wiki: "Wiki",
 }
 
+const sectionTargets = {
+  posts: "posts/index" as FullSlug,
+  apps: "apps/index" as FullSlug,
+  wiki: "wiki/index" as FullSlug,
+}
+
 const sectionLimits = {
   posts: 4,
   wiki: 4,
@@ -67,22 +73,18 @@ export default (() => {
 
     return (
       <nav class="homepage-crawl-frontier" aria-label="Site index">
-        <div class="homepage-crawl-frontier__primary-links">
-          <a class="internal" href={resolveRelative(fileData.slug!, "posts/index" as FullSlug)}>
-            Posts
-          </a>
-          <a class="internal" href={resolveRelative(fileData.slug!, "wiki/index" as FullSlug)}>
-            Wiki
-          </a>
-          <a class="internal" href={resolveRelative(fileData.slug!, "apps/index" as FullSlug)}>
-            Apps
-          </a>
-        </div>
         <div class="homepage-crawl-frontier__sections">
           {(["posts", "wiki"] as const).map((section) =>
             sections[section].length > 0 ? (
               <section>
-                <h2>{sectionTitles[section]}</h2>
+                <h2>
+                  <a
+                    class="internal"
+                    href={resolveRelative(fileData.slug!, sectionTargets[section])}
+                  >
+                    {sectionTitles[section]}
+                  </a>
+                </h2>
                 <ul>
                   {sections[section].map((page) => (
                     <li>
@@ -96,7 +98,11 @@ export default (() => {
             ) : null,
           )}
           <section>
-            <h2>{sectionTitles.apps}</h2>
+            <h2>
+              <a class="internal" href={resolveRelative(fileData.slug!, sectionTargets.apps)}>
+                {sectionTitles.apps}
+              </a>
+            </h2>
             <ul>
               {homepageApps.map((app) => (
                 <li>
