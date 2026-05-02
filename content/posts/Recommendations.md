@@ -22,5 +22,5 @@ https://www.youtube.com/watch?v=Bbwp4PbWYzw
 ![[image-1.png]]
 
 ## Blogs
-
+[Mathematical Oncology Blog](https://mathematical-oncology.org/blog/)
 [Alex Wellerstein, nuclear historian](https://blog.nuclearsecrecy.com/ )
