@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 
 function DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(path) {
   return readFileSync(new URL(path, import.meta.url), "utf8")
@@ -239,4 +239,47 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
   assert.doesNotMatch(runtime, /return "admin_other"|return "iconoplasm_other"/, "handled Iconoplasm routes must not disappear into miscellaneous buckets")
   assert.match(runtime, /ICONOPLASM_ROUTE_CLASSIFICATION_MISSING/, "missing route classification should fail loudly instead of silently falling back")
   assert.doesNotMatch(runtime, /if \(path\.startsWith\("\/api\/iconoplasm\/"\)\)\s*\{\s*return true\s*\}/, "route handling should not accept every /api/iconoplasm path implicitly")
+})
+
+test("DO NOT DELETE: Iconoplasm sync finalization must not regain crutch control planes", () => {
+  const runtime = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js")
+  const deployCredentials = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../docs/ICONOPLASM_DEPLOY_CREDENTIALS.md")
+  const queueDiagnosticsWorkflow = new URL("../.github/workflows/iconoplasm-queue-diagnostics.yml", import.meta.url)
+
+  assert.equal(
+    existsSync(queueDiagnosticsWorkflow),
+    false,
+    "the old GitHub Actions Queue diagnostics/kick workflow should stay deleted; Cloudflare account auth belongs in the dashboard",
+  )
+
+  assert.match(
+    runtime,
+    /durable D1 ledger rows are advanced by Cloudflare Queue messages of kind\s+\/\/ `drain_finalization_ledger`/,
+    "runtime should document the single Queue finalization path",
+  )
+  assert.match(
+    runtime,
+    /Do not add a GitHub\s+\/\/ Actions Queue kick, workstation drain, direct API processor, or admin-token\s+\/\/ workaround/,
+    "runtime should explicitly reject the crutch paths",
+  )
+  assert.match(
+    runtime,
+    /admin_finalization_process_410/,
+    "direct process route should remain a loud tombstone",
+  )
+  assert.doesNotMatch(
+    runtime,
+    /apiPath:\s*["']\/api\/iconoplasm\/admin\/finalization\/process["']|api_path:\s*["']\/api\/iconoplasm\/admin\/finalization\/process["']/,
+    "runtime should not call its own deleted direct finalization processor",
+  )
+  assert.match(
+    deployCredentials,
+    /Do not replace this with a GitHub Actions diagnostic workflow, a repository-secret control plane, or a direct Cloudflare API connector call/,
+    "credential docs should block future dashboard-auth crutches",
+  )
+  assert.match(
+    deployCredentials,
+    /Forbidden paths: workstation-side finalization processing, `\/api\/iconoplasm\/admin\/finalization\/process`, per-symbol Queue message formats, GitHub Actions Queue kicks/,
+    "credential docs should name the forbidden sync finalization paths",
+  )
 })

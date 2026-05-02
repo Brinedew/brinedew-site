@@ -11068,6 +11068,13 @@ async function sendSyncFinalizationDrainQueueMessage(env, message) {
   }
 }
 
+// Iconoplasm sync finalization has exactly one production execution path:
+// durable D1 ledger rows are advanced by Cloudflare Queue messages of kind
+// `drain_finalization_ledger` consumed by this worker. Do not add a GitHub
+// Actions Queue kick, workstation drain, direct API processor, or admin-token
+// workaround here. If Queue sends fail with HTTP 429 or Cloudflare auth code
+// 10000, fix the Cloudflare account/token/allowance in the dashboard and let
+// this code fail loud until the canonical Queue path works again.
 async function ensureSyncFinalizationJobsTable(env) {
   if (!env?.ICONOPLASM_DB) return false
   await env.ICONOPLASM_DB.prepare(
@@ -18609,6 +18616,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/finalization/process" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_finalization_process_403", json({ error: "Unauthorized" }, 403))
+      // This route intentionally remains as a loud tombstone. Reusing it as a
+      // "temporary" processor is the crutch that caused the Queue bypass problem.
       return done(
         "admin_finalization_process_410",
         json(
