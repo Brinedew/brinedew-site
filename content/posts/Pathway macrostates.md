@@ -1,0 +1,175 @@
+---
+title: Pathway macrostates
+tags:
+  - content/post
+date: 2026-05-02
+draft: true
+---
+# Pathway macrostates
+
+https://sci-bot.ru/make-me-a-table-of-676b
+
+Mammalian Cell Signaling Pathway Macrostates: Discrete, Named, Experimentally Interpretable Operating Regimes
+The table below catalogs major mammalian signaling pathways by their experimentally observable macrostate(s) — the coarse-grained, discrete operating regimes that go beyond simple "pathway is on/off" and are distinguished by measurable dynamical signatures. For each, I describe the recognizable states and the experimental readout used to discriminate them.
+
+Summary Table of Discrete Signaling Macrostates
+Pathway	Named Macrostates (Discrete Regimes)	What the states are	How to tell which state you're in (experimental readout)
+NF-κB (TNFα → IKK → IκB → NF-κB)	(1) OFF (cytoplasmic, inactive)
+(2) DIGITAL ON (single pulse, variable amplitude)
+(3) SUSTAINED ON (persistent nuclear)
+(4) OSCILLATORY (damped/sustained nuclear cycling)	OFF: p50/p65 heterodimer sequestered in cytoplasm by IκBα.
+DIGITAL ON: a single spike of nuclear NF-κB, with peak amplitude encoding stimulus strength.
+SUSTAINED ON: IκB degraded and NF-κB stays in nucleus with no recovery.
+OSCILLATORY: cycles of nuclear translocation (typically ~100-min period)	Live-cell imaging of NF-κB–GFP (p65-GFP) nuclear-to-cytoplasmic ratio over time [1–3]. Single-cell microscopy reveals that at low TNF doses, only a fraction of cells activate (digital "all-or-none" at the single-cell level) [1]; at higher doses, all cells activate with oscillatory or sustained patterns [2,3].
+ERK/MAPK (RTK → Ras → Raf → MEK → ERK)	(1) OFF
+(2) TRANSIENT ON (pulse, minutes)
+(3) SUSTAINED ON (plateau)
+(4) OSCILLATORY (repeated pulses)	OFF: ERK unphosphorylated.
+TRANSIENT ON: ERK-PP peak at 5–10 min, decays within 1 hr.
+SUSTAINED ON: persistent phosphorylation (e.g., >4 hr in PC12 cells → differentiation).
+OSCILLATORY: repeated ~15–20 min pulses (e.g., in response to EGF with negative feedback).	Phospho-ERK (ppERK) immunoblotting or immunostaining; live-cell FRET biosensors (e.g., EKAREV) [4–6]. Duration coding: sustained ERK → differentiation (PC12), transient → proliferation. Negative feedback from ERK to RAF creates oscillations and switch-like responses [7].
+p53 (DNA damage → ATM/Chk2 → p53 → Mdm2)	(1) OFF (low, basal)
+(2) DIGITAL PULSES (fixed-amplitude oscillations)
+(3) SUSTAINED HIGH (apoptotic)	OFF: p53 levels low, Mdm2-mediated degradation unimpeded.
+DIGITAL PULSES: repeated fixed-amplitude p53 pulses (period ~5–6 hr) with increasing frequency as DNA damage increases (frequency-modulated coding).
+SUSTAINED HIGH: monotonic elevated p53, associated with apoptosis.	Live-cell p53-GFP imaging; single-cell luminescence reporters. Pulse count scales with DNA damage; sustained high p53 occurs under severe/unreparable damage [8,9]. The p53–Mdm2 negative feedback loop is the core oscillator [10].
+Wnt/β-catenin	(1) OFF (β-catenin degraded)
+(2) ON (β-catenin stabilized, nuclear)	OFF: Destruction complex (AXIN, APC, GSK3β) phosphorylates β-catenin → proteasomal degradation. TCF/LEF bound to Groucho repressors, transcription silenced.
+ON: Wnt ligand → LRP/Fz → Dishevelled → destruction complex inactivated → β-catenin accumulates → translocates to nucleus → displaces Groucho → TCF activates transcription.	β-catenin accumulation by immunofluorescence (nuclear vs. cytoplasmic); TOPFlash/FOPFlash luciferase reporter. The OFF→ON transition is switch-like due to double-negative feedback loops [11].
+Notch	(1) OFF (uncleaved)
+(2) ON (NICD liberated, nuclear)	OFF: Full-length Notch at plasma membrane.
+ON: Sequential proteolysis (ADAM10 → γ-secretase) → NICD (Notch Intracellular Domain) released → translocates to nucleus → binds CSL/RBP-J → recruits co-activators (MAML) → transcription ON.	Nuclear NICD by immunofluorescence (e.g., cleaved Notch1 Val1744 antibody); NICD-GFP translocation; HES1 luciferase reporter. Notch is classically a binary fate switch — single threshold, all-or-none activation [12,13].
+Hedgehog (Shh → Ptch → Smo → Gli)	(1) OFF (GliR state)
+(2) ON (GliA state)	OFF: Ptch inhibits Smo → Gli2/3 proteolytically processed into repressor (GliR, truncated) → enters nucleus → represses targets.
+ON: Shh binds Ptch → releases Smo → Gli processing blocked → full-length Gli activators (GliA) accumulate → activate targets.	Gli1 mRNA (itself a target); Gli2/3 proteolytic fragments by Western blot [14,15]; Gil-luciferase reporters. The OFF→ON transition involves a switch in Gli from a truncated repressor to a full-length activator state.
+Hippo (MST1/2 → LATS1/2 → YAP/TAZ)	(1) OFF (YAP/TAZ cytoplasmic, degraded)
+(2) ON (YAP/TAZ nuclear)	OFF: Active MST1/2→LATS1/2→phosphorylates YAP/TAZ (S127/S89) → 14-3-3 binding → cytoplasmic retention + degradation.
+ON: Kinase cascade OFF → YAP/TAZ unphosphorylated → nuclear → bind TEAD → proliferation/survival genes ON.	YAP phospho-S127 and total YAP immunofluorescence (nuclear/cytoplasmic ratio); TEAD-luciferase reporter. This is effectively a rheostat — graded nuclear YAP levels scale with tissue stiffness and cell density [16,17].
+TGF-β/Smad	(1) OFF (R-Smad cytoplasmic)
+(2) ON (R-Smad nuclear complex)	OFF: R-Smads (Smad2/3) bound to SARA in cytoplasm, receptor kinase off.
+ON: TGF-β→TβRII→TβRI→phosphorylates R-Smads→form Smad2/3-Smad4 trimer→nuclear accumulation→transcription.	Smad2/3 phospho-immunofluorescence (nuclear translocation); CAGA-luciferase reporter. Duration of nuclear Smad determines response (transient vs. sustained nuclear) [18].
+JAK-STAT (Cytokine receptor → JAK → STAT)	(1) OFF (STAT cytoplasmic)
+(2) ON (STAT nuclear, cycling)	OFF: STAT monomers in cytoplasm.
+ON: Ligand→receptor dimerization→JAKs trans-phosphorylate→STAT recruited→phosphorylated→dimerize→nuclear import→transcription→export. The system exhibits nucleocytoplasmic cycling with a period of ~30–90 min (STAT3/STAT5).	STAT phospho-Y (e.g., pY-STAT3) by IF/Western; STAT-GFP live-cell imaging reveals pulsed translocation [19]. The cycling is due to delayed negative feedback (SOCS proteins) and dephosphorylation.
+Ca²⁺ (IP₃ → ER Ca²⁺ release)	(1) BASAL (low nM)
+(2) SPIKING (discrete transients)
+(3) BURSTING (clustered spikes)
+(4) WAVE (propagating front)
+(5) SUSTAINED PLATEAU	BASAL: [Ca²⁺]c ~100 nM.
+SPIKING: single transient peaks (frequency encodes stimulus strength — frequency-modulated signaling).
+BURSTING: groups of spikes separated by quiescence.
+WAVE: regenerative Ca²⁺ wave across the cell or tissue.
+SUSTAINED PLATEAU: tonic elevated Ca²⁺ (often cytotoxic).	Ca²⁺-sensitive fluorescent dyes (Fluo-4, Fura-2 ratio imaging); genetically encoded indicators (GCaMP). The frequency of Ca²⁺ oscillations (spikes/min) encodes agonist concentration [20,21].
+GPCRs (heptahelical → G protein/β-arrestin)	(1) INACTIVE (R)
+(2) ACTIVE (R*) — further subdivided into:
+ • G-protein–biased (Rʸ)
+ • β-arrestin–biased (Rᵝ)
+ • Constitutively active (R*)	INACTIVE: receptor unliganded, heterotrimeric Gₐᵦᵧ intact.
+ACTIVE: agonist bound, conformational change, Gₐᵦᵧ dissociates. Biased states: different ligands stabilize different active conformations that preferentially couple to G-protein vs. β-arrestin pathways [22,23]. Single receptors can sample multiple active states.	BRET/FRET biosensors for G-protein activation (e.g., Gₛ, Gₐ, Gₐ); β-arrestin recruitment (Tango assay, bioluminescence); receptor conformational sensors (intramolecular FRET). Different ligands produce different active-state signatures [22,24].
+Integrins (αβ heterodimers)	(1) BENT/CLOSED (low affinity)
+(2) EXTENDED/CLOSED (intermediate)
+(3) EXTENDED/OPEN (high affinity)	BENT/CLOSED: ectodomain bent at knee, legs together, low affinity for ECM.
+EXTENDED/CLOSED: legs extended but headpiece closed (intermediate).
+EXTENDED/OPEN: legs extended, headpiece open, high-affinity ligand binding → outside-in signaling.	Conformation-specific antibodies (e.g., PAC-1 for activated αIIbβ3; mAb24 for β₂); FRET between integrin α and β cytoplasmic tails (closed→open = loss of FRET) [25,26].
+mTORC1/mTORC2	(1) OFF (inactive complex)
+(2) ON (active, lysosomal/perinuclear)	OFF: mTORC1 disassembled or inhibited by rapamycin/amino acid starvation; mTORC2 off upon growth factor withdrawal.
+ON: mTORC1 — active at lysosomal surface (Rheb-GTP + Rag GTPases); phosphorylates S6K/4E-BP1. mTORC2 — active at plasma membrane; phosphorylates AKT (S473).	Phospho-S6K (T389), phospho-4E-BP1 (T37/46) for mTORC1; phospho-AKT (S473) for mTORC2. Immunofluorescence for mTOR localization to LAMP2⁺ lysosomes [27].
+cAMP/PKA	(1) BASAL (low cAMP)
+(2) ELEVATED (uniform rise)
+(3) OSCILLATORY (cAMP transients)
+(4) COMPARTMENTALIZED (microdomain)	BASAL: low [cAMP], PKA holoenzyme inactive (R₂C₂).
+ELEVATED: AC activated, high cAMP, PKA dissociates → catalytic subunits free.
+OSCILLATORY: cAMP pulses (period ~2–10 min) from interplay of AC and PDEs.
+COMPARTMENTALIZED: localized cAMP domains near plasma membrane vs. perinuclear; AKAPs tether PKA to specific subcellular sites.	FRET-based cAMP sensors (Epac1-camps, ICUE); PKA activity FRET sensors (AKAR). Compartmentalization revealed by local PDE inhibition and targeted sensors [28,29].
+NFAT (Ca²⁺ → calcineurin → NFAT)	(1) OFF (hyper-phosphorylated, cytoplasmic)
+(2) ON (dephosphorylated, nuclear)	OFF: NFAT heavily phosphorylated by CK1/GSK3, sequestered in cytoplasm.
+ON: Ca²⁺ rises → calcineurin activated → dephosphorylates NFAT → rapid nuclear translocation. NFAT shows sustained nuclear localization as long as Ca²⁺ stays elevated (unlike fast nucleocytoplasmic shuttling of NF-κB).	NFAT-GFP translocation; phospho-NFAT Western; NFAT-driven luciferase. NFAT isoforms (NFATc1–c4) differ in nuclear retention dynamics [30].
+Detailed Commentary on Selected Pathways
+NF-κB: Digital activation + temporal encoding
+At the single-cell level, NF-κB activation by TNF-α is a digital (all-or-none) event — individual cells either activate or not, with the fraction of responding cells scaling with TNF dose. The responding cells encode dose in analogue parameters: the amplitude of the first nuclear peak, the time to first peak, the total number of oscillations, and the damping rate [1,2]. The NF-κB system thus exhibits multiple discrete attractors (OFF, single-pulse, oscillatory, sustained) that can be discriminated by live-cell time-lapse microscopy of p65-GFP [3].
+
+ERK/MAPK: Duration, amplitude, and frequency codes
+ERK exhibits at least four distinguishable macrostates: OFF, transient ON, sustained ON, and oscillatory ON. The duration of ERK activity is a classic decoding mechanism — transient ERK in PC12 cells drives proliferation, while sustained ERK drives neuronal differentiation [4,5]. The MAPK cascade contains positive-feedback motifs that create bistability (switch-like OFF→ON transitions) and delayed negative feedback from ERK to RAF that generates oscillations with a period of ~15–20 min [6,7].
+
+p53: Frequency-modulated pulses
+p53 responds to DNA damage with fixed-amplitude digital pulses, whose frequency (number of pulses per unit time) encodes the amount of DNA damage [8,9]. This is an unusually clear example of frequency-modulated (FM) signaling — the "state" is best described not merely as ON/OFF but by the pulse count per cell (0, 1, 2, 3… pulses). Under severe, irreparable damage, p53 transitions to a sustained high state that triggers apoptosis [10].
+
+Ca²⁺: A multi-attractor system
+Ca²⁺ is perhaps the most macroscopically rich second messenger, supporting spiking (single transients), bursting (clusters of spikes), waves (spatial propagation) and sustained plateaus [20,21]. The frequency of Ca²⁺ oscillations (spikes/min) is the best-characterized FM signaling code in biology — different frequencies activate different downstream effectors via frequency-dependent activation of CaM kinase II, NFAT, and NF-κB [20].
+
+GPCRs: Beyond binary ON/OFF — biased signaling
+GPCRs do not occupy a single "ON" state but rather an ensemble of active conformations. Different agonists can stabilize different subsets of these conformations, producing biased signaling: the receptor in a G-protein–preferring conformation vs. a β-arrestin–preferring conformation [22–24]. This goes beyond a simple ON/OFF classification into distinct agonist-specific active states (a form of multistability).
+
+Integrins: Three-state conformational machine
+Integrins are mechanistically well-characterized as a three-state device: bent-closed (low-affinity, OFF), extended-closed (intermediate), and extended-open (high-affinity, ON) [25,26]. The transition from bent to extended can be driven by "inside-out" signals (talin binding to β-tail) while ligand binding stabilizes the open headpiece for "outside-in" signaling.
+
+Notch & Hedgehog: Binary switches
+Both Notch and Hedgehog pathways approximate binary fate switches. In Notch, the key event is proteolytic liberation of NICD — it is either present or absent in the nucleus, with no intermediate amplitude modulation (though the system can exhibit bistable dynamics via downstream feedback) [12,13]. In Hedgehog, the switch operates at the level of Gli processing: OFF = GliR (repressor form), ON = GliA (full-length activator form) [14,15].
+
+References
+[1]Tay S, Hughey JJ, Lee TK, Lipniacki T, Quake SR, Covert MW. Single-cell NF-κB dynamics reveal digital activation and analogue information processing. Nature. 2010;466(7303):267–271
+DOI: 10.1038/nature09145
+[2]Zhang Q, Gupta S, Schipper DL, Kowalczyk GJ, Mancini AE, Budinger GRS, et al. NF-κB Dynamics Discriminate between TNF Doses in Single Cells. Cell Systems. 2017;5(6):638-645.e5
+DOI: 10.1016/j.cels.2017.10.011
+[3]Longo DM, Selimkhanov J, Kearns JD, Hasty J, Hoffmann A, Tsimring LS. Dual Delayed Feedback Provides Sensitivity and Robustness to the NF-κB Signaling Module. PLoS Computational Biology. 2013;9(6):e1003112
+DOI: 10.1371/journal.pcbi.1003112
+[4]Sturm OE, Orton R, Grindlay J, Birtwistle M, Vyshemirsky V, Gilbert D, et al. The Mammalian MAPK/ERK Pathway Exhibits Properties of a Negative Feedback Amplifier. Science Signaling. 2010;3(153):ra90
+DOI: 10.1126/scisignal.2001212
+[5]Arkun Y, Yasemi M. Dynamics and control of the ERK signaling pathway: Sensitivity, bistability, and oscillations. PLOS ONE. 2018;13(4):e0195513
+DOI: 10.1371/journal.pone.0195513
+[6]Sepulchre J-A, Ventura AC. Intrinsic Feedbacks in MAPK Signaling Cascades Lead to Bistability and Oscillations. Acta Biotheoretica. 2013;61(1):59–78
+DOI: 10.1007/s10441-013-9177-5
+[7]Fritsche-Guenther R, Witzel F, Sieber A, Herr R, Schmidt N, Braun S, et al. Strong negative feedback from Erk to Raf confers robustness to MAPK signalling. Molecular Systems Biology. 2011;7(1):489
+DOI: 10.1038/msb.2011.27
+[8]Kalo A, Shav-Tal Y. Acting on impulse: dissecting the dynamics of the NFAT transcriptional response. Genome Biology. 2013;14(1):102
+DOI: 10.1186/gb-2013-14-1-102
+[9]Purvis JE, Karhohs KW, Mock C, Batchelor E, Loewer A, Lahav G. p53 Dynamics Control Cell Fate. Science. 2012;336(6087):1440–1444
+DOI: 10.1126/science.1218351
+[10]Batchelor E, Mock CS, Bhan I, Loewer A, Lahav G. Recurrent initiation: A mechanism for triggering p53 pulses in response to DNA damage. Molecular Cell. 2008;30(3):277–289
+DOI: 10.1016/j.molcel.2008.03.016
+[11]Cadigan KM. Wnt/β-Catenin Signaling: Turning the Switch. Developmental Cell. 2008;14(3):322–323
+DOI: 10.1016/j.devcel.2008.02.006
+[12]Vujovic F, Hunter N, Farahani RM. Notch pathway: a bistable inducer of biological noise? Cell Communication and Signaling. 2019;17(1):133
+DOI: 10.1186/s12964-019-0453-0
+[13]Kopan R, Ilagan MXG. Notch Signaling: The Core Pathway and Its Posttranslational Regulation. Developmental Cell. 2009;16(5):619–632
+DOI: 10.1016/j.devcel.2009.03.010
+[14]Wang B, Fallon JF, Beachy PA. Hedgehog-Regulated Processing of Gli3 Produces an Anterior/Posterior Repressor Gradient in the Developing Vertebrate Limb. Cell. 2000;100(4):423–434
+DOI: 10.1016/s0092-8674(00)80678-9
+[15]Niewiadomski P, Kong JH, Ahrends R, Ma Y, Humke EW, Khan S, et al. Gli Protein Activity Is Controlled by Multisite Phosphorylation in Vertebrate Hedgehog Signaling. Cell Reports. 2014;6(1):168–181
+DOI: 10.1016/j.celrep.2013.12.003
+[16]Hansen CG, Moroishi T, Guan K-L. YAP and TAZ: a nexus for Hippo signaling and beyond. Trends in Cell Biology. 2015;25(9):499–513
+DOI: 10.1016/j.tcb.2015.05.002
+[17]Dupont S, Morsut L, Aragona M, Enzo E, Giulitti S, Cordenonsi M, et al. Role of YAP/TAZ in mechanotransduction. Nature. 2011;474(7350):179–183
+DOI: 10.1038/nature10137
+[18]Schmierer B, Hill CS. TGFβ–SMAD signal transduction: molecular specificity and functional flexibility. Nature Reviews Molecular Cell Biology. 2007;8(12):970–982
+DOI: 10.1038/nrm2297
+[19]Swameye I, Muller TG, Timmer J, Sandra O, Klingmüller U. Identification of nucleocytoplasmic cycling as a remote sensor in cellular signaling by databased modeling. Proceedings of the National Academy of Sciences. 2003;100(3):1028–1033
+DOI: 10.1073/pnas.0237333100
+[20]Berridge MJ, Bootman MD, Roderick HL. Calcium signalling: dynamics, homeostasis and remodelling. Nature Reviews Molecular Cell Biology. 2003;4(7):517–529
+DOI: 10.1038/nrm1155
+[21]Shuttleworth TJ, Thompson JL. Ca²⁺ entry modulates oscillation frequency by triggering Ca²⁺ release. Biochemical Journal. 1996;313(3):815–819
+DOI: 10.1042/bj3130815
+[22]Perez DM, Karnik SS. Multiple Signaling States of G-Protein-Coupled Receptors. Pharmacological Reviews. 2005;57(2):147–161
+DOI: 10.1124/pr.57.2.2
+[23]Wootten D, Christopoulos A, Marti-Solano M, Babu MM, Sexton PM. Mechanisms of signalling and biased agonism at G protein-coupled receptors. Nature Reviews Molecular Cell Biology. 2018;19(10):638–653
+DOI: 10.1038/s41580-018-0049-3
+[24]Violin JD, Lefkowitz RJ. β-Arrestin-biased ligands at seven-transmembrane receptors. Trends in Pharmacological Sciences. 2007;28(8):416–422
+DOI: 10.1016/j.tips.2007.06.006
+[25]Kim C, Ye F, Ginsberg MH. Regulation of Integrin Activation. Annual Review of Cell and Developmental Biology. 2011;27(1):321–345
+DOI: 10.1146/annurev-cellbio-100109-104104
+[26]Springer TA, Wang J. The three-dimensional structure of integrins and their ligands, and conformational regulation of cell adhesion. Advances in Protein Chemistry. 2004;68:29–63
+DOI: 10.1016/S0065-3233(04)68002-3
+[27]Saxton RA, Sabatini DM. mTOR Signaling in Growth, Metabolism, and Disease. Cell. 2017;168(6):960–976
+DOI: 10.1016/j.cell.2017.02.004
+[28]Zaccolo M, Pozzan T. Discrete microdomains with high concentration of cAMP in stimulated rat neonatal cardiac myocytes. Science. 2002;295(5560):1711–1715
+DOI: 10.1126/science.1069982
+[29]Baillie GS. Compartmentalized signalling: spatial regulation of cAMP by the action of compartmentalized phosphodiesterases. FEBS Journal. 2009;276(7):1790–1799
+DOI: 10.1111/j.1742-4658.2009.06926.x
+[30]Yissachar N, Sharar Fischler T, Cohen AA, Reich-Zeliger S, Russ D, Shifrut E, et al. Dynamic Response Diversity of NFAT Isoforms in Individual Living Cells. Molecular Cell. 2013;49(2):322–330
+DOI: 10.1016/j.molcel.2012.11.003
+Key interpretive notes
+
+Bistability (two stable steady states, OFF and ON, with hysteresis) is a property of many of these systems — notably ERK/MAPK, Wnt/β-catenin, Notch, and cell-cycle transitions — enabled by positive or double-negative feedback loops [Ferrell 2002, ref 11 in table].
+Oscillations are not a single "state" but rather a dynamical regime that can coexist with ON/OFF states. NF-κB, p53, ERK, Ca²⁺, and JAK-STAT all exhibit oscillatory attractors under some conditions.
+Digital vs. analogue encoding: NF-κB shows digital (binary, all-or-none) activation at the single-cell level but analogue (continuous) encoding in peak amplitude and pulse number [1]. ERK shows both graded responses (at low stimulus) and switch-like, bistable responses (at threshold) [5,6].
+Attractor landscapes are stimulus-dependent: These pathways are not hard-wired to a single macrostate — they explore different regimes depending on ligand identity, concentration, duration, and cellular context.

@@ -249,7 +249,7 @@
 
 .icono-image-only-media-stage {
   position: absolute;
-  /* Fence: keep a dedicated media stage so image-only portrait fitting is governed in one
+  /* Fence: keep a dedicated media stage so blot-only portrait fitting is governed in one
      place, separate from the caption/shadow overlay. The stage itself should stay edge to
      edge; adding a visible inset creates a fake frame that users read as an unintended border. */
   inset: 0;

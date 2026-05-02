@@ -17,8 +17,7 @@ Gene symbols appear on PubMed, UniProt, Wikipedia, Ensembl, journal articles, la
 
 CUSTOMIZABLE
 - Highlight styles: underline, color pills, pill outlines, or rough hand-drawn ellipses
-- Tooltip themes: light or dark
-- Card styles: simple inline tooltip, vintage lab label, or image-only portrait
+- Card styles: simple inline tooltip, vintage lab label, or blot-only portrait
 - Smart blocklist filters out common English words that happen to be gene symbols (like SET, REST, CAT)
 - Add your own entries to keep highlighting precise
 

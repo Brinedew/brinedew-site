@@ -3403,7 +3403,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               }
             })
             .catch(function (error) {
-              var message = String((error && error.message) || "Could not copy candidate image.")
+              var message = String((error && error.message) || "Could not copy candidate blot.")
               if (/log in|auth/i.test(message)) message += " Use Discord Login first, then try again."
               setCopyStatus(message, "error")
             })
@@ -3673,8 +3673,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-request-actions">' +
       // Sentence-case to match the rest of the action vocabulary
       // ("Approve blot" / "Reject blot" / "New candidate"). FAQ still reads
-      // naturally because we capitalize "Edit image" the same way mid-sentence.
-      '<button type="button" class="icono-request-inline-submit" data-icono-edit-image-toggle>Edit image</button>' +
+      // naturally because we capitalize "Edit blot" the same way mid-sentence.
+      '<button type="button" class="icono-request-inline-submit" data-icono-edit-image-toggle>Edit blot</button>' +
       '<form class="icono-request-form" data-icono-edit-image-form hidden>' +
       '<label class="icono-request-option-copy" for="icono-edit-image-prompt-' +
       esc(symbol) +
@@ -3754,7 +3754,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           promptInput.value = ""
           form.hidden = true
           toggle.setAttribute("aria-expanded", "false")
-          setEditStatus("Edit queued. The corrected image will land in the candidate pool after workstation review.", "success")
+          setEditStatus("Edit queued. The corrected blot will land in the candidate pool after workstation review.", "success")
         })
         .catch(function (error) {
           var message = String((error && error.message) || "Could not queue edit.")
@@ -4287,7 +4287,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           galleryTotalCount.toLocaleString() +
           " human genes, " +
           galleryPublishedCount.toLocaleString() +
-          " AI images"
+          " AI blots"
         return
       }
       if (!galleryState.ready) {
@@ -5267,9 +5267,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '<label class="icono-candidate-copy-popover-label">Copy to gene</label>' +
         '<input class="icono-search-input icono-request-picker-input" data-icono-candidate-copy-query type="text" autocomplete="off" placeholder="target gene symbol" aria-label="Target gene">' +
         '<input type="hidden" data-icono-candidate-copy-target value="">' +
-        '<button type="submit" class="icono-request-inline-submit icono-candidate-copy-submit" aria-label="Copy image to selected gene" title="Copy image">' +
+        '<button type="submit" class="icono-request-inline-submit icono-candidate-copy-submit" aria-label="Copy blot to selected gene" title="Copy blot">' +
         ICONO_SEND_ICON +
-        '<span class="icono-candidate-copy-submit-label">Copy image</span>' +
+        '<span class="icono-candidate-copy-submit-label">Copy blot</span>' +
         "</button>" +
         '<div class="icono-search-results icono-request-results" data-icono-candidate-copy-results hidden></div>' +
         '<div data-icono-candidate-copy-note hidden style="font-size:0.92rem;"></div>' +
@@ -5366,10 +5366,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       html += '<p class="icono-gene-manifestation">' + esc(manifestation) + "</p>"
     }
     html += renderPublishedEmulsionNotice(g)
-    // B-472: the "Edit image" panel and the "Random or X / New candidate"
+    // B-472: the "Edit blot" panel and the "Random or X / New candidate"
     // request shell used to render as two visually disjoint rounded boxes
     // stacked on top of each other. The user reads them as one operation
-    // ("act on the canonical image"), so wrap them in a single toolbar rail
+    // ("act on the canonical blot"), so wrap them in a single toolbar rail
     // and let CSS lay them out side-by-side on wide viewports, stacked but
     // inside one bordered surface on narrow ones.
     html += '<div class="icono-gene-toolbar-rail" data-icono-canonical-rail>'

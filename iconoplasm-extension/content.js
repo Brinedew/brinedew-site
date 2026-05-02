@@ -74,7 +74,7 @@
   const PLACEHOLDER_COLOR = "#6B6B78"
   const CONTENT_STORAGE_KEYS = IconoContentSettings.storageKeys
   const HIGHLIGHT_MODE_KEY = CONTENT_STORAGE_KEYS.highlightMode
-  const TOOLTIP_THEME_KEY = CONTENT_STORAGE_KEYS.tooltipTheme
+  const HIGHLIGHT_VISIBILITY_KEY = CONTENT_STORAGE_KEYS.highlightVisibility
   const CARD_VARIANT_KEY = CONTENT_STORAGE_KEYS.cardVariant
   const GUEST_DISCOVERIES_STORAGE_KEY = CONTENT_STORAGE_KEYS.guestDiscoveries
   const REMOVED_DEFAULTS_KEY = CONTENT_STORAGE_KEYS.removedDefaults
@@ -212,7 +212,6 @@
   const refreshHighlightStyles = highlightRuntime.refreshHighlightStyles
   const scheduleHighlightGeometryRefresh = highlightRuntime.scheduleHighlightGeometryRefresh
 
-  const normalizeTooltipTheme = IconoContentSettings.normalizeTooltipTheme
   const normalizeCardVariant = (raw) =>
     IconoContentSettings.normalizeCardVariant(raw, IconoCardShared)
 
@@ -221,17 +220,33 @@
       const result = await chrome.storage.local.get([HIGHLIGHT_MODE_KEY])
       highlightMode = highlightRuntime.setMode(result[HIGHLIGHT_MODE_KEY])
     } catch (_) {
-      highlightMode = highlightRuntime.setMode("underline")
+      highlightMode = highlightRuntime.setMode("pill")
     }
   }
 
-  async function loadTooltipTheme() {
+  function normalizeHighlightVisibility(raw) {
+    return String(raw || "")
+      .trim()
+      .toLowerCase() === "hover"
+      ? "hover"
+      : "always"
+  }
+
+  function applyHighlightVisibility() {
+    document.body.classList.toggle(
+      "iconoplasm-highlight-on-hover",
+      highlightVisibility === "hover",
+    )
+  }
+
+  async function loadHighlightVisibility() {
     try {
-      const result = await chrome.storage.local.get([TOOLTIP_THEME_KEY])
-      tooltipTheme = normalizeTooltipTheme(result[TOOLTIP_THEME_KEY])
+      const result = await chrome.storage.local.get([HIGHLIGHT_VISIBILITY_KEY])
+      highlightVisibility = normalizeHighlightVisibility(result[HIGHLIGHT_VISIBILITY_KEY])
     } catch (_) {
-      tooltipTheme = "light"
+      highlightVisibility = "always"
     }
+    applyHighlightVisibility()
   }
 
   async function loadCardVariant() {
@@ -239,7 +254,7 @@
       const result = await chrome.storage.local.get([CARD_VARIANT_KEY])
       cardVariant = normalizeCardVariant(result[CARD_VARIANT_KEY])
     } catch (_) {
-      cardVariant = "simple"
+      cardVariant = "image-only"
     }
   }
 
@@ -265,8 +280,8 @@
 
   function applyTooltipTheme() {
     if (!tooltip) return
-    tooltip.classList.toggle("iconoplasm-tooltip--dark", tooltipTheme === "dark")
-    tooltip.classList.toggle("iconoplasm-tooltip--light", tooltipTheme !== "dark")
+    tooltip.classList.remove("iconoplasm-tooltip--dark")
+    tooltip.classList.add("iconoplasm-tooltip--light")
     tooltip.classList.toggle("iconoplasm-tooltip--variant-lab-label", isArchivalCardVariant())
     tooltip.classList.toggle("iconoplasm-tooltip--variant-image-only", isImageOnlyCardVariant())
     tooltip.classList.toggle("iconoplasm-tooltip--frame-card", usesTooltipFrameRenderer())
@@ -493,9 +508,9 @@
   const mutationScanRoots = new Set()
   let mutationScanScheduled = false
   let pageScanner = null
-  let highlightMode = highlightRuntime.getMode()
-  let tooltipTheme = "light"
-  let cardVariant = "simple"
+  let highlightMode = highlightRuntime.setMode("pill")
+  let highlightVisibility = "always"
+  let cardVariant = "image-only"
   let activeGeneSummary = null
   let litArchivalFrameRequestSerial = 0
   const warnedMissingTraitOrigins = new Set()
@@ -1232,7 +1247,7 @@
 
     await Promise.all([
       loadHighlightMode(),
-      loadTooltipTheme(),
+      loadHighlightVisibility(),
       loadCardVariant(),
       loadGuestDiscoverySymbols(),
     ])
@@ -1352,9 +1367,9 @@
       highlightMode = highlightRuntime.setMode(changes[HIGHLIGHT_MODE_KEY].newValue)
       refreshHighlightStyles()
     }
-    if (changes[TOOLTIP_THEME_KEY]) {
-      tooltipTheme = normalizeTooltipTheme(changes[TOOLTIP_THEME_KEY].newValue)
-      applyTooltipTheme()
+    if (changes[HIGHLIGHT_VISIBILITY_KEY]) {
+      highlightVisibility = normalizeHighlightVisibility(changes[HIGHLIGHT_VISIBILITY_KEY].newValue)
+      applyHighlightVisibility()
     }
     if (changes[CARD_VARIANT_KEY]) {
       cardVariant = normalizeCardVariant(changes[CARD_VARIANT_KEY].newValue)
@@ -1532,7 +1547,7 @@
     const payload = {
       type: LIT_ARCHIVAL_RENDER_MESSAGE,
       requestId: String(++litArchivalFrameRequestSerial),
-      theme: tooltipTheme,
+      theme: "light",
       cardVariant,
       symbol,
       pageUrl: symbol ? buildGenePageUrl(symbol) : "",

@@ -27,7 +27,7 @@ import {
     { value: "simple", label: "Simple shared card" },
     { value: "lit-archival", label: "Vintage lab label" },
     { value: "neo-drab", label: "Neo-drab dossier" },
-    { value: "image-only", label: "Image only" },
+    { value: "image-only", label: "Blot only" },
   ]
   var GENERATION_PROVIDERS = [
     { value: "openai-compatible", label: "OpenAI-compatible" },

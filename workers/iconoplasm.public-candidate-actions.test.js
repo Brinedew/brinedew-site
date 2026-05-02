@@ -206,7 +206,7 @@ function buildEnv(db = new FakeDb()) {
   }
 }
 
-test("edit image requests preserve prompt and source canonical asset", async () => {
+test("edit blot requests preserve prompt and source canonical asset", async () => {
   const db = new FakeDb()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/requests", {
@@ -277,7 +277,7 @@ test("candidate copy action stays in the compact candidate footer strip", () => 
 
   assert.match(app, /icono-candidate-secondary-actions/)
   assert.match(app, /Copy to gene/)
-  assert.match(app, /Copy image/)
+  assert.match(app, /Copy blot/)
   assert.doesNotMatch(app, /<summary>copy this image to another gene<\/summary>/)
   assert.match(css, /\.icono-candidate-secondary-actions/)
   assert.match(css, /\.icono-candidate-copy-panel\[open\]/)

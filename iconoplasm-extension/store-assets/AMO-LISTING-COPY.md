@@ -49,7 +49,6 @@ Iconoplasm makes human gene symbols easier to spot, remember, and revisit while 
 ### Customization
 
 - highlight style: underline, pill, pill outline, or rough ellipse
-- tooltip theme: light or dark
 - card style: simple, lab label, or image-only
 - local blocklist for ambiguous symbols like `SET`, `REST`, and `CAT`
 

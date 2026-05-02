@@ -102,12 +102,12 @@
     return siteStylesPromise
   }
 
-  function applyTheme(theme) {
-    const resolvedTheme = theme === "dark" ? "dark" : "light"
+  function applyTheme(_theme) {
+    const resolvedTheme = "light"
     document.documentElement.setAttribute("data-theme", resolvedTheme)
     document.documentElement.setAttribute("saved-theme", resolvedTheme)
     if (!frameRoot) return
-    frameRoot.classList.toggle("iconoplasm-tooltip--dark", resolvedTheme === "dark")
+    frameRoot.classList.remove("iconoplasm-tooltip--dark")
   }
 
   function voteMarkup(payload) {

@@ -1,6 +1,6 @@
 const versionEl = document.getElementById("version-text")
 const HIGHLIGHT_MODE_KEY = "iconoplasm_highlight_mode"
-const TOOLTIP_THEME_KEY = "iconoplasm_tooltip_theme"
+const HIGHLIGHT_VISIBILITY_KEY = "iconoplasm_highlight_visibility"
 const CARD_VARIANT_KEY = "iconoplasm_card_variant"
 const USER_BLOCKLIST_KEY = "iconoplasm_user_blocklist"
 
@@ -32,20 +32,21 @@ for (const tab of tabs) {
 
 // ---- Appearance settings ----
 
-function normalizeTooltipTheme(value) {
-  return value === "dark" ? "dark" : "light"
-}
-
 function normalizeCardVariant(value) {
+  if (value === "simple") return "simple"
   if (value === "image-only") return "image-only"
   if (value === "lab-label" || value === "lit-archival") return "lit-archival"
-  return "simple"
+  return "image-only"
 }
 
 function normalizeHighlightMode(value) {
   return value === "pill" || value === "pill-outline" || value === "ellipse"
     ? value
-    : "underline"
+    : "pill"
+}
+
+function normalizeHighlightVisibility(value) {
+  return value === "hover" ? "hover" : "always"
 }
 
 function setCheckedValue(groupName, value) {
@@ -66,16 +67,19 @@ function bindRadioGroup(groupName, normalizeValue, storageKey) {
 async function loadSettings() {
   const localSettings = await chrome.storage.local.get([
     HIGHLIGHT_MODE_KEY,
-    TOOLTIP_THEME_KEY,
+    HIGHLIGHT_VISIBILITY_KEY,
     CARD_VARIANT_KEY,
   ])
   setCheckedValue("highlight-mode", normalizeHighlightMode(localSettings[HIGHLIGHT_MODE_KEY]))
-  setCheckedValue("tooltip-theme", normalizeTooltipTheme(localSettings[TOOLTIP_THEME_KEY]))
+  setCheckedValue(
+    "highlight-visibility",
+    normalizeHighlightVisibility(localSettings[HIGHLIGHT_VISIBILITY_KEY]),
+  )
   setCheckedValue("card-variant", normalizeCardVariant(localSettings[CARD_VARIANT_KEY]))
 }
 
 bindRadioGroup("highlight-mode", normalizeHighlightMode, HIGHLIGHT_MODE_KEY)
-bindRadioGroup("tooltip-theme", normalizeTooltipTheme, TOOLTIP_THEME_KEY)
+bindRadioGroup("highlight-visibility", normalizeHighlightVisibility, HIGHLIGHT_VISIBILITY_KEY)
 bindRadioGroup("card-variant", normalizeCardVariant, CARD_VARIANT_KEY)
 
 loadSettings().catch(() => null)

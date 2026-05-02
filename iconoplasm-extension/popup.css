@@ -52,6 +52,7 @@ input {
 .popup-shell {
   display: grid;
   gap: 0.95rem;
+  min-width: 0;
   padding: 1rem;
 }
 
@@ -118,6 +119,7 @@ input {
 .popup-section {
   display: grid;
   gap: 0.9rem;
+  min-width: 0;
   padding: 0.95rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
   border-radius: var(--radius-xl);
@@ -148,6 +150,7 @@ input {
 .popup-field-list {
   display: grid;
   gap: 0.9rem;
+  min-width: 0;
 }
 
 .popup-field {
@@ -163,13 +166,11 @@ input {
    that highlights the active option. Replaces individual bordered buttons. */
 .popup-segmented {
   display: flex;
+  width: 100%;
+  min-width: 0;
   padding: 3px;
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--ui-border) 34%, var(--light));
-}
-
-.popup-segmented--compact {
-  /* Keep the 2-up compact variant for Tooltip theme */
 }
 
 .popup-segment {
@@ -201,6 +202,8 @@ input {
   font-weight: 500;
   line-height: 1.15;
   text-align: center;
+  overflow-wrap: normal;
+  word-break: normal;
   cursor: pointer;
   transition:
     border-color 0.18s ease,

@@ -89,15 +89,11 @@ async function main() {
     // "Color pills" highlight mode
     await setupPage.click('label:has(input[value="pill"][name="highlight-mode"])');
     await sleep(300);
-    // "Image only" card style
+    // "Blot only" card style
     await setupPage.click('label:has(input[value="image-only"][name="card-variant"])');
     await sleep(300);
-    // Light tooltip theme
-    await setupPage.click('label:has(input[value="light"][name="tooltip-theme"])');
-    await sleep(500);
-
     await setupPage.close();
-    console.log("Settings applied: pill highlights, image-only card, light theme");
+    console.log("Settings applied: pill highlights, blot-only card");
   }
 
   // ----------------------------------------------------------------
@@ -202,7 +198,7 @@ async function main() {
   console.log("Saved screenshot-2-hovercard.png (pills + hovercard)");
 
   // ----------------------------------------------------------------
-  // Step 4: Popup screenshots -- settings reflect the pill + image choices
+  // Step 4: Popup screenshots -- settings reflect the pill + blot choices
   // ----------------------------------------------------------------
   if (extensionId) {
     const popupUrl = `chrome-extension://${extensionId}/popup.html`;
@@ -211,14 +207,14 @@ async function main() {
     await popupPage.goto(popupUrl, { waitUntil: "load", timeout: 10000 });
     await sleep(1500);
 
-    // Screenshot 3: Appearance tab -- should show pill + image-only selected
+    // Screenshot 3: Appearance tab -- should show pill + blot-only selected
     const shell3 = await popupPage.$(".popup-shell");
     if (shell3) {
       await shell3.screenshot({
         path: resolve(outDir, "screenshot-3-popup.png"),
         type: "png",
       });
-      console.log("Saved screenshot-3-popup.png (Appearance: pills + image-only)");
+      console.log("Saved screenshot-3-popup.png (Appearance: pills + blot-only)");
     }
 
     // Screenshot 4: Blocklist tab -- clip to viewport height, not full scroll

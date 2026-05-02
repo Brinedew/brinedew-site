@@ -166,6 +166,19 @@
   opacity: 0.85;
 }
 
+body.iconoplasm-highlight-on-hover .iconoplasm-gene:not(:hover) {
+  background-size: 0 0;
+}
+
+body.iconoplasm-highlight-on-hover .iconoplasm-gene:not(:hover) .iconoplasm-gene-paint-layer {
+  opacity: 0;
+}
+
+body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
+  color: inherit;
+  text-shadow: none;
+}
+
 /* -- Tooltip container: horizontal card ----------------------------- */
 /* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout, Components) +
    C:\Users\Admin\.codex\skills\polish\SKILL.md (Concentric radii, Surface separation).
@@ -219,24 +232,6 @@
 
 .iconoplasm-tooltip:not(.iconoplasm-tooltip--frame-card) {
   min-height: 298px;
-}
-
-.iconoplasm-tooltip.iconoplasm-tooltip--dark {
-  --iconoplasm-tooltip-shell: rgba(31, 26, 23, 0.98);
-  --iconoplasm-tooltip-surface: rgba(20, 17, 15, 0.985);
-  --iconoplasm-tooltip-ink: rgba(244, 238, 230, 0.96);
-  --iconoplasm-tooltip-muted: rgba(244, 238, 230, 0.68);
-  --iconoplasm-tooltip-line-strong: rgba(255, 255, 255, 0.14);
-  --iconoplasm-tooltip-line: rgba(255, 255, 255, 0.08);
-  --iconoplasm-tooltip-shadow-1: rgba(0, 0, 0, 0.22);
-  --iconoplasm-tooltip-shadow-2: rgba(0, 0, 0, 0.28);
-  --iconoplasm-tooltip-shadow-3: rgba(0, 0, 0, 0.34);
-  --iconoplasm-tooltip-shadow-4: rgba(0, 0, 0, 0.4);
-  --iconoplasm-tooltip-portrait-base: color-mix(
-    in srgb,
-    var(--iconoplasm-gene-color, #6b6b78) 24%,
-    rgba(22, 18, 16, 0.98)
-  );
 }
 
 .iconoplasm-tooltip-visible {

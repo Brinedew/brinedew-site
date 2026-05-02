@@ -1681,7 +1681,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <div class="page">
     <header>
       <h1>Iconoplasm Admin</h1>
-      <p>Images first, bookkeeping second. This page steers the canonical blot shown in the extension. Votes auto-pick the canonical blot unless a manual override is active.</p>
+      <p>Blots first, bookkeeping second. This page steers the canonical blot shown in the extension. Votes auto-pick the canonical blot unless a manual override is active.</p>
     </header>
 
     <nav id="admin-tabs">
@@ -4648,7 +4648,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               '</div>',
               '</article>'
             ].join('');
-          }).join('') : '<div class="gallery-empty">No candidate images found for this gene.</div>'),
+          }).join('') : '<div class="gallery-empty">No candidate blots found for this gene.</div>'),
           '</div>',
           '<div class="detail-kicker">Recent events</div>',
           '<div class="event-list">',
@@ -4666,7 +4666,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.detail.innerHTML = [
           '<div class="detail-kicker">Gene review</div>',
           '<div class="detail-title">' + esc(safeSymbol) + '</div>',
-          '<div class="detail-copy">Loading candidate images, canonical state, and recent events…</div>'
+          '<div class="detail-copy">Loading candidate blots, canonical state, and recent events…</div>'
         ].join('');
         var detail = await apiJson('/gene/' + encodeURIComponent(safeSymbol), { method: 'GET' });
         state.selectedGeneDetail = detail || null;

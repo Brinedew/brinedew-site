@@ -54,9 +54,9 @@ draft: false
 
     If you don't want to use Discord site login, you can send a blocklist email request to <blacklist@brinedew.bio> from your business account. The first @name you send me will be blocklisted. Make sure to use the @ symbol in front of the name.
 
-1. **I noticed a poor quality of the canonical image for some gene. What do I do?**
+1. **I noticed a poor quality of the canonical blot for some gene. What do I do?**
 
-    Go to the gene page for that gene. Tap "edit image" under the canonical image, and input small corrections as an image prompt. This adds a corrected image to a candidate images pool.
+    Go to the gene page for that gene. Tap "edit blot" under the canonical blot, and input small corrections as a blot prompt. This adds a corrected blot to a candidate blots pool.
 
     Some corrections you can prompt for:
 
@@ -64,25 +64,25 @@ draft: false
     - Improve fit to anchor characteristics (weight, age, surface color)
     - Add a fitting background
 
-1. **It's not easily fixable - I don't like the entire concept or art style of the canonical image.**
+1. **It's not easily fixable - I don't like the entire concept or art style of the canonical blot.**
 
-    Downvote the canonical image by tapping X under the image. Upvote a better candidate image by pressing the checkmark.
+    Downvote the canonical blot by tapping X under the blot. Upvote a better candidate blot by pressing the checkmark.
 
-1. **All candidate images are even worse.**
+1. **All candidate blots are even worse.**
 
-    Tap "new candidate" to make a new candidate image. Make sure you have inputted API keys for your image generation service of choice in the site settings.
+    Tap "new candidate" to make a new candidate blot. Make sure you have inputted API keys for your blot generation service of choice in the site settings.
 
-1. **All generated images for a gene reuse the same bad character concept.**
+1. **All generated blots for a gene reuse the same bad character concept.**
 
     Join our Discord to discuss how to modify character prompts for various gene families.
 
-1. **I noticed a candidate image that would better fit another gene.**
+1. **I noticed a candidate blot that would better fit another gene.**
 
-    On that candidate's row in the gene page, tap the copy icon (the one next to "Remove"). An inline form opens with a gene search box - type a gene symbol or name, pick the target from the matches, and confirm. The image is added as a new candidate to that other gene and auto-checkmarked there.
+    On that candidate's row in the gene page, tap the copy icon (the one next to "Remove"). An inline form opens with a gene search box - type a gene symbol or name, pick the target from the matches, and confirm. The blot is added as a new candidate to that other gene and auto-checkmarked there.
 
-1. **What images are not suitable for Iconoplasm?**
+1. **What blots are not suitable for Iconoplasm?**
 
-    - 18+ images aren't suitable. No reproductive organs, no nipples.
+    - 18+ blots aren't suitable. No reproductive organs, no nipples.
     - Furries aren't suitable to represent human genes. Keep them for other animal genomes. I'm looking forward to Drosophila characters.
     - Same goes for any non-humanoid objects (for example, object-heads), however helmets are OK.
     - Monstrous humanlike faces (for example, ogres, nekomimi) are OK if they pass more as human than as animal. Monster-human hybrids are OK if the top part is human (centaurs, nagas, driders).

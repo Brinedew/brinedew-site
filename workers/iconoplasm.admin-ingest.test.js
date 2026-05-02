@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
@@ -273,3 +274,17 @@ test("admin ingest proxy forwards POST bodies without cloning them into text fir
   assert.equal(payload?.failed, 0)
 })
 
+test("admin ingest caps binary item concurrency to protect outgoing storage connections", () => {
+  const source = readFileSync(
+    new URL(
+      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+
+  assert.match(
+    source,
+    /binaryUploadLikelyItemCount\s*>\s*0\s*\?\s*2\s*:\s*1/,
+  )
+})

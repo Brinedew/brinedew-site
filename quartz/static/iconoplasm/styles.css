@@ -350,8 +350,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-shadow: none;
 }
 
-/* B-472: unify the two action panels (Edit image + Random/New candidate)
-   under the canonical specimen image into one visual rail instead of two
+/* B-472: unify the two action panels (Edit blot + Random/New candidate)
+   under the canonical specimen blot into one visual rail instead of two
    stacked boxes. The wrapper owns the border + padding; the children are
    flattened so they look like cells in one toolbar. On wide viewports
    they sit side-by-side; on narrow they stack but stay inside one rail. */
@@ -384,7 +384,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-shadow: none;
 }
 
-/* The "Edit image" trigger is its own cell on the left; the request shell
+/* The "Edit blot" trigger is its own cell on the left; the request shell
    takes the remaining width so the search-pill stretches across the rail. */
 .icono-gene-toolbar-rail > .icono-gene-edit-panel {
   width: max-content;
@@ -2081,7 +2081,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 /* B-457 #3: on mobile (390x844 reference) the gene-page hero portrait
    was rendering ~310px tall, eating ~46% of the viewport and pushing the
-   toolbar rail (Edit image / New candidate from B-472) below the fold.
+   toolbar rail (Edit blot / New candidate from B-472) below the fold.
    The hero IS the page on mobile, but the portrait alone shouldn't be —
    cap it so the first viewport shows the portrait + the start of the
    dossier rows + at least the top of the toolbar rail. The cap only
