@@ -42,11 +42,39 @@ jobs:
         run: |
           set -euo pipefail
           wrangler queues info iconoplasm-sync-finalization
+          wrangler queues info iconoplasm-sync-dlq || true
           curl -fsS \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             -H "Content-Type: application/json" \
             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/queues/${ICONOPLASM_FINALIZATION_QUEUE_ID}/consumers" \
             | python -m json.tool
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/queues/${ICONOPLASM_FINALIZATION_QUEUE_ID}/metrics" \
+            | python -m json.tool
+
+      - name: Push one canonical drain message and capture worker tail
+        run: |
+          set -euo pipefail
+          timeout 75s wrangler tail geneguessr-api --format pretty > /tmp/iconoplasm-worker-tail.log 2>&1 &
+          tail_pid=$!
+          sleep 8
+          curl -fsS \
+            -X POST \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/queues/${ICONOPLASM_FINALIZATION_QUEUE_ID}/messages" \
+            --data '{"content_type":"json","body":{"kind":"drain_finalization_ledger","run_id":"github-actions-queue-diagnostic","symbols":[]}}' \
+            | python -m json.tool
+          sleep 45
+          kill "$tail_pid" 2>/dev/null || true
+          wait "$tail_pid" 2>/dev/null || true
+          cat /tmp/iconoplasm-worker-tail.log
+
+      - name: Inspect queue after diagnostic message
+        run: |
+          set -euo pipefail
           curl -fsS \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             -H "Content-Type: application/json" \
