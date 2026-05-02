@@ -601,6 +601,36 @@ test("admin finalization enqueue returns current mutation-limiter telemetry for 
   assert.equal(payload?.queue_messages, 1)
 })
 
+test("admin finalization kick only enqueues the canonical Queue drain message", async () => {
+  const queue = buildFakeQueue()
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
+      method: "POST",
+      headers: {
+        "x-iconoplasm-admin-token": "secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        run_id: "pytest-run",
+        reason: "pytest-kick",
+      }),
+    }),
+    {
+      ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+      ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    },
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.queue_messages, 1)
+  assert.equal(payload?.process, null)
+  assert.equal(queue.sent.length, 1)
+  assert.equal(queue.sent[0]?.kind, "drain_finalization_ledger")
+})
+
 test("admin finalization process route fails loud because finalization must use the Queue", async () => {
   const env = buildEnv({
     jobs: [

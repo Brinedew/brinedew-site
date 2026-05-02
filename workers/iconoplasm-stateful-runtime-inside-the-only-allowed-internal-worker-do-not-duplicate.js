@@ -394,6 +394,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
     return "admin_artist_blacklist_ack"
   if (path === "/api/iconoplasm/admin/finalization/pending") return "admin_finalization_pending"
   if (path === "/api/iconoplasm/admin/finalization/enqueue") return "admin_finalization_enqueue"
+  if (path === "/api/iconoplasm/admin/finalization/kick") return "admin_finalization_enqueue"
   if (path === "/api/iconoplasm/admin/finalization/process") return "admin_finalization_process"
   if (path === "/api/iconoplasm/admin/catalog/state") return "admin_catalog_state"
   if (path === "/api/iconoplasm/admin/catalog/upsert") return "admin_catalog_upsert"
@@ -4648,6 +4649,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/finalization/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/finalization/enqueue") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/finalization/kick") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/finalization/process") return requestMethod === "POST"
   if (path === ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return requestMethod === "POST"
@@ -18439,6 +18441,65 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             queue_send_failures: Number(enqueueResult?.queue_send_failures || 0),
             symbols: Array.isArray(enqueueResult?.symbols) ? enqueueResult.symbols : [],
             mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
+            process: null,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/finalization/kick" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_finalization_kick_403", json({ error: "Unauthorized" }, 403))
+      if (iconoplasmSyncFinalizationQueueDisabled(env)) {
+        return done(
+          "admin_finalization_kick_disabled",
+          json(
+            {
+              ok: false,
+              code: "QUEUE_PATH_DISABLED",
+              error: "Iconoplasm finalization Queue path is disabled; refusing to fake progress.",
+              disabled_reason: iconoplasmSyncFinalizationQueueDisabledReason(env),
+            },
+            503,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+
+      let p = {}
+      try {
+        p = await request.json()
+      } catch {
+        p = {}
+      }
+      const sentQueueMessage = await sendSyncFinalizationDrainQueueMessage(env, {
+        runId: p?.run_id ?? p?.runId ?? p?.reason ?? "admin_finalization_kick",
+        reason: p?.reason ?? "admin_finalization_kick",
+        symbols: Array.isArray(p?.symbols) ? p.symbols : [],
+      })
+      if (!sentQueueMessage) {
+        return done(
+          "admin_finalization_kick_queue_required",
+          json(
+            {
+              ok: false,
+              code: "QUEUE_MESSAGE_REQUIRED",
+              error: "Iconoplasm finalization has one processing path: Cloudflare Queue drain messages. The worker could not enqueue a drain message.",
+            },
+            503,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      return done(
+        "admin_finalization_kick",
+        json(
+          {
+            ok: true,
+            queue_enabled: true,
+            queue_messages: 1,
             process: null,
           },
           200,
