@@ -11685,14 +11685,29 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
   // same global work until the worker falls over near the finish line. Vision
   // rollups follow the same rule: dedupe them across the whole scoped drain
   // instead of recomputing the same shared vision IDs once per symbol.
+  for (let start = 0; start < uniqueVisionIds.length; start += ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX) {
+    const visionChunk = uniqueVisionIds.slice(start, start + ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX)
+    await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
+      path: "/api/iconoplasm/admin/read-models/sync",
+      payload: {
+        symbols: [],
+        vision_ids: visionChunk,
+        skip_vote_summaries: true,
+        skip_gene_rollups: true,
+        skip_vision_rollups: false,
+        skip_dashboard: true,
+        invalidate_gallery: false,
+      },
+    })
+  }
   await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
     path: "/api/iconoplasm/admin/read-models/sync",
     payload: {
       symbols: [],
-      vision_ids: uniqueVisionIds,
+      vision_ids: [],
       skip_vote_summaries: true,
       skip_gene_rollups: true,
-      skip_vision_rollups: uniqueVisionIds.length <= 0,
+      skip_vision_rollups: true,
       skip_dashboard: false,
       invalidate_gallery: true,
     },

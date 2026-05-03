@@ -987,6 +987,48 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
   )
 })
 
+test("queue drain finalizer chunks more than the read-model vision limit", async () => {
+  const symbols = Array.from({ length: 1001 }, (_, index) => `GENE${index}`)
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: symbols.map((symbol, index) => ({
+        gene_symbol: symbol,
+        status: "queued",
+        phase: "completed_pending_finalize",
+        keep_assets_json: JSON.stringify([{ symbol, asset_sha256: "a".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify([`anima-v1-${index + 1}`]),
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      })),
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: buildFakeQueue(),
+  }
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols: [],
+          },
+          ack() {},
+          retry() {},
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.finalized, 1001)
+  assert.equal([...env.ICONOPLASM_DB.jobs.values()].filter((row) => row.status !== "completed").length, 0)
+})
+
 test("queue drain consumer honors message permits while processing bounded ledger batches", async () => {
   const queue = buildFakeQueue()
   const symbols = ["TP53", "BRCA1", "EGFR"]
