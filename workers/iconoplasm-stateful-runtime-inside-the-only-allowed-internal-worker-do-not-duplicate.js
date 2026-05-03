@@ -18414,7 +18414,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const scopedSymbolsJson = JSON.stringify(scopedSymbols)
       const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
       const jobs = await listPendingSyncFinalizationJobs(env, { limit, symbols: scopedSymbols })
-      const [queuedCount, runningCount, retryingCount, pendingFinalizeCount, completedCount, latestCompletedRow] =
+      const [queuedCount, runningCount, retryingCount, pendingFinalizeCount, unfinishedCount, completedCount, latestCompletedRow] =
         await Promise.all([
           countSyncFinalizationJobs(env, {
             whereSql: `status = ?
@@ -18440,6 +18440,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               scopedEnabled,
               scopedSymbolsJson,
             ],
+          }),
+          countSyncFinalizationJobs(env, {
+            whereSql: `status <> ?
+              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson],
           }),
           countSyncFinalizationJobs(env, {
             whereSql: `status = ?
@@ -18491,8 +18496,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               retrying: retryingCount,
               pending_finalize: pendingFinalizeCount,
               completed: completedCount,
+              unfinished: unfinishedCount,
               last_completed_at: latestCompletedAt,
-              total_pending: queuedCount + runningCount + retryingCount + pendingFinalizeCount,
+              total_pending: unfinishedCount,
             },
           },
           200,
